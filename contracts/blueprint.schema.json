@@ -1,0 +1,854 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:blueprint:0.1.0",
+  "version": "0.1.0",
+  "title": "Blueprint",
+  "description": "Contract 1. The typed, versioned description of one tenant's business: entities, workflows, roles, approvals, reports, integrations, compliance, i18n, branding. The Blueprint is configuration, never code. Cross-reference rules that JSON Schema cannot express (ids resolve, locales covered, contrast passes) are enforced by the Blueprint validator in Part 2 and listed in x-validator-rules.",
+  "type": "object",
+  "required": ["meta", "company", "locations", "entities", "roles", "compliance", "i18n", "branding"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "meta": { "$ref": "#/$defs/meta" },
+    "company": { "$ref": "#/$defs/company" },
+    "locations": {
+      "description": "Branches and warehouses. Referenced by role scopes.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/location" },
+      "uniqueItems": true
+    },
+    "components": {
+      "description": "Components this tenant uses, with version ranges. Entity bindings must reference ids listed here. Resolved to exact versions at compile time.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/componentUse" }
+    },
+    "entities": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entity" }
+    },
+    "workflows": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/workflow" }
+    },
+    "roles": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/role" }
+    },
+    "approvals": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/approvalRule" }
+    },
+    "reports": {
+      "description": "Reports and dashboards. They reference metrics from the semantic layer by id; they never contain SQL or formulas.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/report" }
+    },
+    "integrations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/integration" }
+    },
+    "compliance": { "$ref": "#/$defs/compliance" },
+    "i18n": { "$ref": "#/$defs/i18n" },
+    "branding": { "$ref": "#/$defs/branding" }
+  },
+  "x-validator-rules": [
+    "company.locale fields are optional; each omitted field resolves from compliance.countryPack. The resolved locale is stored with the compiled artifact. workingHours.periods must not overlap and weekend days must not appear in workDays.",
+    "compliance.country must equal company.country and the countryPack id must match the country.",
+    "Every id is unique within its collection and every reference (entity, role, approval, report, component, location, metric, connector) resolves.",
+    "Every localizedText covers every locale in meta.locales.",
+    "Workflow graph: exactly one initial state per workflow, every state reachable, every non-final state has an outgoing transition.",
+    "Approval rule steps reference existing roles; a role cannot approve its own submission unless selfApproval is true and the owner role holds it.",
+    "A role scope dimension must exist in locations or be 'own_records' or 'company'.",
+    "Entity component bindings reference components listed in components and satisfy the manifest's requires and engine compatibility.",
+    "Fields with computed.function may only reference functions provided by a bound component (numbers come from code).",
+    "Branding: primary and accent colours pass WCAG AA against the surfaces of BOTH themes after token resolution (see docs/architecture/theming.md); otherwise auto-adjust or reject.",
+    "Branding assets: media type, size and sanitisation fields match the stored asset record.",
+    "branding.poweredBy.show=false requires the white-label entitlement on the tenant plan.",
+    "Compliance: when compliance.eInvoicing.mode is not 'none' for country SA, documentLanguages must contain 'ar' and company.vatNumber must be set."
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "description": "snake_case identifier, stable for the life of the element."
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+    },
+    "semverRange": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "npm-style range, for example '^1.2.0' or '>=1.2.0 <2.0.0'."
+    },
+    "locale": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
+      "description": "BCP 47 language tag, for example ar, ar-SA, en."
+    },
+    "localizedText": {
+      "type": "object",
+      "description": "Text per locale. ar and en are mandatory in v0.1.0.",
+      "required": ["ar", "en"],
+      "propertyNames": { "$ref": "#/$defs/locale" },
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "hexColour": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Where an element came from. The Platform Autonomy Rate is the share of elements whose source is not 'manual' and whose humanEdited is false at go-live.",
+      "required": ["source", "humanEdited"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "enum": ["template", "interview", "imported", "manual"] },
+        "ref": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Template id and version, interview turn id, or import job id. Empty for manual."
+        },
+        "humanEdited": {
+          "type": "boolean",
+          "description": "True when a person (owner or team reviewer) changed the element after the AI produced it."
+        },
+        "editedBy": {
+          "enum": ["owner", "team_reviewer", "engineer"],
+          "description": "Who made the last human edit. Absent when humanEdited is false."
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["id", "schemaVersion", "revision", "locales", "buildState"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$", "description": "Blueprint id, one per tenant." },
+        "schemaVersion": { "const": "0.1.0" },
+        "revision": { "type": "integer", "minimum": 1, "description": "Increments on every approved change. Diffs are between revisions." },
+        "locales": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/locale" },
+          "contains": { "const": "ar" }
+        },
+        "defaultLocale": { "$ref": "#/$defs/locale" },
+        "buildState": {
+          "enum": ["draft", "owner_approved", "team_reviewed", "built_in_sandbox", "simulated", "live"],
+          "description": "See contracts/build-states.md. Stored here for convenience; the control plane is the source of truth."
+        },
+        "template": {
+          "type": "object",
+          "required": ["id", "version"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "$ref": "#/$defs/id" },
+            "version": { "$ref": "#/$defs/semver" }
+          }
+        },
+        "engineTarget": {
+          "type": "object",
+          "required": ["adapter"],
+          "additionalProperties": false,
+          "properties": {
+            "adapter": { "$ref": "#/$defs/id" },
+            "versionSet": { "type": "string", "maxLength": 64, "description": "Pinned engine version set id, for example 'set-2026-a'." }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "company": {
+      "type": "object",
+      "required": ["legalName", "country", "languages"],
+      "additionalProperties": false,
+      "properties": {
+        "legalName": { "$ref": "#/$defs/localizedText" },
+        "tradeName": { "$ref": "#/$defs/localizedText" },
+        "country": { "enum": ["SA", "AE", "EG", "BH", "KW", "OM", "QA"], "description": "Operating countries are SA, AE and EG (launch order SA, UAE, Egypt). Others are reserved." },
+        "crNumber": { "type": "string", "pattern": "^[0-9]{10}$", "description": "Commercial registration number (KSA format: 10 digits). Optional until compliance needs it. UNVERIFIED for other countries; the country pack may relax the pattern." },
+        "vatNumber": { "type": "string", "pattern": "^[0-9]{15}$", "description": "VAT registration number or UAE TRN, 15 digits. Optional until VAT registered." },
+        "languages": {
+          "type": "object",
+          "required": ["primary"],
+          "additionalProperties": false,
+          "properties": {
+            "primary": { "$ref": "#/$defs/locale" },
+            "secondary": { "type": "array", "items": { "$ref": "#/$defs/locale" }, "uniqueItems": true }
+          }
+        },
+        "locale": { "$ref": "#/$defs/companyLocale" },
+        "sizeBand": { "enum": ["1-9", "10-24", "25-49", "50-100", "100+"] },
+        "industry": { "$ref": "#/$defs/id" }
+      }
+    },
+    "weekday": { "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] },
+    "timeOfDay": { "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    "companyLocale": {
+      "type": "object",
+      "description": "Per-company calendar, week, hours, fiscal year, numbers and currency. Every field is optional; omitted fields take the country pack default. Dates are stored as Gregorian ISO/UTC regardless of these settings (docs/architecture/calendars-and-locale.md).",
+      "additionalProperties": false,
+      "properties": {
+        "timezone": { "type": "string", "maxLength": 64, "description": "IANA zone, for example Asia/Riyadh, Asia/Dubai, Africa/Cairo." },
+        "calendar": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary": { "enum": ["gregorian", "hijri_umm_al_qura"] },
+            "secondaryDisplay": { "enum": ["none", "gregorian", "hijri_umm_al_qura"], "description": "Shown beside the primary date in lists and on documents where layout allows." }
+          }
+        },
+        "week": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "startDay": { "$ref": "#/$defs/weekday" },
+            "weekendDays": { "type": "array", "uniqueItems": true, "maxItems": 3, "items": { "$ref": "#/$defs/weekday" } }
+          }
+        },
+        "workingTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workDays": { "type": "array", "uniqueItems": true, "minItems": 1, "items": { "$ref": "#/$defs/weekday" } },
+            "hours": {
+              "type": "object",
+              "required": ["from", "to"],
+              "additionalProperties": false,
+              "properties": {
+                "from": { "$ref": "#/$defs/timeOfDay" },
+                "to": { "$ref": "#/$defs/timeOfDay" }
+              }
+            },
+            "reducedPeriods": {
+              "type": "array",
+              "description": "Periods with different hours, for example Ramadan. Start can be a fixed date or tied to a Hijri event so it moves each year.",
+              "items": {
+                "type": "object",
+                "required": ["id", "labels", "hours"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "$ref": "#/$defs/id" },
+                  "labels": { "$ref": "#/$defs/localizedText" },
+                  "rule": { "enum": ["ramadan", "fixed_dates"], "default": "ramadan" },
+                  "gregorianFrom": { "type": "string", "format": "date" },
+                  "gregorianTo": { "type": "string", "format": "date" },
+                  "hours": {
+                    "type": "object",
+                    "required": ["from", "to"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": { "$ref": "#/$defs/timeOfDay" },
+                      "to": { "$ref": "#/$defs/timeOfDay" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "fiscalYear": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["gregorian", "hijri"] },
+            "startMonth": { "type": "integer", "minimum": 1, "maximum": 12 },
+            "startDay": { "type": "integer", "minimum": 1, "maximum": 31 }
+          }
+        },
+        "holidays": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "calendarRef": {
+              "type": "object",
+              "required": ["id", "version"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z]{2}(_[a-z0-9]+)?\\.holidays$", "description": "For example sa.holidays, supplied by the country pack." },
+                "version": { "$ref": "#/$defs/semver" }
+              }
+            },
+            "overrides": {
+              "type": "array",
+              "description": "Admin overrides: add a company day off, remove a pack holiday, or move one (for example when an authority announces a different date).",
+              "items": {
+                "type": "object",
+                "required": ["action", "date"],
+                "additionalProperties": false,
+                "properties": {
+                  "action": { "enum": ["add", "remove", "move"] },
+                  "date": { "type": "string", "format": "date", "description": "Gregorian ISO date affected." },
+                  "movedTo": { "type": "string", "format": "date" },
+                  "labels": { "$ref": "#/$defs/localizedText" },
+                  "reason": { "type": "string", "maxLength": 200 }
+                },
+                "allOf": [
+                  { "if": { "properties": { "action": { "const": "move" } }, "required": ["action"] }, "then": { "required": ["movedTo"] } },
+                  { "if": { "properties": { "action": { "const": "add" } }, "required": ["action"] }, "then": { "required": ["labels"] } }
+                ]
+              }
+            }
+          }
+        },
+        "numberSystem": { "enum": ["western", "eastern_arabic"], "description": "Digit shapes in the UI. Documents may differ where law or the customer requires." },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$", "description": "ISO 4217 base currency." }
+      }
+    },
+    "location": {
+      "type": "object",
+      "required": ["id", "kind", "labels"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["branch", "warehouse", "department"] },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "city": { "type": "string", "maxLength": 80 },
+        "parent": { "$ref": "#/$defs/id" }
+      }
+    },
+    "componentUse": {
+      "type": "object",
+      "required": ["id", "versionRange"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/componentId" },
+        "versionRange": { "$ref": "#/$defs/semverRange" },
+        "parameters": { "type": "object", "description": "Values for the parameters declared in the component manifest, validated against it." },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "componentId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}$",
+      "description": "Dotted id, for example core.sales_invoice or compliance.zatca_sa."
+    },
+    "entity": {
+      "type": "object",
+      "required": ["id", "labels", "fields", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "pluralLabels": { "$ref": "#/$defs/localizedText" },
+        "kind": { "enum": ["master", "document", "child"], "default": "master" },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/field" }
+        },
+        "relations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/relation" }
+        },
+        "components": {
+          "description": "Component bindings: which certified components implement this entity (rigid) or extend it (configurable).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["component", "mode"],
+            "additionalProperties": false,
+            "properties": {
+              "component": { "$ref": "#/$defs/componentId" },
+              "mode": { "enum": ["implements", "extends"] },
+              "parameters": { "type": "object" }
+            }
+          }
+        },
+        "workflow": { "$ref": "#/$defs/id" },
+        "numbering": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prefix": { "type": "string", "maxLength": 12 },
+            "padding": { "type": "integer", "minimum": 1, "maximum": 10 },
+            "resetPerFiscalYear": { "type": "boolean" }
+          }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["id", "type", "labels"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "type": {
+          "enum": ["string", "text", "integer", "decimal", "money", "percent", "boolean", "date", "datetime", "select", "link", "attachment", "phone", "email"]
+        },
+        "required": { "type": "boolean", "default": false },
+        "unique": { "type": "boolean", "default": false },
+        "readOnly": { "type": "boolean", "default": false },
+        "default": {},
+        "options": {
+          "type": "array",
+          "description": "For type select.",
+          "items": {
+            "type": "object",
+            "required": ["value", "labels"],
+            "additionalProperties": false,
+            "properties": {
+              "value": { "$ref": "#/$defs/id" },
+              "labels": { "$ref": "#/$defs/localizedText" }
+            }
+          },
+          "minItems": 1
+        },
+        "target": { "$ref": "#/$defs/id", "description": "For type link: the target entity id." },
+        "precision": { "type": "integer", "minimum": 0, "maximum": 6, "description": "Decimal places for decimal, money, percent." },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "maxLength": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "computed": {
+          "type": "object",
+          "description": "Value produced by deterministic code from a bound component. The Blueprint names the function; it never contains a formula.",
+          "required": ["function", "inputs"],
+          "additionalProperties": false,
+          "properties": {
+            "function": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,4}$" },
+            "inputs": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+          }
+        },
+        "visibleToRoles": { "type": "array", "items": { "$ref": "#/$defs/id" }, "description": "Empty or absent means every role with read access to the entity." }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "select" } }, "required": ["type"] }, "then": { "required": ["options"] } },
+        { "if": { "properties": { "type": { "const": "link" } }, "required": ["type"] }, "then": { "required": ["target"] } }
+      ]
+    },
+    "relation": {
+      "type": "object",
+      "required": ["id", "target", "cardinality"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "target": { "$ref": "#/$defs/id" },
+        "cardinality": { "enum": ["one", "many"] },
+        "kind": { "enum": ["reference", "child_table", "many_to_many"], "default": "reference" },
+        "required": { "type": "boolean", "default": false },
+        "onDelete": { "enum": ["restrict", "cascade", "set_null"], "default": "restrict" },
+        "labels": { "$ref": "#/$defs/localizedText" }
+      }
+    },
+    "guard": {
+      "type": "object",
+      "required": ["field", "op"],
+      "additionalProperties": false,
+      "properties": {
+        "field": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$", "description": "Field id on the entity, or a related field as relation.field." },
+        "op": { "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "is_set", "is_not_set"] },
+        "value": {}
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "required": ["id", "entity", "labels", "states", "transitions", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "entity": { "$ref": "#/$defs/id" },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "states": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["id", "labels", "kind"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "labels": { "$ref": "#/$defs/localizedText" },
+              "kind": { "enum": ["initial", "normal", "final"] },
+              "locksEditing": { "type": "boolean", "default": false }
+            }
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "from", "to", "actionLabels", "allowedRoles"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "from": { "$ref": "#/$defs/id" },
+              "to": { "$ref": "#/$defs/id" },
+              "actionLabels": { "$ref": "#/$defs/localizedText" },
+              "allowedRoles": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" } },
+              "guards": { "type": "array", "items": { "$ref": "#/$defs/guard" }, "description": "All must hold (AND)." },
+              "approval": { "$ref": "#/$defs/id", "description": "Approval rule id that must be satisfied before the transition completes." },
+              "notify": { "type": "array", "items": { "$ref": "#/$defs/id" }, "description": "Role ids notified." }
+            }
+          }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["company", "branch", "warehouse", "department", "own_records", "assigned_records"] },
+        "values": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "description": "Location ids for branch, warehouse or department scopes. Absent for company, own_records and assigned_records."
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "enum": ["branch", "warehouse", "department"] } }, "required": ["type"] }, "then": { "required": ["values"] } }
+      ]
+    },
+    "role": {
+      "type": "object",
+      "required": ["id", "labels", "function", "scope", "permissions", "homeView", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "function": { "enum": ["owner", "general_manager", "finance", "accounting", "sales", "purchasing", "warehouse", "hr", "operations", "support", "read_only", "custom"] },
+        "scope": { "$ref": "#/$defs/scope" },
+        "permissions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["entity", "actions"],
+            "additionalProperties": false,
+            "properties": {
+              "entity": { "$ref": "#/$defs/id" },
+              "actions": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "enum": ["read", "create", "update", "delete", "submit", "cancel", "approve", "export"] }
+              },
+              "hiddenFields": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+              "readOnlyFields": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+            }
+          }
+        },
+        "homeView": {
+          "type": "object",
+          "required": ["layout"],
+          "additionalProperties": false,
+          "properties": {
+            "layout": { "enum": ["owner_overview", "task_list", "worklist_and_kpis", "data_entry", "custom"] },
+            "reports": { "type": "array", "items": { "$ref": "#/$defs/id" }, "description": "Report or dashboard ids shown on the role's home view." },
+            "quickActions": { "type": "array", "items": { "$ref": "#/$defs/id" }, "description": "Workflow transition ids offered as one-tap actions." }
+          }
+        },
+        "canUseChatActions": { "type": "boolean", "default": true, "description": "Whether the chat may act for this role. Chat always acts with the user's own permissions; this can only restrict." },
+        "isAdmin": { "type": "boolean", "default": false, "description": "May change branding and request Blueprint changes. At least one role must be admin." },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "approvalRule": {
+      "type": "object",
+      "required": ["id", "labels", "appliesTo", "steps", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "appliesTo": {
+          "type": "object",
+          "required": ["entity", "action"],
+          "additionalProperties": false,
+          "properties": {
+            "entity": { "$ref": "#/$defs/id" },
+            "action": { "enum": ["submit", "cancel", "update", "delete", "payment", "chat_action"] }
+          }
+        },
+        "conditions": { "type": "array", "items": { "$ref": "#/$defs/guard" }, "description": "Rule applies only when all hold, for example amount above a threshold." },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["order", "approverRole", "mode"],
+            "additionalProperties": false,
+            "properties": {
+              "order": { "type": "integer", "minimum": 1 },
+              "approverRole": { "$ref": "#/$defs/id" },
+              "mode": { "enum": ["any_one", "all"] },
+              "timeoutHours": { "type": "integer", "minimum": 1, "maximum": 720 },
+              "escalateToRole": { "$ref": "#/$defs/id" }
+            }
+          }
+        },
+        "selfApproval": { "type": "boolean", "default": false },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "report": {
+      "type": "object",
+      "required": ["id", "kind", "labels", "metrics", "visibleToRoles", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["report", "dashboard"] },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "entity": { "$ref": "#/$defs/id" },
+        "metrics": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["ref"],
+            "additionalProperties": false,
+            "properties": {
+              "ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}$", "description": "Semantic-layer metric id, for example sales.revenue." },
+              "display": { "enum": ["table", "kpi", "line", "bar", "pie"], "default": "table" },
+              "groupBy": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+            }
+          }
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "type"],
+            "additionalProperties": false,
+            "properties": {
+              "field": { "$ref": "#/$defs/id" },
+              "type": { "enum": ["date_range", "select", "link", "text", "number_range"] },
+              "default": {}
+            }
+          }
+        },
+        "visibleToRoles": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" }, "description": "Rows are still limited by each viewer's scope." },
+        "schedule": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "frequency": { "enum": ["daily", "weekly", "monthly"] },
+            "deliverTo": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+            "channel": { "enum": ["in_app", "email", "whatsapp"] }
+          }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "integration": {
+      "type": "object",
+      "required": ["id", "connector", "direction", "mappings", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "connector": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*){0,2}$", "description": "Connector id from the connector registry." },
+        "tier": { "type": "integer", "minimum": 1, "maximum": 5, "description": "Capability tier per contracts/connector-interface.md." },
+        "direction": { "enum": ["in", "out", "both"] },
+        "schedule": { "enum": ["manual", "hourly", "daily", "on_event"], "default": "manual" },
+        "mappings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source", "target"],
+            "additionalProperties": false,
+            "properties": {
+              "source": { "type": "string", "maxLength": 200, "description": "Path in the normalised source model." },
+              "target": { "type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$", "description": "entity.field" },
+              "transform": { "enum": ["none", "trim", "to_date", "to_decimal", "map_values", "split_name", "normalise_phone"], "default": "none" },
+              "mappingConfidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "compliance": {
+      "type": "object",
+      "required": ["country", "countryPack", "eInvoicing", "vat", "hijriDisplay", "documentLanguages"],
+      "additionalProperties": false,
+      "properties": {
+        "country": { "enum": ["SA", "AE", "EG", "BH", "KW", "OM", "QA"], "description": "Operating countries are SA, AE and EG (launch order SA, UAE, Egypt). Others are reserved." },
+        "countryPack": {
+          "type": "object",
+          "description": "The certified Country Pack (tax, e-invoicing, holiday calendar, work week, payroll rules, document templates, formats) this tenant runs on. Supplies defaults for every omitted company.locale field. See docs/architecture/country-packs.md.",
+          "required": ["id", "version"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string", "pattern": "^[a-z]{2}(_[a-z0-9]+)?$", "description": "For example sa, ae, eg." },
+            "version": { "$ref": "#/$defs/semver" }
+          }
+        },
+        "eInvoicing": {
+          "type": "object",
+          "required": ["mode"],
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "enum": ["none", "zatca_phase1", "zatca_phase2", "uae_e_invoicing", "eg_e_invoice"], "description": "UAE and Egypt values are placeholders until those regimes are confirmed (UNVERIFIED); see docs/research/03-regulations.md." },
+            "environment": { "enum": ["sandbox", "simulation", "production"], "default": "sandbox" },
+            "componentId": { "$ref": "#/$defs/componentId" }
+          }
+        },
+        "vat": {
+          "type": "object",
+          "required": ["registered"],
+          "additionalProperties": false,
+          "properties": {
+            "registered": { "type": "boolean" },
+            "defaultRatePercent": { "type": "number", "minimum": 0, "maximum": 100 },
+            "filingPeriod": { "enum": ["monthly", "quarterly"] },
+            "pricesIncludeVat": { "type": "boolean", "default": false }
+          },
+          "allOf": [
+            { "if": { "properties": { "registered": { "const": true } }, "required": ["registered"] }, "then": { "required": ["filingPeriod", "defaultRatePercent"] } }
+          ]
+        },
+        "hijriDisplay": {
+          "type": "object",
+          "description": "Legacy switch for dual-date display on documents; detailed calendar choices live in company.locale.",
+          "required": ["enabled"],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "primary": { "enum": ["gregorian", "hijri"], "default": "gregorian" }
+          }
+        },
+        "documentLanguages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/locale" }
+        },
+        "payroll": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "wpsEnabled": { "type": "boolean" },
+            "socialInsurance": { "enum": ["none", "gosi"], "description": "UNVERIFIED mapping; payroll is not v1 scope." }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "country": { "const": "SA" },
+              "eInvoicing": { "properties": { "mode": { "enum": ["zatca_phase1", "zatca_phase2"] } }, "required": ["mode"] }
+            },
+            "required": ["country", "eInvoicing"]
+          },
+          "then": { "properties": { "documentLanguages": { "contains": { "const": "ar" } } } }
+        }
+      ]
+    },
+    "i18n": {
+      "type": "object",
+      "required": ["defaultLocale"],
+      "additionalProperties": false,
+      "properties": {
+        "defaultLocale": { "$ref": "#/$defs/locale" },
+        "glossary": {
+          "type": "array",
+          "description": "Tenant terms that the AI and UI must use consistently, seeded from docs/glossary.md.",
+          "items": {
+            "type": "object",
+            "required": ["term", "translations"],
+            "additionalProperties": false,
+            "properties": {
+              "term": { "$ref": "#/$defs/id" },
+              "translations": { "$ref": "#/$defs/localizedText" },
+              "note": { "type": "string", "maxLength": 300 }
+            }
+          }
+        },
+        "labelOverrides": {
+          "type": "object",
+          "description": "Map of i18n key to localizedText, for tenant renames of standard labels.",
+          "propertyNames": { "type": "string", "pattern": "^[a-z][a-z0-9_.]{2,100}$" },
+          "additionalProperties": { "$ref": "#/$defs/localizedText" }
+        }
+      }
+    },
+    "assetRef": {
+      "type": "object",
+      "description": "Reference to an uploaded brand asset. The file lives in per-tenant storage; see docs/architecture/theming.md. The asset record, not the client, is authoritative for the fields below.",
+      "required": ["assetId", "mediaType", "bytes", "sha256", "sanitised"],
+      "additionalProperties": false,
+      "properties": {
+        "assetId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,63}$" },
+        "mediaType": { "enum": ["image/png", "image/jpeg", "image/svg+xml"] },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 2097152, "description": "Hard limit 2 MiB." },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "widthPx": { "type": "integer", "minimum": 64, "maximum": 4096 },
+        "heightPx": { "type": "integer", "minimum": 64, "maximum": 4096 },
+        "sanitised": { "const": true, "description": "Set by the asset pipeline after SVG sanitisation (scripts and external references stripped) and malware scan. Blueprints referencing unsanitised assets are rejected." }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "description": "Tenant workspace branding. Changeable only by roles with isAdmin, previewed before apply, versioned with the Blueprint, audited. Token layering: docs/architecture/theming.md.",
+      "required": ["displayName", "primaryColour", "poweredBy", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "displayName": { "$ref": "#/$defs/localizedText" },
+        "logo": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "onLight": { "$ref": "#/$defs/assetRef", "description": "Logo for light surfaces." },
+            "onDark": { "$ref": "#/$defs/assetRef", "description": "Logo for dark surfaces. Omit and set deriveDark to derive one." },
+            "deriveDark": { "type": "boolean", "default": true, "description": "Derive a dark-surface variant from onLight when onDark is absent." }
+          },
+          "required": ["onLight"]
+        },
+        "primaryColour": { "$ref": "#/$defs/hexColour", "description": "Subject to WCAG AA checks in both themes; may be auto-adjusted. Status colours and typography are not brandable." },
+        "accentColour": { "$ref": "#/$defs/hexColour" },
+        "favicon": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "source": { "enum": ["auto", "asset"], "default": "auto", "description": "auto generates the required sizes (16, 32, 48, 180, 192, 512) from the logo." },
+            "asset": { "$ref": "#/$defs/assetRef" }
+          },
+          "allOf": [
+            { "if": { "properties": { "source": { "const": "asset" } }, "required": ["source"] }, "then": { "required": ["asset"] } }
+          ]
+        },
+        "loginPage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "headline": { "$ref": "#/$defs/localizedText" },
+            "showLogo": { "type": "boolean", "default": true },
+            "backgroundAsset": { "$ref": "#/$defs/assetRef" }
+          }
+        },
+        "documentHeader": {
+          "type": "object",
+          "description": "Options for tenant-branded documents. Legally required layout and content always win over these options.",
+          "additionalProperties": false,
+          "properties": {
+            "showLogo": { "type": "boolean", "default": true },
+            "logoPosition": { "enum": ["start", "center", "end"], "default": "start", "description": "start/end are logical positions and flip in RTL." },
+            "showAddress": { "type": "boolean", "default": true },
+            "footerText": { "$ref": "#/$defs/localizedText" },
+            "accentOnDocuments": { "type": "boolean", "default": false, "description": "Use the primary colour for table headers on documents. Never applies to legally mandated elements." }
+          }
+        },
+        "poweredBy": {
+          "type": "object",
+          "required": ["show"],
+          "additionalProperties": false,
+          "properties": {
+            "show": { "type": "boolean", "description": "Show the platform mark in app chrome. false requires the white-label entitlement." }
+          }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    }
+  }
+}

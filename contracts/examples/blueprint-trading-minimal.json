@@ -1,0 +1,319 @@
+{
+  "$schema": "../blueprint.schema.json",
+  "meta": {
+    "id": "example-trading-001",
+    "schemaVersion": "0.1.0",
+    "revision": 1,
+    "locales": ["ar", "en"],
+    "defaultLocale": "ar",
+    "buildState": "draft",
+    "template": { "id": "trading_distribution", "version": "0.1.0" },
+    "engineTarget": { "adapter": "frappe", "versionSet": "set-example" },
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  },
+  "company": {
+    "legalName": { "ar": "شركة المثال للتجارة", "en": "Example Trading Co." },
+    "tradeName": { "ar": "المثال", "en": "Example" },
+    "country": "SA",
+    "crNumber": "1010000000",
+    "vatNumber": "300000000000003",
+    "languages": { "primary": "ar", "secondary": ["en"] },
+    "locale": {
+      "timezone": "Asia/Riyadh",
+      "calendar": { "primary": "gregorian", "secondaryDisplay": "hijri_umm_al_qura" },
+      "week": { "startDay": "sun", "weekendDays": ["fri", "sat"] },
+      "workingTime": {
+        "workDays": ["sun", "mon", "tue", "wed", "thu"],
+        "hours": { "from": "08:00", "to": "17:00" },
+        "reducedPeriods": [
+          { "id": "ramadan", "labels": { "ar": "ساعات رمضان", "en": "Ramadan hours" }, "rule": "ramadan", "hours": { "from": "09:00", "to": "14:00" } }
+        ]
+      },
+      "fiscalYear": { "type": "gregorian", "startMonth": 1, "startDay": 1 },
+      "holidays": {
+        "calendarRef": { "id": "sa.holidays", "version": "0.1.0" },
+        "overrides": [
+          { "action": "add", "date": "2026-03-01", "labels": { "ar": "إجازة الشركة", "en": "Company day off" }, "reason": "Example override" }
+        ]
+      },
+      "numberSystem": "western",
+      "currency": "SAR"
+    },
+    "sizeBand": "10-24",
+    "industry": "trading_distribution"
+  },
+  "locations": [
+    { "id": "hq_riyadh", "kind": "branch", "labels": { "ar": "المقر الرئيسي", "en": "Head office" }, "city": "Riyadh" },
+    { "id": "main_warehouse", "kind": "warehouse", "labels": { "ar": "المستودع الرئيسي", "en": "Main warehouse" }, "city": "Riyadh" }
+  ],
+  "components": [
+    { "id": "core.customer", "versionRange": "^0.1.0", "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false } },
+    { "id": "core.item", "versionRange": "^0.1.0", "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false } },
+    { "id": "core.sales_order", "versionRange": "^0.1.0", "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false } },
+    { "id": "core.sales_invoice", "versionRange": "^0.1.0", "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false } },
+    { "id": "compliance.zatca_sa", "versionRange": "^0.1.0", "parameters": { "phase": 2 }, "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false } }
+  ],
+  "entities": [
+    {
+      "id": "customer",
+      "labels": { "ar": "عميل", "en": "Customer" },
+      "pluralLabels": { "ar": "العملاء", "en": "Customers" },
+      "kind": "master",
+      "fields": [
+        { "id": "customer_name", "type": "string", "required": true, "maxLength": 140, "labels": { "ar": "اسم العميل", "en": "Customer name" } },
+        { "id": "vat_number", "type": "string", "maxLength": 15, "labels": { "ar": "الرقم الضريبي", "en": "VAT number" } },
+        { "id": "phone", "type": "phone", "labels": { "ar": "الجوال", "en": "Mobile" } },
+        { "id": "credit_limit", "type": "money", "precision": 2, "min": 0, "labels": { "ar": "حد الائتمان", "en": "Credit limit" } }
+      ],
+      "components": [{ "component": "core.customer", "mode": "implements" }],
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": true, "editedBy": "owner" }
+    },
+    {
+      "id": "item",
+      "labels": { "ar": "صنف", "en": "Item" },
+      "pluralLabels": { "ar": "الأصناف", "en": "Items" },
+      "kind": "master",
+      "fields": [
+        { "id": "item_code", "type": "string", "required": true, "unique": true, "maxLength": 40, "labels": { "ar": "رمز الصنف", "en": "Item code" } },
+        { "id": "item_name", "type": "string", "required": true, "labels": { "ar": "اسم الصنف", "en": "Item name" } },
+        { "id": "unit", "type": "select", "required": true, "labels": { "ar": "الوحدة", "en": "Unit" },
+          "options": [
+            { "value": "piece", "labels": { "ar": "حبة", "en": "Piece" } },
+            { "value": "carton", "labels": { "ar": "كرتون", "en": "Carton" } }
+          ] },
+        { "id": "selling_price", "type": "money", "precision": 2, "min": 0, "labels": { "ar": "سعر البيع", "en": "Selling price" } }
+      ],
+      "components": [{ "component": "core.item", "mode": "implements" }],
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false }
+    },
+    {
+      "id": "sales_order",
+      "labels": { "ar": "أمر بيع", "en": "Sales order" },
+      "pluralLabels": { "ar": "أوامر البيع", "en": "Sales orders" },
+      "kind": "document",
+      "fields": [
+        { "id": "customer", "type": "link", "target": "customer", "required": true, "labels": { "ar": "العميل", "en": "Customer" } },
+        { "id": "order_date", "type": "date", "required": true, "labels": { "ar": "تاريخ الطلب", "en": "Order date" } },
+        { "id": "subtotal", "type": "money", "precision": 2, "readOnly": true, "labels": { "ar": "المجموع قبل الضريبة", "en": "Subtotal" } },
+        { "id": "vat_amount", "type": "money", "precision": 2, "readOnly": true, "labels": { "ar": "ضريبة القيمة المضافة", "en": "VAT" },
+          "computed": { "function": "compliance.vat.calculate", "inputs": ["subtotal"] } },
+        { "id": "total_amount", "type": "money", "precision": 2, "readOnly": true, "labels": { "ar": "الإجمالي", "en": "Total" },
+          "computed": { "function": "core.sales.order_total", "inputs": ["subtotal", "vat_amount"] } }
+      ],
+      "relations": [
+        { "id": "lines", "target": "item", "cardinality": "many", "kind": "child_table", "required": true, "labels": { "ar": "بنود الطلب", "en": "Order lines" } }
+      ],
+      "components": [{ "component": "core.sales_order", "mode": "implements" }],
+      "workflow": "sales_order_flow",
+      "numbering": { "prefix": "SO-", "padding": 5, "resetPerFiscalYear": true },
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false }
+    },
+    {
+      "id": "sales_invoice",
+      "labels": { "ar": "فاتورة ضريبية", "en": "Tax invoice" },
+      "pluralLabels": { "ar": "الفواتير الضريبية", "en": "Tax invoices" },
+      "kind": "document",
+      "fields": [
+        { "id": "customer", "type": "link", "target": "customer", "required": true, "labels": { "ar": "العميل", "en": "Customer" } },
+        { "id": "invoice_date", "type": "date", "required": true, "labels": { "ar": "تاريخ الفاتورة", "en": "Invoice date" } },
+        { "id": "total_amount", "type": "money", "precision": 2, "readOnly": true, "labels": { "ar": "الإجمالي", "en": "Total" } }
+      ],
+      "components": [
+        { "component": "core.sales_invoice", "mode": "implements" },
+        { "component": "compliance.zatca_sa", "mode": "extends" }
+      ],
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false }
+    }
+  ],
+  "workflows": [
+    {
+      "id": "sales_order_flow",
+      "entity": "sales_order",
+      "labels": { "ar": "مسار أمر البيع", "en": "Sales order flow" },
+      "states": [
+        { "id": "draft", "kind": "initial", "labels": { "ar": "مسودة", "en": "Draft" } },
+        { "id": "pending_approval", "kind": "normal", "locksEditing": true, "labels": { "ar": "بانتظار الاعتماد", "en": "Pending approval" } },
+        { "id": "approved", "kind": "normal", "locksEditing": true, "labels": { "ar": "معتمد", "en": "Approved" } },
+        { "id": "delivered", "kind": "final", "locksEditing": true, "labels": { "ar": "تم التسليم", "en": "Delivered" } },
+        { "id": "cancelled", "kind": "final", "locksEditing": true, "labels": { "ar": "ملغى", "en": "Cancelled" } }
+      ],
+      "transitions": [
+        { "id": "submit_small", "from": "draft", "to": "approved", "actionLabels": { "ar": "اعتماد", "en": "Confirm" },
+          "allowedRoles": ["sales_rep", "owner"], "guards": [{ "field": "total_amount", "op": "lt", "value": 50000 }] },
+        { "id": "submit_large", "from": "draft", "to": "pending_approval", "actionLabels": { "ar": "إرسال للاعتماد", "en": "Send for approval" },
+          "allowedRoles": ["sales_rep", "owner"], "guards": [{ "field": "total_amount", "op": "gte", "value": 50000 }], "notify": ["owner"] },
+        { "id": "approve_large", "from": "pending_approval", "to": "approved", "actionLabels": { "ar": "اعتماد", "en": "Approve" },
+          "allowedRoles": ["owner"], "approval": "large_order_approval" },
+        { "id": "deliver", "from": "approved", "to": "delivered", "actionLabels": { "ar": "تأكيد التسليم", "en": "Confirm delivery" },
+          "allowedRoles": ["warehouse_keeper", "owner"] },
+        { "id": "cancel_draft", "from": "draft", "to": "cancelled", "actionLabels": { "ar": "إلغاء", "en": "Cancel" },
+          "allowedRoles": ["sales_rep", "owner"] }
+      ],
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": true, "editedBy": "owner" }
+    }
+  ],
+  "roles": [
+    {
+      "id": "owner",
+      "labels": { "ar": "المالك", "en": "Owner" },
+      "function": "owner",
+      "scope": { "type": "company" },
+      "permissions": [
+        { "entity": "customer", "actions": ["read", "create", "update", "export"] },
+        { "entity": "item", "actions": ["read", "create", "update", "export"] },
+        { "entity": "sales_order", "actions": ["read", "create", "update", "submit", "cancel", "approve", "export"] },
+        { "entity": "sales_invoice", "actions": ["read", "export"] }
+      ],
+      "homeView": { "layout": "owner_overview", "reports": ["sales_overview", "receivables_aging"], "quickActions": ["approve_large"] },
+      "isAdmin": true,
+      "provenance": { "source": "interview", "ref": "turn-004", "humanEdited": false }
+    },
+    {
+      "id": "sales_rep",
+      "labels": { "ar": "مندوب مبيعات", "en": "Sales rep" },
+      "function": "sales",
+      "scope": { "type": "own_records" },
+      "permissions": [
+        { "entity": "customer", "actions": ["read", "create", "update"], "hiddenFields": ["credit_limit"] },
+        { "entity": "item", "actions": ["read"] },
+        { "entity": "sales_order", "actions": ["read", "create", "update", "submit", "cancel"] }
+      ],
+      "homeView": { "layout": "task_list", "reports": ["my_orders"], "quickActions": ["submit_small", "submit_large"] },
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false }
+    },
+    {
+      "id": "warehouse_keeper",
+      "labels": { "ar": "أمين مستودع", "en": "Warehouse keeper" },
+      "function": "warehouse",
+      "scope": { "type": "warehouse", "values": ["main_warehouse"] },
+      "permissions": [
+        { "entity": "item", "actions": ["read"], "hiddenFields": ["selling_price"] },
+        { "entity": "sales_order", "actions": ["read", "submit"], "readOnlyFields": ["customer", "order_date"] }
+      ],
+      "homeView": { "layout": "worklist_and_kpis", "reports": ["my_orders"], "quickActions": ["deliver"] },
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false }
+    },
+    {
+      "id": "accountant",
+      "labels": { "ar": "محاسب", "en": "Accountant" },
+      "function": "accounting",
+      "scope": { "type": "company" },
+      "permissions": [
+        { "entity": "customer", "actions": ["read", "update"] },
+        { "entity": "sales_order", "actions": ["read", "export"] },
+        { "entity": "sales_invoice", "actions": ["read", "create", "update", "submit", "cancel", "export"] }
+      ],
+      "homeView": { "layout": "worklist_and_kpis", "reports": ["receivables_aging"] },
+      "canUseChatActions": true,
+      "provenance": { "source": "interview", "ref": "turn-011", "humanEdited": false }
+    }
+  ],
+  "approvals": [
+    {
+      "id": "large_order_approval",
+      "labels": { "ar": "اعتماد الطلبات الكبيرة", "en": "Large order approval" },
+      "appliesTo": { "entity": "sales_order", "action": "submit" },
+      "conditions": [{ "field": "total_amount", "op": "gte", "value": 50000 }],
+      "steps": [{ "order": 1, "approverRole": "owner", "mode": "any_one", "timeoutHours": 48 }],
+      "selfApproval": false,
+      "provenance": { "source": "interview", "ref": "turn-009", "humanEdited": false }
+    }
+  ],
+  "reports": [
+    {
+      "id": "sales_overview",
+      "kind": "dashboard",
+      "labels": { "ar": "نظرة عامة على المبيعات", "en": "Sales overview" },
+      "entity": "sales_order",
+      "metrics": [
+        { "ref": "sales.revenue", "display": "kpi" },
+        { "ref": "sales.order_count", "display": "kpi" },
+        { "ref": "sales.revenue_by_customer", "display": "bar", "groupBy": ["customer"] }
+      ],
+      "filters": [{ "field": "order_date", "type": "date_range" }],
+      "visibleToRoles": ["owner"],
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false }
+    },
+    {
+      "id": "receivables_aging",
+      "kind": "report",
+      "labels": { "ar": "أعمار الذمم المدينة", "en": "Receivables aging" },
+      "entity": "sales_invoice",
+      "metrics": [{ "ref": "finance.receivables_aging", "display": "table", "groupBy": ["customer"] }],
+      "visibleToRoles": ["owner", "accountant"],
+      "schedule": { "frequency": "weekly", "deliverTo": ["owner"], "channel": "email" },
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false }
+    },
+    {
+      "id": "my_orders",
+      "kind": "report",
+      "labels": { "ar": "طلباتي", "en": "My orders" },
+      "entity": "sales_order",
+      "metrics": [{ "ref": "sales.order_list", "display": "table" }],
+      "visibleToRoles": ["sales_rep", "warehouse_keeper"],
+      "provenance": { "source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false }
+    }
+  ],
+  "integrations": [
+    {
+      "id": "customer_list_upload",
+      "connector": "file.excel_upload",
+      "tier": 2,
+      "direction": "in",
+      "schedule": "manual",
+      "mappings": [
+        { "source": "sheet1.col_a", "target": "customer.customer_name", "transform": "trim", "mappingConfidence": 0.97 },
+        { "source": "sheet1.col_b", "target": "customer.phone", "transform": "normalise_phone", "mappingConfidence": 0.9 },
+        { "source": "sheet1.col_c", "target": "customer.credit_limit", "transform": "to_decimal", "mappingConfidence": 0.82 }
+      ],
+      "provenance": { "source": "imported", "ref": "import-0001", "humanEdited": true, "editedBy": "team_reviewer" }
+    }
+  ],
+  "compliance": {
+    "country": "SA",
+    "countryPack": { "id": "sa", "version": "0.1.0" },
+    "eInvoicing": { "mode": "zatca_phase2", "environment": "sandbox", "componentId": "compliance.zatca_sa" },
+    "vat": { "registered": true, "defaultRatePercent": 15, "filingPeriod": "quarterly", "pricesIncludeVat": false },
+    "hijriDisplay": { "enabled": true, "primary": "gregorian" },
+    "documentLanguages": ["ar", "en"],
+    "payroll": { "wpsEnabled": false, "socialInsurance": "none" }
+  },
+  "i18n": {
+    "defaultLocale": "ar",
+    "glossary": [
+      { "term": "credit_limit", "translations": { "ar": "حد الائتمان", "en": "Credit limit" }, "note": "Maximum unpaid balance allowed per customer." }
+    ],
+    "labelOverrides": {
+      "sales_order.title": { "ar": "أمر بيع", "en": "Sales order" }
+    }
+  },
+  "branding": {
+    "displayName": { "ar": "المثال للتجارة", "en": "Example Trading" },
+    "logo": {
+      "onLight": {
+        "assetId": "logo-light-0001",
+        "mediaType": "image/png",
+        "bytes": 48213,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000001",
+        "widthPx": 512,
+        "heightPx": 512,
+        "sanitised": true
+      },
+      "deriveDark": true
+    },
+    "primaryColour": "#1F5FAE",
+    "accentColour": "#C77A12",
+    "favicon": { "source": "auto" },
+    "loginPage": { "headline": { "ar": "أهلاً بكم", "en": "Welcome" }, "showLogo": true },
+    "documentHeader": {
+      "showLogo": true,
+      "logoPosition": "start",
+      "showAddress": true,
+      "footerText": { "ar": "شكراً لتعاملكم معنا", "en": "Thank you for your business" },
+      "accentOnDocuments": false
+    },
+    "poweredBy": { "show": true },
+    "provenance": { "source": "interview", "ref": "turn-015", "humanEdited": false }
+  }
+}

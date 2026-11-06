@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:component-manifest:0.1.0",
+  "version": "0.1.0",
+  "title": "Component manifest",
+  "description": "Contract 2. Every component in the library ships a manifest.json that validates against this schema. The compiler resolves Blueprint component bindings against manifests; the registry refuses to publish a component whose manifest is invalid or whose certification evidence is missing. See docs/architecture/component-library.md.",
+  "type": "object",
+  "required": ["id", "version", "kind", "name", "description", "provides", "requires", "parameters", "tests", "certification", "engineCompatibility", "licence", "owner"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}$",
+      "description": "Dotted id, stable forever. First segment is the area: core, compliance, sales, purchasing, stock, hr, finance, ui, integration."
+    },
+    "version": { "$ref": "#/$defs/semver" },
+    "kind": {
+      "enum": ["rigid", "configurable"],
+      "description": "rigid: deterministic, never AI-written, no tenant parameters beyond enable/disable (ledger, tax, e-invoicing, payroll maths, audit). configurable: composed and parameterised by the Blueprint."
+    },
+    "name": {
+      "type": "object",
+      "required": ["ar", "en"],
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 120 }
+    },
+    "description": { "type": "string", "minLength": 10, "maxLength": 1000 },
+    "provides": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["capability", "artifacts"],
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,4}$",
+            "description": "Capability id other components and the Blueprint can require, for example sales.invoice.issue."
+          },
+          "artifacts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["type", "ref"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "enum": ["entity", "workflow", "role_template", "print_format", "report", "metric", "tool", "event", "function", "screen", "notification", "scheduled_job"] },
+                "ref": { "type": "string", "maxLength": 200, "description": "Path inside the component package or a stable name." }
+              }
+            }
+          }
+        }
+      }
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["versionRange"],
+        "additionalProperties": false,
+        "properties": {
+          "component": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}$" },
+          "capability": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,4}$" },
+          "versionRange": { "type": "string", "minLength": 1, "maxLength": 64 }
+        },
+        "oneOf": [{ "required": ["component"] }, { "required": ["capability"] }]
+      }
+    },
+    "parameters": {
+      "type": "array",
+      "description": "Values the Blueprint may set. Rigid components must declare none.",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "labels"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" },
+          "labels": {
+            "type": "object",
+            "required": ["ar", "en"],
+            "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 120 }
+          },
+          "type": { "enum": ["string", "integer", "decimal", "boolean", "enum", "percent", "money", "role_ref", "entity_ref", "field_ref"] },
+          "required": { "type": "boolean", "default": false },
+          "default": {},
+          "enumValues": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+          "min": { "type": "number" },
+          "max": { "type": "number" },
+          "affectsLedgerOrTax": { "type": "boolean", "default": false, "description": "If true, changing the value requires team review even after go-live." }
+        },
+        "allOf": [
+          { "if": { "properties": { "type": { "const": "enum" } }, "required": ["type"] }, "then": { "required": ["enumValues"] } }
+        ]
+      }
+    },
+    "tests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "path", "blocking"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" },
+          "kind": { "enum": ["unit", "integration", "bench", "simulation", "compliance_sandbox", "rtl", "arabic_text", "contrast", "security", "migration"] },
+          "path": { "type": "string", "maxLength": 200 },
+          "blocking": { "type": "boolean", "description": "A failing blocking test prevents publish and triggers canary rollback." }
+        }
+      }
+    },
+    "certification": {
+      "type": "object",
+      "required": ["level"],
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "enum": ["draft", "tested", "reviewed", "certified", "regulated"],
+          "description": "draft: authored, not usable by tenants. tested: all blocking tests pass in CI. reviewed: a named engineer reviewed code and config. certified: reviewed + canary on test tenants + Arabic/RTL checks. regulated: certified + compliance evidence (for example ZATCA sandbox pass) and a named compliance owner."
+        },
+        "reviewedBy": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9-]{1,39}$" }, "description": "GitHub logins." },
+        "certifiedAt": { "type": "string", "format": "date-time" },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "ref"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "enum": ["ci_run", "review", "canary", "compliance_sandbox", "arabic_eval", "security_review"] },
+              "ref": { "type": "string", "maxLength": 300 }
+            }
+          }
+        },
+        "touchesLedgerOrTax": { "type": "boolean", "default": false }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "level": { "enum": ["certified", "regulated"] } }, "required": ["level"] },
+          "then": { "required": ["reviewedBy", "certifiedAt", "evidence"], "properties": { "reviewedBy": { "minItems": 1 }, "evidence": { "minItems": 1 } } }
+        },
+        {
+          "if": { "properties": { "touchesLedgerOrTax": { "const": true } }, "required": ["touchesLedgerOrTax"] },
+          "then": { "properties": { "level": { "enum": ["reviewed", "certified", "regulated"] } } }
+        }
+      ]
+    },
+    "engineCompatibility": {
+      "type": "object",
+      "required": ["adapter", "engineRange"],
+      "additionalProperties": false,
+      "properties": {
+        "adapter": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,31}$", "description": "Engine adapter id, for example frappe." },
+        "engineRange": { "type": "string", "minLength": 1, "maxLength": 64, "description": "Range of the pinned engine version set, for example '>=15.0.0 <16.0.0'." },
+        "dependsOnEngineApps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["app", "range"],
+            "additionalProperties": false,
+            "properties": {
+              "app": { "type": "string", "maxLength": 64 },
+              "range": { "type": "string", "maxLength": 64 }
+            }
+          },
+          "description": "For example erpnext, hrms, or a third-party app such as the MIT ZATCA app, each with a version range."
+        },
+        "testedAgainst": { "type": "array", "items": { "type": "string", "maxLength": 64 }, "description": "Version set ids this version passed CI on." }
+      }
+    },
+    "licence": {
+      "type": "object",
+      "required": ["spdx"],
+      "additionalProperties": false,
+      "properties": {
+        "spdx": { "type": "string", "maxLength": 64, "description": "SPDX expression of the component's own licence, for example LicenseRef-Proprietary or MIT." },
+        "thirdParty": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "spdx", "source"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "maxLength": 120 },
+              "spdx": { "type": "string", "maxLength": 64 },
+              "source": { "type": "string", "maxLength": 300, "description": "Repository or package URL." },
+              "accessed": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "Date the licence was read (YYYY-MM-DD)." }
+            }
+          }
+        },
+        "copyleftReviewed": { "type": "boolean", "default": false, "description": "Must be true if any third-party spdx is GPL, AGPL, LGPL or similar. AGPL components are not accepted without an ADR." }
+      }
+    },
+    "owner": {
+      "type": "object",
+      "required": ["github"],
+      "additionalProperties": false,
+      "properties": {
+        "github": { "type": "string", "pattern": "^[A-Za-z0-9-]{1,39}$" },
+        "team": { "type": "string", "maxLength": 80 }
+      }
+    },
+    "i18n": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "locales": { "type": "array", "items": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$" }, "uniqueItems": true },
+        "rtlVerified": { "type": "boolean" },
+        "stringsFile": { "type": "string", "maxLength": 200 }
+      }
+    },
+    "dataHandling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "storesPersonalData": { "type": "boolean" },
+        "sendsDataToModels": { "type": "boolean" },
+        "promotableToLibrary": { "type": "boolean", "default": false, "description": "Whether patterns from this component's tenant usage may be generalised and promoted. Never customer data." }
+      }
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "enum": ["library", "component_factory", "upstream_open_source"] },
+        "requestId": { "type": "string", "maxLength": 80, "description": "Component request id when source is component_factory." },
+        "upstream": { "type": "string", "maxLength": 300 }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "enum": ["active", "deprecated", "retired"], "default": "active" },
+        "replacedBy": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}$" },
+        "migrationNote": { "type": "string", "maxLength": 500 }
+      },
+      "allOf": [
+        { "if": { "properties": { "status": { "enum": ["deprecated", "retired"] } }, "required": ["status"] }, "then": { "required": ["migrationNote"] } }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "rigid" } }, "required": ["kind"] },
+      "then": { "properties": { "parameters": { "maxItems": 0 } } }
+    }
+  ],
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+    }
+  }
+}

@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 15 | 2 | 16 | 0 | 33 |
-| G1 | 69 | 2 | 0 | 0 | 71 |
+| G1 | 70 | 2 | 0 | 0 | 72 |
 | G2 | 112 | 0 | 0 | 0 | 112 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 259 | 4 | 16 | 0 | 279 |
+| all | 260 | 4 | 16 | 0 | 280 |
 
 ## Blocked items
 
@@ -33,6 +33,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 ## Last 10 log files
 
+- [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.
 
 ## ADRs with status Proposed

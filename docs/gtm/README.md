@@ -19,7 +19,7 @@ Rejected for now: paid ads at scale, cold outbound volume, marketplaces.
 | Item | Plan |
 |---|---|
 | Goal | Validate pain, buyer, price range, accountant veto, channel; apply kill criteria (fewer than 8 describe a current ERP/compliance pain they would pay to fix; fewer than 5 would pay at SAR 2K+/month; accountant veto in more than half) from [../strategy/02-niche-and-launch-country.md](../strategy/02-niche-and-launch-country.md) |
-| Mix | About 15 owners/GMs in trading and distribution, 7 accountants or VAT consultants, 3 implementers/partners; split KSA and UAE |
+| Mix | About 15 owners/GMs in trading and distribution, 7 accountants or VAT consultants, 3 implementers/partners; split across KSA, UAE and Egypt |
 | Sourcing | Founders' networks, accountant referrals, LinkedIn, trade associations (names TBD) |
 | Script areas | Current tools and spend; last software purchase and who decided; ZATCA/e-invoicing status; Odoo or other pain; reaction to the chat-built ERP idea and to the month simulation; price ladder (Van Westendorp-style) at SAR 2K / 3.5K / 5K; setup fee tolerance; trust in AI for books; data/hosting worries; Arabic preference |
 | Rules | No pitching; record verbatim quotes without personal data; anonymise notes; store in `docs/research/` with consent |

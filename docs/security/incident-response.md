@@ -3,7 +3,7 @@
 Status: draft
 Owner: eldon
 
-Plan before the first paying customer (G3). Regulatory notification duties and deadlines under PDPL (KSA/UAE) and to customers: UNVERIFIED, research needed ([../compliance/data-protection-and-residency.md](../compliance/data-protection-and-residency.md)).
+Plan before the first paying customer (G3). Regulatory notification duties and deadlines under PDPL (KSA/UAE), Egypt's data-protection law (research needed) and to customers: UNVERIFIED, research needed ([../compliance/data-protection-and-residency.md](../compliance/data-protection-and-residency.md)).
 
 ## Severity
 | Sev | Definition | Response target (TBD) |

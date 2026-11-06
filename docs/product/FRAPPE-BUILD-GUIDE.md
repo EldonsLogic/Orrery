@@ -40,7 +40,7 @@ Research found Frappe at v16 but the latest ERPNext and HRMS releases at v15. **
 - Log any decision (a version pin, a library choice) in `docs/strategy/decisions.md`.
 
 ## Out of scope for now
-Payroll for KSA/UAE (HRMS Arabic is only 33% translated and GOSI/WPS were not found in it), UAE e-invoicing (needs an accredited provider partner), the chat UI, real customer data, anything for production.
+Payroll for KSA, UAE and Egypt (HRMS Arabic is only 33% translated and GOSI/WPS were not found in it), UAE e-invoicing (needs an accredited provider partner), the chat UI, real customer data, anything for production.
 
 ## Questions to answer in writing at the end
 Did the Blueprint apply cleanly? Did the ZATCA sandbox accept our invoices? What was painful about Frappe? How long does a new tenant take? Would you pick Frappe again?

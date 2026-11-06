@@ -6,7 +6,7 @@ Owner: eldon
 Platform name: Orrery (working name, not cleared; see ADR-0001). Say "the platform" in prose where possible.
 
 ## 1. Problem
-Owner-led companies (10-100 staff) in KSA and UAE run on Excel, WhatsApp and a mix of tools. Moving to an ERP means a partner project costing 5-14x the licence in year one (UNVERIFIED partner pricing, see [../research/02-market-and-customer.md](../research/02-market-and-customer.md) section 3), and customised ERPs become a liability at upgrade time (same file, section 4). Compliance deadlines (ZATCA Phase 2 waves, UAE e-invoicing) force a decision. Evidence of buyer demand is thin and must be tested in interviews ([../strategy/01-gaps-and-risks.md](../strategy/01-gaps-and-risks.md) risk 1).
+Owner-led companies (10-100 staff) in KSA, UAE and Egypt run on Excel, WhatsApp and a mix of tools. Moving to an ERP means a partner project costing 5-14x the licence in year one (UNVERIFIED partner pricing, see [../research/02-market-and-customer.md](../research/02-market-and-customer.md) section 3), and customised ERPs become a liability at upgrade time (same file, section 4). Compliance deadlines (ZATCA Phase 2 waves, UAE e-invoicing) force a decision. Evidence of buyer demand is thin and must be tested in interviews ([../strategy/01-gaps-and-risks.md](../strategy/01-gaps-and-risks.md) risk 1).
 
 ## 2. Product
 One chat, in Arabic or English. The AI interviews the owner (or reads their existing tools), drafts a visual Blueprint, assembles an ERP from vetted components, simulates a month of the business, then runs it. After go-live the same chat asks, acts, reports and changes the system. Every client build improves the platform (no client-specific code).

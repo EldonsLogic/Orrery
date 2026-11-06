@@ -12,7 +12,7 @@ Not legal advice. Everything here needs counsel. Status values: todo / doing / d
 | 3 | IP assignment (founders and contractors to the company) | Clean ownership for investors | Include prior prototype code (change engine) and its history | todo |
 | 4 | GPL boundary review | ERPNext/HRMS are GPL-3; run as SaaS only | Confirm separate services over API are not derivative; never distribute engine without review; write down the architecture rule ([../strategy/04-architecture-and-seed.md](../strategy/04-architecture-and-seed.md)) | todo |
 | 5 | Open-source licence register | Principle 1 | Record every adopted licence (MIT ERPGulf app, Frappe MIT, etc.); avoid AGPL lavaloon app | doing |
-| 6 | Trademark and domain clearance | Working name Orrery is not cleared (ADR-0001) | Search in KSA/UAE and key classes; domains; avoid "ERPNext"/"Frappe" in name and ads | todo |
+| 6 | Trademark and domain clearance | Working name Orrery is not cleared (ADR-0001) | Search in KSA, UAE, Egypt and key classes; domains; avoid "ERPNext"/"Frappe" in name and ads | todo |
 | 7 | Customer contract (master agreement) | Revenue | Includes: SaaS scope, setup milestones, data ownership and export, anonymised pattern reuse clause (licence to reuse de-identified Blueprint patterns and components), no training on tenant data, SLAs TBD, liability cap for compliance output, human review gate language, termination and deletion | todo |
 | 8 | Pilot agreement (paid, about 50%) | First customers | Case-study rights, reuse clause, data handling, feedback | todo |
 | 9 | Terms of service | Self-serve sign-up | Acceptable use, AI limitations, account rules | todo |
@@ -32,7 +32,7 @@ Carried from [../research/03-regulations.md](../research/03-regulations.md) sect
 2. UAE ASP accreditation, integration without being an ASP, liability split.
 3. Final UAE e-invoicing schedule (MD 66 of 2026 vs guidelines v1.1), B2C exclusion.
 4. Arabic and Hijri requirements for invoices in both countries.
-5. Retention periods (KSA, UAE) and who bears archiving duty.
+5. Retention periods (KSA, UAE, Egypt) and who bears archiving duty.
 6. PDPL transfer mechanism for hosting outside KSA; KSA-region host mandatory?; SDAIA processor registration; DPO.
 7. NCA ECC/CCC and CST cloud rules for us as a SaaS vendor.
 8. UAE PDPL executive regulations; DIFC/ADGM scope.

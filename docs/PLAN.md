@@ -37,14 +37,14 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-021 | Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI) | Governance | G0 | GOV-004 | eldon | done |
 | LEG-001 | Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype | Legal | G0 | - | eldon | todo |
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes | Legal | G0 | GOV-004 | eldon | todo |
-| LEG-003 | Engage counsel in KSA and UAE; scope of work | Legal | G0 | - | eldon | todo |
+| LEG-003 | Engage counsel in KSA, UAE and Egypt; scope of work | Legal | G0 | - | eldon | todo |
 | LEG-004 | Third-party licence register (every adopted OSS component, version, licence) | Legal | G0 | GOV-004 | unassigned | todo |
 | LEG-005 | Register domains and social handles for the working name (hold only) | Legal | G0 | - | eldon | todo |
 | LEG-006 | GPL licence-boundary review: SaaS-only engine, separate services, no distribution | Legal | G1 | LEG-003 | unassigned | todo |
 | LEG-007 | Counsel opinion: vendor certification needed to sell ZATCA-compliant software | Legal | G1 | LEG-003 | unassigned | todo |
-| LEG-008 | Name clearance: trademark search and counsel opinion (KSA, UAE, international) | Legal | G1 | LEG-003 | unassigned | todo |
+| LEG-008 | Name clearance: trademark search and counsel opinion (KSA, UAE, Egypt, international) | Legal | G1 | LEG-003 | unassigned | todo |
 | LEG-009 | Trademark policy check: no ERPNext or Frappe in product name or ads | Legal | G1 | LEG-006 | unassigned | todo |
-| LEG-010 | Company entity decision (KSA, UAE, or both) and incorporation | Legal | G2 | LEG-003,LEG-001 | eldon | todo |
+| LEG-010 | Company entity decision (KSA, UAE, Egypt, or several) and incorporation | Legal | G2 | LEG-003,LEG-001 | eldon | todo |
 | LEG-011 | UAE entity serving KSA clients: counsel review | Legal | G2 | LEG-010 | unassigned | todo |
 | LEG-012 | Counsel opinion: PDPL cross-border processing by LLM providers | Legal | G2 | LEG-003 | unassigned | todo |
 | LEG-013 | Customer contract template: fixed setup, anonymised-reuse clause, IP clause, no free pilots | Legal | G2 | LEG-010 | unassigned | todo |
@@ -293,3 +293,4 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | unassigned | todo |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | unassigned | todo |
 | GTM-017 | Egypt go-to-market assessment (third market; depends on verified regulations) | GTM | G4 | CMP-027 | unassigned | todo |
+| GTM-018 | Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use | Go-to-market | G1 | GTM-001 | partner | todo |

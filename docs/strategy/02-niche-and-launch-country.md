@@ -41,3 +41,6 @@ Drop or change the niche if, after 25 interviews: fewer than 8 describe a curren
 - Target ACV $10K+ (subscription SAR 2.5-3.5K/mo plus setup), not $4.8K.
 - Show the path to a second wave: GCC (UAE, then Bahrain/Oman/Kuwait), a payments or financing line, and ecosystem add-ons (landing pages, marketing tracking).
 - Investors will ask for a SOM above $10M ARR in 5 years; at ACV $10K that means ~1,000 customers, ~8% of the niche SAM (12.5k firms, ESTIMATE). Plausible only with channel partners.
+
+## Update (2026-11-06)
+Egypt is a third operating market alongside KSA and UAE (founder requirement, ADR-0015). Launch order stays KSA, UAE, Egypt; this document's KSA-first analysis is unchanged and Egypt is research needed.

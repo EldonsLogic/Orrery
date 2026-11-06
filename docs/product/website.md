@@ -25,7 +25,7 @@ Brand: follow [../brand/](../brand/) (tokens, voice, bilingual rules). Logo is a
 | Step | Detail |
 |---|---|
 | 1 Identity | Email or phone, OTP (rate limited, resend, channel switch) |
-| 2 Company | Company name (Arabic and English), country (KSA, UAE), CR number, VAT number (optional, required before go-live), city, industry (trading and distribution first), size band |
+| 2 Company | Company name (Arabic and English), country (KSA, UAE, Egypt), CR number, VAT number (optional, required before go-live), city, industry (trading and distribution first), size band |
 | 3 Consent | Terms, privacy, PDPL-style purpose notice; separate optional marketing and analytics consents; no pre-ticked boxes |
 | 4 Plan | Free-first: all unlocked; show the plan the tenant would be on (entitlements recorded) |
 | 5 Done | Lands in discovery chat. Account and tenant record created in state trial |
@@ -46,7 +46,7 @@ Consent banner before any non-essential cookie or tracker; decline is as easy as
 | Core Web Vitals | Good on mobile for LCP, INP, CLS (thresholds from web.dev, to cite when implemented) |
 | Page weight | Budget set per page type at build time; Arabic webfont subset and `font-display` strategy per [../brand/04-typography.md](../brand/04-typography.md) |
 | Accessibility | WCAG 2.2 AA target, keyboard use, visible focus, contrast in light and dark, reduced motion, screen-reader tested in Arabic and English |
-| Hosting | Static or edge-served where possible; regional latency for KSA and UAE visitors to be tested |
+| Hosting | Static or edge-served where possible; regional latency for KSA, UAE and Egypt visitors to be tested |
 | Security | HTTPS only, HSTS, CSP, no third-party scripts without approval ([../security/hosting-rules.md](../security/hosting-rules.md)) |
 | Themes | Light and dark from brand tokens; follows system preference with user override |
 

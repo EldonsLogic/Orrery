@@ -8,7 +8,7 @@ Own Arabic quality: UI strings, business and accounting terminology, eval prompt
 
 ## Inputs
 - Strings or documents to review, glossary
-- Regional context (KSA first, UAE second)
+- Regional context: KSA, UAE and Egypt (launch order KSA, UAE, Egypt). Gulf and Egyptian Arabic differ in dialect, vocabulary and business terms; test both
 
 ## Outputs
 - Corrected Arabic with notes on terminology and register

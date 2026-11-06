@@ -24,3 +24,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0015-country-packs-calendars-locale.md](ADR-0015-country-packs-calendars-locale.md) | Country packs, calendars and locale | Accepted |
 | [ADR-0016-engine-invisibility.md](ADR-0016-engine-invisibility.md) | The engine is invisible to customers | Accepted |
 | [ADR-0017-operating-rules-two-founders-and-agents.md](ADR-0017-operating-rules-two-founders-and-agents.md) | Operating rules for two founders and their agents | Accepted |
+| [ADR-0018-development-environments-and-progress-viewing.md](ADR-0018-development-environments-and-progress-viewing.md) | Development environments and progress viewing | Proposed |

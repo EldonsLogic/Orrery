@@ -22,6 +22,9 @@ Basis: [../strategy/05-hosting-and-data.md](../strategy/05-hosting-and-data.md).
 | Network | Private networks, least-open ports, WAF/CDN at the edge, egress allow-list for services (limits SSRF/exfiltration) |
 | Environments parity | Same IaC modules in all environments; versions pinned (Frappe/ERPNext/HRMS set recorded) |
 
+## Development hosts (ADR-0018, Proposed)
+Development and preview hosts (a web preview host such as Vercel, a small shared dev server) may sit outside the country because they hold **synthetic data only**. Production or pilot data never goes to a dev host; production stays in-country (ADR-0006). Dev hosts sit behind a login, keep secrets in their own secret stores (never the repo), and obey engine invisibility (browser talks only to our web app and gateway). Regions and terms of any dev host are unchecked (UNVERIFIED) until chosen.
+
 ## Third-party processor approval list
 No processor is used for tenant data until it is on the list with: purpose, data class, region, DPA, security review, exit plan. Initial list: empty (TBD at G1).
 | Processor | Purpose | Max data class | Region | DPA | Status |

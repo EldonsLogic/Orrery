@@ -61,6 +61,10 @@ Every rule the founders have set or settled, in one place. [AGENTS.md](../AGENTS
 41. Never commit secrets, `.env` files, keys, customer data or real pilot data; use anonymised samples. Roles and identity come only from the authenticated session; fail closed on errors.
 42. Touching auth, tenancy, contracts or compliance needs an ADR and a security review by a different model or founder. Report vulnerabilities per [SECURITY.md](../SECURITY.md).
 
-## H. Strategy and evidence
+## H. Development and viewing progress
+45. The founders and agents can always view the developing product ([ADR-0018](decisions/ADR-0018-development-environments-and-progress-viewing.md), Proposed): per-PR preview links for the web app, one shared dev server for the engine and services, behind a login. A PR that changes visible behaviour says how to view it. If a preview project, dev server, access or keys are missing, the agent stops and asks the founders to create them, listing what is needed and where secrets go.
+46. Dev hosts get synthetic data only; production data stays in-country; the engine stays invisible on dev previews; secrets never enter the repo.
+
+## I. Strategy and evidence
 43. Pricing, market size and speed figures in `docs/strategy/` are hypotheses. Pilot A is a lead not yet contacted; Pilot B is a generic Odoo-using business (no specific company details). Niche: trading and distribution first.
 44. Research is evidence, with caveats stated; do not turn an estimate into a fact in any document.

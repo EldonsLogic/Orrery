@@ -65,6 +65,14 @@ Founder requirement: the platform operates in KSA, UAE and Egypt. Adding Egypt c
 | E10 | Retention | Tax and accounting record periods | Archive config | Yes | research needed |
 | E11 | Sector rules | Health, banking, government | Scope exclusions | Later | research needed |
 
+## Leads from co-founder research (UNVERIFIED; verify against official sources before use)
+| Market | Lead | Product effect |
+|---|---|---|
+| KSA (ZATCA Phase 2) | Cryptographic stamps, ECDSA secp256k1 signatures, invoice hashing, UBL 2.1 XML output | Certified invoice component; the model never builds or signs invoices |
+| Egypt (ETA) | E-invoicing extensions, digital signatures, official unified chart of accounts, withholding-tax integrations | Egypt country pack scope (E1, E2, E3); chart of accounts template |
+| UAE (FTA) | Corporate tax 9% and VAT 5% accounting rules | Tax codes and corporate-tax worksheet in the UAE pack (see U-rows above for sourced items) |
+Principle (all three): statutory requirements ship as certified country packs; the model never calculates tax.
+
 ## Calendar and work-week
 Calendars, week and time are per-company settings (Settings > Company calendar and week, [../product/app-screens.md](../product/app-screens.md)); the country chosen at sign-up supplies defaults. Nothing below is confirmed by the research unless stated; all rows UNVERIFIED, research needed with official sources.
 | Topic | KSA | UAE | Egypt |

@@ -25,7 +25,7 @@ TOP_LEVEL_OK = {
     "services", "web",
 }
 DOCS_FILES_OK = {
-    "00-START-HERE.md", "PLAN.md", "GATES.md", "STATUS.md", "CHANGELOG.md", "risks.md",
+    "00-START-HERE.md", "RULES.md", "PLAN.md", "GATES.md", "STATUS.md", "CHANGELOG.md", "risks.md",
     "open-questions.md", "glossary.md", "HANDOFF.md",
 }
 DOCS_DIRS_OK = {

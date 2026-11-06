@@ -15,6 +15,9 @@ All items UNVERIFIED unless the research supports them. Source: [../research/03-
 | Free zones | n/a | DIFC and ADGM have own regimes (not retrieved) |
 | Retention | VAT/tax records: 6 years commonly cited, do not rely | 5 years VAT, 15 years real estate, 7 years corporate tax: all UNVERIFIED |
 
+## Egypt
+Data-protection law, regulator, transfers, residency, processor registration and retention: all research needed (see E5, E8, E10 in [country-matrix.md](country-matrix.md)). Nothing is assumed from KSA or UAE.
+
 ## Our roles
 Tenant is controller; we are processor (DPA required, [../legal/checklist.md](../legal/checklist.md)). For our own website/sign-up data we are controller. Whether we must register with SDAIA as processor or appoint a DPO: UNVERIFIED.
 

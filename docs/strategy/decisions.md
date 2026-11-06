@@ -56,3 +56,6 @@ Newest at the bottom. Format: date, decision, why, alternatives rejected, impact
 - **Why:** Founder decision; cheap validation and visibility.
 - **Alternatives rejected:** Skip.
 - **Impact / follow-ups:** Registration closes December 2026; a working prototype is due January 2027, so code will be needed then (decide when). Dubai trade licence needed to collect a prize.
+
+## 2026-11-06: Egypt is a third operating market
+- **Decision:** The platform operates in KSA, UAE and Egypt (ADR-0015). Launch order KSA, UAE, Egypt. Egypt compliance is research needed; co-founder research leads are recorded in docs/compliance/country-matrix.md.

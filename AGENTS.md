@@ -3,7 +3,7 @@
 Canonical for all tools (Claude, Codex, Antigravity, others). Two founders work in parallel on different AI models; the repo is the shared memory.
 
 ## Product in four lines
-An AI-native business platform for owner-led companies (10-100 staff) in the Middle East (KSA first, UAE second).
+An AI-native business platform for owner-led companies (10-100 staff) in the Middle East: Saudi Arabia, the UAE and Egypt (three operating markets, launch order KSA, UAE, Egypt).
 One chat, Arabic or English: interview the owner, draft a Blueprint, assemble an ERP from vetted components, simulate a month, go live, then run it.
 Five parts: Discovery, Blueprint and Library (the spine), ERP Runtime (Frappe + ERPNext), Operate, Platform. Four contracts in `/contracts`.
 We are a product company, not a software house. "Orrery" is a working name, not cleared: say "the platform" in new text.
@@ -23,13 +23,14 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/ST
 
 ## Session start checklist
 1. `git pull` (or confirm you are on the latest main).
-2. Read `docs/STATUS.md` and the latest 3 files in `docs/log/` (or run `python3 scripts/session_start.py`).
+2. Read [docs/RULES.md](docs/RULES.md) (every standing founder rule), `docs/STATUS.md` and the latest 3 files in `docs/log/` (or run `python3 scripts/session_start.py`).
 3. Pick a `todo` row in [docs/PLAN.md](docs/PLAN.md) whose Depends are `done`; set it `doing` with an owner.
 
 ## Session end checklist
 1. `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>`; fill it in.
 2. Update statuses in `docs/PLAN.md`; add ADR or open-question entries if a decision or doubt arose.
-3. `python3 scripts/check_docs.py` and `python3 scripts/build_status.py` (then check_docs again). Fix errors.
+3. `python3 scripts/build_status.py`, then `python3 scripts/check_docs.py`, `python3 scripts/check_repo_hygiene.py`, `python3 scripts/scan_secrets.py`. Fix errors.
+4. Push your branch and open a PR. Work left only on a machine or in a chat is lost work.
 
 ## Branches and PRs
 - One branch per task, named with the plan ID: `sec-003-injection-design`. One PR per branch.
@@ -50,7 +51,7 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/ST
 - When two readings of a rule or plan conflict, stop and add an entry to `docs/open-questions.md`; do not guess.
 
 ## Delegation by model tier
-Details in [agents/routing.md](agents/routing.md); roles in [agents/](agents/README.md).
+Details in [agents/routing.md](agents/routing.md) and the step-by-step [agents/delegation-playbook.md](agents/delegation-playbook.md) (briefs, allowed paths, verification, a starter prompt for any tool); roles in [agents/](agents/README.md).
 - Strongest: architecture, security review, accounting and tax logic, planning, hard debugging.
 - Mid: implementation. Small: boilerplate, tests, docs, search, formatting.
 - Orchestrators hand out small scoped tasks with acceptance criteria, never "build X". Read indexes, not folders. Keep files under ~500 lines.
@@ -81,4 +82,4 @@ Details in [agents/routing.md](agents/routing.md); roles in [agents/](agents/REA
 | `agents/` | role specs, routing, model registry; `evals/`, `infra/`, `scripts/` |
 
 ## Reporting style
-Summaries to the founders: at most 15 lines plus the decisions needed. Detail goes in files.
+Summaries to the founders: at most 15 lines plus the decisions needed. Detail goes in files. If anything is unclear, ask a founder or add it to `docs/open-questions.md`; do not guess. Report failures and unchecked items plainly.

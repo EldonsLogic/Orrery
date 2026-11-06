@@ -15,10 +15,10 @@ Items we may need as a software vendor. Status "unknown" means research needed; 
 | 6 | SDAIA processor registration / DPO | KSA | PDPL | K16 | Unknown | unknown | Counsel question 6 |
 | 7 | UAE data protection registration | UAE | PDPL | U13 | Unknown | unknown | Counsel question 8 |
 | 8 | Direct integration partner status with Mudad, GOSI, Qiwa, MOHRE | KSA/UAE | Payroll APIs (later) | K13, K14, U10 | Unknown | unknown | Research when payroll starts |
-| 9 | Tax agent / regulated service status if we prepare tax data or payroll files | KSA/UAE | Avoid unintended regulated activity | counsel question 11 | Unknown | unknown | Counsel |
-| 10 | Local entity / commercial registration to contract and invoice | KSA/UAE | Sales | counsel question 12 | Unknown | unknown | Counsel; [../legal/checklist.md](../legal/checklist.md) |
+| 9 | Tax agent / regulated service status if we prepare tax data or payroll files | KSA/UAE/Egypt | Avoid unintended regulated activity | counsel question 11 | Unknown | unknown | Counsel |
+| 10 | Local entity / commercial registration to contract and invoice | KSA/UAE/Egypt | Sales | counsel question 12 | Unknown | unknown | Counsel; [../legal/checklist.md](../legal/checklist.md) |
 | 11 | SOC 2 | Global | Enterprise trust | [../strategy/05-hosting-and-data.md](../strategy/05-hosting-and-data.md) (12-24 months, ESTIMATE) | Later | not started | G4/G5 |
 | 12 | ISO 27001 | Global | Same | same | Later | not started | G4/G5 |
-| 13 | Payment provider / PCI (if we take cards) | KSA/UAE | Billing | none | Depends on provider (use hosted checkout to avoid scope) | unknown | Billing design |
-| 14 | Trademark registration for chosen name | KSA/UAE | Brand | ADR-0001 | Yes, after clearance | not started | Clearance first |
+| 13 | Payment provider / PCI (if we take cards) | KSA/UAE/Egypt | Billing | none | Depends on provider (use hosted checkout to avoid scope) | unknown | Billing design |
+| 14 | Trademark registration for chosen name | KSA/UAE/Egypt | Brand | ADR-0001 | Yes, after clearance | not started | Clearance first |
 | 15 | Dubai trade licence (championship prize) | UAE | Strategy decision D-P2-10 | [../research/02-market-and-customer.md](../research/02-market-and-customer.md) section 5 | Only to collect prize | not started | Founder decision |

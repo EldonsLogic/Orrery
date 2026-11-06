@@ -38,6 +38,16 @@ Five parts, four contracts, one engine behind an adapter. Decision: ADR-0003. St
  + Connector interface + Build states
 ```
 
+## Settled cross-cutting decisions
+- **Engine is invisible** (ADR-0016): headless and internal; our gateway and web app are the only customer-facing surfaces; nothing customer-visible names the engine.
+- **Three markets** (ADR-0015): KSA, UAE, Egypt as certified country packs; Gregorian storage with Hijri as a display, entry and rule layer; per-company week, hours and fiscal settings with country defaults.
+- **Theming** (ADR-0014): light and dark; tenant logo and primary colour within contrast guardrails; legal invoice layout wins.
+- **Change engine** (ADR-0013): the engine-side apply layer of Part 2 lives in `apps/engine/change_engine/`; AI planning stays in separate services behind the gateway.
+- **One chat, role-based views** (ADR-0004); human review gate and free-first with entitlements (ADR-0005); isolated tenant per customer (ADR-0006).
+
+## Built versus planned
+Built: contracts (specifications), the change-engine apply layer, the design system, docs, CI and checks. Planned (not built): engine bench and tenant creation, validator, compiler, Discovery, Operate, Platform services, web app, connectors, components, evals, infrastructure. The ordered path is in [../00-START-HERE.md](../00-START-HERE.md) and [../PLAN.md](../PLAN.md).
+
 ## Zones
 - **Rigid**: ledger, tax, e-invoicing, payroll maths, audit; country packs. Deterministic, never AI-written.
 - **Configurable**: custom fields, workflows, approvals, roles, print layouts, dashboards, views; composed by the AI from certified components.

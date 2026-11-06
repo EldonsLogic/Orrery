@@ -20,6 +20,27 @@ def render():
         out.append(f"| {g} | " + " | ".join(map(str, counts)) + f" | {len(gr)} |")
     counts = [sum(1 for r in rows if r["Status"] == s) for s in STATUSES]
     out.append("| all | " + " | ".join(map(str, counts)) + f" | {len(rows)} |")
+    done_ids = {r["ID"] for r in rows if r["Status"] == "done"}
+    out += ["", "## Built so far (done)", ""]
+    out += [f"- {r['ID']}: {r['Item']}" for r in rows if r["Status"] == "done"] or ["- nothing yet"]
+    ready = []
+    for r in rows:
+        if r["Status"] != "todo":
+            continue
+        deps = [d.strip() for d in r["Depends"].replace(";", ",").split(",") if d.strip() and d.strip() != "-"]
+        if all(d in done_ids for d in deps):
+            ready.append(r)
+    ready.sort(key=lambda r: (r["Gate"], r["ID"]))
+    out += ["", "## Ready to start (todo, all dependencies done), by gate", "",
+            "Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.", ""]
+    for g in GATES:
+        gr = [r for r in ready if r["Gate"] == g]
+        if gr:
+            out.append(f"**{g}** ({len(gr)})")
+            out += [f"- {r['ID']}: {r['Item']} (owner {r['Owner']})" for r in gr]
+            out.append("")
+    if not ready:
+        out.append("- none")
     out += ["", "## Blocked items", ""]
     blocked = [r for r in rows if r["Status"] == "blocked"]
     out += [f"- {r['ID']}: {r['Item']} ({r['Gate']})" for r in blocked] or ["- none"]

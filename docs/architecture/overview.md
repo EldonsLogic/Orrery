@@ -45,6 +45,8 @@ Five parts, four contracts, one engine behind an adapter. Decision: ADR-0003. St
 - **Change engine** (ADR-0013): the engine-side apply layer of Part 2 lives in `apps/engine/change_engine/`; AI planning stays in separate services behind the gateway.
 - **One chat, role-based views** (ADR-0004); human review gate and free-first with entitlements (ADR-0005); isolated tenant per customer (ADR-0006).
 
+- **Always viewable** (ADR-0018, Proposed): per-PR web previews and one shared dev server for the engine and services, synthetic data only.
+
 ## Built versus planned
 Built: contracts (specifications), the change-engine apply layer, the design system, docs, CI and checks. Planned (not built): engine bench and tenant creation, validator, compiler, Discovery, Operate, Platform services, web app, connectors, components, evals, infrastructure. The ordered path is in [../00-START-HERE.md](../00-START-HERE.md) and [../PLAN.md](../PLAN.md).
 

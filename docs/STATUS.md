@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 1 | 18 | 1 | 33 |
-| G1 | 66 | 2 | 4 | 0 | 72 |
+| G0 | 15 | 1 | 18 | 1 | 35 |
+| G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 110 | 2 | 0 | 0 | 112 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 252 | 5 | 22 | 1 | 280 |
+| all | 258 | 5 | 22 | 1 | 286 |
 
 ## Built so far (done)
 
@@ -45,7 +45,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (9)
+**G0** (10)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner unassigned)
 - GOV-012: Fill model registry rows for Codex and Antigravity (owner partner)
@@ -55,6 +55,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-004: Third-party licence register (every adopted OSS component, version, licence) (owner unassigned)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 - PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (owner unassigned)
+- WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (owner unassigned)
 
 **G1** (20)
 - BPL-003: Blueprint validator (owner unassigned)
@@ -102,8 +103,10 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.
+- [2026-11-06-eldon-claude-code-dev-viewing.md](log/2026-11-06-eldon-claude-code-dev-viewing.md): Recorded the founder request (relayed from a side session) that the developing product is always viewable: a Proposed decision record, early plan rows, a concise agent rule, and the hosting rules updated for dev hosts. Planning only; nothing is deployed and nothing runnable exists yet.
 - [2026-11-06-eldon-claude-code-agent-ready-repo.md](log/2026-11-06-eldon-claude-code-agent-ready-repo.md): Made the repo ready for any agent to open cold: complete standing-rules file, delegation playbook with model-by-tier routing and a starter prompt, a status page that lists what is built and what is ready to start, a rewritten start page with the ordered path by gate, and a decision record for the operating rules. Plan statuses were corrected to match what exists.
 
 ## ADRs with status Proposed
 
 - [ADR-0007-identity](decisions/ADR-0007-identity.md)
+- [ADR-0018-development-environments-and-progress-viewing](decisions/ADR-0018-development-environments-and-progress-viewing.md)

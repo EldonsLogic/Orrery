@@ -38,6 +38,7 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/ST
 - Cross-model review: a change written with one model is reviewed with a different one.
 - Commit or push only when the session task says so. Pushing is handled by the founders' own setup; do not add remotes or create repos.
 - CI needs: docs gate, secret scan, and a new log file in any PR that touches files outside `docs/` and `.github/`.
+- Keep progress viewable (ADR-0018). A PR that changes visible behaviour says how to view it (preview link or exact steps) in its description. If something needed to view progress does not exist (a preview project, the dev server, access, keys), stop and ask the founders to create it, listing exactly what is needed and where secrets go; never guess or work around it. Dev hosts get synthetic data only.
 
 ## Two-person rules and repo hygiene (strict; two people always work here)
 - One writer per path: claim a plan row (`doing` + owner) before touching its files; never edit paths under someone else's `doing` row. `git pull --rebase` before starting and before opening a PR. No force-push, no history rewrite, no merging your own PR without the other founder's review.

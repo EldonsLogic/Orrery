@@ -83,6 +83,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DAT-006 | Tenant export in an open format | Data | G3 | PLT-004 | unassigned | todo |
 | DAT-007 | Tenant deletion with verification and certificate | Data | G3 | PLT-004 | unassigned | todo |
 | DAT-008 | Anonymisation pipeline for promoting generalised patterns across tenants | Data | G4 | DAT-001,LEG-013 | unassigned | todo |
+| DAT-009 | Synthetic data generator for dev, demos and previews (no real data; ADR-0018) | Data | G1 | DAT-002 | unassigned | todo |
 | CMP-001 | Re-verify UNVERIFIED regulation rows in research/03 against official sources | Compliance | G1 | LEG-003 | unassigned | todo |
 | CMP-002 | Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance | Compliance | G1 | ERP-001 | unassigned | todo |
 | CMP-003 | ZATCA Phase 1 invoice generation (QR, mandatory fields) | Compliance | G1 | CMP-002 | unassigned | todo |
@@ -213,6 +214,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | INF-009 | Decide where the isolated browser runner lives (open question) | Infrastructure | G3 | SEC-003 | unassigned | todo |
 | INF-010 | Capacity plan and hosting at volume | Infrastructure | G5 | ERP-002,INF-007 | unassigned | todo |
 | INF-011 | Asset delivery (CDN) for tenant brand assets | Infrastructure | G2 | INF-004 | unassigned | todo |
+| INF-012 | Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) | Infrastructure | G1 | GOV-009 | eldon | todo |
+| INF-013 | Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) | Infrastructure | G0 | GOV-009 | eldon | todo |
 | BRD-001 | Brand guidelines v1 (Quadrant) and placeholder logo | Brand | G0 | - | eldon | done |
 | BRD-002 | Design tokens: light and dark, CSS and JSON | Brand | G0 | BRD-001 | eldon | done |
 | BRD-003 | Identity decision: final name, logo direction, Arabic spelling | Brand | G1 | LEG-008 | eldon | todo |
@@ -290,7 +293,10 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-020 | Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016) | ERP runtime | G1 | ERP-001 | unassigned | todo |
 | WEB-016 | Date pickers and entry in both Gregorian and Hijri calendars, RTL | Web | G2 | CMP-022,BRD-010 | unassigned | todo |
 | WEB-017 | Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) | Web | G1 | BRD-001 | unassigned | todo |
+| WEB-018 | Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) | Web | G0 | BRD-002 | unassigned | todo |
+| WEB-019 | Host the static design-system preview pages from docs/brand on the preview project | Web | G1 | INF-013 | unassigned | todo |
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | unassigned | todo |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | unassigned | todo |
+| QA-017 | Smoke check that a preview URL loads and shows no engine markers (ADR-0016, ADR-0018) | Quality | G1 | INF-013 | unassigned | todo |
 | GTM-017 | Egypt go-to-market assessment (third market; depends on verified regulations) | GTM | G4 | CMP-027 | unassigned | todo |
 | GTM-018 | Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use | Go-to-market | G1 | GTM-001 | partner | todo |

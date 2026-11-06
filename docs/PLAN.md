@@ -21,7 +21,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-005 | Docs scripts: check_docs, build_status, new_log, session_start, scan_secrets | Governance | G0 | GOV-004 | eldon | done |
 | GOV-006 | CI workflow: docs gate, secret scan, PR log gate | Governance | G0 | GOV-005 | eldon | done |
 | GOV-007 | First green CI run on GitHub after bootstrap push | Governance | G0 | GOV-006 | eldon | done |
-| GOV-008 | Branch protection on main: PRs only, required checks, no force push | Governance | G0 | GOV-007 | eldon | doing |
+| GOV-008 | Branch protection on main: PRs only, required checks, no force push (blocked: needs GitHub Pro or Team for private repos; until then rely on the rules and CI) | Governance | G0 | GOV-007 | eldon | blocked |
 | GOV-009 | Add partner (sayegh9) as admin; confirm CODEOWNERS review works | Governance | G0 | GOV-002 | eldon | todo |
 | GOV-010 | Install pre-commit hooks on both founders' machines | Governance | G0 | GOV-005 | unassigned | todo |
 | GOV-011 | Agent role specs, routing rules, model registry | Governance | G0 | GOV-003 | eldon | done |

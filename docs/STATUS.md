@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 2 | 18 | 0 | 33 |
+| G0 | 13 | 1 | 18 | 1 | 33 |
 | G1 | 66 | 2 | 4 | 0 | 72 |
 | G2 | 110 | 2 | 0 | 0 | 112 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 252 | 6 | 22 | 0 | 280 |
+| all | 252 | 5 | 22 | 1 | 280 |
 
 ## Built so far (done)
 
@@ -84,7 +84,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 
 ## Blocked items
 
-- none
+- GOV-008: Branch protection on main: PRs only, required checks, no force push (blocked: needs GitHub Pro or Team for private repos; until then rely on the rules and CI) (G0)
 
 ## Doing items without an owner
 
@@ -92,7 +92,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 
 ## Items in progress
 
-- GOV-008: Branch protection on main: PRs only, required checks, no force push (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
 - BPL-005: Hand-written trading and distribution Blueprint fixture (eldon)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)

@@ -1,0 +1,14 @@
+[project]
+name = "change_engine"
+description = "Guarded configuration apply layer for the Orrery engine"
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = [
+    # frappe and erpnext come from the pinned bench, not from here
+    "pydantic>=2",
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"

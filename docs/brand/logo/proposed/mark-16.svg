@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" role="img">
+<title>Orrery mark 16</title>
+<!-- DRAFT, PROPOSED. Pixel-snapped: corner (0,16) and radius 16 are integers. Slot: v1 12 degree wedge outside, parallel channel 1.5 px wide near the corner. Needs a designer's review. -->
+<path d="M1.043 16L5.496 11.388L12.257 5.715A16 16 0 0 1 16 16Z" fill="#2443D0"/><path d="M0 14.92L4.417 10.346L9.851 3.392A16 16 0 0 0 0 0Z" fill="#2443D0"/>
+</svg>

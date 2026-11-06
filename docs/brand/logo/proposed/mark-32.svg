@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img">
+<title>Orrery mark 32</title>
+<!-- DRAFT, PROPOSED. Pixel-snapped: corner (1,31) and radius 30 are integers. Slot: v1 12 degree wedge outside, parallel channel 2.0 px wide near the corner. Needs a designer's review. -->
+<path d="M2.39 31L8.329 24.851L23.981 11.716A30 30 0 0 1 31 31Z" fill="#2443D0"/><path d="M1 29.56L6.89 23.461L19.47 7.36A30 30 0 0 0 1 1Z" fill="#2443D0"/>
+</svg>

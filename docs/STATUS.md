@@ -8,13 +8,79 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 15 | 2 | 16 | 0 | 33 |
-| G1 | 70 | 2 | 0 | 0 | 72 |
-| G2 | 112 | 0 | 0 | 0 | 112 |
+| G0 | 13 | 2 | 18 | 0 | 33 |
+| G1 | 66 | 2 | 4 | 0 | 72 |
+| G2 | 110 | 2 | 0 | 0 | 112 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 260 | 4 | 16 | 0 | 280 |
+| all | 252 | 6 | 22 | 0 | 280 |
+
+## Built so far (done)
+
+- GOV-001: Private GitHub repo exists (EldonsLogic/Orrery)
+- GOV-003: Rewrite AGENTS.md, CLAUDE.md, GEMINI.md as canonical agent rules
+- GOV-004: Docs skeleton: START-HERE, PLAN, GATES, STATUS, logs, ADR folder
+- GOV-005: Docs scripts: check_docs, build_status, new_log, session_start, scan_secrets
+- GOV-006: CI workflow: docs gate, secret scan, PR log gate
+- GOV-007: First green CI run on GitHub after bootstrap push
+- GOV-011: Agent role specs, routing rules, model registry
+- GOV-015: Draft ADR-0001..0014
+- GOV-018: Retire docs/HANDOFF.md in favour of docs/log and STATUS
+- GOV-021: Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI)
+- CE-SEC-001: Change engine: stop accepting caller-supplied roles from request kwargs on whitelisted endpoints
+- CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
+- CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
+- BPL-001: Import the prototype change engine into apps/engine as the change-engine module (renamed)
+- BPL-002: Blueprint schema v0 in contracts/
+- BPL-009: Component manifest schema v0 in contracts/
+- BPL-013: Branding section in the Blueprint schema (ADR-0014)
+- DSC-003: Connector interface spec and tier definitions
+- PLT-001: Tenancy ADR-0006: site per tenant on shared in-country infrastructure
+- BRD-001: Brand guidelines v1 (Quadrant) and placeholder logo
+- BRD-002: Design tokens: light and dark, CSS and JSON
+- GTM-001: Niche decision: trading and distribution first
+
+## Ready to start (todo, all dependencies done), by gate
+
+Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
+
+**G0** (9)
+- GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
+- GOV-010: Install pre-commit hooks on both founders' machines (owner unassigned)
+- GOV-012: Fill model registry rows for Codex and Antigravity (owner partner)
+- LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
+- LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (owner eldon)
+- LEG-003: Engage counsel in KSA, UAE and Egypt; scope of work (owner eldon)
+- LEG-004: Third-party licence register (every adopted OSS component, version, licence) (owner unassigned)
+- LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
+- PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (owner unassigned)
+
+**G1** (20)
+- BPL-003: Blueprint validator (owner unassigned)
+- BPL-010: Component registry (list, version, compatibility) (owner unassigned)
+- BPL-011: Event stream contract implementation (owner unassigned)
+- BPL-012: Engine adapter interface so the engine stays replaceable (owner unassigned)
+- BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner unassigned)
+- BRD-012: Icon set licence check (owner unassigned)
+- CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner unassigned)
+- DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner unassigned)
+- ERP-008: Blueprint roles to engine roles and user permissions mapping (owner unassigned)
+- FND-001: Investor shortlist from research/05, re-verified (owner unassigned)
+- GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner unassigned)
+- GTM-002: 20-30 buyer and accountant interviews in the niche (owner unassigned)
+- GTM-004: Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) (owner eldon)
+- GTM-018: Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use (owner partner)
+- INF-003: CI/CD for services (build, test, deploy to staging) (owner unassigned)
+- PLT-024: Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) (owner unassigned)
+- QA-001: Eval framework and CI hook (owner unassigned)
+- QA-016: Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) (owner unassigned)
+- SEC-001: Threat model for the five parts and four contracts (owner unassigned)
+- WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner unassigned)
+
+**G2** (1)
+- SEC-007: Dependency and SBOM scanning for Python and Node (beyond dependabot actions) (owner unassigned)
+
 
 ## Blocked items
 
@@ -26,15 +92,18 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 ## Items in progress
 
+- GOV-008: Branch protection on main: PRs only, required checks, no force push (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
-- BPL-002: Blueprint schema v0 in contracts/ (eldon)
-- BPL-009: Component manifest schema v0 in contracts/ (eldon)
-- PLT-001: Tenancy ADR-0006: site per tenant on shared in-country infrastructure (eldon)
+- BPL-005: Hand-written trading and distribution Blueprint fixture (eldon)
+- BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
+- BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
+- BRD-011: Font licence and Arabic typography verification (eldon)
 
 ## Last 10 log files
 
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.
+- [2026-11-06-eldon-claude-code-agent-ready-repo.md](log/2026-11-06-eldon-claude-code-agent-ready-repo.md): Made the repo ready for any agent to open cold: complete standing-rules file, delegation playbook with model-by-tier routing and a starter prompt, a status page that lists what is built and what is ready to start, a rewritten start page with the ordered path by gate, and a decision record for the operating rules. Plan statuses were corrected to match what exists.
 
 ## ADRs with status Proposed
 

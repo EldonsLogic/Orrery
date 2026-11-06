@@ -8,6 +8,7 @@ Role specs and routing rules for AI agents (and humans acting in those roles). R
 | File | Purpose |
 |---|---|
 | [routing.md](routing.md) | Which model tier for which job; orchestrator rules |
+| [delegation-playbook.md](delegation-playbook.md) | Step by step: delegate to sub-agents by model, briefs, verification, starter prompt for any tool |
 | [model-registry.md](model-registry.md) | Models and tools the founders use; costs |
 | [orchestrator.md](orchestrator.md) | Splits work, delegates, merges results |
 | [architect.md](architect.md) | Designs, writes ADRs and contracts |

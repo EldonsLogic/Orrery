@@ -20,8 +20,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-004 | Docs skeleton: START-HERE, PLAN, GATES, STATUS, logs, ADR folder | Governance | G0 | GOV-003 | eldon | done |
 | GOV-005 | Docs scripts: check_docs, build_status, new_log, session_start, scan_secrets | Governance | G0 | GOV-004 | eldon | done |
 | GOV-006 | CI workflow: docs gate, secret scan, PR log gate | Governance | G0 | GOV-005 | eldon | done |
-| GOV-007 | First green CI run on GitHub after bootstrap push | Governance | G0 | GOV-006 | eldon | todo |
-| GOV-008 | Branch protection on main: PRs only, required checks, no force push | Governance | G0 | GOV-007 | eldon | todo |
+| GOV-007 | First green CI run on GitHub after bootstrap push | Governance | G0 | GOV-006 | eldon | done |
+| GOV-008 | Branch protection on main: PRs only, required checks, no force push | Governance | G0 | GOV-007 | eldon | doing |
 | GOV-009 | Add partner (sayegh9) as admin; confirm CODEOWNERS review works | Governance | G0 | GOV-002 | eldon | todo |
 | GOV-010 | Install pre-commit hooks on both founders' machines | Governance | G0 | GOV-005 | unassigned | todo |
 | GOV-011 | Agent role specs, routing rules, model registry | Governance | G0 | GOV-003 | eldon | done |
@@ -104,18 +104,18 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-019 | Review of Saudi AI and data-hosting rules that affect the gateway and hosting | Compliance | G1 | CMP-001 | unassigned | todo |
 | CMP-020 | Regulation change watcher feeding versioned compliance components | Compliance | G4 | CMP-008 | unassigned | todo |
 | BPL-001 | Import the prototype change engine into apps/engine as the change-engine module (renamed) | Blueprint | G0 | LEG-001 | partner | done |
-| BPL-002 | Blueprint schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | doing |
+| BPL-002 | Blueprint schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | done |
 | BPL-003 | Blueprint validator | Blueprint | G1 | BPL-002 | unassigned | todo |
 | BPL-004 | Compiler: Blueprint to engine configuration | Blueprint | G1 | BPL-003,ERP-012 | unassigned | todo |
-| BPL-005 | Hand-written trading and distribution Blueprint fixture | Blueprint | G1 | BPL-002 | unassigned | todo |
+| BPL-005 | Hand-written trading and distribution Blueprint fixture | Blueprint | G1 | BPL-002 | eldon | doing |
 | BPL-006 | Blueprint diff | Blueprint | G1 | BPL-003 | unassigned | todo |
 | BPL-007 | Apply with preview and DDL plan gate (change engine) | Blueprint | G1 | BPL-004,BPL-001 | unassigned | todo |
 | BPL-008 | Rollback to a previous Blueprint version | Blueprint | G1 | BPL-007 | unassigned | todo |
-| BPL-009 | Component manifest schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | doing |
+| BPL-009 | Component manifest schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | done |
 | BPL-010 | Component registry (list, version, compatibility) | Blueprint | G1 | BPL-009 | unassigned | todo |
 | BPL-011 | Event stream contract implementation | Blueprint | G1 | BPL-002 | unassigned | todo |
 | BPL-012 | Engine adapter interface so the engine stays replaceable | Blueprint | G1 | GOV-015 | unassigned | todo |
-| BPL-013 | Branding section in the Blueprint schema (ADR-0014) | Blueprint | G1 | BPL-002 | unassigned | todo |
+| BPL-013 | Branding section in the Blueprint schema (ADR-0014) | Blueprint | G1 | BPL-002 | unassigned | done |
 | BPL-014 | Component certification levels and test harness | Blueprint | G2 | BPL-010 | unassigned | todo |
 | BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | unassigned | todo |
 | BPL-016 | Component request pipeline: gap to AI-drafted request with spec and tests | Blueprint | G2 | BPL-014,DSC-006 | unassigned | todo |
@@ -129,7 +129,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-024 | Promotion of generalised patterns into the library | Blueprint | G4 | DAT-008,BPL-016 | unassigned | todo |
 | DSC-001 | Interview protocol v0, Arabic and English | Discovery | G1 | GTM-002 | unassigned | todo |
 | DSC-002 | Template Blueprint: trading and distribution | Discovery | G1 | BPL-005 | unassigned | todo |
-| DSC-003 | Connector interface spec and tier definitions | Discovery | G1 | GOV-015 | unassigned | todo |
+| DSC-003 | Connector interface spec and tier definitions | Discovery | G1 | GOV-015 | unassigned | done |
 | DSC-004 | Template-first discovery flow: show draft, owner corrects | Discovery | G2 | DSC-002,OPR-010 | unassigned | todo |
 | DSC-005 | Interview agent in Arabic and English | Discovery | G2 | DSC-001,OPR-010 | unassigned | todo |
 | DSC-006 | Gap analysis: Blueprint versus library | Discovery | G2 | BPL-010,DSC-004 | unassigned | todo |
@@ -178,7 +178,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-013 | Scheduled agents with budgets | Operate | G3 | OPR-001,PLT-021 | unassigned | todo |
 | OPR-014 | Per-tenant memory | Operate | G3 | OPR-001,DAT-001 | unassigned | todo |
 | OPR-015 | WhatsApp or push channel for the chat | Operate | G4 | OPR-010,DSC-015 | unassigned | todo |
-| PLT-001 | Tenancy ADR-0006: site per tenant on shared in-country infrastructure | Platform | G0 | GOV-015 | eldon | doing |
+| PLT-001 | Tenancy ADR-0006: site per tenant on shared in-country infrastructure | Platform | G0 | GOV-015 | eldon | done |
 | PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | unassigned | todo |
 | PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | unassigned | todo |
 | PLT-004 | Tenant lifecycle states: trial, active, suspended, exported, deleted | Platform | G2 | PLT-003 | unassigned | todo |
@@ -218,12 +218,12 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BRD-003 | Identity decision: final name, logo direction, Arabic spelling | Brand | G1 | LEG-008 | eldon | todo |
 | BRD-004 | Token layering: base, product theme, tenant overrides, user preference | Brand | G1 | BRD-002 | unassigned | todo |
 | BRD-005 | Theme engine: light, dark, system, per-user persistence | Brand | G2 | BRD-004 | unassigned | todo |
-| BRD-006 | Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject | Brand | G2 | BRD-004 | unassigned | todo |
-| BRD-007 | Brand asset pipeline: logo variants, auto-derived dark variant, size generation | Brand | G2 | BRD-004,SEC-006 | unassigned | todo |
+| BRD-006 | Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject | Brand | G2 | BRD-004 | eldon | doing |
+| BRD-007 | Brand asset pipeline: logo variants, auto-derived dark variant, size generation | Brand | G2 | BRD-004,SEC-006 | eldon | doing |
 | BRD-008 | Favicon generation from the tenant logo | Brand | G2 | BRD-007 | unassigned | todo |
 | BRD-009 | Design system rollout: generate all logo files, sizes, favicons, social sizes, the product design system and brand guidelines | Brand | G2 | BRD-003,LEG-008 | unassigned | todo |
 | BRD-010 | UI component library built from tokens | Brand | G2 | BRD-005 | unassigned | todo |
-| BRD-011 | Font licence and Arabic typography verification | Brand | G1 | BRD-001 | unassigned | todo |
+| BRD-011 | Font licence and Arabic typography verification | Brand | G1 | BRD-001 | eldon | doing |
 | BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | unassigned | todo |
 | WEB-001 | Marketing website v1, bilingual | Web | G2 | BRD-009 | unassigned | todo |
 | WEB-002 | Contact and waitlist form with PDPL consent | Web | G2 | WEB-001,LEG-012 | unassigned | todo |

@@ -7,9 +7,10 @@ Models and tools the founders currently use. Costs and limits are UNVERIFIED; fi
 
 | Tool | Model family | Tier mapping | Used by | Instruction file read | Cost notes |
 |---|---|---|---|---|---|
-| Claude Code | Claude Opus 5.x | Strongest | eldon | CLAUDE.md (imports AGENTS.md) | UNVERIFIED |
-| Claude Code | Claude Sonnet 5.x | Mid | eldon | CLAUDE.md | UNVERIFIED |
-| Claude Code | Claude Haiku 5.x | Small | eldon | CLAUDE.md | UNVERIFIED |
+| Claude Code | Claude Fable 5.1 | Strongest (hardest planning and review) | eldon | CLAUDE.md (imports AGENTS.md) | UNVERIFIED |
+| Claude Code | Claude Opus 5.5 | Strongest | eldon | CLAUDE.md | UNVERIFIED |
+| Claude Code | Claude Sonnet 5.5 | Mid | eldon | CLAUDE.md | UNVERIFIED |
+| Claude Code | Claude Haiku 5.5 | Small | eldon | CLAUDE.md | UNVERIFIED |
 | Codex | founders to fill | founders to fill | partner | AGENTS.md (UNVERIFIED) | founders to fill |
 | Antigravity | founders to fill | founders to fill | partner | GEMINI.md or AGENTS.md (UNVERIFIED) | founders to fill |
 

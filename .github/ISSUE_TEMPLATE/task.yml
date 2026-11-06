@@ -1,0 +1,37 @@
+name: Task
+description: A unit of work from docs/PLAN.md
+labels: [task]
+body:
+  - type: input
+    id: plan_id
+    attributes:
+      label: Plan ID
+      placeholder: BPL-003
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should be true when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable list. Include Arabic/RTL and theme checks for UI work.
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Suggested model tier
+      options: [Strongest, Mid, Small]
+    validations:
+      required: true
+  - type: textarea
+    id: links
+    attributes:
+      label: Links
+      description: Docs, ADRs, contracts. Do not paste secrets or customer data.

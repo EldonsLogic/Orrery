@@ -1,0 +1,41 @@
+.DS_Store
+.env*
+!.env.example
+node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+.next/
+.turbo/
+
+# Build output
+dist/
+build/
+out/
+coverage/
+
+# Frappe bench local state
+sites/*/private/
+*.sqlite3
+
+# Editors and OS junk
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+*.log
+.claude/worktrees/

@@ -1,0 +1,29 @@
+name: Deviation or exception
+description: Log a manual step, a client-specific need, or a departure from the rules (feeds the exceptions register)
+labels: [deviation]
+body:
+  - type: markdown
+    attributes:
+      value: No client names or customer data. Use anonymised descriptions.
+  - type: textarea
+    id: what
+    attributes:
+      label: What was done by hand or differently
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it was needed
+    validations:
+      required: true
+  - type: textarea
+    id: automate
+    attributes:
+      label: What would remove the need (candidate component, compiler rule, eval)
+    validations:
+      required: true
+  - type: input
+    id: plan_id
+    attributes:
+      label: Related plan ID

@@ -1,0 +1,24 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+        exclude: ^docs/brand/
+      - id: check-yaml
+      - id: check-json
+        exclude: ^docs/brand/
+      - id: detect-private-key
+  - repo: local
+    hooks:
+      - id: scan-secrets
+        name: scan secrets
+        entry: python3 scripts/scan_secrets.py
+        language: system
+        pass_filenames: false
+      - id: repo-hygiene
+        name: repo hygiene
+        entry: python3 scripts/check_repo_hygiene.py
+        language: system
+        pass_filenames: false

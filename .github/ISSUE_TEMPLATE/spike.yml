@@ -1,0 +1,29 @@
+name: Spike
+description: A time-boxed investigation that ends in a decision
+labels: [spike]
+body:
+  - type: input
+    id: plan_id
+    attributes:
+      label: Plan ID
+      placeholder: ERP-001
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question to answer
+    validations:
+      required: true
+  - type: textarea
+    id: pass_fail
+    attributes:
+      label: Pass and fail criteria
+      description: Written before starting.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Expected output
+      description: A file in docs/research/ with sources, and an ADR if a decision follows.

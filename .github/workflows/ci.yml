@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Docs checks (includes STATUS.md freshness)
+        run: python3 scripts/check_docs.py
+      - name: STATUS.md is current
+        run: |
+          python3 scripts/build_status.py
+          git diff --exit-code docs/STATUS.md
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 scripts/scan_secrets.py
+
+  repo-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 scripts/check_repo_hygiene.py
+
+  pr-log-gate:
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Require a new session log when files outside docs/ and .github/ change
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          outside=$(echo "$changed" | grep -v -E '^(docs/|\.github/)' || true)
+          if [ -z "$outside" ]; then
+            echo "Only docs/ and .github/ changed; log not required."
+            exit 0
+          fi
+          new_logs=$(git diff --name-only --diff-filter=A "$BASE_SHA" "$HEAD_SHA" | grep -E '^docs/log/' | grep -v -E '/(README|TEMPLATE)\.md$' || true)
+          if [ -z "$new_logs" ]; then
+            echo "Files outside docs/ and .github/ changed but no new file under docs/log/ was added:"
+            echo "$outside"
+            echo "Run: python3 scripts/new_log.py --author <you> --tool <tool> --slug <topic> --ids <ids>"
+            exit 1
+          fi
+          echo "New log(s): $new_logs"

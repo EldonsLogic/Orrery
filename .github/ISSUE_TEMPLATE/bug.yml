@@ -1,0 +1,31 @@
+name: Bug
+description: Something is broken
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Security issues go through SECURITY.md, not here. Do not paste secrets or customer data.
+  - type: input
+    id: plan_id
+    attributes:
+      label: Related plan ID
+      placeholder: ERP-007 (or none)
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options: [Compliance or data risk, Blocks work, Degrades work, Cosmetic]
+    validations:
+      required: true

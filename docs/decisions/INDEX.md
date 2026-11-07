@@ -30,3 +30,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0021-public-repo-and-branch-protection.md](ADR-0021-public-repo-and-branch-protection.md) | Public repository with branch protection | Accepted |
 | [ADR-0022-web-stack.md](ADR-0022-web-stack.md) | Web stack for the marketing site and the app | Proposed |
 | [ADR-0023-one-github-account-per-founder.md](ADR-0023-one-github-account-per-founder.md) | One personal GitHub account per founder | Accepted |
+| [ADR-0024-four-phase-1-markets.md](ADR-0024-four-phase-1-markets.md) | Four phase-1 markets, no fixed launch order | Accepted |

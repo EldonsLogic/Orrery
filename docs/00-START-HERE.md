@@ -3,7 +3,7 @@
 Status: accepted
 Owner: eldon
 
-The platform (working name Orrery, not trademark-cleared) is an AI-native business platform for owner-led companies in Saudi Arabia, the UAE and Egypt. One chat, in Arabic or English, interviews the owner, drafts a Blueprint, assembles an ERP from vetted components, simulates a month, then runs the business and changes it through the same chat. We are a product company, not a software house. Two founders work here in parallel with different AI tools.
+The platform (working name Orrery, not trademark-cleared) is an AI-native business platform for owner-led companies in Saudi Arabia, the UAE, Egypt and Qatar. One chat, in Arabic or English, interviews the owner, drafts a Blueprint, assembles an ERP from vetted components, simulates a month, then runs the business and changes it through the same chat. We are a product company, not a software house. Two founders work here in parallel with different AI tools.
 
 ## First 10 minutes (any agent, any tool)
 0. New founder or new machine? Do the one-time setup and read the lanes in [ONBOARDING.md](ONBOARDING.md).

@@ -44,3 +44,6 @@ Drop or change the niche if, after 25 interviews: fewer than 8 describe a curren
 
 ## Update (2026-11-06)
 Egypt is a third operating market alongside KSA and UAE (founder requirement, ADR-0015). Launch order stays KSA, UAE, Egypt; this document's KSA-first analysis is unchanged and Egypt is research needed.
+
+## Update 2026-11-07 (founder, ADR-0024)
+The launch order in this file (KSA first, UAE second, Egypt third) is superseded: phase 1 operates in KSA, UAE, Egypt and Qatar with no fixed order, because the founder's first leads are in Qatar and the founders also want Egypt in phase 1. The niche (trading and distribution) stays a lead hypothesis and the first template, not a restriction: later templates follow the leads. Qatar and Egypt facts are research needed.

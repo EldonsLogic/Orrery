@@ -45,14 +45,14 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-029 | One personal GitHub account per founder in lanes, owners and docs; recover unmerged work (ADR-0023) | Governance | G0 | GOV-028 | eldon | done |
 | LEG-001 | Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype | Legal | G0 | - | eldon | todo |
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) | Legal | G0 | GOV-004 | eldon | doing |
-| LEG-003 | Engage counsel in KSA, UAE and Egypt; scope of work | Legal | G0 | - | eldon | todo |
+| LEG-003 | Engage counsel in KSA, UAE, Egypt and Qatar; scope of work | Legal | G0 | - | eldon | todo |
 | LEG-004 | Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) | Legal | G0 | GOV-004 | partner | done |
 | LEG-005 | Register domains and social handles for the working name (hold only) | Legal | G0 | - | eldon | todo |
 | LEG-006 | GPL licence-boundary review: SaaS-only engine, separate services, no distribution | Legal | G1 | LEG-003 | unassigned | todo |
 | LEG-007 | Counsel opinion: vendor certification needed to sell ZATCA-compliant software | Legal | G1 | LEG-003 | unassigned | todo |
-| LEG-008 | Name clearance: trademark search and counsel opinion (KSA, UAE, Egypt, international) | Legal | G1 | LEG-003 | unassigned | todo |
+| LEG-008 | Name clearance: trademark search and counsel opinion (KSA, UAE, Egypt, Qatar, international) | Legal | G1 | LEG-003 | unassigned | todo |
 | LEG-009 | Trademark policy check: no ERPNext or Frappe in product name or ads | Legal | G1 | LEG-006 | unassigned | todo |
-| LEG-010 | Company entity decision (KSA, UAE, Egypt, or several) and incorporation | Legal | G2 | LEG-003,LEG-001 | eldon | todo |
+| LEG-010 | Company entity decision (KSA, UAE, Egypt, Qatar, or several) and incorporation | Legal | G2 | LEG-003,LEG-001 | eldon | todo |
 | LEG-011 | UAE entity serving KSA clients: counsel review | Legal | G2 | LEG-010 | unassigned | todo |
 | LEG-012 | Counsel opinion: PDPL cross-border processing by LLM providers | Legal | G2 | LEG-003 | unassigned | todo |
 | LEG-013 | Customer contract template: fixed setup, anonymised-reuse clause, IP clause, no free pilots | Legal | G2 | LEG-010 | unassigned | todo |
@@ -294,8 +294,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-024 | Holiday calendars per country with admin-editable moon-sighting overrides | Compliance | G2 | CMP-023 | unassigned | todo |
 | CMP-025 | Fiscal-year type and start handling; zakat period handling | Compliance | G2 | CMP-023,CMP-013 | unassigned | todo |
 | CMP-026 | Timezone handling and Egypt daylight-saving rules (UNVERIFIED) | Compliance | G2 | CMP-023 | unassigned | todo |
-| CMP-027 | Egypt market research: e-invoicing, VAT, data protection, payroll (all UNVERIFIED) | Compliance | G3 | CMP-001 | unassigned | todo |
-| CMP-028 | Egypt country pack | Compliance | G4 | CMP-027,CMP-021 | unassigned | todo |
+| CMP-027 | Egypt market research: e-invoicing, VAT, data protection, payroll (all UNVERIFIED) | Compliance | G1 | CMP-001 | unassigned | todo |
+| CMP-028 | Egypt country pack | Compliance | G2 | CMP-027,CMP-021 | unassigned | todo |
 | CMP-029 | UAE country pack and KSA country pack built on the framework | Compliance | G2 | CMP-021,CMP-006 | unassigned | todo |
 | ERP-019 | Dual-date display (Gregorian plus Hijri) on documents, locked regions respected | Runtime | G2 | CMP-022,ERP-016 | unassigned | todo |
 | ERP-020 | Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016) | ERP runtime | G1 | ERP-001 | unassigned | todo |
@@ -306,5 +306,9 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | unassigned | todo |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | unassigned | todo |
 | QA-017 | Smoke check that a preview URL loads and shows no engine markers (ADR-0016, ADR-0018) | Quality | G1 | INF-013 | unassigned | todo |
-| GTM-017 | Egypt go-to-market assessment (third market; depends on verified regulations) | GTM | G4 | CMP-027 | unassigned | todo |
-| GTM-018 | Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use | Go-to-market | G1 | GTM-001 | partner | todo |
+| GTM-017 | Egypt go-to-market assessment (phase-1 market; depends on verified regulations) | GTM | G2 | CMP-027 | unassigned | todo |
+| GTM-018 | Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use | Go-to-market | G1 | GTM-001 | partner | todo |
+| CMP-030 | Qatar market research: tax, e-invoicing, data protection and hosting, payroll, accounting standard, calendars, entity (all UNVERIFIED; docs/compliance/country-matrix.md section Qatar) | Compliance | G1 | CMP-001 | unassigned | todo |
+| CMP-031 | Qatar country pack | Compliance | G2 | CMP-030,CMP-021 | unassigned | todo |
+| GTM-019 | Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires | GTM | G1 | GTM-001 | eldon | todo |
+| GOV-031 | Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified | Governance | G0 | GOV-029 | eldon | doing |

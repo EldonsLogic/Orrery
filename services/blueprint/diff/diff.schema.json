@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:draft:blueprint-diff:0.1.0",
+  "title": "Blueprint diff",
+  "description": "Draft, not a contract. Output of bpdiff.diff(): structural operations between two Blueprint revisions, with code-computed impact and explanation material. Promoting this file into contracts/ needs a recorded decision.",
+  "type": "object",
+  "required": ["schema", "base", "target", "ops", "summary", "risk"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "bpdiff/0.1.0" },
+    "base": { "$ref": "#/$defs/revisionRef" },
+    "target": { "$ref": "#/$defs/revisionRef" },
+    "ops": { "type": "array", "items": { "$ref": "#/$defs/op" } },
+    "summary": {
+      "type": "object",
+      "required": ["add", "remove", "replace", "reorder"],
+      "additionalProperties": false,
+      "properties": {
+        "add": { "type": "integer", "minimum": 0 },
+        "remove": { "type": "integer", "minimum": 0 },
+        "replace": { "type": "integer", "minimum": 0 },
+        "reorder": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["counts", "total", "maxImpact", "needsDdlPlanGate", "touchesCompliance", "touchesAccess"],
+      "additionalProperties": false,
+      "properties": {
+        "counts": {
+          "type": "object",
+          "required": ["cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"],
+          "additionalProperties": false,
+          "patternProperties": { "^[a-z_]+$": { "type": "integer", "minimum": 0 } }
+        },
+        "total": { "type": "integer", "minimum": 0 },
+        "maxImpact": { "oneOf": [{ "$ref": "#/$defs/impact" }, { "type": "null" }] },
+        "needsDdlPlanGate": { "type": "boolean" },
+        "touchesCompliance": { "type": "boolean" },
+        "touchesAccess": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "impact": { "enum": ["cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"] },
+    "revisionRef": {
+      "type": "object",
+      "required": ["hash", "revision", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$", "description": "SHA-256 of the canonical JSON (sorted keys, no spaces, UTF-8)." },
+        "revision": { "type": ["integer", "null"], "description": "meta.revision when present." },
+        "id": { "type": ["string", "null"], "description": "meta.id when present." }
+      }
+    },
+    "segment": { "type": ["string", "integer"], "description": "String: object key, or the key of an element of a keyed array (composite keys joined with '|'). Integer: plain array index." },
+    "labels": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["before", "after"],
+          "additionalProperties": false,
+          "properties": {
+            "before": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/localizedText" }] },
+            "after": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/localizedText" }] }
+          }
+        }
+      ]
+    },
+    "localizedText": { "type": "object", "additionalProperties": { "type": "string" } },
+    "subject": {
+      "type": "object",
+      "required": ["kind", "id", "parents"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "id": { "type": ["string", "integer", "null"] },
+        "parents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "id"],
+            "additionalProperties": false,
+            "properties": { "kind": { "type": "string" }, "id": { "type": ["string", "integer"] } }
+          }
+        }
+      }
+    },
+    "op": {
+      "type": "object",
+      "required": ["op", "code", "impact", "pointer", "path", "schemaPath", "subject", "property", "labels"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "enum": ["add", "remove", "replace", "reorder"] },
+        "code": { "type": "string", "pattern": "^BPD-[A-Z0-9-]+$" },
+        "impact": { "$ref": "#/$defs/impact" },
+        "pointer": { "type": "string", "description": "RFC 6901 escaping, but keyed array elements are addressed by key, not index." },
+        "path": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/segment" } },
+        "schemaPath": { "type": "string", "description": "Path with '*' for any array element." },
+        "subject": { "$ref": "#/$defs/subject" },
+        "property": { "type": "string", "description": "Path below the subject; empty when the subject itself is added or removed." },
+        "index": { "type": "integer", "minimum": 0 },
+        "before": {},
+        "after": {},
+        "orderSignificant": { "type": "boolean" },
+        "labels": { "$ref": "#/$defs/labels" }
+      },
+      "allOf": [
+        { "if": { "properties": { "op": { "const": "add" } } }, "then": { "required": ["after"], "not": { "required": ["before"] } } },
+        { "if": { "properties": { "op": { "const": "remove" } } }, "then": { "required": ["before"], "not": { "required": ["after"] } } },
+        { "if": { "properties": { "op": { "enum": ["replace", "reorder"] } } }, "then": { "required": ["before", "after"] } },
+        { "if": { "properties": { "op": { "const": "reorder" } } }, "then": { "required": ["orderSignificant"], "properties": { "before": { "type": "array", "items": { "type": "string" } }, "after": { "type": "array", "items": { "type": "string" } } } } }
+      ]
+    }
+  }
+}

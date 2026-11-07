@@ -26,7 +26,7 @@ Principle 1: Build on open source; record every licence. Every adopted open-sour
 | Component | Upstream / image | Pinned version | Licence | Role / Why used | Boundary notes |
 |---|---|---|---|---|---|
 | **MariaDB** | `mariadb` official Docker image | 10.6 | GNU GPL v2.0 | Primary relational database for engine tenant sites. | Standard server backend; isolated network in Docker. |
-| **Redis** | `redis` official Docker image | 7-alpine | BSD-3-Clause | Cache and background queue broker for Frappe bench. | Standard caching backend; permissive licence. |
+| **Redis** | `redis` official Docker image | 7-alpine (floating tag, to be pinned) | BSD-3-Clause up to 7.2.x; RSALv2 or SSPLv1 from 7.4; Redis 8 adds AGPLv3 (UNVERIFIED, re-check upstream) | Cache and background queue broker for Frappe bench. | The floating `7-alpine` tag moves to 7.4 or later, which is not BSD. Pin 7.2.x (last BSD line) or switch to Valkey (BSD-3-Clause) before any hosted use; dev compose is a partner-lane change (open question Q-15). |
 
 ## 4. Verification and maintenance
 

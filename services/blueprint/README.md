@@ -92,3 +92,16 @@ Fail closed: a manifest with any error is not admitted. Admission checks each ma
 | `REG-010` | warning | `draft` level: admitted, not usable by tenants |
 
 Limits: the manifest schema has no per-test pass/fail field, so REG-006 checks only what the schema can express (level against evidence kinds). Levels below `certified` are taken at face value. Compatibility mirrors validator rule 8: adapter must equal, `versionSet` must be in `testedAgainst`; `engineRange` is not evaluated. Safety: manifests are parsed as JSON and never executed or imported; component ids and file names are matched against strict patterns before use; lookups never touch the filesystem; results are sorted.
+
+## Blueprint diff
+
+Python package `diff/bpdiff/` (BPL-006). Standard library and `jsonschema` (tests and the optional validator call). Full documentation: [diff/README.md](diff/README.md).
+
+```python
+from bpdiff import diff, apply, invert, diff_validated
+d = diff(rev_a, rev_b)          # operations, code-computed impact, risk summary, explanation material
+apply(d, rev_a) == rev_b        # pure; refuses a foreign base with BPD-BASE-001
+apply(invert(d), rev_b) == rev_a   # the stored inverse is the undo point
+```
+
+Run from the repo root: `PYTHONPATH=services/blueprint/diff python3 -m bpdiff A.json B.json [--json] [--apply-check]` (exit 0 same, 1 differs, 2 error). `blueprint.propose_change` and `blueprint.explain_diff` build on this; the diff holds no prose. Tests: `tests/diff/`, run with the rest of the suite.

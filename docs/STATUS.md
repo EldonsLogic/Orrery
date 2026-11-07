@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 15 | 1 | 19 | 1 | 36 |
+| G0 | 15 | 1 | 20 | 1 | 37 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 110 | 2 | 0 | 0 | 112 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 258 | 5 | 23 | 1 | 287 |
+| all | 258 | 5 | 24 | 1 | 288 |
 
 ## Built so far (done)
 
@@ -29,6 +29,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-018: Retire docs/HANDOFF.md in favour of docs/log and STATUS
 - GOV-021: Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI)
 - GOV-022: Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md)
+- GOV-023: Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS
 - CE-SEC-001: Change engine: stop accepting caller-supplied roles from request kwargs on whitelisted endpoints
 - CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
@@ -84,6 +85,52 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - SEC-007: Dependency and SBOM scanning for Python and Node (beyond dependabot actions) (owner unassigned)
 
 
+## Queue: eldon
+
+Doing:
+- BPL-005: Hand-written trading and distribution Blueprint fixture
+- BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
+- BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
+- BRD-011: Font licence and Arabic typography verification
+
+Ready next (dependencies done), by gate:
+- GOV-002 (G0): Create GitHub organisation, transfer repo, decide final repo name
+- LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
+- LEG-002 (G0): Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes
+- LEG-003 (G0): Engage counsel in KSA, UAE and Egypt; scope of work
+- LEG-005 (G0): Register domains and social handles for the working name (hold only)
+- PLT-002 (G0): Identity ADR-0007: decide central identity with per-tenant roles
+- WEB-018 (G0): Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
+- BPL-003 (G1): Blueprint validator
+- BPL-010 (G1): Component registry (list, version, compatibility)
+- BPL-011 (G1): Event stream contract implementation
+- BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
+- FND-001 (G1): Investor shortlist from research/05, re-verified
+- GTM-002 (G1): 20-30 buyer and accountant interviews in the niche
+- GTM-004 (G1): Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED)
+- QA-001 (G1): Eval framework and CI hook
+- SEC-001 (G1): Threat model for the five parts and four contracts
+
+Waiting on dependencies: 13 row(s).
+
+## Queue: partner
+
+Doing:
+- CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
+
+Ready next (dependencies done), by gate:
+- GOV-012 (G0): Fill model registry rows for Codex and Antigravity
+- LEG-004 (G0): Third-party licence register (every adopted OSS component, version, licence)
+- BPL-012 (G1): Engine adapter interface so the engine stays replaceable
+- CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
+- ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
+- GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use
+- INF-003 (G1): CI/CD for services (build, test, deploy to staging)
+
+Waiting on dependencies: 16 row(s).
+
+Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim one).
+
 ## Blocked items
 
 - GOV-008: Branch protection on main: PRs only, required checks, no force push (blocked: needs GitHub Pro or Team for private repos; until then rely on the rules and CI) (G0)
@@ -102,6 +149,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 
 ## Last 10 log files
 
+- [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 - [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.

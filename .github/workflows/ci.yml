@@ -70,3 +70,8 @@ jobs:
             exit 1
           fi
           echo "New log(s): $new_logs"
+      - name: Trail check (log has valid plan IDs and the rows are not still todo)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/check_pr_trail.py --base "$BASE_SHA" --head "$HEAD_SHA"

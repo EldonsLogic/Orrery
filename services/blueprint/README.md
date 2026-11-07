@@ -17,7 +17,7 @@ validate(blueprint: dict, ctx: ValidationContext | None = None) -> Report
 - Step 2: one function per `x-validator-rules` entry. Cross-checks still run when the schema step found errors, and are defensive about shapes. The validator never raises for bad input: it returns errors (fail closed). A rule that cannot run on a malformed shape reports `BP-INTERNAL-001`.
 - `Report`: `ok`, `errors`, `warnings` (each an `Issue` with `code`, JSON-pointer `path`, `message`) and `adjustments` (colour proposals).
 - `ValidationContext` (all optional): `registry` (component id -> list of manifests), `metrics`, `connectors` (id sets), `assets` (assetId -> record), `entitlements`, `pack_locales`, `schema_path`. Anything that needs a registry that was not supplied gives a "not checked" warning, except rule 12 (fails closed).
-- `resolve_locale(blueprint, ctx)` returns `company.locale` with omitted fields filled from `DEFAULT_PACK_LOCALES` (sa, ae, eg). Those values are placeholder defaults; the country pack (CMP-021) is authoritative.
+- `resolve_locale(blueprint, ctx)` returns `company.locale` with omitted fields filled from `DEFAULT_PACK_LOCALES` (sa, ae, eg, qa; qa is UNVERIFIED). Those values are placeholder defaults; the country pack (CMP-021) is authoritative.
 
 ### Run
 

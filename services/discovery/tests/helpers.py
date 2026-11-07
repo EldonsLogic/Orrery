@@ -18,6 +18,8 @@ ANSWERS = {
            "branches": 1, "vat_registered": True, "vat_number": "100000000000003", "currency": "AED"},
     "eg": {"country": "eg", "name_ar": "شركة اختبار للتجارة", "name_en": "Sample Trading SAE",
            "branches": 3, "vat_registered": False, "currency": "EGP"},
+    "qa": {"country": "qa", "name_ar": "شركة اختبار للتجارة", "name_en": "Sample Trading WLL",
+           "branches": 1, "vat_registered": False, "currency": "QAR"},
 }
 
 

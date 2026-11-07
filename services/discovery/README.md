@@ -37,7 +37,7 @@ Without `--out` the Blueprint goes to stdout; the CLI never writes into the repo
 | Key | Type | Required | Effect |
 |---|---|---|---|
 | `name_ar`, `name_en` | string, up to 120 characters, no braces | yes | Fills the only placeholder, `{{company.name}}`, per locale; also sets `meta.id`. |
-| `country` | `sa`, `ae`, `eg` | yes | Country, country pack id and the compliance block. Locale values are left out so they resolve from the pack. |
+| `country` | `sa`, `ae`, `eg`, `qa` | yes | Country, country pack id and the compliance block. Locale values are left out so they resolve from the pack. |
 | `branches` | whole number 1-50 (default 1) | no | Adds `branch_N` and `wh_N` locations; location selects and the warehouse keeper scope follow. |
 | `currency` | ISO 4217 code | no | `company.locale.currency`; else the pack default. |
 | `vat_registered` | boolean (default false until confirmed) | no | true: VAT block and the country's e-invoicing mode; false: mode `none`. |
@@ -49,7 +49,7 @@ Unknown keys, values that are not strings, numbers, booleans or lists of those, 
 ### Limits and open points
 - Everything else in `questions.json` (`fillsBy: interview`: thresholds, which documents exist, units, price lists, VAT filing period and so on) is applied later as Blueprint patches by the interview engine; `instantiate()` does not take those answers yet. The defaults shown there are the template values.
 - Approval thresholds (50000 and 100000) and the 10 percent discount limit are template defaults in the company currency, not rules.
-- Country values in `instantiate.py` (`COUNTRIES`: VAT rate, filing period, e-invoicing mode) are placeholders so that schema-required fields are filled until the country pack (CMP-021) exists; they are not tax logic. UNVERIFIED for the UAE and Egypt, whose e-invoicing modes are contract placeholders and have no component in the registry, so those Blueprints carry no e-invoicing component yet. Only Saudi Arabia binds `compliance.zatca_sa`.
+- Country values in `instantiate.py` (`COUNTRIES`: VAT rate, filing period, e-invoicing mode) are placeholders so that schema-required fields are filled until the country pack (CMP-021) exists; they are not tax logic. UNVERIFIED for the UAE, Egypt and Qatar, whose e-invoicing modes are contract placeholders (Qatar has none) and have no component in the registry, so those Blueprints carry no e-invoicing component yet. For Qatar, VAT status is UNVERIFIED: no rate is assumed, the Blueprint carries VAT as not registered, and `vat_registered: true` is rejected. Only Saudi Arabia binds `compliance.zatca_sa`.
 - Registry used by the tests is the fictional fixture registry (adapter id `change_engine`, version set `set-example`); metrics are not checked (no metric registry), which gives warning `BP-REF-002`. The platform colours give an auto-adjust warning `BP-BRAND-002` in the dark theme (no single colour passes both themes).
 - Extra branches get generic names; roles are not duplicated per branch (the branch sales manager stays on the head office until the owner says otherwise).
 

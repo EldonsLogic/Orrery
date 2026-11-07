@@ -136,7 +136,7 @@ def test_template_covers_the_expected_documents():
 
 
 # ---- instantiate ---------------------------------------------------------------------------
-@pytest.mark.parametrize("country", ["sa", "ae", "eg"])
+@pytest.mark.parametrize("country", ["sa", "ae", "eg", "qa"])
 def test_instantiate_has_zero_validator_errors(country):
     bp = instantiate(TEMPLATE, ANSWERS[country], now="2026-01-01T00:00:00Z")
     rep = validate(bp, ctx())
@@ -151,7 +151,7 @@ def test_sa_keeps_zatca_and_others_drop_it():
     sa = instantiate(TEMPLATE, ANSWERS["sa"])
     assert sa["compliance"]["eInvoicing"]["mode"] == "zatca_phase2"
     assert "compliance.zatca_sa" in {c["id"] for c in sa["components"]}
-    for key in ("ae", "eg"):
+    for key in ("ae", "eg", "qa"):
         other = instantiate(TEMPLATE, ANSWERS[key])
         assert "compliance.zatca_sa" not in json.dumps(other)
         assert "zatca" not in json.dumps(other).lower()
@@ -191,7 +191,7 @@ def test_sa_without_vat_number_is_flagged_by_the_validator_not_hidden():
 
 
 def test_default_answers_work_for_every_country():
-    for c in ("sa", "ae", "eg"):
+    for c in ("sa", "ae", "eg", "qa"):
         bp = instantiate(TEMPLATE, {"country": c, "name_ar": "شركة", "name_en": "Co"})
         assert validate(bp, ctx()).errors == []
         assert bp["meta"]["buildState"] == "draft" and len(bp["locations"]) == 3
@@ -310,3 +310,12 @@ def test_only_known_warnings_remain():
         rep = validate(instantiate(TEMPLATE, ANSWERS[c]), ctx())
         # metrics are not checked (no metric registry yet); the platform colour is auto-adjusted in dark theme
         assert {w.code for w in rep.warnings} <= {"BP-REF-002", "BP-BRAND-002"}, [str(w) for w in rep.warnings]
+
+
+def test_qa_has_no_vat_or_einvoicing_assumption():
+    bp = instantiate(TEMPLATE, ANSWERS["qa"])
+    assert bp["compliance"]["eInvoicing"] == {"mode": "none"}
+    assert bp["compliance"]["vat"] == {"registered": False}
+    assert "BP-EINV-001" not in {e.code for e in validate(bp, ctx()).errors}
+    with pytest.raises(InstantiationError):
+        instantiate(TEMPLATE, {**ANSWERS["qa"], "vat_registered": True})

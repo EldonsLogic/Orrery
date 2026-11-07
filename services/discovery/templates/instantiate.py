@@ -34,7 +34,8 @@ MAX_BRANCHES = 50
 
 # PLACEHOLDER country values for the compliance block. The country pack (CMP-021) is authoritative
 # and the numbers below are NOT tax logic: they only fill schema-required fields until the pack
-# exists. UNVERIFIED for ae and eg (the e-invoicing modes are contract placeholders too).
+# exists. UNVERIFIED for ae, eg and qa (the e-invoicing modes are contract placeholders too). For qa the VAT
+# status and any e-invoicing regime are UNVERIFIED: no rate is assumed and VAT is modelled as not applicable.
 COUNTRIES: dict[str, dict[str, Any]] = {
     "sa": {"code": "SA", "einvoicing": "zatca_phase2", "component": "compliance.zatca_sa",
            "vat_rate": 15, "filing": "monthly", "hijri": True},
@@ -42,6 +43,8 @@ COUNTRIES: dict[str, dict[str, Any]] = {
            "vat_rate": 5, "filing": "quarterly", "hijri": False},
     "eg": {"code": "EG", "einvoicing": "eg_e_invoice", "component": None,
            "vat_rate": 14, "filing": "monthly", "hijri": False},
+    "qa": {"code": "QA", "einvoicing": "none", "component": None,
+           "vat_rate": None, "filing": None, "hijri": True, "vat_applicable": False},  # UNVERIFIED
 }
 ZATCA_COMPONENT = "compliance.zatca_sa"
 ZATCA_FIELD_PREFIX = "zatca_"
@@ -92,7 +95,7 @@ def check_answers(answers: Any) -> dict[str, Any]:
         out[key] = v
     country = answers["country"]
     if not isinstance(country, str) or country.strip().lower() not in COUNTRIES:
-        raise InstantiationError("answer 'country': must be one of sa, ae, eg")
+        raise InstantiationError("answer 'country': must be one of sa, ae, eg, qa")
     out["country"] = country.strip().lower()
     b = answers.get("branches", 1)
     if isinstance(b, bool) or not isinstance(b, (int, float)) or int(b) != b or not 1 <= b <= MAX_BRANCHES:
@@ -217,7 +220,7 @@ def instantiate(template_path: str | Path, answers: dict, now: str | None = None
     """Return a new Blueprint dict (draft) for the company described by `answers`.
 
     answers keys (all values strings, numbers, booleans or lists of those): name_ar, name_en and
-    country (sa, ae, eg) are required; branches (default 1), currency, vat_registered (default
+    country (sa, ae, eg, qa) are required; branches (default 1), currency, vat_registered (default
     false), languages (default ["ar", "en"]), vat_number, cr_number are optional. Unknown keys,
     other value types and contradictions raise InstantiationError. Country-pack differences are
     limited to the compliance block (placeholders, see COUNTRIES); locale values are left out so
@@ -227,6 +230,9 @@ def instantiate(template_path: str | Path, answers: dict, now: str | None = None
     bp = load_template(template_path)  # fresh object: the template is never modified
     bp.pop("$schema", None)  # the template's relative schema path means nothing next to the output
     ctry = COUNTRIES[a["country"]]
+    if a["vat_registered"] and not ctry.get("vat_applicable", True):
+        raise InstantiationError(
+            f"answer 'vat_registered': VAT for country {a['country']} is UNVERIFIED and not modelled; answer false")
     tmpl_locs = copy.deepcopy(bp["locations"])
 
     # meta
@@ -312,7 +318,7 @@ def _yes_no(text: str) -> bool:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Instantiate the trading and distribution template.")
     ap.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE, help="path to blueprint.template.json")
-    ap.add_argument("--country", required=True, help="sa, ae or eg")
+    ap.add_argument("--country", required=True, help="sa, ae, eg or qa")
     ap.add_argument("--name-ar", required=True)
     ap.add_argument("--name-en", required=True)
     ap.add_argument("--branches", type=int)

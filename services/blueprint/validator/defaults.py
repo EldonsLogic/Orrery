@@ -7,7 +7,7 @@ from typing import Any
 from .report import ValidationContext, as_dict
 
 # PLACEHOLDER DEFAULTS. The country pack (CMP-021) is authoritative; these values only let the
-# validator resolve omitted company.locale fields until the packs ship. UNVERIFIED for ae and eg.
+# validator resolve omitted company.locale fields until the packs ship. UNVERIFIED for ae, eg and qa.
 # Each value below is a placeholder default, not a statement of law.
 DEFAULT_PACK_LOCALES: dict[str, dict[str, Any]] = {
     "sa": {  # placeholder defaults, the country pack (CMP-021) is authoritative
@@ -48,6 +48,19 @@ DEFAULT_PACK_LOCALES: dict[str, dict[str, Any]] = {
         "holidays": {"calendarRef": {"id": "eg.holidays", "version": "0.1.0"}},
         "numberSystem": "western",
         "currency": "EGP",
+    },
+    "qa": {  # UNVERIFIED placeholder; country pack is authoritative
+        "timezone": "Asia/Qatar",
+        "calendar": {"primary": "gregorian", "secondaryDisplay": "hijri_umm_al_qura"},
+        "week": {"startDay": "sun", "weekendDays": ["fri", "sat"]},
+        "workingTime": {
+            "workDays": ["sun", "mon", "tue", "wed", "thu"],
+            "hours": {"from": "08:00", "to": "17:00"},
+        },
+        "fiscalYear": {"type": "gregorian", "startMonth": 1, "startDay": 1},
+        "holidays": {"calendarRef": {"id": "qa.holidays", "version": "0.1.0"}},
+        "numberSystem": "western",
+        "currency": "QAR",
     },
 }
 

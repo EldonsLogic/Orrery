@@ -41,6 +41,18 @@ def render():
             out.append("")
     if not ready:
         out.append("- none")
+    for owner in ("eldon", "partner"):
+        mine = [r for r in rows if r["Owner"] == owner and r["Status"] != "done"]
+        doing_m = [r for r in mine if r["Status"] == "doing"]
+        ready_m = [r for r in ready if r["Owner"] == owner]
+        waiting = [r for r in mine if r["Status"] == "todo" and r not in ready_m]
+        out += ["", f"## Queue: {owner}", "", "Doing:"]
+        out += [f"- {r['ID']}: {r['Item']}" for r in doing_m] or ["- nothing"]
+        out += ["", "Ready next (dependencies done), by gate:"]
+        out += [f"- {r['ID']} ({r['Gate']}): {r['Item']}" for r in ready_m] or ["- nothing"]
+        out += ["", f"Waiting on dependencies: {len(waiting)} row(s)."]
+    unassigned = sum(1 for r in rows if r["Owner"] == "unassigned" and r["Status"] != "done")
+    out += ["", f"Unassigned rows not done: {unassigned} (assign an owner in docs/PLAN.md when you claim one)."]
     out += ["", "## Blocked items", ""]
     blocked = [r for r in rows if r["Status"] == "blocked"]
     out += [f"- {r['ID']}: {r['Item']} ({r['Gate']})" for r in blocked] or ["- none"]

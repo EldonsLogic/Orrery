@@ -1,0 +1,48 @@
+{
+  "$schema": "../../../../contracts/component.manifest.schema.json",
+  "id": "core.sales_invoice",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": { "ar": "الفواتير الضريبية (تجريبي)", "en": "Tax invoices (fixture)" },
+  "description": "Fictional component manifest used only by the trading and distribution test fixture. It describes no real component and ships no code.",
+  "provides": [
+    {
+      "capability": "core.sales_invoice.entities",
+      "artifacts": [
+        { "type": "entity", "ref": "sales_invoice" },
+        { "type": "entity", "ref": "sales_invoice_line" }
+      ]
+    },
+    {
+      "capability": "core.sales_invoice.workflows",
+      "artifacts": [
+        { "type": "workflow", "ref": "sales_invoice_flow" }
+      ]
+    },
+    {
+      "capability": "core.sales_invoice.calculate",
+      "artifacts": [
+        { "type": "function", "ref": "sales.invoice.due_date" },
+        { "type": "function", "ref": "sales.invoice.line_total" },
+        { "type": "function", "ref": "sales.invoice.outstanding" },
+        { "type": "function", "ref": "sales.invoice.subtotal" },
+        { "type": "function", "ref": "sales.invoice.total" },
+        { "type": "function", "ref": "sales.invoice.vat_amount" }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "core.customer", "versionRange": "^0.1.0" },
+    { "component": "core.item", "versionRange": "^0.1.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    { "id": "fixture_unit", "kind": "unit", "path": "tests/fixture_unit.py", "blocking": true }
+  ],
+  "certification": { "level": "reviewed", "touchesLedgerOrTax": true, "reviewedBy": ["example-reviewer"] },
+  "engineCompatibility": { "adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0", "testedAgainst": ["set-example"] },
+  "licence": { "spdx": "LicenseRef-Proprietary" },
+  "owner": { "github": "example-owner" },
+  "i18n": { "locales": ["ar", "en"], "rtlVerified": false },
+  "dataHandling": { "storesPersonalData": false, "sendsDataToModels": false, "promotableToLibrary": false }
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "../../../../contracts/component.manifest.schema.json",
+  "id": "purchasing.purchase_order",
+  "version": "0.1.0",
+  "kind": "configurable",
+  "name": { "ar": "أوامر الشراء (تجريبي)", "en": "Purchase orders (fixture)" },
+  "description": "Fictional component manifest used only by the trading and distribution test fixture. It describes no real component and ships no code.",
+  "provides": [
+    {
+      "capability": "purchasing.purchase_order.entities",
+      "artifacts": [
+        { "type": "entity", "ref": "purchase_order" },
+        { "type": "entity", "ref": "purchase_order_line" }
+      ]
+    },
+    {
+      "capability": "purchasing.purchase_order.workflows",
+      "artifacts": [
+        { "type": "workflow", "ref": "purchase_order_flow" }
+      ]
+    },
+    {
+      "capability": "purchasing.purchase_order.calculate",
+      "artifacts": [
+        { "type": "function", "ref": "purchasing.order.line_total" },
+        { "type": "function", "ref": "purchasing.order.subtotal" },
+        { "type": "function", "ref": "purchasing.order.total" },
+        { "type": "function", "ref": "purchasing.order.vat_amount" }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "core.supplier", "versionRange": "^0.1.0" },
+    { "component": "core.item", "versionRange": "^0.1.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    { "id": "fixture_unit", "kind": "unit", "path": "tests/fixture_unit.py", "blocking": true }
+  ],
+  "certification": { "level": "tested", "touchesLedgerOrTax": false },
+  "engineCompatibility": { "adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0", "testedAgainst": ["set-example"] },
+  "licence": { "spdx": "LicenseRef-Proprietary" },
+  "owner": { "github": "example-owner" },
+  "i18n": { "locales": ["ar", "en"], "rtlVerified": false },
+  "dataHandling": { "storesPersonalData": false, "sendsDataToModels": false, "promotableToLibrary": false }
+}

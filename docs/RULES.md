@@ -40,7 +40,7 @@ Every rule the founders have set or settled, in one place. [AGENTS.md](../AGENTS
 28. Identity model (central with per-tenant roles vs per-tenant users) is a Proposed decision, [ADR-0007](decisions/ADR-0007-identity.md); decide before building the sign-in.
 
 ## D. Markets and compliance
-29. Three operating markets: Saudi Arabia, the UAE and Egypt. Launch order KSA, UAE, Egypt. Egypt regulations are research needed ([ADR-0015](decisions/ADR-0015-country-packs-calendars-locale.md)).
+29. Four phase-1 operating markets: Saudi Arabia, the UAE, Egypt and Qatar, with no fixed launch order ([ADR-0024](decisions/ADR-0024-four-phase-1-markets.md), which supersedes the launch order in ADR-0012 and ADR-0015). Egypt and Qatar regulations are research needed; never state a Qatar or Egypt fact without a source and access date.
 30. Statutory logic ships as certified country packs (tax, e-invoicing, holidays, default week, payroll rules, document templates, formats). The model never calculates tax. Compliance is never "later" for v1 scope.
 31. Calendars: store dates in Gregorian; Hijri (Umm al-Qura) is a display, entry and rule layer; week start, weekend, working days and hours (including reduced Ramadan hours), calendars, fiscal year, holidays and time zone are per-company settings with country defaults.
 32. Arabic first and right-to-left from day one; every user-facing string through i18n; Arabic and English equal. Gulf and Egyptian Arabic are tested. Arabic copy and anything legal needs a native-speaker review.

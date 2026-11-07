@@ -3,7 +3,7 @@
 Canonical for all tools (Claude, Codex, Antigravity, others). Two founders work in parallel on different AI models; the repo is the shared memory.
 
 ## Product in four lines
-An AI-native business platform for owner-led companies (10-100 staff) in the Middle East: Saudi Arabia, the UAE and Egypt (three operating markets, launch order KSA, UAE, Egypt).
+An AI-native business platform for owner-led companies (10-100 staff) in the Middle East: Saudi Arabia, the UAE, Egypt and Qatar (four phase-1 operating markets, no fixed launch order, ADR-0024).
 One chat, Arabic or English: interview the owner, draft a Blueprint, assemble an ERP from vetted components, simulate a month, go live, then run it.
 Five parts: Discovery, Blueprint and Library (the spine), ERP Runtime (Frappe + ERPNext), Operate, Platform. Four contracts in `/contracts`.
 We are a product company, not a software house. "Orrery" is a working name, not cleared: say "the platform" in new text.

@@ -15,7 +15,7 @@ The rigid core that does the accounting and operations correctly: Frappe Framewo
 5. **Arabic and RTL** in engine-rendered outputs: bilingual invoices and statements, Hijri date display, Arabic-Indic numerals option, correct PDF shaping (known risk, UNVERIFIED).
 6. Expose a stable API to the adapter and tool API (REST; MCP where useful). The engine's own Desk UI is for internal and support use; customers use the platform's own web app.
 7. Emit record events to the event stream ([events.md](../../contracts/events.md)).
-8. Host **country packs** (KSA first, then UAE, then Egypt; Egypt UNVERIFIED): tax, e-invoicing, holiday calendar, work week, document templates, formats ([country-packs](../architecture/country-packs.md)).
+8. Host **country packs** (KSA, UAE, Egypt and Qatar, all phase 1; Egypt and Qatar UNVERIFIED until researched): tax, e-invoicing, holiday calendar, work week, document templates, formats ([country-packs](../architecture/country-packs.md)).
 9. Implement the **calendar layer**: dates stored as Gregorian ISO/UTC, Hijri (Umm al-Qura) as display/entry/rule layer, working-day and due-date functions in code ([calendars-and-locale](../architecture/calendars-and-locale.md)).
 
 ## Interfaces

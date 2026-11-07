@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 8 | 3 | 31 | 0 | 42 |
-| G1 | 62 | 1 | 13 | 0 | 76 |
-| G2 | 111 | 2 | 0 | 0 | 113 |
-| G3 | 44 | 0 | 0 | 0 | 44 |
-| G4 | 12 | 0 | 0 | 0 | 12 |
+| G0 | 8 | 4 | 31 | 0 | 43 |
+| G1 | 65 | 1 | 13 | 0 | 79 |
+| G2 | 114 | 2 | 0 | 0 | 116 |
+| G3 | 43 | 0 | 0 | 0 | 43 |
+| G4 | 10 | 0 | 0 | 0 | 10 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 244 | 6 | 44 | 0 | 294 |
+| all | 247 | 7 | 44 | 0 | 298 |
 
 ## Built so far (done)
 
@@ -74,10 +74,10 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (owner unassigned)
 - INF-013: Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) (owner eldon)
 - LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
-- LEG-003: Engage counsel in KSA, UAE and Egypt; scope of work (owner eldon)
+- LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (22)
+**G1** (23)
 - BPL-012: Engine adapter interface so the engine stays replaceable (owner partner)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner unassigned)
@@ -91,7 +91,8 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner unassigned)
 - GTM-002: 20-30 buyer and accountant interviews in the niche (owner eldon)
 - GTM-004: Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) (owner eldon)
-- GTM-018: Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use (owner partner)
+- GTM-018: Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use (owner partner)
+- GTM-019: Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires (owner eldon)
 - INF-003: CI/CD for services (build, test, deploy to staging) (owner partner)
 - INF-012: Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) (owner eldon)
 - PLT-024: Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) (owner unassigned)
@@ -118,17 +119,19 @@ Doing:
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
+- GOV-031: Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified
 
 Ready next (dependencies done), by gate:
 - GOV-002 (G0): Create GitHub organisation, transfer repo, decide final repo name
 - INF-013 (G0): Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018)
 - LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
-- LEG-003 (G0): Engage counsel in KSA, UAE and Egypt; scope of work
+- LEG-003 (G0): Engage counsel in KSA, UAE, Egypt and Qatar; scope of work
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
 - BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
 - FND-001 (G1): Investor shortlist from research/05, re-verified
 - GTM-002 (G1): 20-30 buyer and accountant interviews in the niche
 - GTM-004 (G1): Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED)
+- GTM-019 (G1): Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires
 - INF-012 (G1): Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018)
 - QA-003 (G1): Model bake-off on the Arabic eval set
 - GOV-027 (G2): Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public
@@ -146,12 +149,12 @@ Ready next (dependencies done), by gate:
 - ERP-001 (G1): G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - ERP-009 (G1): Engine event emitter feeding the event stream
-- GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use
+- GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use
 - INF-003 (G1): CI/CD for services (build, test, deploy to staging)
 
 Waiting on dependencies: 13 row(s).
 
-Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim one).
+Unassigned rows not done: 208 (assign an owner in docs/PLAN.md when you claim one).
 
 ## Blocked items
 
@@ -169,6 +172,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (eldon)
+- GOV-031: Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified (eldon)
 
 ## Last 10 log files
 

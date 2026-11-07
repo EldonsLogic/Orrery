@@ -46,7 +46,7 @@ Consent banner before any non-essential cookie or tracker; decline is as easy as
 | Core Web Vitals | Good on mobile for LCP, INP, CLS (thresholds from web.dev, to cite when implemented) |
 | Page weight | Budget set per page type at build time; Arabic webfont subset and `font-display` strategy per [../brand/04-typography.md](../brand/04-typography.md) |
 | Accessibility | WCAG 2.2 AA target, keyboard use, visible focus, contrast in light and dark, reduced motion, screen-reader tested in Arabic and English |
-| Hosting | Static or edge-served where possible; regional latency for KSA, UAE and Egypt visitors to be tested |
+| Hosting | Static or edge-served where possible; regional latency for KSA, UAE, Egypt and Qatar visitors to be tested |
 | Security | HTTPS only, HSTS, CSP, no third-party scripts without approval ([../security/hosting-rules.md](../security/hosting-rules.md)) |
 | Themes | Light and dark from brand tokens; follows system preference with user override |
 
@@ -54,7 +54,7 @@ Consent banner before any non-essential cookie or tracker; decline is as easy as
 Domain and name clearance (ADR-0001); who writes Arabic copy; which analytics tool; whether a UAE entity or KSA presence is needed to show prices in SAR (UNVERIFIED).
 
 ## Egypt and country selection (added)
-- Markets: KSA first, UAE second, Egypt third. Launch order is unchanged; Egypt content goes live only after its country pack and compliance research are done (research needed, [../compliance/country-matrix.md](../compliance/country-matrix.md)).
+- Markets: KSA, UAE, Egypt and Qatar, no fixed launch order (ADR-0024). Content for a market goes live only after its country pack and compliance research are done (research needed, [../compliance/country-matrix.md](../compliance/country-matrix.md)).
 - Sitemap addition: country pages (KSA, UAE, Egypt) under Compliance and Solutions, each with only verified claims and dates; Egypt page shows "coming soon" with a waitlist until ready.
 - Country selection: sign-up step 2 adds a required country choice (KSA, UAE, Egypt/waitlist); it sets defaults for compliance pack, hosting region, currency, calendar, week and holidays, which the company can change later. Site language switcher and country selector are separate. Company ID fields vary by country (CR/VAT for KSA; Egypt identifiers research needed).
 - Content blocks per country: e-invoicing status, VAT, language and document rules, hosting location, currency, calendar and work-week defaults.

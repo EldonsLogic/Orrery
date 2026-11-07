@@ -49,8 +49,8 @@ Source: [../research/03-regulations.md](../research/03-regulations.md) (prepared
 | U16 | Retention | Commonly 5 years VAT; 15 real estate; 7 CT (UNVERIFIED) | none | Configurable retention, immutable archive | Yes | UNVERIFIED |
 | U17 | Hijri | No requirement found | none | None in v1 | No | UNVERIFIED |
 
-## Egypt (operating market, launch order KSA, UAE, Egypt)
-Founder requirement: the platform operates in KSA, UAE and Egypt. Adding Egypt changes nothing about the KSA-first launch: KSA remains first for customers, UAE second, Egypt third ([../strategy/02-niche-and-launch-country.md](../strategy/02-niche-and-launch-country.md)). The research file has NO Egypt rows; every row below is research needed, with no facts recorded. When researched, record each fact with URL and access date. Country packs are specified in [../architecture/country-packs.md](../architecture/country-packs.md) and calendars in [../architecture/calendars-and-locale.md](../architecture/calendars-and-locale.md) (written by another agent).
+## Egypt (phase-1 operating market)
+Founder requirement: the platform operates in KSA, UAE, Egypt and Qatar in phase 1, with no fixed launch order (ADR-0024; the earlier KSA-first order in ADR-0012 and ADR-0015 is superseded). The research file has NO Egypt rows; every row below is research needed, with no facts recorded. When researched, record each fact with URL and access date. Country packs are specified in [../architecture/country-packs.md](../architecture/country-packs.md) and calendars in [../architecture/calendars-and-locale.md](../architecture/calendars-and-locale.md) (written by another agent).
 | ID | Area | Question to research | Effect on product (to confirm) | v1 must-have for Egypt | Status |
 |---|---|---|---|---|---|
 | E1 | E-invoicing | Is there a national e-invoicing mandate, which authority, which phases and thresholds, document format, signing, portal/API, vendor obligations, sandbox | Egypt e-invoicing component and sandbox plan (see [e-invoicing.md](e-invoicing.md)) | Yes if mandate exists | research needed |
@@ -96,3 +96,15 @@ See the research section 4 ([../research/03-regulations.md](../research/03-regul
 
 ## Open legal questions
 12 questions listed in the research section 5; carried to [../legal/checklist.md](../legal/checklist.md).
+
+## Qatar (phase-1 operating market, added 2026-11-07)
+Founder requirement (ADR-0024): Qatar is a phase-1 market because the founder's first leads are there. NO Qatar facts are recorded: every area below is research needed. When researched, record each fact with URL and access date. Do not copy assumptions from the KSA or UAE rows; Qatar has its own tax, data protection and labour rules (UNVERIFIED, to confirm).
+| ID | Area | Question to research | Effect on product (to confirm) | v1 must-have for Qatar | Status |
+|---|---|---|---|---|---|
+| Q1 | Tax | Is there VAT or another consumption tax in force, corporate income tax rules, withholding, filing portal and periods | Qatar tax codes and filing component | Yes if a tax applies | research needed |
+| Q2 | E-invoicing | Any national e-invoicing mandate, authority, phases, format, signing, portal or API | Qatar e-invoicing component, if any | Yes if mandate exists | research needed |
+| Q3 | Data protection and hosting | Personal data protection law, in-country hosting or transfer limits, regulator, breach notification | Hosting and residency choice (Q-9, Q-14), consent and retention defaults | Yes | research needed |
+| Q4 | Payroll and labour | Wage protection system, end-of-service rules, national workforce rules, payroll file formats | Qatar payroll component | Yes if payroll is in v1 scope | research needed |
+| Q5 | Accounting standard | Accepted standards and chart of accounts defaults for SMEs; audit requirements | Chart of accounts default (Q-8) | Yes | research needed |
+| Q6 | Calendars | Work week, weekend, Ramadan hours, public holidays, fiscal year practice, Hijri usage | Qatar defaults in the country pack (placeholders in code are UNVERIFIED) | Yes | research needed |
+| Q7 | Company and licensing | Entity types, commercial registration, foreign ownership rules relevant to us as a vendor | Entity decision (LEG-010) and counsel scope (LEG-003) | Yes | research needed |

@@ -3,11 +3,11 @@
 Status: draft
 Owner: eldon
 
-How the platform handles dates, weeks, working time, fiscal years, numbers and time zones across KSA, UAE and Egypt. Settings live in the Blueprint (`company.locale`, [schema](../../contracts/blueprint.schema.json)); defaults come from the [country pack](country-packs.md).
+How the platform handles dates, weeks, working time, fiscal years, numbers and time zones across KSA, UAE, Egypt and Qatar. Settings live in the Blueprint (`company.locale`, [schema](../../contracts/blueprint.schema.json)); defaults come from the [country pack](country-packs.md).
 
 ## Principles
 1. **Store canonically, display locally.** Every date is stored as Gregorian ISO 8601 (dates as `YYYY-MM-DD`, instants as UTC). Hijri is a display, entry and rule layer on top. No table holds a Hijri date as the only copy, except when a document legally records the Hijri date, in which case both are stored.
-2. **Commerce and tax run on Gregorian** in practice in all three countries (UNVERIFIED, confirm per country with a local accountant). Hijri matters for Saudi official and some contract contexts, possibly the zakat year (UNVERIFIED), and religious dates (Ramadan, Eid). Egypt may use the Coptic calendar in some contexts (UNVERIFIED); not planned for v1.
+2. **Commerce and tax run on Gregorian** in practice in all four countries (UNVERIFIED, confirm per country with a local accountant). Hijri matters for Saudi official and some contract contexts, possibly the zakat year (UNVERIFIED), and religious dates (Ramadan, Eid). Egypt may use the Coptic calendar in some contexts (UNVERIFIED); not planned for v1.
 3. **Per-company settings with country defaults.** Every `company.locale` field is optional; omitted fields resolve from the country pack, and the resolved values are stored with the compiled artifact.
 4. **Numbers and money come from code.** The model never formats or computes dates or amounts.
 
@@ -49,7 +49,7 @@ How the platform handles dates, weeks, working time, fiscal years, numbers and t
 
 ## Time zones
 - Store UTC; display in `locale.timezone` (IANA: Asia/Riyadh, Asia/Dubai, Africa/Cairo).
-- KSA and UAE have no daylight saving. Egypt reintroduced daylight saving in 2023 (UNVERIFIED, confirm and watch for changes); rely on the IANA tz database, updated through the normal dependency path, and test around transitions.
+- KSA, UAE and Qatar have no daylight saving (Qatar UNVERIFIED). Egypt reintroduced daylight saving in 2023 (UNVERIFIED, confirm and watch for changes); rely on the IANA tz database, updated through the normal dependency path, and test around transitions.
 - "Today" for a document is the company's local date, not UTC.
 
 ## Tests and evals

@@ -40,5 +40,5 @@ MVP = trading and distribution firms, 10-100 staff ([../strategy/02-niche-and-la
 - No third-party marketplace for components in v1.
 
 ## Country packs and per-company calendars (added)
-- Markets: KSA, UAE, Egypt (launch order KSA, UAE, Egypt; Egypt does not change the KSA-first launch). Compliance, tax codes, document templates, payroll files, currency and calendar defaults are delivered as country packs, specified in [../architecture/country-packs.md](../architecture/country-packs.md) (written by another agent). Egypt pack contents: research needed.
+- Markets: KSA, UAE, Egypt and Qatar (all phase 1, no fixed launch order, ADR-0024). Compliance, tax codes, document templates, payroll files, currency and calendar defaults are delivered as country packs, specified in [../architecture/country-packs.md](../architecture/country-packs.md) (written by another agent). Egypt and Qatar pack contents: research needed.
 - Calendars, week, holidays, fiscal year and time zone are per-company settings with country defaults: [../architecture/calendars-and-locale.md](../architecture/calendars-and-locale.md). UI: Settings > Company calendar and week ([app-screens.md](app-screens.md)).

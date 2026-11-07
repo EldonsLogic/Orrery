@@ -5,7 +5,7 @@ An AI-native business platform for owner-led companies in the Middle East. One c
 Status: foundation built, product not yet built. Current gate in [docs/GATES.md](docs/GATES.md); what is built and what is ready to start in [docs/STATUS.md](docs/STATUS.md). Markets: Saudi Arabia, UAE, Egypt. Private repository; not open source.
 
 ## Start
-- Humans and agents: [docs/00-START-HERE.md](docs/00-START-HERE.md), then [AGENTS.md](AGENTS.md) and [docs/RULES.md](docs/RULES.md). Delegating to sub-agents: [agents/delegation-playbook.md](agents/delegation-playbook.md).
+- New here: [docs/ONBOARDING.md](docs/ONBOARDING.md) (setup, lanes, first tasks). Humans and agents: [docs/00-START-HERE.md](docs/00-START-HERE.md), then [AGENTS.md](AGENTS.md) and [docs/RULES.md](docs/RULES.md). Delegating to sub-agents: [agents/delegation-playbook.md](agents/delegation-playbook.md).
 - Work list: [docs/PLAN.md](docs/PLAN.md). Decisions: [docs/decisions/INDEX.md](docs/decisions/INDEX.md). Risks: [docs/risks.md](docs/risks.md).
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Security: [SECURITY.md](SECURITY.md). Licences: [NOTICE.md](NOTICE.md).
 

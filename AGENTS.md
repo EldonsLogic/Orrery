@@ -22,9 +22,10 @@ We are a product company, not a software house. "Orrery" is a working name, not 
 See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/STATUS.md](docs/STATUS.md). Do not build for a later gate without a plan row. Application code is allowed only where a plan row for the current gate asks for it.
 
 ## Session start checklist
-1. `git pull` (or confirm you are on the latest main).
-2. Read [docs/RULES.md](docs/RULES.md) (every standing founder rule), `docs/STATUS.md` and the latest 3 files in `docs/log/` (or run `python3 scripts/session_start.py`).
-3. Pick a `todo` row in [docs/PLAN.md](docs/PLAN.md) whose Depends are `done`; set it `doing` with an owner.
+1. Identify which founder you are working with: Eldon (GitHub `EldonsLogic`) or the partner (GitHub `sayegh9`). Check `gh api user --jq .login`, or `git config user.name` and `user.email`, or ask; never assume. It decides the log `--author` (eldon or partner) and your lane in [docs/ONBOARDING.md](docs/ONBOARDING.md).
+2. `git pull` (or confirm you are on the latest main). If the person you work with has not done the one-time setup, walk them through [docs/ONBOARDING.md](docs/ONBOARDING.md) first; it also defines the two founders' lanes (stay in your lane's paths).
+3. Read [docs/RULES.md](docs/RULES.md) (every standing founder rule), `docs/STATUS.md` and the latest 3 files in `docs/log/` (or run `python3 scripts/session_start.py`).
+4. Pick a `todo` row in [docs/PLAN.md](docs/PLAN.md) whose Depends are `done`; set it `doing` with an owner.
 
 ## Session end checklist
 1. `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>`; fill it in.

@@ -35,10 +35,11 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-019 | Pick issue/PR labels and project board mapping to PLAN IDs | Governance | G0 | GOV-008 | unassigned | todo |
 | GOV-020 | Periodic plan review: re-rank, close stale rows, check gate criteria | Governance | G1 | GOV-016 | unassigned | todo |
 | GOV-021 | Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI) | Governance | G0 | GOV-004 | eldon | done |
+| GOV-022 | Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md) | Governance | G0 | GOV-004 | eldon | done |
 | LEG-001 | Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype | Legal | G0 | - | eldon | todo |
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes | Legal | G0 | GOV-004 | eldon | todo |
 | LEG-003 | Engage counsel in KSA, UAE and Egypt; scope of work | Legal | G0 | - | eldon | todo |
-| LEG-004 | Third-party licence register (every adopted OSS component, version, licence) | Legal | G0 | GOV-004 | unassigned | todo |
+| LEG-004 | Third-party licence register (every adopted OSS component, version, licence) | Legal | G0 | GOV-004 | partner | todo |
 | LEG-005 | Register domains and social handles for the working name (hold only) | Legal | G0 | - | eldon | todo |
 | LEG-006 | GPL licence-boundary review: SaaS-only engine, separate services, no distribution | Legal | G1 | LEG-003 | unassigned | todo |
 | LEG-007 | Counsel opinion: vendor certification needed to sell ZATCA-compliant software | Legal | G1 | LEG-003 | unassigned | todo |
@@ -58,7 +59,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CE-SEC-003 | Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory | Security | G0 | BPL-001 | partner | doing |
 | CE-SEC-004 | Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL | Security | G0 | BPL-001 | partner | done |
 | CE-SEC-005 | Change engine: CI against a real Frappe bench instead of mocks | Security | G1 | BPL-001,ERP-001 | partner | todo |
-| SEC-001 | Threat model for the five parts and four contracts | Security | G1 | GOV-015 | unassigned | todo |
+| SEC-001 | Threat model for the five parts and four contracts | Security | G1 | GOV-015 | eldon | todo |
 | SEC-002 | Secrets management design (store, rotate, never in repo) | Security | G1 | SEC-001 | unassigned | todo |
 | SEC-003 | Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data | Security | G1 | SEC-001 | unassigned | todo |
 | SEC-004 | Cross-tenant isolation test suite | Security | G1 | ERP-003 | unassigned | todo |
@@ -85,9 +86,9 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DAT-008 | Anonymisation pipeline for promoting generalised patterns across tenants | Data | G4 | DAT-001,LEG-013 | unassigned | todo |
 | DAT-009 | Synthetic data generator for dev, demos and previews (no real data; ADR-0018) | Data | G1 | DAT-002 | unassigned | todo |
 | CMP-001 | Re-verify UNVERIFIED regulation rows in research/03 against official sources | Compliance | G1 | LEG-003 | unassigned | todo |
-| CMP-002 | Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance | Compliance | G1 | ERP-001 | unassigned | todo |
-| CMP-003 | ZATCA Phase 1 invoice generation (QR, mandatory fields) | Compliance | G1 | CMP-002 | unassigned | todo |
-| CMP-004 | ZATCA Phase 2 invoice passes ZATCA sandbox (signing, hash chain, clearance and reporting) | Compliance | G1 | CMP-003 | unassigned | todo |
+| CMP-002 | Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance | Compliance | G1 | ERP-001 | partner | todo |
+| CMP-003 | ZATCA Phase 1 invoice generation (QR, mandatory fields) | Compliance | G1 | CMP-002 | partner | todo |
+| CMP-004 | ZATCA Phase 2 invoice passes ZATCA sandbox (signing, hash chain, clearance and reporting) | Compliance | G1 | CMP-003 | partner | todo |
 | CMP-005 | Hijri date support in fields, display and print | Compliance | G1 | ERP-001 | unassigned | todo |
 | CMP-006 | KSA chart of accounts template and tax codes | Compliance | G1 | ERP-001 | unassigned | todo |
 | CMP-007 | ZATCA onboarding automation per tenant (CSID, certificates, environments) | Compliance | G2 | CMP-004,PLT-003 | unassigned | todo |
@@ -106,16 +107,16 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-020 | Regulation change watcher feeding versioned compliance components | Compliance | G4 | CMP-008 | unassigned | todo |
 | BPL-001 | Import the prototype change engine into apps/engine as the change-engine module (renamed) | Blueprint | G0 | LEG-001 | partner | done |
 | BPL-002 | Blueprint schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | done |
-| BPL-003 | Blueprint validator | Blueprint | G1 | BPL-002 | unassigned | todo |
-| BPL-004 | Compiler: Blueprint to engine configuration | Blueprint | G1 | BPL-003,ERP-012 | unassigned | todo |
+| BPL-003 | Blueprint validator | Blueprint | G1 | BPL-002 | eldon | todo |
+| BPL-004 | Compiler: Blueprint to engine configuration | Blueprint | G1 | BPL-003,ERP-012 | eldon | todo |
 | BPL-005 | Hand-written trading and distribution Blueprint fixture | Blueprint | G1 | BPL-002 | eldon | doing |
-| BPL-006 | Blueprint diff | Blueprint | G1 | BPL-003 | unassigned | todo |
-| BPL-007 | Apply with preview and DDL plan gate (change engine) | Blueprint | G1 | BPL-004,BPL-001 | unassigned | todo |
-| BPL-008 | Rollback to a previous Blueprint version | Blueprint | G1 | BPL-007 | unassigned | todo |
+| BPL-006 | Blueprint diff | Blueprint | G1 | BPL-003 | eldon | todo |
+| BPL-007 | Apply with preview and DDL plan gate (change engine) | Blueprint | G1 | BPL-004,BPL-001 | partner | todo |
+| BPL-008 | Rollback to a previous Blueprint version | Blueprint | G1 | BPL-007 | partner | todo |
 | BPL-009 | Component manifest schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | done |
-| BPL-010 | Component registry (list, version, compatibility) | Blueprint | G1 | BPL-009 | unassigned | todo |
-| BPL-011 | Event stream contract implementation | Blueprint | G1 | BPL-002 | unassigned | todo |
-| BPL-012 | Engine adapter interface so the engine stays replaceable | Blueprint | G1 | GOV-015 | unassigned | todo |
+| BPL-010 | Component registry (list, version, compatibility) | Blueprint | G1 | BPL-009 | eldon | todo |
+| BPL-011 | Event stream contract implementation | Blueprint | G1 | BPL-002 | eldon | todo |
+| BPL-012 | Engine adapter interface so the engine stays replaceable | Blueprint | G1 | GOV-015 | partner | todo |
 | BPL-013 | Branding section in the Blueprint schema (ADR-0014) | Blueprint | G1 | BPL-002 | unassigned | done |
 | BPL-014 | Component certification levels and test harness | Blueprint | G2 | BPL-010 | unassigned | todo |
 | BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | unassigned | todo |
@@ -128,8 +129,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-022 | Reuse metrics and Platform Autonomy Rate computation | Blueprint | G2 | BPL-010,GOV-016 | unassigned | todo |
 | BPL-023 | Exceptions register tooling | Blueprint | G2 | GOV-017 | unassigned | todo |
 | BPL-024 | Promotion of generalised patterns into the library | Blueprint | G4 | DAT-008,BPL-016 | unassigned | todo |
-| DSC-001 | Interview protocol v0, Arabic and English | Discovery | G1 | GTM-002 | unassigned | todo |
-| DSC-002 | Template Blueprint: trading and distribution | Discovery | G1 | BPL-005 | unassigned | todo |
+| DSC-001 | Interview protocol v0, Arabic and English | Discovery | G1 | GTM-002 | eldon | todo |
+| DSC-002 | Template Blueprint: trading and distribution | Discovery | G1 | BPL-005 | eldon | todo |
 | DSC-003 | Connector interface spec and tier definitions | Discovery | G1 | GOV-015 | unassigned | done |
 | DSC-004 | Template-first discovery flow: show draft, owner corrects | Discovery | G2 | DSC-002,OPR-010 | unassigned | todo |
 | DSC-005 | Interview agent in Arabic and English | Discovery | G2 | DSC-001,OPR-010 | unassigned | todo |
@@ -146,18 +147,18 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-016 | Accountant review view in discovery | Discovery | G3 | DSC-007 | unassigned | todo |
 | DSC-017 | Owner-driven isolated read-only browser session (no stored credentials) | Discovery | G4 | DSC-010,SEC-015,INF-009 | unassigned | todo |
 | DSC-018 | Second vertical template chosen from pilot evidence | Discovery | G4 | GTM-005 | unassigned | todo |
-| ERP-001 | G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench | Runtime | G1 | LEG-004 | unassigned | todo |
-| ERP-002 | Spike: 50-tenant load test on one bench pool | Runtime | G1 | ERP-003 | unassigned | todo |
-| ERP-003 | Scripted site-per-tenant creation | Runtime | G1 | ERP-001 | unassigned | todo |
-| ERP-004 | Version pin and upgrade policy document | Runtime | G1 | ERP-001 | unassigned | todo |
-| ERP-005 | Core module scope for trading and distribution (selling, buying, stock, accounts) | Runtime | G1 | ERP-001 | unassigned | todo |
-| ERP-006 | Arabic and RTL translation completion for in-scope modules | Runtime | G1 | ERP-005 | unassigned | todo |
-| ERP-007 | Bilingual tax invoice PDF print format | Runtime | G1 | CMP-003,ERP-006 | unassigned | todo |
-| ERP-008 | Blueprint roles to engine roles and user permissions mapping | Runtime | G1 | BPL-002 | unassigned | todo |
-| ERP-009 | Engine event emitter feeding the event stream | Runtime | G1 | BPL-011 | unassigned | todo |
+| ERP-001 | G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench | Runtime | G1 | LEG-004 | partner | todo |
+| ERP-002 | Spike: 50-tenant load test on one bench pool | Runtime | G1 | ERP-003 | partner | todo |
+| ERP-003 | Scripted site-per-tenant creation | Runtime | G1 | ERP-001 | partner | todo |
+| ERP-004 | Version pin and upgrade policy document | Runtime | G1 | ERP-001 | partner | todo |
+| ERP-005 | Core module scope for trading and distribution (selling, buying, stock, accounts) | Runtime | G1 | ERP-001 | partner | todo |
+| ERP-006 | Arabic and RTL translation completion for in-scope modules | Runtime | G1 | ERP-005 | partner | todo |
+| ERP-007 | Bilingual tax invoice PDF print format | Runtime | G1 | CMP-003,ERP-006 | partner | todo |
+| ERP-008 | Blueprint roles to engine roles and user permissions mapping | Runtime | G1 | BPL-002 | partner | todo |
+| ERP-009 | Engine event emitter feeding the event stream | Runtime | G1 | BPL-011 | partner | todo |
 | ERP-010 | HRMS skeleton: employees, leave, payroll structure, only what v1 needs | Runtime | G2 | ERP-005 | unassigned | todo |
 | ERP-011 | Component pack v1 for trading and distribution (price lists, credit limits, rep commission) | Runtime | G2 | BPL-014,ERP-005 | unassigned | todo |
-| ERP-012 | Frappe implementation of the engine adapter | Runtime | G1 | BPL-012,ERP-001 | unassigned | todo |
+| ERP-012 | Frappe implementation of the engine adapter | Runtime | G1 | BPL-012,ERP-001 | partner | todo |
 | ERP-013 | Opening balances and master data importer | Runtime | G2 | DSC-011 | unassigned | todo |
 | ERP-014 | Accounting correctness property tests (ledger balances, tax, rounding) | Runtime | G1 | ERP-005,QA-001 | unassigned | todo |
 | ERP-015 | Inventory valuation correctness tests | Runtime | G2 | ERP-014 | unassigned | todo |
@@ -180,7 +181,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-014 | Per-tenant memory | Operate | G3 | OPR-001,DAT-001 | unassigned | todo |
 | OPR-015 | WhatsApp or push channel for the chat | Operate | G4 | OPR-010,DSC-015 | unassigned | todo |
 | PLT-001 | Tenancy ADR-0006: site per tenant on shared in-country infrastructure | Platform | G0 | GOV-015 | eldon | done |
-| PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | unassigned | todo |
+| PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | eldon | todo |
 | PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | unassigned | todo |
 | PLT-004 | Tenant lifecycle states: trial, active, suspended, exported, deleted | Platform | G2 | PLT-003 | unassigned | todo |
 | PLT-005 | Identity service (users, sessions, per-tenant roles) | Platform | G2 | PLT-002 | unassigned | todo |
@@ -205,7 +206,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-024 | Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) | Platform | G1 | PLT-001 | unassigned | todo |
 | INF-001 | Hosting decision: in-country provider shortlist and choice | Infrastructure | G1 | LEG-003,CMP-019 | unassigned | todo |
 | INF-002 | Infrastructure as code baseline | Infrastructure | G1 | INF-001 | unassigned | todo |
-| INF-003 | CI/CD for services (build, test, deploy to staging) | Infrastructure | G1 | GOV-007 | unassigned | todo |
+| INF-003 | CI/CD for services (build, test, deploy to staging) | Infrastructure | G1 | GOV-007 | partner | todo |
 | INF-004 | Staging environment | Infrastructure | G1 | INF-002 | unassigned | todo |
 | INF-005 | Production environment | Infrastructure | G3 | INF-004,SEC-002 | unassigned | todo |
 | INF-006 | Container build and image scanning | Infrastructure | G2 | INF-003 | unassigned | todo |
@@ -219,7 +220,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BRD-001 | Brand guidelines v1 (Quadrant) and placeholder logo | Brand | G0 | - | eldon | done |
 | BRD-002 | Design tokens: light and dark, CSS and JSON | Brand | G0 | BRD-001 | eldon | done |
 | BRD-003 | Identity decision: final name, logo direction, Arabic spelling | Brand | G1 | LEG-008 | eldon | todo |
-| BRD-004 | Token layering: base, product theme, tenant overrides, user preference | Brand | G1 | BRD-002 | unassigned | todo |
+| BRD-004 | Token layering: base, product theme, tenant overrides, user preference | Brand | G1 | BRD-002 | eldon | todo |
 | BRD-005 | Theme engine: light, dark, system, per-user persistence | Brand | G2 | BRD-004 | unassigned | todo |
 | BRD-006 | Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject | Brand | G2 | BRD-004 | eldon | doing |
 | BRD-007 | Brand asset pipeline: logo variants, auto-derived dark variant, size generation | Brand | G2 | BRD-004,SEC-006 | eldon | doing |
@@ -243,10 +244,10 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | WEB-013 | Mobile responsive layout and installable web app | Web | G3 | WEB-004 | unassigned | todo |
 | WEB-014 | Pricing page | Web | G3 | GTM-008,WEB-001 | unassigned | todo |
 | WEB-015 | Bilingual help centre | Web | G3 | WEB-001 | unassigned | todo |
-| QA-001 | Eval framework and CI hook | Quality | G1 | GOV-006 | unassigned | todo |
-| QA-002 | Arabic eval set v0 (100 prompts: accounting terms, dialects, numbers) | Quality | G1 | QA-001 | unassigned | todo |
-| QA-003 | Model bake-off on the Arabic eval set | Quality | G1 | QA-002 | unassigned | todo |
-| QA-004 | Compiler snapshot tests on Blueprint fixtures | Quality | G1 | BPL-004 | unassigned | todo |
+| QA-001 | Eval framework and CI hook | Quality | G1 | GOV-006 | eldon | todo |
+| QA-002 | Arabic eval set v0 (100 prompts: accounting terms, dialects, numbers) | Quality | G1 | QA-001 | eldon | todo |
+| QA-003 | Model bake-off on the Arabic eval set | Quality | G1 | QA-002 | eldon | todo |
+| QA-004 | Compiler snapshot tests on Blueprint fixtures | Quality | G1 | BPL-004 | eldon | todo |
 | QA-005 | Agent behaviour evals (tool choice, refusal, confirm-before-write) | Quality | G2 | OPR-002,QA-001 | unassigned | todo |
 | QA-006 | Prompt-injection eval suite | Quality | G2 | SEC-003,QA-001 | unassigned | todo |
 | QA-007 | Contrast tests for tenant themes in light and dark | Quality | G2 | BRD-006 | unassigned | todo |
@@ -258,8 +259,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-013 | Load and soak tests | Quality | G3 | ERP-002,INF-005 | unassigned | todo |
 | QA-014 | Accessibility audit (WCAG AA) | Quality | G3 | WEB-013 | unassigned | todo |
 | GTM-001 | Niche decision: trading and distribution first | GTM | G0 | - | eldon | done |
-| GTM-002 | 20-30 buyer and accountant interviews in the niche | GTM | G1 | - | unassigned | todo |
-| GTM-003 | Interview synthesis: ICP, pains, who vetoes, willingness to pay | GTM | G1 | GTM-002 | unassigned | todo |
+| GTM-002 | 20-30 buyer and accountant interviews in the niche | GTM | G1 | - | eldon | todo |
+| GTM-003 | Interview synthesis: ICP, pains, who vetoes, willingness to pay | GTM | G1 | GTM-002 | eldon | todo |
 | GTM-004 | Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) | GTM | G1 | - | eldon | todo |
 | GTM-005 | Pilot A: sign a paid pilot with the anonymised-reuse clause | GTM | G2 | LEG-013,GTM-003 | unassigned | todo |
 | GTM-006 | Pilot A: run discovery to live | GTM | G2 | GTM-005,QA-009 | unassigned | todo |
@@ -273,14 +274,14 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-014 | Customer success playbook | GTM | G4 | GTM-011 | unassigned | todo |
 | GTM-015 | Second market (UAE) launch plan | GTM | G5 | CMP-011 | unassigned | todo |
 | GTM-016 | Partner and reseller programme | GTM | G5 | GTM-014 | unassigned | todo |
-| FND-001 | Investor shortlist from research/05, re-verified | Fundraising | G1 | - | unassigned | todo |
+| FND-001 | Investor shortlist from research/05, re-verified | Fundraising | G1 | - | eldon | todo |
 | FND-002 | Accelerator evaluation (Hub71+, Antler) after the spike | Fundraising | G1 | ERP-001 | unassigned | todo |
 | FND-003 | Financial model | Fundraising | G2 | GTM-007 | unassigned | todo |
 | FND-004 | Pitch deck | Fundraising | G2 | GTM-006 | unassigned | todo |
 | FND-005 | Data room | Fundraising | G2 | LEG-010 | unassigned | todo |
 | FND-006 | Autonomy and reuse chart for investors | Fundraising | G3 | BPL-022,GTM-006 | unassigned | todo |
 | FND-007 | Cap table and funding terms with counsel | Fundraising | G3 | LEG-010 | unassigned | todo |
-| CMP-021 | Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) | Compliance | G1 | BPL-002,BPL-009 | unassigned | todo |
+| CMP-021 | Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) | Compliance | G1 | BPL-002,BPL-009 | partner | todo |
 | CMP-022 | Calendar and Hijri (Umm al-Qura) conversion library choice, licence and tests | Compliance | G1 | CMP-005 | unassigned | todo |
 | CMP-023 | Per-company calendar and week settings (week start, weekend, working days and hours, Ramadan hours, number system) | Compliance | G2 | CMP-021,CMP-022 | unassigned | todo |
 | CMP-024 | Holiday calendars per country with admin-editable moon-sighting overrides | Compliance | G2 | CMP-023 | unassigned | todo |
@@ -293,7 +294,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-020 | Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016) | ERP runtime | G1 | ERP-001 | unassigned | todo |
 | WEB-016 | Date pickers and entry in both Gregorian and Hijri calendars, RTL | Web | G2 | CMP-022,BRD-010 | unassigned | todo |
 | WEB-017 | Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) | Web | G1 | BRD-001 | unassigned | todo |
-| WEB-018 | Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) | Web | G0 | BRD-002 | unassigned | todo |
+| WEB-018 | Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) | Web | G0 | BRD-002 | eldon | todo |
 | WEB-019 | Host the static design-system preview pages from docs/brand on the preview project | Web | G1 | INF-013 | unassigned | todo |
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | unassigned | todo |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | unassigned | todo |

@@ -6,6 +6,7 @@ Owner: eldon
 The platform (working name Orrery, not trademark-cleared) is an AI-native business platform for owner-led companies in Saudi Arabia, the UAE and Egypt. One chat, in Arabic or English, interviews the owner, drafts a Blueprint, assembles an ERP from vetted components, simulates a month, then runs the business and changes it through the same chat. We are a product company, not a software house. Two founders work here in parallel with different AI tools.
 
 ## First 10 minutes (any agent, any tool)
+0. New founder or new machine? Do the one-time setup and read the lanes in [ONBOARDING.md](ONBOARDING.md).
 1. Read [AGENTS.md](../AGENTS.md), then [RULES.md](RULES.md) (every standing founder rule).
 2. Read [STATUS.md](STATUS.md) (generated: gate, what is built, what is ready to start) and the latest 3 files in [log/](log/README.md), newest first.
 3. Take a row from "Ready to start" in STATUS.md or a `todo` row in [PLAN.md](PLAN.md) whose dependencies are `done`. Claim it (`doing` plus owner), work on a branch named with its plan ID.

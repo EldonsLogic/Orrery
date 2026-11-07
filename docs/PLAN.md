@@ -39,10 +39,10 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-023 | Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS | Governance | G0 | GOV-006 | eldon | done |
 | GOV-024 | Enforcement layers: commit-msg and pre-push hooks, finish_session gate, main-guard audit workflow, ADR-0019 | Governance | G0 | GOV-023 | eldon | done |
 | GOV-025 | Lane guard: scripts/lanes.json and check_lanes.py in CI, pre-push and finish_session; cross-lane waiver in the session log (ADR-0020) | Governance | G0 | GOV-024 | eldon | done |
-| GOV-026 | Public repo with branch protection, secret scanning, outsider limits and Eldon second account (ADR-0021) | Governance | G0 | GOV-008 | eldon | done |
+| GOV-026 | Public repo with branch protection, secret scanning, outsider limits (ADR-0021) | Governance | G0 | GOV-008 | eldon | done |
 | GOV-027 | Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public | Governance | G2 | GOV-008 | eldon | todo |
 | GOV-028 | Cloud-session support: gh-optional finish gate, founder detection fallbacks, CI check that every commit names a plan ID, cloud guidance in onboarding | Governance | G0 | GOV-024 | eldon | done |
-| GOV-029 | One GitHub account per founder: remove the second account from lanes, owners and docs; recover its branches (ADR-0023) | Governance | G0 | GOV-028 | eldon | done |
+| GOV-029 | One personal GitHub account per founder in lanes, owners and docs; recover unmerged work (ADR-0023) | Governance | G0 | GOV-028 | eldon | done |
 | LEG-001 | Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype | Legal | G0 | - | eldon | todo |
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) | Legal | G0 | GOV-004 | eldon | doing |
 | LEG-003 | Engage counsel in KSA, UAE and Egypt; scope of work | Legal | G0 | - | eldon | todo |

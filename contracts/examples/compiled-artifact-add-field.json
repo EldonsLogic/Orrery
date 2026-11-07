@@ -1,0 +1,142 @@
+{
+  "artifactSchema": "0.1.0",
+  "artifactId": "art_660cfd15f31e4b93b6b8c2d56d552cf7",
+  "kind": "forward",
+  "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
+  "blueprint": {
+    "id": "example-trading-001",
+    "base": {"hash": "sha256:3ae76a1ad19c165efa6da7c69a01812ce1f92acfb728936236e2ec00347b1d02", "revision": 1},
+    "target": {"hash": "sha256:7016c3e9419503e7bf6b3f158aec6c156711619af52dd22c5d4d6d1837677e1e", "revision": 2},
+    "diffHash": "sha256:d43ad967f4385cc6b2eec3fad0673f36e67f6a1707cc27b83ef83b10740ff69d"
+  },
+  "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+  "components": [
+    {"id": "compliance.zatca_sa", "version": "0.1.0"},
+    {"id": "core.customer", "version": "0.1.0"},
+    {"id": "core.item", "version": "0.1.0"},
+    {"id": "core.sales_invoice", "version": "0.1.0"},
+    {"id": "core.sales_order", "version": "0.1.0"}
+  ],
+  "steps": [
+    {
+      "seq": 1,
+      "phase": 5,
+      "kind": "field.add",
+      "subject": {"kind": "field", "id": "payment_terms_days", "parents": [{"kind": "entity", "id": "customer"}]},
+      "pointer": "/entities/customer/fields/payment_terms_days",
+      "impact": "data_shape",
+      "ddlImpact": "additive",
+      "reversible": true,
+      "params": {
+        "definition": {
+          "id": "payment_terms_days",
+          "type": "integer",
+          "min": 0,
+          "max": 365,
+          "labels": {"ar": "مدة السداد بالأيام", "en": "Payment terms (days)"}
+        }
+      },
+      "sourceOps": ["/entities/customer/fields/payment_terms_days"]
+    }
+  ],
+  "skippedOps": [{"pointer": "/meta/revision", "reason": "meta"}],
+  "postConditions": [
+    {"id": "pc_001", "check": "exists", "pointer": "/entities/customer/fields/payment_terms_days"},
+    {
+      "id": "pc_002",
+      "check": "property_equals",
+      "pointer": "/entities/customer/fields/payment_terms_days",
+      "property": "/type",
+      "expected": "integer"
+    },
+    {"id": "pc_003", "check": "count_equals", "pointer": "/entities/customer/fields", "expected": 5}
+  ],
+  "risk": {
+    "counts": {"cosmetic": 1, "config": 0, "data_shape": 1, "destructive": 0, "compliance": 0, "access": 0, "branding": 0},
+    "total": 2,
+    "maxImpact": "data_shape",
+    "needsDdlPlanGate": true,
+    "touchesCompliance": false,
+    "touchesAccess": false,
+    "touchesLedgerOrTax": false,
+    "requiresTeamReview": false,
+    "irreversibleSteps": 0
+  },
+  "inverse": {
+    "artifactSchema": "0.1.0",
+    "artifactId": "art_4336afd481d48de6f68261fc8b1cd421",
+    "kind": "inverse",
+    "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
+    "blueprint": {
+      "id": "example-trading-001",
+      "base": {"hash": "sha256:7016c3e9419503e7bf6b3f158aec6c156711619af52dd22c5d4d6d1837677e1e", "revision": 2},
+      "target": {"hash": "sha256:3ae76a1ad19c165efa6da7c69a01812ce1f92acfb728936236e2ec00347b1d02", "revision": 1},
+      "diffHash": "sha256:6f4dde34aa671d87f88dd74fd3328989d3255b07062354deeee85258d7453069"
+    },
+    "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+    "components": [
+      {"id": "compliance.zatca_sa", "version": "0.1.0"},
+      {"id": "core.customer", "version": "0.1.0"},
+      {"id": "core.item", "version": "0.1.0"},
+      {"id": "core.sales_invoice", "version": "0.1.0"},
+      {"id": "core.sales_order", "version": "0.1.0"}
+    ],
+    "steps": [
+      {
+        "seq": 1,
+        "phase": 15,
+        "kind": "field.quarantine",
+        "subject": {"kind": "field", "id": "payment_terms_days", "parents": [{"kind": "entity", "id": "customer"}]},
+        "pointer": "/entities/customer/fields/payment_terms_days",
+        "impact": "destructive",
+        "ddlImpact": "none",
+        "reversible": true,
+        "params": {
+          "definition": {
+            "id": "payment_terms_days",
+            "type": "integer",
+            "min": 0,
+            "max": 365,
+            "labels": {"ar": "مدة السداد بالأيام", "en": "Payment terms (days)"}
+          }
+        },
+        "sourceOps": ["/entities/customer/fields/payment_terms_days"]
+      }
+    ],
+    "skippedOps": [{"pointer": "/meta/revision", "reason": "meta"}],
+    "postConditions": [
+      {"id": "pc_001", "check": "quarantined", "pointer": "/entities/customer/fields/payment_terms_days"},
+      {"id": "pc_002", "check": "count_equals", "pointer": "/entities/customer/fields", "expected": 4}
+    ],
+    "risk": {
+      "counts": {
+        "cosmetic": 1,
+        "config": 0,
+        "data_shape": 0,
+        "destructive": 1,
+        "compliance": 0,
+        "access": 0,
+        "branding": 0
+      },
+      "total": 2,
+      "maxImpact": "destructive",
+      "needsDdlPlanGate": true,
+      "touchesCompliance": false,
+      "touchesAccess": false,
+      "touchesLedgerOrTax": false,
+      "requiresTeamReview": false,
+      "irreversibleSteps": 0
+    },
+    "inverse": null,
+    "integrity": {
+      "algorithm": "sha256-canonical-json-v1",
+      "contentHash": "sha256:4336afd481d48de6f68261fc8b1cd4210553e5775c60387a4e842efdfeb153f7",
+      "signature": null
+    }
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "contentHash": "sha256:660cfd15f31e4b93b6b8c2d56d552cf7abb0037f862841a91cb6f27f5546759f",
+    "signature": null
+  }
+}

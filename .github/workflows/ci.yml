@@ -118,3 +118,14 @@ jobs:
       - run: pip install -r services/blueprint/requirements.txt
       - name: Template tests
         run: python3 -m pytest services/discovery/tests -q
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r services/blueprint/requirements.txt
+      - name: Contract schemas and examples
+        run: python3 scripts/check_contracts.py

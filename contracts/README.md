@@ -13,8 +13,11 @@ The contracts are the source of truth for how the five parts of the platform tal
 | 4 | Event stream | [events.md](events.md) | 0.1.0 |
 | - | Connector interface | [connector-interface.md](connector-interface.md) | 0.1.0 |
 | - | Build states | [build-states.md](build-states.md) | 0.1.0 |
+| - | Engine adapter (operations, errors, conformance; schemas in [engine-adapter/](engine-adapter/)) | [engine-adapter.md](engine-adapter.md) | 0.1.0 |
+| - | Compiled artifact | [compiled-artifact.schema.json](compiled-artifact.schema.json) | 0.1.0 |
 
 Example: [examples/blueprint-trading-minimal.json](examples/blueprint-trading-minimal.json) (fictional data; must always validate against the schema).
+Compiled-artifact samples: [examples/compiled-artifact-add-field.json](examples/compiled-artifact-add-field.json), [examples/compiled-artifact-add-workflow-state.json](examples/compiled-artifact-add-workflow-state.json), [examples/compiled-artifact-remove-field.json](examples/compiled-artifact-remove-field.json) (fictional; built from the example Blueprint with bpdiff hashes).
 
 ## Rules
 1. **Versioning.** Every file carries a `version` (JSON files: top-level `version`; Markdown files: the `Version:` line). Semantic versioning: patch = clarification, minor = backward-compatible addition, major = breaking change. While the major is 0, minor bumps may break; say so in the ADR.

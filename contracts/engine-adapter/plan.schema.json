@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:plan:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: plan()",
+  "description": "Dry run of a compiled artifact against the context tenant's site: per-step disposition, storage-change plan and gate verdict. No side effects except the audit record. Raw storage statements stay in the adapter's internal store under evidenceRef and are never returned.",
+  "anyOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/response" }],
+  "$defs": {
+    "request": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }],
+      "properties": {
+        "input": {
+          "type": "object", "required": ["artifact"], "additionalProperties": false,
+          "properties": { "artifact": { "$ref": "urn:platform:contract:compiled-artifact:0.1.0" } }
+        }
+      }
+    },
+    "response": { "oneOf": [{ "$ref": "#/$defs/ok" }, { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/errorResponse" }] },
+    "ok": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/okResponseBase" }],
+      "properties": { "result": { "$ref": "#/$defs/plan" } },
+      "unevaluatedProperties": false
+    },
+    "reasonCode": {
+      "enum": ["protected_subject", "unsupported_step_kind", "unsupported_value_type", "storage_not_additive", "multi_statement", "unique_or_index", "subject_exists", "subject_missing", "subject_in_use", "state_in_use", "definition_conflict", "recovery_required", "limit_exceeded"]
+    },
+    "plan": {
+      "type": "object",
+      "required": ["planToken", "artifactId", "siteConfigHash", "verdict", "steps", "storage", "evidenceRef", "expiresInSeconds"],
+      "additionalProperties": false,
+      "properties": {
+        "planToken": { "type": "string", "pattern": "^pln_[A-Za-z0-9_-]{16,128}$", "description": "Opaque. Binds tenant, artifact contentHash, siteConfigHash and adapter version. Required by apply." },
+        "artifactId": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/artifactId" },
+        "siteConfigHash": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/sha256", "description": "exportHash of export_config at plan time." },
+        "verdict": { "enum": ["auto_approved", "needs_gate_approval", "rejected"], "description": "auto_approved: every step ok. needs_gate_approval: no step blocked or unsupported, at least one gated; apply needs a gate approval reference. rejected: at least one step blocked or unsupported; apply is impossible." },
+        "steps": {
+          "type": "array", "maxItems": 500,
+          "items": {
+            "type": "object", "required": ["seq", "disposition", "ddlImpact"], "additionalProperties": false,
+            "properties": {
+              "seq": { "type": "integer", "minimum": 1 },
+              "disposition": { "enum": ["ok", "gated", "blocked", "unsupported", "already_applied"] },
+              "ddlImpact": { "enum": ["none", "additive", "semantic"], "description": "Adapter's own assessment; never lower than the artifact's." },
+              "reasonCode": { "$ref": "#/$defs/reasonCode" }
+            },
+            "allOf": [{ "if": { "properties": { "disposition": { "enum": ["gated", "blocked", "unsupported"] } } }, "then": { "required": ["reasonCode"] } }]
+          }
+        },
+        "storage": {
+          "type": "object", "required": ["additive", "semantic", "statementCount"], "additionalProperties": false,
+          "properties": {
+            "additive": { "type": "integer", "minimum": 0 },
+            "semantic": { "type": "integer", "minimum": 0 },
+            "statementCount": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "evidenceRef": { "type": "string", "pattern": "^evd_[A-Za-z0-9_-]{8,128}$", "description": "Internal reference to the stored storage plan for reviewers with engine access." },
+        "expiresInSeconds": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

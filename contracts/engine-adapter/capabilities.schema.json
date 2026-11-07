@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:capabilities:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: capabilities()",
+  "description": "What this adapter build supports. No side effects. Deterministic for one adapter build.",
+  "anyOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/response" }],
+  "$defs": {
+    "request": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }],
+      "properties": { "input": { "type": "object", "maxProperties": 0 } }
+    },
+    "response": { "oneOf": [{ "$ref": "#/$defs/ok" }, { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/errorResponse" }] },
+    "ok": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/okResponseBase" }],
+      "properties": { "result": { "$ref": "#/$defs/capabilities" } },
+      "unevaluatedProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["adapterId", "adapterVersion", "contractVersions", "artifactSchemaVersions", "versionSets", "stepKinds", "limits", "exportedProperties", "idempotencyRetentionSeconds", "features"],
+      "additionalProperties": false,
+      "properties": {
+        "adapterId": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,31}$", "description": "Matches engineTarget.adapter in artifacts. Internal; never shown to customers." },
+        "adapterVersion": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/semver" },
+        "contractVersions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/semver" } },
+        "artifactSchemaVersions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/semver" } },
+        "versionSets": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 64 } },
+        "stepKinds": {
+          "type": "array", "minItems": 1,
+          "description": "Every kind of the compiled-artifact stepKind enum, sorted, each with its support level. A kind the adapter has never heard of is unsupported.",
+          "items": {
+            "type": "object", "required": ["kind", "support"], "additionalProperties": false,
+            "properties": {
+              "kind": { "type": "string", "pattern": "^[a-z]+\\.[a-z_]+$" },
+              "support": { "enum": ["supported", "gated", "unsupported"], "description": "gated: plan always returns needs_gate_approval for this kind." },
+              "maxPerArtifact": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "limits": {
+          "type": "object", "required": ["maxRequestBytes", "maxStepsPerArtifact", "maxMembersPerSync", "planTokenTtlSeconds"], "additionalProperties": false,
+          "properties": {
+            "maxRequestBytes": { "type": "integer", "minimum": 1 },
+            "maxStepsPerArtifact": { "type": "integer", "minimum": 1, "maximum": 500 },
+            "maxMembersPerSync": { "type": "integer", "minimum": 1 },
+            "planTokenTtlSeconds": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "exportedProperties": {
+          "type": "object", "additionalProperties": false,
+          "description": "Per subject kind, the Blueprint node properties the adapter persists and returns in export_config. The compiler uses this to predict exports; the fake and the real adapter must declare the same lists for a given contract version.",
+          "patternProperties": { "^[a-z_]+$": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" } } }
+        },
+        "idempotencyRetentionSeconds": { "type": "integer", "minimum": 2592000, "description": "At least 30 days." },
+        "features": {
+          "type": "object", "required": ["signatureVerification", "previewPredictsExport"], "additionalProperties": false,
+          "properties": { "signatureVerification": { "type": "boolean" }, "previewPredictsExport": { "type": "boolean" } }
+        }
+      }
+    }
+  }
+}

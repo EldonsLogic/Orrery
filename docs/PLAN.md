@@ -313,8 +313,9 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-019 | Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires | GTM | G1 | GTM-001 | eldon | todo |
 | GOV-031 | Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified | Governance | G0 | GOV-029 | eldon | done |
 
-| BPL-025 | Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently | Blueprint | G0 | BPL-002 | eldon | todo |
-| BPL-026 | Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures | Blueprint | G0 | BPL-002 | eldon | todo |
+| BPL-025 | Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently | Blueprint | G0 | BPL-002 | eldon | doing |
+| BPL-026 | Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures | Blueprint | G0 | BPL-002 | eldon | doing |
 | BPL-027 | Integration: compile the trading fixture and apply it through the real engine adapter | Blueprint | G2 | BPL-004,BPL-007,ERP-012 | partner | todo |
 | SEC-018 | Brand asset upload security rules (spec): allowed types, size limits, SVG sanitiser requirements, scan policy, storage isolation; enforced by SEC-006 | Security | G1 | SEC-001 | eldon | todo |
 | GOV-032 | Independent founder lanes: every open row owned, no cross-founder dependency inside a gate, interface rows, plan check in CI (ADR-0025) | Governance | G0 | GOV-031 | eldon | done |
+| GOV-033 | Contracts check script: every contract schema valid, examples validate, refs resolve; CI job | Governance | G0 | GOV-032 | eldon | done |

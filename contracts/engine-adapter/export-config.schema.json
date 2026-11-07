@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:export-config:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: export_config()",
+  "description": "Neutral, normalised export of the active configuration the site actually holds, in Blueprint shape. Quarantined and disabled elements are not in export; they are listed in retained, which is outside the hashed document so that apply followed by rollback gives a byte-identical export. Deterministic: the same configuration gives byte-identical canonical JSON on any site and any day. No business records, no timestamps, no engine-generated ids, no secrets.",
+  "anyOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/response" }],
+  "$defs": {
+    "request": { "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }], "properties": { "input": { "type": "object", "maxProperties": 0 } } },
+    "response": { "oneOf": [{ "$ref": "#/$defs/ok" }, { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/errorResponse" }] },
+    "ok": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/okResponseBase" }],
+      "properties": {
+        "result": {
+          "type": "object", "required": ["exportHash", "export", "retained"], "additionalProperties": false,
+          "properties": {
+            "retained": {
+              "type": "array", "maxItems": 5000,
+              "description": "Elements kept with their data but not active, sorted by pointer. Not part of exportHash.",
+              "items": {
+                "type": "object", "required": ["pointer", "state"], "additionalProperties": false,
+                "properties": {
+                  "pointer": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/pointer" },
+                  "state": { "enum": ["quarantined", "disabled"] }
+                }
+              }
+            },
+            "exportHash": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/sha256", "description": "sha256 of the canonical JSON of export." },
+            "export": { "$ref": "#/$defs/export" }
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "element": {
+      "type": "object", "required": ["id"],
+      "description": "A Blueprint node of the section's kind holding only the properties listed for that kind in capabilities().exportedProperties, with child collections nested as in the Blueprint.",
+      "properties": { "id": { "type": "string", "maxLength": 128 } }
+    },
+    "export": {
+      "type": "object", "required": ["exportSchema", "engineTarget", "blueprintId", "revision", "sections"], "additionalProperties": false,
+      "properties": {
+        "exportSchema": { "const": "0.1.0" },
+        "engineTarget": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/engineTarget" },
+        "blueprintId": { "oneOf": [{ "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$" }, { "type": "null" }] },
+        "revision": { "oneOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/revisionRef" }, { "type": "null" }], "description": "Blueprint revision the site matches; null for an empty site." },
+        "sections": {
+          "type": "object", "additionalProperties": false,
+          "required": ["settings", "components", "locations", "entities", "roles", "workflows", "approvals", "reports"],
+          "properties": {
+            "settings": { "type": "object", "additionalProperties": false, "properties": { "company": { "type": "object" }, "compliance": { "type": "object" }, "i18n": { "type": "object" } } },
+            "components": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+            "locations": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+            "entities": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+            "roles": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+            "workflows": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+            "approvals": { "type": "array", "items": { "$ref": "#/$defs/element" } },
+            "reports": { "type": "array", "items": { "$ref": "#/$defs/element" } }
+          }
+        }
+      }
+    }
+  }
+}

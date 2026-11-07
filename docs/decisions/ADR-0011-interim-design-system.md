@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 UI work needs tokens now, but the name is not cleared (ADR-0001). Brand guidelines v1 and tokens exist in [../brand/README.md](../brand/README.md).

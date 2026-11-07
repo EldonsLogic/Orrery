@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 A prototype (written earlier by the partner) implements guarded configuration changes on Frappe: preview, a pre-execution DDL plan gate, an audited six-stage deploy, soft-quarantine rollback, declarative workflows and reports, and runtime policy enforcement. This is the apply, preview, rollback, audit and policy layer that Part 2 needs.

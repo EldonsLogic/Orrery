@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Phase 2 produced eleven strategy decisions, logged as PROPOSED in [../strategy/decisions.md](../strategy/decisions.md) on 2026-11-04.

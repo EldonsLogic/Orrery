@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon (founder instruction); partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 The founders want the rules (logging, plan updates, no pushes to main, clean repo, one writer per path) followed on every task by every agent. Nobody can honestly guarantee that AI agents and people always comply. The aim is to make skipping a rule fail loudly at several independent points, and to be exact about what remains unguaranteed.

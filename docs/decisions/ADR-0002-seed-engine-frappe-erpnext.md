@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Writing a ledger from scratch is the biggest correctness risk for two founders using AI coding tools ([../strategy/04-architecture-and-seed.md](../strategy/04-architecture-and-seed.md), [../strategy/01-gaps-and-risks.md](../strategy/01-gaps-and-risks.md) risk 7). Frappe Framework is MIT; ERPNext and HRMS are GPL-3; ERPNext is about 89% translated to Arabic (measured, strategy/04).

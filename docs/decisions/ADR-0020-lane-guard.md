@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon (founder instruction); partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Two founders and several agents work in parallel. Lanes were described in the onboarding guide but nothing stopped someone editing the other's files.

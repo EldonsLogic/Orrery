@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon (founder instruction); partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Two founders work in parallel on different AI subscriptions and tools. The repo must stay clean, current and usable by any agent that opens it cold, and delegation across sub-agents and models must be safe and cheap.

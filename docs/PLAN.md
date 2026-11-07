@@ -154,7 +154,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-016 | Accountant review view in discovery | Discovery | G3 | DSC-007 | eldon | todo |
 | DSC-017 | Owner-driven isolated read-only browser session (no stored credentials) | Discovery | G4 | DSC-010,SEC-015,INF-009 | eldon | todo |
 | DSC-018 | Second vertical template chosen from pilot evidence | Discovery | G3 | GTM-005 | eldon | todo |
-| ERP-001 | G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench | Runtime | G1 | LEG-004 | partner | todo |
+| ERP-001 | G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench | Runtime | G1 | LEG-004 | partner | doing |
 | ERP-002 | Spike: 50-tenant load test on one bench pool | Runtime | G1 | ERP-003 | partner | todo |
 | ERP-003 | Scripted site-per-tenant creation | Runtime | G1 | ERP-001 | partner | todo |
 | ERP-004 | Version pin and upgrade policy document | Runtime | G1 | ERP-001 | partner | todo |

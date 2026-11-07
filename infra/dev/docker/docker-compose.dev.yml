@@ -16,7 +16,7 @@ services:
       - mariadb_data:/var/lib/mysql
       - ./my.cnf:/etc/mysql/conf.d/frappe.cnf:ro
     ports:
-      - "3306:3306"
+      - "${DB_PORT:-3306}:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}"]
       interval: 10s
@@ -24,18 +24,49 @@ services:
       retries: 5
 
   redis-cache:
-    image: redis:7-alpine
+    image: redis:7.2.7-alpine
     container_name: ce-redis-cache
     restart: unless-stopped
     ports:
-      - "12000:6379"
+      - "${REDIS_CACHE_PORT:-12000}:6379"
 
   redis-queue:
-    image: redis:7-alpine
+    image: redis:7.2.7-alpine
     container_name: ce-redis-queue
     restart: unless-stopped
     ports:
-      - "11000:6379"
+      - "${REDIS_QUEUE_PORT:-11000}:6379"
+
+  engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: orrery-engine-dev:v15
+    container_name: ce-engine-dev
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+    environment:
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - REDIS_CACHE_HOST=redis-cache
+      - REDIS_QUEUE_HOST=redis-queue
+      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - SITE_NAME=${SITE_NAME:-dev.localhost}
+    volumes:
+      - ../../../apps/engine/change_engine:/home/frappe/frappe-bench/apps/change_engine:rw
+      - sites_data:/home/frappe/frappe-bench/sites
+      - logs_data:/home/frappe/frappe-bench/logs
+    ports:
+      - "${ENGINE_PORT:-8000}:8000"
 
 volumes:
   mariadb_data:
+  sites_data:
+  logs_data:

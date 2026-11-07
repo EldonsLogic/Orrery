@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 13 | 9 | 33 | 0 | 55 |
-| G1 | 75 | 2 | 13 | 0 | 90 |
+| G1 | 74 | 3 | 13 | 0 | 90 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 267 | 12 | 46 | 0 | 325 |
+| all | 266 | 13 | 46 | 0 | 325 |
 
 ## Built so far (done)
 
@@ -81,14 +81,13 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (26)
+**G1** (25)
 - BPL-014: Component certification levels and test harness (owner eldon)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
 - DAT-001: Data classification and retention policy (owner eldon)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner eldon)
-- ERP-001: G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
 - FND-001: Investor shortlist from research/05, re-verified (owner eldon)
@@ -173,10 +172,10 @@ Waiting on dependencies: 152 row(s).
 
 Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
+- ERP-001: G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
 
 Ready next (dependencies done), by gate:
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
-- ERP-001 (G1): G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - ERP-009 (G1): Engine event emitter feeding the event stream
 - GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use
@@ -202,6 +201,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
+- ERP-001: G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench (partner)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
@@ -220,11 +220,11 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-11-eldon-claude-code-agent-foundation-rules.md](log/2026-11-11-eldon-claude-code-agent-foundation-rules.md): Added the agent working principles, the agent team protocol with 30 role contracts, and the phase exit rule with a check script, so every phase is tested and recorded before the next one counts.
 - [2026-11-07-partner-antigravity-third-party-licence-register.md](log/2026-11-07-partner-antigravity-third-party-licence-register.md): Recorded the partner's verified local bench installation (Frappe Framework 15.126.0 MIT, ERPNext 15.124.5 GPL-3.0, change engine module 0.1.0, MariaDB 10.6, Redis 7) into the third-party licence register and NOTICE.md, completing LEG-004.
 - [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0018 Dev Environments to Accepted; ADR-0007 Identity stays Proposed until Eldon accepts it (restored when the PR was re-applied onto main)), and populated the Codex and Antigravity rows in the model registry.
+- [2026-11-07-partner-antigravity-dev-bench-pin.md](log/2026-11-07-partner-antigravity-dev-bench-pin.md): Pinned the Frappe v15 ecosystem version set (Frappe Framework 15.126.0, ERPNext 15.124.5, Frappe HRMS 15.64.8, MariaDB 10.6, Redis 7.2.7-alpine) and established a reproducible dev bench in `infra/dev/docker/`.
 - [2026-11-07-eldon-claude-code-wording-cleanup.md](log/2026-11-07-eldon-claude-code-wording-cleanup.md): Reworded older logs, ADR-0021, ADR-0023 and plan rows so they state the one-account policy plainly; renamed two logs to match.
 - [2026-11-07-eldon-claude-code-web-stack-review-fixes.md](log/2026-11-07-eldon-claude-code-web-stack-review-fixes.md): A cross-model review of ADR-0022 found gaps. Added: app limited to static-export-safe features with a CI build in that mode (in-country hosting marked UNVERIFIED), marketing on Vercel only without personal data collection there, explicit narrowing of ADR-0018 item 2, stronger tokens-only and logical-property lint rules, tenant token loading before first paint, RTL direction provider and bidi isolation for user text, and a human review for major-version bumps of the framework and auth libraries.
 - [2026-11-07-eldon-claude-code-web-stack-adr.md](log/2026-11-07-eldon-claude-code-web-stack-adr.md): Wrote the web stack proposal for founder approval (ADR-0022, Proposed): one TypeScript and React stack on Next.js for marketing and app; static marketing; app screens rendered in the browser against our in-country gateway so no tenant data is processed on Vercel; plain CSS with token custom properties and a lint rule against literal colours and fonts; logical properties for RTL; headless accessible primitives; ICU i18n with Arabic default; self-hosted fonts; Playwright RTL goldens.
 - [2026-11-07-eldon-claude-code-visibility-temporary.md](log/2026-11-07-eldon-claude-code-visibility-temporary.md): Founder said the repo is public only for a while. Added a plan row so the switch back to private is decided deliberately: branch protection needs a paid plan on a private repo, and anything published may already be forked or cached.
-- [2026-11-07-eldon-claude-code-trading-template.md](log/2026-11-07-eldon-claude-code-trading-template.md): Built the trading and distribution template Blueprint (split into parts, company-neutral, Arabic and English everywhere), the owner question list with schema, and an instantiator for KSA, UAE and Egypt that produces drafts passing the validator with the fixture registry. Added a CI job for the discovery tests.
 
 ## ADRs with status Proposed
 

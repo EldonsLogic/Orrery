@@ -70,6 +70,12 @@ jobs:
             exit 1
           fi
           echo "New log(s): $new_logs"
+      - name: Lane guard (each founder edits only their own lane unless a waiver is logged)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ACTOR: ${{ github.event.pull_request.user.login }}
+        run: python3 scripts/check_lanes.py --base "$BASE_SHA" --head "$HEAD_SHA" --actor "$ACTOR"
       - name: Trail check (log has valid plan IDs and the rows are not still todo)
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}

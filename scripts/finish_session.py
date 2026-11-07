@@ -40,6 +40,8 @@ def main():
     if base:
         rc, o = out(sys.executable, "scripts/check_pr_trail.py", "--base", base, "--head", "HEAD")
         check("task trail (session log with valid plan IDs, rows updated)", rc == 0, o)
+        rc, o = out(sys.executable, "scripts/check_lanes.py", "--base", base, "--head", "HEAD")
+        check("lane guard (you edited only your own lane, or logged a Cross-lane waiver)", rc == 0, o)
     rc, upstream = out("git", "rev-parse", "--abbrev-ref", "@{upstream}")
     if rc == 0:
         _, ahead = out("git", "rev-list", "--count", "@{upstream}..HEAD")

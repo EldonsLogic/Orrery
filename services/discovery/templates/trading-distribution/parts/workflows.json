@@ -1,0 +1,136 @@
+[
+  {
+    "id": "sales_order_flow",
+    "entity": "sales_order",
+    "labels": {"ar": "مسار أمر البيع", "en": "Sales order flow"},
+    "states": [
+      {"id": "draft", "labels": {"ar": "مسودة", "en": "Draft"}, "kind": "initial"},
+      {"id": "pending_approval", "labels": {"ar": "بانتظار الاعتماد", "en": "Pending approval"}, "kind": "normal", "locksEditing": true},
+      {"id": "approved", "labels": {"ar": "معتمد", "en": "Approved"}, "kind": "normal", "locksEditing": true},
+      {"id": "delivered", "labels": {"ar": "تم التسليم", "en": "Delivered"}, "kind": "normal", "locksEditing": true},
+      {"id": "invoiced", "labels": {"ar": "تمت الفوترة", "en": "Invoiced"}, "kind": "final", "locksEditing": true},
+      {"id": "cancelled", "labels": {"ar": "ملغى", "en": "Cancelled"}, "kind": "final", "locksEditing": true}
+    ],
+    "transitions": [
+      {
+        "id": "submit_small",
+        "from": "draft",
+        "to": "approved",
+        "actionLabels": {"ar": "اعتماد", "en": "Confirm"},
+        "allowedRoles": ["sales_rep", "branch_sales_manager"],
+        "guards": [{"field": "total_amount", "op": "lte", "value": 50000}, {"field": "discount_percent", "op": "lte", "value": 10}],
+        "notify": ["warehouse_keeper"]
+      },
+      {
+        "id": "submit_discount",
+        "from": "draft",
+        "to": "pending_approval",
+        "actionLabels": {"ar": "إرسال للاعتماد (خصم)", "en": "Send for approval (discount)"},
+        "allowedRoles": ["sales_rep", "branch_sales_manager"],
+        "guards": [{"field": "total_amount", "op": "lte", "value": 50000}, {"field": "discount_percent", "op": "gt", "value": 10}],
+        "notify": ["general_manager"]
+      },
+      {
+        "id": "submit_large",
+        "from": "draft",
+        "to": "pending_approval",
+        "actionLabels": {"ar": "إرسال للاعتماد (مبلغ كبير)", "en": "Send for approval (large order)"},
+        "allowedRoles": ["sales_rep", "branch_sales_manager"],
+        "guards": [{"field": "total_amount", "op": "gt", "value": 50000}],
+        "notify": ["general_manager"]
+      },
+      {
+        "id": "approve_large",
+        "from": "pending_approval",
+        "to": "approved",
+        "actionLabels": {"ar": "اعتماد الطلب الكبير", "en": "Approve large order"},
+        "allowedRoles": ["general_manager", "owner"],
+        "guards": [{"field": "total_amount", "op": "gt", "value": 50000}],
+        "approval": "large_sales_order_approval",
+        "notify": ["sales_rep", "warehouse_keeper"]
+      },
+      {
+        "id": "approve_discount",
+        "from": "pending_approval",
+        "to": "approved",
+        "actionLabels": {"ar": "اعتماد الخصم", "en": "Approve discount"},
+        "allowedRoles": ["general_manager", "owner"],
+        "guards": [{"field": "total_amount", "op": "lte", "value": 50000}, {"field": "discount_percent", "op": "gt", "value": 10}],
+        "approval": "discount_approval",
+        "notify": ["sales_rep", "warehouse_keeper"]
+      },
+      {"id": "reject_order", "from": "pending_approval", "to": "draft", "actionLabels": {"ar": "إعادة للمسودة", "en": "Return to draft"}, "allowedRoles": ["general_manager", "owner"], "notify": ["sales_rep"]},
+      {"id": "deliver", "from": "approved", "to": "delivered", "actionLabels": {"ar": "تأكيد التسليم", "en": "Confirm delivery"}, "allowedRoles": ["warehouse_keeper"], "guards": [{"field": "warehouse", "op": "is_set"}], "notify": ["accountant"]},
+      {"id": "invoice_order", "from": "delivered", "to": "invoiced", "actionLabels": {"ar": "إصدار الفاتورة", "en": "Issue invoice"}, "allowedRoles": ["accountant"], "notify": ["sales_rep"]},
+      {"id": "cancel_draft", "from": "draft", "to": "cancelled", "actionLabels": {"ar": "إلغاء", "en": "Cancel"}, "allowedRoles": ["sales_rep", "branch_sales_manager"]},
+      {"id": "cancel_approved", "from": "approved", "to": "cancelled", "actionLabels": {"ar": "إلغاء الطلب المعتمد", "en": "Cancel approved order"}, "allowedRoles": ["general_manager", "owner"], "notify": ["sales_rep", "warehouse_keeper"]}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "purchase_order_flow",
+    "entity": "purchase_order",
+    "labels": {"ar": "مسار أمر الشراء", "en": "Purchase order flow"},
+    "states": [
+      {"id": "draft", "labels": {"ar": "مسودة", "en": "Draft"}, "kind": "initial"},
+      {"id": "pending_approval", "labels": {"ar": "بانتظار الاعتماد", "en": "Pending approval"}, "kind": "normal", "locksEditing": true},
+      {"id": "ordered", "labels": {"ar": "تم الطلب من المورد", "en": "Ordered"}, "kind": "normal", "locksEditing": true},
+      {"id": "received", "labels": {"ar": "تم الاستلام", "en": "Received"}, "kind": "normal", "locksEditing": true},
+      {"id": "closed", "labels": {"ar": "مغلق", "en": "Closed"}, "kind": "final", "locksEditing": true},
+      {"id": "cancelled", "labels": {"ar": "ملغى", "en": "Cancelled"}, "kind": "final", "locksEditing": true}
+    ],
+    "transitions": [
+      {"id": "submit_po_small", "from": "draft", "to": "ordered", "actionLabels": {"ar": "اعتماد وإرسال للمورد", "en": "Confirm and send to supplier"}, "allowedRoles": ["purchasing_officer"], "guards": [{"field": "total_amount", "op": "lte", "value": 100000}], "notify": ["warehouse_keeper"]},
+      {"id": "submit_po_large", "from": "draft", "to": "pending_approval", "actionLabels": {"ar": "إرسال للاعتماد", "en": "Send for approval"}, "allowedRoles": ["purchasing_officer"], "guards": [{"field": "total_amount", "op": "gt", "value": 100000}], "notify": ["general_manager"]},
+      {
+        "id": "approve_po",
+        "from": "pending_approval",
+        "to": "ordered",
+        "actionLabels": {"ar": "اعتماد أمر الشراء", "en": "Approve purchase order"},
+        "allowedRoles": ["general_manager", "owner"],
+        "guards": [{"field": "total_amount", "op": "gt", "value": 100000}],
+        "approval": "po_large_approval",
+        "notify": ["purchasing_officer", "warehouse_keeper"]
+      },
+      {"id": "reject_po", "from": "pending_approval", "to": "draft", "actionLabels": {"ar": "إعادة للمسودة", "en": "Return to draft"}, "allowedRoles": ["general_manager", "owner"], "notify": ["purchasing_officer"]},
+      {"id": "receive_po", "from": "ordered", "to": "received", "actionLabels": {"ar": "تأكيد الاستلام", "en": "Confirm receipt"}, "allowedRoles": ["warehouse_keeper"], "notify": ["purchasing_officer", "accountant"]},
+      {"id": "close_po", "from": "received", "to": "closed", "actionLabels": {"ar": "إغلاق الأمر", "en": "Close order"}, "allowedRoles": ["accountant", "purchasing_officer"]},
+      {"id": "cancel_po_draft", "from": "draft", "to": "cancelled", "actionLabels": {"ar": "إلغاء", "en": "Cancel"}, "allowedRoles": ["purchasing_officer"]},
+      {"id": "cancel_po_ordered", "from": "ordered", "to": "cancelled", "actionLabels": {"ar": "إلغاء الأمر", "en": "Cancel order"}, "allowedRoles": ["general_manager", "owner"], "notify": ["purchasing_officer"]}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "sales_invoice_flow",
+    "entity": "sales_invoice",
+    "labels": {"ar": "مسار الفاتورة الضريبية", "en": "Tax invoice flow"},
+    "states": [
+      {"id": "draft", "labels": {"ar": "مسودة", "en": "Draft"}, "kind": "initial"},
+      {"id": "submitted", "labels": {"ar": "مُصدرة", "en": "Submitted"}, "kind": "normal", "locksEditing": true},
+      {"id": "paid", "labels": {"ar": "مسددة", "en": "Paid"}, "kind": "final", "locksEditing": true},
+      {"id": "cancelled", "labels": {"ar": "ملغاة", "en": "Cancelled"}, "kind": "final", "locksEditing": true}
+    ],
+    "transitions": [
+      {"id": "submit_invoice", "from": "draft", "to": "submitted", "actionLabels": {"ar": "إصدار الفاتورة", "en": "Issue invoice"}, "allowedRoles": ["accountant"], "guards": [{"field": "total_amount", "op": "gt", "value": 0}], "notify": ["sales_rep"]},
+      {"id": "mark_paid", "from": "submitted", "to": "paid", "actionLabels": {"ar": "تسجيل السداد الكامل", "en": "Mark as paid"}, "allowedRoles": ["accountant"], "guards": [{"field": "outstanding_amount", "op": "lte", "value": 0}]},
+      {"id": "cancel_invoice_draft", "from": "draft", "to": "cancelled", "actionLabels": {"ar": "إلغاء المسودة", "en": "Discard draft"}, "allowedRoles": ["accountant"]},
+      {"id": "cancel_invoice", "from": "submitted", "to": "cancelled", "actionLabels": {"ar": "إلغاء الفاتورة", "en": "Cancel invoice"}, "allowedRoles": ["general_manager", "owner"], "notify": ["accountant"]}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "stock_transfer_flow",
+    "entity": "stock_transfer",
+    "labels": {"ar": "مسار التحويل المخزني", "en": "Stock transfer flow"},
+    "states": [
+      {"id": "draft", "labels": {"ar": "مسودة", "en": "Draft"}, "kind": "initial"},
+      {"id": "in_transit", "labels": {"ar": "في الطريق", "en": "In transit"}, "kind": "normal", "locksEditing": true},
+      {"id": "received", "labels": {"ar": "تم الاستلام", "en": "Received"}, "kind": "final", "locksEditing": true}
+    ],
+    "transitions": [
+      {"id": "dispatch_transfer", "from": "draft", "to": "in_transit", "actionLabels": {"ar": "إرسال الشحنة", "en": "Dispatch"}, "allowedRoles": ["warehouse_keeper"], "guards": [{"field": "source_warehouse", "op": "is_set"}, {"field": "destination_warehouse", "op": "is_set"}]},
+      {"id": "receive_transfer", "from": "in_transit", "to": "received", "actionLabels": {"ar": "تأكيد الاستلام", "en": "Confirm receipt"}, "allowedRoles": ["warehouse_keeper"], "notify": ["purchasing_officer"]}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  }
+]

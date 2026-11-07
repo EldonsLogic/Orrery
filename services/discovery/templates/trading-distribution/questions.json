@@ -1,0 +1,457 @@
+{
+  "$schema": "questions.schema.json",
+  "version": "0.1.0",
+  "template": {"id": "trading_distribution", "version": "0.1.0"},
+  "sections": [
+    {
+      "id": "company",
+      "title": {"ar": "الشركة", "en": "Company"},
+      "questions": [
+        {
+          "id": "q_company_name",
+          "text": {"ar": "ما الاسم القانوني لشركتكم بالعربية والإنجليزية؟", "en": "What is your company's legal name in Arabic and in English?"},
+          "type": "text_pair",
+          "required": true,
+          "fillsBy": "instantiate",
+          "answerKeys": ["name_ar", "name_en"],
+          "pointers": [
+            "/company/legalName/ar",
+            "/company/legalName/en",
+            "/branding/displayName/ar",
+            "/branding/displayName/en",
+            "/branding/loginPage/headline/ar",
+            "/branding/loginPage/headline/en"
+          ],
+          "defaultIfUnknown": {"value": null, "note": {"ar": "لا يوجد افتراضي؛ يجب أن يجيب المالك.", "en": "No default; the owner must answer."}}
+        },
+        {
+          "id": "q_country",
+          "text": {"ar": "في أي دولة تعملون؟", "en": "Which country do you operate in?"},
+          "type": "choice",
+          "required": true,
+          "fillsBy": "instantiate",
+          "answerKeys": ["country"],
+          "options": [
+            {"value": "sa", "labels": {"ar": "المملكة العربية السعودية", "en": "Saudi Arabia"}},
+            {"value": "ae", "labels": {"ar": "الإمارات العربية المتحدة", "en": "United Arab Emirates"}},
+            {"value": "eg", "labels": {"ar": "مصر", "en": "Egypt"}}
+          ],
+          "pointers": ["/company/country", "/compliance/country", "/compliance/countryPack/id", "/compliance/eInvoicing/mode"],
+          "defaultIfUnknown": {"value": null, "note": {"ar": "لا يوجد افتراضي؛ يحدد الدولة حزمة الامتثال والتقويم.", "en": "No default; the country selects the country pack and calendar."}}
+        },
+        {
+          "id": "q_languages",
+          "text": {"ar": "ما اللغات التي تريدون استخدامها في النظام والمستندات؟", "en": "Which languages do you want for the system and your documents?"},
+          "type": "multi_choice",
+          "required": false,
+          "fillsBy": "instantiate",
+          "answerKeys": ["languages"],
+          "options": [{"value": "ar", "labels": {"ar": "العربية", "en": "Arabic"}}, {"value": "en", "labels": {"ar": "الإنجليزية", "en": "English"}}],
+          "pointers": ["/company/languages/primary", "/company/languages/secondary", "/compliance/documentLanguages", "/meta/defaultLocale", "/i18n/defaultLocale"],
+          "defaultIfUnknown": {
+            "value": ["ar", "en"],
+            "note": {"ar": "العربية مطلوبة دائماً؛ الأولى في القائمة هي الافتراضية.", "en": "Arabic is always included; the first in the list is the default."}
+          }
+        },
+        {
+          "id": "q_currency",
+          "text": {"ar": "ما العملة الأساسية لدفاتركم؟", "en": "What is the base currency of your books?"},
+          "type": "text",
+          "required": false,
+          "fillsBy": "instantiate",
+          "answerKeys": ["currency"],
+          "pointers": ["/company/locale"],
+          "defaultIfUnknown": {"value": "country_pack", "note": {"ar": "عملة حزمة الدولة (رمز من ثلاثة أحرف).", "en": "The country pack currency (three-letter code)."}}
+        },
+        {
+          "id": "q_cr_number",
+          "text": {"ar": "ما رقم السجل التجاري؟", "en": "What is your commercial registration number?"},
+          "type": "text",
+          "required": false,
+          "fillsBy": "instantiate",
+          "answerKeys": ["cr_number"],
+          "pointers": ["/company"],
+          "createsAt": ["/company/crNumber"],
+          "defaultIfUnknown": {"value": null, "note": {"ar": "اتركه فارغاً حتى يتوفر الرقم.", "en": "Leave empty until the number is known."}}
+        },
+        {
+          "id": "q_size_band",
+          "text": {"ar": "كم عدد الموظفين تقريباً؟", "en": "Roughly how many staff do you have?"},
+          "type": "choice",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [
+            {"value": "1-9", "labels": {"ar": "1-9", "en": "1-9"}},
+            {"value": "10-24", "labels": {"ar": "10-24", "en": "10-24"}},
+            {"value": "25-49", "labels": {"ar": "25-49", "en": "25-49"}},
+            {"value": "50-100", "labels": {"ar": "50-100", "en": "50-100"}},
+            {"value": "100+", "labels": {"ar": "100+", "en": "100+"}}
+          ],
+          "pointers": ["/company"],
+          "createsAt": ["/company/sizeBand"],
+          "defaultIfUnknown": {"value": null, "note": {"ar": "اتركه فارغاً.", "en": "Leave empty."}}
+        }
+      ]
+    },
+    {
+      "id": "locations",
+      "title": {"ar": "المواقع", "en": "Locations"},
+      "questions": [
+        {
+          "id": "q_branches",
+          "text": {"ar": "كم عدد الفروع (بما فيها المقر الرئيسي)؟", "en": "How many branches do you have, including the head office?"},
+          "type": "integer",
+          "required": false,
+          "fillsBy": "instantiate",
+          "answerKeys": ["branches"],
+          "pointers": ["/locations"],
+          "defaultIfUnknown": {
+            "value": 1,
+            "note": {
+              "ar": "مقر رئيسي واحد مع مستودع واحد؛ كل فرع إضافي يضيف فرعاً ومستودعاً.",
+              "en": "One head office with one warehouse; each extra branch adds a branch and a warehouse."
+            }
+          }
+        },
+        {
+          "id": "q_warehouses",
+          "text": {"ar": "أي الفروع لها مستودع خاص؟", "en": "Which branches have their own warehouse?"},
+          "type": "text",
+          "required": false,
+          "fillsBy": "interview",
+          "pointers": ["/locations/1", "/roles/6/scope/values"],
+          "defaultIfUnknown": {"value": "every_branch", "note": {"ar": "مستودع لكل فرع.", "en": "One warehouse per branch."}}
+        },
+        {
+          "id": "q_finance_department",
+          "text": {"ar": "هل لديكم إدارة مالية مستقلة؟", "en": "Do you have a separate finance department?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/locations/2"],
+          "defaultIfUnknown": {"value": true}
+        }
+      ]
+    },
+    {
+      "id": "roles_approvals",
+      "title": {"ar": "الأدوار والاعتمادات", "en": "Roles and approvals"},
+      "questions": [
+        {
+          "id": "q_roles",
+          "text": {
+            "ar": "ما الأدوار الموجودة لديكم (مالك، مدير عام، محاسب، مندوب مبيعات، مدير فرع، مسؤول مشتريات، أمين مستودع، مدقق)؟",
+            "en": "Which of these roles exist in your company: owner, general manager, accountant, sales rep, branch sales manager, purchasing officer, warehouse keeper, auditor?"
+          },
+          "type": "text",
+          "required": false,
+          "fillsBy": "interview",
+          "pointers": ["/roles"],
+          "defaultIfUnknown": {"value": "all_roles", "note": {"ar": "كل الأدوار الثمانية.", "en": "All eight roles."}}
+        },
+        {
+          "id": "q_branch_manager_scope",
+          "text": {"ar": "أي فرع يديره مدير المبيعات المحلي؟", "en": "Which branch does the branch sales manager look after?"},
+          "type": "text",
+          "required": false,
+          "fillsBy": "interview",
+          "pointers": ["/roles/4/scope/values"],
+          "defaultIfUnknown": {"value": "hq", "note": {"ar": "المقر الرئيسي حتى يتم التحديد.", "en": "The head office until set."}}
+        },
+        {
+          "id": "q_sales_order_threshold",
+          "text": {"ar": "فوق أي مبلغ يحتاج أمر البيع إلى اعتماد؟", "en": "Above what order amount does a sales order need approval?"},
+          "type": "number",
+          "required": false,
+          "fillsBy": "interview",
+          "pointers": [
+            "/workflows/0/transitions/0/guards/0/value",
+            "/workflows/0/transitions/1/guards/0/value",
+            "/workflows/0/transitions/2/guards/0/value",
+            "/workflows/0/transitions/3/guards/0/value",
+            "/workflows/0/transitions/4/guards/0/value",
+            "/approvals/0/conditions/0/value"
+          ],
+          "defaultIfUnknown": {"value": 50000, "note": {"ar": "50000 بعملة الشركة؛ يؤكده المالك.", "en": "50000 in the company currency; the owner confirms."}}
+        },
+        {
+          "id": "q_discount_threshold",
+          "text": {"ar": "ما أعلى نسبة خصم يمنحها المندوب دون اعتماد؟", "en": "What is the largest discount a sales rep can give without approval (percent)?"},
+          "type": "number",
+          "required": false,
+          "fillsBy": "interview",
+          "pointers": [
+            "/workflows/0/transitions/0/guards/1/value",
+            "/workflows/0/transitions/1/guards/1/value",
+            "/workflows/0/transitions/4/guards/1/value",
+            "/approvals/1/conditions/0/value"
+          ],
+          "defaultIfUnknown": {"value": 10, "note": {"ar": "10 بالمئة.", "en": "10 percent."}}
+        },
+        {
+          "id": "q_po_threshold",
+          "text": {"ar": "فوق أي مبلغ يحتاج أمر الشراء إلى اعتماد خطوتين؟", "en": "Above what amount does a purchase order need two-step approval?"},
+          "type": "number",
+          "required": false,
+          "fillsBy": "interview",
+          "pointers": [
+            "/workflows/1/transitions/0/guards/0/value",
+            "/workflows/1/transitions/1/guards/0/value",
+            "/workflows/1/transitions/2/guards/0/value",
+            "/approvals/2/conditions/0/value"
+          ],
+          "defaultIfUnknown": {"value": 100000, "note": {"ar": "100000 بعملة الشركة؛ يؤكده المالك.", "en": "100000 in the company currency; the owner confirms."}}
+        },
+        {
+          "id": "q_sales_approver",
+          "text": {"ar": "من يعتمد أوامر البيع الكبيرة؟", "en": "Who approves large sales orders?"},
+          "type": "choice",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [
+            {"value": "general_manager", "labels": {"ar": "المدير العام", "en": "General manager"}},
+            {"value": "owner", "labels": {"ar": "المالك", "en": "Owner"}},
+            {"value": "accountant", "labels": {"ar": "المحاسب", "en": "Accountant"}}
+          ],
+          "pointers": ["/approvals/0/steps/0/approverRole", "/approvals/1/steps/0/approverRole"],
+          "defaultIfUnknown": {"value": "general_manager"}
+        }
+      ]
+    },
+    {
+      "id": "sales_flow",
+      "title": {"ar": "دورة المبيعات", "en": "Sales flow"},
+      "questions": [
+        {
+          "id": "q_quotes",
+          "text": {"ar": "هل تصدرون عروض أسعار قبل أوامر البيع؟", "en": "Do you issue quotes before sales orders?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/5"],
+          "defaultIfUnknown": {"value": true}
+        },
+        {
+          "id": "q_delivery_notes",
+          "text": {"ar": "هل تصدرون إذن تسليم يوقعه العميل؟", "en": "Do you issue a delivery note that the customer signs?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/9", "/workflows/0/transitions/6"],
+          "defaultIfUnknown": {"value": true}
+        },
+        {
+          "id": "q_credit_notes",
+          "text": {"ar": "هل تصدرون إشعارات دائنة للمرتجعات والتسويات؟", "en": "Do you issue credit notes for returns and corrections?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/13", "/approvals/3"],
+          "defaultIfUnknown": {"value": true}
+        },
+        {
+          "id": "q_customer_terms",
+          "text": {"ar": "ما مدة السداد المعتادة للعملاء بالأيام؟", "en": "What are your usual customer payment terms, in days?"},
+          "type": "integer",
+          "required": false,
+          "fillsBy": "interview",
+          "pointers": ["/entities/0/fields/9/default", "/entities/11/fields/3/default"],
+          "defaultIfUnknown": {"value": 30, "note": {"ar": "30 يوماً.", "en": "30 days."}}
+        },
+        {
+          "id": "q_credit_limits",
+          "text": {"ar": "هل تحددون حد ائتمان لكل عميل؟", "en": "Do you set a credit limit per customer?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/0/fields/10"],
+          "defaultIfUnknown": {"value": true}
+        }
+      ]
+    },
+    {
+      "id": "purchase_flow",
+      "title": {"ar": "دورة المشتريات", "en": "Purchase flow"},
+      "questions": [
+        {
+          "id": "q_purchase_orders",
+          "text": {"ar": "هل تصدرون أوامر شراء للموردين؟", "en": "Do you raise purchase orders to suppliers?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/15", "/workflows/1"],
+          "defaultIfUnknown": {"value": true}
+        },
+        {
+          "id": "q_goods_receipts",
+          "text": {"ar": "هل تسجلون استلام البضاعة قبل فاتورة المورد؟", "en": "Do you record goods receipts before the supplier invoice arrives?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/17"],
+          "defaultIfUnknown": {"value": true}
+        },
+        {
+          "id": "q_supplier_terms",
+          "text": {"ar": "ما مدة السداد المعتادة للموردين بالأيام؟", "en": "What are your usual supplier payment terms, in days?"},
+          "type": "integer",
+          "required": false,
+          "fillsBy": "interview",
+          "pointers": ["/entities/1/fields/7/default", "/entities/19/fields/4/default"],
+          "defaultIfUnknown": {"value": 30, "note": {"ar": "30 يوماً.", "en": "30 days."}}
+        }
+      ]
+    },
+    {
+      "id": "stock",
+      "title": {"ar": "المخزون", "en": "Stock"},
+      "questions": [
+        {
+          "id": "q_stock_tracking",
+          "text": {"ar": "هل تتابعون الكميات في المخزون حسب المستودع؟", "en": "Do you track stock quantities per warehouse?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/2", "/reports/3"],
+          "defaultIfUnknown": {"value": true}
+        },
+        {
+          "id": "q_default_unit",
+          "text": {"ar": "ما وحدة القياس الأكثر استخداماً للأصناف؟", "en": "What is the unit most of your items are sold in?"},
+          "type": "choice",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [
+            {"value": "carton", "labels": {"ar": "كرتون", "en": "Carton"}},
+            {"value": "piece", "labels": {"ar": "قطعة", "en": "Piece"}},
+            {"value": "kg", "labels": {"ar": "كيلوغرام", "en": "Kilogram"}}
+          ],
+          "pointers": ["/entities/2/fields/3/default"],
+          "defaultIfUnknown": {"value": "carton"}
+        },
+        {
+          "id": "q_reorder_levels",
+          "text": {"ar": "هل تحددون حداً أدنى لإعادة الطلب لكل صنف؟", "en": "Do you set a reorder level per item?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/2/fields/8"],
+          "defaultIfUnknown": {"value": false}
+        },
+        {
+          "id": "q_stock_transfers",
+          "text": {"ar": "هل تنقلون البضاعة بين المستودعات؟", "en": "Do you move goods between warehouses?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/22", "/workflows/3"],
+          "defaultIfUnknown": {"value": true, "note": {"ar": "نعم عند وجود أكثر من مستودع.", "en": "Yes when there is more than one warehouse."}}
+        }
+      ]
+    },
+    {
+      "id": "pricing",
+      "title": {"ar": "التسعير", "en": "Pricing"},
+      "questions": [
+        {
+          "id": "q_price_lists",
+          "text": {"ar": "هل تستخدمون قوائم أسعار مختلفة لفئات العملاء؟", "en": "Do you use different price lists for customer groups?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/entities/3", "/entities/7/fields/6"],
+          "defaultIfUnknown": {"value": true}
+        },
+        {
+          "id": "q_prices_include_vat",
+          "text": {"ar": "هل أسعاركم المعلنة تشمل ضريبة القيمة المضافة؟", "en": "Do your quoted prices include VAT?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/compliance/vat/pricesIncludeVat"],
+          "defaultIfUnknown": {"value": false, "note": {"ar": "لا، الأسعار قبل الضريبة.", "en": "No, prices exclude VAT."}}
+        }
+      ]
+    },
+    {
+      "id": "compliance",
+      "title": {"ar": "الامتثال", "en": "Compliance"},
+      "questions": [
+        {
+          "id": "q_vat_registered",
+          "text": {"ar": "هل شركتكم مسجلة في ضريبة القيمة المضافة؟", "en": "Is your company registered for VAT?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "instantiate",
+          "answerKeys": ["vat_registered"],
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/compliance/vat/registered", "/compliance/eInvoicing/mode", "/compliance/eInvoicing/componentId", "/compliance/vat/defaultRatePercent"],
+          "defaultIfUnknown": {
+            "value": false,
+            "note": {"ar": "لا إلى أن يؤكد المالك؛ التسجيل الفعلي يغير الفوترة الإلكترونية.", "en": "No until the owner confirms; registration switches e-invoicing on."}
+          }
+        },
+        {
+          "id": "q_vat_number",
+          "text": {"ar": "ما الرقم الضريبي (15 رقماً)؟", "en": "What is your VAT registration number (15 digits)?"},
+          "type": "text",
+          "required": false,
+          "fillsBy": "instantiate",
+          "answerKeys": ["vat_number"],
+          "pointers": ["/compliance/vat"],
+          "createsAt": ["/company/vatNumber"],
+          "defaultIfUnknown": {
+            "value": null,
+            "note": {"ar": "مطلوب في السعودية للفوترة الإلكترونية؛ اتركه فارغاً حتى يتوفر.", "en": "Needed in Saudi Arabia for e-invoicing; leave empty until known."}
+          }
+        },
+        {
+          "id": "q_vat_filing",
+          "text": {"ar": "هل تقدمون الإقرار الضريبي شهرياً أم ربع سنوياً؟", "en": "Do you file VAT returns monthly or quarterly?"},
+          "type": "choice",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": "monthly", "labels": {"ar": "شهرياً", "en": "Monthly"}}, {"value": "quarterly", "labels": {"ar": "ربع سنوياً", "en": "Quarterly"}}],
+          "pointers": ["/compliance/vat/filingPeriod"],
+          "defaultIfUnknown": {"value": "country_pack", "note": {"ar": "حسب حزمة الدولة.", "en": "From the country pack."}}
+        },
+        {
+          "id": "q_einvoice_environment",
+          "text": {"ar": "ما بيئة الفوترة الإلكترونية الحالية؟", "en": "Which e-invoicing environment are you in now?"},
+          "type": "choice",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [
+            {"value": "sandbox", "labels": {"ar": "تجريبية", "en": "Sandbox"}},
+            {"value": "simulation", "labels": {"ar": "محاكاة", "en": "Simulation"}},
+            {"value": "production", "labels": {"ar": "إنتاج", "en": "Production"}}
+          ],
+          "pointers": ["/compliance/eInvoicing/environment"],
+          "defaultIfUnknown": {"value": "sandbox", "note": {"ar": "تجريبية.", "en": "Sandbox."}}
+        },
+        {
+          "id": "q_hijri_display",
+          "text": {"ar": "هل تريدون عرض التاريخ الهجري بجانب الميلادي؟", "en": "Do you want the Hijri date shown next to the Gregorian date?"},
+          "type": "boolean",
+          "required": false,
+          "fillsBy": "interview",
+          "options": [{"value": true, "labels": {"ar": "نعم", "en": "Yes"}}, {"value": false, "labels": {"ar": "لا", "en": "No"}}],
+          "pointers": ["/compliance/hijriDisplay/enabled"],
+          "defaultIfUnknown": {"value": "country_pack", "note": {"ar": "حسب حزمة الدولة.", "en": "From the country pack."}}
+        }
+      ]
+    }
+  ]
+}

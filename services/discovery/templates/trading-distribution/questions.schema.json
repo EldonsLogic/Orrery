@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:discovery:template-questions:0.1.0",
+  "title": "Template questions",
+  "description": "The confirm-with-the-owner list for one Discovery template. Each question says where the answer lands in the Blueprint (JSON pointers) and what to assume if the owner does not know.",
+  "type": "object",
+  "required": ["version", "template", "sections"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "template": {
+      "type": "object",
+      "required": ["id", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"}
+      }
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "questions"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+          "title": {"$ref": "#/$defs/text"},
+          "questions": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/question"}}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "object",
+      "required": ["ar", "en"],
+      "additionalProperties": false,
+      "properties": {
+        "ar": {"type": "string", "minLength": 1, "maxLength": 300},
+        "en": {"type": "string", "minLength": 1, "maxLength": 300}
+      }
+    },
+    "pointer": {"type": "string", "pattern": "^(/([^/~]|~[01])*)*$", "description": "RFC 6901 JSON pointer into the assembled template Blueprint."},
+    "question": {
+      "type": "object",
+      "required": ["id", "text", "type", "required", "fillsBy", "pointers", "defaultIfUnknown"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^q_[a-z][a-z0-9_]{1,63}$"},
+        "text": {"$ref": "#/$defs/text"},
+        "type": {"enum": ["text_pair", "text", "integer", "number", "boolean", "choice", "multi_choice"]},
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["value", "labels"],
+            "additionalProperties": false,
+            "properties": {
+              "value": {"type": ["string", "number", "boolean"]},
+              "labels": {"$ref": "#/$defs/text"}
+            }
+          }
+        },
+        "required": {"type": "boolean", "description": "True when there is no safe default and the owner must answer (defaultIfUnknown.value is then null)."},
+        "fillsBy": {"enum": ["instantiate", "interview"], "description": "instantiate: filled by instantiate.py from an answer key. interview: applied later by the interview engine or a reviewer as a Blueprint patch."},
+        "answerKeys": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,40}$"},
+          "description": "Keys accepted by instantiate(). Present exactly when fillsBy is instantiate."
+        },
+        "pointers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/pointer"}, "description": "Existing locations in the template that the answer changes. Every pointer must resolve."},
+        "createsAt": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/pointer"}, "description": "Locations the answer adds that the template does not hold yet. The parent of each must resolve."},
+        "defaultIfUnknown": {
+          "type": "object",
+          "required": ["value"],
+          "additionalProperties": false,
+          "properties": {
+            "value": {"description": "JSON value; null when required is true. The string country_pack means: take the value from the country pack at instantiation."},
+            "note": {"$ref": "#/$defs/text"}
+          }
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"type": {"enum": ["choice", "multi_choice"]}}, "required": ["type"]}, "then": {"required": ["options"]}},
+        {"if": {"properties": {"fillsBy": {"const": "instantiate"}}, "required": ["fillsBy"]}, "then": {"required": ["answerKeys"]}},
+        {"if": {"properties": {"fillsBy": {"const": "interview"}}, "required": ["fillsBy"]}, "then": {"not": {"required": ["answerKeys"]}}}
+      ]
+    }
+  }
+}

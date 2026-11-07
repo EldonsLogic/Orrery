@@ -122,7 +122,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-008 | Rollback to a previous Blueprint version | Blueprint | G1 | BPL-007 | partner | todo |
 | BPL-009 | Component manifest schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | done |
 | BPL-010 | Component registry (list, version, compatibility) | Blueprint | G1 | BPL-009 | eldon | done |
-| BPL-011 | Event stream contract implementation | Blueprint | G1 | BPL-002 | eldon | todo |
+| BPL-011 | Event stream contract implementation | Blueprint | G1 | BPL-002 | eldon | done |
 | BPL-012 | Engine adapter interface so the engine stays replaceable | Blueprint | G1 | GOV-015 | partner | todo |
 | BPL-013 | Branding section in the Blueprint schema (ADR-0014) | Blueprint | G1 | BPL-002 | unassigned | done |
 | BPL-014 | Component certification levels and test harness | Blueprint | G2 | BPL-010 | unassigned | todo |

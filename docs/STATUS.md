@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 8 | 3 | 31 | 0 | 42 |
-| G1 | 63 | 1 | 12 | 0 | 76 |
+| G1 | 62 | 1 | 13 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 245 | 6 | 43 | 0 | 294 |
+| all | 244 | 6 | 44 | 0 | 294 |
 
 ## Built so far (done)
 
@@ -51,6 +51,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - BPL-006: Blueprint diff
 - BPL-009: Component manifest schema v0 in contracts/
 - BPL-010: Component registry (list, version, compatibility)
+- BPL-011: Event stream contract implementation
 - BPL-013: Branding section in the Blueprint schema (ADR-0014)
 - DSC-002: Template Blueprint: trading and distribution
 - DSC-003: Connector interface spec and tier definitions
@@ -77,7 +78,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
 **G1** (22)
-- BPL-011: Event stream contract implementation (owner eldon)
 - BPL-012: Engine adapter interface so the engine stays replaceable (owner partner)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner unassigned)
@@ -86,6 +86,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner unassigned)
 - ERP-001: G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
+- ERP-009: Engine event emitter feeding the event stream (owner partner)
 - FND-001: Investor shortlist from research/05, re-verified (owner eldon)
 - GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner unassigned)
 - GTM-002: 20-30 buyer and accountant interviews in the niche (owner eldon)
@@ -124,7 +125,6 @@ Ready next (dependencies done), by gate:
 - LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
 - LEG-003 (G0): Engage counsel in KSA, UAE and Egypt; scope of work
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
-- BPL-011 (G1): Event stream contract implementation
 - BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
 - FND-001 (G1): Investor shortlist from research/05, re-verified
 - GTM-002 (G1): 20-30 buyer and accountant interviews in the niche
@@ -145,10 +145,11 @@ Ready next (dependencies done), by gate:
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
 - ERP-001 (G1): G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
+- ERP-009 (G1): Engine event emitter feeding the event stream
 - GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use
 - INF-003 (G1): CI/CD for services (build, test, deploy to staging)
 
-Waiting on dependencies: 14 row(s).
+Waiting on dependencies: 13 row(s).
 
 Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim one).
 

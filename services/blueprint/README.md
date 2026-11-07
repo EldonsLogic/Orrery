@@ -105,3 +105,9 @@ apply(invert(d), rev_b) == rev_a   # the stored inverse is the undo point
 ```
 
 Run from the repo root: `PYTHONPATH=services/blueprint/diff python3 -m bpdiff A.json B.json [--json] [--apply-check]` (exit 0 same, 1 differs, 2 error). `blueprint.propose_change` and `blueprint.explain_diff` build on this; the diff holds no prose. Tests: `tests/diff/`, run with the rest of the suite.
+
+## Event stream
+
+Python package `events/evstream/` (BPL-011), the reference implementation of contract 4: ULIDs, `build_event` (tenant and actor only from the authenticated context), `validate_event` (envelope, per-type data schemas, size, depth and whole-record caps, personal-data minimisation), an append-only `MemoryStore` (per-tenant sequence assigned by the store, dedupe, gap detection, causation check), `redact_for_model`, tenant JSONL export and `verify_chain`. Error codes `EVS-xxx`. Full documentation: [events/README.md](events/README.md).
+
+Run from `services/blueprint/events`: `PYTHONPATH=. python3 -m evstream validate FILE.json|FILE.jsonl` or `types` (exit 0 ok, 1 problems). Tests: `tests/events/`, run with the rest of the suite.

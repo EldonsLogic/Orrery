@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 11 | 4 | 27 | 0 | 42 |
-| G1 | 66 | 1 | 9 | 0 | 76 |
+| G1 | 65 | 1 | 10 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 251 | 7 | 36 | 0 | 294 |
+| all | 250 | 7 | 37 | 0 | 294 |
 
 ## Built so far (done)
 
@@ -46,6 +46,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - BPL-003: Blueprint validator
 - BPL-005: Hand-written trading and distribution Blueprint fixture
 - BPL-009: Component manifest schema v0 in contracts/
+- BPL-010: Component registry (list, version, compatibility)
 - BPL-013: Branding section in the Blueprint schema (ADR-0014)
 - DSC-003: Connector interface spec and tier definitions
 - PLT-001: Tenancy ADR-0006: site per tenant on shared in-country infrastructure
@@ -72,9 +73,8 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (24)
+**G1** (23)
 - BPL-006: Blueprint diff (owner eldon)
-- BPL-010: Component registry (list, version, compatibility) (owner eldon)
 - BPL-011: Event stream contract implementation (owner eldon)
 - BPL-012: Engine adapter interface so the engine stays replaceable (owner partner)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
@@ -98,7 +98,8 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - SEC-003: Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data (owner unassigned)
 - WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner unassigned)
 
-**G2** (3)
+**G2** (4)
+- BPL-014: Component certification levels and test harness (owner unassigned)
 - GOV-027: Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public (owner eldon)
 - OPR-003: Tool API generator: typed actions per tenant from the Blueprint (owner unassigned)
 - SEC-007: Dependency and SBOM scanning for Python and Node (beyond dependabot actions) (owner unassigned)
@@ -121,7 +122,6 @@ Ready next (dependencies done), by gate:
 - LEG-003 (G0): Engage counsel in KSA, UAE and Egypt; scope of work
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
 - BPL-006 (G1): Blueprint diff
-- BPL-010 (G1): Component registry (list, version, compatibility)
 - BPL-011 (G1): Event stream contract implementation
 - BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
 - DSC-002 (G1): Template Blueprint: trading and distribution

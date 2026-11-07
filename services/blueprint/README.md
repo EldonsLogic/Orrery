@@ -56,3 +56,39 @@ Tests: `python3 -m pytest services/blueprint/tests -q` (from the repo root; `tes
 - Rule 11: each `assetRef` (logo on light/dark, favicon asset, login background) must equal the record for its `assetId` on mediaType, bytes, sha256, widthPx, heightPx and sanitised (same value and type); the record itself must be sanitised.
 - Rule 13: uses `compliance.country`.
 - Metrics and connectors are only checked against registries passed in the context.
+
+## Component registry
+
+Python package `registry/` (BPL-010). Standard library, `jsonschema`, and `validator.semver` (imported, not copied). Storage sits behind `ManifestStore` (`read_all()`), so a service can replace the first backend, `DirectoryStore`: a folder of manifest JSON files, `<dir>/<component id>.json`, one manifest per file, version inside the manifest. Extra versions of one component in the same folder use `<component id>@<version>.json`. The file name must match the manifest.
+
+```python
+from registry import Registry
+reg = Registry.load("path/to/manifests")           # reg.issues, reg.errors, reg.warnings, reg.ok
+reg.list_components(); reg.versions(cid); reg.get(cid, version)
+reg.resolve(cid, "^0.1.0")                         # highest satisfying version, None if none; bad range raises ValueError
+reg.provides("sales.invoice.issue")                # capability or function name -> [(id, version)]
+reg.as_validation_context_registry()               # ValidationContext(registry=...) shape
+reg.compatible(blueprint["components"], blueprint["meta"]["engineTarget"])   # per-component ok and reasons
+```
+
+### Run
+
+From this folder: `python3 -m registry list|show|check DIR [--strict]` (`show` also takes `COMPONENT [--version V | --range R]`). From the repo root: `PYTHONPATH=services/blueprint python3 -m registry check DIR`. Exit 0 when the registry has no errors, 1 otherwise (including an unreadable folder). Tests are under `tests/registry/` and run with the rest of the suite.
+
+### Admission rules and codes
+
+Fail closed: a manifest with any error is not admitted. Admission checks each manifest alone, then compares the survivors; it does not cascade (a manifest rejected later is still counted as present when others are checked).
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `REG-001` | error | Manifest invalid against `component.manifest.schema.json` |
+| `REG-002` | error | Licence not recorded (`licence.spdx` empty or `NOASSERTION`; same for third-party entries) |
+| `REG-003` | error | Same (id, version) with different content; none of the copies is admitted. Identical copies collapse silently |
+| `REG-004` | warning, error with `--strict` | `requires` names a component or capability that no manifest in the registry provides |
+| `REG-005` | error | `requires` names a known component or capability but no version satisfies the range, or the range is invalid |
+| `REG-006` | error | Blocking tests not evidenced: `certified` or `regulated` with blocking tests needs `ci_run` evidence; `regulated` with a blocking `compliance_sandbox` test needs `compliance_sandbox` evidence |
+| `REG-007` | error | File rejected: bad name, symlink, not a regular file, over 1 MB, not JSON or not an object, name differs from manifest id or version, folder unreadable |
+| `REG-009` | error | Third-party AGPL (needs an ADR), or other copyleft without `copyleftReviewed: true` |
+| `REG-010` | warning | `draft` level: admitted, not usable by tenants |
+
+Limits: the manifest schema has no per-test pass/fail field, so REG-006 checks only what the schema can express (level against evidence kinds). Levels below `certified` are taken at face value. Compatibility mirrors validator rule 8: adapter must equal, `versionSet` must be in `testedAgainst`; `engineRange` is not evaluated. Safety: manifests are parsed as JSON and never executed or imported; component ids and file names are matched against strict patterns before use; lookups never touch the filesystem; results are sorted.

@@ -1,0 +1,546 @@
+{
+ "registry_version": 1,
+ "comment": "Derived only from contracts/events.md section 3 (plus build-states.md for three build.* names). Keys with <entity> are patterns: any entity name outside reserved_domains matches. 'assumed' marks anything not stated by the contract.",
+ "reserved_domains": [
+  "agent",
+  "approval",
+  "auth",
+  "blueprint",
+  "branding",
+  "build",
+  "chat",
+  "component",
+  "data",
+  "document",
+  "engine",
+  "eval",
+  "memory",
+  "meter",
+  "permission",
+  "role",
+  "support",
+  "tenant",
+  "tool"
+ ],
+ "types": {
+  "<entity>.created": {
+   "schema_version": 1,
+   "data_class": "business",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/entity_changed"
+  },
+  "<entity>.updated": {
+   "schema_version": 1,
+   "data_class": "business",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/entity_changed"
+  },
+  "<entity>.submitted": {
+   "schema_version": 1,
+   "data_class": "business",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/entity_changed"
+  },
+  "<entity>.cancelled": {
+   "schema_version": 1,
+   "data_class": "business",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/entity_changed"
+  },
+  "<entity>.deleted": {
+   "schema_version": 1,
+   "data_class": "business",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/entity_changed"
+  },
+  "<entity>.transitioned": {
+   "schema_version": 1,
+   "data_class": "business",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/entity_transitioned"
+  },
+  "approval.requested": {
+   "schema_version": 1,
+   "data_class": "business",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/approval_requested"
+  },
+  "approval.decided": {
+   "schema_version": 1,
+   "data_class": "business",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/approval_decided"
+  },
+  "document.issued": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/document_issued",
+   "assumed": "data.einvoice_status name and data_class financial are assumptions"
+  },
+  "document.rejected_by_authority": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.record.schema.json#/$defs/document_rejected_by_authority"
+  },
+  "auth.signed_in": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/auth_event",
+   "assumed": "data_class personal is an assumption"
+  },
+  "auth.sign_in_failed": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/auth_event",
+   "assumed": "data_class personal is an assumption"
+  },
+  "auth.mfa_challenged": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/auth_event",
+   "assumed": "data_class personal is an assumption"
+  },
+  "permission.denied": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/permission_denied"
+  },
+  "role.assigned": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/role_change",
+   "assumed": "data requires role_id and user_id (assumption)"
+  },
+  "role.revoked": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/role_change",
+   "assumed": "data requires role_id and user_id (assumption)"
+  },
+  "tool.called": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/tool_called",
+   "assumed": "tenant_id and ts omitted from data (envelope carries them)"
+  },
+  "blueprint.change_proposed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/blueprint_event"
+  },
+  "blueprint.change_approved": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/blueprint_event"
+  },
+  "blueprint.applied": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/blueprint_event"
+  },
+  "blueprint.apply_failed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/blueprint_event"
+  },
+  "blueprint.rolled_back": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/blueprint_event"
+  },
+  "branding.changed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/branding_event"
+  },
+  "branding.asset_uploaded": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/branding_event"
+  },
+  "branding.asset_rejected": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/branding_event"
+  },
+  "build.state_changed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/build_state_changed"
+  },
+  "build.review_passed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/build_event"
+  },
+  "build.review_rejected": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/build_event"
+  },
+  "build.live": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/build_event"
+  },
+  "build.sandbox_ready": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/build_event",
+   "assumed": "named in build-states.md, not in events.md section 3"
+  },
+  "build.simulation_completed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/build_event",
+   "assumed": "named in build-states.md, not in events.md section 3"
+  },
+  "build.cutover_started": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/build_event",
+   "assumed": "named in build-states.md, not in events.md section 3"
+  },
+  "support.access_requested": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/support_access_requested",
+   "assumed": "grant_id requirement from threat model T55 (assumption)"
+  },
+  "support.access_granted": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/support_access_granted",
+   "assumed": "grant_id requirement from threat model T55 (assumption)"
+  },
+  "support.access_ended": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/support_access_ended"
+  },
+  "support.action_taken": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/support_action_taken",
+   "assumed": "grant_id requirement from threat model T55 (assumption)"
+  },
+  "data.exported": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/data_lifecycle"
+  },
+  "data.deleted": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/data_lifecycle"
+  },
+  "tenant.state_changed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/tenant_state_changed"
+  },
+  "agent.run_started": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": true,
+   "data_schema": "data.agent.schema.json#/$defs/agent_run"
+  },
+  "agent.run_completed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": true,
+   "data_schema": "data.agent.schema.json#/$defs/agent_run"
+  },
+  "agent.run_failed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": true,
+   "data_schema": "data.agent.schema.json#/$defs/agent_run"
+  },
+  "agent.tool_proposed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": true,
+   "data_schema": "data.agent.schema.json#/$defs/agent_tool_proposed"
+  },
+  "agent.budget_exceeded": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": true,
+   "data_schema": "data.agent.schema.json#/$defs/agent_budget_exceeded"
+  },
+  "agent.output_flagged": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": true,
+   "data_schema": "data.agent.schema.json#/$defs/agent_output_flagged"
+  },
+  "chat.turn_completed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": true,
+   "data_schema": "data.agent.schema.json#/$defs/chat_turn_completed"
+  },
+  "memory.written": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": true,
+   "data_schema": "data.agent.schema.json#/$defs/memory_event",
+   "assumed": "data_class personal is an assumption"
+  },
+  "memory.expired": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.agent.schema.json#/$defs/memory_event",
+   "assumed": "no model takes part in expiry, so trace not required (assumption)"
+  },
+  "eval.regression_detected": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "agent",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.agent.schema.json#/$defs/eval_regression_detected",
+   "assumed": "platform-level: tenant_id platform; no trace required (assumption)"
+  },
+  "meter.ai_usage": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "meter",
+   "scope": "tenant",
+   "requires_trace": true,
+   "data_schema": "data.meter.schema.json#/$defs/ai_usage"
+  },
+  "meter.active_user": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "meter",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.meter.schema.json#/$defs/active_user"
+  },
+  "meter.storage": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "meter",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.meter.schema.json#/$defs/storage"
+  },
+  "meter.documents_issued": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "meter",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.meter.schema.json#/$defs/documents_issued"
+  },
+  "meter.connector_run": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "meter",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.meter.schema.json#/$defs/connector_run"
+  },
+  "meter.simulation_run": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "meter",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.meter.schema.json#/$defs/simulation_run"
+  },
+  "component.published": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/component_event",
+   "assumed": "kind platform added; not one of the four kinds in the brief"
+  },
+  "component.deprecated": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/component_event",
+   "assumed": "kind platform added; not one of the four kinds in the brief"
+  },
+  "component.request_created": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/component_event",
+   "assumed": "kind platform added; not one of the four kinds in the brief"
+  },
+  "component.request_reviewed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/component_event",
+   "assumed": "kind platform added; not one of the four kinds in the brief"
+  },
+  "engine.upgrade_canary_started": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/engine_event",
+   "assumed": "kind platform added; not one of the four kinds in the brief"
+  },
+  "engine.upgrade_promoted": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/engine_event",
+   "assumed": "kind platform added; not one of the four kinds in the brief"
+  },
+  "engine.upgrade_rolled_back": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/engine_event",
+   "assumed": "kind platform added; not one of the four kinds in the brief"
+  }
+ }
+}

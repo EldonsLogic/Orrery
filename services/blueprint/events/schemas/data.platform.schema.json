@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Data of platform events (no tenant data)",
+  "$defs": {
+    "component_event": {
+      "type": "object",
+      "properties": {
+        "component_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "engine_event": {
+      "type": "object",
+      "properties": {
+        "version_set": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "canary_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}

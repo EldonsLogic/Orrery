@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Data of record events",
+  "$defs": {
+    "entity_changed": {
+      "type": "object",
+      "properties": {
+        "changed_fields": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "changes": {
+          "type": "object"
+        }
+      }
+    },
+    "entity_transitioned": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "transition_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "transition_id"
+      ]
+    },
+    "approval_requested": {
+      "type": "object",
+      "properties": {
+        "approval_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "approval_decided": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "approver": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "comment": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "decision",
+        "approver"
+      ]
+    },
+    "document_issued": {
+      "type": "object",
+      "properties": {
+        "einvoice_status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "document_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "einvoice_status"
+      ]
+    },
+    "document_rejected_by_authority": {
+      "type": "object",
+      "properties": {
+        "authority": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reason_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}

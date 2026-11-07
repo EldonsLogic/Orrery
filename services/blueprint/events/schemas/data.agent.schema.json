@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Data of agent events",
+  "$defs": {
+    "agent_run": {
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "agent_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "error_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "run_id"
+      ]
+    },
+    "agent_tool_proposed": {
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "tainted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "run_id",
+        "tool"
+      ]
+    },
+    "agent_budget_exceeded": {
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "budget_kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "run_id"
+      ]
+    },
+    "agent_output_flagged": {
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reason_code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "reason_code"
+      ]
+    },
+    "chat_turn_completed": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "discover",
+            "ask",
+            "act",
+            "change"
+          ]
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "content": false,
+        "text": false,
+        "message": false
+      },
+      "required": [
+        "mode",
+        "latency_ms",
+        "input_tokens",
+        "output_tokens"
+      ]
+    },
+    "memory_event": {
+      "type": "object",
+      "properties": {
+        "memory_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "memory_id"
+      ]
+    },
+    "eval_regression_detected": {
+      "type": "object",
+      "properties": {
+        "suite": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "metric": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    }
+  }
+}

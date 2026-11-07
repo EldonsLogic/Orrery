@@ -7,7 +7,7 @@ The canonical list from Phase 1-2 is [strategy/open-questions.md](strategy/open-
 
 | # | Question | Owner | Needed by | Related |
 |---|---|---|---|---|
-| Q-1 | Identity model: one central identity with per-tenant roles, or identity per tenant? Proposed central (ADR-0007) | eldon | G0 | PLT-002 |
+| Q-1 | RESOLVED 2026-11-07 (ADR-0007 accepted: central identity with per-tenant roles). Was: identity model, one central identity with per-tenant roles, or identity per tenant? | eldon | G0 | PLT-002 |
 | Q-2 | Where does the isolated read-only browser runner live (our infrastructure, owner's device, third-party)? Affects credentials, egress and PDPL | unassigned | G3 | INF-009, SEC-015 |
 | Q-3 | Final GitHub repo name and organisation name (working name is not cleared) | eldon | G0 | GOV-002, ADR-0001 |
 | Q-4 | Arabic spelling and transliteration of the product name for search and brand | eldon | G1 | BRD-003 |

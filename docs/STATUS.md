@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 8 | 4 | 30 | 0 | 42 |
+| G0 | 8 | 3 | 31 | 0 | 42 |
 | G1 | 63 | 1 | 12 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 245 | 7 | 42 | 0 | 294 |
+| all | 245 | 6 | 43 | 0 | 294 |
 
 ## Built so far (done)
 
@@ -55,6 +55,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - DSC-002: Template Blueprint: trading and distribution
 - DSC-003: Connector interface spec and tier definitions
 - PLT-001: Tenancy ADR-0006: site per tenant on shared in-country infrastructure
+- PLT-002: Identity ADR-0007: decide central identity with per-tenant roles
 - BRD-001: Brand guidelines v1 (Quadrant) and placeholder logo
 - BRD-002: Design tokens: light and dark, CSS and JSON
 - QA-001: Eval framework and CI hook
@@ -99,11 +100,12 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - SEC-003: Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data (owner unassigned)
 - WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner unassigned)
 
-**G2** (5)
+**G2** (6)
 - BPL-014: Component certification levels and test harness (owner unassigned)
 - BPL-021: Blueprint versioning and schema migration (owner unassigned)
 - GOV-027: Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public (owner eldon)
 - OPR-003: Tool API generator: typed actions per tenant from the Blueprint (owner unassigned)
+- PLT-005: Identity service (users, sessions, per-tenant roles) (owner unassigned)
 - SEC-007: Dependency and SBOM scanning for Python and Node (beyond dependabot actions) (owner unassigned)
 
 
@@ -111,7 +113,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 
 Doing:
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise)
-- PLT-002: Identity ADR-0007: decide central identity with per-tenant roles
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
@@ -163,7 +164,6 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
-- PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (eldon)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
@@ -184,5 +184,4 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 ## ADRs with status Proposed
 
-- [ADR-0007-identity](decisions/ADR-0007-identity.md)
 - [ADR-0022-web-stack](decisions/ADR-0022-web-stack.md)

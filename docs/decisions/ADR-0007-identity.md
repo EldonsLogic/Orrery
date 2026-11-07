@@ -1,8 +1,8 @@
 # ADR-0007: Identity model
 
-Status: Proposed
+Status: Accepted
 Owner: eldon
-Approved by: pending (Eldon to approve; partner review pending, GOV-013). Proposal written for PLT-002, log 2026-11-07-eldon-claude-code-identity-adr.
+Approved by: Eldon (review delegated to the orchestrator session, 2026-11-07) and partner (PR 24 review, GOV-013). Security review: cross-model review of 2026-11-07 plus orchestrator review the same day; Q-14 stays open and blocks storing real users (PLT-005).
 
 ## Context
 Sign-in must be decided before the app shell (WEB-003) and the identity service (PLT-005) are built, and it is a G0 exit criterion. Facts that shape it:

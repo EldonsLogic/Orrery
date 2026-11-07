@@ -37,15 +37,16 @@ A cloud session works from a fresh clone on the provider's side. Before it start
 6. Never put secrets, keys, customer data, scratch files or documents outside the project in the repo; the hygiene check will fail if you do.
 7. Partner, first week: review ADR-0001 to ADR-0018 (GOV-013). Open one PR that sets the `Approved by` line of each ADR you accept to "Eldon and partner"; for anything you disagree with, add an entry to [open-questions.md](open-questions.md) instead of editing the decision text. Fill in the Codex and Antigravity rows of [agents/model-registry.md](../agents/model-registry.md) (GOV-012).
 
-## 2. Lanes (initial split; re-assign by changing the Owner in [PLAN.md](PLAN.md) in a PR)
+## 2. Lanes and independent work (ADR-0025; initial split; re-assign by changing the Owner in [PLAN.md](PLAN.md) in a PR)
 Lanes keep two people and several agents out of each other's files. Edit only your lane's paths. The lane map is `scripts/lanes.json` (source of truth); CI, the pre-push hook and `finish_session.py` run `scripts/check_lanes.py`, which **fails** a change that touches the other founder's lane. If you genuinely need a change there, get the other founder's agreement first (a PR comment or an entry in [open-questions.md](open-questions.md)), then add this line to your session log: `Cross-lane: approved by <eldon|partner> (where and when)`. Reviewers must confirm the agreement is real. The shared interface is `contracts/`; changes there need an ADR and both founders.
+
+Every open plan row has exactly one owner, and the plan never makes one founder wait for the other inside a gate: a row may depend on the other founder's row only if that row is in an EARLIER gate (or done). Needs that cross lanes are met by interface rows at an earlier gate (a contract, a fake and a conformance test, or a fixture), so each side builds against the interface and the integration row comes later. `scripts/check_plan_independence.py` (run by the docs gate, CI, pre-push and `finish_session.py`) fails the build otherwise. To change an owner or gate, edit PLAN.md in a PR; the check tells you if it breaks independence.
 
 | Lane | Founder | Paths | Typical plan rows |
 |---|---|---|---|
-| Spine, product and brand | Eldon | `contracts/`, `services/blueprint/`, `services/discovery/`, `services/operate/`, `web/`, `evals/`, `docs/product/`, `docs/brand/`, `docs/strategy/`, `docs/research/` | BPL-003 to BPL-006, QA-001 to QA-004, SEC-001, WEB, BRD, DSC, GTM, FND, LEG |
-| Engine, runtime and compliance | Partner | `apps/engine/`, `infra/`, `components/`, `connectors/` | CE-SEC-003, CE-SEC-005, LEG-004, ERP, CMP, BPL-007, BPL-008, BPL-012 |
+| Spine, product and brand | Eldon | `contracts/`, `services/blueprint/`, `services/discovery/`, `services/operate/`, `services/control-plane/`, `connectors/`, `web/`, `evals/`, `docs/product/`, `docs/brand/`, `docs/strategy/`, `docs/research/` | BPL-003 to BPL-006, QA-001 to QA-004, SEC-001, WEB, BRD, DSC, GTM, FND, LEG |
+| Engine, runtime and compliance | Partner | `apps/engine/`, `infra/`, `components/`, `services/gateway/` | CE-SEC-003, CE-SEC-005, LEG-004, ERP, CMP, BPL-007, BPL-008, BPL-012 |
 | Shared (needs the other's review) | both | `docs/PLAN.md`, `docs/RULES.md`, `AGENTS.md`, `docs/decisions/`, `docs/log/`, `docs/security/`, `docs/compliance/`, `docs/legal/`, `scripts/`, `.github/` | GOV |
-| Decide at the start of G2 | both | `services/gateway/`, `services/control-plane/` | PLT |
 
 ## 3. First tasks (claim by setting `doing` plus owner in PLAN.md)
 - **Eldon:** BPL-003 Blueprint validator, BPL-005 fixture (in progress), identity decision ADR-0007 (PLT-002), web stack decision (WEB-018), threat model (SEC-001), Arabic eval set (QA-001, QA-002), owner interviews (GTM-002), the founders' agreement and licence policy (LEG-001, LEG-002).

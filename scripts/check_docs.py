@@ -64,8 +64,10 @@ def main():
             if f.name not in t:
                 errors.append(f"docs/decisions/INDEX.md does not list {f.name}")
 
-    _, perrs = parse_plan()
+    prows, perrs = parse_plan()
     errors += perrs
+    import check_plan_independence
+    errors += check_plan_independence.check(prows)
 
     core = set()
     for g in CORE_GLOBS:

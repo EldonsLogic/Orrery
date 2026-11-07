@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 2 | 25 | 0 | 40 |
+| G0 | 13 | 2 | 26 | 0 | 41 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 257 | 6 | 29 | 0 | 292 |
+| all | 257 | 6 | 30 | 0 | 293 |
 
 ## Built so far (done)
 
@@ -35,6 +35,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-024: Enforcement layers: commit-msg and pre-push hooks, finish_session gate, main-guard audit workflow, ADR-0019
 - GOV-025: Lane guard: scripts/lanes.json and check_lanes.py in CI, pre-push and finish_session; cross-lane waiver in the session log (ADR-0020)
 - GOV-026: Public repo with branch protection, secret scanning, outsider limits and Eldon second account (ADR-0021)
+- GOV-028: Cloud-session support: gh-optional finish gate, founder detection fallbacks, CI check that every commit names a plan ID, cloud guidance in onboarding
 - CE-SEC-001: Change engine: stop accepting caller-supplied roles from request kwargs on whitelisted endpoints
 - CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
@@ -170,10 +171,10 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.
 - [2026-11-07-eldon-claude-code-lane-guard.md](log/2026-11-07-eldon-claude-code-lane-guard.md): Founder declined a paid GitHub plan and asked for clear guardrails that keep each founder in their own lane. Added a machine-readable lane map and a guard that fails any change touching the other founder's lane unless a waiver line is logged, in CI, the pre-push hook and the end-of-session gate. Added a first task for the partner to list every Frappe or ERPNext app and add-on used locally, because the repo holds only the change-engine module, not the engine installation.
 - [2026-11-07-eldon-claude-code-enforcement-layers.md](log/2026-11-07-eldon-claude-code-enforcement-layers.md): Founder asked for the logging and rules to be guaranteed on every task. Nothing can honestly guarantee that AI agents always comply, so this session added independent enforcement layers and recorded what stays unguaranteed. Also recorded the founder's standing authorisation for his sessions to merge PRs once checks pass.
+- [2026-11-07-eldon-claude-code-cloud-sessions.md](log/2026-11-07-eldon-claude-code-cloud-sessions.md): Founder's second account will work in the cloud. Made the guards cloud-friendly (finish gate no longer fails when gh is missing, founder detection falls back to git config or ORRERY_FOUNDER) and added a CI check that every commit in a PR names a plan ID, since cloud sessions may not run local hooks. Added cloud guidance to onboarding.
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.
 - [2026-11-06-eldon-claude-code-dev-viewing.md](log/2026-11-06-eldon-claude-code-dev-viewing.md): Recorded the founder request (relayed from a side session) that the developing product is always viewable: a Proposed decision record, early plan rows, a concise agent rule, and the hosting rules updated for dev hosts. Planning only; nothing is deployed and nothing runnable exists yet.
-- [2026-11-06-eldon-claude-code-agent-ready-repo.md](log/2026-11-06-eldon-claude-code-agent-ready-repo.md): Made the repo ready for any agent to open cold: complete standing-rules file, delegation playbook with model-by-tier routing and a starter prompt, a status page that lists what is built and what is ready to start, a rewritten start page with the ordered path by gate, and a decision record for the operating rules. Plan statuses were corrected to match what exists.
 
 ## ADRs with status Proposed
 

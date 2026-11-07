@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 15 | 1 | 20 | 1 | 37 |
+| G0 | 15 | 1 | 21 | 1 | 38 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 110 | 2 | 0 | 0 | 112 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 258 | 5 | 24 | 1 | 288 |
+| all | 258 | 5 | 25 | 1 | 289 |
 
 ## Built so far (done)
 
@@ -30,6 +30,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-021: Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI)
 - GOV-022: Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md)
 - GOV-023: Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS
+- GOV-024: Enforcement layers: commit-msg and pre-push hooks, finish_session gate, main-guard audit workflow, ADR-0019
 - CE-SEC-001: Change engine: stop accepting caller-supplied roles from request kwargs on whitelisted endpoints
 - CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
@@ -151,6 +152,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 - [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.
+- [2026-11-07-eldon-claude-code-enforcement-layers.md](log/2026-11-07-eldon-claude-code-enforcement-layers.md): Founder asked for the logging and rules to be guaranteed on every task. Nothing can honestly guarantee that AI agents always comply, so this session added independent enforcement layers and recorded what stays unguaranteed. Also recorded the founder's standing authorisation for his sessions to merge PRs once checks pass.
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.
 - [2026-11-06-eldon-claude-code-dev-viewing.md](log/2026-11-06-eldon-claude-code-dev-viewing.md): Recorded the founder request (relayed from a side session) that the developing product is always viewable: a Proposed decision record, early plan rows, a concise agent rule, and the hosting rules updated for dev hosts. Planning only; nothing is deployed and nothing runnable exists yet.

@@ -37,6 +37,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-021 | Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI) | Governance | G0 | GOV-004 | eldon | done |
 | GOV-022 | Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md) | Governance | G0 | GOV-004 | eldon | done |
 | GOV-023 | Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS | Governance | G0 | GOV-006 | eldon | done |
+| GOV-024 | Enforcement layers: commit-msg and pre-push hooks, finish_session gate, main-guard audit workflow, ADR-0019 | Governance | G0 | GOV-023 | eldon | done |
 | LEG-001 | Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype | Legal | G0 | - | eldon | todo |
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes | Legal | G0 | GOV-004 | eldon | todo |
 | LEG-003 | Engage counsel in KSA, UAE and Egypt; scope of work | Legal | G0 | - | eldon | todo |

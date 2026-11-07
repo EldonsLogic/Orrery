@@ -1,0 +1,48 @@
+name: Main guard
+
+# Audits every push to main. It cannot block a push (GitHub branch protection needs a paid plan for private repos),
+# but it re-runs the checks and opens an issue for both founders if main was pushed to directly or a check fails.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Re-run repo checks on main
+        id: checks
+        continue-on-error: true
+        run: |
+          python3 scripts/build_status.py
+          git diff --exit-code docs/STATUS.md
+          python3 scripts/check_docs.py
+          python3 scripts/check_repo_hygiene.py
+          python3 scripts/scan_secrets.py
+      - name: Was this push made through a pull request?
+        id: viapr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq 'length')
+          echo "prs=$n" >> "$GITHUB_OUTPUT"
+      - name: Open an issue if main was pushed directly or checks failed
+        if: steps.viapr.outputs.prs == '0' || steps.checks.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "${{ github.repository }}" \
+            --title "Main guard: ${{ github.sha }} needs attention" \
+            --body "Commit ${{ github.sha }} on main by ${{ github.actor }}. Pull requests found: ${{ steps.viapr.outputs.prs }}. Checks outcome: ${{ steps.checks.outcome }}. Direct pushes to main break the rules (docs/RULES.md rule 10). Fix forward through a PR or revert, and log it. See the run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --assignee EldonsLogic,sayegh9

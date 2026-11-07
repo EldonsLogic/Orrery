@@ -30,7 +30,7 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/ST
 ## Session end checklist
 1. `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>`; fill it in.
 2. Update statuses in `docs/PLAN.md`; add ADR or open-question entries if a decision or doubt arose.
-3. `python3 scripts/build_status.py`, then `python3 scripts/check_docs.py`, `python3 scripts/check_repo_hygiene.py`, `python3 scripts/scan_secrets.py`. Fix errors.
+3. Run `python3 scripts/finish_session.py` (regenerates STATUS, runs every check and the task trail, verifies the branch is pushed and a PR is open). Do not stop until it prints FINISHED. Every commit message names a plan ID; never bypass hooks.
 4. Push your branch and open a PR. Work left only on a machine or in a chat is lost work.
 
 ## Branches and PRs

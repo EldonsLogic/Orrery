@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 2 | 26 | 0 | 41 |
+| G0 | 12 | 3 | 26 | 0 | 41 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 257 | 6 | 30 | 0 | 293 |
+| all | 256 | 7 | 30 | 0 | 293 |
 
 ## Built so far (done)
 
@@ -53,7 +53,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (13)
+**G0** (12)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner unassigned)
 - GOV-012: Fill model registry rows for Codex and Antigravity (owner partner)
@@ -65,7 +65,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE and Egypt; scope of work (owner eldon)
 - LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
-- PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (owner eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (owner eldon)
 
 **G1** (21)
@@ -101,6 +100,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 Doing:
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise)
 - BPL-005: Hand-written trading and distribution Blueprint fixture
+- PLT-002: Identity ADR-0007: decide central identity with per-tenant roles
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
@@ -111,7 +111,6 @@ Ready next (dependencies done), by gate:
 - LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
 - LEG-003 (G0): Engage counsel in KSA, UAE and Egypt; scope of work
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
-- PLT-002 (G0): Identity ADR-0007: decide central identity with per-tenant roles
 - WEB-018 (G0): Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
 - BPL-003 (G1): Blueprint validator
 - BPL-010 (G1): Component registry (list, version, compatibility)
@@ -159,6 +158,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
 - BPL-005: Hand-written trading and distribution Blueprint fixture (eldon)
+- PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (eldon)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
@@ -170,11 +170,11 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - [2026-11-07-eldon-claude-code-public-repo-second-account.md](log/2026-11-07-eldon-claude-code-public-repo-second-account.md): The founder made the repo public. Verified there are no secrets, no emails in tracked files and no secret-like strings in history; enabled branch protection on main (PRs only, four required checks, no force push or deletion, admins included), secret scanning with push protection, private vulnerability reporting, outside-contributor workflow approval and a collaborators-only interaction limit. Merged the last Dependabot PR (none open). Added an interim all-rights-reserved LICENSE, ADR-0021, and the founder's second GitHub account (Eldonham) as the same founder in the lane map, code owners, onboarding and rules.
 - [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.
 - [2026-11-07-eldon-claude-code-lane-guard.md](log/2026-11-07-eldon-claude-code-lane-guard.md): Founder declined a paid GitHub plan and asked for clear guardrails that keep each founder in their own lane. Added a machine-readable lane map and a guard that fails any change touching the other founder's lane unless a waiver line is logged, in CI, the pre-push hook and the end-of-session gate. Added a first task for the partner to list every Frappe or ERPNext app and add-on used locally, because the repo holds only the change-engine module, not the engine installation.
+- [2026-11-07-eldon-claude-code-identity-adr.md](log/2026-11-07-eldon-claude-code-identity-adr.md): Wrote the identity proposal for founder approval: central identity with per-tenant membership, roles resolved per request from each tenant's Blueprint, one token per tenant, no customer login on the engine (shadow engine users), OIDC with the identity provider chosen in a spike, mandatory MFA for admin and finance roles, separate staff realm. ADR-0007 stays Proposed.
 - [2026-11-07-eldon-claude-code-enforcement-layers.md](log/2026-11-07-eldon-claude-code-enforcement-layers.md): Founder asked for the logging and rules to be guaranteed on every task. Nothing can honestly guarantee that AI agents always comply, so this session added independent enforcement layers and recorded what stays unguaranteed. Also recorded the founder's standing authorisation for his sessions to merge PRs once checks pass.
 - [2026-11-07-eldon-claude-code-cloud-sessions.md](log/2026-11-07-eldon-claude-code-cloud-sessions.md): Founder's second account will work in the cloud. Made the guards cloud-friendly (finish gate no longer fails when gh is missing, founder detection falls back to git config or ORRERY_FOUNDER) and added a CI check that every commit in a PR names a plan ID, since cloud sessions may not run local hooks. Added cloud guidance to onboarding.
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.
-- [2026-11-06-eldon-claude-code-dev-viewing.md](log/2026-11-06-eldon-claude-code-dev-viewing.md): Recorded the founder request (relayed from a side session) that the developing product is always viewable: a Proposed decision record, early plan rows, a concise agent rule, and the hosting rules updated for dev hosts. Planning only; nothing is deployed and nothing runnable exists yet.
 
 ## ADRs with status Proposed
 

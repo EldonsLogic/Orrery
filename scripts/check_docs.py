@@ -19,7 +19,7 @@ REQUIRED = [
     ".github/CODEOWNERS", ".github/PULL_REQUEST_TEMPLATE.md", ".github/dependabot.yml",
     ".github/workflows/ci.yml", ".github/ISSUE_TEMPLATE/config.yml",
     "agents/README.md", "agents/routing.md", "agents/model-registry.md", "agents/delegation-playbook.md",
-    "docs/00-START-HERE.md", "docs/RULES.md", "docs/PLAN.md", "docs/GATES.md", "docs/STATUS.md", "docs/CHANGELOG.md",
+    "docs/00-START-HERE.md", "docs/ONBOARDING.md", "docs/RULES.md", "docs/PLAN.md", "docs/GATES.md", "docs/STATUS.md", "docs/CHANGELOG.md",
     "docs/risks.md", "docs/open-questions.md", "docs/glossary.md", "docs/HANDOFF.md",
     "docs/log/README.md", "docs/log/TEMPLATE.md",
     "docs/decisions/TEMPLATE.md", "docs/decisions/INDEX.md",
@@ -27,7 +27,7 @@ REQUIRED = [
     "scripts/session_start.py", "scripts/scan_secrets.py",
 ]
 LOG_FIELDS = ["Date:", "Author:", "Tool and model:", "Plan IDs:"]
-CORE_GLOBS = ["AGENTS.md", "README.md", "docs/00-START-HERE.md", "docs/RULES.md", "docs/PLAN.md", "docs/GATES.md",
+CORE_GLOBS = ["AGENTS.md", "README.md", "docs/00-START-HERE.md", "docs/ONBOARDING.md", "docs/RULES.md", "docs/PLAN.md", "docs/GATES.md",
               "docs/decisions/*.md", "agents/*.md"]
 LINK_RE = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 

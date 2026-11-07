@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 15 | 1 | 18 | 1 | 35 |
+| G0 | 15 | 1 | 19 | 1 | 36 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 110 | 2 | 0 | 0 | 112 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 258 | 5 | 22 | 1 | 286 |
+| all | 258 | 5 | 23 | 1 | 287 |
 
 ## Built so far (done)
 
@@ -28,6 +28,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-015: Draft ADR-0001..0014
 - GOV-018: Retire docs/HANDOFF.md in favour of docs/log and STATUS
 - GOV-021: Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI)
+- GOV-022: Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md)
 - CE-SEC-001: Change engine: stop accepting caller-supplied roles from request kwargs on whitelisted endpoints
 - CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
@@ -52,31 +53,31 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (owner eldon)
 - LEG-003: Engage counsel in KSA, UAE and Egypt; scope of work (owner eldon)
-- LEG-004: Third-party licence register (every adopted OSS component, version, licence) (owner unassigned)
+- LEG-004: Third-party licence register (every adopted OSS component, version, licence) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
-- PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (owner unassigned)
-- WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (owner unassigned)
+- PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (owner eldon)
+- WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (owner eldon)
 
 **G1** (20)
-- BPL-003: Blueprint validator (owner unassigned)
-- BPL-010: Component registry (list, version, compatibility) (owner unassigned)
-- BPL-011: Event stream contract implementation (owner unassigned)
-- BPL-012: Engine adapter interface so the engine stays replaceable (owner unassigned)
-- BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner unassigned)
+- BPL-003: Blueprint validator (owner eldon)
+- BPL-010: Component registry (list, version, compatibility) (owner eldon)
+- BPL-011: Event stream contract implementation (owner eldon)
+- BPL-012: Engine adapter interface so the engine stays replaceable (owner partner)
+- BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner unassigned)
-- CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner unassigned)
+- CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner unassigned)
-- ERP-008: Blueprint roles to engine roles and user permissions mapping (owner unassigned)
-- FND-001: Investor shortlist from research/05, re-verified (owner unassigned)
+- ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
+- FND-001: Investor shortlist from research/05, re-verified (owner eldon)
 - GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner unassigned)
-- GTM-002: 20-30 buyer and accountant interviews in the niche (owner unassigned)
+- GTM-002: 20-30 buyer and accountant interviews in the niche (owner eldon)
 - GTM-004: Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) (owner eldon)
 - GTM-018: Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use (owner partner)
-- INF-003: CI/CD for services (build, test, deploy to staging) (owner unassigned)
+- INF-003: CI/CD for services (build, test, deploy to staging) (owner partner)
 - PLT-024: Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) (owner unassigned)
-- QA-001: Eval framework and CI hook (owner unassigned)
+- QA-001: Eval framework and CI hook (owner eldon)
 - QA-016: Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) (owner unassigned)
-- SEC-001: Threat model for the five parts and four contracts (owner unassigned)
+- SEC-001: Threat model for the five parts and four contracts (owner eldon)
 - WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner unassigned)
 
 **G2** (1)
@@ -101,6 +102,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 
 ## Last 10 log files
 
+- [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.
 - [2026-11-06-eldon-claude-code-dev-viewing.md](log/2026-11-06-eldon-claude-code-dev-viewing.md): Recorded the founder request (relayed from a side session) that the developing product is always viewable: a Proposed decision record, early plan rows, a concise agent rule, and the hosting rules updated for dev hosts. Planning only; nothing is deployed and nothing runnable exists yet.

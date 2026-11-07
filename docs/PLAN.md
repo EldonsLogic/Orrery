@@ -114,7 +114,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-020 | Regulation change watcher feeding versioned compliance components | Compliance | G4 | CMP-008 | unassigned | todo |
 | BPL-001 | Import the prototype change engine into apps/engine as the change-engine module (renamed) | Blueprint | G0 | LEG-001 | partner | done |
 | BPL-002 | Blueprint schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | done |
-| BPL-003 | Blueprint validator | Blueprint | G1 | BPL-002 | eldon | todo |
+| BPL-003 | Blueprint validator | Blueprint | G1 | BPL-002 | eldon | done |
 | BPL-004 | Compiler: Blueprint to engine configuration | Blueprint | G1 | BPL-003,ERP-012 | eldon | todo |
 | BPL-005 | Hand-written trading and distribution Blueprint fixture | Blueprint | G1 | BPL-002 | eldon | doing |
 | BPL-006 | Blueprint diff | Blueprint | G1 | BPL-003 | eldon | todo |

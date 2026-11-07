@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 2 | 26 | 0 | 41 |
+| G0 | 12 | 3 | 26 | 0 | 41 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 257 | 6 | 30 | 0 | 293 |
+| all | 256 | 7 | 30 | 0 | 293 |
 
 ## Built so far (done)
 
@@ -53,7 +53,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (13)
+**G0** (12)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner unassigned)
 - GOV-012: Fill model registry rows for Codex and Antigravity (owner partner)
@@ -66,7 +66,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 - PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (owner eldon)
-- WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (owner eldon)
 
 **G1** (21)
 - BPL-003: Blueprint validator (owner eldon)
@@ -104,6 +103,7 @@ Doing:
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
+- WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
 
 Ready next (dependencies done), by gate:
 - GOV-002 (G0): Create GitHub organisation, transfer repo, decide final repo name
@@ -112,7 +112,6 @@ Ready next (dependencies done), by gate:
 - LEG-003 (G0): Engage counsel in KSA, UAE and Egypt; scope of work
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
 - PLT-002 (G0): Identity ADR-0007: decide central identity with per-tenant roles
-- WEB-018 (G0): Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
 - BPL-003 (G1): Blueprint validator
 - BPL-010 (G1): Component registry (list, version, compatibility)
 - BPL-011 (G1): Event stream contract implementation
@@ -162,9 +161,11 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
+- WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (eldon)
 
 ## Last 10 log files
 
+- [2026-11-07-eldon-claude-code-web-stack-adr.md](log/2026-11-07-eldon-claude-code-web-stack-adr.md): Wrote the web stack proposal for founder approval (ADR-0022, Proposed): one TypeScript and React stack on Next.js for marketing and app; static marketing; app screens rendered in the browser against our in-country gateway so no tenant data is processed on Vercel; plain CSS with token custom properties and a lint rule against literal colours and fonts; logical properties for RTL; headless accessible primitives; ICU i18n with Arabic default; self-hosted fonts; Playwright RTL goldens.
 - [2026-11-07-eldon-claude-code-visibility-temporary.md](log/2026-11-07-eldon-claude-code-visibility-temporary.md): Founder said the repo is public only for a while. Added a plan row so the switch back to private is decided deliberately: branch protection needs a paid plan on a private repo, and anything published may already be forked or cached.
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 - [2026-11-07-eldon-claude-code-public-repo-second-account.md](log/2026-11-07-eldon-claude-code-public-repo-second-account.md): The founder made the repo public. Verified there are no secrets, no emails in tracked files and no secret-like strings in history; enabled branch protection on main (PRs only, four required checks, no force push or deletion, admins included), secret scanning with push protection, private vulnerability reporting, outside-contributor workflow approval and a collaborators-only interaction limit. Merged the last Dependabot PR (none open). Added an interim all-rights-reserved LICENSE, ADR-0021, and the founder's second GitHub account (Eldonham) as the same founder in the lane map, code owners, onboarding and rules.
@@ -174,9 +175,9 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - [2026-11-07-eldon-claude-code-cloud-sessions.md](log/2026-11-07-eldon-claude-code-cloud-sessions.md): Founder's second account will work in the cloud. Made the guards cloud-friendly (finish gate no longer fails when gh is missing, founder detection falls back to git config or ORRERY_FOUNDER) and added a CI check that every commit in a PR names a plan ID, since cloud sessions may not run local hooks. Added cloud guidance to onboarding.
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.
-- [2026-11-06-eldon-claude-code-dev-viewing.md](log/2026-11-06-eldon-claude-code-dev-viewing.md): Recorded the founder request (relayed from a side session) that the developing product is always viewable: a Proposed decision record, early plan rows, a concise agent rule, and the hosting rules updated for dev hosts. Planning only; nothing is deployed and nothing runnable exists yet.
 
 ## ADRs with status Proposed
 
 - [ADR-0007-identity](decisions/ADR-0007-identity.md)
 - [ADR-0018-development-environments-and-progress-viewing](decisions/ADR-0018-development-environments-and-progress-viewing.md)
+- [ADR-0022-web-stack](decisions/ADR-0022-web-stack.md)

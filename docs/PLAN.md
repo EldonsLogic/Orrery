@@ -300,7 +300,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-020 | Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016) | ERP runtime | G1 | ERP-001 | unassigned | todo |
 | WEB-016 | Date pickers and entry in both Gregorian and Hijri calendars, RTL | Web | G2 | CMP-022,BRD-010 | unassigned | todo |
 | WEB-017 | Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) | Web | G1 | BRD-001 | unassigned | todo |
-| WEB-018 | Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) | Web | G0 | BRD-002 | eldon | todo |
+| WEB-018 | Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) | Web | G0 | BRD-002 | eldon | doing |
 | WEB-019 | Host the static design-system preview pages from docs/brand on the preview project | Web | G1 | INF-013 | unassigned | todo |
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | unassigned | todo |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | unassigned | todo |

@@ -82,15 +82,27 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: python3 scripts/check_pr_trail.py --base "$BASE_SHA" --head "$HEAD_SHA"
 
+<<<<<<< HEAD
   blueprint-validator:
+=======
+  evals:
+>>>>>>> 6d1d80b (QA-001 QA-002: offline eval framework with CI job and Arabic eval set v0 (100 prompts))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+<<<<<<< HEAD
       - run: pip install -r services/blueprint/requirements.txt
       - name: Validator tests
         run: python3 -m pytest services/blueprint/tests -q
       - name: Contract example validates
         run: PYTHONPATH=services/blueprint python3 -m validator contracts/examples/blueprint-trading-minimal.json
+=======
+      - run: pip install -r evals/requirements.txt
+      - name: Eval harness tests
+        run: python3 -m pytest evals/tests -q
+      - name: Eval sets are valid
+        run: python3 -m evals.harness check
+>>>>>>> 6d1d80b (QA-001 QA-002: offline eval framework with CI job and Arabic eval set v0 (100 prompts))

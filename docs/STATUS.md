@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 2 | 25 | 0 | 40 |
+| G0 | 13 | 2 | 26 | 0 | 41 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 257 | 6 | 29 | 0 | 292 |
+| all | 257 | 6 | 30 | 0 | 293 |
 
 ## Built so far (done)
 
@@ -35,6 +35,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-024: Enforcement layers: commit-msg and pre-push hooks, finish_session gate, main-guard audit workflow, ADR-0019
 - GOV-025: Lane guard: scripts/lanes.json and check_lanes.py in CI, pre-push and finish_session; cross-lane waiver in the session log (ADR-0020)
 - GOV-026: Public repo with branch protection, secret scanning, outsider limits and Eldon second account (ADR-0021)
+- GOV-028: Cloud-session support: gh-optional finish gate, founder detection fallbacks, CI check that every commit names a plan ID, cloud guidance in onboarding
 - CE-SEC-001: Change engine: stop accepting caller-supplied roles from request kwargs on whitelisted endpoints
 - CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL

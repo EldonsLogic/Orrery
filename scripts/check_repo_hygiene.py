@@ -20,7 +20,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 TOP_LEVEL_OK = {
     ".editorconfig", ".env.example", ".git", ".github", ".gitignore", ".pre-commit-config.yaml",
-    "AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md", "GEMINI.md", "NOTICE.md", "README.md", "SECURITY.md",
+    "AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md", "GEMINI.md", "LICENSE", "NOTICE.md", "README.md", "SECURITY.md",
     "agents", "apps", "components", "connectors", "contracts", "docs", "evals", "infra", "scripts",
     "services", "web",
 }

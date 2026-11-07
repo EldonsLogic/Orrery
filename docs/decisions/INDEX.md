@@ -27,3 +27,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0018-development-environments-and-progress-viewing.md](ADR-0018-development-environments-and-progress-viewing.md) | Development environments and progress viewing | Proposed |
 | [ADR-0019-enforcement-layers.md](ADR-0019-enforcement-layers.md) | Enforcement layers for the operating rules | Accepted |
 | [ADR-0020-lane-guard.md](ADR-0020-lane-guard.md) | Lane guard | Accepted |
+| [ADR-0021-public-repo-and-branch-protection.md](ADR-0021-public-repo-and-branch-protection.md) | Public repository with branch protection | Accepted |

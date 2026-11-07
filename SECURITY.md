@@ -1,7 +1,7 @@
 # Security policy
 
 ## Reporting a vulnerability
-This is a private, pre-release project. Report suspected vulnerabilities privately: use GitHub's "Report a vulnerability" (private security advisory) on this repository, or contact a founder directly. Do not open a public issue and do not paste secrets or customer data into issues, PRs or logs. A dedicated security contact address will be added when the company domain exists (UNVERIFIED until then).
+This is a public repository of a pre-release project. Report suspected vulnerabilities privately: use GitHub's "Report a vulnerability" (private security advisory) on this repository, or contact a founder directly. Do not open a public issue and do not paste secrets or customer data into issues, PRs or logs. A dedicated security contact address will be added when the company domain exists (UNVERIFIED until then).
 
 ## Secrets policy
 - No passwords, API keys, tokens, private keys, certificates or `.env` files in the repo, issues, PRs, logs or chat transcripts that are saved.

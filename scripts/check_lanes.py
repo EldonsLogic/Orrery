@@ -47,7 +47,8 @@ def main():
     ap.add_argument("--actor", default="")
     a = ap.parse_args()
     actor = a.actor or detect_actor()
-    me = CFG["founders"].get(actor) or (actor if actor in CFG["lanes"] else None)
+    founders = {k.lower(): v for k, v in CFG["founders"].items()}
+    me = founders.get(actor.lower()) or (actor if actor in CFG["lanes"] else None)
     if not me:
         print(f"Lane check skipped: founder unknown for '{actor or '?'}' (CI enforces with the PR author).")
         return 0

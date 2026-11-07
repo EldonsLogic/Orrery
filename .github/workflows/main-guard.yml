@@ -1,7 +1,6 @@
 name: Main guard
 
-# Audits every push to main. It cannot block a push (GitHub branch protection needs a paid plan for private repos),
-# but it re-runs the checks and opens an issue for both founders if main was pushed to directly or a check fails.
+# Audits every push to main. Branch protection blocks direct pushes (ADR-0021); this re-runs the checks and opens an issue for both founders if main was pushed to directly or a check fails.
 on:
   push:
     branches: [main]

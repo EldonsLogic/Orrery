@@ -1,9 +1,30 @@
 {
-  "founders": {"EldonsLogic": "eldon", "sayegh9": "partner"},
+  "founders": {
+    "EldonsLogic": "eldon",
+    "sayegh9": "partner",
+    "Eldonham": "eldon",
+    "eldonham": "eldon",
+    "eldonslogic": "eldon"
+  },
   "lanes": {
-    "eldon": ["contracts/", "services/blueprint/", "services/discovery/", "services/operate/", "web/", "evals/",
-              "docs/product/", "docs/brand/", "docs/strategy/", "docs/research/"],
-    "partner": ["apps/engine/", "infra/", "components/", "connectors/"]
+    "eldon": [
+      "contracts/",
+      "services/blueprint/",
+      "services/discovery/",
+      "services/operate/",
+      "web/",
+      "evals/",
+      "docs/product/",
+      "docs/brand/",
+      "docs/strategy/",
+      "docs/research/"
+    ],
+    "partner": [
+      "apps/engine/",
+      "infra/",
+      "components/",
+      "connectors/"
+    ]
   },
   "note": "Everything not listed is shared (docs/PLAN.md, docs/RULES.md, AGENTS.md, docs/decisions/, docs/log/, docs/security/, docs/compliance/, docs/legal/, scripts/, .github/, services/gateway/, services/control-plane/). Shared paths are open to both founders but need the other's review."
 }

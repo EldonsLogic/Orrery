@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 11 | 4 | 27 | 0 | 42 |
+| G0 | 10 | 4 | 28 | 0 | 42 |
 | G1 | 64 | 1 | 11 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 249 | 7 | 38 | 0 | 294 |
+| all | 248 | 7 | 39 | 0 | 294 |
 
 ## Built so far (done)
 
@@ -37,6 +37,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-026: Public repo with branch protection, secret scanning, outsider limits (ADR-0021)
 - GOV-028: Cloud-session support: gh-optional finish gate, founder detection fallbacks, CI check that every commit names a plan ID, cloud guidance in onboarding
 - GOV-029: One personal GitHub account per founder in lanes, owners and docs; recover unmerged work (ADR-0023)
+- LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally)
 - CE-SEC-001: Change engine: stop accepting caller-supplied roles from request kwargs on whitelisted endpoints
 - CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
@@ -61,7 +62,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (11)
+**G0** (10)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner unassigned)
 - GOV-012: Fill model registry rows for Codex and Antigravity (owner partner)
@@ -71,10 +72,9 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - INF-013: Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) (owner eldon)
 - LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
 - LEG-003: Engage counsel in KSA, UAE and Egypt; scope of work (owner eldon)
-- LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (22)
+**G1** (23)
 - BPL-006: Blueprint diff (owner eldon)
 - BPL-011: Event stream contract implementation (owner eldon)
 - BPL-012: Engine adapter interface so the engine stays replaceable (owner partner)
@@ -83,6 +83,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
 - DAT-001: Data classification and retention policy (owner unassigned)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner unassigned)
+- ERP-001: G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - FND-001: Investor shortlist from research/05, re-verified (owner eldon)
 - GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner unassigned)
@@ -141,14 +142,14 @@ Doing:
 Ready next (dependencies done), by gate:
 - GOV-012 (G0): Fill model registry rows for Codex and Antigravity
 - GOV-013 (G0): Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11
-- LEG-004 (G0): Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally)
 - BPL-012 (G1): Engine adapter interface so the engine stays replaceable
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
+- ERP-001 (G1): G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use
 - INF-003 (G1): CI/CD for services (build, test, deploy to staging)
 
-Waiting on dependencies: 15 row(s).
+Waiting on dependencies: 14 row(s).
 
 Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim one).
 
@@ -172,6 +173,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 ## Last 10 log files
 
+- [2026-11-07-partner-antigravity-third-party-licence-register.md](log/2026-11-07-partner-antigravity-third-party-licence-register.md): Recorded the partner's verified local bench installation (Frappe Framework 15.126.0 MIT, ERPNext 15.124.5 GPL-3.0, change engine module 0.1.0, MariaDB 10.6, Redis 7) into the third-party licence register and NOTICE.md, completing LEG-004.
 - [2026-11-07-eldon-claude-code-wording-cleanup.md](log/2026-11-07-eldon-claude-code-wording-cleanup.md): Reworded older logs, ADR-0021, ADR-0023 and plan rows so they state the one-account policy plainly; renamed two logs to match.
 - [2026-11-07-eldon-claude-code-web-stack-review-fixes.md](log/2026-11-07-eldon-claude-code-web-stack-review-fixes.md): A cross-model review of ADR-0022 found gaps. Added: app limited to static-export-safe features with a CI build in that mode (in-country hosting marked UNVERIFIED), marketing on Vercel only without personal data collection there, explicit narrowing of ADR-0018 item 2, stronger tokens-only and logical-property lint rules, tenant token loading before first paint, RTL direction provider and bidi isolation for user text, and a human review for major-version bumps of the framework and auth libraries.
 - [2026-11-07-eldon-claude-code-web-stack-adr.md](log/2026-11-07-eldon-claude-code-web-stack-adr.md): Wrote the web stack proposal for founder approval (ADR-0022, Proposed): one TypeScript and React stack on Next.js for marketing and app; static marketing; app screens rendered in the browser against our in-country gateway so no tenant data is processed on Vercel; plain CSS with token custom properties and a lint rule against literal colours and fonts; logical properties for RTL; headless accessible primitives; ICU i18n with Arabic default; self-hosted fonts; Playwright RTL goldens.
@@ -181,7 +183,6 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - [2026-11-07-eldon-claude-code-threat-model.md](log/2026-11-07-eldon-claude-code-threat-model.md): Threat model v1 for the five parts and the four contracts (plus connector interface and build states): scope and an honest not-modelled list, a trust-boundary diagram, assets, actors, STRIDE tables per part (T1-T16 kept, T17-T60 new), abuse cases, top 10 risks, and a per-contract file saying what each consumer may and may not trust.
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 - [2026-11-07-eldon-claude-code-qa-002-close.md](log/2026-11-07-eldon-claude-code-qa-002-close.md): Closed QA-002: the 100-prompt Arabic eval set v0 and its harness are merged and pass in CI.
-- [2026-11-07-eldon-claude-code-public-repo.md](log/2026-11-07-eldon-claude-code-public-repo.md): The founder made the repo public. Verified there are no secrets, no emails in tracked files and no secret-like strings in history; enabled branch protection on main (PRs only, four required checks, no force push or deletion, admins included), secret scanning with push protection, private vulnerability reporting, outside-contributor workflow approval and a collaborators-only interaction limit. Merged the last Dependabot PR (none open). Added an interim all-rights-reserved LICENSE, ADR-0021 and the founder's access setup.
 
 ## ADRs with status Proposed
 

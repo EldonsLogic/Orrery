@@ -46,7 +46,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | LEG-001 | Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype | Legal | G0 | - | eldon | todo |
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) | Legal | G0 | GOV-004 | eldon | doing |
 | LEG-003 | Engage counsel in KSA, UAE and Egypt; scope of work | Legal | G0 | - | eldon | todo |
-| LEG-004 | Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) | Legal | G0 | GOV-004 | partner | todo |
+| LEG-004 | Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) | Legal | G0 | GOV-004 | partner | done |
 | LEG-005 | Register domains and social handles for the working name (hold only) | Legal | G0 | - | eldon | todo |
 | LEG-006 | GPL licence-boundary review: SaaS-only engine, separate services, no distribution | Legal | G1 | LEG-003 | unassigned | todo |
 | LEG-007 | Counsel opinion: vendor certification needed to sell ZATCA-compliant software | Legal | G1 | LEG-003 | unassigned | todo |

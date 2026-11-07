@@ -17,6 +17,8 @@ Built the founders' onboarding into the repo so nothing has to be sent separatel
 ## Decisions
 - Initial lanes are a working agreement proposed in Eldon's session; either founder may re-assign owners in the plan through a PR. Gateway and control-plane lanes are decided at the start of G2.
 
+- Agents identify which founder they work with at session start (EldonsLogic = Eldon, sayegh9 = partner) and never assume; this drives the log author, owner and lane.
+
 ## Tokens or cost
 Unknown.
 

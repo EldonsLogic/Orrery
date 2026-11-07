@@ -5,6 +5,14 @@ Owner: eldon
 
 Everything a founder needs to start working here, with no separate message. Read it once, then work from [STATUS.md](STATUS.md). Agents: if the person you are working with has not completed section 1, walk them through it first.
 
+## Which founder are you?
+| Founder | GitHub | Log author | Lane |
+|---|---|---|---|
+| Eldon | `EldonsLogic` | `eldon` | Spine, product and brand |
+| Partner | `sayegh9` | `partner` | Engine, runtime and compliance |
+
+Agents: at session start work out which founder you are helping (`gh api user --jq .login`, or `git config user.name` and `user.email`, or ask). Do not assume. Use the answer for the log author, the plan-row owner and the lane. Founders: if your agent asks who you are, tell it.
+
 ## 1. One-time setup (each founder, about 30 minutes)
 1. Clone the private repo (sign in with your GitHub account): `git clone https://github.com/EldonsLogic/Orrery.git`, then `cd Orrery`.
 2. Install Python 3.10 or newer, then `pip install pre-commit` and `pre-commit install` (plan row GOV-010). The hooks run the repo checks before every commit.

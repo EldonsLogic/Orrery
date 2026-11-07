@@ -66,7 +66,7 @@ Every rule the founders have set or settled, in one place. [AGENTS.md](../AGENTS
 46. Dev hosts get synthetic data only; production data stays in-country; the engine stays invisible on dev previews; secrets never enter the repo.
 
 ## I. Onboarding and lanes
-47. [ONBOARDING.md](ONBOARDING.md) holds the one-time setup for each founder, the lane split (which paths each founder edits), first tasks and pending decisions. Edit only your lane's paths; ask via open-questions or a PR comment for changes in the other lane; shared files need the other founder's review. Founders re-assign lanes by changing plan-row owners in a PR.
+47. Agents identify which founder they work with at session start (Eldon `EldonsLogic`, partner `sayegh9`), never assuming. [ONBOARDING.md](ONBOARDING.md) holds the one-time setup for each founder, the lane split (which paths each founder edits), first tasks and pending decisions. Edit only your lane's paths; ask via open-questions or a PR comment for changes in the other lane; shared files need the other founder's review. Founders re-assign lanes by changing plan-row owners in a PR.
 
 ## J. Strategy and evidence
 43. Pricing, market size and speed figures in `docs/strategy/` are hypotheses. Pilot A is a lead not yet contacted; Pilot B is a generic Odoo-using business (no specific company details). Niche: trading and distribution first.

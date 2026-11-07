@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 11 | 4 | 27 | 0 | 42 |
-| G1 | 65 | 1 | 10 | 0 | 76 |
+| G1 | 64 | 1 | 11 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 250 | 7 | 37 | 0 | 294 |
+| all | 249 | 7 | 38 | 0 | 294 |
 
 ## Built so far (done)
 
@@ -48,6 +48,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - BPL-009: Component manifest schema v0 in contracts/
 - BPL-010: Component registry (list, version, compatibility)
 - BPL-013: Branding section in the Blueprint schema (ADR-0014)
+- DSC-002: Template Blueprint: trading and distribution
 - DSC-003: Connector interface spec and tier definitions
 - PLT-001: Tenancy ADR-0006: site per tenant on shared in-country infrastructure
 - BRD-001: Brand guidelines v1 (Quadrant) and placeholder logo
@@ -73,7 +74,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (23)
+**G1** (22)
 - BPL-006: Blueprint diff (owner eldon)
 - BPL-011: Event stream contract implementation (owner eldon)
 - BPL-012: Engine adapter interface so the engine stays replaceable (owner partner)
@@ -82,7 +83,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
 - DAT-001: Data classification and retention policy (owner unassigned)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner unassigned)
-- DSC-002: Template Blueprint: trading and distribution (owner eldon)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - FND-001: Investor shortlist from research/05, re-verified (owner eldon)
 - GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner unassigned)
@@ -124,7 +124,6 @@ Ready next (dependencies done), by gate:
 - BPL-006 (G1): Blueprint diff
 - BPL-011 (G1): Event stream contract implementation
 - BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
-- DSC-002 (G1): Template Blueprint: trading and distribution
 - FND-001 (G1): Investor shortlist from research/05, re-verified
 - GTM-002 (G1): 20-30 buyer and accountant interviews in the niche
 - GTM-004 (G1): Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED)
@@ -177,12 +176,12 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - [2026-11-07-eldon-claude-code-web-stack-review-fixes.md](log/2026-11-07-eldon-claude-code-web-stack-review-fixes.md): A cross-model review of ADR-0022 found gaps. Added: app limited to static-export-safe features with a CI build in that mode (in-country hosting marked UNVERIFIED), marketing on Vercel only without personal data collection there, explicit narrowing of ADR-0018 item 2, stronger tokens-only and logical-property lint rules, tenant token loading before first paint, RTL direction provider and bidi isolation for user text, and a human review for major-version bumps of the framework and auth libraries.
 - [2026-11-07-eldon-claude-code-web-stack-adr.md](log/2026-11-07-eldon-claude-code-web-stack-adr.md): Wrote the web stack proposal for founder approval (ADR-0022, Proposed): one TypeScript and React stack on Next.js for marketing and app; static marketing; app screens rendered in the browser against our in-country gateway so no tenant data is processed on Vercel; plain CSS with token custom properties and a lint rule against literal colours and fonts; logical properties for RTL; headless accessible primitives; ICU i18n with Arabic default; self-hosted fonts; Playwright RTL goldens.
 - [2026-11-07-eldon-claude-code-visibility-temporary.md](log/2026-11-07-eldon-claude-code-visibility-temporary.md): Founder said the repo is public only for a while. Added a plan row so the switch back to private is decided deliberately: branch protection needs a paid plan on a private repo, and anything published may already be forked or cached.
+- [2026-11-07-eldon-claude-code-trading-template.md](log/2026-11-07-eldon-claude-code-trading-template.md): Built the trading and distribution template Blueprint (split into parts, company-neutral, Arabic and English everywhere), the owner question list with schema, and an instantiator for KSA, UAE and Egypt that produces drafts passing the validator with the fixture registry. Added a CI job for the discovery tests.
 - [2026-11-07-eldon-claude-code-trading-fixture.md](log/2026-11-07-eldon-claude-code-trading-fixture.md): Finished the hand-written, fictional trading and distribution Blueprint fixture: a Saudi company with two branches, two warehouses and a finance department; 24 entities (14 top-level, 10 line tables), 189 fields, 30 computed fields named as component functions, 4 workflows with 24 transitions, 8 roles, 4 approvals, 6 reports, 2 integrations, ZATCA phase 2 in sandbox, plus 16 fictional component manifests as its registry.
 - [2026-11-07-eldon-claude-code-threat-model.md](log/2026-11-07-eldon-claude-code-threat-model.md): Threat model v1 for the five parts and the four contracts (plus connector interface and build states): scope and an honest not-modelled list, a trust-boundary diagram, assets, actors, STRIDE tables per part (T1-T16 kept, T17-T60 new), abuse cases, top 10 risks, and a per-contract file saying what each consumer may and may not trust.
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 - [2026-11-07-eldon-claude-code-qa-002-close.md](log/2026-11-07-eldon-claude-code-qa-002-close.md): Closed QA-002: the 100-prompt Arabic eval set v0 and its harness are merged and pass in CI.
 - [2026-11-07-eldon-claude-code-public-repo.md](log/2026-11-07-eldon-claude-code-public-repo.md): The founder made the repo public. Verified there are no secrets, no emails in tracked files and no secret-like strings in history; enabled branch protection on main (PRs only, four required checks, no force push or deletion, admins included), secret scanning with push protection, private vulnerability reporting, outside-contributor workflow approval and a collaborators-only interaction limit. Merged the last Dependabot PR (none open). Added an interim all-rights-reserved LICENSE, ADR-0021 and the founder's access setup.
-- [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.
 
 ## ADRs with status Proposed
 

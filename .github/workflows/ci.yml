@@ -107,3 +107,14 @@ jobs:
         run: python3 -m pytest evals/tests -q
       - name: Eval sets are valid
         run: python3 -m evals.harness check
+
+  discovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r services/blueprint/requirements.txt
+      - name: Template tests
+        run: python3 -m pytest services/discovery/tests -q

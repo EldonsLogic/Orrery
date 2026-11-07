@@ -1,0 +1,167 @@
+{
+  "$schema": "../../../../contracts/blueprint.schema.json",
+  "meta": {"id": "trading-distribution-template", "schemaVersion": "0.1.0", "revision": 1, "locales": ["ar", "en"], "defaultLocale": "ar", "buildState": "draft", "template": {"id": "trading_distribution", "version": "0.1.0"}, "engineTarget": {"adapter": "change_engine", "versionSet": "set-example"}},
+  "company": {"legalName": {"ar": "{{company.name}}", "en": "{{company.name}}"}, "country": "SA", "languages": {"primary": "ar", "secondary": ["en"]}, "locale": {}, "industry": "trading_distribution"},
+  "locations": [
+    {"id": "hq", "kind": "branch", "labels": {"ar": "المقر الرئيسي", "en": "Head office"}},
+    {"id": "wh_main", "kind": "warehouse", "labels": {"ar": "المستودع الرئيسي", "en": "Main warehouse"}, "parent": "hq"},
+    {"id": "dept_finance", "kind": "department", "labels": {"ar": "الإدارة المالية", "en": "Finance department"}, "parent": "hq"}
+  ],
+  "components": [
+    {"id": "core.customer", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "core.supplier", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "core.item", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "sales.price_list", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "sales.quote", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "core.sales_order", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "sales.delivery_note", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "core.sales_invoice", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "sales.credit_note", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "purchasing.purchase_order", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "purchasing.purchase_receipt", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "purchasing.purchase_invoice", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "finance.payment_entry", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "stock.transfer", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "stock.ledger", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}},
+    {"id": "compliance.zatca_sa", "versionRange": "^0.1.0", "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}}
+  ],
+  "entities": [{"$include": "parts/entities-1.json"}, {"$include": "parts/entities-2.json"}],
+  "workflows": [{"$include": "parts/workflows.json"}],
+  "roles": [{"$include": "parts/roles.json"}],
+  "approvals": [
+    {
+      "id": "large_sales_order_approval",
+      "labels": {"ar": "اعتماد أوامر البيع الكبيرة", "en": "Large sales order approval"},
+      "appliesTo": {"entity": "sales_order", "action": "submit"},
+      "conditions": [{"field": "total_amount", "op": "gt", "value": 50000}],
+      "steps": [{"order": 1, "approverRole": "general_manager", "mode": "any_one", "timeoutHours": 48, "escalateToRole": "owner"}],
+      "selfApproval": false,
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    },
+    {
+      "id": "discount_approval",
+      "labels": {"ar": "اعتماد الخصم", "en": "Discount approval"},
+      "appliesTo": {"entity": "sales_order", "action": "submit"},
+      "conditions": [{"field": "discount_percent", "op": "gt", "value": 10}],
+      "steps": [{"order": 1, "approverRole": "general_manager", "mode": "any_one", "timeoutHours": 24, "escalateToRole": "owner"}],
+      "selfApproval": false,
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    },
+    {
+      "id": "po_large_approval",
+      "labels": {"ar": "اعتماد أوامر الشراء الكبيرة", "en": "Large purchase order approval"},
+      "appliesTo": {"entity": "purchase_order", "action": "submit"},
+      "conditions": [{"field": "total_amount", "op": "gt", "value": 100000}],
+      "steps": [{"order": 1, "approverRole": "general_manager", "mode": "any_one", "timeoutHours": 48}, {"order": 2, "approverRole": "owner", "mode": "any_one", "timeoutHours": 72}],
+      "selfApproval": false,
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    },
+    {
+      "id": "credit_note_approval",
+      "labels": {"ar": "اعتماد إشعارات الدائن", "en": "Credit note approval"},
+      "appliesTo": {"entity": "credit_note", "action": "submit"},
+      "steps": [{"order": 1, "approverRole": "accountant", "mode": "any_one", "timeoutHours": 24, "escalateToRole": "general_manager"}],
+      "selfApproval": false,
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    }
+  ],
+  "reports": [
+    {
+      "id": "sales_overview",
+      "kind": "dashboard",
+      "labels": {"ar": "نظرة عامة على المبيعات", "en": "Sales overview"},
+      "entity": "sales_order",
+      "metrics": [{"ref": "sales.revenue", "display": "kpi"}, {"ref": "sales.order_count", "display": "kpi"}, {"ref": "sales.revenue_by_customer", "display": "bar", "groupBy": ["customer"]}, {"ref": "sales.revenue_by_branch", "display": "pie", "groupBy": ["branch"]}],
+      "filters": [{"field": "order_date", "type": "date_range"}, {"field": "branch", "type": "select"}, {"field": "customer", "type": "link"}],
+      "visibleToRoles": ["owner", "general_manager", "branch_sales_manager", "auditor"],
+      "schedule": {"frequency": "weekly", "deliverTo": ["owner", "general_manager"], "channel": "in_app"},
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    },
+    {
+      "id": "receivables_aging",
+      "kind": "report",
+      "labels": {"ar": "أعمار الذمم المدينة", "en": "Receivables aging"},
+      "entity": "sales_invoice",
+      "metrics": [{"ref": "finance.receivables_aging", "display": "table", "groupBy": ["customer"]}],
+      "filters": [{"field": "invoice_date", "type": "date_range"}, {"field": "customer", "type": "link"}],
+      "visibleToRoles": ["owner", "general_manager", "accountant", "auditor"],
+      "schedule": {"frequency": "weekly", "deliverTo": ["accountant"], "channel": "email"},
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    },
+    {
+      "id": "payables_aging",
+      "kind": "report",
+      "labels": {"ar": "أعمار الذمم الدائنة", "en": "Payables aging"},
+      "entity": "purchase_invoice",
+      "metrics": [{"ref": "finance.payables_aging", "display": "table", "groupBy": ["supplier"]}],
+      "filters": [{"field": "invoice_date", "type": "date_range"}, {"field": "supplier", "type": "link"}],
+      "visibleToRoles": ["owner", "general_manager", "accountant", "purchasing_officer", "auditor"],
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    },
+    {
+      "id": "stock_on_hand",
+      "kind": "report",
+      "labels": {"ar": "المخزون المتوفر حسب المستودع", "en": "Stock on hand by warehouse"},
+      "metrics": [{"ref": "stock.on_hand_by_warehouse", "display": "table", "groupBy": ["warehouse"]}],
+      "filters": [{"field": "warehouse", "type": "select"}],
+      "visibleToRoles": ["owner", "general_manager", "purchasing_officer", "warehouse_keeper", "auditor"],
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    },
+    {
+      "id": "vat_summary",
+      "kind": "report",
+      "labels": {"ar": "ملخص ضريبة القيمة المضافة", "en": "VAT summary"},
+      "entity": "sales_invoice",
+      "metrics": [{"ref": "vat.output_vat", "display": "kpi"}, {"ref": "vat.input_vat", "display": "kpi"}, {"ref": "vat.net_payable", "display": "kpi"}],
+      "filters": [{"field": "invoice_date", "type": "date_range"}],
+      "visibleToRoles": ["accountant"],
+      "schedule": {"frequency": "monthly", "deliverTo": ["accountant"], "channel": "in_app"},
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    },
+    {
+      "id": "my_orders",
+      "kind": "report",
+      "labels": {"ar": "طلباتي", "en": "My orders"},
+      "entity": "sales_order",
+      "metrics": [{"ref": "sales.order_list", "display": "table"}],
+      "filters": [{"field": "order_date", "type": "date_range"}, {"field": "customer", "type": "link"}],
+      "visibleToRoles": ["sales_rep"],
+      "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+    }
+  ],
+  "compliance": {
+    "country": "SA",
+    "countryPack": {"id": "sa", "version": "0.1.0"},
+    "eInvoicing": {"mode": "zatca_phase2", "environment": "sandbox", "componentId": "compliance.zatca_sa"},
+    "vat": {"registered": true, "defaultRatePercent": 15, "filingPeriod": "monthly", "pricesIncludeVat": false},
+    "hijriDisplay": {"enabled": true, "primary": "gregorian"},
+    "documentLanguages": ["ar", "en"],
+    "payroll": {"wpsEnabled": false, "socialInsurance": "none"}
+  },
+  "i18n": {
+    "defaultLocale": "ar",
+    "glossary": [
+      {"term": "tax_invoice", "translations": {"ar": "فاتورة ضريبية", "en": "Tax invoice"}, "note": "Issued to VAT-registered customers as an e-invoice where the country requires it."},
+      {"term": "credit_note", "translations": {"ar": "إشعار دائن", "en": "Credit note"}, "note": "Reduces a previously issued tax invoice."},
+      {"term": "sales_order", "translations": {"ar": "أمر بيع", "en": "Sales order"}},
+      {"term": "purchase_order", "translations": {"ar": "أمر شراء", "en": "Purchase order"}},
+      {"term": "delivery_note", "translations": {"ar": "إذن تسليم", "en": "Delivery note"}, "note": "Signed by the customer on delivery."},
+      {"term": "warehouse", "translations": {"ar": "المستودع", "en": "Warehouse"}},
+      {"term": "accounts_receivable", "translations": {"ar": "الذمم المدينة", "en": "Accounts receivable"}, "note": "Amounts customers owe the company."},
+      {"term": "accounts_payable", "translations": {"ar": "الذمم الدائنة", "en": "Accounts payable"}, "note": "Amounts the company owes suppliers."},
+      {"term": "vat", "translations": {"ar": "ضريبة القيمة المضافة", "en": "Value added tax (VAT)"}},
+      {"term": "credit_limit", "translations": {"ar": "حد الائتمان", "en": "Credit limit"}, "note": "Maximum unpaid balance allowed per customer."}
+    ],
+    "labelOverrides": {"sales_order.title": {"ar": "أمر بيع", "en": "Sales order"}, "stock_transfer.title": {"ar": "تحويل بين المستودعات", "en": "Warehouse transfer"}, "sales_invoice.title": {"ar": "فاتورة ضريبية", "en": "Tax invoice"}}
+  },
+  "branding": {
+    "displayName": {"ar": "{{company.name}}", "en": "{{company.name}}"},
+    "primaryColour": "#2443D0",
+    "accentColour": "#E0552C",
+    "favicon": {"source": "auto"},
+    "loginPage": {"headline": {"ar": "أهلاً بكم في {{company.name}}", "en": "Welcome to {{company.name}}"}, "showLogo": false},
+    "documentHeader": {"showLogo": false, "logoPosition": "start", "showAddress": true, "footerText": {"ar": "شكراً لتعاملكم معنا", "en": "Thank you for your business"}, "accentOnDocuments": false},
+    "poweredBy": {"show": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  }
+}

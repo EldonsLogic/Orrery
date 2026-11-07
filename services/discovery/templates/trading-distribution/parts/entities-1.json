@@ -1,0 +1,391 @@
+[
+  {
+    "id": "customer",
+    "labels": {"ar": "عميل", "en": "Customer"},
+    "pluralLabels": {"ar": "العملاء", "en": "Customers"},
+    "kind": "master",
+    "fields": [
+      {"id": "customer_code", "type": "string", "labels": {"ar": "رمز العميل", "en": "Customer code"}, "unique": true, "readOnly": true, "maxLength": 20},
+      {"id": "customer_name", "type": "string", "labels": {"ar": "اسم العميل", "en": "Customer name"}, "required": true, "maxLength": 140},
+      {
+        "id": "customer_type",
+        "type": "select",
+        "labels": {"ar": "نوع العميل", "en": "Customer type"},
+        "required": true,
+        "default": "company",
+        "options": [{"value": "company", "labels": {"ar": "منشأة", "en": "Company"}}, {"value": "individual", "labels": {"ar": "فرد", "en": "Individual"}}, {"value": "government", "labels": {"ar": "جهة حكومية", "en": "Government entity"}}]
+      },
+      {
+        "id": "customer_group",
+        "type": "select",
+        "labels": {"ar": "مجموعة العملاء", "en": "Customer group"},
+        "default": "wholesale",
+        "options": [{"value": "wholesale", "labels": {"ar": "جملة", "en": "Wholesale"}}, {"value": "retail", "labels": {"ar": "تجزئة", "en": "Retail"}}, {"value": "key_account", "labels": {"ar": "عميل رئيسي", "en": "Key account"}}]
+      },
+      {"id": "vat_number", "type": "string", "labels": {"ar": "الرقم الضريبي", "en": "VAT number"}, "maxLength": 15},
+      {"id": "cr_number", "type": "string", "labels": {"ar": "السجل التجاري", "en": "Commercial registration"}, "maxLength": 10},
+      {"id": "phone", "type": "phone", "labels": {"ar": "الجوال", "en": "Mobile"}},
+      {"id": "email", "type": "email", "labels": {"ar": "البريد الإلكتروني", "en": "Email"}},
+      {"id": "city", "type": "string", "labels": {"ar": "المدينة", "en": "City"}, "maxLength": 80},
+      {"id": "payment_terms_days", "type": "integer", "labels": {"ar": "مدة السداد بالأيام", "en": "Payment terms (days)"}, "default": 30, "min": 0, "max": 180},
+      {"id": "credit_limit", "type": "money", "labels": {"ar": "حد الائتمان", "en": "Credit limit"}, "precision": 2, "min": 0},
+      {"id": "disabled", "type": "boolean", "labels": {"ar": "موقوف", "en": "Disabled"}, "default": false}
+    ],
+    "components": [{"component": "core.customer", "mode": "implements"}],
+    "numbering": {"prefix": "CUS-", "padding": 5, "resetPerFiscalYear": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "supplier",
+    "labels": {"ar": "مورد", "en": "Supplier"},
+    "pluralLabels": {"ar": "الموردون", "en": "Suppliers"},
+    "kind": "master",
+    "fields": [
+      {"id": "supplier_code", "type": "string", "labels": {"ar": "رمز المورد", "en": "Supplier code"}, "unique": true, "readOnly": true, "maxLength": 20},
+      {"id": "supplier_name", "type": "string", "labels": {"ar": "اسم المورد", "en": "Supplier name"}, "required": true, "maxLength": 140},
+      {
+        "id": "supplier_type",
+        "type": "select",
+        "labels": {"ar": "نوع المورد", "en": "Supplier type"},
+        "default": "local",
+        "options": [{"value": "local", "labels": {"ar": "محلي", "en": "Local"}}, {"value": "importer", "labels": {"ar": "مستورد", "en": "Importer"}}, {"value": "manufacturer", "labels": {"ar": "مصنّع", "en": "Manufacturer"}}]
+      },
+      {"id": "vat_number", "type": "string", "labels": {"ar": "الرقم الضريبي", "en": "VAT number"}, "maxLength": 15},
+      {"id": "phone", "type": "phone", "labels": {"ar": "الجوال", "en": "Mobile"}},
+      {"id": "email", "type": "email", "labels": {"ar": "البريد الإلكتروني", "en": "Email"}},
+      {"id": "city", "type": "string", "labels": {"ar": "المدينة", "en": "City"}, "maxLength": 80},
+      {"id": "payment_terms_days", "type": "integer", "labels": {"ar": "مدة السداد بالأيام", "en": "Payment terms (days)"}, "default": 30, "min": 0, "max": 180},
+      {"id": "bank_iban", "type": "string", "labels": {"ar": "رقم الآيبان", "en": "IBAN"}, "maxLength": 24},
+      {"id": "disabled", "type": "boolean", "labels": {"ar": "موقوف", "en": "Disabled"}, "default": false}
+    ],
+    "components": [{"component": "core.supplier", "mode": "implements"}],
+    "numbering": {"prefix": "SUP-", "padding": 5, "resetPerFiscalYear": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "item",
+    "labels": {"ar": "صنف", "en": "Item"},
+    "pluralLabels": {"ar": "الأصناف", "en": "Items"},
+    "kind": "master",
+    "fields": [
+      {"id": "item_code", "type": "string", "labels": {"ar": "رمز الصنف", "en": "Item code"}, "required": true, "unique": true, "maxLength": 40},
+      {"id": "item_name", "type": "string", "labels": {"ar": "اسم الصنف", "en": "Item name"}, "required": true, "maxLength": 140},
+      {
+        "id": "item_group",
+        "type": "select",
+        "labels": {"ar": "مجموعة الأصناف", "en": "Item group"},
+        "required": true,
+        "options": [
+          {"value": "food_dry", "labels": {"ar": "مواد غذائية جافة", "en": "Dry foods"}},
+          {"value": "beverages", "labels": {"ar": "مشروبات", "en": "Beverages"}},
+          {"value": "cleaning", "labels": {"ar": "مواد تنظيف", "en": "Cleaning supplies"}},
+          {"value": "packaging", "labels": {"ar": "مواد تغليف", "en": "Packaging"}},
+          {"value": "stationery", "labels": {"ar": "قرطاسية", "en": "Stationery"}}
+        ]
+      },
+      {
+        "id": "unit",
+        "type": "select",
+        "labels": {"ar": "الوحدة", "en": "Unit"},
+        "required": true,
+        "default": "carton",
+        "options": [{"value": "piece", "labels": {"ar": "حبة", "en": "Piece"}}, {"value": "carton", "labels": {"ar": "كرتون", "en": "Carton"}}, {"value": "kg", "labels": {"ar": "كيلوغرام", "en": "Kilogram"}}, {"value": "pallet", "labels": {"ar": "طبلية", "en": "Pallet"}}]
+      },
+      {"id": "barcode", "type": "string", "labels": {"ar": "الباركود", "en": "Barcode"}, "maxLength": 40},
+      {"id": "cost_price", "type": "money", "labels": {"ar": "سعر التكلفة", "en": "Cost price"}, "precision": 2, "min": 0, "visibleToRoles": ["owner", "general_manager", "accountant", "purchasing_officer", "auditor"]},
+      {"id": "selling_price", "type": "money", "labels": {"ar": "سعر البيع", "en": "Selling price"}, "precision": 2, "min": 0},
+      {"id": "vat_rate", "type": "percent", "labels": {"ar": "نسبة الضريبة", "en": "VAT rate"}, "precision": 2, "min": 0, "max": 100},
+      {"id": "reorder_level", "type": "decimal", "labels": {"ar": "حد إعادة الطلب", "en": "Reorder level"}, "precision": 3, "min": 0},
+      {"id": "total_stock", "type": "decimal", "labels": {"ar": "إجمالي المخزون", "en": "Total stock"}, "readOnly": true, "precision": 3, "computed": {"function": "stock.ledger.on_hand", "inputs": ["item_code"]}},
+      {"id": "disabled", "type": "boolean", "labels": {"ar": "موقوف", "en": "Disabled"}, "default": false}
+    ],
+    "components": [{"component": "core.item", "mode": "implements"}, {"component": "stock.ledger", "mode": "extends"}],
+    "numbering": {"prefix": "ITM-", "padding": 5, "resetPerFiscalYear": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "price_list",
+    "labels": {"ar": "قائمة أسعار", "en": "Price list"},
+    "pluralLabels": {"ar": "قوائم الأسعار", "en": "Price lists"},
+    "kind": "master",
+    "fields": [
+      {"id": "price_list_name", "type": "string", "labels": {"ar": "اسم القائمة", "en": "Price list name"}, "required": true, "maxLength": 100},
+      {
+        "id": "customer_group",
+        "type": "select",
+        "labels": {"ar": "مجموعة العملاء", "en": "Customer group"},
+        "options": [{"value": "wholesale", "labels": {"ar": "جملة", "en": "Wholesale"}}, {"value": "retail", "labels": {"ar": "تجزئة", "en": "Retail"}}, {"value": "key_account", "labels": {"ar": "عميل رئيسي", "en": "Key account"}}]
+      },
+      {"id": "valid_from", "type": "date", "labels": {"ar": "ساري من", "en": "Valid from"}},
+      {"id": "valid_to", "type": "date", "labels": {"ar": "ساري حتى", "en": "Valid to"}},
+      {"id": "is_default", "type": "boolean", "labels": {"ar": "القائمة الافتراضية", "en": "Default list"}, "default": false}
+    ],
+    "relations": [{"id": "lines", "target": "price_list_item", "cardinality": "many", "kind": "child_table", "required": true, "onDelete": "cascade", "labels": {"ar": "بنود القائمة", "en": "List items"}}],
+    "components": [{"component": "sales.price_list", "mode": "implements"}],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "price_list_item",
+    "labels": {"ar": "بند قائمة الأسعار", "en": "Price list item"},
+    "kind": "child",
+    "fields": [
+      {"id": "item", "type": "link", "labels": {"ar": "الصنف", "en": "Item"}, "required": true, "target": "item"},
+      {"id": "rate", "type": "money", "labels": {"ar": "السعر", "en": "Rate"}, "required": true, "precision": 2, "min": 0},
+      {"id": "min_quantity", "type": "decimal", "labels": {"ar": "الحد الأدنى للكمية", "en": "Minimum quantity"}, "default": 1, "precision": 3, "min": 0}
+    ],
+    "components": [{"component": "sales.price_list", "mode": "implements"}],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "sales_quote",
+    "labels": {"ar": "عرض سعر", "en": "Sales quote"},
+    "pluralLabels": {"ar": "عروض الأسعار", "en": "Sales quotes"},
+    "kind": "document",
+    "fields": [
+      {"id": "customer", "type": "link", "labels": {"ar": "العميل", "en": "Customer"}, "required": true, "target": "customer"},
+      {"id": "quote_date", "type": "date", "labels": {"ar": "تاريخ العرض", "en": "Quote date"}, "required": true},
+      {"id": "valid_until", "type": "date", "labels": {"ar": "صالح حتى", "en": "Valid until"}},
+      {"id": "price_list", "type": "link", "labels": {"ar": "قائمة الأسعار", "en": "Price list"}, "target": "price_list"},
+      {"id": "branch", "type": "select", "labels": {"ar": "الفرع", "en": "Branch"}, "required": true, "options": [{"value": "hq", "labels": {"ar": "المقر الرئيسي", "en": "Head office"}}]},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "subtotal", "type": "money", "labels": {"ar": "المجموع قبل الضريبة", "en": "Subtotal"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.quote.subtotal", "inputs": ["discount_percent"]}},
+      {"id": "vat_amount", "type": "money", "labels": {"ar": "ضريبة القيمة المضافة", "en": "VAT"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.quote.vat_amount", "inputs": ["subtotal"]}},
+      {"id": "total_amount", "type": "money", "labels": {"ar": "الإجمالي", "en": "Total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.quote.total", "inputs": ["subtotal", "vat_amount"]}},
+      {"id": "notes", "type": "text", "labels": {"ar": "ملاحظات", "en": "Notes"}, "maxLength": 1000}
+    ],
+    "relations": [{"id": "lines", "target": "sales_quote_line", "cardinality": "many", "kind": "child_table", "required": true, "onDelete": "cascade", "labels": {"ar": "البنود", "en": "Lines"}}],
+    "components": [{"component": "sales.quote", "mode": "implements"}],
+    "numbering": {"prefix": "QT-", "padding": 5, "resetPerFiscalYear": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "sales_quote_line",
+    "labels": {"ar": "بند عرض السعر", "en": "Quote line"},
+    "kind": "child",
+    "fields": [
+      {"id": "item", "type": "link", "labels": {"ar": "الصنف", "en": "Item"}, "required": true, "target": "item"},
+      {"id": "description", "type": "string", "labels": {"ar": "الوصف", "en": "Description"}, "maxLength": 200},
+      {"id": "quantity", "type": "decimal", "labels": {"ar": "الكمية", "en": "Quantity"}, "required": true, "precision": 3, "min": 0},
+      {"id": "unit_price", "type": "money", "labels": {"ar": "سعر الوحدة", "en": "Unit price"}, "required": true, "precision": 2, "min": 0},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "line_total", "type": "money", "labels": {"ar": "إجمالي البند", "en": "Line total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.quote.line_total", "inputs": ["quantity", "unit_price", "discount_percent"]}}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false},
+    "components": [{"component": "sales.quote", "mode": "implements"}]
+  },
+  {
+    "id": "sales_order",
+    "labels": {"ar": "أمر بيع", "en": "Sales order"},
+    "pluralLabels": {"ar": "أوامر البيع", "en": "Sales orders"},
+    "kind": "document",
+    "fields": [
+      {"id": "customer", "type": "link", "labels": {"ar": "العميل", "en": "Customer"}, "required": true, "target": "customer"},
+      {"id": "sales_quote", "type": "link", "labels": {"ar": "عرض السعر", "en": "Sales quote"}, "target": "sales_quote"},
+      {"id": "order_date", "type": "date", "labels": {"ar": "تاريخ الطلب", "en": "Order date"}, "required": true},
+      {"id": "delivery_date", "type": "date", "labels": {"ar": "تاريخ التسليم المطلوب", "en": "Requested delivery date"}},
+      {"id": "branch", "type": "select", "labels": {"ar": "الفرع", "en": "Branch"}, "required": true, "options": [{"value": "hq", "labels": {"ar": "المقر الرئيسي", "en": "Head office"}}]},
+      {"id": "warehouse", "type": "select", "labels": {"ar": "المستودع", "en": "Warehouse"}, "required": true, "options": [{"value": "wh_main", "labels": {"ar": "المستودع الرئيسي", "en": "Main warehouse"}}]},
+      {"id": "price_list", "type": "link", "labels": {"ar": "قائمة الأسعار", "en": "Price list"}, "target": "price_list"},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "subtotal", "type": "money", "labels": {"ar": "المجموع قبل الضريبة", "en": "Subtotal"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.order.subtotal", "inputs": ["discount_percent"]}},
+      {"id": "vat_amount", "type": "money", "labels": {"ar": "ضريبة القيمة المضافة", "en": "VAT"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.order.vat_amount", "inputs": ["subtotal"]}},
+      {"id": "total_amount", "type": "money", "labels": {"ar": "الإجمالي", "en": "Total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.order.total", "inputs": ["subtotal", "vat_amount"]}},
+      {"id": "notes", "type": "text", "labels": {"ar": "ملاحظات", "en": "Notes"}, "maxLength": 1000}
+    ],
+    "relations": [{"id": "lines", "target": "sales_order_line", "cardinality": "many", "kind": "child_table", "required": true, "onDelete": "cascade", "labels": {"ar": "البنود", "en": "Lines"}}],
+    "components": [{"component": "core.sales_order", "mode": "implements"}],
+    "workflow": "sales_order_flow",
+    "numbering": {"prefix": "SO-", "padding": 5, "resetPerFiscalYear": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "sales_order_line",
+    "labels": {"ar": "بند أمر البيع", "en": "Order line"},
+    "kind": "child",
+    "fields": [
+      {"id": "item", "type": "link", "labels": {"ar": "الصنف", "en": "Item"}, "required": true, "target": "item"},
+      {"id": "description", "type": "string", "labels": {"ar": "الوصف", "en": "Description"}, "maxLength": 200},
+      {"id": "quantity", "type": "decimal", "labels": {"ar": "الكمية", "en": "Quantity"}, "required": true, "precision": 3, "min": 0},
+      {"id": "unit_price", "type": "money", "labels": {"ar": "سعر الوحدة", "en": "Unit price"}, "required": true, "precision": 2, "min": 0},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "line_total", "type": "money", "labels": {"ar": "إجمالي البند", "en": "Line total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.order.line_total", "inputs": ["quantity", "unit_price", "discount_percent"]}}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false},
+    "components": [{"component": "core.sales_order", "mode": "implements"}]
+  },
+  {
+    "id": "delivery_note",
+    "labels": {"ar": "إذن تسليم", "en": "Delivery note"},
+    "pluralLabels": {"ar": "أذونات التسليم", "en": "Delivery notes"},
+    "kind": "document",
+    "fields": [
+      {"id": "sales_order", "type": "link", "labels": {"ar": "أمر البيع", "en": "Sales order"}, "required": true, "target": "sales_order"},
+      {"id": "customer", "type": "link", "labels": {"ar": "العميل", "en": "Customer"}, "required": true, "target": "customer"},
+      {"id": "delivery_date", "type": "date", "labels": {"ar": "تاريخ التسليم", "en": "Delivery date"}, "required": true},
+      {"id": "warehouse", "type": "select", "labels": {"ar": "المستودع", "en": "Warehouse"}, "required": true, "options": [{"value": "wh_main", "labels": {"ar": "المستودع الرئيسي", "en": "Main warehouse"}}]},
+      {"id": "driver_name", "type": "string", "labels": {"ar": "اسم السائق", "en": "Driver name"}, "maxLength": 100},
+      {"id": "vehicle_plate", "type": "string", "labels": {"ar": "لوحة المركبة", "en": "Vehicle plate"}, "maxLength": 20},
+      {"id": "notes", "type": "text", "labels": {"ar": "ملاحظات", "en": "Notes"}, "maxLength": 1000}
+    ],
+    "relations": [{"id": "lines", "target": "delivery_note_line", "cardinality": "many", "kind": "child_table", "required": true, "onDelete": "cascade", "labels": {"ar": "البنود", "en": "Lines"}}],
+    "components": [{"component": "sales.delivery_note", "mode": "implements"}, {"component": "stock.ledger", "mode": "extends"}],
+    "numbering": {"prefix": "DN-", "padding": 5, "resetPerFiscalYear": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "delivery_note_line",
+    "labels": {"ar": "بند إذن التسليم", "en": "Delivery line"},
+    "kind": "child",
+    "fields": [
+      {"id": "item", "type": "link", "labels": {"ar": "الصنف", "en": "Item"}, "required": true, "target": "item"},
+      {"id": "description", "type": "string", "labels": {"ar": "الوصف", "en": "Description"}, "maxLength": 200},
+      {"id": "quantity", "type": "decimal", "labels": {"ar": "الكمية", "en": "Quantity"}, "required": true, "precision": 3, "min": 0}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false},
+    "components": [{"component": "sales.delivery_note", "mode": "implements"}]
+  },
+  {
+    "id": "sales_invoice",
+    "labels": {"ar": "فاتورة ضريبية", "en": "Tax invoice"},
+    "pluralLabels": {"ar": "الفواتير الضريبية", "en": "Tax invoices"},
+    "kind": "document",
+    "fields": [
+      {"id": "customer", "type": "link", "labels": {"ar": "العميل", "en": "Customer"}, "required": true, "target": "customer"},
+      {"id": "sales_order", "type": "link", "labels": {"ar": "أمر البيع", "en": "Sales order"}, "target": "sales_order"},
+      {"id": "invoice_date", "type": "date", "labels": {"ar": "تاريخ الفاتورة", "en": "Invoice date"}, "required": true},
+      {"id": "payment_terms_days", "type": "integer", "labels": {"ar": "مدة السداد بالأيام", "en": "Payment terms (days)"}, "default": 30, "min": 0, "max": 180},
+      {"id": "due_date", "type": "date", "labels": {"ar": "تاريخ الاستحقاق", "en": "Due date"}, "readOnly": true, "computed": {"function": "sales.invoice.due_date", "inputs": ["invoice_date", "payment_terms_days"]}},
+      {"id": "branch", "type": "select", "labels": {"ar": "الفرع", "en": "Branch"}, "required": true, "options": [{"value": "hq", "labels": {"ar": "المقر الرئيسي", "en": "Head office"}}]},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "subtotal", "type": "money", "labels": {"ar": "المجموع قبل الضريبة", "en": "Subtotal"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.invoice.subtotal", "inputs": ["discount_percent"]}},
+      {"id": "vat_amount", "type": "money", "labels": {"ar": "ضريبة القيمة المضافة", "en": "VAT"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.invoice.vat_amount", "inputs": ["subtotal"]}},
+      {"id": "total_amount", "type": "money", "labels": {"ar": "الإجمالي", "en": "Total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.invoice.total", "inputs": ["subtotal", "vat_amount"]}},
+      {"id": "paid_amount", "type": "money", "labels": {"ar": "المبلغ المسدد", "en": "Paid amount"}, "readOnly": true, "default": 0, "precision": 2, "min": 0},
+      {"id": "outstanding_amount", "type": "money", "labels": {"ar": "المبلغ المتبقي", "en": "Outstanding amount"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.invoice.outstanding", "inputs": ["total_amount", "paid_amount"]}},
+      {
+        "id": "zatca_status",
+        "type": "select",
+        "labels": {"ar": "حالة هيئة الزكاة", "en": "ZATCA status"},
+        "readOnly": true,
+        "default": "not_sent",
+        "options": [{"value": "not_sent", "labels": {"ar": "لم تُرسل", "en": "Not sent"}}, {"value": "cleared", "labels": {"ar": "تم الاعتماد", "en": "Cleared"}}, {"value": "reported", "labels": {"ar": "تم الإبلاغ", "en": "Reported"}}, {"value": "rejected", "labels": {"ar": "مرفوضة", "en": "Rejected"}}]
+      },
+      {"id": "zatca_uuid", "type": "string", "labels": {"ar": "المعرّف الفريد للفاتورة", "en": "Invoice UUID"}, "readOnly": true, "maxLength": 36},
+      {"id": "zatca_qr", "type": "string", "labels": {"ar": "رمز الاستجابة السريعة", "en": "QR payload"}, "readOnly": true, "maxLength": 700, "computed": {"function": "compliance.zatca.qr_payload", "inputs": ["invoice_date", "total_amount", "vat_amount"]}},
+      {"id": "notes", "type": "text", "labels": {"ar": "ملاحظات", "en": "Notes"}, "maxLength": 1000}
+    ],
+    "relations": [{"id": "lines", "target": "sales_invoice_line", "cardinality": "many", "kind": "child_table", "required": true, "onDelete": "cascade", "labels": {"ar": "البنود", "en": "Lines"}}],
+    "components": [{"component": "core.sales_invoice", "mode": "implements"}, {"component": "compliance.zatca_sa", "mode": "extends"}],
+    "workflow": "sales_invoice_flow",
+    "numbering": {"prefix": "INV-", "padding": 5, "resetPerFiscalYear": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "sales_invoice_line",
+    "labels": {"ar": "بند الفاتورة", "en": "Invoice line"},
+    "kind": "child",
+    "fields": [
+      {"id": "item", "type": "link", "labels": {"ar": "الصنف", "en": "Item"}, "required": true, "target": "item"},
+      {"id": "description", "type": "string", "labels": {"ar": "الوصف", "en": "Description"}, "maxLength": 200},
+      {"id": "quantity", "type": "decimal", "labels": {"ar": "الكمية", "en": "Quantity"}, "required": true, "precision": 3, "min": 0},
+      {"id": "unit_price", "type": "money", "labels": {"ar": "سعر الوحدة", "en": "Unit price"}, "required": true, "precision": 2, "min": 0},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "line_total", "type": "money", "labels": {"ar": "إجمالي البند", "en": "Line total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.invoice.line_total", "inputs": ["quantity", "unit_price", "discount_percent"]}}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false},
+    "components": [{"component": "core.sales_invoice", "mode": "implements"}]
+  },
+  {
+    "id": "credit_note",
+    "labels": {"ar": "إشعار دائن", "en": "Credit note"},
+    "pluralLabels": {"ar": "إشعارات الدائن", "en": "Credit notes"},
+    "kind": "document",
+    "fields": [
+      {"id": "sales_invoice", "type": "link", "labels": {"ar": "الفاتورة الأصلية", "en": "Original invoice"}, "required": true, "target": "sales_invoice"},
+      {"id": "customer", "type": "link", "labels": {"ar": "العميل", "en": "Customer"}, "required": true, "target": "customer"},
+      {"id": "credit_date", "type": "date", "labels": {"ar": "تاريخ الإشعار", "en": "Credit date"}, "required": true},
+      {
+        "id": "reason",
+        "type": "select",
+        "labels": {"ar": "السبب", "en": "Reason"},
+        "required": true,
+        "options": [
+          {"value": "returned_goods", "labels": {"ar": "مرتجعات", "en": "Returned goods"}},
+          {"value": "price_correction", "labels": {"ar": "تصحيح سعر", "en": "Price correction"}},
+          {"value": "damaged_goods", "labels": {"ar": "بضاعة تالفة", "en": "Damaged goods"}},
+          {"value": "other", "labels": {"ar": "أخرى", "en": "Other"}}
+        ]
+      },
+      {"id": "branch", "type": "select", "labels": {"ar": "الفرع", "en": "Branch"}, "required": true, "options": [{"value": "hq", "labels": {"ar": "المقر الرئيسي", "en": "Head office"}}]},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "subtotal", "type": "money", "labels": {"ar": "المجموع قبل الضريبة", "en": "Subtotal"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.credit_note.subtotal", "inputs": ["discount_percent"]}},
+      {"id": "vat_amount", "type": "money", "labels": {"ar": "ضريبة القيمة المضافة", "en": "VAT"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.credit_note.vat_amount", "inputs": ["subtotal"]}},
+      {"id": "total_amount", "type": "money", "labels": {"ar": "الإجمالي", "en": "Total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.credit_note.total", "inputs": ["subtotal", "vat_amount"]}},
+      {
+        "id": "zatca_status",
+        "type": "select",
+        "labels": {"ar": "حالة هيئة الزكاة", "en": "ZATCA status"},
+        "readOnly": true,
+        "default": "not_sent",
+        "options": [{"value": "not_sent", "labels": {"ar": "لم تُرسل", "en": "Not sent"}}, {"value": "cleared", "labels": {"ar": "تم الاعتماد", "en": "Cleared"}}, {"value": "reported", "labels": {"ar": "تم الإبلاغ", "en": "Reported"}}, {"value": "rejected", "labels": {"ar": "مرفوضة", "en": "Rejected"}}]
+      },
+      {"id": "notes", "type": "text", "labels": {"ar": "ملاحظات", "en": "Notes"}, "maxLength": 1000}
+    ],
+    "relations": [{"id": "lines", "target": "credit_note_line", "cardinality": "many", "kind": "child_table", "required": true, "onDelete": "cascade", "labels": {"ar": "البنود", "en": "Lines"}}],
+    "components": [{"component": "sales.credit_note", "mode": "implements"}, {"component": "compliance.zatca_sa", "mode": "extends"}],
+    "numbering": {"prefix": "CN-", "padding": 5, "resetPerFiscalYear": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "credit_note_line",
+    "labels": {"ar": "بند الإشعار", "en": "Credit note line"},
+    "kind": "child",
+    "fields": [
+      {"id": "item", "type": "link", "labels": {"ar": "الصنف", "en": "Item"}, "required": true, "target": "item"},
+      {"id": "description", "type": "string", "labels": {"ar": "الوصف", "en": "Description"}, "maxLength": 200},
+      {"id": "quantity", "type": "decimal", "labels": {"ar": "الكمية", "en": "Quantity"}, "required": true, "precision": 3, "min": 0},
+      {"id": "unit_price", "type": "money", "labels": {"ar": "سعر الوحدة", "en": "Unit price"}, "required": true, "precision": 2, "min": 0},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "line_total", "type": "money", "labels": {"ar": "إجمالي البند", "en": "Line total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "sales.credit_note.line_total", "inputs": ["quantity", "unit_price", "discount_percent"]}}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false},
+    "components": [{"component": "sales.credit_note", "mode": "implements"}]
+  },
+  {
+    "id": "purchase_order",
+    "labels": {"ar": "أمر شراء", "en": "Purchase order"},
+    "pluralLabels": {"ar": "أوامر الشراء", "en": "Purchase orders"},
+    "kind": "document",
+    "fields": [
+      {"id": "supplier", "type": "link", "labels": {"ar": "المورد", "en": "Supplier"}, "required": true, "target": "supplier"},
+      {"id": "order_date", "type": "date", "labels": {"ar": "تاريخ الأمر", "en": "Order date"}, "required": true},
+      {"id": "expected_date", "type": "date", "labels": {"ar": "تاريخ الاستلام المتوقع", "en": "Expected receipt date"}},
+      {"id": "warehouse", "type": "select", "labels": {"ar": "مستودع الاستلام", "en": "Receiving warehouse"}, "required": true, "options": [{"value": "wh_main", "labels": {"ar": "المستودع الرئيسي", "en": "Main warehouse"}}]},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "subtotal", "type": "money", "labels": {"ar": "المجموع قبل الضريبة", "en": "Subtotal"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "purchasing.order.subtotal", "inputs": ["discount_percent"]}},
+      {"id": "vat_amount", "type": "money", "labels": {"ar": "ضريبة القيمة المضافة", "en": "VAT"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "purchasing.order.vat_amount", "inputs": ["subtotal"]}},
+      {"id": "total_amount", "type": "money", "labels": {"ar": "الإجمالي", "en": "Total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "purchasing.order.total", "inputs": ["subtotal", "vat_amount"]}},
+      {"id": "notes", "type": "text", "labels": {"ar": "ملاحظات", "en": "Notes"}, "maxLength": 1000}
+    ],
+    "relations": [{"id": "lines", "target": "purchase_order_line", "cardinality": "many", "kind": "child_table", "required": true, "onDelete": "cascade", "labels": {"ar": "البنود", "en": "Lines"}}],
+    "components": [{"component": "purchasing.purchase_order", "mode": "implements"}],
+    "workflow": "purchase_order_flow",
+    "numbering": {"prefix": "PO-", "padding": 5, "resetPerFiscalYear": true},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "purchase_order_line",
+    "labels": {"ar": "بند أمر الشراء", "en": "Purchase order line"},
+    "kind": "child",
+    "fields": [
+      {"id": "item", "type": "link", "labels": {"ar": "الصنف", "en": "Item"}, "required": true, "target": "item"},
+      {"id": "description", "type": "string", "labels": {"ar": "الوصف", "en": "Description"}, "maxLength": 200},
+      {"id": "quantity", "type": "decimal", "labels": {"ar": "الكمية", "en": "Quantity"}, "required": true, "precision": 3, "min": 0},
+      {"id": "unit_cost", "type": "money", "labels": {"ar": "تكلفة الوحدة", "en": "Unit cost"}, "required": true, "precision": 2, "min": 0},
+      {"id": "discount_percent", "type": "percent", "labels": {"ar": "نسبة الخصم", "en": "Discount percent"}, "default": 0, "precision": 2, "min": 0, "max": 100},
+      {"id": "line_total", "type": "money", "labels": {"ar": "إجمالي البند", "en": "Line total"}, "readOnly": true, "precision": 2, "min": 0, "computed": {"function": "purchasing.order.line_total", "inputs": ["quantity", "unit_cost", "discount_percent"]}}
+    ],
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false},
+    "components": [{"component": "purchasing.purchase_order", "mode": "implements"}]
+  }
+]

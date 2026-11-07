@@ -1,0 +1,169 @@
+[
+  {
+    "id": "owner",
+    "labels": {"ar": "المالك", "en": "Owner"},
+    "function": "owner",
+    "scope": {"type": "company"},
+    "permissions": [
+      {"entity": "customer", "actions": ["read", "create", "update", "export"]},
+      {"entity": "supplier", "actions": ["read", "create", "update", "export"]},
+      {"entity": "item", "actions": ["read", "create", "update", "export"]},
+      {"entity": "price_list", "actions": ["read", "create", "update", "export"]},
+      {"entity": "sales_quote", "actions": ["read", "export"]},
+      {"entity": "sales_order", "actions": ["read", "create", "update", "cancel", "approve", "export"]},
+      {"entity": "delivery_note", "actions": ["read", "export"]},
+      {"entity": "sales_invoice", "actions": ["read", "cancel", "export"]},
+      {"entity": "credit_note", "actions": ["read", "export"]},
+      {"entity": "purchase_order", "actions": ["read", "create", "update", "cancel", "approve", "export"]},
+      {"entity": "purchase_receipt", "actions": ["read", "export"]},
+      {"entity": "purchase_invoice", "actions": ["read", "export"]},
+      {"entity": "payment", "actions": ["read", "export"]},
+      {"entity": "stock_transfer", "actions": ["read", "export"]}
+    ],
+    "homeView": {"layout": "owner_overview", "reports": ["sales_overview", "receivables_aging", "payables_aging", "stock_on_hand"], "quickActions": ["approve_large", "approve_discount", "approve_po"]},
+    "isAdmin": true,
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "general_manager",
+    "labels": {"ar": "المدير العام", "en": "General manager"},
+    "function": "general_manager",
+    "scope": {"type": "company"},
+    "permissions": [
+      {"entity": "customer", "actions": ["read", "update", "export"]},
+      {"entity": "supplier", "actions": ["read", "update", "export"]},
+      {"entity": "item", "actions": ["read", "update", "export"]},
+      {"entity": "price_list", "actions": ["read", "update", "export"]},
+      {"entity": "sales_quote", "actions": ["read", "export"]},
+      {"entity": "sales_order", "actions": ["read", "update", "cancel", "approve", "export"]},
+      {"entity": "delivery_note", "actions": ["read", "export"]},
+      {"entity": "sales_invoice", "actions": ["read", "cancel", "export"]},
+      {"entity": "credit_note", "actions": ["read", "export"]},
+      {"entity": "purchase_order", "actions": ["read", "update", "cancel", "approve", "export"]},
+      {"entity": "purchase_receipt", "actions": ["read", "export"]},
+      {"entity": "purchase_invoice", "actions": ["read", "export"]},
+      {"entity": "payment", "actions": ["read", "export"]},
+      {"entity": "stock_transfer", "actions": ["read", "export"]}
+    ],
+    "homeView": {"layout": "owner_overview", "reports": ["sales_overview", "receivables_aging", "payables_aging", "stock_on_hand"], "quickActions": ["approve_large", "approve_discount", "approve_po"]},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "accountant",
+    "labels": {"ar": "محاسب", "en": "Accountant"},
+    "function": "finance",
+    "scope": {"type": "company"},
+    "permissions": [
+      {"entity": "customer", "actions": ["read", "update", "export"]},
+      {"entity": "supplier", "actions": ["read", "export"]},
+      {"entity": "item", "actions": ["read", "export"]},
+      {"entity": "price_list", "actions": ["read"]},
+      {"entity": "sales_quote", "actions": ["read"]},
+      {"entity": "sales_order", "actions": ["read", "submit", "export"]},
+      {"entity": "delivery_note", "actions": ["read", "export"]},
+      {"entity": "sales_invoice", "actions": ["read", "create", "update", "submit", "cancel", "export"]},
+      {"entity": "credit_note", "actions": ["read", "update", "approve", "export"]},
+      {"entity": "purchase_order", "actions": ["read", "submit", "export"]},
+      {"entity": "purchase_receipt", "actions": ["read", "export"]},
+      {"entity": "purchase_invoice", "actions": ["read", "create", "update", "submit", "export"]},
+      {"entity": "payment", "actions": ["read", "create", "update", "submit", "export"]},
+      {"entity": "stock_transfer", "actions": ["read"]}
+    ],
+    "homeView": {"layout": "worklist_and_kpis", "reports": ["receivables_aging", "payables_aging", "vat_summary"], "quickActions": ["invoice_order", "submit_invoice", "mark_paid"]},
+    "canUseChatActions": true,
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "sales_rep",
+    "labels": {"ar": "مندوب مبيعات", "en": "Sales representative"},
+    "function": "sales",
+    "scope": {"type": "own_records"},
+    "permissions": [
+      {"entity": "customer", "actions": ["read", "create", "update"], "hiddenFields": ["credit_limit"]},
+      {"entity": "item", "actions": ["read"], "hiddenFields": ["cost_price"]},
+      {"entity": "price_list", "actions": ["read"]},
+      {"entity": "sales_quote", "actions": ["read", "create", "update", "cancel"]},
+      {"entity": "sales_order", "actions": ["read", "create", "update", "submit", "cancel"]},
+      {"entity": "delivery_note", "actions": ["read"]},
+      {"entity": "sales_invoice", "actions": ["read"]},
+      {"entity": "credit_note", "actions": ["read", "create"]}
+    ],
+    "homeView": {"layout": "task_list", "reports": ["my_orders"], "quickActions": ["submit_small", "submit_discount", "submit_large", "cancel_draft"]},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "branch_sales_manager",
+    "labels": {"ar": "مدير مبيعات الفرع", "en": "Branch sales manager"},
+    "function": "sales",
+    "scope": {"type": "branch", "values": ["hq"]},
+    "permissions": [
+      {"entity": "customer", "actions": ["read", "create", "update", "export"], "hiddenFields": ["credit_limit"]},
+      {"entity": "item", "actions": ["read"], "hiddenFields": ["cost_price"]},
+      {"entity": "price_list", "actions": ["read"]},
+      {"entity": "sales_quote", "actions": ["read", "create", "update", "cancel", "export"]},
+      {"entity": "sales_order", "actions": ["read", "create", "update", "submit", "cancel", "export"]},
+      {"entity": "delivery_note", "actions": ["read"]},
+      {"entity": "sales_invoice", "actions": ["read", "export"]},
+      {"entity": "credit_note", "actions": ["read", "create", "update", "submit", "export"]}
+    ],
+    "homeView": {"layout": "worklist_and_kpis", "reports": ["sales_overview"], "quickActions": ["submit_small", "submit_discount", "submit_large", "cancel_draft"]},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "purchasing_officer",
+    "labels": {"ar": "مسؤول المشتريات", "en": "Purchasing officer"},
+    "function": "purchasing",
+    "scope": {"type": "company"},
+    "permissions": [
+      {"entity": "supplier", "actions": ["read", "create", "update"]},
+      {"entity": "item", "actions": ["read"]},
+      {"entity": "purchase_order", "actions": ["read", "create", "update", "submit", "cancel", "export"]},
+      {"entity": "purchase_receipt", "actions": ["read"]},
+      {"entity": "purchase_invoice", "actions": ["read"]},
+      {"entity": "stock_transfer", "actions": ["read"]}
+    ],
+    "homeView": {"layout": "task_list", "reports": ["payables_aging", "stock_on_hand"], "quickActions": ["submit_po_small", "submit_po_large", "close_po", "cancel_po_draft"]},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "warehouse_keeper",
+    "labels": {"ar": "أمين مستودع", "en": "Warehouse keeper"},
+    "function": "warehouse",
+    "scope": {"type": "warehouse", "values": ["wh_main"]},
+    "permissions": [
+      {"entity": "item", "actions": ["read"], "hiddenFields": ["cost_price", "selling_price"]},
+      {"entity": "sales_order", "actions": ["read", "submit"], "readOnlyFields": ["customer", "order_date"]},
+      {"entity": "delivery_note", "actions": ["read", "create", "update", "submit"]},
+      {"entity": "purchase_order", "actions": ["read", "submit"], "readOnlyFields": ["supplier", "order_date"]},
+      {"entity": "purchase_receipt", "actions": ["read", "create", "update", "submit"]},
+      {"entity": "stock_transfer", "actions": ["read", "create", "update", "submit"]}
+    ],
+    "homeView": {"layout": "worklist_and_kpis", "reports": ["stock_on_hand"], "quickActions": ["deliver", "receive_po", "dispatch_transfer", "receive_transfer"]},
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  },
+  {
+    "id": "auditor",
+    "labels": {"ar": "مراجع (للقراءة فقط)", "en": "Auditor (read only)"},
+    "function": "read_only",
+    "scope": {"type": "company"},
+    "permissions": [
+      {"entity": "customer", "actions": ["read", "export"]},
+      {"entity": "supplier", "actions": ["read", "export"]},
+      {"entity": "item", "actions": ["read", "export"]},
+      {"entity": "price_list", "actions": ["read", "export"]},
+      {"entity": "sales_quote", "actions": ["read", "export"]},
+      {"entity": "sales_order", "actions": ["read", "export"]},
+      {"entity": "delivery_note", "actions": ["read", "export"]},
+      {"entity": "sales_invoice", "actions": ["read", "export"]},
+      {"entity": "credit_note", "actions": ["read", "export"]},
+      {"entity": "purchase_order", "actions": ["read", "export"]},
+      {"entity": "purchase_receipt", "actions": ["read", "export"]},
+      {"entity": "purchase_invoice", "actions": ["read", "export"]},
+      {"entity": "payment", "actions": ["read", "export"]},
+      {"entity": "stock_transfer", "actions": ["read", "export"]}
+    ],
+    "homeView": {"layout": "custom", "reports": ["sales_overview", "receivables_aging", "payables_aging", "stock_on_hand"]},
+    "canUseChatActions": false,
+    "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": false}
+  }
+]

@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 11 | 4 | 27 | 0 | 42 |
-| G1 | 69 | 1 | 6 | 0 | 76 |
+| G1 | 67 | 2 | 7 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 254 | 7 | 33 | 0 | 294 |
+| all | 252 | 8 | 34 | 0 | 294 |
 
 ## Built so far (done)
 
@@ -50,6 +50,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - PLT-001: Tenancy ADR-0006: site per tenant on shared in-country infrastructure
 - BRD-001: Brand guidelines v1 (Quadrant) and placeholder logo
 - BRD-002: Design tokens: light and dark, CSS and JSON
+- QA-001: Eval framework and CI hook
 - GTM-001: Niche decision: trading and distribution first
 
 ## Ready to start (todo, all dependencies done), by gate
@@ -69,7 +70,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (22)
+**G1** (21)
 - BPL-006: Blueprint diff (owner eldon)
 - BPL-010: Component registry (list, version, compatibility) (owner eldon)
 - BPL-011: Event stream contract implementation (owner eldon)
@@ -88,7 +89,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - INF-003: CI/CD for services (build, test, deploy to staging) (owner partner)
 - INF-012: Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) (owner eldon)
 - PLT-024: Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) (owner unassigned)
-- QA-001: Eval framework and CI hook (owner eldon)
 - QA-016: Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) (owner unassigned)
 - SEC-001: Threat model for the five parts and four contracts (owner eldon)
 - WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner unassigned)
@@ -107,6 +107,7 @@ Doing:
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
+- QA-002: Arabic eval set v0 (100 prompts: accounting terms, dialects, numbers)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
 
 Ready next (dependencies done), by gate:
@@ -124,11 +125,10 @@ Ready next (dependencies done), by gate:
 - GTM-002 (G1): 20-30 buyer and accountant interviews in the niche
 - GTM-004 (G1): Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED)
 - INF-012 (G1): Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018)
-- QA-001 (G1): Eval framework and CI hook
 - SEC-001 (G1): Threat model for the five parts and four contracts
 - GOV-027 (G2): Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public
 
-Waiting on dependencies: 8 row(s).
+Waiting on dependencies: 7 row(s).
 
 ## Queue: partner
 
@@ -165,6 +165,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
+- QA-002: Arabic eval set v0 (100 prompts: accounting terms, dialects, numbers) (eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (eldon)
 
 ## Last 10 log files
@@ -178,7 +179,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.
 - [2026-11-07-eldon-claude-code-lane-guard.md](log/2026-11-07-eldon-claude-code-lane-guard.md): Founder declined a paid GitHub plan and asked for clear guardrails that keep each founder in their own lane. Added a machine-readable lane map and a guard that fails any change touching the other founder's lane unless a waiver line is logged, in CI, the pre-push hook and the end-of-session gate. Added a first task for the partner to list every Frappe or ERPNext app and add-on used locally, because the repo holds only the change-engine module, not the engine installation.
 - [2026-11-07-eldon-claude-code-identity-adr.md](log/2026-11-07-eldon-claude-code-identity-adr.md): Wrote the identity proposal for founder approval: central identity with per-tenant membership, roles resolved per request from each tenant's Blueprint, one token per tenant, no customer login on the engine (shadow engine users), OIDC with the identity provider chosen in a spike, mandatory MFA for admin and finance roles, separate staff realm. ADR-0007 stays Proposed.
-- [2026-11-07-eldon-claude-code-enforcement-layers.md](log/2026-11-07-eldon-claude-code-enforcement-layers.md): Founder asked for the logging and rules to be guaranteed on every task. Nothing can honestly guarantee that AI agents always comply, so this session added independent enforcement layers and recorded what stays unguaranteed. Also recorded the founder's standing authorisation for his sessions to merge PRs once checks pass.
+- [2026-11-07-eldon-claude-code-evals.md](log/2026-11-07-eldon-claude-code-evals.md): Built the offline eval framework (record schema, loader, deterministic scorers with Arabic digit and letter normalisation, echo and null adapters, per-set thresholds, CLI, 38 tests) with a CI job, and the first Arabic eval set: 100 fictional prompts covering accounting terms, Gulf, Egyptian and MSA intents, numbers, dates, code-switching and safety.
 
 ## ADRs with status Proposed
 

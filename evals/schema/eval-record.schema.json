@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/evals/eval-record.schema.json",
+  "title": "Eval record (one JSONL line)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "set", "locale", "dialect", "category", "input", "expected", "tags", "notes", "review"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*-\\d{3}$"},
+    "set": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+    "locale": {"enum": ["ar", "ar-SA", "ar-AE", "ar-EG", "en", "mixed"]},
+    "dialect": {"enum": ["msa", "gulf", "egyptian", "mixed", "none"]},
+    "category": {"enum": ["accounting_term", "dialect_intent", "numbers", "dates", "mixed_language", "safety"]},
+    "input": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["intent", "tool_call", "answer", "clarify", "refusal"]},
+        "intent": {"type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"},
+        "tool": {"type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)?$"},
+        "args": {"type": "object"},
+        "normalized": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "amount": {"type": "number"},
+            "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+            "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+            "hijri": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["y", "m", "d"],
+              "properties": {
+                "y": {"type": "integer", "minimum": 1},
+                "m": {"type": "integer", "minimum": 1, "maximum": 12},
+                "d": {"type": "integer", "minimum": 1, "maximum": 30}
+              }
+            },
+            "quantity": {"type": "number"},
+            "percent": {"type": "number"}
+          }
+        },
+        "must_include": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "must_not_include": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      },
+      "allOf": [
+        {"if": {"properties": {"type": {"enum": ["intent", "tool_call"]}}}, "then": {"required": ["intent"]}},
+        {"if": {"properties": {"type": {"const": "tool_call"}}}, "else": {"not": {"anyOf": [{"required": ["tool"]}, {"required": ["args"]}]}}}
+      ]
+    },
+    "tags": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "notes": {"type": "string", "minLength": 1},
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nativeSpeaker", "reviewer"],
+      "properties": {
+        "nativeSpeaker": {"type": "boolean"},
+        "reviewer": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

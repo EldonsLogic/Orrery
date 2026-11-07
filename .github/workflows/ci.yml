@@ -94,3 +94,16 @@ jobs:
         run: python3 -m pytest services/blueprint/tests -q
       - name: Contract example validates
         run: PYTHONPATH=services/blueprint python3 -m validator contracts/examples/blueprint-trading-minimal.json
+
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r evals/requirements.txt
+      - name: Eval harness tests
+        run: python3 -m pytest evals/tests -q
+      - name: Eval sets are valid
+        run: python3 -m evals.harness check

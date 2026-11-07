@@ -1,3 +1,4 @@
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -10,6 +11,8 @@ repos:
       - id: check-json
         exclude: ^docs/brand/
       - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main]
   - repo: local
     hooks:
       - id: scan-secrets
@@ -22,3 +25,15 @@ repos:
         entry: python3 scripts/check_repo_hygiene.py
         language: system
         pass_filenames: false
+      - id: commit-message-plan-id
+        name: commit message names a plan ID
+        entry: python3 scripts/check_commit_msg.py
+        language: system
+        stages: [commit-msg]
+      - id: pre-push-guard
+        name: pre-push guard (no push to main, checks, task trail)
+        entry: python3 scripts/check_pre_push.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

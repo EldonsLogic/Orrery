@@ -15,7 +15,7 @@ Agents: at session start work out which founder you are helping (`gh api user --
 
 ## 1. One-time setup (each founder, about 30 minutes)
 1. Clone the private repo (sign in with your GitHub account): `git clone https://github.com/EldonsLogic/Orrery.git`, then `cd Orrery`.
-2. Install Python 3.10 or newer, then `pip install pre-commit` and `pre-commit install` (plan row GOV-010). The hooks run the repo checks before every commit.
+2. Install Python 3.10 or newer, then `pip install pre-commit` and `pre-commit install` (plan row GOV-010). It installs three hooks: no commit on `main` and a plan ID in every commit message, and a pre-push guard that blocks pushes to `main` and runs the repo checks. Never use `--no-verify`.
 3. Run the four checks; all must pass on your machine:
    ```
    python3 scripts/build_status.py
@@ -57,8 +57,8 @@ Lanes keep two people and several agents out of each other's files. Edit only yo
 1. Pick a row from "Ready to start" in STATUS.md; set it `doing` with your name; pull the latest `main`.
 2. Create a branch named with the plan ID (for example `bpl-003-validator`).
 3. Work, delegating scoped sub-tasks by model tier ([delegation playbook](../agents/delegation-playbook.md)).
-4. Finish: new session log (`python3 scripts/new_log.py ...`), update PLAN statuses, regenerate STATUS, run the four checks, push the branch, open a PR that says how to view the change.
-5. The other founder reviews it (with a different model than the author used) and merges, or tells an agent explicitly to merge. Nobody merges their own PR or pushes to `main`.
+4. Finish: new session log (`python3 scripts/new_log.py ...`), update PLAN statuses, then run `python3 scripts/finish_session.py` (regenerates STATUS, runs every check, verifies the push and the PR). Open the PR with how to view the change.
+5. The other founder reviews it (with a different model than the author used). Merge only after all checks pass, by a founder or by an agent the founder has authorised (RULES.md rule 10). Nobody pushes to `main`.
 6. Delete the merged branch.
 
 ## 6. When you are blocked

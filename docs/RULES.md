@@ -15,7 +15,7 @@ Every rule the founders have set or settled, in one place. [AGENTS.md](../AGENTS
 7. Use your own judgment. Do not copy blindly: adapt outside code to the architecture and drop what does not fit (example: [PROVENANCE](../apps/engine/change_engine/PROVENANCE.md)).
 8. Be blunt and honest. Cite a URL and access date for external facts; label anything unverified `UNVERIFIED`. Report outcomes faithfully, including failures and what was not checked.
 9. Chat summaries to founders: at most 15 lines plus the decisions needed. Detail goes in files.
-10. Never merge your own PR or push to `main` after the bootstrap. Founders merge, or explicitly instruct a merge. Pushing and merging are founder-authorised actions.
+10. Never push to `main` after the bootstrap. Merge only through a PR whose checks pass. Founders merge, or authorise their agent sessions to merge. **Standing authorisation (2026-11-07): Eldon authorised sessions working for him to merge PRs once all checks pass, including dependency-bot PRs, without asking.** The partner's sessions merge their own PRs only after the partner records the same authorisation here; until then the other founder merges.
 
 ## B. Repo and files
 11. The repo holds project content only. Never commit scratch or temp files, session briefs, rendered images, downloads, exports, archives, PDFs or office files, local paths, personal notes, secrets or customer data. Files over 1 MB are rejected. Enforced by `scripts/check_repo_hygiene.py` (CI and pre-commit).
@@ -64,6 +64,8 @@ Every rule the founders have set or settled, in one place. [AGENTS.md](../AGENTS
 ## H. Development and viewing progress
 45. The founders and agents can always view the developing product ([ADR-0018](decisions/ADR-0018-development-environments-and-progress-viewing.md), Proposed): per-PR preview links for the web app, one shared dev server for the engine and services, behind a login. A PR that changes visible behaviour says how to view it. If a preview project, dev server, access or keys are missing, the agent stops and asks the founders to create them, listing what is needed and where secrets go.
 46. Dev hosts get synthetic data only; production data stays in-country; the engine stays invisible on dev previews; secrets never enter the repo.
+
+45b. Enforcement ([ADR-0019](decisions/ADR-0019-enforcement-layers.md)): sessions end with `python3 scripts/finish_session.py` and may not stop until it prints FINISHED; every commit message names a plan ID; never bypass hooks (`--no-verify`) or checks. Each rule is guarded at several independent points; no layer is a guarantee on its own, and server-side blocking needs GitHub branch protection (GOV-008).
 
 ## I. Onboarding and lanes
 47. Agents identify which founder they work with at session start (Eldon `EldonsLogic`, partner `sayegh9`), never assuming. [ONBOARDING.md](ONBOARDING.md) holds the one-time setup for each founder, the lane split (which paths each founder edits), first tasks and pending decisions. Edit only your lane's paths; ask via open-questions or a PR comment for changes in the other lane; shared files need the other founder's review. Founders re-assign lanes by changing plan-row owners in a PR.

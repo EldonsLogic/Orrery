@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Frappe uses one database per site. PDPL and customer trust favour strong isolation. A VPS per client kills margins and operations ([../strategy/05-hosting-and-data.md](../strategy/05-hosting-and-data.md)).

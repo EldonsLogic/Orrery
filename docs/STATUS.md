@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 10 | 4 | 28 | 0 | 42 |
+| G0 | 8 | 4 | 30 | 0 | 42 |
 | G1 | 63 | 1 | 12 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 247 | 7 | 40 | 0 | 294 |
+| all | 245 | 7 | 42 | 0 | 294 |
 
 ## Built so far (done)
 
@@ -27,6 +27,8 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-008: Branch protection on main: PRs only, required checks, no force push, admins included (done via public repo, ADR-0021)
 - GOV-009: Add partner (sayegh9) as admin; confirm CODEOWNERS review works
 - GOV-011: Agent role specs, routing rules, model registry
+- GOV-012: Fill model registry rows for Codex and Antigravity
+- GOV-013: Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11
 - GOV-015: Draft ADR-0001..0014
 - GOV-018: Retire docs/HANDOFF.md in favour of docs/log and STATUS
 - GOV-021: Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI)
@@ -63,11 +65,9 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (10)
+**G0** (8)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner unassigned)
-- GOV-012: Fill model registry rows for Codex and Antigravity (owner partner)
-- GOV-013: Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11 (owner partner)
 - GOV-014: Trial the cross-model PR review routine on the first real PR (owner unassigned)
 - GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (owner unassigned)
 - INF-013: Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) (owner eldon)
@@ -140,8 +140,6 @@ Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 
 Ready next (dependencies done), by gate:
-- GOV-012 (G0): Fill model registry rows for Codex and Antigravity
-- GOV-013 (G0): Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11
 - BPL-012 (G1): Engine adapter interface so the engine stays replaceable
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
 - ERP-001 (G1): G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
@@ -174,6 +172,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 ## Last 10 log files
 
 - [2026-11-07-partner-antigravity-third-party-licence-register.md](log/2026-11-07-partner-antigravity-third-party-licence-register.md): Recorded the partner's verified local bench installation (Frappe Framework 15.126.0 MIT, ERPNext 15.124.5 GPL-3.0, change engine module 0.1.0, MariaDB 10.6, Redis 7) into the third-party licence register and NOTICE.md, completing LEG-004.
+- [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0018 Dev Environments to Accepted; ADR-0007 Identity stays Proposed until Eldon accepts it (restored when the PR was re-applied onto main)), and populated the Codex and Antigravity rows in the model registry.
 - [2026-11-07-eldon-claude-code-wording-cleanup.md](log/2026-11-07-eldon-claude-code-wording-cleanup.md): Reworded older logs, ADR-0021, ADR-0023 and plan rows so they state the one-account policy plainly; renamed two logs to match.
 - [2026-11-07-eldon-claude-code-web-stack-review-fixes.md](log/2026-11-07-eldon-claude-code-web-stack-review-fixes.md): A cross-model review of ADR-0022 found gaps. Added: app limited to static-export-safe features with a CI build in that mode (in-country hosting marked UNVERIFIED), marketing on Vercel only without personal data collection there, explicit narrowing of ADR-0018 item 2, stronger tokens-only and logical-property lint rules, tenant token loading before first paint, RTL direction provider and bidi isolation for user text, and a human review for major-version bumps of the framework and auth libraries.
 - [2026-11-07-eldon-claude-code-web-stack-adr.md](log/2026-11-07-eldon-claude-code-web-stack-adr.md): Wrote the web stack proposal for founder approval (ADR-0022, Proposed): one TypeScript and React stack on Next.js for marketing and app; static marketing; app screens rendered in the browser against our in-country gateway so no tenant data is processed on Vercel; plain CSS with token custom properties and a lint rule against literal colours and fonts; logical properties for RTL; headless accessible primitives; ICU i18n with Arabic default; self-hosted fonts; Playwright RTL goldens.
@@ -182,10 +181,8 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - [2026-11-07-eldon-claude-code-trading-fixture.md](log/2026-11-07-eldon-claude-code-trading-fixture.md): Finished the hand-written, fictional trading and distribution Blueprint fixture: a Saudi company with two branches, two warehouses and a finance department; 24 entities (14 top-level, 10 line tables), 189 fields, 30 computed fields named as component functions, 4 workflows with 24 transitions, 8 roles, 4 approvals, 6 reports, 2 integrations, ZATCA phase 2 in sandbox, plus 16 fictional component manifests as its registry.
 - [2026-11-07-eldon-claude-code-threat-model.md](log/2026-11-07-eldon-claude-code-threat-model.md): Threat model v1 for the five parts and the four contracts (plus connector interface and build states): scope and an honest not-modelled list, a trust-boundary diagram, assets, actors, STRIDE tables per part (T1-T16 kept, T17-T60 new), abuse cases, top 10 risks, and a per-contract file saying what each consumer may and may not trust.
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
-- [2026-11-07-eldon-claude-code-redis-licence.md](log/2026-11-07-eldon-claude-code-redis-licence.md): Reviewed the partner's PR 28 (licence register, merged) and PR 24 (changes requested). Corrected the Redis row in the register: the floating 7-alpine tag is not BSD from 7.4; added open question Q-15 for the partner.
 
 ## ADRs with status Proposed
 
 - [ADR-0007-identity](decisions/ADR-0007-identity.md)
-- [ADR-0018-development-environments-and-progress-viewing](decisions/ADR-0018-development-environments-and-progress-viewing.md)
 - [ADR-0022-web-stack](decisions/ADR-0022-web-stack.md)

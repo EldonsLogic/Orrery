@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon (founder decision, 2026-11-07); partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 GitHub only offers branch protection on a private repo with a paid plan. The founder declined the plan and chose to make the repository public. ADR-0009 and earlier text assumed a private repo.

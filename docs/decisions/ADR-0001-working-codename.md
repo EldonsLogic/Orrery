@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 We need a name to label the repo and docs now. No trademark search has been done. The final name may differ, and Arabic spelling is open (Q-4 in [../open-questions.md](../open-questions.md)).

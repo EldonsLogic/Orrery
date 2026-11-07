@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 The UI needs light and dark themes. Customers want their own logo and colours, which sells the product but can break contrast, Arabic layout or legal invoice layout if unconstrained.

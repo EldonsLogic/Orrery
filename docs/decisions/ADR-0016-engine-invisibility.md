@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon (founder instruction); partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 The platform runs on an open-source engine (ADR-0002). Customers buy Orrery, not the engine. Showing the engine's name or its default screens weakens the product, confuses support, invites comparison with a different product, and conflicts with the engine's trademark policy on product naming and advertising.

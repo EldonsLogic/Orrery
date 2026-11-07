@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Inference cost per tenant is small compared to a price floor, but Arabic quality and reliability matter ([../strategy/06-model-strategy.md](../strategy/06-model-strategy.md)). Model prices and usage in that file are assumptions.

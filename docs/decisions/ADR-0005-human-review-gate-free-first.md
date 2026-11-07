@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 AI-built configuration for real businesses can be wrong. Pricing is untested ([../strategy/07-pricing.md](../strategy/07-pricing.md)); early adoption matters more than early revenue per seat.

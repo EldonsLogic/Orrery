@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Founder requirement: operate in KSA, UAE and Egypt, with per-company calendar and week settings. Launch order stays KSA first, UAE second, Egypt third. Egypt regulations (e-invoicing, VAT, data protection, payroll) are all UNVERIFIED and need research (GTM-017). Commerce and tax are Gregorian in practice in all three countries (UNVERIFIED). Hijri matters for Saudi official and some contract contexts, possibly the zakat year, and religious dates in all three. Egypt may also use the Coptic calendar in some contexts (UNVERIFIED).

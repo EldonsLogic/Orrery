@@ -8,16 +8,16 @@ Everything a founder needs to start working here, with no separate message. Read
 ## Which founder are you?
 | Founder | GitHub | Log author | Lane |
 |---|---|---|---|
-| Eldon | `EldonsLogic` or `Eldonham` (two GitHub accounts, each on its own Claude subscription; never both at the same time) | `eldon` | Spine, product and brand |
+| Eldon | `EldonsLogic` (one GitHub account; he may use more than one Claude subscription or tool, one session at a time) | `eldon` | Spine, product and brand |
 | Partner | `sayegh9` | `partner` | Engine, runtime and compliance |
 
 Agents: at session start work out which founder you are helping (`gh api user --jq .login`, or `git config user.name` and `user.email`, or ask). Do not assume. Use the answer for the log author, the plan-row owner and the lane. Founders: if your agent asks who you are, tell it.
 
-## Eldon works from two accounts
-Both accounts are the same founder: same lane, same plan owner (`eldon`), same standing merge authorisation. Never run both at once. Before switching: finish the session (`python3 scripts/finish_session.py`, so everything is committed, pushed and in a PR) and write the log. When starting on the other account: `git pull`, read the latest log and the `doing` rows owned by `eldon` in STATUS.md, and continue from there; do not start a second branch for a row that already has one. Log the tool as `claude-code` and put the GitHub account in the log's Summary if it matters.
+## Eldon works from several Claude sessions
+All of Eldon's sessions use the one GitHub account `EldonsLogic`: same lane, same plan owner (`eldon`), same standing merge authorisation. Never run two at once. Before switching tool or subscription: finish the session (`python3 scripts/finish_session.py`, so everything is committed, pushed and in a PR) and write the log. When starting on the other session: `git pull`, read the latest log and the `doing` rows owned by `eldon` in STATUS.md, and continue from there; do not start a second branch for a row that already has one. Log the tool as `claude-code`.
 
-## Cloud sessions (Eldon's second account)
-A cloud session works from a fresh clone on the provider's side. Before it starts: the account must be a repo collaborator and connected to GitHub in that tool. Set `ORRERY_FOUNDER=Eldonham` (or tell the agent who you are) because `gh` may be missing; `finish_session.py` then warns that it could not verify the PR instead of failing, and CI re-checks everything. If the sandbox allows it, run `pip install pre-commit && pre-commit install` first; if not, CI and branch protection still enforce the rules (including a plan ID in every commit message). Name the branch with the plan ID if the tool lets you. Never leave a cloud session running while you start another session as the same founder: wait for it to report finished and for its PR to exist, then pull on the next machine.
+## Cloud sessions
+A cloud session works from a fresh clone on the provider's side. Before it starts: the tool must be connected to the founder's own GitHub account (a repo collaborator). Set `ORRERY_FOUNDER=EldonsLogic` (or tell the agent who you are) because `gh` may be missing; `finish_session.py` then warns that it could not verify the PR instead of failing, and CI re-checks everything. If the sandbox allows it, run `pip install pre-commit && pre-commit install` first; if not, CI and branch protection still enforce the rules (including a plan ID in every commit message). Name the branch with the plan ID if the tool lets you. Never leave a cloud session running while you start another session as the same founder: wait for it to report finished and for its PR to exist, then pull on the next machine.
 
 ## 1. One-time setup (each founder, about 30 minutes)
 1. Clone the repo (public to read; you need collaborator access to push; sign in with your GitHub account): `git clone https://github.com/EldonsLogic/Orrery.git`, then `cd Orrery`.

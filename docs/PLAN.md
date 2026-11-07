@@ -25,8 +25,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-009 | Add partner (sayegh9) as admin; confirm CODEOWNERS review works | Governance | G0 | GOV-002 | eldon | done |
 | GOV-010 | Install pre-commit hooks on both founders' machines | Governance | G0 | GOV-005 | unassigned | todo |
 | GOV-011 | Agent role specs, routing rules, model registry | Governance | G0 | GOV-003 | eldon | done |
-| GOV-012 | Fill model registry rows for Codex and Antigravity | Governance | G0 | GOV-011 | partner | todo |
-| GOV-013 | Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11 | Governance | G0 | GOV-009 | partner | todo |
+| GOV-012 | Fill model registry rows for Codex and Antigravity | Governance | G0 | GOV-011 | partner | done |
+| GOV-013 | Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11 | Governance | G0 | GOV-009 | partner | done |
 | GOV-014 | Trial the cross-model PR review routine on the first real PR | Governance | G0 | GOV-008 | unassigned | todo |
 | GOV-015 | Draft ADR-0001..0014 | Governance | G0 | GOV-004 | eldon | done |
 | GOV-016 | Autonomy metrics file and monthly reporting template (strategy/08) | Governance | G1 | GOV-004 | unassigned | todo |

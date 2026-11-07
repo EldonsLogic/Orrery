@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Two founders use different AI models and tools. The repo is the shared memory. Past practice used one shared HANDOFF file, which would collide.

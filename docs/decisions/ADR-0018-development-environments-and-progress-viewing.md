@@ -1,8 +1,8 @@
 # ADR-0018: Development environments and progress viewing
 
-Status: Proposed
+Status: Accepted
 Owner: eldon
-Approved by: pending partner review (GOV-013); founder request (relayed from a side session, 2026-11-06)
+Approved by: Eldon and partner
 
 ## Context
 Both founders, and their agents, must always be able to see the product as it develops: not only read docs. Nothing runnable exists yet, so this decision is a plan, not a deployment. Constraints already settled: the engine is invisible to customers (ADR-0016), production data stays in-country (ADR-0006), secrets never enter the repo, the web stack is not yet chosen, identity (ADR-0007) is still Proposed.

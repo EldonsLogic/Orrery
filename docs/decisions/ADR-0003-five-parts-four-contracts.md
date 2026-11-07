@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Two founders on different AI tools need a shared map so work can run in parallel without collisions. The product is a pipeline (discover, blueprint, build, run) on a multi-tenant platform.

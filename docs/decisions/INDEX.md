@@ -13,7 +13,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0004-one-chat-role-based-views.md](ADR-0004-one-chat-role-based-views.md) | One chat, anyone chats, role-based views | Accepted |
 | [ADR-0005-human-review-gate-free-first.md](ADR-0005-human-review-gate-free-first.md) | Human review gate for first clients; free-first with entitlements built in | Accepted |
 | [ADR-0006-tenancy-site-per-tenant.md](ADR-0006-tenancy-site-per-tenant.md) | Tenancy is an isolated site per customer on shared in-country infrastructure | Accepted |
-| [ADR-0007-identity.md](ADR-0007-identity.md) | Identity model | Proposed |
+| [ADR-0007-identity.md](ADR-0007-identity.md) | Identity model | Accepted |
 | [ADR-0008-no-client-specific-code.md](ADR-0008-no-client-specific-code.md) | No client-specific code; component factory; autonomy metrics | Accepted |
 | [ADR-0009-repo-workflow.md](ADR-0009-repo-workflow.md) | Repo workflow | Accepted |
 | [ADR-0010-model-strategy.md](ADR-0010-model-strategy.md) | Model strategy | Accepted |
@@ -24,7 +24,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0015-country-packs-calendars-locale.md](ADR-0015-country-packs-calendars-locale.md) | Country packs, calendars and locale | Accepted |
 | [ADR-0016-engine-invisibility.md](ADR-0016-engine-invisibility.md) | The engine is invisible to customers | Accepted |
 | [ADR-0017-operating-rules-two-founders-and-agents.md](ADR-0017-operating-rules-two-founders-and-agents.md) | Operating rules for two founders and their agents | Accepted |
-| [ADR-0018-development-environments-and-progress-viewing.md](ADR-0018-development-environments-and-progress-viewing.md) | Development environments and progress viewing | Proposed |
+| [ADR-0018-development-environments-and-progress-viewing.md](ADR-0018-development-environments-and-progress-viewing.md) | Development environments and progress viewing | Accepted |
 | [ADR-0019-enforcement-layers.md](ADR-0019-enforcement-layers.md) | Enforcement layers for the operating rules | Accepted |
 | [ADR-0020-lane-guard.md](ADR-0020-lane-guard.md) | Lane guard | Accepted |
 | [ADR-0021-public-repo-and-branch-protection.md](ADR-0021-public-repo-and-branch-protection.md) | Public repository with branch protection | Accepted |

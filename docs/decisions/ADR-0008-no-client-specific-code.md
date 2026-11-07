@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 We build the first clients ourselves, which is how a product company turns into a software house ([../strategy/08-product-vs-software-house.md](../strategy/08-product-vs-software-house.md)).

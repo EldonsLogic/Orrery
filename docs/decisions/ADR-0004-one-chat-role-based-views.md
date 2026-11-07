@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon; partner review pending (GOV-013)
+Approved by: Eldon and partner
 
 ## Context
 Early idea was a builder UI plus a separate operator UI. Owners and staff both need the same assistant, and permissions must not be bypassed by chat.

@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 12 | 3 | 26 | 0 | 41 |
+| G0 | 10 | 3 | 28 | 0 | 41 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 256 | 7 | 30 | 0 | 293 |
+| all | 254 | 7 | 32 | 0 | 293 |
 
 ## Built so far (done)
 
@@ -27,6 +27,8 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-008: Branch protection on main: PRs only, required checks, no force push, admins included (done via public repo, ADR-0021)
 - GOV-009: Add partner (sayegh9) as admin; confirm CODEOWNERS review works
 - GOV-011: Agent role specs, routing rules, model registry
+- GOV-012: Fill model registry rows for Codex and Antigravity
+- GOV-013: Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11
 - GOV-015: Draft ADR-0001..0014
 - GOV-018: Retire docs/HANDOFF.md in favour of docs/log and STATUS
 - GOV-021: Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI)
@@ -53,11 +55,9 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (12)
+**G0** (10)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner unassigned)
-- GOV-012: Fill model registry rows for Codex and Antigravity (owner partner)
-- GOV-013: Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11 (owner partner)
 - GOV-014: Trial the cross-model PR review routine on the first real PR (owner unassigned)
 - GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (owner unassigned)
 - INF-013: Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) (owner eldon)
@@ -132,8 +132,6 @@ Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 
 Ready next (dependencies done), by gate:
-- GOV-012 (G0): Fill model registry rows for Codex and Antigravity
-- GOV-013 (G0): Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11
 - LEG-004 (G0): Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally)
 - BPL-012 (G1): Engine adapter interface so the engine stays replaceable
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
@@ -165,6 +163,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 ## Last 10 log files
 
+- [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0007 Identity and ADR-0018 Dev Environments to Accepted with both founders' approval, meeting the G0 exit criterion), and populated the Codex and Antigravity rows in the model registry.
 - [2026-11-07-eldon-claude-code-visibility-temporary.md](log/2026-11-07-eldon-claude-code-visibility-temporary.md): Founder said the repo is public only for a while. Added a plan row so the switch back to private is decided deliberately: branch protection needs a paid plan on a private repo, and anything published may already be forked or cached.
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 - [2026-11-07-eldon-claude-code-public-repo-second-account.md](log/2026-11-07-eldon-claude-code-public-repo-second-account.md): The founder made the repo public. Verified there are no secrets, no emails in tracked files and no secret-like strings in history; enabled branch protection on main (PRs only, four required checks, no force push or deletion, admins included), secret scanning with push protection, private vulnerability reporting, outside-contributor workflow approval and a collaborators-only interaction limit. Merged the last Dependabot PR (none open). Added an interim all-rights-reserved LICENSE, ADR-0021, and the founder's second GitHub account (Eldonham) as the same founder in the lane map, code owners, onboarding and rules.
@@ -174,9 +173,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - [2026-11-07-eldon-claude-code-enforcement-layers.md](log/2026-11-07-eldon-claude-code-enforcement-layers.md): Founder asked for the logging and rules to be guaranteed on every task. Nothing can honestly guarantee that AI agents always comply, so this session added independent enforcement layers and recorded what stays unguaranteed. Also recorded the founder's standing authorisation for his sessions to merge PRs once checks pass.
 - [2026-11-07-eldon-claude-code-cloud-sessions.md](log/2026-11-07-eldon-claude-code-cloud-sessions.md): Founder's second account will work in the cloud. Made the guards cloud-friendly (finish gate no longer fails when gh is missing, founder detection falls back to git config or ORRERY_FOUNDER) and added a CI check that every commit in a PR names a plan ID, since cloud sessions may not run local hooks. Added cloud guidance to onboarding.
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
-- [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.
 
 ## ADRs with status Proposed
 
-- [ADR-0007-identity](decisions/ADR-0007-identity.md)
-- [ADR-0018-development-environments-and-progress-viewing](decisions/ADR-0018-development-environments-and-progress-viewing.md)
+- none

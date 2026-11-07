@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 15 | 1 | 22 | 1 | 39 |
+| G0 | 13 | 2 | 25 | 0 | 40 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 110 | 2 | 0 | 0 | 112 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 258 | 5 | 26 | 1 | 290 |
+| all | 256 | 6 | 29 | 0 | 291 |
 
 ## Built so far (done)
 
@@ -24,6 +24,8 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-005: Docs scripts: check_docs, build_status, new_log, session_start, scan_secrets
 - GOV-006: CI workflow: docs gate, secret scan, PR log gate
 - GOV-007: First green CI run on GitHub after bootstrap push
+- GOV-008: Branch protection on main: PRs only, required checks, no force push, admins included (done via public repo, ADR-0021)
+- GOV-009: Add partner (sayegh9) as admin; confirm CODEOWNERS review works
 - GOV-011: Agent role specs, routing rules, model registry
 - GOV-015: Draft ADR-0001..0014
 - GOV-018: Retire docs/HANDOFF.md in favour of docs/log and STATUS
@@ -32,6 +34,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-023: Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS
 - GOV-024: Enforcement layers: commit-msg and pre-push hooks, finish_session gate, main-guard audit workflow, ADR-0019
 - GOV-025: Lane guard: scripts/lanes.json and check_lanes.py in CI, pre-push and finish_session; cross-lane waiver in the session log (ADR-0020)
+- GOV-026: Public repo with branch protection, secret scanning, outsider limits and Eldon second account (ADR-0021)
 - CE-SEC-001: Change engine: stop accepting caller-supplied roles from request kwargs on whitelisted endpoints
 - CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
@@ -49,19 +52,22 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (10)
+**G0** (13)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner unassigned)
 - GOV-012: Fill model registry rows for Codex and Antigravity (owner partner)
+- GOV-013: Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11 (owner partner)
+- GOV-014: Trial the cross-model PR review routine on the first real PR (owner unassigned)
+- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (owner unassigned)
+- INF-013: Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) (owner eldon)
 - LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
-- LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (owner eldon)
 - LEG-003: Engage counsel in KSA, UAE and Egypt; scope of work (owner eldon)
 - LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 - PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (owner eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (owner eldon)
 
-**G1** (20)
+**G1** (21)
 - BPL-003: Blueprint validator (owner eldon)
 - BPL-010: Component registry (list, version, compatibility) (owner eldon)
 - BPL-011: Event stream contract implementation (owner eldon)
@@ -77,6 +83,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - GTM-004: Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) (owner eldon)
 - GTM-018: Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use (owner partner)
 - INF-003: CI/CD for services (build, test, deploy to staging) (owner partner)
+- INF-012: Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) (owner eldon)
 - PLT-024: Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) (owner unassigned)
 - QA-001: Eval framework and CI hook (owner eldon)
 - QA-016: Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) (owner unassigned)
@@ -90,6 +97,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 ## Queue: eldon
 
 Doing:
+- LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise)
 - BPL-005: Hand-written trading and distribution Blueprint fixture
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
@@ -97,8 +105,8 @@ Doing:
 
 Ready next (dependencies done), by gate:
 - GOV-002 (G0): Create GitHub organisation, transfer repo, decide final repo name
+- INF-013 (G0): Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018)
 - LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
-- LEG-002 (G0): Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes
 - LEG-003 (G0): Engage counsel in KSA, UAE and Egypt; scope of work
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
 - PLT-002 (G0): Identity ADR-0007: decide central identity with per-tenant roles
@@ -110,10 +118,11 @@ Ready next (dependencies done), by gate:
 - FND-001 (G1): Investor shortlist from research/05, re-verified
 - GTM-002 (G1): 20-30 buyer and accountant interviews in the niche
 - GTM-004 (G1): Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED)
+- INF-012 (G1): Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018)
 - QA-001 (G1): Eval framework and CI hook
 - SEC-001 (G1): Threat model for the five parts and four contracts
 
-Waiting on dependencies: 13 row(s).
+Waiting on dependencies: 10 row(s).
 
 ## Queue: partner
 
@@ -122,6 +131,7 @@ Doing:
 
 Ready next (dependencies done), by gate:
 - GOV-012 (G0): Fill model registry rows for Codex and Antigravity
+- GOV-013 (G0): Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11
 - LEG-004 (G0): Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally)
 - BPL-012 (G1): Engine adapter interface so the engine stays replaceable
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
@@ -129,13 +139,13 @@ Ready next (dependencies done), by gate:
 - GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE compliance leads) before any external use
 - INF-003 (G1): CI/CD for services (build, test, deploy to staging)
 
-Waiting on dependencies: 16 row(s).
+Waiting on dependencies: 15 row(s).
 
 Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim one).
 
 ## Blocked items
 
-- GOV-008: Branch protection on main: PRs only, required checks, no force push (blocked: needs GitHub Pro or Team for private repos; until then rely on the rules and CI) (G0)
+- none
 
 ## Doing items without an owner
 
@@ -143,6 +153,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 ## Items in progress
 
+- LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
 - BPL-005: Hand-written trading and distribution Blueprint fixture (eldon)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
@@ -152,6 +163,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 ## Last 10 log files
 
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
+- [2026-11-07-eldon-claude-code-public-repo-second-account.md](log/2026-11-07-eldon-claude-code-public-repo-second-account.md): The founder made the repo public. Verified there are no secrets, no emails in tracked files and no secret-like strings in history; enabled branch protection on main (PRs only, four required checks, no force push or deletion, admins included), secret scanning with push protection, private vulnerability reporting, outside-contributor workflow approval and a collaborators-only interaction limit. Merged the last Dependabot PR (none open). Added an interim all-rights-reserved LICENSE, ADR-0021, and the founder's second GitHub account (Eldonham) as the same founder in the lane map, code owners, onboarding and rules.
 - [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.
 - [2026-11-07-eldon-claude-code-lane-guard.md](log/2026-11-07-eldon-claude-code-lane-guard.md): Founder declined a paid GitHub plan and asked for clear guardrails that keep each founder in their own lane. Added a machine-readable lane map and a guard that fails any change touching the other founder's lane unless a waiver line is logged, in CI, the pre-push hook and the end-of-session gate. Added a first task for the partner to list every Frappe or ERPNext app and add-on used locally, because the repo holds only the change-engine module, not the engine installation.
 - [2026-11-07-eldon-claude-code-enforcement-layers.md](log/2026-11-07-eldon-claude-code-enforcement-layers.md): Founder asked for the logging and rules to be guaranteed on every task. Nothing can honestly guarantee that AI agents always comply, so this session added independent enforcement layers and recorded what stays unguaranteed. Also recorded the founder's standing authorisation for his sessions to merge PRs once checks pass.

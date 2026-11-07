@@ -252,7 +252,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | WEB-014 | Pricing page | Web | G3 | GTM-008,WEB-001 | unassigned | todo |
 | WEB-015 | Bilingual help centre | Web | G3 | WEB-001 | unassigned | todo |
 | QA-001 | Eval framework and CI hook | Quality | G1 | GOV-006 | eldon | done |
-| QA-002 | Arabic eval set v0 (100 prompts: accounting terms, dialects, numbers) | Quality | G1 | QA-001 | eldon | doing |
+| QA-002 | Arabic eval set v0 (100 prompts: accounting terms, dialects, numbers) | Quality | G1 | QA-001 | eldon | done |
 | QA-003 | Model bake-off on the Arabic eval set | Quality | G1 | QA-002 | eldon | todo |
 | QA-004 | Compiler snapshot tests on Blueprint fixtures | Quality | G1 | BPL-004 | eldon | todo |
 | QA-005 | Agent behaviour evals (tool choice, refusal, confirm-before-write) | Quality | G2 | OPR-002,QA-001 | unassigned | todo |

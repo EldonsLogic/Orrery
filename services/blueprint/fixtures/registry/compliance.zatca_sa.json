@@ -1,0 +1,43 @@
+{
+  "$schema": "../../../../contracts/component.manifest.schema.json",
+  "id": "compliance.zatca_sa",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": { "ar": "الفوترة الإلكترونية - هيئة الزكاة (تجريبي)", "en": "E-invoicing - ZATCA (fixture)" },
+  "description": "Fictional component manifest used only by the trading and distribution test fixture. It describes no real component and ships no code.",
+  "provides": [
+    {
+      "capability": "compliance.zatca_sa.entities",
+      "artifacts": [
+        { "type": "entity", "ref": "sales_invoice" },
+        { "type": "entity", "ref": "credit_note" }
+      ]
+    },
+    {
+      "capability": "compliance.zatca_sa.workflows",
+      "artifacts": [
+        { "type": "workflow", "ref": "sales_invoice_flow" }
+      ]
+    },
+    {
+      "capability": "compliance.zatca_sa.calculate",
+      "artifacts": [
+        { "type": "function", "ref": "compliance.zatca.qr_payload" }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "core.sales_invoice", "versionRange": "^0.1.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    { "id": "fixture_unit", "kind": "unit", "path": "tests/fixture_unit.py", "blocking": true },
+    { "id": "sandbox_stub", "kind": "compliance_sandbox", "path": "tests/sandbox_stub.py", "blocking": true }
+  ],
+  "certification": { "level": "reviewed", "touchesLedgerOrTax": true, "reviewedBy": ["example-reviewer"] },
+  "engineCompatibility": { "adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0", "testedAgainst": ["set-example"] },
+  "licence": { "spdx": "LicenseRef-Proprietary" },
+  "owner": { "github": "example-owner" },
+  "i18n": { "locales": ["ar", "en"], "rtlVerified": false },
+  "dataHandling": { "storesPersonalData": false, "sendsDataToModels": false, "promotableToLibrary": false }
+}

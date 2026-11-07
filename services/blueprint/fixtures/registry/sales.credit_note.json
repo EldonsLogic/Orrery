@@ -1,0 +1,39 @@
+{
+  "$schema": "../../../../contracts/component.manifest.schema.json",
+  "id": "sales.credit_note",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": { "ar": "إشعارات الدائن (تجريبي)", "en": "Credit notes (fixture)" },
+  "description": "Fictional component manifest used only by the trading and distribution test fixture. It describes no real component and ships no code.",
+  "provides": [
+    {
+      "capability": "sales.credit_note.entities",
+      "artifacts": [
+        { "type": "entity", "ref": "credit_note" },
+        { "type": "entity", "ref": "credit_note_line" }
+      ]
+    },
+    {
+      "capability": "sales.credit_note.calculate",
+      "artifacts": [
+        { "type": "function", "ref": "sales.credit_note.line_total" },
+        { "type": "function", "ref": "sales.credit_note.subtotal" },
+        { "type": "function", "ref": "sales.credit_note.total" },
+        { "type": "function", "ref": "sales.credit_note.vat_amount" }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "core.sales_invoice", "versionRange": "^0.1.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    { "id": "fixture_unit", "kind": "unit", "path": "tests/fixture_unit.py", "blocking": true }
+  ],
+  "certification": { "level": "reviewed", "touchesLedgerOrTax": true, "reviewedBy": ["example-reviewer"] },
+  "engineCompatibility": { "adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0", "testedAgainst": ["set-example"] },
+  "licence": { "spdx": "LicenseRef-Proprietary" },
+  "owner": { "github": "example-owner" },
+  "i18n": { "locales": ["ar", "en"], "rtlVerified": false },
+  "dataHandling": { "storesPersonalData": false, "sendsDataToModels": false, "promotableToLibrary": false }
+}

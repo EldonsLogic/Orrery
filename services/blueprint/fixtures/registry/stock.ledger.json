@@ -1,0 +1,50 @@
+{
+  "$schema": "../../../../contracts/component.manifest.schema.json",
+  "id": "stock.ledger",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": { "ar": "سجل المخزون (تجريبي)", "en": "Stock ledger (fixture)" },
+  "description": "Fictional component manifest used only by the trading and distribution test fixture. It describes no real component and ships no code.",
+  "provides": [
+    {
+      "capability": "stock.ledger.entities",
+      "artifacts": [
+        { "type": "entity", "ref": "item" },
+        { "type": "entity", "ref": "delivery_note" },
+        { "type": "entity", "ref": "purchase_receipt" },
+        { "type": "entity", "ref": "stock_transfer" }
+      ]
+    },
+    {
+      "capability": "stock.ledger.workflows",
+      "artifacts": [
+        { "type": "workflow", "ref": "stock_transfer_flow" }
+      ]
+    },
+    {
+      "capability": "stock.ledger.calculate",
+      "artifacts": [
+        { "type": "function", "ref": "stock.ledger.on_hand" }
+      ]
+    },
+    {
+      "capability": "stock.ledger.post",
+      "artifacts": [
+        { "type": "event", "ref": "stock.ledger.posted" }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "core.item", "versionRange": "^0.1.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    { "id": "fixture_unit", "kind": "unit", "path": "tests/fixture_unit.py", "blocking": true }
+  ],
+  "certification": { "level": "reviewed", "touchesLedgerOrTax": true, "reviewedBy": ["example-reviewer"] },
+  "engineCompatibility": { "adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0", "testedAgainst": ["set-example"] },
+  "licence": { "spdx": "LicenseRef-Proprietary" },
+  "owner": { "github": "example-owner" },
+  "i18n": { "locales": ["ar", "en"], "rtlVerified": false },
+  "dataHandling": { "storesPersonalData": false, "sendsDataToModels": false, "promotableToLibrary": false }
+}

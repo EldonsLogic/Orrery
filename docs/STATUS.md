@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 11 | 4 | 27 | 0 | 42 |
-| G1 | 69 | 2 | 5 | 0 | 76 |
+| G1 | 69 | 1 | 6 | 0 | 76 |
 | G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 254 | 8 | 32 | 0 | 294 |
+| all | 254 | 7 | 33 | 0 | 294 |
 
 ## Built so far (done)
 
@@ -43,6 +43,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - BPL-001: Import the prototype change engine into apps/engine as the change-engine module (renamed)
 - BPL-002: Blueprint schema v0 in contracts/
 - BPL-003: Blueprint validator
+- BPL-005: Hand-written trading and distribution Blueprint fixture
 - BPL-009: Component manifest schema v0 in contracts/
 - BPL-013: Branding section in the Blueprint schema (ADR-0014)
 - DSC-003: Connector interface spec and tier definitions
@@ -68,7 +69,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (21)
+**G1** (22)
 - BPL-006: Blueprint diff (owner eldon)
 - BPL-010: Component registry (list, version, compatibility) (owner eldon)
 - BPL-011: Event stream contract implementation (owner eldon)
@@ -77,6 +78,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - BRD-012: Icon set licence check (owner unassigned)
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner unassigned)
+- DSC-002: Template Blueprint: trading and distribution (owner eldon)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - FND-001: Investor shortlist from research/05, re-verified (owner eldon)
 - GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner unassigned)
@@ -101,7 +103,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 
 Doing:
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise)
-- BPL-005: Hand-written trading and distribution Blueprint fixture
 - PLT-002: Identity ADR-0007: decide central identity with per-tenant roles
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
@@ -118,6 +119,7 @@ Ready next (dependencies done), by gate:
 - BPL-010 (G1): Component registry (list, version, compatibility)
 - BPL-011 (G1): Event stream contract implementation
 - BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
+- DSC-002 (G1): Template Blueprint: trading and distribution
 - FND-001 (G1): Investor shortlist from research/05, re-verified
 - GTM-002 (G1): 20-30 buyer and accountant interviews in the niche
 - GTM-004 (G1): Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED)
@@ -126,7 +128,7 @@ Ready next (dependencies done), by gate:
 - SEC-001 (G1): Threat model for the five parts and four contracts
 - GOV-027 (G2): Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public
 
-Waiting on dependencies: 9 row(s).
+Waiting on dependencies: 8 row(s).
 
 ## Queue: partner
 
@@ -159,7 +161,6 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
-- BPL-005: Hand-written trading and distribution Blueprint fixture (eldon)
 - PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (eldon)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
@@ -170,6 +171,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 - [2026-11-07-eldon-claude-code-web-stack-adr.md](log/2026-11-07-eldon-claude-code-web-stack-adr.md): Wrote the web stack proposal for founder approval (ADR-0022, Proposed): one TypeScript and React stack on Next.js for marketing and app; static marketing; app screens rendered in the browser against our in-country gateway so no tenant data is processed on Vercel; plain CSS with token custom properties and a lint rule against literal colours and fonts; logical properties for RTL; headless accessible primitives; ICU i18n with Arabic default; self-hosted fonts; Playwright RTL goldens.
 - [2026-11-07-eldon-claude-code-visibility-temporary.md](log/2026-11-07-eldon-claude-code-visibility-temporary.md): Founder said the repo is public only for a while. Added a plan row so the switch back to private is decided deliberately: branch protection needs a paid plan on a private repo, and anything published may already be forked or cached.
+- [2026-11-07-eldon-claude-code-trading-fixture.md](log/2026-11-07-eldon-claude-code-trading-fixture.md): Finished the hand-written, fictional trading and distribution Blueprint fixture: a Saudi company with two branches, two warehouses and a finance department; 24 entities (14 top-level, 10 line tables), 189 fields, 30 computed fields named as component functions, 4 workflows with 24 transitions, 8 roles, 4 approvals, 6 reports, 2 integrations, ZATCA phase 2 in sandbox, plus 16 fictional component manifests as its registry.
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 - [2026-11-07-eldon-claude-code-single-account.md](log/2026-11-07-eldon-claude-code-single-account.md): The founder's second GitHub account was suspended. Its two unmerged branches (identity and web-stack proposals) were re-committed under the main account and merged (PRs 14 and 15, both ADRs still Proposed). The repo now uses one GitHub account per founder (ADR-0023): the second account was removed from the lane map, code owners, onboarding, rules and agent instructions.
 - [2026-11-07-eldon-claude-code-public-repo-second-account.md](log/2026-11-07-eldon-claude-code-public-repo-second-account.md): The founder made the repo public. Verified there are no secrets, no emails in tracked files and no secret-like strings in history; enabled branch protection on main (PRs only, four required checks, no force push or deletion, admins included), secret scanning with push protection, private vulnerability reporting, outside-contributor workflow approval and a collaborators-only interaction limit. Merged the last Dependabot PR (none open). Added an interim all-rights-reserved LICENSE, ADR-0021, and the founder's second GitHub account (Eldonham) as the same founder in the lane map, code owners, onboarding and rules.
@@ -177,7 +179,6 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 - [2026-11-07-eldon-claude-code-lane-guard.md](log/2026-11-07-eldon-claude-code-lane-guard.md): Founder declined a paid GitHub plan and asked for clear guardrails that keep each founder in their own lane. Added a machine-readable lane map and a guard that fails any change touching the other founder's lane unless a waiver line is logged, in CI, the pre-push hook and the end-of-session gate. Added a first task for the partner to list every Frappe or ERPNext app and add-on used locally, because the repo holds only the change-engine module, not the engine installation.
 - [2026-11-07-eldon-claude-code-identity-adr.md](log/2026-11-07-eldon-claude-code-identity-adr.md): Wrote the identity proposal for founder approval: central identity with per-tenant membership, roles resolved per request from each tenant's Blueprint, one token per tenant, no customer login on the engine (shadow engine users), OIDC with the identity provider chosen in a spike, mandatory MFA for admin and finance roles, separate staff realm. ADR-0007 stays Proposed.
 - [2026-11-07-eldon-claude-code-enforcement-layers.md](log/2026-11-07-eldon-claude-code-enforcement-layers.md): Founder asked for the logging and rules to be guaranteed on every task. Nothing can honestly guarantee that AI agents always comply, so this session added independent enforcement layers and recorded what stays unguaranteed. Also recorded the founder's standing authorisation for his sessions to merge PRs once checks pass.
-- [2026-11-07-eldon-claude-code-cloud-sessions.md](log/2026-11-07-eldon-claude-code-cloud-sessions.md): Founder's second account will work in the cloud. Made the guards cloud-friendly (finish gate no longer fails when gh is missing, founder detection falls back to git config or ORRERY_FOUNDER) and added a CI check that every commit in a PR names a plan ID, since cloud sessions may not run local hooks. Added cloud guidance to onboarding.
 
 ## ADRs with status Proposed
 

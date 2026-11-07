@@ -1,0 +1,41 @@
+{
+  "$schema": "../../../../contracts/component.manifest.schema.json",
+  "id": "sales.quote",
+  "version": "0.1.0",
+  "kind": "configurable",
+  "name": { "ar": "عروض الأسعار (تجريبي)", "en": "Sales quotes (fixture)" },
+  "description": "Fictional component manifest used only by the trading and distribution test fixture. It describes no real component and ships no code.",
+  "provides": [
+    {
+      "capability": "sales.quote.entities",
+      "artifacts": [
+        { "type": "entity", "ref": "sales_quote" },
+        { "type": "entity", "ref": "sales_quote_line" }
+      ]
+    },
+    {
+      "capability": "sales.quote.calculate",
+      "artifacts": [
+        { "type": "function", "ref": "sales.quote.line_total" },
+        { "type": "function", "ref": "sales.quote.subtotal" },
+        { "type": "function", "ref": "sales.quote.total" },
+        { "type": "function", "ref": "sales.quote.vat_amount" }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "core.customer", "versionRange": "^0.1.0" },
+    { "component": "core.item", "versionRange": "^0.1.0" },
+    { "component": "sales.price_list", "versionRange": "^0.1.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    { "id": "fixture_unit", "kind": "unit", "path": "tests/fixture_unit.py", "blocking": true }
+  ],
+  "certification": { "level": "tested", "touchesLedgerOrTax": false },
+  "engineCompatibility": { "adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0", "testedAgainst": ["set-example"] },
+  "licence": { "spdx": "LicenseRef-Proprietary" },
+  "owner": { "github": "example-owner" },
+  "i18n": { "locales": ["ar", "en"], "rtlVerified": false },
+  "dataHandling": { "storesPersonalData": false, "sendsDataToModels": false, "promotableToLibrary": false }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../../contracts/component.manifest.schema.json",
+  "id": "purchasing.purchase_receipt",
+  "version": "0.1.0",
+  "kind": "configurable",
+  "name": { "ar": "أذونات الاستلام (تجريبي)", "en": "Purchase receipts (fixture)" },
+  "description": "Fictional component manifest used only by the trading and distribution test fixture. It describes no real component and ships no code.",
+  "provides": [
+    {
+      "capability": "purchasing.purchase_receipt.entities",
+      "artifacts": [
+        { "type": "entity", "ref": "purchase_receipt" },
+        { "type": "entity", "ref": "purchase_receipt_line" }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "purchasing.purchase_order", "versionRange": "^0.1.0" },
+    { "capability": "stock.ledger.post", "versionRange": "^0.1.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    { "id": "fixture_unit", "kind": "unit", "path": "tests/fixture_unit.py", "blocking": true }
+  ],
+  "certification": { "level": "tested", "touchesLedgerOrTax": false },
+  "engineCompatibility": { "adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0", "testedAgainst": ["set-example"] },
+  "licence": { "spdx": "LicenseRef-Proprietary" },
+  "owner": { "github": "example-owner" },
+  "i18n": { "locales": ["ar", "en"], "rtlVerified": false },
+  "dataHandling": { "storesPersonalData": false, "sendsDataToModels": false, "promotableToLibrary": false }
+}

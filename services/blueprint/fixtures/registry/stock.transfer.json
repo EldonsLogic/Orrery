@@ -1,0 +1,38 @@
+{
+  "$schema": "../../../../contracts/component.manifest.schema.json",
+  "id": "stock.transfer",
+  "version": "0.1.0",
+  "kind": "configurable",
+  "name": { "ar": "التحويلات المخزنية (تجريبي)", "en": "Stock transfers (fixture)" },
+  "description": "Fictional component manifest used only by the trading and distribution test fixture. It describes no real component and ships no code.",
+  "provides": [
+    {
+      "capability": "stock.transfer.entities",
+      "artifacts": [
+        { "type": "entity", "ref": "stock_transfer" },
+        { "type": "entity", "ref": "stock_transfer_line" }
+      ]
+    },
+    {
+      "capability": "stock.transfer.workflows",
+      "artifacts": [
+        { "type": "workflow", "ref": "stock_transfer_flow" }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "core.item", "versionRange": "^0.1.0" },
+    { "capability": "stock.ledger.post", "versionRange": "^0.1.0" },
+    { "component": "stock.ledger", "versionRange": "^0.1.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    { "id": "fixture_unit", "kind": "unit", "path": "tests/fixture_unit.py", "blocking": true }
+  ],
+  "certification": { "level": "tested", "touchesLedgerOrTax": false },
+  "engineCompatibility": { "adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0", "testedAgainst": ["set-example"] },
+  "licence": { "spdx": "LicenseRef-Proprietary" },
+  "owner": { "github": "example-owner" },
+  "i18n": { "locales": ["ar", "en"], "rtlVerified": false },
+  "dataHandling": { "storesPersonalData": false, "sendsDataToModels": false, "promotableToLibrary": false }
+}

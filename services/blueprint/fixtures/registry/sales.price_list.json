@@ -1,0 +1,30 @@
+{
+  "$schema": "../../../../contracts/component.manifest.schema.json",
+  "id": "sales.price_list",
+  "version": "0.1.0",
+  "kind": "configurable",
+  "name": { "ar": "قوائم الأسعار (تجريبي)", "en": "Price lists (fixture)" },
+  "description": "Fictional component manifest used only by the trading and distribution test fixture. It describes no real component and ships no code.",
+  "provides": [
+    {
+      "capability": "sales.price_list.entities",
+      "artifacts": [
+        { "type": "entity", "ref": "price_list" },
+        { "type": "entity", "ref": "price_list_item" }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "core.item", "versionRange": "^0.1.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    { "id": "fixture_unit", "kind": "unit", "path": "tests/fixture_unit.py", "blocking": true }
+  ],
+  "certification": { "level": "tested", "touchesLedgerOrTax": false },
+  "engineCompatibility": { "adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0", "testedAgainst": ["set-example"] },
+  "licence": { "spdx": "LicenseRef-Proprietary" },
+  "owner": { "github": "example-owner" },
+  "i18n": { "locales": ["ar", "en"], "rtlVerified": false },
+  "dataHandling": { "storesPersonalData": false, "sendsDataToModels": false, "promotableToLibrary": false }
+}

@@ -12,7 +12,6 @@ GitHub only offers branch protection on a private repo with a paid plan. The fou
 - Branch protection on `main`: pull requests required, status checks docs-gate, secret-scan, repo-hygiene and pr-log-gate must pass, force pushes and deletion blocked, enforced for admins. Required approving reviews are 0 (founders authorise merges, RULES.md rule 10); raise to 1 when both founders are active.
 - Secret scanning with push protection and private vulnerability reporting are on. Outside contributors need approval to run workflows, and interactions are limited to collaborators (six-month limit, renew).
 - Everything committed is public: no secrets, personal data, customer or pilot data, or confidential material. Confidential documents (partner briefs, decks, investor material) stay outside the repo.
-- Eldon works from two GitHub accounts (`EldonsLogic`, `Eldonham`), one at a time, as one founder.
 
 ## Alternatives rejected
 - Paid plan: declined by the founder.

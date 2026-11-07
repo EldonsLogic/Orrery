@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:preview:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: preview()",
+  "description": "What the site configuration would be after applying the artifact, computed without side effects. Neutral and safe to build an owner-facing explanation from.",
+  "anyOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/response" }],
+  "$defs": {
+    "request": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }],
+      "properties": {
+        "input": {
+          "type": "object", "required": ["artifact"], "additionalProperties": false,
+          "properties": {
+            "artifact": { "$ref": "urn:platform:contract:compiled-artifact:0.1.0" },
+            "includeExport": { "type": "boolean", "default": false, "description": "Return the predicted export document as well as its hash." }
+          }
+        }
+      }
+    },
+    "response": { "oneOf": [{ "$ref": "#/$defs/ok" }, { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/errorResponse" }] },
+    "ok": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/okResponseBase" }],
+      "properties": { "result": { "$ref": "#/$defs/preview" } },
+      "unevaluatedProperties": false
+    },
+    "preview": {
+      "type": "object", "required": ["artifactId", "siteConfigHash", "verdict", "predictedExportHash", "delta"], "additionalProperties": false,
+      "properties": {
+        "artifactId": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/artifactId" },
+        "siteConfigHash": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/sha256" },
+        "verdict": { "enum": ["auto_approved", "needs_gate_approval", "rejected"], "description": "Same value plan() returns for the same artifact and site state." },
+        "predictedExportHash": { "oneOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/sha256" }, { "type": "null" }], "description": "exportHash export_config will return after a successful apply. null when verdict is rejected." },
+        "predictedExport": { "$ref": "urn:platform:contract:engine-adapter:export-config:0.1.0#/$defs/export" },
+        "delta": {
+          "type": "array", "maxItems": 5000,
+          "description": "Changes between the current and predicted export, sorted by pointer then property.",
+          "items": {
+            "type": "object", "required": ["change", "pointer"], "additionalProperties": false,
+            "properties": {
+              "change": { "enum": ["add", "replace", "remove", "reorder", "quarantine", "restore", "disable", "enable"] },
+              "pointer": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/pointer" },
+              "property": { "type": "string", "maxLength": 256 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

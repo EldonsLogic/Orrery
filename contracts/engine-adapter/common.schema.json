@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:common:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: shared definitions",
+  "description": "Request envelope, platform context, response envelope and shared types for every engine adapter operation. See contracts/engine-adapter.md. The context is stamped by the platform's internal gateway from the authenticated service identity and session; nothing in input may set tenant, caller or roles.",
+  "$defs": {
+    "semver": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "ulid": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "tenantId": { "type": "string", "pattern": "^(t_[a-z0-9_]{3,63}|platform)$", "description": "'platform' only for capabilities and platform-level health." },
+    "auditId": { "type": "string", "pattern": "^aud_[A-Za-z0-9]{8,64}$" },
+    "artifactId": { "type": "string", "pattern": "^art_[a-f0-9]{32}$" },
+    "operationId": { "type": "string", "pattern": "^op_[A-Za-z0-9]{8,64}$" },
+    "idempotencyKey": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,128}$", "description": "UUID or ULID chosen by the caller per intended effect." },
+    "pointer": { "type": "string", "maxLength": 512, "pattern": "^(/[^/]*)*$" },
+    "revisionRef": {
+      "type": "object", "required": ["hash", "revision"], "additionalProperties": false,
+      "properties": { "hash": { "$ref": "#/$defs/sha256" }, "revision": { "type": "integer", "minimum": 1 } }
+    },
+    "engineTarget": {
+      "type": "object", "required": ["adapter", "versionSet"], "additionalProperties": false,
+      "properties": { "adapter": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,31}$" }, "versionSet": { "type": "string", "minLength": 1, "maxLength": 64 } }
+    },
+    "serviceId": { "enum": ["control_plane", "compiler", "simulator", "operate_gateway", "identity", "observability"] },
+    "context": {
+      "type": "object",
+      "required": ["contractVersion", "requestId", "correlationId", "tenantId", "caller", "deadlineMs"],
+      "additionalProperties": false,
+      "description": "Set by the internal gateway, never by the calling code's payload. The adapter re-derives nothing from input.",
+      "properties": {
+        "contractVersion": { "$ref": "#/$defs/semver", "description": "Version of contracts/engine-adapter.md the caller speaks." },
+        "requestId": { "$ref": "#/$defs/ulid" },
+        "correlationId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_.:-]+$" },
+        "tenantId": { "$ref": "#/$defs/tenantId" },
+        "caller": {
+          "type": "object", "required": ["service", "onBehalfOf"], "additionalProperties": false,
+          "properties": {
+            "service": { "$ref": "#/$defs/serviceId", "description": "Authenticated service identity (mutual TLS or signed service token)." },
+            "onBehalfOf": {
+              "oneOf": [{ "type": "null" }, {
+                "type": "object", "required": ["kind", "id"], "additionalProperties": false,
+                "properties": {
+                  "kind": { "enum": ["user", "agent", "support", "system"] },
+                  "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_.:-]+$" },
+                  "roleIds": { "type": "array", "maxItems": 64, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" }, "description": "Resolved by the gateway from the tenant's assignment store at request time. Recorded for audit; config operations do not authorise on them." },
+                  "supportGrantId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,128}$", "description": "Required when kind is support." }
+                },
+                "allOf": [{ "if": { "properties": { "kind": { "const": "support" } } }, "then": { "required": ["supportGrantId"] } }]
+              }]
+            }
+          }
+        },
+        "deadlineMs": { "type": "integer", "minimum": 1, "maximum": 3600000, "description": "Time budget left for this call. The adapter stops starting new work after it and reports timeout or in_progress." }
+      }
+    },
+    "requestEnvelope": {
+      "type": "object", "required": ["context", "input"], "additionalProperties": false,
+      "properties": { "context": { "$ref": "#/$defs/context" }, "input": { "type": "object" } }
+    },
+    "errorResponse": {
+      "type": "object", "required": ["ok", "error", "auditId"], "additionalProperties": false,
+      "properties": {
+        "ok": { "const": false },
+        "error": { "$ref": "urn:platform:contract:engine-adapter:error:0.1.0" },
+        "auditId": { "$ref": "#/$defs/auditId" }
+      }
+    },
+    "okResponseBase": {
+      "type": "object", "required": ["ok", "result", "auditId", "replayed"],
+      "properties": {
+        "ok": { "const": true },
+        "result": { "type": "object" },
+        "auditId": { "$ref": "#/$defs/auditId" },
+        "replayed": { "type": "boolean", "description": "true when an idempotent replay returned a stored result and performed no new effect." }
+      }
+    },
+    "siteStatus": {
+      "type": "object", "required": ["state", "siteClass", "engineTarget", "blueprintId", "applied", "lockedBy"], "additionalProperties": false,
+      "properties": {
+        "state": { "enum": ["absent", "provisioning", "ready", "applying", "recovery_required", "failed"], "description": "applying: an apply or rollback holds the site lock. recovery_required: a partial change could not be compensated; no apply or rollback is accepted until a human resolves it." },
+        "siteClass": { "oneOf": [{ "enum": ["sandbox", "production"] }, { "type": "null" }] },
+        "engineTarget": { "oneOf": [{ "$ref": "#/$defs/engineTarget" }, { "type": "null" }] },
+        "blueprintId": { "oneOf": [{ "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$" }, { "type": "null" }] },
+        "applied": {
+          "oneOf": [{ "type": "null" }, {
+            "type": "object", "required": ["artifactId", "revision"], "additionalProperties": false,
+            "properties": { "artifactId": { "$ref": "#/$defs/artifactId" }, "revision": { "$ref": "#/$defs/revisionRef" } }
+          }],
+          "description": "Last artifact successfully applied (or rolled back to) and the Blueprint revision the site now matches."
+        },
+        "lockedBy": { "oneOf": [{ "$ref": "#/$defs/operationId" }, { "type": "null" }] }
+      }
+    }
+  }
+}

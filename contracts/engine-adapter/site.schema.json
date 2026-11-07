@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:site:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: provision_site() and site_status()",
+  "description": "Create the empty isolated site for the context tenant (ADR-0006) and read its state. Only the platform state the control plane needs is returned; no hostnames, database names or engine identifiers.",
+  "anyOf": [{ "$ref": "#/$defs/provisionRequest" }, { "$ref": "#/$defs/statusRequest" }, { "$ref": "#/$defs/response" }],
+  "$defs": {
+    "provisionRequest": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }],
+      "properties": {
+        "input": {
+          "type": "object", "required": ["idempotencyKey", "engineTarget", "countryPack", "siteClass", "blueprintId"], "additionalProperties": false,
+          "properties": {
+            "idempotencyKey": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/idempotencyKey" },
+            "engineTarget": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/engineTarget" },
+            "countryPack": { "type": "string", "pattern": "^[a-z]{2}(_[a-z0-9]+)?$", "description": "Country pack id, for example sa." },
+            "siteClass": { "enum": ["sandbox", "production"] },
+            "blueprintId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$", "description": "Binds the site to one Blueprint; artifacts for another Blueprint id are refused (blueprint_mismatch)." }
+          }
+        }
+      }
+    },
+    "statusRequest": { "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }], "properties": { "input": { "type": "object", "maxProperties": 0 } } },
+    "response": { "oneOf": [{ "$ref": "#/$defs/ok" }, { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/errorResponse" }] },
+    "ok": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/okResponseBase" }],
+      "properties": { "result": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/siteStatus" } },
+      "unevaluatedProperties": false
+    }
+  }
+}

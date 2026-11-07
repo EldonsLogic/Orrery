@@ -16,7 +16,7 @@ Only what [../research/03-regulations.md](../research/03-regulations.md) support
 | Hijri | No requirement found (K8) | Gregorian canonical; Hijri display later if confirmed |
 | Retention | UNVERIFIED (K9) | Immutable archive of signed XML + PDF/A; configurable period |
 
-Licence rule: use the MIT ERPGulf app, not the AGPL app ([../product/FRAPPE-BUILD-GUIDE.md](../product/FRAPPE-BUILD-GUIDE.md)).
+Licence rule: use the MIT ERPGulf app, not the AGPL app ([../product/FRAPPE-BUILD-GUIDE.md](../product/FRAPPE-BUILD-GUIDE.md)). Detailed technical evaluation of ERPGulf completed in [zatca-erpgulf-evaluation.md](zatca-erpgulf-evaluation.md) (CMP-002).
 
 ### ZATCA sandbox testing plan
 | Step | Check | Evidence |

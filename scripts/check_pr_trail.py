@@ -4,6 +4,7 @@
 Fails when a PR changes project files without leaving a trail:
   - files outside docs/ and .github/ changed but no new session log was added;
   - a new log has no Plan IDs or names an ID that is not in docs/PLAN.md;
+  - a commit message in the change names no plan ID (exempt: merges, reverts, bots);
   - product files (not Markdown) changed under apps/, services/, web/, connectors/, components/, evals/, infra/, contracts/ but the
     log names only rows still `todo` (work on a row must show as `doing`, `done` or `blocked` in the plan).
     Docs and governance PRs may log planning work on rows that stay `todo`.
@@ -54,6 +55,20 @@ def main():
         known = [i for i in ids if i in status]
         if code and known and all(status[i] == "todo" for i in known):
             errors.append(f"{f}: every listed plan row is still `todo`; set the row you worked on to doing, done or blocked in docs/PLAN.md")
+    bad = []
+    for rec in subprocess.run(["git", "log", "--no-merges", "--format=%H%x00%an%x00%B%x01", f"{a.base}..{a.head}"],
+                              cwd=ROOT, capture_output=True, text=True).stdout.split("\x01"):
+        parts = rec.strip().split("\x00", 2)
+        if len(parts) < 3:
+            continue
+        sha, author, body = parts
+        first = next((ln for ln in body.splitlines() if ln.strip()), "")
+        if "[bot]" in author or re.match(r"^(Merge |Revert |Bump |fixup! |squash! )", first):
+            continue
+        if not re.search(r"\b[A-Z]{2,}(?:-[A-Z]+)*-\d{3}\b", body):
+            bad.append(f"{sha[:7]} {first[:60]}")
+    if bad:
+        errors.append("commit message(s) without a plan ID: " + "; ".join(bad))
     if errors:
         print("Task trail FAILED:")
         for e in errors:

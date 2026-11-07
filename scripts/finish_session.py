@@ -48,8 +48,12 @@ def main():
         check("branch is pushed and up to date", ahead == "0", "git push")
     else:
         check("branch is pushed", False, "git push -u origin " + branch)
-    rc, o = out("gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number", "--jq", "length")
-    check("a pull request is open for this branch", rc == 0 and o.strip() not in ("", "0"), "gh pr create (say how to view the change)")
+    import shutil
+    if shutil.which("gh"):
+        rc, o = out("gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number", "--jq", "length")
+        check("a pull request is open for this branch", rc == 0 and o.strip() not in ("", "0"), "gh pr create (say how to view the change)")
+    else:
+        print("WARN  gh is not available here (cloud session?): open the PR with your tool and confirm it exists; CI will check the rest")
     if problems:
         print("\nNOT FINISHED. Fix:")
         for p in problems:

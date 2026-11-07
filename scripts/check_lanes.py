@@ -5,7 +5,7 @@ A change to the other founder's lane fails unless the session log added in the s
   Cross-lane: approved by <eldon|partner> (where and when, e.g. PR comment, open-questions entry)
 naming the owner of that lane. Shared paths are always allowed. Unknown actors (bots, unmapped logins) are skipped.
 Usage: check_lanes.py --base <sha> [--head <sha>] [--actor <github login>]
-Without --actor it tries ORRERY_FOUNDER, then `gh api user`; if the founder is unknown it skips (CI enforces).
+Without --actor it tries ORRERY_FOUNDER, then `gh api user`, then `git config user.name`; if the founder is unknown it skips (CI enforces).
 """
 import argparse
 import json
@@ -28,7 +28,12 @@ def detect_actor():
         return os.environ["ORRERY_FOUNDER"]
     try:
         r = subprocess.run(["gh", "api", "user", "--jq", ".login"], capture_output=True, text=True, timeout=15)
-        return r.stdout.strip() if r.returncode == 0 else ""
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except Exception:
+        pass
+    try:
+        return subprocess.run(["git", "config", "user.name"], capture_output=True, text=True, timeout=10).stdout.strip()
     except Exception:
         return ""
 

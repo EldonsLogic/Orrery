@@ -28,3 +28,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0019-enforcement-layers.md](ADR-0019-enforcement-layers.md) | Enforcement layers for the operating rules | Accepted |
 | [ADR-0020-lane-guard.md](ADR-0020-lane-guard.md) | Lane guard | Accepted |
 | [ADR-0021-public-repo-and-branch-protection.md](ADR-0021-public-repo-and-branch-protection.md) | Public repository with branch protection | Accepted |
+| [ADR-0022-web-stack.md](ADR-0022-web-stack.md) | Web stack for the marketing site and the app | Proposed |

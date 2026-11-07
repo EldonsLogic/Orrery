@@ -1,0 +1,77 @@
+{
+  "$schema": "../../../contracts/component.manifest.schema.json",
+  "id": "compliance.zatca_sa",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": {
+    "ar": "الفوترة الإلكترونية السعودية (المرحلة الأولى)",
+    "en": "Saudi ZATCA E-Invoicing (Phase 1)"
+  },
+  "description": "Deterministic ZATCA Phase 1 e-invoicing component for KSA: mandatory field validation (Art. 53), 5-tag TLV QR code generation, tax rounding, and immutability guardrails.",
+  "provides": [
+    {
+      "capability": "compliance.zatca_sa.phase1_generation",
+      "artifacts": [
+        {
+          "type": "function",
+          "ref": "components.compliance.zatca_sa.phase1.generate_phase1_invoice"
+        },
+        {
+          "type": "function",
+          "ref": "components.compliance.zatca_sa.phase1.encode_phase1_tlv"
+        },
+        {
+          "type": "function",
+          "ref": "components.compliance.zatca_sa.phase1.decode_phase1_tlv"
+        },
+        {
+          "type": "function",
+          "ref": "components.compliance.zatca_sa.phase1.validate_phase1_invoice"
+        }
+      ]
+    }
+  ],
+  "requires": [],
+  "parameters": [],
+  "tests": [
+    {
+      "id": "test_phase1_unit",
+      "kind": "unit",
+      "path": "tests/test_phase1.py",
+      "blocking": true
+    }
+  ],
+  "certification": {
+    "level": "reviewed",
+    "touchesLedgerOrTax": true,
+    "reviewedBy": [
+      "sayegh9"
+    ]
+  },
+  "engineCompatibility": {
+    "adapter": "change_engine",
+    "engineRange": ">=0.1.0 <1.0.0",
+    "testedAgainst": [
+      "frappe-15.126.0",
+      "erpnext-15.124.5"
+    ]
+  },
+  "licence": {
+    "spdx": "MIT"
+  },
+  "owner": {
+    "github": "sayegh9"
+  },
+  "i18n": {
+    "locales": [
+      "ar",
+      "en"
+    ],
+    "rtlVerified": true
+  },
+  "dataHandling": {
+    "storesPersonalData": false,
+    "sendsDataToModels": false,
+    "promotableToLibrary": true
+  }
+}

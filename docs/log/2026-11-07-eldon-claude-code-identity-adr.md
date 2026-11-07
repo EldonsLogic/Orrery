@@ -2,7 +2,7 @@
 
 Date: 2026-11-07
 Author: eldon
-Tool and model: claude-code (account Eldonham, cloud session)
+Tool and model: claude-code (cloud session)
 Plan IDs: PLT-002
 
 ## Summary

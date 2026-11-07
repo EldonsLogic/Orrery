@@ -42,6 +42,7 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/ST
 - Keep progress viewable (ADR-0018). A PR that changes visible behaviour says how to view it (preview link or exact steps) in its description. If something needed to view progress does not exist (a preview project, the dev server, access, keys), stop and ask the founders to create it, listing exactly what is needed and where secrets go; never guess or work around it. Dev hosts get synthetic data only.
 
 ## Two-person rules and repo hygiene (strict; two people always work here)
+- Every open plan row has one owner; a row never depends on the other founder's row in the same or a later gate (ADR-0025, `scripts/check_plan_independence.py`).
 - One writer per path: claim a plan row (`doing` + owner) before touching its files; never edit paths under someone else's `doing` row. `git pull --rebase` before starting and before opening a PR. No force-push, no history rewrite, no merging your own PR without the other founder's review.
 - Lanes are enforced: `scripts/lanes.json` maps paths to each founder; editing the other's lane fails CI unless your session log has `Cross-lane: approved by <eldon|partner> (where and when)` after real agreement (ADR-0020).
 - Small PRs (about 400 changed lines or less, excluding generated files). Logs and decision records are append-only: new file per session, never edit an old log, supersede an ADR instead of editing it.
@@ -81,7 +82,7 @@ Details in [agents/routing.md](agents/routing.md) and the step-by-step [agents/d
 | `docs/research/`, `docs/strategy/` | evidence and strategy (existing) |
 | `docs/{product,architecture,compliance,security,legal,brand,gtm,fundraising,specs,runbooks}/` | topic docs |
 | `contracts/` | schemas: Blueprint, Component manifest, Tool API, Event stream, Connector |
-| `apps/engine/`, `services/`, `web/`, `connectors/`, `components/` | code (empty until the gate that needs it) |
+| `apps/engine/`, `services/`, `web/`, `connectors/`, `components/` | code (empty until the gate that needs it); lanes in `scripts/lanes.json` |
 | `agents/` | role specs, routing, model registry; `evals/`, `infra/`, `scripts/` |
 
 ## Reporting style

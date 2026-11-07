@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 8 | 3 | 32 | 0 | 43 |
-| G1 | 65 | 1 | 13 | 0 | 79 |
-| G2 | 114 | 2 | 0 | 0 | 116 |
-| G3 | 43 | 0 | 0 | 0 | 43 |
-| G4 | 10 | 0 | 0 | 0 | 10 |
+| G0 | 12 | 3 | 33 | 0 | 48 |
+| G1 | 66 | 2 | 13 | 0 | 81 |
+| G2 | 111 | 1 | 0 | 0 | 112 |
+| G3 | 47 | 0 | 0 | 0 | 47 |
+| G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 247 | 6 | 45 | 0 | 298 |
+| all | 251 | 6 | 46 | 0 | 303 |
 
 ## Built so far (done)
 
@@ -63,53 +63,56 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - QA-002: Arabic eval set v0 (100 prompts: accounting terms, dialects, numbers)
 - GTM-001: Niche decision: trading and distribution first
 - GOV-031: Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified
+- GOV-032: Independent founder lanes: every open row owned, no cross-founder dependency inside a gate, interface rows, plan check in CI (ADR-0025)
 
 ## Ready to start (todo, all dependencies done), by gate
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (8)
+**G0** (10)
+- BPL-025: Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently (owner eldon)
+- BPL-026: Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures (owner eldon)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
-- GOV-010: Install pre-commit hooks on both founders' machines (owner unassigned)
-- GOV-014: Trial the cross-model PR review routine on the first real PR (owner unassigned)
-- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (owner unassigned)
+- GOV-010: Install pre-commit hooks on both founders' machines (owner eldon)
+- GOV-014: Trial the cross-model PR review routine on the first real PR (owner eldon)
+- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (owner eldon)
 - INF-013: Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) (owner eldon)
 - LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (23)
-- BPL-012: Engine adapter interface so the engine stays replaceable (owner partner)
+**G1** (24)
+- BPL-014: Component certification levels and test harness (owner eldon)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
-- BRD-012: Icon set licence check (owner unassigned)
+- BRD-012: Icon set licence check (owner eldon)
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
-- DAT-001: Data classification and retention policy (owner unassigned)
-- DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner unassigned)
+- DAT-001: Data classification and retention policy (owner eldon)
+- DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner eldon)
 - ERP-001: G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
 - FND-001: Investor shortlist from research/05, re-verified (owner eldon)
-- GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner unassigned)
+- GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner eldon)
 - GTM-002: 20-30 buyer and accountant interviews in the niche (owner eldon)
 - GTM-004: Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) (owner eldon)
 - GTM-018: Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use (owner partner)
 - GTM-019: Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires (owner eldon)
 - INF-003: CI/CD for services (build, test, deploy to staging) (owner partner)
 - INF-012: Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) (owner eldon)
-- PLT-024: Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) (owner unassigned)
+- PLT-024: Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) (owner partner)
 - QA-003: Model bake-off on the Arabic eval set (owner eldon)
-- QA-016: Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) (owner unassigned)
-- SEC-002: Secrets management design (store, rotate, never in repo) (owner unassigned)
-- SEC-003: Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data (owner unassigned)
-- WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner unassigned)
+- QA-016: Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) (owner partner)
+- SEC-002: Secrets management design (store, rotate, never in repo) (owner partner)
+- SEC-003: Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data (owner eldon)
+- SEC-018: Brand asset upload security rules (spec): allowed types, size limits, SVG sanitiser requirements, scan policy, storage isolation; enforced by SEC-006 (owner eldon)
+- WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner eldon)
 
-**G2** (6)
-- BPL-014: Component certification levels and test harness (owner unassigned)
-- BPL-021: Blueprint versioning and schema migration (owner unassigned)
+**G2** (5)
+- BPL-021: Blueprint versioning and schema migration (owner eldon)
 - GOV-027: Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public (owner eldon)
-- OPR-003: Tool API generator: typed actions per tenant from the Blueprint (owner unassigned)
-- PLT-005: Identity service (users, sessions, per-tenant roles) (owner unassigned)
-- SEC-007: Dependency and SBOM scanning for Python and Node (beyond dependabot actions) (owner unassigned)
+- OPR-003: Tool API generator: typed actions per tenant from the Blueprint (owner eldon)
+- PLT-005: Identity service (users, sessions, per-tenant roles) (owner eldon)
+- SEC-007: Dependency and SBOM scanning for Python and Node (beyond dependabot actions) (owner eldon)
 
 
 ## Queue: eldon
@@ -122,21 +125,38 @@ Doing:
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
 
 Ready next (dependencies done), by gate:
+- BPL-025 (G0): Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently
+- BPL-026 (G0): Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures
 - GOV-002 (G0): Create GitHub organisation, transfer repo, decide final repo name
+- GOV-010 (G0): Install pre-commit hooks on both founders' machines
+- GOV-014 (G0): Trial the cross-model PR review routine on the first real PR
+- GOV-019 (G0): Pick issue/PR labels and project board mapping to PLAN IDs
 - INF-013 (G0): Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018)
 - LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
 - LEG-003 (G0): Engage counsel in KSA, UAE, Egypt and Qatar; scope of work
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
+- BPL-014 (G1): Component certification levels and test harness
 - BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
+- BRD-012 (G1): Icon set licence check
+- DAT-001 (G1): Data classification and retention policy
+- DAT-002 (G1): Anonymised sample datasets for dev, demos and evals (no real customer data)
 - FND-001 (G1): Investor shortlist from research/05, re-verified
+- GOV-016 (G1): Autonomy metrics file and monthly reporting template (strategy/08)
 - GTM-002 (G1): 20-30 buyer and accountant interviews in the niche
 - GTM-004 (G1): Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED)
 - GTM-019 (G1): Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires
 - INF-012 (G1): Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018)
 - QA-003 (G1): Model bake-off on the Arabic eval set
+- SEC-003 (G1): Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data
+- SEC-018 (G1): Brand asset upload security rules (spec): allowed types, size limits, SVG sanitiser requirements, scan policy, storage isolation; enforced by SEC-006
+- WEB-017 (G1): Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016)
+- BPL-021 (G2): Blueprint versioning and schema migration
 - GOV-027 (G2): Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public
+- OPR-003 (G2): Tool API generator: typed actions per tenant from the Blueprint
+- PLT-005 (G2): Identity service (users, sessions, per-tenant roles)
+- SEC-007 (G2): Dependency and SBOM scanning for Python and Node (beyond dependabot actions)
 
-Waiting on dependencies: 6 row(s).
+Waiting on dependencies: 143 row(s).
 
 ## Queue: partner
 
@@ -144,17 +164,19 @@ Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 
 Ready next (dependencies done), by gate:
-- BPL-012 (G1): Engine adapter interface so the engine stays replaceable
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
 - ERP-001 (G1): G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - ERP-009 (G1): Engine event emitter feeding the event stream
 - GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use
 - INF-003 (G1): CI/CD for services (build, test, deploy to staging)
+- PLT-024 (G1): Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016)
+- QA-016 (G1): Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016)
+- SEC-002 (G1): Secrets management design (store, rotate, never in repo)
 
-Waiting on dependencies: 13 row(s).
+Waiting on dependencies: 69 row(s).
 
-Unassigned rows not done: 208 (assign an owner in docs/PLAN.md when you claim one).
+Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one).
 
 ## Blocked items
 

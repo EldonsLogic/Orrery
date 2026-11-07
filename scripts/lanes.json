@@ -15,14 +15,16 @@
       "docs/product/",
       "docs/brand/",
       "docs/strategy/",
-      "docs/research/"
+      "docs/research/",
+      "connectors/",
+      "services/control-plane/"
     ],
     "partner": [
       "apps/engine/",
       "infra/",
       "components/",
-      "connectors/"
+      "services/gateway/"
     ]
   },
-  "note": "Everything not listed is shared (docs/PLAN.md, docs/RULES.md, AGENTS.md, docs/decisions/, docs/log/, docs/security/, docs/compliance/, docs/legal/, scripts/, .github/, services/gateway/, services/control-plane/). Shared paths are open to both founders but need the other's review."
+  "note": "Everything not listed is shared (docs/PLAN.md, docs/RULES.md, AGENTS.md, docs/decisions/, docs/log/, docs/security/, docs/compliance/, docs/legal/, scripts/, .github/). Shared paths are open to both founders but need the other's review. Plan rows follow these lanes and never block each other inside a gate (ADR-0025, scripts/check_plan_independence.py)."
 }

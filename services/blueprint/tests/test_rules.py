@@ -173,7 +173,7 @@ def test_resolve_locale_fills_defaults_and_checks_them():
     del bp["company"]["locale"]
     loc = resolve_locale(bp)
     assert loc["workingTime"]["workDays"] == DEFAULT_PACK_LOCALES["sa"]["workingTime"]["workDays"]
-    assert set(DEFAULT_PACK_LOCALES) == {"sa", "ae", "eg"}
+    assert set(DEFAULT_PACK_LOCALES) == {"sa", "ae", "eg", "qa"}
     # explicit weekend that collides with the defaulted work days is caught
     bp["company"]["locale"] = {"week": {"weekendDays": ["sun"]}}
     assert "BP-LOC-001" in {e.code for e in validate(bp, full_ctx()).errors}
@@ -188,3 +188,42 @@ def test_localized_text_found_in_every_position():
               "/i18n/labelOverrides/sales_order.title", "/i18n/glossary/0/translations",
               "/branding/documentHeader/footerText", "/company/locale/workingTime/reducedPeriods/0/labels"):
         assert p in paths, p
+
+
+def _as_qa(bp):
+    bp["company"]["country"] = bp["compliance"]["country"] = "QA"
+    bp["compliance"]["countryPack"]["id"] = "qa"
+    bp["company"]["locale"]["holidays"]["calendarRef"]["id"] = "qa.holidays"
+    return bp
+
+
+def test_qa_locale_resolution():
+    from validator import resolve_locale
+    bp = load_example()
+    del bp["company"]["locale"]
+    bp["compliance"]["countryPack"]["id"] = "qa"
+    loc = resolve_locale(bp)
+    assert loc["timezone"] == "Asia/Qatar" and loc["currency"] == "QAR"
+    assert loc["week"] == {"startDay": "sun", "weekendDays": ["fri", "sat"]}
+    assert loc["calendar"] == {"primary": "gregorian", "secondaryDisplay": "hijri_umm_al_qura"}
+    assert loc["numberSystem"] == "western"
+    assert loc["holidays"]["calendarRef"] == {"id": "qa.holidays", "version": "0.1.0"}
+
+
+def test_qa_pack_and_holiday_prefix_pass_and_mismatch():
+    bp = _as_qa(load_example())
+    codes = {e.code for e in validate(bp, full_ctx()).errors}
+    assert not codes & {"BP-CTRY-001", "BP-CTRY-002", "BP-CTRY-003"}
+    bp["compliance"]["countryPack"]["id"] = "sa"
+    assert "BP-CTRY-002" in {e.code for e in validate(bp, full_ctx()).errors}
+    bp = _as_qa(load_example())
+    bp["company"]["locale"]["holidays"]["calendarRef"]["id"] = "sa.holidays"
+    assert "BP-CTRY-003" in {e.code for e in validate(bp, full_ctx()).errors}
+
+
+def test_qa_skips_sa_only_einvoicing_rule():
+    bp = _as_qa(load_example())
+    del bp["company"]["vatNumber"]
+    bp["compliance"]["documentLanguages"] = ["en"]
+    codes = {e.code for e in validate(bp, full_ctx()).errors}
+    assert "BP-EINV-001" not in codes and "BP-EINV-002" not in codes

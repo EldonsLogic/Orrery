@@ -311,4 +311,4 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-030 | Qatar market research: tax, e-invoicing, data protection and hosting, payroll, accounting standard, calendars, entity (all UNVERIFIED; docs/compliance/country-matrix.md section Qatar) | Compliance | G1 | CMP-001 | unassigned | todo |
 | CMP-031 | Qatar country pack | Compliance | G2 | CMP-030,CMP-021 | unassigned | todo |
 | GTM-019 | Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires | GTM | G1 | GTM-001 | eldon | todo |
-| GOV-031 | Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified | Governance | G0 | GOV-029 | eldon | doing |
+| GOV-031 | Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified | Governance | G0 | GOV-029 | eldon | done |

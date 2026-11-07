@@ -34,7 +34,8 @@
           "options": [
             {"value": "sa", "labels": {"ar": "المملكة العربية السعودية", "en": "Saudi Arabia"}},
             {"value": "ae", "labels": {"ar": "الإمارات العربية المتحدة", "en": "United Arab Emirates"}},
-            {"value": "eg", "labels": {"ar": "مصر", "en": "Egypt"}}
+            {"value": "eg", "labels": {"ar": "مصر", "en": "Egypt"}},
+            {"value": "qa", "labels": {"ar": "قطر", "en": "Qatar"}}
           ],
           "pointers": ["/company/country", "/compliance/country", "/compliance/countryPack/id", "/compliance/eInvoicing/mode"],
           "defaultIfUnknown": {"value": null, "note": {"ar": "لا يوجد افتراضي؛ يحدد الدولة حزمة الامتثال والتقويم.", "en": "No default; the country selects the country pack and calendar."}}

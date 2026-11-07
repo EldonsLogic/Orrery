@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 8 | 4 | 31 | 0 | 43 |
+| G0 | 8 | 3 | 32 | 0 | 43 |
 | G1 | 65 | 1 | 13 | 0 | 79 |
 | G2 | 114 | 2 | 0 | 0 | 116 |
 | G3 | 43 | 0 | 0 | 0 | 43 |
 | G4 | 10 | 0 | 0 | 0 | 10 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 247 | 7 | 44 | 0 | 298 |
+| all | 247 | 6 | 45 | 0 | 298 |
 
 ## Built so far (done)
 
@@ -62,6 +62,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - QA-001: Eval framework and CI hook
 - QA-002: Arabic eval set v0 (100 prompts: accounting terms, dialects, numbers)
 - GTM-001: Niche decision: trading and distribution first
+- GOV-031: Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified
 
 ## Ready to start (todo, all dependencies done), by gate
 
@@ -119,7 +120,6 @@ Doing:
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
-- GOV-031: Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified
 
 Ready next (dependencies done), by gate:
 - GOV-002 (G0): Create GitHub organisation, transfer repo, decide final repo name
@@ -172,7 +172,6 @@ Unassigned rows not done: 208 (assign an owner in docs/PLAN.md when you claim on
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (eldon)
-- GOV-031: Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified (eldon)
 
 ## Last 10 log files
 

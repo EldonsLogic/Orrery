@@ -43,6 +43,7 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/ST
 
 ## Two-person rules and repo hygiene (strict; two people always work here)
 - One writer per path: claim a plan row (`doing` + owner) before touching its files; never edit paths under someone else's `doing` row. `git pull --rebase` before starting and before opening a PR. No force-push, no history rewrite, no merging your own PR without the other founder's review.
+- Lanes are enforced: `scripts/lanes.json` maps paths to each founder; editing the other's lane fails CI unless your session log has `Cross-lane: approved by <eldon|partner> (where and when)` after real agreement (ADR-0020).
 - Small PRs (about 400 changed lines or less, excluding generated files). Logs and decision records are append-only: new file per session, never edit an old log, supersede an ADR instead of editing it.
 - Generated files are never hand-edited: `docs/STATUS.md`, `docs/brand/tokens/*.css`, `docs/brand/logo/*`. Regenerate them with their script.
 - The repo holds project content only. Never commit: scratch or temp files, session briefs, rendered images, downloads, exports, archives, PDFs or office files, local paths, personal notes, sales or partner or investor documents (those live outside the repo), copies of third-party code (except a documented import with a `PROVENANCE.md`), secrets, customer data. Files over 1 MB are rejected.

@@ -32,6 +32,7 @@ def main():
     base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     if base:
         rc |= run(sys.executable, "scripts/check_pr_trail.py", "--base", base, "--head", "HEAD")
+        rc |= run(sys.executable, "scripts/check_lanes.py", "--base", base, "--head", "HEAD")
     if rc:
         print("Pre-push checks failed. Fix them (run python3 scripts/finish_session.py) and push again.")
     return 1 if rc else 0

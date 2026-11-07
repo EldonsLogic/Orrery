@@ -38,10 +38,11 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-022 | Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md) | Governance | G0 | GOV-004 | eldon | done |
 | GOV-023 | Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS | Governance | G0 | GOV-006 | eldon | done |
 | GOV-024 | Enforcement layers: commit-msg and pre-push hooks, finish_session gate, main-guard audit workflow, ADR-0019 | Governance | G0 | GOV-023 | eldon | done |
+| GOV-025 | Lane guard: scripts/lanes.json and check_lanes.py in CI, pre-push and finish_session; cross-lane waiver in the session log (ADR-0020) | Governance | G0 | GOV-024 | eldon | done |
 | LEG-001 | Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype | Legal | G0 | - | eldon | todo |
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes | Legal | G0 | GOV-004 | eldon | todo |
 | LEG-003 | Engage counsel in KSA, UAE and Egypt; scope of work | Legal | G0 | - | eldon | todo |
-| LEG-004 | Third-party licence register (every adopted OSS component, version, licence) | Legal | G0 | GOV-004 | partner | todo |
+| LEG-004 | Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) | Legal | G0 | GOV-004 | partner | todo |
 | LEG-005 | Register domains and social handles for the working name (hold only) | Legal | G0 | - | eldon | todo |
 | LEG-006 | GPL licence-boundary review: SaaS-only engine, separate services, no distribution | Legal | G1 | LEG-003 | unassigned | todo |
 | LEG-007 | Counsel opinion: vendor certification needed to sell ZATCA-compliant software | Legal | G1 | LEG-003 | unassigned | todo |

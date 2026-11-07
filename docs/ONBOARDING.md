@@ -29,7 +29,7 @@ Agents: at session start work out which founder you are helping (`gh api user --
 7. Partner, first week: review ADR-0001 to ADR-0018 (GOV-013). Open one PR that sets the `Approved by` line of each ADR you accept to "Eldon and partner"; for anything you disagree with, add an entry to [open-questions.md](open-questions.md) instead of editing the decision text. Fill in the Codex and Antigravity rows of [agents/model-registry.md](../agents/model-registry.md) (GOV-012).
 
 ## 2. Lanes (initial split; re-assign by changing the Owner in [PLAN.md](PLAN.md) in a PR)
-Lanes keep two people and several agents out of each other's files. Edit only your lane's paths. If you need a change in the other lane, open an entry in [open-questions.md](open-questions.md) or comment on the other's PR. The shared interface is `contracts/`; changes there need an ADR and both founders.
+Lanes keep two people and several agents out of each other's files. Edit only your lane's paths. The lane map is `scripts/lanes.json` (source of truth); CI, the pre-push hook and `finish_session.py` run `scripts/check_lanes.py`, which **fails** a change that touches the other founder's lane. If you genuinely need a change there, get the other founder's agreement first (a PR comment or an entry in [open-questions.md](open-questions.md)), then add this line to your session log: `Cross-lane: approved by <eldon|partner> (where and when)`. Reviewers must confirm the agreement is real. The shared interface is `contracts/`; changes there need an ADR and both founders.
 
 | Lane | Founder | Paths | Typical plan rows |
 |---|---|---|---|
@@ -40,7 +40,7 @@ Lanes keep two people and several agents out of each other's files. Edit only yo
 
 ## 3. First tasks (claim by setting `doing` plus owner in PLAN.md)
 - **Eldon:** BPL-003 Blueprint validator, BPL-005 fixture (in progress), identity decision ADR-0007 (PLT-002), web stack decision (WEB-018), threat model (SEC-001), Arabic eval set (QA-001, QA-002), owner interviews (GTM-002), the founders' agreement and licence policy (LEG-001, LEG-002).
-- **Partner:** finish CE-SEC-003 (policy persistence, in progress), the third-party licence register (LEG-004, it unblocks the engine spike), then ERP-001 (pin versions and stand up a bench), ERP-003 (scripted tenant creation), CMP-002 (evaluate the ZATCA app), BPL-012 (engine adapter interface).
+- **Partner:** first, list every Frappe or ERPNext app and add-on you installed or used locally (name, source URL, version, licence, why) in your first PR as an entry for the third-party licence register (LEG-004); the repo contains only the change-engine module, not the engine installation. Then finish CE-SEC-003 (policy persistence, in progress), the third-party licence register (LEG-004, it unblocks the engine spike), then ERP-001 (pin versions and stand up a bench), ERP-003 (scripted tenant creation), CMP-002 (evaluate the ZATCA app), BPL-012 (engine adapter interface).
 - **Both:** GOV-010 (pre-commit), and creating the shared accounts when [ADR-0018](decisions/ADR-0018-development-environments-and-progress-viewing.md) asks (Vercel project, dev server): INF-012 and INF-013.
 
 ## 4. Decisions waiting, and who records them

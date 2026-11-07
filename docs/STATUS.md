@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 15 | 1 | 21 | 1 | 38 |
+| G0 | 15 | 1 | 22 | 1 | 39 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
 | G2 | 110 | 2 | 0 | 0 | 112 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 258 | 5 | 25 | 1 | 289 |
+| all | 258 | 5 | 26 | 1 | 290 |
 
 ## Built so far (done)
 
@@ -31,6 +31,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-022: Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md)
 - GOV-023: Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS
 - GOV-024: Enforcement layers: commit-msg and pre-push hooks, finish_session gate, main-guard audit workflow, ADR-0019
+- GOV-025: Lane guard: scripts/lanes.json and check_lanes.py in CI, pre-push and finish_session; cross-lane waiver in the session log (ADR-0020)
 - CE-SEC-001: Change engine: stop accepting caller-supplied roles from request kwargs on whitelisted endpoints
 - CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
@@ -55,7 +56,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (owner eldon)
 - LEG-003: Engage counsel in KSA, UAE and Egypt; scope of work (owner eldon)
-- LEG-004: Third-party licence register (every adopted OSS component, version, licence) (owner partner)
+- LEG-004: Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) (owner partner)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 - PLT-002: Identity ADR-0007: decide central identity with per-tenant roles (owner eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (owner eldon)
@@ -121,7 +122,7 @@ Doing:
 
 Ready next (dependencies done), by gate:
 - GOV-012 (G0): Fill model registry rows for Codex and Antigravity
-- LEG-004 (G0): Third-party licence register (every adopted OSS component, version, licence)
+- LEG-004 (G0): Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally)
 - BPL-012 (G1): Engine adapter interface so the engine stays replaceable
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
@@ -152,6 +153,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 - [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.
+- [2026-11-07-eldon-claude-code-lane-guard.md](log/2026-11-07-eldon-claude-code-lane-guard.md): Founder declined a paid GitHub plan and asked for clear guardrails that keep each founder in their own lane. Added a machine-readable lane map and a guard that fails any change touching the other founder's lane unless a waiver line is logged, in CI, the pre-push hook and the end-of-session gate. Added a first task for the partner to list every Frappe or ERPNext app and add-on used locally, because the repo holds only the change-engine module, not the engine installation.
 - [2026-11-07-eldon-claude-code-enforcement-layers.md](log/2026-11-07-eldon-claude-code-enforcement-layers.md): Founder asked for the logging and rules to be guaranteed on every task. Nothing can honestly guarantee that AI agents always comply, so this session added independent enforcement layers and recorded what stays unguaranteed. Also recorded the founder's standing authorisation for his sessions to merge PRs once checks pass.
 - [2026-11-06-eldon-claude-code-three-countries.md](log/2026-11-06-eldon-claude-code-three-countries.md): Aligned the repo with three operating markets (KSA, UAE, Egypt) instead of two, and recorded the co-founder research leads for the three country packs as UNVERIFIED.
 - [2026-11-06-eldon-claude-code-foundation-governance.md](log/2026-11-06-eldon-claude-code-foundation-governance.md): Built the governance foundation: agent rules, docs gate scripts, CI, agent roles, master plan, gates, risks and ADR-0001..0015.

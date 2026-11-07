@@ -10,11 +10,11 @@ Current gate: G0 (see [GATES.md](GATES.md))
 |---|---|---|---|---|---|
 | G0 | 13 | 2 | 25 | 0 | 40 |
 | G1 | 70 | 2 | 4 | 0 | 76 |
-| G2 | 110 | 2 | 0 | 0 | 112 |
+| G2 | 111 | 2 | 0 | 0 | 113 |
 | G3 | 44 | 0 | 0 | 0 | 44 |
 | G4 | 12 | 0 | 0 | 0 | 12 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 256 | 6 | 29 | 0 | 291 |
+| all | 257 | 6 | 29 | 0 | 292 |
 
 ## Built so far (done)
 
@@ -90,7 +90,8 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - SEC-001: Threat model for the five parts and four contracts (owner eldon)
 - WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner unassigned)
 
-**G2** (1)
+**G2** (2)
+- GOV-027: Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public (owner eldon)
 - SEC-007: Dependency and SBOM scanning for Python and Node (beyond dependabot actions) (owner unassigned)
 
 
@@ -121,6 +122,7 @@ Ready next (dependencies done), by gate:
 - INF-012 (G1): Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018)
 - QA-001 (G1): Eval framework and CI hook
 - SEC-001 (G1): Threat model for the five parts and four contracts
+- GOV-027 (G2): Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public
 
 Waiting on dependencies: 10 row(s).
 
@@ -162,6 +164,7 @@ Unassigned rows not done: 206 (assign an owner in docs/PLAN.md when you claim on
 
 ## Last 10 log files
 
+- [2026-11-07-eldon-claude-code-visibility-temporary.md](log/2026-11-07-eldon-claude-code-visibility-temporary.md): Founder said the repo is public only for a while. Added a plan row so the switch back to private is decided deliberately: branch protection needs a paid plan on a private repo, and anything published may already be forked or cached.
 - [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 - [2026-11-07-eldon-claude-code-public-repo-second-account.md](log/2026-11-07-eldon-claude-code-public-repo-second-account.md): The founder made the repo public. Verified there are no secrets, no emails in tracked files and no secret-like strings in history; enabled branch protection on main (PRs only, four required checks, no force push or deletion, admins included), secret scanning with push protection, private vulnerability reporting, outside-contributor workflow approval and a collaborators-only interaction limit. Merged the last Dependabot PR (none open). Added an interim all-rights-reserved LICENSE, ADR-0021, and the founder's second GitHub account (Eldonham) as the same founder in the lane map, code owners, onboarding and rules.
 - [2026-11-07-eldon-claude-code-onboarding-lanes.md](log/2026-11-07-eldon-claude-code-onboarding-lanes.md): Built the founders' onboarding into the repo so nothing has to be sent separately: one-time setup per founder, the lane split by paths, first tasks by owner, pending decisions with who records them, the working loop and what to do when blocked. Plan owners now follow the lanes.

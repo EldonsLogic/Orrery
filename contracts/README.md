@@ -13,8 +13,9 @@ The contracts are the source of truth for how the five parts of the platform tal
 | 4 | Event stream | [events.md](events.md) | 0.1.0 |
 | - | Connector interface | [connector-interface.md](connector-interface.md) | 0.1.0 |
 | - | Build states | [build-states.md](build-states.md) | 0.1.0 |
+| - | Blueprint-to-engine mapping (draft, ADR-0030 Proposed) | [engine-mapping.md](engine-mapping.md), [schema](engine-mapping.schema.json) | 0.1.0 |
 
-Example: [examples/blueprint-trading-minimal.json](examples/blueprint-trading-minimal.json) (fictional data; must always validate against the schema).
+Examples: [examples/blueprint-trading-minimal.json](examples/blueprint-trading-minimal.json) and [examples/engine-mapping-golden-path.json](examples/engine-mapping-golden-path.json) (fictional data; must always validate against their schemas).
 
 ## Rules
 1. **Versioning.** Every file carries a `version` (JSON files: top-level `version`; Markdown files: the `Version:` line). Semantic versioning: patch = clarification, minor = backward-compatible addition, major = breaking change. While the major is 0, minor bumps may break; say so in the ADR.

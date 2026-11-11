@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 14 | 8 | 33 | 0 | 55 |
+| G0 | 13 | 9 | 33 | 0 | 55 |
 | G1 | 75 | 2 | 13 | 0 | 90 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 268 | 11 | 46 | 0 | 325 |
+| all | 267 | 12 | 46 | 0 | 325 |
 
 ## Built so far (done)
 
@@ -131,6 +131,7 @@ Doing:
 - GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests)
 - GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2
+- BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022
 
 Ready next (dependencies done), by gate:
 - BPL-025 (G0): Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently
@@ -166,7 +167,7 @@ Ready next (dependencies done), by gate:
 - QA-020 (G2): Optional experiment: bounded-decision model for intent routing compared with a small general model and rules on synthetic Arabic and English cases; not a dependency, synthetic data only
 - SEC-007 (G2): Dependency and SBOM scanning for Python and Node (beyond dependabot actions)
 
-Waiting on dependencies: 153 row(s).
+Waiting on dependencies: 152 row(s).
 
 ## Queue: partner
 
@@ -210,10 +211,12 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests) (eldon)
 - GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows (eldon)
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 (eldon)
+- BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022 (eldon)
 
 ## Last 10 log files
 
 - [2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md](log/2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md): Wrote the phased delivery document with lanes and the phase to gate map, four proposed ADRs, 19 new plan rows and the phase exit plan rows, for the partner to review.
+- [2026-11-11-eldon-claude-code-blueprint-engine-mapping.md](log/2026-11-11-eldon-claude-code-blueprint-engine-mapping.md): Drafted the Blueprint-to-engine mapping contract (schema, golden path example, tests) so the partner's real-engine proof can build against an agreed interface.
 - [2026-11-11-eldon-claude-code-agent-foundation-rules.md](log/2026-11-11-eldon-claude-code-agent-foundation-rules.md): Added the agent working principles, the agent team protocol with 30 role contracts, and the phase exit rule with a check script, so every phase is tested and recorded before the next one counts.
 - [2026-11-07-partner-antigravity-third-party-licence-register.md](log/2026-11-07-partner-antigravity-third-party-licence-register.md): Recorded the partner's verified local bench installation (Frappe Framework 15.126.0 MIT, ERPNext 15.124.5 GPL-3.0, change engine module 0.1.0, MariaDB 10.6, Redis 7) into the third-party licence register and NOTICE.md, completing LEG-004.
 - [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0018 Dev Environments to Accepted; ADR-0007 Identity stays Proposed until Eldon accepts it (restored when the PR was re-applied onto main)), and populated the Codex and Antigravity rows in the model registry.
@@ -222,7 +225,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-07-eldon-claude-code-web-stack-adr.md](log/2026-11-07-eldon-claude-code-web-stack-adr.md): Wrote the web stack proposal for founder approval (ADR-0022, Proposed): one TypeScript and React stack on Next.js for marketing and app; static marketing; app screens rendered in the browser against our in-country gateway so no tenant data is processed on Vercel; plain CSS with token custom properties and a lint rule against literal colours and fonts; logical properties for RTL; headless accessible primitives; ICU i18n with Arabic default; self-hosted fonts; Playwright RTL goldens.
 - [2026-11-07-eldon-claude-code-visibility-temporary.md](log/2026-11-07-eldon-claude-code-visibility-temporary.md): Founder said the repo is public only for a while. Added a plan row so the switch back to private is decided deliberately: branch protection needs a paid plan on a private repo, and anything published may already be forked or cached.
 - [2026-11-07-eldon-claude-code-trading-template.md](log/2026-11-07-eldon-claude-code-trading-template.md): Built the trading and distribution template Blueprint (split into parts, company-neutral, Arabic and English everywhere), the owner question list with schema, and an instantiator for KSA, UAE and Egypt that produces drafts passing the validator with the fixture registry. Added a CI job for the discovery tests.
-- [2026-11-07-eldon-claude-code-trading-fixture.md](log/2026-11-07-eldon-claude-code-trading-fixture.md): Finished the hand-written, fictional trading and distribution Blueprint fixture: a Saudi company with two branches, two warehouses and a finance department; 24 entities (14 top-level, 10 line tables), 189 fields, 30 computed fields named as component functions, 4 workflows with 24 transitions, 8 roles, 4 approvals, 6 reports, 2 integrations, ZATCA phase 2 in sandbox, plus 16 fictional component manifests as its registry.
 
 ## ADRs with status Proposed
 
@@ -231,3 +233,4 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [ADR-0027-human-floor-action-policy-and-agent-authority](decisions/ADR-0027-human-floor-action-policy-and-agent-authority.md)
 - [ADR-0028-recoverable-journaled-change-apply](decisions/ADR-0028-recoverable-journaled-change-apply.md)
 - [ADR-0029-engine-disclosure-wording-and-saas-only](decisions/ADR-0029-engine-disclosure-wording-and-saas-only.md)
+- [ADR-0030-blueprint-to-engine-mapping-contract](decisions/ADR-0030-blueprint-to-engine-mapping-contract.md)

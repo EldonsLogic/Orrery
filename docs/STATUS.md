@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 15 | 7 | 33 | 0 | 55 |
+| G0 | 14 | 8 | 33 | 0 | 55 |
 | G1 | 75 | 2 | 13 | 0 | 90 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 269 | 10 | 46 | 0 | 325 |
+| all | 268 | 11 | 46 | 0 | 325 |
 
 ## Built so far (done)
 
@@ -130,6 +130,7 @@ Doing:
 - GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety
 - GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests)
 - GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows
+- BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2
 
 Ready next (dependencies done), by gate:
 - BPL-025 (G0): Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently
@@ -165,7 +166,7 @@ Ready next (dependencies done), by gate:
 - QA-020 (G2): Optional experiment: bounded-decision model for intent routing compared with a small general model and rules on synthetic Arabic and English cases; not a dependency, synthetic data only
 - SEC-007 (G2): Dependency and SBOM scanning for Python and Node (beyond dependabot actions)
 
-Waiting on dependencies: 154 row(s).
+Waiting on dependencies: 153 row(s).
 
 ## Queue: partner
 
@@ -208,6 +209,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety (eldon)
 - GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests) (eldon)
 - GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows (eldon)
+- BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 (eldon)
 
 ## Last 10 log files
 

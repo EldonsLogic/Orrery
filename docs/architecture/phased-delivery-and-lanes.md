@@ -53,7 +53,7 @@ Lane rules: [../ONBOARDING.md](../ONBOARDING.md) section 2, `scripts/lanes.json`
 | Phase | Partner lane (engine, runtime, compliance) | Eldon lane (spine, product, operate, web, commercial) |
 |---|---|---|
 | 0 | ERP-001 bench; ERP-003 scripted tenants; SEC-004 isolation suite; BPL-012 adapter interface; ERP-021 six-proof suite; PLT-025 gateway token metering (`services/gateway/` is the partner lane) | GTM-019 lead conversations; CMP-030 Qatar research; BPL-029 mapping spec (interface, G0); BPL-025 and BPL-026 contracts (draft, recoverable wording per ADR-0028) |
-| 1A | ERP-005 core module scope; ERP-014 accounting correctness tests; ERP-022 manual golden system, timed; country-neutral Arabic invoice print (split from ERP-007, see GOV-037) | BPL-028 golden path spec (G0, agreed with an accountant); QA-018 acceptance test; role-view definitions |
+| 1A | ERP-005 core module scope; ERP-014 accounting correctness tests; ERP-022 manual golden system, timed; country-neutral Arabic invoice print (split from ERP-007, see GOV-037) | BPL-028 golden path spec (G0; [golden-path-trading-sale.md](../specs/golden-path-trading-sale.md), checked independently now, accountant before Phase 2); QA-018 acceptance test; role-view definitions |
 | 1B | ERP-012 engine adapter; BPL-027 compile and apply through the real adapter | BPL-030 builder reproduction; QA-019 leak canaries; SEC-019 action-policy table; SEC-020 agent role spec; QA-020 optional routing experiment |
 | 2 | ERP-023 policy enforcement in the engine; backup and restore drills; opening-balance importer (ERP-013); CMP-031 Qatar pack; CMP-032 market-pack checklist | LEG-019 real-data and live-posting checklists and manual accountant sign-off route; GOV-039 market-pack track plan; OPR-016 optional first agent; OPR-001 to OPR-009 operate path; pricing and pilot terms (GTM, FND) |
 | 3 | UAE e-invoicing integration (CMP-011); fleet upgrade by replay (ERP-004 follow-up); second template components (ERP-018) | CMP-009 choose the UAE accredited provider; release rings and accountant review screen (OPR, WEB); self-serve waiting list |
@@ -71,7 +71,7 @@ Open ownership question for the founders: the Blueprint-to-engine mapping. Propo
 Orchestrators follow [../../agents/team-protocol.md](../../agents/team-protocol.md) and [../../agents/roles.md](../../agents/roles.md): three to five roles per task, loop observe, plan, execute, verify, record, a different model reviews. Self-improvement of prompts and roles is benchmarked (GOV-038) and never changes approval gates, evaluation rules, lanes or the phase exit check.
 
 ## 7. Decisions still open (from the partner's responses)
-1. The exact golden path, expected postings, and who independently checks them (BPL-028).
+1. The golden path draft is in [../specs/golden-path-trading-sale.md](../specs/golden-path-trading-sale.md). Open: the other founder's independent check and confirming its engine settings on the bench. No accountant is needed for Phase 1A; the accountant reviews it before Phase 2.
 2. Whether the pilot needs an online-store connector, and the manual fallback.
 3. Which one draft-only agent, if any, is in the pilot, and its authority.
 4. The manual accountant sign-off route before an accountant screen exists (LEG-019).

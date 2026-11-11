@@ -14,6 +14,7 @@ Wrote the phased delivery document with lanes and the phase to gate map, four pr
 - docs/PLAN.md: rows GOV-036 to GOV-039, BPL-028 to BPL-030, ERP-021 to ERP-023, QA-018 to QA-020, SEC-019, SEC-020, LEG-019, CMP-032, OPR-016
 - docs/specs/phase-exit-criteria.json: plan rows per phase
 - docs/ONBOARDING.md: pointer to the proposed phased delivery
+- docs/specs/golden-path-trading-sale.md: draft golden path (BPL-028 now doing); no accountant needed before Phase 2, other founder checks independently
 
 ## Decisions
 - ADR-0026, ADR-0027, ADR-0028, ADR-0029 (all Proposed, approval pending). Founder decision 2026-11-11: Qatar first pilot market, the other markets follow right away in the build as a parallel track. Partner positions from his written responses are reflected, not yet agreed in writing.

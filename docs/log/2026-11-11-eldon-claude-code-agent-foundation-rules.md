@@ -21,4 +21,4 @@ Added the agent working principles, the agent team protocol with 30 role contrac
 Not measured.
 
 ## Next step
-Stacked PR for GOV-036 and later: phased delivery document with lanes, proposed ADRs, plan rows and the phase to gate map. Evidence items still need their plan rows (phase-exit-criteria.json plan_rows). Verified: script unit tests pass (4); not verified: first real exit run, partner review.
+Stacked PR for GOV-036 and later: phased delivery document with lanes, proposed ADRs, plan rows and the phase to gate map. Evidence items still need their plan rows (phase-exit-criteria.json plan_rows). Verified: script unit tests pass (8). An independent Opus review found gaps in the exit check (gates missing, dry run printed CLOSED, weak reviewer and evidence checks); fixed in a second commit. Not verified: first real exit run, partner review.

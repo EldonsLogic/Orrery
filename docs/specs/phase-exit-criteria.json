@@ -1,5 +1,5 @@
 {
-  "_note": "Evidence items for each phase exit. plan_rows are filled in when the phase's plan rows exist. Edited only by founder decision; never to make a failing run pass (docs/RULES.md rule 48).",
+  "_note": "Evidence items per phase or gate. Phases 0 to 4 apply once ADR-0026 is accepted. Gate entries G0 to G5 are transcribed from docs/GATES.md, which wins if they differ; a gate also needs every plan row in that gate to be done. plan_rows are filled in as phase rows exist. Edited only by founder decision, never to make a failing run pass (docs/RULES.md rule 48).",
   "phases": {
     "0": {
       "title": "Engine proof",
@@ -150,6 +150,152 @@
         {
           "id": "E4-3",
           "text": "Unit economics checked against targets set from pilot data"
+        }
+      ]
+    },
+    "G0": {
+      "title": "Gate G0 Foundation",
+      "gate": "G0",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "G0-1",
+          "text": "Private org repo with branch protection, CI green, pre-commit installed on both machines."
+        },
+        {
+          "id": "G0-2",
+          "text": "Rules, roles and logs in place (AGENTS.md, agents/, docs/log, docs/PLAN.md)."
+        },
+        {
+          "id": "G0-3",
+          "text": "Change-engine security fixes CE-SEC-001 to CE-SEC-004 done; no known open security bug in code that touches a real site."
+        },
+        {
+          "id": "G0-4",
+          "text": "Founders' agreement signed, including IP assignment of the prototype."
+        },
+        {
+          "id": "G0-5",
+          "text": "ADRs accepted by both founders: tenancy (0006), identity (0007), Blueprint contract (0003)."
+        }
+      ]
+    },
+    "G1": {
+      "title": "Gate G1 Spine proven",
+      "gate": "G1",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "G1-1",
+          "text": "A hand-written Blueprint compiles to a fresh tenant, applies, diffs and rolls back, on a real bench."
+        },
+        {
+          "id": "G1-2",
+          "text": "A ZATCA Phase 2 invoice passes the ZATCA sandbox."
+        },
+        {
+          "id": "G1-3",
+          "text": "Arabic bilingual tax invoice PDF reviewed by an Arabic-speaking accountant."
+        },
+        {
+          "id": "G1-4",
+          "text": "Tenant creation is one scripted command; the 50-tenant spike has a written result."
+        },
+        {
+          "id": "G1-5",
+          "text": "Counsel has answered the GPL boundary and vendor-certification questions in writing."
+        },
+        {
+          "id": "G1-6",
+          "text": "Arabic eval set v0 and the model bake-off are done; a model tier list exists."
+        }
+      ]
+    },
+    "G2": {
+      "title": "Gate G2 Pilot-ready",
+      "gate": "G2",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "G2-1",
+          "text": "One real business goes from discovery to a simulated Blueprint to live, with the human review gate and the one chat."
+        },
+        {
+          "id": "G2-2",
+          "text": "Role-based views work for at least owner, accountant and sales roles."
+        },
+        {
+          "id": "G2-3",
+          "text": "Tenant branding works end to end with guardrails (ADR-0014)."
+        },
+        {
+          "id": "G2-4",
+          "text": "Customer contract with the anonymised-reuse clause is signed for Pilot A."
+        },
+        {
+          "id": "G2-5",
+          "text": "Eval thresholds are enforced in CI as a release gate."
+        }
+      ]
+    },
+    "G3": {
+      "title": "Gate G3 Paying-customer-ready",
+      "gate": "G3",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "G3-1",
+          "text": "Security baseline checklist met; independent penetration test done and findings fixed or accepted in writing."
+        },
+        {
+          "id": "G3-2",
+          "text": "Backups tested with timed restore drills; export and delete work and are verified."
+        },
+        {
+          "id": "G3-3",
+          "text": "Billing, terms, privacy policy and DPA live; support process and status page running."
+        },
+        {
+          "id": "G3-4",
+          "text": "UAE e-invoicing and payroll (WPS, GOSI) either shipped or explicitly excluded from the sold scope."
+        }
+      ]
+    },
+    "G4": {
+      "title": "Gate G4 Repeatable",
+      "gate": "G4",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "G4-1",
+          "text": "Autonomy and reuse targets in [strategy/08](strategy/08-product-vs-software-house.md) met across several clients."
+        },
+        {
+          "id": "G4-2",
+          "text": "Services share of revenue and setup margin on or above the table for the client count reached."
+        },
+        {
+          "id": "G4-3",
+          "text": "Second vertical template and second market assessed with evidence."
+        }
+      ]
+    },
+    "G5": {
+      "title": "Gate G5 Scale",
+      "gate": "G5",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "G5-1",
+          "text": "Self-serve signup with plan gating switched on."
+        },
+        {
+          "id": "G5-2",
+          "text": "Second market live; certifications chosen and in progress."
+        },
+        {
+          "id": "G5-3",
+          "text": "Hosting capacity plan proven at volume; custom domains available."
         }
       ]
     }

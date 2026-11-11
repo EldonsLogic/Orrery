@@ -4,9 +4,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import phase_exit_check as p  # noqa: E402
 
+HEAD = "Author: eldon\nTool and model: claude-code / sonnet-5.5\nPhase exit: 1A\n"
+
 
 def rows(**status):
-    return [{"ID": k, "Status": v} for k, v in status.items()]
+    return [{"ID": k, "Status": v, "Gate": "G0"} for k, v in status.items()]
 
 
 def test_plan_rows_must_exist_and_be_done():
@@ -16,21 +18,46 @@ def test_plan_rows_must_exist_and_be_done():
     assert "does not exist" in p.plan_rows_problems(r, ["GOV-999"])[0]
 
 
-def test_evidence_needs_pass_lines_and_a_reviewer():
-    good = "Phase exit: 1A\n- E1: PASS ledger matches\n- E2: PASS arabic pdf reviewed\nReviewed by: Partner (codex-5)\n"
+def test_a_gate_needs_every_row_in_that_gate_done():
+    r = rows(**{"GOV-001": "done", "GOV-002": "todo"})
+    assert any("GOV-002" in o for o in p.plan_rows_problems(r, [], gate="G0"))
+    assert p.plan_rows_problems(rows(**{"GOV-001": "done"}), [], gate="G0") == []
+
+
+def test_evidence_needs_pass_with_a_note():
+    good = HEAD + "- E1: PASS ledger matches\n- E2: PASS arabic pdf reviewed\nReviewed by: partner (codex-5)\n"
     assert p.evidence_problems(good, ["E1", "E2"]) == []
-    bad = "Phase exit: 1A\n- E1: FAIL mismatch\nReviewed by: x\n"
-    out = p.evidence_problems(bad, ["E1", "E2"])
-    assert any("E1" in o for o in out) and any("E2" in o for o in out) and any("Reviewed by" in o for o in out)
+    assert any("E2" in o for o in p.evidence_problems(HEAD + "- E1: PASS ok\nReviewed by: partner (x)\n", ["E1", "E2"]))
+    assert any("note" in o for o in p.evidence_problems(HEAD + "- E1: PASS\nReviewed by: partner (x)\n", ["E1"]))
 
 
-def test_find_exit_log_matches_the_phase_exactly(tmp_path):
+def test_a_fail_line_blocks_even_with_a_pass_line():
+    t = HEAD + "- E1: PASS fine\n- E1: FAIL mismatch\nReviewed by: partner (x)\n"
+    assert any("not PASS" in o for o in p.evidence_problems(t, ["E1"]))
+
+
+def test_empty_evidence_list_does_not_pass():
+    assert any("no evidence" in o for o in p.evidence_problems(HEAD + "Reviewed by: partner (x)\n", []))
+
+
+def test_reviewer_must_be_other_founder_or_other_model():
+    ev = "- E1: PASS checked ledger\n"
+    assert p.evidence_problems(HEAD + ev + "Reviewed by: partner (sonnet-5.5)\n", ["E1"]) == []
+    assert p.evidence_problems(HEAD + ev + "Reviewed by: eldon (opus-5.5)\n", ["E1"]) == []
+    same = p.evidence_problems(HEAD + ev + "Reviewed by: eldon (sonnet-5.5)\n", ["E1"])
+    assert any("reviewer must be" in o for o in same)
+    assert any("Reviewed by" in o for o in p.evidence_problems(HEAD + ev, ["E1"]))
+
+
+def test_exit_header_must_be_in_the_first_lines(tmp_path):
     a = tmp_path / "a.md"
     b = tmp_path / "b.md"
+    c = tmp_path / "c.md"
     a.write_text("Phase exit: 1A\n")
     b.write_text("Phase exit: 1B\n")
+    c.write_text("x\n" * 40 + "Phase exit: 2\n")
     assert p.find_exit_log("1B", [a, b]) == b
-    assert p.find_exit_log("2", [a, b]) is None
+    assert p.find_exit_log("2", [a, b, c]) is None
 
 
 def test_missing_or_bad_criteria_file(tmp_path):

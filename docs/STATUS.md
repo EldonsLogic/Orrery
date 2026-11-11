@@ -227,7 +227,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-07-partner-antigravity-scripted-tenant-creation.md](log/2026-11-07-partner-antigravity-scripted-tenant-creation.md): Implemented scripted site-per-tenant creation for the Frappe/ERPNext engine runtime with per-tenant database isolation, automated app installation, regional market defaults (SA, AE, EG, QA), and headless engine invisibility.
 - [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0018 Dev Environments to Accepted; ADR-0007 Identity stays Proposed until Eldon accepts it (restored when the PR was re-applied onto main)), and populated the Codex and Antigravity rows in the model registry.
 - [2026-11-07-partner-antigravity-dev-bench-pin.md](log/2026-11-07-partner-antigravity-dev-bench-pin.md): Pinned the Frappe v15 ecosystem version set (Frappe Framework 15.126.0, ERPNext 15.124.5, Frappe HRMS 15.64.8, MariaDB 10.6, Redis 7.2.7-alpine) and established a reproducible dev bench in `infra/dev/docker/`.
-- [2026-11-07-eldon-claude-code-wording-cleanup.md](log/2026-11-07-eldon-claude-code-wording-cleanup.md): Reworded older logs, ADR-0021, ADR-0023 and plan rows so they state the one-account policy plainly; renamed two logs to match.
 
 ## ADRs with status Proposed
 

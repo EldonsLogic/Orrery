@@ -9,6 +9,13 @@ Gates replace dates. Work for a later gate may start early, but nothing counts a
 
 **Changing the current gate** needs both founders in writing (a PR comment from each, or a signed line in the log) and an ADR in [decisions/](decisions/INDEX.md) that lists the evidence for each criterion. Then edit the `Current gate:` line above in the same PR.
 
+## Phase and gate exit check
+Every gate, and every delivery phase described in [architecture/](architecture/), closes only after a recorded exit run (RULES 48). Nothing from the next stage counts as passed before that.
+1. Run `python3 scripts/phase_exit_check.py --phase <name>` (`--list` shows the names). It runs the repo checks and the test suites that exist, checks that the phase's plan rows are `done`, and reads the evidence list in `docs/specs/phase-exit-criteria.json`.
+2. Record the run in a session log whose header has the line `Phase exit: <name>`, one line `- <evidence-id>: PASS <note or link>` per evidence item, and `Reviewed by: <name> (<model>)`.
+3. The other founder reviews the log with a different model than the author. A failed item keeps the phase open; fix it and run again.
+4. Closing a gate also needs the founders' written agreement and an ADR, as above.
+
 ## G0 Foundation
 - Private org repo with branch protection, CI green, pre-commit installed on both machines.
 - Rules, roles and logs in place (AGENTS.md, agents/, docs/log, docs/PLAN.md).

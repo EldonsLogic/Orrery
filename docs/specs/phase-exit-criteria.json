@@ -1,0 +1,157 @@
+{
+  "_note": "Evidence items for each phase exit. plan_rows are filled in when the phase's plan rows exist. Edited only by founder decision; never to make a failing run pass (docs/RULES.md rule 48).",
+  "phases": {
+    "0": {
+      "title": "Engine proof",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "E0-1",
+          "text": "Two-tenant authorization tests recorded: no cross-tenant access or aggregate leakage"
+        },
+        {
+          "id": "E0-2",
+          "text": "One small sales or purchasing workflow reconciled: expected accounting and stock effects"
+        },
+        {
+          "id": "E0-3",
+          "text": "An operation is denied when roles, policy evaluation or required context fail"
+        },
+        {
+          "id": "E0-4",
+          "text": "A guarded configuration change interrupted at several points reaches a documented recovery outcome"
+        },
+        {
+          "id": "E0-5",
+          "text": "A repeated or interrupted business action cannot silently create a duplicate effect"
+        },
+        {
+          "id": "E0-6",
+          "text": "One minimal real Blueprint, component and adapter connection through a documented mapping (not only a fake)"
+        },
+        {
+          "id": "E0-7",
+          "text": "Engine limitations documented, with alternatives where the engine cannot support a proof"
+        },
+        {
+          "id": "E0-8",
+          "text": "Lead conversations held and a recorded decision on whether a pilot is credible"
+        }
+      ]
+    },
+    "1A": {
+      "title": "Manual golden system",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "E1A-1",
+          "text": "One synthetic company configured by hand on the real bench; all human time and gaps recorded"
+        },
+        {
+          "id": "E1A-2",
+          "text": "Expected ledger and stock results independently checked"
+        },
+        {
+          "id": "E1A-3",
+          "text": "Arabic document output and role views reviewed"
+        },
+        {
+          "id": "E1A-4",
+          "text": "Versioned Blueprint-to-engine mapping proved with the real adapter for customer, item price, sales order and invoice"
+        }
+      ]
+    },
+    "1B": {
+      "title": "Builder reproduction",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "E1B-1",
+          "text": "The builder reproduces the approved setup over repeated runs; pass rate recorded"
+        },
+        {
+          "id": "E1B-2",
+          "text": "Automatic acceptance test passes: scripted transactions in, expected postings out"
+        },
+        {
+          "id": "E1B-3",
+          "text": "One guarded change with a diff and a tested recovery"
+        },
+        {
+          "id": "E1B-4",
+          "text": "Role and leakage canary tests pass"
+        },
+        {
+          "id": "E1B-5",
+          "text": "Setup time, human corrections and AI cost measured"
+        }
+      ]
+    },
+    "2": {
+      "title": "Pilot",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "E2-1",
+          "text": "Before real data: data-handling arrangements, approved location and transfer route, access controls, owner, retention and incident path in place"
+        },
+        {
+          "id": "E2-2",
+          "text": "Named accountant; the manual sign-off route defined and used"
+        },
+        {
+          "id": "E2-3",
+          "text": "Before live posting: production environment, tested backup and restore, export and exit procedure"
+        },
+        {
+          "id": "E2-4",
+          "text": "Opening balances reconciled within agreed tolerances; owner and accountant sign-off stored"
+        },
+        {
+          "id": "E2-5",
+          "text": "Support and incident process ready; paid terms agreed"
+        },
+        {
+          "id": "E2-6",
+          "text": "Applicable market requirements reviewed"
+        }
+      ]
+    },
+    "3": {
+      "title": "Repeatability",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "E3-1",
+          "text": "A second suitable customer implemented with measured reuse and lower all-in effort, without losing correctness"
+        },
+        {
+          "id": "E3-2",
+          "text": "Release and upgrade process demonstrated"
+        },
+        {
+          "id": "E3-3",
+          "text": "The next market chosen by evidence"
+        }
+      ]
+    },
+    "4": {
+      "title": "Scale",
+      "plan_rows": [],
+      "evidence": [
+        {
+          "id": "E4-1",
+          "text": "Self-service, billing and abuse controls working"
+        },
+        {
+          "id": "E4-2",
+          "text": "Operational capacity and customer outcomes measured"
+        },
+        {
+          "id": "E4-3",
+          "text": "Unit economics checked against targets set from pilot data"
+        }
+      ]
+    }
+  }
+}

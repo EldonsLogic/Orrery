@@ -15,5 +15,9 @@ This repository is proprietary. This file summarizes what we use or plan to use 
 - The change engine is a prototype written by the partner. It was adapted into `apps/engine/change_engine/` (see its `PROVENANCE.md`; source repository `sayegh9/EXRP`, commit `f0ce226dd8d050fbc947caf50657e651e01792b8`). Licence and IP assignment are to be confirmed in the founders' agreement (LEG-001). It has no LICENSE file yet (LEG-002).
 - Fonts and icons used in `docs/brand`: licences UNVERIFIED (BRD-011, BRD-012).
 
+## Reference material (ideas only, nothing copied)
+- `multica-ai/andrej-karpathy-skills` (`CLAUDE.md`, read 2026-11-11): coding-agent guidelines. GitHub shows no licence for it, so we copy none of its text; [agents/working-principles.md](agents/working-principles.md) restates the ideas in our own words. Re-check the licence before any future copy.
+- A one-page "self-improving agent team" prompt guide supplied by the founder on 2026-11-11 (original source and licence unknown, UNVERIFIED): restated in [agents/team-protocol.md](agents/team-protocol.md) and [agents/roles.md](agents/roles.md).
+
 ## Trademarks
 "Frappe" and "ERPNext" are third-party trademarks. Do not use them in our product name or ads (LEG-009). "Orrery" is a working name and is not cleared (ADR-0001).

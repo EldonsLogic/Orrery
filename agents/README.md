@@ -10,6 +10,9 @@ Role specs and routing rules for AI agents (and humans acting in those roles). R
 | [routing.md](routing.md) | Which model tier for which job; orchestrator rules |
 | [delegation-playbook.md](delegation-playbook.md) | Step by step: delegate to sub-agents by model, briefs, verification, starter prompt for any tool |
 | [model-registry.md](model-registry.md) | Models and tools the founders use; costs |
+| [working-principles.md](working-principles.md) | Four habits every agent follows: think first, keep it simple, change surgically, work to checkable goals |
+| [team-protocol.md](team-protocol.md) | How an orchestrator builds and runs an agent team: setup, harness, execution loop, evaluation, self-improvement, safety, delivery |
+| [roles.md](roles.md) | The 30 role contracts in six functions; start with three to five |
 | [orchestrator.md](orchestrator.md) | Splits work, delegates, merges results |
 | [architect.md](architect.md) | Designs, writes ADRs and contracts |
 | [implementer.md](implementer.md) | Writes code and config for one scoped task |

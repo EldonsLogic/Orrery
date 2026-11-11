@@ -31,7 +31,8 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/ST
 1. `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>`; fill it in.
 2. Update statuses in `docs/PLAN.md`; add ADR or open-question entries if a decision or doubt arose.
 3. Run `python3 scripts/finish_session.py` (regenerates STATUS, runs every check and the task trail, verifies the branch is pushed and a PR is open). Do not stop until it prints FINISHED. Every commit message names a plan ID; never bypass hooks.
-4. Push your branch and open a PR. Work left only on a machine or in a chat is lost work.
+4. If your work closes a phase or a gate, run `python3 scripts/phase_exit_check.py --phase <name>` and record the exit in a log (see [docs/GATES.md](docs/GATES.md)). Nothing from the next phase counts as passed before that run is recorded.
+5. Push your branch and open a PR. Work left only on a machine or in a chat is lost work.
 
 ## Branches and PRs
 - One branch per task, named with the plan ID: `sec-003-injection-design`. One PR per branch.
@@ -59,6 +60,10 @@ Details in [agents/routing.md](agents/routing.md) and the step-by-step [agents/d
 - Strongest: architecture, security review, accounting and tax logic, planning, hard debugging.
 - Mid: implementation. Small: boilerplate, tests, docs, search, formatting.
 - Orchestrators hand out small scoped tasks with acceptance criteria, never "build X". Read indexes, not folders. Keep files under ~500 lines.
+
+## Working principles and the agent team
+- Four habits for every agent ([agents/working-principles.md](agents/working-principles.md)): think before coding (state assumptions, ask when unclear), simplicity first, surgical changes (every changed line traces to the task), goal-driven execution (write the check first, loop until it passes).
+- Team protocol ([agents/team-protocol.md](agents/team-protocol.md), roles in [agents/roles.md](agents/roles.md)): inspect real tools first; start with three to five roles; loop observe, plan, execute, verify, record; a fresh reviewer verifies; improve a prompt or role only by a versioned PR measured against a baseline. Improvements never change approval gates, evaluation rules, lanes or the phase exit check.
 
 ## Security rules
 - Never commit secrets, `.env*` (except `.env.example`), keys, customer data or real pilot data. Use anonymised samples.

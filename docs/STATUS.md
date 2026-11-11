@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 12 | 3 | 33 | 0 | 48 |
+| G0 | 12 | 6 | 33 | 0 | 51 |
 | G1 | 66 | 2 | 13 | 0 | 81 |
 | G2 | 111 | 1 | 0 | 0 | 112 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 251 | 6 | 46 | 0 | 303 |
+| all | 251 | 9 | 46 | 0 | 306 |
 
 ## Built so far (done)
 
@@ -123,6 +123,9 @@ Doing:
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
+- GOV-033: Adopt agent working principles (think before coding, simplicity, surgical changes, goal-driven execution) from the Karpathy guidelines as reference, restated in our own words (agents/working-principles.md) and linked from AGENTS.md, CLAUDE.md, GEMINI.md and RULES.md
+- GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety
+- GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests)
 
 Ready next (dependencies done), by gate:
 - BPL-025 (G0): Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently
@@ -194,9 +197,13 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (eldon)
+- GOV-033: Adopt agent working principles (think before coding, simplicity, surgical changes, goal-driven execution) from the Karpathy guidelines as reference, restated in our own words (agents/working-principles.md) and linked from AGENTS.md, CLAUDE.md, GEMINI.md and RULES.md (eldon)
+- GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety (eldon)
+- GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests) (eldon)
 
 ## Last 10 log files
 
+- [2026-11-11-eldon-claude-code-agent-foundation-rules.md](log/2026-11-11-eldon-claude-code-agent-foundation-rules.md): Added the agent working principles, the agent team protocol with 30 role contracts, and the phase exit rule with a check script, so every phase is tested and recorded before the next one counts.
 - [2026-11-07-partner-antigravity-third-party-licence-register.md](log/2026-11-07-partner-antigravity-third-party-licence-register.md): Recorded the partner's verified local bench installation (Frappe Framework 15.126.0 MIT, ERPNext 15.124.5 GPL-3.0, change engine module 0.1.0, MariaDB 10.6, Redis 7) into the third-party licence register and NOTICE.md, completing LEG-004.
 - [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0018 Dev Environments to Accepted; ADR-0007 Identity stays Proposed until Eldon accepts it (restored when the PR was re-applied onto main)), and populated the Codex and Antigravity rows in the model registry.
 - [2026-11-07-eldon-claude-code-wording-cleanup.md](log/2026-11-07-eldon-claude-code-wording-cleanup.md): Reworded older logs, ADR-0021, ADR-0023 and plan rows so they state the one-account policy plainly; renamed two logs to match.
@@ -206,7 +213,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-07-eldon-claude-code-trading-template.md](log/2026-11-07-eldon-claude-code-trading-template.md): Built the trading and distribution template Blueprint (split into parts, company-neutral, Arabic and English everywhere), the owner question list with schema, and an instantiator for KSA, UAE and Egypt that produces drafts passing the validator with the fixture registry. Added a CI job for the discovery tests.
 - [2026-11-07-eldon-claude-code-trading-fixture.md](log/2026-11-07-eldon-claude-code-trading-fixture.md): Finished the hand-written, fictional trading and distribution Blueprint fixture: a Saudi company with two branches, two warehouses and a finance department; 24 entities (14 top-level, 10 line tables), 189 fields, 30 computed fields named as component functions, 4 workflows with 24 transitions, 8 roles, 4 approvals, 6 reports, 2 integrations, ZATCA phase 2 in sandbox, plus 16 fictional component manifests as its registry.
 - [2026-11-07-eldon-claude-code-threat-model.md](log/2026-11-07-eldon-claude-code-threat-model.md): Threat model v1 for the five parts and the four contracts (plus connector interface and build states): scope and an honest not-modelled list, a trust-boundary diagram, assets, actors, STRIDE tables per part (T1-T16 kept, T17-T60 new), abuse cases, top 10 risks, and a per-contract file saying what each consumer may and may not trust.
-- [2026-11-07-eldon-claude-code-task-trail.md](log/2026-11-07-eldon-claude-code-task-trail.md): Made the task trail checkable: a CI gate now fails a PR whose new log has no valid plan IDs, or whose product-code changes are logged against plan rows that are still todo. STATUS now shows a queue for each founder (doing, ready next, waiting), so each person's flow is visible from the start.
 
 ## ADRs with status Proposed
 

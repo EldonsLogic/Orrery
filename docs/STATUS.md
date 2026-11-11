@@ -217,6 +217,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-11-partner-codex-cmp-002-rebase.md](log/2026-11-11-partner-codex-cmp-002-rebase.md): Rebased the existing CMP-002 evaluation on current main and kept the row doing while its ERP-001 dependency remains open.
 - [2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md](log/2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md): Wrote the phased delivery document with lanes and the phase to gate map, four proposed ADRs, 19 new plan rows and the phase exit plan rows, for the partner to review.
 - [2026-11-11-eldon-claude-code-blueprint-engine-mapping.md](log/2026-11-11-eldon-claude-code-blueprint-engine-mapping.md): Drafted the Blueprint-to-engine mapping contract (schema, golden path example, tests) so the partner's real-engine proof can build against an agreed interface.
 - [2026-11-11-eldon-claude-code-agent-foundation-rules.md](log/2026-11-11-eldon-claude-code-agent-foundation-rules.md): Added the agent working principles, the agent team protocol with 30 role contracts, and the phase exit rule with a check script, so every phase is tested and recorded before the next one counts.
@@ -226,7 +227,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-07-eldon-claude-code-wording-cleanup.md](log/2026-11-07-eldon-claude-code-wording-cleanup.md): Reworded older logs, ADR-0021, ADR-0023 and plan rows so they state the one-account policy plainly; renamed two logs to match.
 - [2026-11-07-eldon-claude-code-web-stack-review-fixes.md](log/2026-11-07-eldon-claude-code-web-stack-review-fixes.md): A cross-model review of ADR-0022 found gaps. Added: app limited to static-export-safe features with a CI build in that mode (in-country hosting marked UNVERIFIED), marketing on Vercel only without personal data collection there, explicit narrowing of ADR-0018 item 2, stronger tokens-only and logical-property lint rules, tenant token loading before first paint, RTL direction provider and bidi isolation for user text, and a human review for major-version bumps of the framework and auth libraries.
 - [2026-11-07-eldon-claude-code-web-stack-adr.md](log/2026-11-07-eldon-claude-code-web-stack-adr.md): Wrote the web stack proposal for founder approval (ADR-0022, Proposed): one TypeScript and React stack on Next.js for marketing and app; static marketing; app screens rendered in the browser against our in-country gateway so no tenant data is processed on Vercel; plain CSS with token custom properties and a lint rule against literal colours and fonts; logical properties for RTL; headless accessible primitives; ICU i18n with Arabic default; self-hosted fonts; Playwright RTL goldens.
-- [2026-11-07-eldon-claude-code-visibility-temporary.md](log/2026-11-07-eldon-claude-code-visibility-temporary.md): Founder said the repo is public only for a while. Added a plan row so the switch back to private is decided deliberately: branch protection needs a paid plan on a private repo, and anything published may already be forked or cached.
 
 ## ADRs with status Proposed
 

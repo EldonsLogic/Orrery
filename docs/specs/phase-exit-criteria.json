@@ -3,7 +3,12 @@
   "phases": {
     "0": {
       "title": "Engine proof",
-      "plan_rows": [],
+      "plan_rows": [
+        "ERP-001",
+        "ERP-021",
+        "GTM-019",
+        "PLT-025"
+      ],
       "evidence": [
         {
           "id": "E0-1",
@@ -36,12 +41,20 @@
         {
           "id": "E0-8",
           "text": "Lead conversations held and a recorded decision on whether a pilot is credible"
+        },
+        {
+          "id": "E0-9",
+          "text": "Token metering per tenant and per call recorded in the gateway"
         }
       ]
     },
     "1A": {
       "title": "Manual golden system",
-      "plan_rows": [],
+      "plan_rows": [
+        "BPL-028",
+        "BPL-029",
+        "ERP-022"
+      ],
       "evidence": [
         {
           "id": "E1A-1",
@@ -63,7 +76,11 @@
     },
     "1B": {
       "title": "Builder reproduction",
-      "plan_rows": [],
+      "plan_rows": [
+        "QA-018",
+        "BPL-030",
+        "QA-019"
+      ],
       "evidence": [
         {
           "id": "E1B-1",
@@ -89,7 +106,13 @@
     },
     "2": {
       "title": "Pilot",
-      "plan_rows": [],
+      "plan_rows": [
+        "LEG-019",
+        "SEC-019",
+        "SEC-020",
+        "ERP-023",
+        "GOV-039"
+      ],
       "evidence": [
         {
           "id": "E2-1",

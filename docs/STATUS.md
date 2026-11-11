@@ -217,6 +217,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-11-partner-codex-erp-003-rebase.md](log/2026-11-11-partner-codex-erp-003-rebase.md): Rebased the ERP-003 change on the refreshed ERP-001 branch and kept its row doing pending a live bench proof.
 - [2026-11-11-partner-codex-erp-001-rebase.md](log/2026-11-11-partner-codex-erp-001-rebase.md): Rebased ERP-001 on current main and claimed the row for the partner; the bench remains under verification.
 - [2026-11-11-partner-codex-erp-001-preflight.md](log/2026-11-11-partner-codex-erp-001-preflight.md): Reviewed the ERP-001 bench and the golden path using cached image metadata; the live bench proof remains open.
 - [2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md](log/2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md): Wrote the phased delivery document with lanes and the phase to gate map, four proposed ADRs, 19 new plan rows and the phase exit plan rows, for the partner to review.
@@ -227,7 +228,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0018 Dev Environments to Accepted; ADR-0007 Identity stays Proposed until Eldon accepts it (restored when the PR was re-applied onto main)), and populated the Codex and Antigravity rows in the model registry.
 - [2026-11-07-partner-antigravity-dev-bench-pin.md](log/2026-11-07-partner-antigravity-dev-bench-pin.md): Pinned the Frappe v15 ecosystem version set (Frappe Framework 15.126.0, ERPNext 15.124.5, Frappe HRMS 15.64.8, MariaDB 10.6, Redis 7.2.7-alpine) and established a reproducible dev bench in `infra/dev/docker/`.
 - [2026-11-07-eldon-claude-code-wording-cleanup.md](log/2026-11-07-eldon-claude-code-wording-cleanup.md): Reworded older logs, ADR-0021, ADR-0023 and plan rows so they state the one-account policy plainly; renamed two logs to match.
-- [2026-11-07-eldon-claude-code-web-stack-review-fixes.md](log/2026-11-07-eldon-claude-code-web-stack-review-fixes.md): A cross-model review of ADR-0022 found gaps. Added: app limited to static-export-safe features with a CI build in that mode (in-country hosting marked UNVERIFIED), marketing on Vercel only without personal data collection there, explicit narrowing of ADR-0018 item 2, stronger tokens-only and logical-property lint rules, tenant token loading before first paint, RTL direction provider and bidi isolation for user text, and a human review for major-version bumps of the framework and auth libraries.
 
 ## ADRs with status Proposed
 

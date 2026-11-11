@@ -70,6 +70,11 @@ class RuntimePolicy:
     error_message: str = ""
     active: bool = True
     stage: Optional[str] = None
+    revision: int = 1
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
 
     def __post_init__(self):
         if isinstance(self.policy_type, PolicyType):
@@ -301,14 +306,35 @@ class RuntimePolicyCatalog:
     """
 
     def __init__(self, register_defaults: bool = True):
-        self._policies: Dict[str, List[RuntimePolicy]] = {}
+        self._default_policies: Dict[str, List[RuntimePolicy]] = {}
+        self._site_policies: Dict[str, Dict[str, List[RuntimePolicy]]] = {}
         if register_defaults:
             self._register_default_policies()
 
-    def reset(self) -> None:
-        """Resets catalog to initial built-in Tier 0 policies."""
-        self._policies.clear()
-        self._register_default_policies()
+    @property
+    def _policies(self) -> Dict[str, List[RuntimePolicy]]:
+        """Backwards compatibility alias for default Tier 0 policies."""
+        return self._default_policies
+
+    def reset(self, site_id: Optional[str] = None) -> None:
+        """Resets catalog to initial built-in Tier 0 policies and resets site store."""
+        from .policy_store import policy_store
+        if site_id:
+            self._site_policies.pop(site_id, None)
+            policy_store.reset_store(site_id=site_id)
+        else:
+            self._default_policies.clear()
+            self._site_policies.clear()
+            policy_store.reset_store()
+            self._register_default_policies()
+
+    def _register_default(self, policy: RuntimePolicy) -> None:
+        pols = self._default_policies.setdefault(policy.doctype, [])
+        for idx, existing in enumerate(pols):
+            if existing.policy_id == policy.policy_id:
+                pols[idx] = policy
+                return
+        pols.append(policy)
 
     def _register_default_policies(self) -> None:
         """
@@ -317,7 +343,7 @@ class RuntimePolicyCatalog:
         - Sales Invoice: GL ledger posting and currency tampering protection
         """
         # Tier 0 Invariant: Sales Order Credit Limit Check Bypass
-        self.register_policy(
+        self._register_default(
             RuntimePolicy(
                 policy_id="TIER0_SO_CREDIT_LIMIT_BYPASS",
                 doctype="Sales Order",
@@ -332,7 +358,7 @@ class RuntimePolicyCatalog:
         )
 
         # Tier 0 Invariant: Sales Invoice Currency Tampering
-        self.register_policy(
+        self._register_default(
             RuntimePolicy(
                 policy_id="TIER0_SI_CURRENCY_TAMPERING",
                 doctype="Sales Invoice",
@@ -347,7 +373,7 @@ class RuntimePolicyCatalog:
         )
 
         # Tier 0 Invariant: Sales Invoice Currency Override Authorization
-        self.register_policy(
+        self._register_default(
             RuntimePolicy(
                 policy_id="TIER0_SI_CURRENCY_OVERRIDE",
                 doctype="Sales Invoice",
@@ -362,7 +388,7 @@ class RuntimePolicyCatalog:
         )
 
         # Tier 0 Invariant: Sales Invoice GL Ledger Posting Protection
-        self.register_policy(
+        self._register_default(
             RuntimePolicy(
                 policy_id="TIER0_SI_GL_POSTING_PROTECTION",
                 doctype="Sales Invoice",
@@ -376,36 +402,105 @@ class RuntimePolicyCatalog:
             )
         )
 
-    def register_policy(self, policy: RuntimePolicy) -> None:
-        """Registers or updates a policy in the catalog."""
-        doctype_policies = self._policies.setdefault(policy.doctype, [])
-        # Update existing policy with same policy_id if present
-        for idx, existing in enumerate(doctype_policies):
-            if existing.policy_id == policy.policy_id:
-                doctype_policies[idx] = policy
-                return
-        doctype_policies.append(policy)
+    def register_policy(
+        self,
+        policy: RuntimePolicy,
+        actor: str = "System",
+        site_id: Optional[str] = None,
+        persist: bool = True,
+    ) -> RuntimePolicy:
+        """Registers or updates a policy in the catalog and optionally persists it per site."""
+        if persist:
+            from .policy_store import policy_store
+            saved_policy, _ = policy_store.save_policy(policy, actor=actor, site_id=site_id)
+        else:
+            saved_policy = policy
 
-    def unregister_policy(self, policy_id: str, doctype: Optional[str] = None) -> bool:
-        """Removes a policy from the catalog by policy_id."""
+        from .policy_store import get_current_site_id
+        resolved_site = get_current_site_id(site_id)
+        if resolved_site:
+            site_bucket = self._site_policies.setdefault(resolved_site, {})
+            doctype_policies = site_bucket.setdefault(saved_policy.doctype, [])
+            for idx, existing in enumerate(doctype_policies):
+                if existing.policy_id == saved_policy.policy_id:
+                    doctype_policies[idx] = saved_policy
+                    return saved_policy
+            doctype_policies.append(saved_policy)
+        else:
+            self._register_default(saved_policy)
+        return saved_policy
+
+    def unregister_policy(
+        self,
+        policy_id: str,
+        doctype: Optional[str] = None,
+        actor: str = "System",
+        site_id: Optional[str] = None,
+    ) -> bool:
+        """Removes a policy from the catalog and persistent site store by policy_id."""
+        from .policy_store import get_current_site_id, policy_store
         removed = False
-        doctypes = [doctype] if doctype else list(self._policies.keys())
-        for dt in doctypes:
-            if dt in self._policies:
-                initial_len = len(self._policies[dt])
-                self._policies[dt] = [p for p in self._policies[dt] if p.policy_id != policy_id]
-                if len(self._policies[dt]) < initial_len:
-                    removed = True
+        resolved_site = get_current_site_id(site_id)
+        if resolved_site and resolved_site in self._site_policies:
+            site_bucket = self._site_policies[resolved_site]
+            doctypes = [doctype] if doctype else list(site_bucket.keys())
+            for dt in doctypes:
+                if dt in site_bucket:
+                    initial_len = len(site_bucket[dt])
+                    site_bucket[dt] = [p for p in site_bucket[dt] if p.policy_id != policy_id]
+                    if len(site_bucket[dt]) < initial_len:
+                        removed = True
+        else:
+            doctypes = [doctype] if doctype else list(self._default_policies.keys())
+            for dt in doctypes:
+                if dt in self._default_policies:
+                    initial_len = len(self._default_policies[dt])
+                    self._default_policies[dt] = [p for p in self._default_policies[dt] if p.policy_id != policy_id]
+                    if len(self._default_policies[dt]) < initial_len:
+                        removed = True
+
+        audit = policy_store.delete_policy(policy_id, actor=actor, site_id=site_id)
+        if audit is not None:
+            removed = True
         return removed
 
-    def get_active_policies(self, doctype: str, stage: Optional[str] = None) -> List[RuntimePolicy]:
-        """Returns all active policies for the specified DocType and lifecycle stage."""
-        all_policies = self._policies.get(doctype, [])
+    def get_active_policies(
+        self,
+        doctype: str,
+        stage: Optional[str] = None,
+        site_id: Optional[str] = None,
+    ) -> List[RuntimePolicy]:
+        """Returns all active policies for the specified DocType and lifecycle stage on the site."""
+        from .policy_store import get_current_site_id, policy_store
         norm_stage = normalize_stage(stage)
-        return [
-            p for p in all_policies
+        resolved_site = get_current_site_id(site_id)
+
+        # 1. Built-in Tier 0 default policies
+        default_for_dt = [
+            p for p in self._default_policies.get(doctype, [])
             if p.active and is_policy_applicable_to_stage(p, norm_stage)
         ]
+
+        # 2. In-memory site policies
+        site_in_mem = []
+        if resolved_site and resolved_site in self._site_policies:
+            site_in_mem = [
+                p for p in self._site_policies[resolved_site].get(doctype, [])
+                if p.active and is_policy_applicable_to_stage(p, norm_stage)
+            ]
+
+        # 3. Persisted site policies
+        persisted = policy_store.get_policies(
+            doctype=doctype, stage=stage, active_only=True, site_id=site_id
+        )
+
+        combined: Dict[str, RuntimePolicy] = {p.policy_id: p for p in default_for_dt}
+        for p in site_in_mem:
+            combined[p.policy_id] = p
+        for p in persisted:
+            combined[p.policy_id] = p
+
+        return list(combined.values())
 
     def _evaluate_single_policy(
         self,
@@ -461,6 +556,7 @@ class RuntimePolicyCatalog:
         stage: str,
         user_roles: Optional[List[str]] = None,
         raise_exception: bool = True,
+        site_id: Optional[str] = None,
     ) -> PolicyEvaluationResult:
         """Evaluates active policies for the specified lifecycle stage."""
         doctype = getattr(doc, "doctype", None) if hasattr(doc, "doctype") else (doc.get("doctype") if isinstance(doc, dict) else None)
@@ -470,7 +566,7 @@ class RuntimePolicyCatalog:
         if user_roles is None:
             user_roles = []
 
-        policies = self.get_active_policies(doctype, stage=stage)
+        policies = self.get_active_policies(doctype, stage=stage, site_id=site_id)
         violated_policies: List[str] = []
         reasons: List[str] = []
 
@@ -502,9 +598,10 @@ class RuntimePolicyCatalog:
         user_roles: Optional[List[str]] = None,
         raise_exception: bool = True,
         db: Any = None,
+        site_id: Optional[str] = None,
     ) -> PolicyEvaluationResult:
         """Evaluates policies applicable to Document.validate."""
-        res = self._evaluate_stage(doc, stage="validate", user_roles=user_roles, raise_exception=False)
+        res = self._evaluate_stage(doc, stage="validate", user_roles=user_roles, raise_exception=False, site_id=site_id)
         from .cross_doc_policy import cross_doc_catalog
         cross_res = cross_doc_catalog.evaluate_cross_doc_policies(doc, stage="validate", db=db)
 
@@ -530,9 +627,10 @@ class RuntimePolicyCatalog:
         user_roles: Optional[List[str]] = None,
         raise_exception: bool = True,
         db: Any = None,
+        site_id: Optional[str] = None,
     ) -> PolicyEvaluationResult:
         """Evaluates policies applicable to Document.before_submit."""
-        res = self._evaluate_stage(doc, stage="submit", user_roles=user_roles, raise_exception=False)
+        res = self._evaluate_stage(doc, stage="submit", user_roles=user_roles, raise_exception=False, site_id=site_id)
         from .cross_doc_policy import cross_doc_catalog
         cross_res = cross_doc_catalog.evaluate_cross_doc_policies(doc, stage="submit", db=db)
 
@@ -557,9 +655,10 @@ class RuntimePolicyCatalog:
         doc: Any,
         user_roles: Optional[List[str]] = None,
         raise_exception: bool = True,
+        site_id: Optional[str] = None,
     ) -> PolicyEvaluationResult:
         """Evaluates policies applicable to Document.before_update_after_submit."""
-        return self._evaluate_stage(doc, stage="update_after_submit", user_roles=user_roles, raise_exception=raise_exception)
+        return self._evaluate_stage(doc, stage="update_after_submit", user_roles=user_roles, raise_exception=raise_exception, site_id=site_id)
 
 
 # Global default instance

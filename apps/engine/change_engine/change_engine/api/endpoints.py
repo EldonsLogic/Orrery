@@ -117,11 +117,26 @@ def _resolve_caller_roles(kwargs: Optional[Dict[str, Any]] = None) -> list:
     return get_current_user_roles()
 
 
-def _require_authorized_caller() -> None:
-    """Reject non-authorised callers on read endpoints (only enforced inside Frappe)."""
+def _require_authorized_caller(kwargs: Optional[Dict[str, Any]] = None) -> None:
+    """Reject non-authorised callers on read endpoints (CE-SEC-003)."""
     if frappe is not None and hasattr(frappe, "session") and getattr(frappe.session, "user", None):
         if not set(get_current_user_roles()).intersection(AUTHORIZED_DEPLOYMENT_ROLES):
             raise PermissionError("Not permitted")
+    elif kwargs and ("user_roles" in kwargs or "caller_roles" in kwargs):
+        roles = set(_resolve_caller_roles(kwargs))
+        if not roles.intersection(AUTHORIZED_DEPLOYMENT_ROLES):
+            raise PermissionError("Not permitted")
+
+
+def _require_admin_caller(kwargs: Optional[Dict[str, Any]] = None) -> None:
+    """Reject non-admin callers on policy registration/unregistration endpoints (CE-SEC-003)."""
+    if frappe is not None and hasattr(frappe, "session") and getattr(frappe.session, "user", None):
+        if not set(get_current_user_roles()).intersection(AUTHORIZED_DEPLOYMENT_ROLES):
+            raise PermissionError("Not permitted: admin permission required to register or modify runtime policies")
+    elif kwargs and ("user_roles" in kwargs or "caller_roles" in kwargs):
+        roles = set(_resolve_caller_roles(kwargs))
+        if not roles.intersection(AUTHORIZED_DEPLOYMENT_ROLES):
+            raise PermissionError("Not permitted: admin permission required to register or modify runtime policies")
 
 
 
@@ -1744,31 +1759,135 @@ def enforce_runtime_policies_on_update_after_submit(doc, method=None, user_roles
     return result
 
 
-def get_runtime_policies(doctype: Optional[str] = None, stage: Optional[str] = None) -> List[Dict[str, Any]]:
+def _resolve_site_id(explicit_site: Optional[str] = None) -> Optional[str]:
+    """Resolves the active Frappe site ID from explicit parameter or frappe.local.site."""
+    if explicit_site:
+        return explicit_site
+    if frappe is not None and hasattr(frappe, "local") and getattr(frappe.local, "site", None):
+        return str(frappe.local.site)
+    return None
+
+
+def get_runtime_policies(
+    doctype: Optional[str] = None,
+    stage: Optional[str] = None,
+    include_inactive: bool = False,
+    site_id: Optional[str] = None,
+    **kwargs: Any,
+) -> List[Dict[str, Any]]:
     """
     Whitelisted RPC method: returns active runtime policies for a given DocType and lifecycle stage.
     """
-    _require_authorized_caller()
-    if doctype:
-        policies = policy_catalog.get_active_policies(doctype, stage=stage)
+    _require_authorized_caller(kwargs)
+    resolved_site = _resolve_site_id(site_id)
+    from change_engine.guarded_apply.policy_store import policy_store
+    if include_inactive:
+        policies = policy_store.get_policies(doctype=doctype, stage=stage, active_only=False, site_id=resolved_site)
     else:
-        policies = []
-        for dt in policy_catalog._policies:
-            policies.extend(policy_catalog.get_active_policies(dt, stage=stage))
+        if doctype:
+            policies = policy_catalog.get_active_policies(doctype, stage=stage, site_id=resolved_site)
+        else:
+            policies = policy_store.get_policies(stage=stage, active_only=True, site_id=resolved_site)
+            # Combine with default Tier 0 policies
+            for dt, pol_list in policy_catalog._policies.items():
+                for p in pol_list:
+                    if p.active and (not stage or p.stage == stage) and not any(x.policy_id == p.policy_id for x in policies):
+                        policies.append(p)
     return [p.to_dict() for p in policies]
 
 
-def register_runtime_policy(policy_data: Union[Dict[str, Any], RuntimePolicy]) -> Dict[str, Any]:
+def register_runtime_policy(
+    policy_data: Union[Dict[str, Any], RuntimePolicy],
+    site_id: Optional[str] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
     """
-    Registers a new runtime policy or updates an existing one.
-    NOTE: in-process memory only (not persisted, not per site). Not exposed over HTTP. See CE-SEC-003.
+    Whitelisted RPC method: Registers a new runtime policy or updates an existing one with
+    per-site persistence, revision increment, and durable audit trail (CE-SEC-003).
+    Requires admin permission (System Manager, Finance Director, or Operations Director).
     """
+    _require_admin_caller(kwargs)
+    resolved_site = _resolve_site_id(site_id)
     if isinstance(policy_data, dict):
         policy = RuntimePolicy(**policy_data)
     else:
         policy = policy_data
-    policy_catalog.register_policy(policy)
-    return {"success": True, "policy_id": policy.policy_id}
+
+    actor = "System"
+    if frappe is not None and hasattr(frappe, "session") and getattr(frappe.session, "user", None):
+        actor = str(frappe.session.user)
+    elif kwargs.get("actor"):
+        actor = str(kwargs.get("actor"))
+
+    from change_engine.guarded_apply.policy_store import policy_store
+    saved_policy, audit = policy_store.save_policy(policy, actor=actor, site_id=resolved_site)
+    policy_catalog.register_policy(saved_policy, actor=actor, site_id=resolved_site, persist=False)
+    return {
+        "success": True,
+        "policy_id": saved_policy.policy_id,
+        "revision": saved_policy.revision,
+        "audit_id": audit.get("audit_id"),
+        "action": audit.get("action"),
+    }
+
+
+def unregister_runtime_policy(
+    policy_id: str,
+    doctype: Optional[str] = None,
+    site_id: Optional[str] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """
+    Whitelisted RPC method: Unregisters or deactivates a runtime policy with audit trail.
+    Requires admin permission.
+    """
+    _require_admin_caller(kwargs)
+    resolved_site = _resolve_site_id(site_id)
+    actor = "System"
+    if frappe is not None and hasattr(frappe, "session") and getattr(frappe.session, "user", None):
+        actor = str(frappe.session.user)
+    elif kwargs.get("actor"):
+        actor = str(kwargs.get("actor"))
+
+    from change_engine.guarded_apply.policy_store import policy_store
+    audit = policy_store.delete_policy(policy_id, actor=actor, site_id=resolved_site)
+    policy_catalog.unregister_policy(policy_id, doctype=doctype, actor=actor, site_id=resolved_site)
+    return {
+        "success": True,
+        "policy_id": policy_id,
+        "audit_id": audit.get("audit_id") if audit else None,
+    }
+
+
+def get_policy_audit_trail(
+    policy_id: Optional[str] = None,
+    doctype: Optional[str] = None,
+    site_id: Optional[str] = None,
+    **kwargs: Any,
+) -> List[Dict[str, Any]]:
+    """
+    Whitelisted RPC method: Returns the durable audit journal for runtime policies.
+    Requires authorized caller.
+    """
+    _require_authorized_caller(kwargs)
+    resolved_site = _resolve_site_id(site_id)
+    from change_engine.guarded_apply.policy_store import policy_store
+    return policy_store.get_audit_trail(policy_id=policy_id, doctype=doctype, site_id=resolved_site)
+
+
+def get_policy_revisions(
+    policy_id: str,
+    site_id: Optional[str] = None,
+    **kwargs: Any,
+) -> List[Dict[str, Any]]:
+    """
+    Whitelisted RPC method: Returns historical revisions of a runtime policy.
+    Requires authorized caller.
+    """
+    _require_authorized_caller(kwargs)
+    resolved_site = _resolve_site_id(site_id)
+    from change_engine.guarded_apply.policy_store import policy_store
+    return policy_store.get_policy_revisions(policy_id=policy_id, site_id=resolved_site)
 
 
 def evaluate_document_policies(
@@ -1776,29 +1895,35 @@ def evaluate_document_policies(
     doc: Dict[str, Any],
     stage: str = "validate",
     user_roles: Optional[List[str]] = None,
+    site_id: Optional[str] = None,
+    **kwargs: Any,
 ) -> Dict[str, Any]:
     """
     Whitelisted RPC method: Evaluates runtime policies against a document preview
     without saving to the database.
     """
-    _require_authorized_caller()
-    user_roles = _resolve_caller_roles({"user_roles": user_roles})
+    _require_authorized_caller(kwargs)
+    resolved_site = _resolve_site_id(site_id)
+    resolved_roles = list(user_roles) if user_roles is not None else _resolve_caller_roles(kwargs)
     if isinstance(doc, dict):
         doc = dict(doc)
         doc["doctype"] = doctype
 
     norm_stage = (stage or "validate").lower()
     if norm_stage in ("submit", "before_submit"):
-        res = policy_catalog.evaluate_submit(doc, user_roles=user_roles, raise_exception=False)
+        res = policy_catalog.evaluate_submit(doc, user_roles=resolved_roles, raise_exception=False, site_id=resolved_site)
     elif norm_stage in ("update_after_submit", "before_update_after_submit"):
-        res = policy_catalog.evaluate_update_after_submit(doc, user_roles=user_roles, raise_exception=False)
+        res = policy_catalog.evaluate_update_after_submit(doc, user_roles=resolved_roles, raise_exception=False, site_id=resolved_site)
     else:
-        res = policy_catalog.evaluate_validate(doc, user_roles=user_roles, raise_exception=False)
+        res = policy_catalog.evaluate_validate(doc, user_roles=resolved_roles, raise_exception=False, site_id=resolved_site)
 
     return res.to_dict()
 
 
 if frappe and hasattr(frappe, "whitelist"):
     get_runtime_policies = frappe.whitelist()(get_runtime_policies)
+    register_runtime_policy = frappe.whitelist()(register_runtime_policy)
+    unregister_runtime_policy = frappe.whitelist()(unregister_runtime_policy)
+    get_policy_audit_trail = frappe.whitelist()(get_policy_audit_trail)
+    get_policy_revisions = frappe.whitelist()(get_policy_revisions)
     evaluate_document_policies = frappe.whitelist()(evaluate_document_policies)
-    # register_runtime_policy is intentionally NOT whitelisted until policies are persisted (CE-SEC-003).

@@ -1,6 +1,6 @@
 """
 Unit test suite for ZATCA Phase 1 E-Invoicing Component (CMP-003).
-Covers TLV encoding/decoding, mandatory field validation, tax computations,
+Covers TLV encoding/decoding, mandatory field validation, checks on engine-supplied totals,
 credit/debit notes, and error handling.
 """
 
@@ -17,7 +17,6 @@ from components.compliance.zatca_sa.phase1 import (
     encode_phase1_tlv,
     generate_phase1_invoice,
     generate_phase1_qr,
-    quantize_amount,
 )
 
 
@@ -25,15 +24,21 @@ class TestZatcaPhase1TLV(unittest.TestCase):
     """Tests for ZATCA Phase 1 5-tag TLV encoding and decoding."""
 
     def test_official_sample_test_vector(self):
-        """Test bit-for-bit equivalence against the canonical ZATCA sample test vector."""
-        seller_name = "Bob's Dogs"
-        vat_number = "310122393500003"
+        """Bit-for-bit match with the worked example published by ZATCA.
+
+        Source: ZATCA, E-invoicing Detailed Technical Guideline, section 6.4 "Manual decoding a TLV
+        QR Code", https://zatca.gov.sa/en/E-Invoicing/Introduction/Guidelines/Documents/E-invoicing-Detailed-Technical-Guideline.pdf
+        (accessed 2026-11-13). Values and the Base64 string are copied from that document.
+        """
+        seller_name = "Bobs Basement Records"
+        vat_number = "100025906700003"
         timestamp = "2022-04-25T15:30:00Z"
-        invoice_total = "1000.00"
-        vat_total = "150.00"
+        invoice_total = "2100100.99"
+        vat_total = "315015.15"
 
         expected_b64 = (
-            "AQpCb2IncyBEb2dzAg8zMTAxMjIzOTM1MDAwMDMDFDIwMjItMDQtMjVUMTU6MzA6MDBaBAcxMDAwLjAwBQYxNTAuMDA="
+            "ARVCb2JzIEJhc2VtZW50IFJlY29yZHMCDzEwMDAyNTkwNjcwMDAwMwMUMjAyMi0wNC0yNVQxNTozMDowMFoE"
+            "CjIxMDAxMDAuOTkFCTMxNTAxNS4xNQ=="
         )
 
         actual_b64 = encode_phase1_tlv(
@@ -189,16 +194,13 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
                     "vat_category": "S",
                 }
             ],
+            "totals": {"total_taxable_amount": "200.00", "total_vat_amount": "30.00", "grand_total": "230.00"},
         }
 
         invoice = generate_phase1_invoice(inv_data)
         self.assertIsNotNone(invoice.qr_code_tlv)
 
-        totals = invoice.compute_totals()
-        self.assertEqual(totals.line_extension_amount, Decimal("200.00"))
-        self.assertEqual(totals.total_taxable_amount, Decimal("200.00"))
-        self.assertEqual(totals.total_vat_amount, Decimal("30.00"))
-        self.assertEqual(totals.grand_total, Decimal("230.00"))
+        self.assertEqual(invoice.totals.grand_total, Decimal("230.00"))
 
         # Verify decoded QR matches invoice amounts
         decoded_qr = decode_phase1_tlv(invoice.qr_code_tlv)
@@ -249,13 +251,13 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
                     "vat_rate": "0.15",
                 }
             ],
+            "totals": {"total_taxable_amount": "5000.00", "total_vat_amount": "750.00", "grand_total": "5750.00"},
         }
 
         invoice = generate_phase1_invoice(inv_data)
-        totals = invoice.compute_totals()
-        self.assertEqual(totals.line_extension_amount, Decimal("5000.00"))
-        self.assertEqual(totals.total_vat_amount, Decimal("750.00"))
-        self.assertEqual(totals.grand_total, Decimal("5750.00"))
+        decoded_qr = decode_phase1_tlv(invoice.qr_code_tlv)
+        self.assertEqual(decoded_qr[4], "5750.00")
+        self.assertEqual(decoded_qr[5], "750.00")
 
     def test_standard_b2b_missing_buyer_fails(self):
         """Standard tax invoices must fail if buyer details are omitted."""
@@ -322,6 +324,7 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
                     "vat_rate": "0.15",
                 }
             ],
+            "totals": {"total_taxable_amount": "100.00", "total_vat_amount": "15.00", "grand_total": "115.00"},
         }
 
         invoice = generate_phase1_invoice(inv_data)
@@ -364,8 +367,8 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
             any("Preceding invoice reference is mandatory" in err for err in ctx.exception.errors)
         )
 
-    def test_tax_exemptions_and_rounding(self):
-        """Verify handling of zero-rated items and Decimal rounding accuracy."""
+    def test_zero_rated_line_uses_engine_totals(self):
+        """Zero-rated items validate, and the QR carries the engine's totals unchanged."""
         inv_data = {
             "invoice_id": "INV-EXEMPT-01",
             "issue_date": "2026-11-07",
@@ -404,19 +407,84 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
                     "vat_category": "S",
                 },
             ],
+            # As computed by the engine: VAT rounded once at document level (ZATCA XML implementation
+            # standard, chapter 10). This module does not recompute it.
+            "totals": {"total_taxable_amount": "187.64", "total_vat_amount": "15.00", "grand_total": "202.64"},
         }
 
         invoice = generate_phase1_invoice(inv_data)
-        totals = invoice.compute_totals()
+        decoded_qr = decode_phase1_tlv(invoice.qr_code_tlv)
+        self.assertEqual(decoded_qr[4], "202.64")
+        self.assertEqual(decoded_qr[5], "15.00")
 
-        # Line 1: 87.65 @ 0% = 0.00 VAT
-        # Line 2: 3 * 33.33 = 99.99 @ 15% = 14.9985 -> rounded to 15.00 VAT
-        # Line extension: 87.65 + 99.99 = 187.64
-        # Total VAT: 15.00
-        # Grand total: 187.64 + 15.00 = 202.64
-        self.assertEqual(totals.line_extension_amount, Decimal("187.64"))
-        self.assertEqual(totals.total_vat_amount, Decimal("15.00"))
-        self.assertEqual(totals.grand_total, Decimal("202.64"))
+
+class TestEngineTotalsAuthority(unittest.TestCase):
+    """ADR-0031: the engine computes totals; this module checks them and fails closed."""
+
+    def base(self, totals):
+        data = {
+            "invoice_id": "INV-AUTH-01",
+            "issue_date": "2026-11-07",
+            "issue_time": "11:00:00",
+            "invoice_type": "simplified",
+            "transaction_type": "simplified_tax_invoice",
+            "seller": {
+                "name": "Al-Noor Trading Est",
+                "vat_number": "300000000000003",
+                "address": {"street": "Street", "building_no": "1", "postal_code": "12345",
+                            "city": "Riyadh", "district": "Olaya", "country_code": "SA"},
+            },
+            "lines": [{"item_code": "ITEM-1", "description": "Item", "quantity": "1",
+                       "unit_price": "100.00", "vat_rate": "0.15", "vat_category": "S"}],
+        }
+        if totals is not None:
+            data["totals"] = totals
+        return data
+
+    def test_document_discount_vat_comes_from_engine(self):
+        """100.00 less a 10.00 document discount: the engine's VAT (13.50) is used, not recomputed."""
+        invoice = generate_phase1_invoice(self.base(
+            {"total_taxable_amount": "90.00", "total_vat_amount": "13.50", "grand_total": "103.50"}))
+        decoded_qr = decode_phase1_tlv(invoice.qr_code_tlv)
+        self.assertEqual(decoded_qr[4], "103.50")
+        self.assertEqual(decoded_qr[5], "13.50")
+
+    def test_missing_totals_fails(self):
+        with self.assertRaises(ZatcaValidationError) as ctx:
+            generate_phase1_invoice(self.base(None))
+        self.assertTrue(any("totals from the engine are mandatory" in e for e in ctx.exception.errors))
+
+    def test_inconsistent_totals_fail_closed(self):
+        with self.assertRaises(ZatcaValidationError) as ctx:
+            generate_phase1_invoice(self.base(
+                {"total_taxable_amount": "90.00", "total_vat_amount": "15.00", "grand_total": "103.50"}))
+        self.assertTrue(any("Engine totals disagree" in e for e in ctx.exception.errors))
+
+    def test_unrounded_totals_fail(self):
+        with self.assertRaises(ZatcaValidationError) as ctx:
+            generate_phase1_invoice(self.base(
+                {"total_taxable_amount": "99.99", "total_vat_amount": "14.9985", "grand_total": "114.9885"}))
+        self.assertTrue(any("rounded to 2 decimals" in e for e in ctx.exception.errors))
+
+    def test_non_finite_amount_fails(self):
+        for bad in ("NaN", "Infinity", "abc"):
+            with self.assertRaises(ZatcaValidationError):
+                generate_phase1_invoice(self.base(
+                    {"total_taxable_amount": bad, "total_vat_amount": "15.00", "grand_total": "115.00"}))
+
+    def test_negative_quantity_fails(self):
+        data = self.base({"total_taxable_amount": "100.00", "total_vat_amount": "15.00", "grand_total": "115.00"})
+        data["lines"][0]["quantity"] = "-1"
+        with self.assertRaises(ZatcaValidationError) as ctx:
+            generate_phase1_invoice(data)
+        self.assertTrue(any("Quantity cannot be negative" in e for e in ctx.exception.errors))
+
+    def test_missing_vat_rate_fails(self):
+        data = self.base({"total_taxable_amount": "100.00", "total_vat_amount": "15.00", "grand_total": "115.00"})
+        del data["lines"][0]["vat_rate"]
+        with self.assertRaises(ZatcaValidationError) as ctx:
+            generate_phase1_invoice(data)
+        self.assertTrue(any("VAT rate is required" in e for e in ctx.exception.errors))
 
 
 if __name__ == "__main__":

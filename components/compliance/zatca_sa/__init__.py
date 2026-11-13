@@ -1,6 +1,7 @@
 """
 ZATCA Phase 1 E-Invoicing Component for Saudi Arabia.
-Provides deterministic validation, tax computation, and 5-tag TLV QR code generation.
+Validates invoices, checks the engine's totals and generates the 5-tag TLV QR code.
+It never computes tax (ADR-0031). Not yet verified against the ZATCA sandbox.
 """
 
 from .phase1 import (

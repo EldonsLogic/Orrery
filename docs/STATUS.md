@@ -219,6 +219,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-13-partner-claude-code-cmp-003-engine-totals-and-official-vector.md](log/2026-11-13-partner-claude-code-cmp-003-engine-totals-and-official-vector.md): Reworked the ZATCA Phase 1 component to the conditions of proposed ADR-0031: a real ZATCA test vector, no tax computed in our code, and no claims of review, certification or engine testing that have not happened.
 - [2026-11-11-partner-codex-cmp-003-rebase.md](log/2026-11-11-partner-codex-cmp-003-rebase.md): Rebased CMP-003 on the refreshed CMP-002 branch and kept its row doing pending its dependency and compliance review.
 - [2026-11-11-partner-codex-cmp-002-rebase.md](log/2026-11-11-partner-codex-cmp-002-rebase.md): Rebased the existing CMP-002 evaluation on current main and kept the row doing while its ERP-001 dependency remains open.
 - [2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md](log/2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md): Wrote the phased delivery document with lanes and the phase to gate map, four proposed ADRs, 19 new plan rows and the phase exit plan rows, for the partner to review.
@@ -228,7 +229,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-07-partner-antigravity-zatca-erpgulf-evaluation.md](log/2026-11-07-partner-antigravity-zatca-erpgulf-evaluation.md): Evaluated the ERPGulf ZATCA e-invoicing app (v3.0.1, commit 7d686f7) across licence, Phase 2 coverage, and maintenance health, recommending adopting its pure Python cryptographic and UBL logic while wrapping it to enforce engine invisibility, transactional hash chaining, and CI sandbox testing.
 - [2026-11-07-partner-antigravity-third-party-licence-register.md](log/2026-11-07-partner-antigravity-third-party-licence-register.md): Recorded the partner's verified local bench installation (Frappe Framework 15.126.0 MIT, ERPNext 15.124.5 GPL-3.0, change engine module 0.1.0, MariaDB 10.6, Redis 7) into the third-party licence register and NOTICE.md, completing LEG-004.
 - [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0018 Dev Environments to Accepted; ADR-0007 Identity stays Proposed until Eldon accepts it (restored when the PR was re-applied onto main)), and populated the Codex and Antigravity rows in the model registry.
-- [2026-11-07-eldon-claude-code-wording-cleanup.md](log/2026-11-07-eldon-claude-code-wording-cleanup.md): Reworded older logs, ADR-0021, ADR-0023 and plan rows so they state the one-account policy plainly; renamed two logs to match.
 
 ## ADRs with status Proposed
 

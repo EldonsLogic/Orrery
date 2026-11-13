@@ -6,15 +6,18 @@ Implements:
 1. 5-tag TLV QR code encoding and decoding.
 2. Mandatory invoice field validation per VAT Implementing Regulations (Art. 53)
    and ZATCA E-Invoicing Resolution (Annex 2).
-3. Deterministic decimal tax calculation and rounding (15% standard rate, zero-rate, exempt).
+3. Consistency checks on the totals the engine computed (ADR-0031: the engine is the only
+   calculation authority; this module never computes tax and never substitutes its own figure).
 4. Immutability guardrails for credit and debit notes.
+
+Status: implemented, not yet verified against the ZATCA sandbox or reviewed by an accountant.
 """
 
 from __future__ import annotations
 
 import base64
 from dataclasses import dataclass, field
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation
 import re
 from typing import Any, Dict, List, Optional
 
@@ -23,8 +26,7 @@ KSA_VAT_REGEX = re.compile(r"^3\d{13}3$")
 DATE_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_REGEX = re.compile(r"^\d{2}:\d{2}(:\d{2})?")
 
-STANDARD_TAX_RATE = Decimal("0.15")
-ZERO_TAX_RATE = Decimal("0.00")
+ZERO = Decimal("0.00")
 TWO_DECIMALS = Decimal("0.01")
 
 
@@ -36,15 +38,25 @@ class ZatcaValidationError(ValueError):
         self.errors = errors or [message]
 
 
-def quantize_amount(val: Any) -> Decimal:
-    """Format and round a monetary amount to 2 decimal places using ROUND_HALF_UP."""
+def to_decimal(val: Any) -> Decimal:
+    """Convert an engine-supplied value to a finite Decimal without rounding it."""
     if isinstance(val, Decimal):
         dec = val
-    elif isinstance(val, (int, float, str)):
-        dec = Decimal(str(val))
+    elif isinstance(val, (int, str)):
+        try:
+            dec = Decimal(str(val))
+        except InvalidOperation as exc:
+            raise ZatcaValidationError(f"Amount '{val}' is not a number") from exc
     else:
-        dec = Decimal("0.00")
-    return dec.quantize(TWO_DECIMALS, rounding=ROUND_HALF_UP)
+        raise ZatcaValidationError(f"Amount must be a Decimal, int or string, not {type(val).__name__}")
+    if not dec.is_finite():
+        raise ZatcaValidationError(f"Amount '{val}' must be a finite number")
+    return dec
+
+
+def is_two_decimals(val: Decimal) -> bool:
+    """True if the amount already has at most 2 decimal places (no rounding is applied here)."""
+    return val == val.quantize(TWO_DECIMALS)
 
 
 @dataclass
@@ -117,52 +129,40 @@ class ZatcaParty:
 
 @dataclass
 class ZatcaLineItem:
-    """Line item in a ZATCA invoice."""
+    """Line item in a ZATCA invoice. Rates come from the engine (country pack), never from here."""
     item_code: str
     description: str
     quantity: Decimal
     unit_price: Decimal
-    vat_rate: Decimal = STANDARD_TAX_RATE
-    discount: Decimal = Decimal("0.00")
+    vat_rate: Optional[Decimal] = None
+    discount: Decimal = ZERO
     vat_category: str = "S"  # S: Standard, Z: Zero-rated, E: Exempt, O: Out-of-scope
     exemption_reason_code: Optional[str] = None
     exemption_reason_text: Optional[str] = None
-
-    @property
-    def gross_amount(self) -> Decimal:
-        return quantize_amount(self.quantity * self.unit_price)
-
-    @property
-    def net_amount(self) -> Decimal:
-        return quantize_amount(self.gross_amount - self.discount)
-
-    @property
-    def vat_amount(self) -> Decimal:
-        return quantize_amount(self.net_amount * self.vat_rate)
-
-    @property
-    def line_total(self) -> Decimal:
-        return quantize_amount(self.net_amount + self.vat_amount)
 
     def validate(self, line_index: int = 1) -> List[str]:
         errors = []
         if not self.description or not self.description.strip():
             errors.append(f"Line {line_index}: Item description is required")
-        if self.quantity == Decimal("0.00"):
+        if self.quantity == ZERO:
             errors.append(f"Line {line_index}: Quantity cannot be zero")
-        if self.unit_price < Decimal("0.00"):
+        elif self.quantity < ZERO:
+            errors.append(f"Line {line_index}: Quantity cannot be negative (a credit note is its own document type)")
+        if self.unit_price < ZERO:
             errors.append(f"Line {line_index}: Unit price cannot be negative")
-        if self.discount < Decimal("0.00"):
+        if self.discount < ZERO:
             errors.append(f"Line {line_index}: Discount cannot be negative")
-        if self.discount > self.gross_amount:
+        if self.quantity > ZERO and self.discount > self.quantity * self.unit_price:
             errors.append(f"Line {line_index}: Discount cannot exceed line gross amount")
 
-        # VAT Category checks
-        if self.vat_category == "S":
-            if self.vat_rate != STANDARD_TAX_RATE:
-                errors.append(f"Line {line_index}: Standard rate category 'S' must have VAT rate 0.15 (15%)")
+        # VAT category checks. The exact standard rate belongs to the country pack and the engine.
+        if self.vat_rate is None:
+            errors.append(f"Line {line_index}: VAT rate is required (supplied by the engine)")
+        elif self.vat_category == "S":
+            if self.vat_rate <= ZERO:
+                errors.append(f"Line {line_index}: Standard rate category 'S' must have a VAT rate above 0")
         elif self.vat_category in ("Z", "E", "O"):
-            if self.vat_rate != ZERO_TAX_RATE:
+            if self.vat_rate != ZERO:
                 errors.append(
                     f"Line {line_index}: Category '{self.vat_category}' must have VAT rate 0.00 (0%)"
                 )
@@ -178,14 +178,34 @@ class ZatcaLineItem:
 
 @dataclass
 class ZatcaTaxTotal:
-    """Aggregated tax breakdown for an invoice."""
+    """Invoice totals exactly as the engine computed them (ADR-0031). Never computed here."""
     total_taxable_amount: Decimal
     total_vat_amount: Decimal
     grand_total: Decimal
-    line_extension_amount: Decimal
-    document_discount: Decimal = Decimal("0.00")
-    prepaid_amount: Decimal = Decimal("0.00")
-    amount_due: Decimal = Decimal("0.00")
+
+    def validate(self) -> List[str]:
+        """Compare the engine's figures with each other; fail closed, never correct them.
+
+        The totals are deliberately not recomputed from the lines: the engine is the only
+        calculation authority (ADR-0031), so a line-level check would be a second calculator.
+        """
+        errors = []
+        figures = {
+            "Total taxable amount": self.total_taxable_amount,
+            "Total VAT amount": self.total_vat_amount,
+            "Grand total": self.grand_total,
+        }
+        for label, val in figures.items():
+            if val < ZERO:
+                errors.append(f"{label} cannot be negative")
+            if not is_two_decimals(val):
+                errors.append(f"{label} '{val}' must already be rounded to 2 decimals by the engine")
+        if self.total_taxable_amount + self.total_vat_amount != self.grand_total:
+            errors.append(
+                f"Engine totals disagree: taxable {self.total_taxable_amount} + VAT "
+                f"{self.total_vat_amount} != grand total {self.grand_total}"
+            )
+        return errors
 
 
 @dataclass
@@ -200,11 +220,10 @@ class ZatcaInvoice:
     invoice_type: str  # "standard" or "simplified"
     transaction_type: str  # "tax_invoice", "simplified_tax_invoice", "credit_note", "debit_note"
     seller: ZatcaParty
+    totals: Optional[ZatcaTaxTotal] = None
     lines: List[ZatcaLineItem] = field(default_factory=list)
     buyer: Optional[ZatcaParty] = None
     currency: str = "SAR"
-    document_discount: Decimal = Decimal("0.00")
-    prepaid_amount: Decimal = Decimal("0.00")
     preceding_invoice_reference: Optional[str] = None
     amendment_reason: Optional[str] = None
     qr_code_tlv: Optional[str] = None
@@ -220,31 +239,6 @@ class ZatcaInvoice:
     @property
     def is_adjustment_note(self) -> bool:
         return self.transaction_type in ("credit_note", "debit_note")
-
-    def compute_totals(self) -> ZatcaTaxTotal:
-        """Compute all taxable and VAT totals using deterministic Decimal arithmetic."""
-        line_extension = sum((item.net_amount for item in self.lines), Decimal("0.00"))
-        line_extension = quantize_amount(line_extension)
-
-        doc_discount = quantize_amount(self.document_discount)
-        total_taxable = quantize_amount(line_extension - doc_discount)
-
-        total_vat = sum((item.vat_amount for item in self.lines), Decimal("0.00"))
-        total_vat = quantize_amount(total_vat)
-
-        grand_total = quantize_amount(total_taxable + total_vat)
-        prepaid = quantize_amount(self.prepaid_amount)
-        amount_due = quantize_amount(grand_total - prepaid)
-
-        return ZatcaTaxTotal(
-            total_taxable_amount=total_taxable,
-            total_vat_amount=total_vat,
-            grand_total=grand_total,
-            line_extension_amount=line_extension,
-            document_discount=doc_discount,
-            prepaid_amount=prepaid,
-            amount_due=amount_due,
-        )
 
     def validate(self) -> List[str]:
         """Perform full validation against ZATCA Phase 1 regulations."""
@@ -276,6 +270,11 @@ class ZatcaInvoice:
             else:
                 errors.extend(self.buyer.validate(is_b2b_buyer=True))
 
+        if not self.totals:
+            errors.append("Invoice totals from the engine are mandatory")
+        else:
+            errors.extend(self.totals.validate())
+
         if not self.lines:
             errors.append("Invoice must contain at least one line item")
         else:
@@ -291,12 +290,6 @@ class ZatcaInvoice:
                 errors.append(
                     f"Amendment reason is mandatory for {self.transaction_type} adjustment notes."
                 )
-
-        # Simplified invoices must have QR code generated
-        if self.is_simplified and self.qr_code_tlv is None:
-            # We don't fail immediately if caller hasn't called generate_phase1_qr yet,
-            # but note it in check
-            pass
 
         return errors
 
@@ -380,8 +373,14 @@ def decode_phase1_tlv(b64_tlv_string: str) -> Dict[int, str]:
 def generate_phase1_qr(invoice: ZatcaInvoice) -> str:
     """
     Generate the Base64-encoded Phase 1 TLV QR string for an invoice and assign it.
+    Uses the engine's totals as given; refuses an invoice that fails validation.
     """
-    totals = invoice.compute_totals()
+    errors = invoice.validate()
+    if errors:
+        raise ZatcaValidationError(
+            f"ZATCA Phase 1 invoice validation failed with {len(errors)} error(s)", errors=errors
+        )
+    totals = invoice.totals
 
     # Time stamp format: YYYY-MM-DDTHH:MM:SSZ
     date_part = invoice.issue_date.strip()
@@ -413,9 +412,9 @@ def generate_phase1_invoice(invoice_dict: Dict[str, Any]) -> ZatcaInvoice:
     """
     High-level factory function:
     1. Parses dictionary invoice data into strongly typed models.
-    2. Computes line totals and invoice totals deterministically.
-    3. Generates the mandatory 5-tag TLV QR code.
-    4. Validates compliance and returns the certified ZatcaInvoice.
+    2. Takes the invoice totals the engine computed (key "totals"); computes none itself.
+    3. Validates the invoice, then generates the mandatory 5-tag TLV QR code.
+    Returns the validated ZatcaInvoice. Not yet verified against the ZATCA sandbox.
     """
     # 1. Parse Seller
     seller_data = invoice_dict.get("seller", {})
@@ -465,15 +464,24 @@ def generate_phase1_invoice(invoice_dict: Dict[str, Any]) -> ZatcaInvoice:
         line = ZatcaLineItem(
             item_code=item_data.get("item_code", ""),
             description=item_data.get("description", ""),
-            quantity=quantize_amount(item_data.get("quantity", "1")),
-            unit_price=quantize_amount(item_data.get("unit_price", "0")),
-            vat_rate=Decimal(str(item_data.get("vat_rate", "0.15"))),
-            discount=quantize_amount(item_data.get("discount", "0")),
+            quantity=to_decimal(item_data.get("quantity", "1")),
+            unit_price=to_decimal(item_data.get("unit_price", "0")),
+            vat_rate=to_decimal(item_data["vat_rate"]) if "vat_rate" in item_data else None,
+            discount=to_decimal(item_data.get("discount", "0")),
             vat_category=item_data.get("vat_category", "S"),
             exemption_reason_code=item_data.get("exemption_reason_code"),
             exemption_reason_text=item_data.get("exemption_reason_text"),
         )
         lines.append(line)
+
+    totals = None
+    totals_data = invoice_dict.get("totals")
+    if totals_data:
+        totals = ZatcaTaxTotal(
+            total_taxable_amount=to_decimal(totals_data.get("total_taxable_amount", "0")),
+            total_vat_amount=to_decimal(totals_data.get("total_vat_amount", "0")),
+            grand_total=to_decimal(totals_data.get("grand_total", "0")),
+        )
 
     invoice = ZatcaInvoice(
         invoice_id=invoice_dict.get("invoice_id", ""),
@@ -482,24 +490,14 @@ def generate_phase1_invoice(invoice_dict: Dict[str, Any]) -> ZatcaInvoice:
         invoice_type=invoice_dict.get("invoice_type", "simplified").lower(),
         transaction_type=invoice_dict.get("transaction_type", "tax_invoice").lower(),
         seller=seller,
+        totals=totals,
         buyer=buyer,
         lines=lines,
         currency=invoice_dict.get("currency", "SAR"),
-        document_discount=quantize_amount(invoice_dict.get("document_discount", "0")),
-        prepaid_amount=quantize_amount(invoice_dict.get("prepaid_amount", "0")),
         preceding_invoice_reference=invoice_dict.get("preceding_invoice_reference"),
         amendment_reason=invoice_dict.get("amendment_reason"),
     )
 
-    # 4. Generate Phase 1 TLV QR Code
+    # 4. Validate, then generate the Phase 1 TLV QR code (raises on any validation error)
     generate_phase1_qr(invoice)
-
-    # 5. Validate full compliance
-    errors = invoice.validate()
-    if errors:
-        raise ZatcaValidationError(
-            f"ZATCA Phase 1 invoice validation failed with {len(errors)} error(s)",
-            errors=errors,
-        )
-
     return invoice

@@ -7,7 +7,7 @@
     "ar": "الفوترة الإلكترونية السعودية (المرحلة الأولى)",
     "en": "Saudi ZATCA E-Invoicing (Phase 1)"
   },
-  "description": "Deterministic ZATCA Phase 1 e-invoicing component for KSA: mandatory field validation (Art. 53), 5-tag TLV QR code generation, tax rounding, and immutability guardrails.",
+  "description": "ZATCA Phase 1 e-invoicing component for KSA: mandatory field validation (Art. 53), checks on the totals the engine computed (it computes no tax itself, ADR-0031), 5-tag TLV QR code generation, and immutability guardrails. Not yet verified against the ZATCA sandbox.",
   "provides": [
     {
       "capability": "compliance.zatca_sa.phase1_generation",
@@ -44,17 +44,12 @@
   "certification": {
     "level": "reviewed",
     "touchesLedgerOrTax": true,
-    "reviewedBy": [
-      "sayegh9"
-    ]
+    "reviewedBy": []
   },
   "engineCompatibility": {
     "adapter": "change_engine",
     "engineRange": ">=0.1.0 <1.0.0",
-    "testedAgainst": [
-      "frappe-15.126.0",
-      "erpnext-15.124.5"
-    ]
+    "testedAgainst": []
   },
   "licence": {
     "spdx": "MIT"
@@ -67,7 +62,7 @@
       "ar",
       "en"
     ],
-    "rtlVerified": true
+    "rtlVerified": false
   },
   "dataHandling": {
     "storesPersonalData": false,

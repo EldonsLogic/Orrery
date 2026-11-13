@@ -58,12 +58,13 @@ class TestEngineZatcaPhase1(unittest.TestCase):
                     "vat_rate": "0.15",
                 }
             ],
+            "totals": {"total_taxable_amount": "100.00", "total_vat_amount": "15.00", "grand_total": "115.00"},
         }
 
         invoice = generate_phase1_invoice(inv_data)
         self.assertIsNotNone(invoice.qr_code_tlv)
-        totals = invoice.compute_totals()
-        self.assertEqual(totals.grand_total, Decimal("115.00"))
+        self.assertEqual(invoice.totals.grand_total, Decimal("115.00"))
+        self.assertEqual(decode_phase1_tlv(invoice.qr_code_tlv)[4], "115.00")
 
 
 if __name__ == "__main__":

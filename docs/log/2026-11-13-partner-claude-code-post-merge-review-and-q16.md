@@ -9,16 +9,19 @@ Plan IDs: GOV-008,GOV-036,BPL-028,BPL-029
 Post-merge cross-model review (Opus against the Sonnet author) of Eldon's merged PRs #44, #45 and #46, which the partner had approved verbally; review posted as PR comments, with a correction that the approval was given; open question Q-17 on recording approvals as GitHub reviews.
 
 ## Files touched
+- docs/decisions/ADR-0031-rigid-zone-code-authorship.md and INDEX.md: proposed answer to Q-18 (reading A with four conditions: source test vectors, one calculation authority, a named human reviewer, a different-model review).
+- docs/open-questions.md: added Q-19 (manifest schema has no pre-review state for tax components).
 - docs/open-questions.md: added Q-18 (what "never AI-written" means for tax and e-invoice code; holds #43 until settled).
 - docs/open-questions.md: added Q-17 (numbered after the Q-16 already proposed in #39; verbal approvals with no GitHub review on record, `main` protection requires checks but no approving review, whether a PR approval approves its ADRs, rows placed in the other founder's lane).
 
 ## Decisions
 - None taken. The partner's position on the proposed ADRs, as posted on the PRs: changes requested on ADR-0027 (the human-floor limit would let an agent post to the ledger or file a tax return, against RULES 21; no security review) and ADR-0030 (the mapping drops role scope, and unmapped engine fields are visible by default); ADR-0028 approved; ADR-0029 approved pending counsel; ADR-0026 approved in principle after fixes (lane table contradicts section 2, Qatar shown as the first market although it is a hypothesis). The partner accepts ERP-021 and ERP-022. PLT-025, CMP-032 and ERP-023 are to be confirmed in a follow-up.
 - BPL-028 independent check on paper: trial balance correct (1,150.00 each side). Fixes requested: opening-stock account, discount accounting setting, a credit note instead of cancel, a real mid-submit interruption case, the Owner approval step.
+- Partner chose reading A with conditions for Q-18 (ADR-0031 proposed, needs Eldon). In #43 the test labelled official uses seller "Bob's Dogs"; ZATCA's published example (E-invoicing Detailed Technical Guideline, section 6.4, accessed 2026-11-13) is "Bobs Basement Records", VAT 100025906700003, totals 2100100.99 and 315015.15. So #43's expected value was the code's own output. My own first recollection ("Bobs Records") was also wrong: it comes from a third-party SDK. Checked against the primary PDF.
 - Defect reported on #44: `scripts/phase_exit_check.py` accepts the other founder OR a different model; RULES 48 requires both. Reproduced locally.
 
 ## Tokens or cost
 Unknown.
 
 ## Next step
-Eldon answers the review comments on #44 to #46 and Q-17. Partner: get #39 (ERP-001) and #34 (CE-SEC-003) reviewed and merged, then ERP-021. Merge order for the stacked PRs: #39 then #41; #42 then #43 (after Q-18).
+Eldon answers the review comments on #44 to #46 and Q-17. Partner: get #39 (ERP-001) and #34 (CE-SEC-003) reviewed and merged, then ERP-021. #43 reworked to ADR-0031 on its own branch (new log there). Merge order for the stacked PRs: #39 then #41; #42 then #43 (after Q-18).

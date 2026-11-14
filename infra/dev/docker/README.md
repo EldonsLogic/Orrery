@@ -63,6 +63,7 @@ Wait for the engine to start, then run this once for the chosen site. It creates
 docker compose --env-file /dev/null -f infra/dev/docker/docker-compose.dev.yml exec -T engine sh -ec \
   'bench new-site "$SITE_NAME" --db-host "$DB_HOST" --mariadb-user-host-login-scope=% --db-root-password "$DB_ROOT_PASSWORD" --admin-password "$ADMIN_PASSWORD" --install-app erpnext --install-app hrms --install-app change_engine'
 ```
+Dev bench only: the passwords come from the container's environment, so they are not typed on your command line, but the `bench new-site` process inside the container carries them as arguments, visible to anyone who can list processes in that container. Do not reuse this pattern for any shared or hosted environment.
 
 ---
 
@@ -70,6 +71,10 @@ docker compose --env-file /dev/null -f infra/dev/docker/docker-compose.dev.yml e
 ```bash
 python3 infra/dev/docker/verify_dev_bench.py
 ```
-The verifier checks the selected project's running engine, site database and installed apps, app versions, HRMS commit, and both Redis services. It does not prove tenant isolation, accounting correctness, or adapter conformance. The separate automated regression tests live in `infra/dev/docker/tests/`.
+The verifier checks the selected project's running engine, site database and installed apps, app versions, HRMS commit, both Redis services, and that the site answers `/api/method/ping` on `127.0.0.1:${ENGINE_PORT}` (default 8000; set `ENGINE_PORT` if you changed it). It does not prove tenant isolation, accounting correctness, or adapter conformance. The separate automated regression tests live in `infra/dev/docker/tests/`.
+
+### Known limits of this spike
+- HRMS is pinned to a commit, but its transitive Python dependencies are installed without a lock file or hashes, so a rebuild can pull newer versions of them.
+- Compose runs no worker, scheduler or socketio service, so background jobs, scheduled jobs and realtime updates never run. Anything that depends on them is untested on this bench.
 
 Stop only the selected project with `docker compose --env-file /dev/null -f infra/dev/docker/docker-compose.dev.yml stop`. Its synthetic volumes remain; removing volumes destroys their data.

@@ -12,6 +12,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 
 DOCKER_DIR = Path(__file__).resolve().parent
@@ -47,6 +49,20 @@ def compose(project, *args):
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
+
+
+def http_ready(site):
+    """Return True when the engine answers a ping for the site on its host port."""
+    port = os.environ.get("ENGINE_PORT", "8000")
+    if not port.isdigit():
+        return False
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/api/method/ping", headers={"Host": site})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status == 200 and b"pong" in response.read()
+    except (OSError, urllib.error.URLError, ValueError):
+        return False
 
 
 def main():
@@ -98,7 +114,11 @@ def main():
         if response is None or response.returncode != 0 or response.stdout.strip() != "PONG":
             print(f"{service} is not responding.", file=sys.stderr)
             return 1
-    print(f"Verified synthetic site {site} on project {project}: apps, versions, HRMS commit and Redis.")
+    if not http_ready(site):
+        print("HTTP endpoint is not ready on 127.0.0.1 (set ENGINE_PORT to the host port).",
+              file=sys.stderr)
+        return 1
+    print(f"Verified synthetic site {site} on project {project}: apps, versions, HRMS commit, Redis and HTTP.")
     return 0
 
 

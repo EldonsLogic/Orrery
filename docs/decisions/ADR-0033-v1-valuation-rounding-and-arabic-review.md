@@ -9,7 +9,7 @@ The ERP-005 scope work found two places where the pinned engine's defaults disag
 - Stock valuation defaults to FIFO, while the golden path assumes Moving Average (Q-21).
 - Rounding defaults to "Banker's Rounding (legacy)", while the mapping fixture says `half_up` (Q-22).
 
-See [../specs/core-module-scope-trading.md](../specs/core-module-scope-trading.md) section 5. The Arabic gap audit also raised who reviews Arabic terminology (Q-28, [../specs/arabic-translation-gap-trading.md](../specs/arabic-translation-gap-trading.md)).
+See [../specs/core-module-scope-trading.md](../specs/core-module-scope-trading.md) section 5. The Arabic gap audit also raised who reviews Arabic terminology (Q-28; the audit is `docs/specs/arabic-translation-gap-trading.md` in PR #51).
 
 These choices change ledger figures, so they are founder decisions, not engine defaults left in place.
 

@@ -17,6 +17,11 @@ echo "=== Initializing Orrery Engine Dev Environment (Frappe/ERPNext/HRMS v15) =
 
 # 1. Generate common_site_config.json if not present or needs update
 mkdir -p "${SITES_DIR}"
+
+# Link the image's built assets and compiled translations into sites/, as the
+# upstream image entrypoint does; the engine reads them from sites/assets.
+rm -rf "${SITES_DIR}/assets"
+ln -s "${BENCH_DIR}/assets" "${SITES_DIR}/assets"
 cat <<EOF > "${CONFIG_FILE}"
 {
   "db_host": "${DB_HOST}",

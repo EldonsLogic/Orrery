@@ -68,6 +68,26 @@ class EngineEntrypointTests(unittest.TestCase):
             )
             self.assertEqual(apps.read_text().splitlines(), ["frappe", "erpnext", "hrms"])
 
+    def test_links_built_assets_into_sites(self):
+        """The engine reads compiled translations and assets from sites/assets."""
+        script = Path(__file__).resolve().parents[1] / "entrypoint.sh"
+        result = subprocess.run(
+            [
+                "docker", "run", "--rm", "--network", "none", "--read-only",
+                "--tmpfs", "/tmp:rw,mode=1777",
+                "--tmpfs", f"{CONTAINER_BENCH / 'sites'}:rw,mode=1777",
+                "--tmpfs", str(CONTAINER_BENCH / "apps" / "hrms"),
+                "--mount", f"type=bind,src={script},dst=/tmp/bench-entrypoint.sh,readonly",
+                "--entrypoint", "/bin/bash", BASE_IMAGE,
+                "/tmp/bench-entrypoint.sh", "readlink", str(CONTAINER_BENCH / "sites" / "assets"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=True,
+        )
+        self.assertEqual(result.stdout.strip().splitlines()[-1], str(CONTAINER_BENCH / "assets"))
+
 
 if __name__ == "__main__":
     unittest.main()

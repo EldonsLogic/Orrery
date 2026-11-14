@@ -138,7 +138,7 @@
             },
             "rounding": {
               "precision": 2,
-              "mode": "half_up"
+              "mode": "half_away_from_zero"
             },
             "recalculateOn": [
               "line_changed",
@@ -160,7 +160,7 @@
             ],
             "rounding": {
               "precision": 2,
-              "mode": "half_up"
+              "mode": "half_away_from_zero"
             },
             "recalculateOn": [
               "subtotal_changed",
@@ -183,7 +183,7 @@
             ],
             "rounding": {
               "precision": 2,
-              "mode": "half_up"
+              "mode": "half_away_from_zero"
             },
             "recalculateOn": [
               "subtotal_changed",
@@ -246,7 +246,7 @@
             ],
             "rounding": {
               "precision": 2,
-              "mode": "half_up"
+              "mode": "half_away_from_zero"
             },
             "recalculateOn": [
               "quantity",
@@ -373,7 +373,7 @@
             },
             "rounding": {
               "precision": 2,
-              "mode": "half_up"
+              "mode": "half_away_from_zero"
             },
             "recalculateOn": [
               "line_changed",
@@ -395,7 +395,7 @@
             ],
             "rounding": {
               "precision": 2,
-              "mode": "half_up"
+              "mode": "half_away_from_zero"
             },
             "recalculateOn": [
               "subtotal_changed",
@@ -418,7 +418,7 @@
             ],
             "rounding": {
               "precision": 2,
-              "mode": "half_up"
+              "mode": "half_away_from_zero"
             },
             "recalculateOn": [
               "subtotal_changed",
@@ -488,7 +488,7 @@
             ],
             "rounding": {
               "precision": 2,
-              "mode": "half_up"
+              "mode": "half_away_from_zero"
             },
             "recalculateOn": [
               "quantity",

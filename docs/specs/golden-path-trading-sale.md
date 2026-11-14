@@ -20,7 +20,8 @@ Out (later paths): payments, the purchase cycle, returns, any tax (a tax variant
 | Opening stock | 100 pieces at cost 10.00, posted once as the opening balance |
 | Customer | CUST-001 |
 | Selling price | 15.00 per piece (price list) |
-| Inventory method | Perpetual (stock movements post to the ledger), moving average cost. UNVERIFIED: confirm the engine default and the setting on the bench |
+| Inventory method | Perpetual (stock movements post to the ledger), Moving Average valuation, set explicitly by provisioning and not left to the engine default (founder answer to Q-21). UNVERIFIED on the bench; the accountant confirms before Phase 2 |
+| Rounding | Commercial rounding: half away from zero, so a credit note mirrors its invoice (founder answer to Q-22). Negative amounts round by magnitude. UNVERIFIED: confirm the engine setting on the bench |
 
 Opening entry: debit Inventory 1,000.00, credit Opening equity 1,000.00.
 
@@ -79,4 +80,5 @@ Someone other than the author recomputes the trial balance by hand from section 
 ## 10. Open questions for the bench
 - Does the pinned engine post stock to the ledger by default on delivery, or does it need the perpetual setting?
 - Does invoicing a delivered order avoid a second stock movement by default?
-- Which valuation method is the default for ITEM-001?
+- Which valuation method is the engine default for ITEM-001, and does the explicit Moving Average setting hold?
+- Does the engine's rounding setting round negative amounts half away from zero?

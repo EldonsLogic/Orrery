@@ -82,7 +82,7 @@
           "additionalProperties": false,
           "properties": {
             "precision": { "type": "integer", "minimum": 0, "maximum": 6 },
-            "mode": { "enum": ["half_up", "half_even", "engine_default"] }
+            "mode": { "enum": ["half_away_from_zero", "half_up", "half_even", "engine_default"] }
           }
         },
         "recalculateOn": { "type": "array", "items": { "type": "string" } }

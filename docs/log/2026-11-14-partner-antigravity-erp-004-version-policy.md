@@ -6,7 +6,7 @@ Tool and model: antigravity / gemini-4-hydrogen
 Plan IDs: ERP-004
 
 ## Summary
-Drafted [engine-version-policy.md](../architecture/engine-version-policy.md) for ERP-004 covering the current pinned engine/dependency set, pin immutability rules, upstream lifecycle facts cited as of 2026-11-14 (flagging MariaDB 10.6 Community EOL on 2026-07-06), upgrade classes, gate-based upgrade/rollback procedure, security exposure rules, governance interactions, and open founder decisions.
+Drafted `docs/architecture/engine-version-policy.md` for ERP-004 covering the current pinned engine/dependency set, pin immutability rules, upstream lifecycle facts cited as of 2026-11-14 (flagging MariaDB 10.6 Community EOL on 2026-07-06), upgrade classes, gate-based upgrade/rollback procedure, security exposure rules, governance interactions, and open founder decisions.
 
 ## Files touched
 - `docs/architecture/engine-version-policy.md`: created the version pin and upgrade policy document (92 lines; Status: draft, Owner: partner).
@@ -37,4 +37,4 @@ Drafted [engine-version-policy.md](../architecture/engine-version-policy.md) for
 Unknown (sub-agent run; not metered inside repository).
 
 ## Next step
-Orchestrator reviews [engine-version-policy.md](../architecture/engine-version-policy.md) and open questions `Q-25`–`Q-27`, regenerates `docs/STATUS.md` via `python3 scripts/build_status.py`, commits, and solicits founder decisions on `Q-6`, `Q-15`, `Q-25`, `Q-26`, and `Q-27` before marking `ERP-004` `done`.
+Orchestrator reviews `docs/architecture/engine-version-policy.md` and open questions `Q-25`–`Q-27`, regenerates `docs/STATUS.md` via `python3 scripts/build_status.py`, commits, and solicits founder decisions on `Q-6`, `Q-15`, `Q-25`, `Q-26`, and `Q-27` before marking `ERP-004` `done`.

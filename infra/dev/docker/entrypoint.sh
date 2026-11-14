@@ -13,7 +13,7 @@ DB_PORT="${DB_PORT:-3306}"
 REDIS_CACHE_HOST="${REDIS_CACHE_HOST:-redis-cache}"
 REDIS_QUEUE_HOST="${REDIS_QUEUE_HOST:-redis-queue}"
 
-echo "=== Initializing Orrery Engine Dev Environment (Frappe/ERPNext/HRMS v15) ==="
+echo "=== Initializing the platform engine dev environment (Frappe/ERPNext/HRMS v15) ==="
 
 # 1. Generate common_site_config.json if not present or needs update
 mkdir -p "${SITES_DIR}"

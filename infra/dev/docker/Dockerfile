@@ -1,4 +1,4 @@
-# Development Engine Image for Orrery (ERP-001)
+# Development engine image for the platform (ERP-001)
 # Extends official Frappe ERPNext v15 with pinned Frappe HRMS and change_engine
 
 FROM frappe/erpnext@sha256:6e016c0fc3aec5b32c14ff7c2ac97523cc864748c83ce75197779b8fe5a665a8

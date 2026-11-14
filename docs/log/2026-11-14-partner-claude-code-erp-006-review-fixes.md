@@ -29,6 +29,14 @@ Applied Eldon's review of PR #51. The gap is now 107 translatable strings, not 1
 - One Accounts Settings description holding an HTML link stays counted as translatable.
 - Per-area excluded counts: Selling 3, Buying 2, Stock 22, Accounts 10, Setup and masters 12.
 
+## Second review (Antigravity, Gemini 4 Hydrogen, non-Claude, read-only with bench spot-checks)
+- Nothing blocking. Every count and exclusion recomputes. A bench spot-check confirmed the `ar.po` totals, 13 probe strings and 6 doctype denominators.
+- Fixed from that review:
+  - The description entries in section 3.1 were 24; the correct count is 25 (128 in all).
+  - A punctuation typo in section 1.
+  - Section 2 now says ERP-005 section 2 is the canonical doctype list.
+- The PR description was updated, because the stack below it has merged.
+
 ## Decisions
 - None new. Q-28 was answered by the founders.
 

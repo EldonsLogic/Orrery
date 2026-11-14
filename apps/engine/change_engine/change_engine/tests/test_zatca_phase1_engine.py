@@ -34,6 +34,8 @@ class TestEngineZatcaPhase1(unittest.TestCase):
             "invoice_id": "ENG-INV-001",
             "issue_date": "2026-11-07",
             "issue_time": "09:30:00",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
             "invoice_type": "simplified",
             "transaction_type": "simplified_tax_invoice",
             "seller": {
@@ -56,6 +58,7 @@ class TestEngineZatcaPhase1(unittest.TestCase):
                     "quantity": "5",
                     "unit_price": "20.00",
                     "vat_rate": "0.15",
+                    "vat_category": "S",
                 }
             ],
             "totals": {"total_taxable_amount": "100.00", "total_vat_amount": "15.00", "grand_total": "115.00"},

@@ -167,9 +167,10 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
             "invoice_id": "INV-2026-0001",
             "issue_date": "2026-11-07",
             "issue_time": "14:30:00",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
             "invoice_type": "simplified",
             "transaction_type": "simplified_tax_invoice",
-            "currency": "SAR",
             "seller": {
                 "name": "Al-Noor Trading Est",
                 "name_ar": "مؤسسة النور للتجارة",
@@ -190,6 +191,7 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
                     "quantity": "2",
                     "unit_price": "100.00",
                     "vat_rate": "0.15",
+                    "vat_category": "S",
                     "discount": "0.00",
                     "vat_category": "S",
                 }
@@ -215,9 +217,10 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
             "invoice_id": "INV-B2B-1001",
             "issue_date": "2026-11-07",
             "issue_time": "10:15:00",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
             "invoice_type": "standard",
             "transaction_type": "tax_invoice",
-            "currency": "SAR",
             "seller": {
                 "name": "Al-Noor Trading Est",
                 "vat_number": "300000000000003",
@@ -249,6 +252,7 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
                     "quantity": "10",
                     "unit_price": "500.00",
                     "vat_rate": "0.15",
+                    "vat_category": "S",
                 }
             ],
             "totals": {"total_taxable_amount": "5000.00", "total_vat_amount": "750.00", "grand_total": "5750.00"},
@@ -265,6 +269,8 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
             "invoice_id": "INV-B2B-FAIL",
             "issue_date": "2026-11-07",
             "issue_time": "10:15:00",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
             "invoice_type": "standard",
             "transaction_type": "tax_invoice",
             "seller": {
@@ -285,8 +291,11 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
                     "description": "Item",
                     "quantity": "1",
                     "unit_price": "100.00",
+                    "vat_rate": "0.15",
+                    "vat_category": "S",
                 }
             ],
+            "totals": {"total_taxable_amount": "100.00", "total_vat_amount": "15.00", "grand_total": "115.00"},
         }
 
         with self.assertRaises(ZatcaValidationError) as ctx:
@@ -299,6 +308,8 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
             "invoice_id": "CN-2026-0005",
             "issue_date": "2026-11-07",
             "issue_time": "15:00:00",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
             "invoice_type": "simplified",
             "transaction_type": "credit_note",
             "preceding_invoice_reference": "INV-2026-0001",
@@ -322,6 +333,7 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
                     "quantity": "1",
                     "unit_price": "100.00",
                     "vat_rate": "0.15",
+                    "vat_category": "S",
                 }
             ],
             "totals": {"total_taxable_amount": "100.00", "total_vat_amount": "15.00", "grand_total": "115.00"},
@@ -337,6 +349,8 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
             "invoice_id": "CN-2026-FAIL",
             "issue_date": "2026-11-07",
             "issue_time": "15:00:00",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
             "invoice_type": "simplified",
             "transaction_type": "credit_note",
             "seller": {
@@ -357,8 +371,11 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
                     "description": "Item",
                     "quantity": "1",
                     "unit_price": "100.00",
+                    "vat_rate": "0.15",
+                    "vat_category": "S",
                 }
             ],
+            "totals": {"total_taxable_amount": "100.00", "total_vat_amount": "15.00", "grand_total": "115.00"},
         }
 
         with self.assertRaises(ZatcaValidationError) as ctx:
@@ -373,6 +390,8 @@ class TestZatcaInvoiceGeneration(unittest.TestCase):
             "invoice_id": "INV-EXEMPT-01",
             "issue_date": "2026-11-07",
             "issue_time": "11:00:00",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
             "invoice_type": "simplified",
             "transaction_type": "simplified_tax_invoice",
             "seller": {
@@ -426,6 +445,8 @@ class TestEngineTotalsAuthority(unittest.TestCase):
             "invoice_id": "INV-AUTH-01",
             "issue_date": "2026-11-07",
             "issue_time": "11:00:00",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
             "invoice_type": "simplified",
             "transaction_type": "simplified_tax_invoice",
             "seller": {
@@ -452,7 +473,7 @@ class TestEngineTotalsAuthority(unittest.TestCase):
     def test_missing_totals_fails(self):
         with self.assertRaises(ZatcaValidationError) as ctx:
             generate_phase1_invoice(self.base(None))
-        self.assertTrue(any("totals from the engine are mandatory" in e for e in ctx.exception.errors))
+        self.assertTrue(any("Missing invoice: totals" in e for e in ctx.exception.errors))
 
     def test_inconsistent_totals_fail_closed(self):
         with self.assertRaises(ZatcaValidationError) as ctx:
@@ -484,7 +505,81 @@ class TestEngineTotalsAuthority(unittest.TestCase):
         del data["lines"][0]["vat_rate"]
         with self.assertRaises(ZatcaValidationError) as ctx:
             generate_phase1_invoice(data)
-        self.assertTrue(any("VAT rate is required" in e for e in ctx.exception.errors))
+        self.assertTrue(any("Missing line 1: vat_rate" in e for e in ctx.exception.errors))
+
+class TestMandatoryFieldsAndTime(unittest.TestCase):
+    """Missing mandatory fields are refused, never defaulted; the QR time is converted to UTC."""
+
+    def base(self, **overrides):
+        data = {
+            "invoice_id": "INV-TIME-01",
+            "issue_date": "2026-11-07",
+            "issue_time": "14:30:00",
+            "timezone": "Asia/Riyadh",
+            "currency": "SAR",
+            "invoice_type": "simplified",
+            "transaction_type": "simplified_tax_invoice",
+            "seller": {
+                "name": "Al-Noor Trading Est",
+                "vat_number": "300000000000003",
+                "address": {"street": "Street", "building_no": "1", "postal_code": "12345",
+                            "city": "Riyadh", "district": "Olaya", "country_code": "SA"},
+            },
+            "lines": [{"item_code": "ITEM-1", "description": "Item", "quantity": "1",
+                       "unit_price": "100.00", "vat_rate": "0.15", "vat_category": "S"}],
+            "totals": {"total_taxable_amount": "100.00", "total_vat_amount": "15.00",
+                       "grand_total": "115.00"},
+        }
+        data.update(overrides)
+        return data
+
+    def assert_missing(self, data, expected):
+        with self.assertRaises(ZatcaValidationError) as ctx:
+            generate_phase1_invoice(data)
+        self.assertIn(f"Missing {expected}", ctx.exception.errors)
+
+    def test_missing_invoice_fields_are_refused(self):
+        for key in ("issue_time", "timezone", "invoice_type", "transaction_type", "currency"):
+            data = self.base()
+            del data[key]
+            self.assert_missing(data, f"invoice: {key}")
+
+    def test_missing_line_fields_are_refused(self):
+        for key in ("quantity", "unit_price", "vat_category"):
+            data = self.base()
+            del data["lines"][0][key]
+            self.assert_missing(data, f"line 1: {key}")
+
+    def test_missing_total_field_is_refused(self):
+        data = self.base()
+        del data["totals"]["grand_total"]
+        self.assert_missing(data, "totals: grand_total")
+
+    def test_qr_time_is_converted_to_utc(self):
+        """Riyadh is UTC+3: 14:30 local is 11:30Z."""
+        invoice = generate_phase1_invoice(self.base())
+        self.assertEqual(decode_phase1_tlv(invoice.qr_code_tlv)[3], "2026-11-07T11:30:00Z")
+
+    def test_qr_time_crosses_midnight_into_previous_utc_day(self):
+        invoice = generate_phase1_invoice(self.base(issue_time="00:30:00"))
+        self.assertEqual(decode_phase1_tlv(invoice.qr_code_tlv)[3], "2026-11-06T21:30:00Z")
+
+    def test_time_with_trailing_characters_fails(self):
+        with self.assertRaises(ZatcaValidationError):
+            generate_phase1_invoice(self.base(issue_time="14:30:00junk"))
+
+    def test_impossible_date_and_time_fail(self):
+        for overrides in ({"issue_date": "2026-02-30"}, {"issue_time": "25:00:00"},
+                          {"timezone": "Not/AZone"}):
+            with self.assertRaises(ZatcaValidationError):
+                generate_phase1_invoice(self.base(**overrides))
+
+    def test_arabic_seller_name_over_255_bytes_fails(self):
+        """Arabic letters are 2 bytes in UTF-8, so 128 of them exceed the 1-byte TLV length."""
+        data = self.base()
+        data["seller"]["name_ar"] = "\u0645" * 128
+        with self.assertRaises(ValueError):
+            generate_phase1_invoice(data)
 
 
 if __name__ == "__main__":

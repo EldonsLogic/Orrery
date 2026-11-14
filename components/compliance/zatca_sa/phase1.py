@@ -8,7 +8,8 @@ Implements:
    and ZATCA E-Invoicing Resolution (Annex 2).
 3. Consistency checks on the totals the engine computed (ADR-0031: the engine is the only
    calculation authority; this module never computes tax and never substitutes its own figure).
-4. Immutability guardrails for credit and debit notes.
+4. Required references (preceding invoice, reason) on credit and debit notes. Nothing here
+   enforces immutability; that belongs to the engine's ledger settings.
 
 Status: implemented, not yet verified against the ZATCA sandbox or reviewed by an accountant.
 """
@@ -18,13 +19,23 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone as dt_timezone
 import re
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-# KSA 15-digit VAT number format: begins with '3' and ends with '3'
+# KSA 15-digit VAT number format: begins with '3' and ends with '3'.
+# UNVERIFIED: the rule is widely used but its official source is not yet cited here.
 KSA_VAT_REGEX = re.compile(r"^3\d{13}3$")
 DATE_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-TIME_REGEX = re.compile(r"^\d{2}:\d{2}(:\d{2})?")
+TIME_REGEX = re.compile(r"^\d{2}:\d{2}(:\d{2})?$")
+
+# Fields a caller must supply; nothing is defaulted, because an invented value on a tax
+# document is worse than a refusal.
+REQUIRED_INVOICE_KEYS = ("invoice_id", "issue_date", "issue_time", "timezone", "invoice_type",
+                         "transaction_type", "currency", "seller", "lines", "totals")
+REQUIRED_LINE_KEYS = ("item_code", "description", "quantity", "unit_price", "vat_rate", "vat_category")
+REQUIRED_TOTAL_KEYS = ("total_taxable_amount", "total_vat_amount", "grand_total")
 
 ZERO = Decimal("0.00")
 TWO_DECIMALS = Decimal("0.01")
@@ -218,6 +229,7 @@ class ZatcaInvoice:
     issue_date: str  # YYYY-MM-DD
     issue_time: str  # HH:MM:SS
     invoice_type: str  # "standard" or "simplified"
+    timezone: str  # IANA name of the zone issue_date and issue_time are in, e.g. "Asia/Riyadh"
     transaction_type: str  # "tax_invoice", "simplified_tax_invoice", "credit_note", "debit_note"
     seller: ZatcaParty
     totals: Optional[ZatcaTaxTotal] = None
@@ -227,6 +239,28 @@ class ZatcaInvoice:
     preceding_invoice_reference: Optional[str] = None
     amendment_reason: Optional[str] = None
     qr_code_tlv: Optional[str] = None
+
+    def local_issue_datetime(self) -> Optional[datetime]:
+        """The issue date and time as a real, zone-aware datetime, or None if invalid."""
+        date_part = (self.issue_date or "").strip()
+        time_part = (self.issue_time or "").strip()
+        if not DATE_REGEX.match(date_part) or not TIME_REGEX.match(time_part):
+            return None
+        if len(time_part) == 5:
+            time_part += ":00"
+        try:
+            zone = ZoneInfo((self.timezone or "").strip())
+            naive = datetime.strptime(f"{date_part}T{time_part}", "%Y-%m-%dT%H:%M:%S")
+        except (ZoneInfoNotFoundError, ValueError):
+            return None
+        return naive.replace(tzinfo=zone)
+
+    def utc_timestamp(self) -> str:
+        """QR tag 3: the issue time converted to UTC, as YYYY-MM-DDTHH:MM:SSZ."""
+        local = self.local_issue_datetime()
+        if local is None:
+            raise ZatcaValidationError("Issue date, time or timezone is invalid")
+        return local.astimezone(dt_timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @property
     def is_standard(self) -> bool:
@@ -252,6 +286,12 @@ class ZatcaInvoice:
 
         if not self.issue_time or not TIME_REGEX.match(self.issue_time.strip()):
             errors.append(f"Issue time '{self.issue_time}' is invalid. Must be 'HH:MM:SS'.")
+
+        if self.local_issue_datetime() is None and not errors:
+            errors.append(
+                f"Issue date '{self.issue_date}', time '{self.issue_time}' or timezone "
+                f"'{self.timezone}' is not a real date, time and IANA zone."
+            )
 
         if self.currency != "SAR":
             errors.append(f"Currency '{self.currency}' is invalid. Standard KSA currency is 'SAR'.")
@@ -382,12 +422,8 @@ def generate_phase1_qr(invoice: ZatcaInvoice) -> str:
         )
     totals = invoice.totals
 
-    # Time stamp format: YYYY-MM-DDTHH:MM:SSZ
-    date_part = invoice.issue_date.strip()
-    time_part = invoice.issue_time.strip()
-    if len(time_part) == 5:
-        time_part += ":00"
-    timestamp_iso = f"{date_part}T{time_part}Z"
+    # Time stamp: the local issue time converted to UTC, YYYY-MM-DDTHH:MM:SSZ
+    timestamp_iso = invoice.utc_timestamp()
 
     # Prefer Arabic name if present, otherwise default name
     seller_name = (
@@ -416,6 +452,18 @@ def generate_phase1_invoice(invoice_dict: Dict[str, Any]) -> ZatcaInvoice:
     3. Validates the invoice, then generates the mandatory 5-tag TLV QR code.
     Returns the validated ZatcaInvoice. Not yet verified against the ZATCA sandbox.
     """
+    # 0. Refuse missing mandatory fields instead of inventing values
+    missing = [f"invoice: {k}" for k in REQUIRED_INVOICE_KEYS if invoice_dict.get(k) in (None, "", [], {})]
+    for idx, item_data in enumerate(invoice_dict.get("lines") or [], start=1):
+        missing += [f"line {idx}: {k}" for k in REQUIRED_LINE_KEYS if item_data.get(k) in (None, "")]
+    totals_in = invoice_dict.get("totals") or {}
+    if totals_in:
+        missing += [f"totals: {k}" for k in REQUIRED_TOTAL_KEYS if totals_in.get(k) in (None, "")]
+    if missing:
+        raise ZatcaValidationError(
+            f"{len(missing)} mandatory field(s) missing", errors=[f"Missing {m}" for m in missing]
+        )
+
     # 1. Parse Seller
     seller_data = invoice_dict.get("seller", {})
     seller_addr_data = seller_data.get("address", {})
@@ -464,36 +512,34 @@ def generate_phase1_invoice(invoice_dict: Dict[str, Any]) -> ZatcaInvoice:
         line = ZatcaLineItem(
             item_code=item_data.get("item_code", ""),
             description=item_data.get("description", ""),
-            quantity=to_decimal(item_data.get("quantity", "1")),
-            unit_price=to_decimal(item_data.get("unit_price", "0")),
-            vat_rate=to_decimal(item_data["vat_rate"]) if "vat_rate" in item_data else None,
-            discount=to_decimal(item_data.get("discount", "0")),
-            vat_category=item_data.get("vat_category", "S"),
+            quantity=to_decimal(item_data["quantity"]),
+            unit_price=to_decimal(item_data["unit_price"]),
+            vat_rate=to_decimal(item_data["vat_rate"]),
+            discount=to_decimal(item_data.get("discount", "0")),  # absent means no discount
+            vat_category=item_data["vat_category"],
             exemption_reason_code=item_data.get("exemption_reason_code"),
             exemption_reason_text=item_data.get("exemption_reason_text"),
         )
         lines.append(line)
 
-    totals = None
-    totals_data = invoice_dict.get("totals")
-    if totals_data:
-        totals = ZatcaTaxTotal(
-            total_taxable_amount=to_decimal(totals_data.get("total_taxable_amount", "0")),
-            total_vat_amount=to_decimal(totals_data.get("total_vat_amount", "0")),
-            grand_total=to_decimal(totals_data.get("grand_total", "0")),
-        )
+    totals = ZatcaTaxTotal(
+        total_taxable_amount=to_decimal(totals_in["total_taxable_amount"]),
+        total_vat_amount=to_decimal(totals_in["total_vat_amount"]),
+        grand_total=to_decimal(totals_in["grand_total"]),
+    )
 
     invoice = ZatcaInvoice(
-        invoice_id=invoice_dict.get("invoice_id", ""),
-        issue_date=invoice_dict.get("issue_date", ""),
-        issue_time=invoice_dict.get("issue_time", "12:00:00"),
-        invoice_type=invoice_dict.get("invoice_type", "simplified").lower(),
-        transaction_type=invoice_dict.get("transaction_type", "tax_invoice").lower(),
+        invoice_id=invoice_dict["invoice_id"],
+        issue_date=invoice_dict["issue_date"],
+        issue_time=invoice_dict["issue_time"],
+        timezone=invoice_dict["timezone"],
+        invoice_type=invoice_dict["invoice_type"].lower(),
+        transaction_type=invoice_dict["transaction_type"].lower(),
         seller=seller,
         totals=totals,
         buyer=buyer,
         lines=lines,
-        currency=invoice_dict.get("currency", "SAR"),
+        currency=invoice_dict["currency"],
         preceding_invoice_reference=invoice_dict.get("preceding_invoice_reference"),
         amendment_reason=invoice_dict.get("amendment_reason"),
     )

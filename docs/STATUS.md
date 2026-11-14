@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 13 | 9 | 33 | 0 | 55 |
-| G1 | 72 | 2 | 16 | 0 | 90 |
+| G1 | 71 | 3 | 16 | 0 | 90 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 264 | 12 | 49 | 0 | 325 |
+| all | 263 | 13 | 49 | 0 | 325 |
 
 ## Built so far (done)
 
@@ -84,7 +84,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (33)
+**G1** (32)
 - BPL-014: Component certification levels and test harness (owner eldon)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
@@ -96,7 +96,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - DAT-001: Data classification and retention policy (owner eldon)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner eldon)
 - ERP-003: Scripted site-per-tenant creation (owner partner)
-- ERP-006: Arabic and RTL translation completion for in-scope modules (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
 - ERP-014: Accounting correctness property tests (ledger balances, tax, rounding) (owner partner)
@@ -186,6 +185,7 @@ Waiting on dependencies: 151 row(s).
 
 Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
+- ERP-006: Arabic and RTL translation completion for in-scope modules
 
 Ready next (dependencies done), by gate:
 - CE-SEC-005 (G1): Change engine: CI against a real Frappe bench instead of mocks
@@ -194,7 +194,6 @@ Ready next (dependencies done), by gate:
 - CMP-006 (G1): KSA chart of accounts template and tax codes
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
 - ERP-003 (G1): Scripted site-per-tenant creation
-- ERP-006 (G1): Arabic and RTL translation completion for in-scope modules
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - ERP-009 (G1): Engine event emitter feeding the event stream
 - ERP-014 (G1): Accounting correctness property tests (ledger balances, tax, rounding)
@@ -223,6 +222,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
+- ERP-006: Arabic and RTL translation completion for in-scope modules (partner)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
@@ -236,6 +236,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-14-partner-claude-code-erp-006-arabic-gap-audit.md](log/2026-11-14-partner-claude-code-erp-006-arabic-gap-audit.md): Measured Arabic coverage of the v1 trading scope on the pinned bench: the shipped catalogues cover 92.1% of in-scope strings, but Arabic does not load at runtime on our bench.
 - [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
 - [2026-11-14-partner-antigravity-erp-005-core-module-scope.md](log/2026-11-14-partner-antigravity-erp-005-core-module-scope.md): Defined the v1 core module, doctype, report, print format, and configuration-guardrail scope for trading and distribution in `docs/specs/core-module-scope-trading.md`, grounded in read-only inspection of the pinned synthetic bench.
 - [2026-11-14-partner-antigravity-erp-004-version-policy.md](log/2026-11-14-partner-antigravity-erp-004-version-policy.md): Drafted `docs/architecture/engine-version-policy.md` for ERP-004 covering the current pinned engine/dependency set, pin immutability rules, upstream lifecycle facts cited as of 2026-11-14 (flagging MariaDB 10.6 Community EOL on 2026-07-06), upgrade classes, gate-based upgrade/rollback procedure, security exposure rules, governance interactions, and open founder decisions.
@@ -245,7 +246,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-11-eldon-claude-code-blueprint-engine-mapping.md](log/2026-11-11-eldon-claude-code-blueprint-engine-mapping.md): Drafted the Blueprint-to-engine mapping contract (schema, golden path example, tests) so the partner's real-engine proof can build against an agreed interface.
 - [2026-11-11-eldon-claude-code-agent-foundation-rules.md](log/2026-11-11-eldon-claude-code-agent-foundation-rules.md): Added the agent working principles, the agent team protocol with 30 role contracts, and the phase exit rule with a check script, so every phase is tested and recorded before the next one counts.
 - [2026-11-07-partner-antigravity-third-party-licence-register.md](log/2026-11-07-partner-antigravity-third-party-licence-register.md): Recorded the partner's verified local bench installation (Frappe Framework 15.126.0 MIT, ERPNext 15.124.5 GPL-3.0, change engine module 0.1.0, MariaDB 10.6, Redis 7) into the third-party licence register and NOTICE.md, completing LEG-004.
-- [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0018 Dev Environments to Accepted; ADR-0007 Identity stays Proposed until Eldon accepts it (restored when the PR was re-applied onto main)), and populated the Codex and Antigravity rows in the model registry.
 
 ## ADRs with status Proposed
 

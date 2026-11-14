@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 13 | 9 | 33 | 0 | 55 |
-| G1 | 73 | 4 | 13 | 0 | 90 |
+| G1 | 71 | 6 | 14 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 265 | 14 | 46 | 0 | 325 |
+| all | 263 | 16 | 47 | 0 | 326 |
 
 ## Built so far (done)
 
@@ -55,6 +55,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - BPL-013: Branding section in the Blueprint schema (ADR-0014)
 - DSC-002: Template Blueprint: trading and distribution
 - DSC-003: Connector interface spec and tier definitions
+- ERP-001: G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
 - PLT-001: Tenancy ADR-0006: site per tenant on shared in-country infrastructure
 - PLT-002: Identity ADR-0007: decide central identity with per-tenant roles
 - BRD-001: Brand guidelines v1 (Quadrant) and placeholder logo
@@ -81,16 +82,21 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (26)
+**G1** (31)
 - BPL-014: Component certification levels and test harness (owner eldon)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
+- CE-SEC-005: Change engine: CI against a real Frappe bench instead of mocks (owner partner)
+- CMP-005: Hijri date support in fields, display and print (owner partner)
+- CMP-006: KSA chart of accounts template and tax codes (owner partner)
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
 - DAT-001: Data classification and retention policy (owner eldon)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner eldon)
-- ERP-001: G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench (owner partner)
+- ERP-003: Scripted site-per-tenant creation (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
+- ERP-020: Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016) (owner partner)
+- ERP-024: Move the bench database off end-of-life MariaDB 10.6: pick the target version (Q-25), build the bench on it, run the bench tests and the ERP-021 suite if it exists by then, record the result (owner partner)
 - FND-001: Investor shortlist from research/05, re-verified (owner eldon)
 - GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner eldon)
 - GTM-002: 20-30 buyer and accountant interviews in the niche (owner eldon)
@@ -109,8 +115,9 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - SEC-019: Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails (owner eldon)
 - WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner eldon)
 
-**G2** (6)
+**G2** (7)
 - BPL-021: Blueprint versioning and schema migration (owner eldon)
+- FND-002: Accelerator evaluation (Hub71+, Antler) after the spike (owner eldon)
 - GOV-027: Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public (owner eldon)
 - OPR-003: Tool API generator: typed actions per tenant from the Blueprint (owner eldon)
 - PLT-005: Identity service (users, sessions, per-tenant roles) (owner eldon)
@@ -161,13 +168,14 @@ Ready next (dependencies done), by gate:
 - SEC-019 (G1): Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails
 - WEB-017 (G1): Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016)
 - BPL-021 (G2): Blueprint versioning and schema migration
+- FND-002 (G2): Accelerator evaluation (Hub71+, Antler) after the spike
 - GOV-027 (G2): Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public
 - OPR-003 (G2): Tool API generator: typed actions per tenant from the Blueprint
 - PLT-005 (G2): Identity service (users, sessions, per-tenant roles)
 - QA-020 (G2): Optional experiment: bounded-decision model for intent routing compared with a small general model and rules on synthetic Arabic and English cases; not a dependency, synthetic data only
 - SEC-007 (G2): Dependency and SBOM scanning for Python and Node (beyond dependabot actions)
 
-Waiting on dependencies: 152 row(s).
+Waiting on dependencies: 151 row(s).
 
 ## Queue: partner
 
@@ -175,12 +183,19 @@ Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 - CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance
 - CMP-003: ZATCA Phase 1 invoice generation (QR, mandatory fields)
+- ERP-004: Version pin and upgrade policy document
+- ERP-005: Core module scope for trading and distribution (selling, buying, stock, accounts)
 
 Ready next (dependencies done), by gate:
+- CE-SEC-005 (G1): Change engine: CI against a real Frappe bench instead of mocks
+- CMP-005 (G1): Hijri date support in fields, display and print
+- CMP-006 (G1): KSA chart of accounts template and tax codes
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
-- ERP-001 (G1): G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
+- ERP-003 (G1): Scripted site-per-tenant creation
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - ERP-009 (G1): Engine event emitter feeding the event stream
+- ERP-020 (G1): Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016)
+- ERP-024 (G1): Move the bench database off end-of-life MariaDB 10.6: pick the target version (Q-25), build the bench on it, run the bench tests and the ERP-021 suite if it exists by then, record the result
 - GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use
 - INF-003 (G1): CI/CD for services (build, test, deploy to staging)
 - PLT-024 (G1): Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016)
@@ -188,7 +203,7 @@ Ready next (dependencies done), by gate:
 - QA-016 (G1): Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016)
 - SEC-002 (G1): Secrets management design (store, rotate, never in repo)
 
-Waiting on dependencies: 71 row(s).
+Waiting on dependencies: 64 row(s).
 
 Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one).
 
@@ -206,6 +221,8 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
 - CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance (partner)
 - CMP-003: ZATCA Phase 1 invoice generation (QR, mandatory fields) (partner)
+- ERP-004: Version pin and upgrade policy document (partner)
+- ERP-005: Core module scope for trading and distribution (selling, buying, stock, accounts) (partner)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
@@ -219,16 +236,16 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-14-partner-claude-code-erp-005-review-fixes.md](log/2026-11-14-partner-claude-code-erp-005-review-fixes.md): Applied Eldon's review of PR #49. The ERP-005 row is back to `doing`, the spec now says Desk hiding is not enforcement, and the Q-22 question now covers negative amounts.
+- [2026-11-14-partner-claude-code-erp-004-review-fixes.md](log/2026-11-14-partner-claude-code-erp-004-review-fixes.md): Applied Eldon's review of PR #50. ERP-004 is back to `doing`, Q-25 now has the engine's own MariaDB support range, and the MariaDB move is a new plan row (ERP-024).
+- [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
+- [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
+- [2026-11-14-partner-antigravity-erp-005-core-module-scope.md](log/2026-11-14-partner-antigravity-erp-005-core-module-scope.md): Defined the v1 core module, doctype, report, print format, and configuration-guardrail scope for trading and distribution in `docs/specs/core-module-scope-trading.md`, grounded in read-only inspection of the pinned synthetic bench.
+- [2026-11-14-partner-antigravity-erp-004-version-policy.md](log/2026-11-14-partner-antigravity-erp-004-version-policy.md): Drafted `docs/architecture/engine-version-policy.md` for ERP-004 covering the current pinned engine/dependency set, pin immutability rules, upstream lifecycle facts cited as of 2026-11-14 (flagging MariaDB 10.6 Community EOL on 2026-07-06), upgrade classes, gate-based upgrade/rollback procedure, security exposure rules, governance interactions, and open founder decisions.
 - [2026-11-13-partner-claude-code-cmp-003-engine-totals-and-official-vector.md](log/2026-11-13-partner-claude-code-cmp-003-engine-totals-and-official-vector.md): Reworked the ZATCA Phase 1 component to the conditions of proposed ADR-0031: a real ZATCA test vector, no tax computed in our code, and no claims of review, certification or engine testing that have not happened.
+- [2026-11-11-partner-codex-erp-001-rebase.md](log/2026-11-11-partner-codex-erp-001-rebase.md): Rebased ERP-001 on current main and claimed the row for the partner; the bench remains under verification.
+- [2026-11-11-partner-codex-erp-001-preflight.md](log/2026-11-11-partner-codex-erp-001-preflight.md): Reviewed the ERP-001 bench and the golden path using cached image metadata; the live bench proof remains open.
 - [2026-11-11-partner-codex-cmp-003-rebase.md](log/2026-11-11-partner-codex-cmp-003-rebase.md): Rebased CMP-003 on the refreshed CMP-002 branch and kept its row doing pending its dependency and compliance review.
-- [2026-11-11-partner-codex-cmp-002-rebase.md](log/2026-11-11-partner-codex-cmp-002-rebase.md): Rebased the existing CMP-002 evaluation on current main and kept the row doing while its ERP-001 dependency remains open.
-- [2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md](log/2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md): Wrote the phased delivery document with lanes and the phase to gate map, four proposed ADRs, 19 new plan rows and the phase exit plan rows, for the partner to review.
-- [2026-11-11-eldon-claude-code-blueprint-engine-mapping.md](log/2026-11-11-eldon-claude-code-blueprint-engine-mapping.md): Drafted the Blueprint-to-engine mapping contract (schema, golden path example, tests) so the partner's real-engine proof can build against an agreed interface.
-- [2026-11-11-eldon-claude-code-agent-foundation-rules.md](log/2026-11-11-eldon-claude-code-agent-foundation-rules.md): Added the agent working principles, the agent team protocol with 30 role contracts, and the phase exit rule with a check script, so every phase is tested and recorded before the next one counts.
-- [2026-11-07-partner-antigravity-zatca-phase1-invoicing.md](log/2026-11-07-partner-antigravity-zatca-phase1-invoicing.md): Implemented the certified compliance.zatca_sa component and engine adapter for ZATCA Phase 1 e-invoicing: mandatory field validation (Art. 53), 5-tag binary TLV QR code encoding/decoding, deterministic decimal tax math, credit/debit note immutability guardrails, and full test suite.
-- [2026-11-07-partner-antigravity-zatca-erpgulf-evaluation.md](log/2026-11-07-partner-antigravity-zatca-erpgulf-evaluation.md): Evaluated the ERPGulf ZATCA e-invoicing app (v3.0.1, commit 7d686f7) across licence, Phase 2 coverage, and maintenance health, recommending adopting its pure Python cryptographic and UBL logic while wrapping it to enforce engine invisibility, transactional hash chaining, and CI sandbox testing.
-- [2026-11-07-partner-antigravity-third-party-licence-register.md](log/2026-11-07-partner-antigravity-third-party-licence-register.md): Recorded the partner's verified local bench installation (Frappe Framework 15.126.0 MIT, ERPNext 15.124.5 GPL-3.0, change engine module 0.1.0, MariaDB 10.6, Redis 7) into the third-party licence register and NOTICE.md, completing LEG-004.
-- [2026-11-07-partner-antigravity-model-registry-and-adr-review.md](log/2026-11-07-partner-antigravity-model-registry-and-adr-review.md): Partner reviewed and accepted ADR-0001 through ADR-0021 (setting ADR-0018 Dev Environments to Accepted; ADR-0007 Identity stays Proposed until Eldon accepts it (restored when the PR was re-applied onto main)), and populated the Codex and Antigravity rows in the model registry.
 
 ## ADRs with status Proposed
 

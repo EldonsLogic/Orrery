@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 9 | 33 | 0 | 55 |
+| G0 | 13 | 4 | 38 | 0 | 55 |
 | G1 | 75 | 2 | 13 | 0 | 90 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 267 | 12 | 46 | 0 | 325 |
+| all | 267 | 7 | 51 | 0 | 325 |
 
 ## Built so far (done)
 
@@ -64,24 +64,30 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GTM-001: Niche decision: trading and distribution first
 - GOV-031: Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified
 - GOV-032: Independent founder lanes: every open row owned, no cross-founder dependency inside a gate, interface rows, plan check in CI (ADR-0025)
+- GOV-033: Adopt agent working principles (think before coding, simplicity, surgical changes, goal-driven execution) from the Karpathy guidelines as reference, restated in our own words (agents/working-principles.md) and linked from AGENTS.md, CLAUDE.md, GEMINI.md and RULES.md
+- GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety
+- GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests)
+- GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows
+- BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022
 
 ## Ready to start (todo, all dependencies done), by gate
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (10)
+**G0** (11)
 - BPL-025: Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently (owner eldon)
 - BPL-026: Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures (owner eldon)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner eldon)
 - GOV-014: Trial the cross-model PR review routine on the first real PR (owner eldon)
 - GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (owner eldon)
+- GOV-037: After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency (owner eldon)
 - INF-013: Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) (owner eldon)
 - LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (26)
+**G1** (28)
 - BPL-014: Component certification levels and test harness (owner eldon)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
@@ -93,6 +99,8 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
 - FND-001: Investor shortlist from research/05, re-verified (owner eldon)
 - GOV-016: Autonomy metrics file and monthly reporting template (strategy/08) (owner eldon)
+- GOV-038: Agent-team benchmark: baseline tasks, cost, latency and regression log used to judge prompt and role improvements (owner eldon)
+- GOV-039: Market-pack track plan: owner and capacity per active pack, what "right away" means per market, country release checklist adopted (owner eldon)
 - GTM-002: 20-30 buyer and accountant interviews in the niche (owner eldon)
 - GTM-004: Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) (owner eldon)
 - GTM-018: Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use (owner partner)
@@ -126,12 +134,7 @@ Doing:
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
-- GOV-033: Adopt agent working principles (think before coding, simplicity, surgical changes, goal-driven execution) from the Karpathy guidelines as reference, restated in our own words (agents/working-principles.md) and linked from AGENTS.md, CLAUDE.md, GEMINI.md and RULES.md
-- GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety
-- GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests)
-- GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2
-- BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022
 
 Ready next (dependencies done), by gate:
 - BPL-025 (G0): Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently
@@ -140,6 +143,7 @@ Ready next (dependencies done), by gate:
 - GOV-010 (G0): Install pre-commit hooks on both founders' machines
 - GOV-014 (G0): Trial the cross-model PR review routine on the first real PR
 - GOV-019 (G0): Pick issue/PR labels and project board mapping to PLAN IDs
+- GOV-037 (G0): After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency
 - INF-013 (G0): Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018)
 - LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
 - LEG-003 (G0): Engage counsel in KSA, UAE, Egypt and Qatar; scope of work
@@ -151,6 +155,8 @@ Ready next (dependencies done), by gate:
 - DAT-002 (G1): Anonymised sample datasets for dev, demos and evals (no real customer data)
 - FND-001 (G1): Investor shortlist from research/05, re-verified
 - GOV-016 (G1): Autonomy metrics file and monthly reporting template (strategy/08)
+- GOV-038 (G1): Agent-team benchmark: baseline tasks, cost, latency and regression log used to judge prompt and role improvements
+- GOV-039 (G1): Market-pack track plan: owner and capacity per active pack, what "right away" means per market, country release checklist adopted
 - GTM-002 (G1): 20-30 buyer and accountant interviews in the niche
 - GTM-004 (G1): Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED)
 - GTM-019 (G1): Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires
@@ -167,7 +173,7 @@ Ready next (dependencies done), by gate:
 - QA-020 (G2): Optional experiment: bounded-decision model for intent routing compared with a small general model and rules on synthetic Arabic and English cases; not a dependency, synthetic data only
 - SEC-007 (G2): Dependency and SBOM scanning for Python and Node (beyond dependabot actions)
 
-Waiting on dependencies: 152 row(s).
+Waiting on dependencies: 149 row(s).
 
 ## Queue: partner
 
@@ -206,15 +212,11 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (eldon)
-- GOV-033: Adopt agent working principles (think before coding, simplicity, surgical changes, goal-driven execution) from the Karpathy guidelines as reference, restated in our own words (agents/working-principles.md) and linked from AGENTS.md, CLAUDE.md, GEMINI.md and RULES.md (eldon)
-- GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety (eldon)
-- GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests) (eldon)
-- GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows (eldon)
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 (eldon)
-- BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022 (eldon)
 
 ## Last 10 log files
 
+- [2026-11-14-eldon-claude-code-close-merged-rows.md](log/2026-11-14-eldon-claude-code-close-merged-rows.md): Closed the plan rows whose work merged in PRs 44, 45 and 46, as the plan rules require.
 - [2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md](log/2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md): Wrote the phased delivery document with lanes and the phase to gate map, four proposed ADRs, 19 new plan rows and the phase exit plan rows, for the partner to review.
 - [2026-11-11-eldon-claude-code-blueprint-engine-mapping.md](log/2026-11-11-eldon-claude-code-blueprint-engine-mapping.md): Drafted the Blueprint-to-engine mapping contract (schema, golden path example, tests) so the partner's real-engine proof can build against an agreed interface.
 - [2026-11-11-eldon-claude-code-agent-foundation-rules.md](log/2026-11-11-eldon-claude-code-agent-foundation-rules.md): Added the agent working principles, the agent team protocol with 30 role contracts, and the phase exit rule with a check script, so every phase is tested and recorded before the next one counts.
@@ -224,7 +226,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-07-eldon-claude-code-web-stack-review-fixes.md](log/2026-11-07-eldon-claude-code-web-stack-review-fixes.md): A cross-model review of ADR-0022 found gaps. Added: app limited to static-export-safe features with a CI build in that mode (in-country hosting marked UNVERIFIED), marketing on Vercel only without personal data collection there, explicit narrowing of ADR-0018 item 2, stronger tokens-only and logical-property lint rules, tenant token loading before first paint, RTL direction provider and bidi isolation for user text, and a human review for major-version bumps of the framework and auth libraries.
 - [2026-11-07-eldon-claude-code-web-stack-adr.md](log/2026-11-07-eldon-claude-code-web-stack-adr.md): Wrote the web stack proposal for founder approval (ADR-0022, Proposed): one TypeScript and React stack on Next.js for marketing and app; static marketing; app screens rendered in the browser against our in-country gateway so no tenant data is processed on Vercel; plain CSS with token custom properties and a lint rule against literal colours and fonts; logical properties for RTL; headless accessible primitives; ICU i18n with Arabic default; self-hosted fonts; Playwright RTL goldens.
 - [2026-11-07-eldon-claude-code-visibility-temporary.md](log/2026-11-07-eldon-claude-code-visibility-temporary.md): Founder said the repo is public only for a while. Added a plan row so the switch back to private is decided deliberately: branch protection needs a paid plan on a private repo, and anything published may already be forked or cached.
-- [2026-11-07-eldon-claude-code-trading-template.md](log/2026-11-07-eldon-claude-code-trading-template.md): Built the trading and distribution template Blueprint (split into parts, company-neutral, Arabic and English everywhere), the owner question list with schema, and an instantiator for KSA, UAE and Egypt that produces drafts passing the validator with the fixture registry. Added a CI job for the discovery tests.
 
 ## ADRs with status Proposed
 

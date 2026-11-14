@@ -32,11 +32,18 @@ EOF
 # 2. Register mounted change_engine app if available
 if [ -d "${BENCH_DIR}/apps/change_engine" ]; then
     echo "Found change_engine app; installing in editable mode..."
-    pip install -e "${BENCH_DIR}/apps/change_engine" --no-deps 2>/dev/null || true
+    if ! pip install -e "${BENCH_DIR}/apps/change_engine" --no-deps; then
+        echo "Cannot install change_engine app" >&2
+        exit 1
+    fi
 fi
 
 # 3. Ensure apps.txt contains the pinned application set
 touch "${APPS_TXT}"
+# The upstream image may ship apps.txt without a final newline.
+if [ -s "${APPS_TXT}" ] && [ "$(tail -c 1 "${APPS_TXT}" | wc -l)" -eq 0 ]; then
+    printf '\n' >> "${APPS_TXT}"
+fi
 for app in frappe erpnext hrms change_engine; do
     if [ -d "${BENCH_DIR}/apps/${app}" ] && ! grep -qx "${app}" "${APPS_TXT}" 2>/dev/null; then
         echo "${app}" >> "${APPS_TXT}"

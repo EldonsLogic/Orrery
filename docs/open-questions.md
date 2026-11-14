@@ -12,7 +12,7 @@ The canonical list from Phase 1-2 is [strategy/open-questions.md](strategy/open-
 | Q-3 | Final GitHub repo name and organisation name (working name is not cleared) | eldon | G0 | GOV-002, ADR-0001 |
 | Q-4 | Arabic spelling and transliteration of the product name for search and brand | eldon | G1 | BRD-003 |
 | Q-5 | Tenant branding limits: which plan may remove "Powered by", how many colours, custom fonts allowed (default no) | eldon | G2 | PLT-018, ADR-0014 |
-| Q-6 | Which Frappe/ERPNext/HRMS version set to pin and when to move? ERP-001 proposes v15.126.0, v15.124.5 and v15.64.8 respectively; compatibility on a dedicated bench is UNVERIFIED. | partner | G1 | ERP-001, ERP-004 |
+| Q-6 | Which Frappe/ERPNext/HRMS version set to pin and when to move? ERP-001 proposes v15.126.0, v15.124.5 and v15.64.8 respectively; compatibility on a dedicated bench is UNVERIFIED. Update 2026-11-14: the set builds cleanly and runs on a local synthetic bench (see the ERP-001 log of that date); behaviour under real workloads and the move policy (ERP-004) remain open. | partner | G1 | ERP-001, ERP-004 |
 | Q-7 | Licence for our own repo and for contracts/ if we ever publish them | eldon | G0 | LEG-002 |
 | Q-8 | Which accounting standard and chart of accounts default for KSA, UAE, Egypt and Qatar templates | unassigned | G1 | CMP-006 |
 | Q-9 | Which cloud or hosting provider can keep tenant data in-country with acceptable cost | unassigned | G1 | INF-001 |

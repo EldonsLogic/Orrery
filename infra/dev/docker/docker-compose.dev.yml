@@ -1,9 +1,6 @@
-version: '3.8'
-
 services:
   mariadb:
-    image: mariadb:10.6
-    container_name: ce-mariadb
+    image: mariadb:10.6@sha256:f1c56f035ed268a0d7c2c2e06dc879f6319b997cb434cf822a4cfd72a7aa184d
     restart: unless-stopped
     command:
       - --character-set-server=utf8mb4
@@ -15,34 +12,24 @@ services:
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./my.cnf:/etc/mysql/conf.d/frappe.cnf:ro
-    ports:
-      - "${DB_PORT:-3306}:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis-cache:
-    image: redis:7.2.7-alpine
-    container_name: ce-redis-cache
+    image: redis:7.2.7-alpine@sha256:ddd16a9b1575a774c7e62956be8daa1de5b32cfb5c25b7a216aefed8e0919f9b
     restart: unless-stopped
-    ports:
-      - "${REDIS_CACHE_PORT:-12000}:6379"
 
   redis-queue:
-    image: redis:7.2.7-alpine
-    container_name: ce-redis-queue
+    image: redis:7.2.7-alpine@sha256:ddd16a9b1575a774c7e62956be8daa1de5b32cfb5c25b7a216aefed8e0919f9b
     restart: unless-stopped
-    ports:
-      - "${REDIS_QUEUE_PORT:-11000}:6379"
 
   engine:
     build:
       context: .
       dockerfile: Dockerfile
-    image: orrery-engine-dev:v15
-    container_name: ce-engine-dev
     restart: unless-stopped
     depends_on:
       mariadb:
@@ -57,14 +44,14 @@ services:
       - REDIS_CACHE_HOST=redis-cache
       - REDIS_QUEUE_HOST=redis-queue
       - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD in the environment}
       - SITE_NAME=${SITE_NAME:-dev.localhost}
     volumes:
       - ../../../apps/engine/change_engine:/home/frappe/frappe-bench/apps/change_engine:rw
       - sites_data:/home/frappe/frappe-bench/sites
       - logs_data:/home/frappe/frappe-bench/logs
     ports:
-      - "${ENGINE_PORT:-8000}:8000"
+      - "127.0.0.1:${ENGINE_PORT:-8000}:8000"
 
 volumes:
   mariadb_data:

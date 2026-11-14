@@ -12,6 +12,7 @@ from components.compliance.zatca_sa.phase1 import (
     ZatcaInvoice,
     ZatcaLineItem,
     ZatcaParty,
+    ZatcaTaxTotal,
     ZatcaValidationError,
     decode_phase1_tlv,
     encode_phase1_tlv,
@@ -580,6 +581,53 @@ class TestMandatoryFieldsAndTime(unittest.TestCase):
         data["seller"]["name_ar"] = "\u0645" * 128
         with self.assertRaises(ValueError):
             generate_phase1_invoice(data)
+
+
+    def test_unknown_or_mismatched_transaction_type_fails(self):
+        for overrides in ({"transaction_type": "credit-note"}, {"transaction_type": "tax_invoice"}):
+            with self.subTest(**overrides):
+                with self.assertRaises(ZatcaValidationError) as ctx:
+                    generate_phase1_invoice(self.base(**overrides))
+                self.assertTrue(any("Transaction type" in e for e in ctx.exception.errors))
+
+    def test_nonexistent_local_time_in_a_dst_zone_fails(self):
+        """02:30 on the spring-forward night does not exist in Europe/Berlin."""
+        with self.assertRaises(ZatcaValidationError):
+            generate_phase1_invoice(self.base(timezone="Europe/Berlin", issue_date="2026-03-29", issue_time="02:30:00"))
+
+    def test_ambiguous_local_time_in_a_dst_zone_fails(self):
+        """02:30 on the fall-back night happens twice in Europe/Berlin."""
+        with self.assertRaises(ZatcaValidationError):
+            generate_phase1_invoice(self.base(timezone="Europe/Berlin", issue_date="2026-10-25", issue_time="02:30:00"))
+
+
+class TestDirectDataclassCallers(unittest.TestCase):
+    """Callers that build the dataclasses directly get no defaults either."""
+
+    def make(self, **line_overrides):
+        line = dict(item_code="I", description="Item", quantity=Decimal("1"), unit_price=Decimal("100.00"),
+                    vat_rate=Decimal("0.15"))
+        line.update(line_overrides)
+        seller = ZatcaParty(name="Seller", vat_number="300000000000003",
+                            address=ZatcaAddress(street="S", building_no="1", postal_code="12345",
+                                                 city="Riyadh", district="D"))
+        return ZatcaInvoice(invoice_id="INV-1", issue_date="2026-11-07", issue_time="10:00:00",
+                            invoice_type="simplified", timezone="Asia/Riyadh",
+                            transaction_type="simplified_tax_invoice", seller=seller,
+                            totals=ZatcaTaxTotal(Decimal("100.00"), Decimal("15.00"), Decimal("115.00")),
+                            lines=[ZatcaLineItem(**line)])
+
+    def test_missing_vat_category_and_currency_are_refused(self):
+        errors = self.make().validate()
+        self.assertTrue(any("VAT category is required" in e for e in errors))
+        self.assertTrue(any("Currency" in e for e in errors))
+        with self.assertRaises(ZatcaValidationError):
+            generate_phase1_qr(self.make())
+
+    def test_complete_direct_invoice_passes(self):
+        invoice = self.make(vat_category="S")
+        invoice.currency = "SAR"
+        self.assertEqual(invoice.validate(), [])
 
 
 if __name__ == "__main__":

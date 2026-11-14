@@ -32,6 +32,13 @@ TIME_REGEX = re.compile(r"^\d{2}:\d{2}(:\d{2})?$")
 
 # Fields a caller must supply; nothing is defaulted, because an invented value on a tax
 # document is worse than a refusal.
+# Transaction types allowed per invoice type. A misspelled credit note must be refused, not
+# treated as an invoice that needs no preceding reference.
+TRANSACTION_TYPES = {
+    "standard": ("tax_invoice", "credit_note", "debit_note"),
+    "simplified": ("simplified_tax_invoice", "credit_note", "debit_note"),
+}
+
 REQUIRED_INVOICE_KEYS = ("invoice_id", "issue_date", "issue_time", "timezone", "invoice_type",
                          "transaction_type", "currency", "seller", "lines", "totals")
 REQUIRED_LINE_KEYS = ("item_code", "description", "quantity", "unit_price", "vat_rate", "vat_category")
@@ -147,7 +154,7 @@ class ZatcaLineItem:
     unit_price: Decimal
     vat_rate: Optional[Decimal] = None
     discount: Decimal = ZERO
-    vat_category: str = "S"  # S: Standard, Z: Zero-rated, E: Exempt, O: Out-of-scope
+    vat_category: str = ""  # Required: S Standard, Z Zero-rated, E Exempt, O Out-of-scope (empty is refused)
     exemption_reason_code: Optional[str] = None
     exemption_reason_text: Optional[str] = None
 
@@ -172,6 +179,8 @@ class ZatcaLineItem:
         elif self.vat_category == "S":
             if self.vat_rate <= ZERO:
                 errors.append(f"Line {line_index}: Standard rate category 'S' must have a VAT rate above 0")
+        elif not self.vat_category:
+            errors.append(f"Line {line_index}: VAT category is required (supplied by the engine)")
         elif self.vat_category in ("Z", "E", "O"):
             if self.vat_rate != ZERO:
                 errors.append(
@@ -235,7 +244,7 @@ class ZatcaInvoice:
     totals: Optional[ZatcaTaxTotal] = None
     lines: List[ZatcaLineItem] = field(default_factory=list)
     buyer: Optional[ZatcaParty] = None
-    currency: str = "SAR"
+    currency: str = ""  # Required; empty is refused, never assumed
     preceding_invoice_reference: Optional[str] = None
     amendment_reason: Optional[str] = None
     qr_code_tlv: Optional[str] = None
@@ -253,7 +262,15 @@ class ZatcaInvoice:
             naive = datetime.strptime(f"{date_part}T{time_part}", "%Y-%m-%dT%H:%M:%S")
         except (ZoneInfoNotFoundError, ValueError):
             return None
-        return naive.replace(tzinfo=zone)
+        local = naive.replace(tzinfo=zone)
+        # Refuse local times that do not exist or are ambiguous in the zone (DST gaps and
+        # overlaps), instead of silently picking one. Asia/Riyadh has no DST.
+        earlier, later = naive.replace(tzinfo=zone, fold=0), naive.replace(tzinfo=zone, fold=1)
+        if earlier.utcoffset() != later.utcoffset():
+            return None
+        if local.astimezone(dt_timezone.utc).astimezone(zone).replace(tzinfo=None) != naive:
+            return None
+        return local
 
     def utc_timestamp(self) -> str:
         """QR tag 3: the issue time converted to UTC, as YYYY-MM-DDTHH:MM:SSZ."""
@@ -295,6 +312,13 @@ class ZatcaInvoice:
 
         if self.currency != "SAR":
             errors.append(f"Currency '{self.currency}' is invalid. Standard KSA currency is 'SAR'.")
+
+        allowed_types = TRANSACTION_TYPES.get(self.invoice_type)
+        if allowed_types is not None and self.transaction_type not in allowed_types:
+            errors.append(
+                f"Transaction type '{self.transaction_type}' is not valid for a {self.invoice_type} invoice. "
+                f"Must be one of: {', '.join(allowed_types)}."
+            )
 
         if self.invoice_type not in ("standard", "simplified"):
             errors.append(f"Invoice type '{self.invoice_type}' must be either 'standard' or 'simplified'.")

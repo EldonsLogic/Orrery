@@ -54,6 +54,16 @@ Applied Eldon's review of PR #43. Missing mandatory fields are refused instead o
   - ZATCA sandbox verification.
   - The manifest still says `reviewed` with an empty `reviewedBy` (Q-19 is answered, but its schema change has not landed).
 
+## Different-model review (Codex, GPT-6.1 Terra, read-only) and fixes
+The review asked for changes. Two items were blocking and one was a should-fix. All three are fixed in this session (same model and prompt as above, with the review as the brief).
+- **Blocking: the direct dataclass path still had defaults** (`vat_category` "S", `currency` "SAR"). Both now default to empty, and validation refuses empty values. New tests cover callers that build the dataclasses directly.
+- **Blocking: `transaction_type` was not validated.** A misspelled credit note skipped the reference checks. Now only these pairs are allowed:
+  - `standard`: `tax_invoice`, `credit_note` or `debit_note`.
+  - `simplified`: `simplified_tax_invoice`, `credit_note` or `debit_note`.
+  - New tests cover a misspelled type and a mismatched pair.
+- **Should fix: DST.** Nonexistent and ambiguous local times in zones with daylight saving are now refused. Tests cover Europe/Berlin spring-forward and fall-back; Asia/Riyadh has no daylight saving.
+- Component tests: 31, OK. Engine wrapper tests: 2, OK.
+
 ## Decisions
 - None.
 

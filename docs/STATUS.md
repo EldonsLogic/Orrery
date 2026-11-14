@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 13 | 9 | 33 | 0 | 55 |
-| G1 | 73 | 4 | 14 | 0 | 91 |
+| G1 | 73 | 3 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 265 | 14 | 47 | 0 | 326 |
+| all | 265 | 13 | 48 | 0 | 326 |
 
 ## Built so far (done)
 
@@ -56,6 +56,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - DSC-002: Template Blueprint: trading and distribution
 - DSC-003: Connector interface spec and tier definitions
 - ERP-001: G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench
+- ERP-005: Core module scope for trading and distribution (selling, buying, stock, accounts)
 - PLT-001: Tenancy ADR-0006: site per tenant on shared in-country infrastructure
 - PLT-002: Identity ADR-0007: decide central identity with per-tenant roles
 - BRD-001: Brand guidelines v1 (Quadrant) and placeholder logo
@@ -82,7 +83,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (32)
+**G1** (34)
 - BPL-014: Component certification levels and test harness (owner eldon)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
@@ -94,8 +95,10 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - DAT-001: Data classification and retention policy (owner eldon)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner eldon)
 - ERP-003: Scripted site-per-tenant creation (owner partner)
+- ERP-006: Arabic and RTL translation completion for in-scope modules (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
+- ERP-014: Accounting correctness property tests (ledger balances, tax, rounding) (owner partner)
 - ERP-020: Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016) (owner partner)
 - ERP-024: Move the bench database off end-of-life MariaDB 10.6: pick the target version (Q-25), build the bench on it, run the bench tests and the ERP-021 suite if it exists by then, record the result (owner partner)
 - FND-001: Investor shortlist from research/05, re-verified (owner eldon)
@@ -116,8 +119,9 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - SEC-019: Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails (owner eldon)
 - WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner eldon)
 
-**G2** (7)
+**G2** (8)
 - BPL-021: Blueprint versioning and schema migration (owner eldon)
+- ERP-010: HRMS skeleton: employees, leave, payroll structure, only what v1 needs (owner partner)
 - FND-002: Accelerator evaluation (Hub71+, Antler) after the spike (owner eldon)
 - GOV-027: Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public (owner eldon)
 - OPR-003: Tool API generator: typed actions per tenant from the Blueprint (owner eldon)
@@ -183,7 +187,6 @@ Waiting on dependencies: 151 row(s).
 Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 - ERP-004: Version pin and upgrade policy document
-- ERP-005: Core module scope for trading and distribution (selling, buying, stock, accounts)
 
 Ready next (dependencies done), by gate:
 - CE-SEC-005 (G1): Change engine: CI against a real Frappe bench instead of mocks
@@ -192,8 +195,10 @@ Ready next (dependencies done), by gate:
 - CMP-006 (G1): KSA chart of accounts template and tax codes
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
 - ERP-003 (G1): Scripted site-per-tenant creation
+- ERP-006 (G1): Arabic and RTL translation completion for in-scope modules
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - ERP-009 (G1): Engine event emitter feeding the event stream
+- ERP-014 (G1): Accounting correctness property tests (ledger balances, tax, rounding)
 - ERP-020 (G1): Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016)
 - ERP-024 (G1): Move the bench database off end-of-life MariaDB 10.6: pick the target version (Q-25), build the bench on it, run the bench tests and the ERP-021 suite if it exists by then, record the result
 - GTM-018 (G1): Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use
@@ -202,8 +207,9 @@ Ready next (dependencies done), by gate:
 - PLT-025 (G1): Gateway token metering from the start: count tokens and cost per tenant and per call in services/gateway, so builder session cost is measured
 - QA-016 (G1): Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016)
 - SEC-002 (G1): Secrets management design (store, rotate, never in repo)
+- ERP-010 (G2): HRMS skeleton: employees, leave, payroll structure, only what v1 needs
 
-Waiting on dependencies: 65 row(s).
+Waiting on dependencies: 62 row(s).
 
 Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one).
 
@@ -220,7 +226,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
 - ERP-004: Version pin and upgrade policy document (partner)
-- ERP-005: Core module scope for trading and distribution (selling, buying, stock, accounts) (partner)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
@@ -235,6 +240,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 ## Last 10 log files
 
 - [2026-11-14-partner-claude-code-erp-005-review-fixes.md](log/2026-11-14-partner-claude-code-erp-005-review-fixes.md): Applied Eldon's review of PR #49. The ERP-005 row is back to `doing`, the spec now says Desk hiding is not enforcement, and the Q-22 question now covers negative amounts.
+- [2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md](log/2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md): Recorded the founders' answers to Q-21, Q-22 and Q-28 in ADR-0033, confirmed the two engine settings on the bench, and closed ERP-005.
 - [2026-11-14-partner-claude-code-erp-004-review-fixes.md](log/2026-11-14-partner-claude-code-erp-004-review-fixes.md): Applied Eldon's review of PR #50. ERP-004 is back to `doing`, Q-25 now has the engine's own MariaDB support range, and the MariaDB move is a new plan row (ERP-024).
 - [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
 - [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
@@ -243,7 +249,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-11-partner-codex-erp-001-rebase.md](log/2026-11-11-partner-codex-erp-001-rebase.md): Rebased ERP-001 on current main and claimed the row for the partner; the bench remains under verification.
 - [2026-11-11-partner-codex-erp-001-preflight.md](log/2026-11-11-partner-codex-erp-001-preflight.md): Reviewed the ERP-001 bench and the golden path using cached image metadata; the live bench proof remains open.
 - [2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md](log/2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md): Wrote the phased delivery document with lanes and the phase to gate map, four proposed ADRs, 19 new plan rows and the phase exit plan rows, for the partner to review.
-- [2026-11-11-eldon-claude-code-blueprint-engine-mapping.md](log/2026-11-11-eldon-claude-code-blueprint-engine-mapping.md): Drafted the Blueprint-to-engine mapping contract (schema, golden path example, tests) so the partner's real-engine proof can build against an agreed interface.
 
 ## ADRs with status Proposed
 

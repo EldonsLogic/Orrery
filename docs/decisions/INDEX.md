@@ -37,3 +37,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0028-recoverable-journaled-change-apply.md](ADR-0028-recoverable-journaled-change-apply.md) | Recoverable, journaled change apply (not universal rollback) | Proposed |
 | [ADR-0029-engine-disclosure-wording-and-saas-only.md](ADR-0029-engine-disclosure-wording-and-saas-only.md) | Engine disclosure wording and SaaS-only delivery | Proposed |
 | [ADR-0030-blueprint-to-engine-mapping-contract.md](ADR-0030-blueprint-to-engine-mapping-contract.md) | Blueprint-to-engine mapping contract | Proposed |
+| [ADR-0033-v1-valuation-rounding-and-arabic-review.md](ADR-0033-v1-valuation-rounding-and-arabic-review.md) | v1 stock valuation, rounding and Arabic review defaults | Accepted |

@@ -37,4 +37,5 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0028-recoverable-journaled-change-apply.md](ADR-0028-recoverable-journaled-change-apply.md) | Recoverable, journaled change apply (not universal rollback) | Proposed |
 | [ADR-0029-engine-disclosure-wording-and-saas-only.md](ADR-0029-engine-disclosure-wording-and-saas-only.md) | Engine disclosure wording and SaaS-only delivery | Proposed |
 | [ADR-0030-blueprint-to-engine-mapping-contract.md](ADR-0030-blueprint-to-engine-mapping-contract.md) | Blueprint-to-engine mapping contract | Proposed |
-| [ADR-0031-rigid-zone-code-authorship.md](ADR-0031-rigid-zone-code-authorship.md) | Who may write rigid-zone code, and what it must pass | Proposed |
+| [ADR-0031-rigid-zone-code-authorship.md](ADR-0031-rigid-zone-code-authorship.md) | Who may write rigid-zone code, and what it must pass | Accepted |
+| [ADR-0032-approval-is-a-recorded-review.md](ADR-0032-approval-is-a-recorded-review.md) | Approval is a recorded GitHub review | Accepted |

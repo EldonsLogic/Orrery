@@ -65,7 +65,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GTM-001: Niche decision: trading and distribution first
 - GOV-031: Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified
 - GOV-032: Independent founder lanes: every open row owned, no cross-founder dependency inside a gate, interface rows, plan check in CI (ADR-0025)
-- GOV-040: Contracts check script: every contract schema valid, examples validate, refs resolve; CI job
+- GOV-041: Contracts check script: every contract schema valid, examples validate, refs resolve; CI job
 
 ## Ready to start (todo, all dependencies done), by gate
 
@@ -244,9 +244,9 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
 - [2026-11-14-partner-antigravity-erp-005-core-module-scope.md](log/2026-11-14-partner-antigravity-erp-005-core-module-scope.md): Defined the v1 core module, doctype, report, print format, and configuration-guardrail scope for trading and distribution in `docs/specs/core-module-scope-trading.md`, grounded in read-only inspection of the pinned synthetic bench.
 - [2026-11-14-partner-antigravity-erp-004-version-policy.md](log/2026-11-14-partner-antigravity-erp-004-version-policy.md): Drafted `docs/architecture/engine-version-policy.md` for ERP-004 covering the current pinned engine/dependency set, pin immutability rules, upstream lifecycle facts cited as of 2026-11-14 (flagging MariaDB 10.6 Community EOL on 2026-07-06), upgrade classes, gate-based upgrade/rollback procedure, security exposure rules, governance interactions, and open founder decisions.
+- [2026-11-14-eldon-claude-code-renumber-contracts-check-row.md](log/2026-11-14-eldon-claude-code-renumber-contracts-check-row.md): Renumbered this branch's "Contracts check script" row again, from GOV-040 to GOV-041, because #48 merged to `main` using GOV-040 for the founder answers. Earlier logs that say GOV-033 or GOV-040 for the contracts check mean GOV-041 (logs are append-only).
 - [2026-11-14-eldon-claude-code-merge-main-into-adapter-contracts.md](log/2026-11-14-eldon-claude-code-merge-main-into-adapter-contracts.md): Merged `main` into the BPL-025/BPL-026 draft branch (PR 40) so it no longer conflicts. The draft contracts themselves are unchanged.
 - [2026-11-14-eldon-claude-code-adapter-adr-0028-wording.md](log/2026-11-14-eldon-claude-code-adapter-adr-0028-wording.md): Reworded the draft adapter and build-states contracts from "atomic apply and inverse for every change" to the journaled, recoverable apply of ADR-0028 (Proposed). Wording only: no schema, step or test id changed.
-- [2026-11-13-partner-claude-code-post-merge-review-and-q17-q19.md](log/2026-11-13-partner-claude-code-post-merge-review-and-q17-q19.md): Post-merge cross-model review (Opus against the Sonnet author) of Eldon's merged PRs #44, #45 and #46, which the partner had approved verbally; review posted as PR comments, with a correction that the approval was given; open question Q-17 on recording approvals as GitHub reviews.
 
 ## ADRs with status Proposed
 

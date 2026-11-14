@@ -27,6 +27,11 @@ Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, loc
 - `verify_dev_bench.py` against the running project `platform-erp001-20261111b`, site `erp001.localhost`: verified apps, versions, HRMS commit and Redis.
 - Not done: the clean image was not used to create a new site (the live site runs an image built on 2026-11-11 from the same pins); the Frappe source commit inside the base image is UNVERIFIED; counsel has not confirmed the Redis licence reading (Q-15); the shared dev host (INF-012) does not exist yet.
 
+## Follow-up in the same session: Arabic runtime loading
+- The ERP-006 audit found that Arabic did not load on the bench: our entrypoint replaced the upstream one, which links `sites/assets` to the image's built `assets`, and the HRMS Arabic catalogue was never compiled.
+- infra/dev/docker/entrypoint.sh now creates that link; the Dockerfile compiles the HRMS Arabic catalogue at build time and fails if it is missing; a new entrypoint test checks the link.
+- Evidence: 15 tests OK (3 skipped); clean no-cache build produces `hrms.mo`; with the rebuilt image against a copy of the synthetic site's config, the engine loads 16,144 Arabic strings (was 0), including HRMS labels. The running bench still uses the earlier image until it is recreated.
+
 ## Tokens or cost
 Not measured.
 

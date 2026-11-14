@@ -11,6 +11,11 @@ from enum import Enum
 import re
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
+from .policy_expression import PolicyExpressionError, evaluate_condition, validate_condition
+
+TIER0_PREFIX = "TIER0_"
+POLICY_STORE_UNAVAILABLE = "POLICY_STORE_UNAVAILABLE"
+
 # Safe Frappe imports or standalone fallback
 try:
     import frappe
@@ -111,46 +116,6 @@ class PolicyEvaluationResult:
 
 # Helpers for document inspection and safe condition evaluation
 
-class SafeDocWrapper:
-    """Wraps documents or dicts to provide safe attribute access and get() support."""
-    def __init__(self, doc: Any):
-        self._doc = doc
-
-    def __getattr__(self, name: str) -> Any:
-        if self._doc is None:
-            return None
-        if hasattr(self._doc, name):
-            return getattr(self._doc, name)
-        if isinstance(self._doc, dict) and name in self._doc:
-            return self._doc[name]
-        return None
-
-    def get(self, name: str, default: Any = None) -> Any:
-        if self._doc is None:
-            return default
-        if hasattr(self._doc, "get") and callable(self._doc.get):
-            val = self._doc.get(name, default)
-            return default if val is None else val
-        if hasattr(self._doc, name):
-            val = getattr(self._doc, name)
-            return default if val is None else val
-        return default
-
-    def __getitem__(self, item: str) -> Any:
-        return self.get(item)
-
-    def __contains__(self, item: str) -> bool:
-        if isinstance(self._doc, dict):
-            return item in self._doc
-        return hasattr(self._doc, item)
-
-
-class SafeEvalContext(dict):
-    """Dictionary context that returns None for undefined names instead of raising NameError."""
-    def __missing__(self, key: str) -> Any:
-        return None
-
-
 def is_field_changed(doc: Any, fieldname: str) -> bool:
     """
     Determines if fieldname has been modified in the current transaction.
@@ -210,52 +175,35 @@ def check_user_has_required_role(user_roles: Optional[List[str]], required_role:
     return bool(required_set & user_set)
 
 
+def _read_field(doc: Any, name: str) -> Any:
+    """A plain document field value, or None. Never returns private attributes or methods."""
+    if doc is None or name.startswith("_"):
+        return None
+    if isinstance(doc, dict):
+        return doc.get(name)
+    value = getattr(doc, name, None)
+    if value is None and hasattr(doc, "get") and callable(doc.get):
+        try:
+            value = doc.get(name)
+        except Exception:
+            value = None
+    return None if callable(value) else value
+
+
 def evaluate_condition_expr(expr: str, doc: Any, user_roles: Optional[List[str]]) -> bool:
-    """Safely evaluates a Python condition expression against document attributes."""
+    """Evaluates a policy condition in the fixed grammar of policy_expression (no eval).
+
+    Raises PolicyExpressionError if the condition is not allowed; callers treat that as a
+    violation (fail closed).
+    """
     if not expr:
         return False
-
-    wrapped_doc = SafeDocWrapper(doc)
-    ctx = SafeEvalContext()
-
-    # Populate doc fields as top-level variables
-    if isinstance(doc, dict):
-        ctx.update(doc)
-    elif hasattr(doc, "__dict__"):
-        for k, v in doc.__dict__.items():
-            if not k.startswith("_") and not callable(v):
-                ctx[k] = v
-
-    # Add helper functions and context
-    ctx["doc"] = wrapped_doc
-    ctx["user_roles"] = user_roles or []
-    ctx["has_role"] = lambda r: check_user_has_required_role(user_roles, r)
-    ctx["is_field_changed"] = lambda f: is_field_changed(doc, f)
-
-    # Safe builtins
-    safe_builtins = {
-        "True": True,
-        "False": False,
-        "None": None,
-        "len": len,
-        "int": int,
-        "float": float,
-        "str": str,
-        "bool": bool,
-        "abs": abs,
-        "round": round,
-        "min": min,
-        "max": max,
-    }
-
-    try:
-        res = eval(expr, {"__builtins__": safe_builtins}, ctx)
-        return bool(res)
-    except (TypeError, ValueError, AttributeError, NameError):
-        # Gracefully treat invalid type comparisons (e.g. None > 50000) as False
-        return False
-    except Exception:
-        return False
+    return evaluate_condition(
+        expr,
+        get_field=lambda name: _read_field(doc, name),
+        is_field_changed=lambda f: is_field_changed(doc, f),
+        has_role=lambda r: check_user_has_required_role(user_roles, r),
+    )
 
 
 def normalize_stage(stage: Optional[str]) -> Optional[str]:
@@ -402,6 +350,12 @@ class RuntimePolicyCatalog:
             )
         )
 
+    def is_protected_policy_id(self, policy_id: str) -> bool:
+        """Tier 0 ids (built-in, or any id starting with TIER0_) cannot be set through the API."""
+        return policy_id.upper().startswith(TIER0_PREFIX) or any(
+            p.policy_id == policy_id for pols in self._default_policies.values() for p in pols
+        )
+
     def register_policy(
         self,
         policy: RuntimePolicy,
@@ -409,25 +363,32 @@ class RuntimePolicyCatalog:
         site_id: Optional[str] = None,
         persist: bool = True,
     ) -> RuntimePolicy:
-        """Registers or updates a policy in the catalog and optionally persists it per site."""
+        """Registers or updates a site policy (Tier 1 only) and persists it.
+
+        Tier 0 invariants are built in and can never be replaced, shadowed or disabled here.
+        """
+        if not policy.policy_id or self.is_protected_policy_id(policy.policy_id):
+            raise PermissionError(f"Policy id '{policy.policy_id}' is reserved for built-in Tier 0 invariants")
+        if policy.governance_tier != 1:
+            raise PermissionError("Only Tier 1 policies can be registered; the tier is set by the platform")
+        validate_condition(policy.condition_expr)
+
+        from .policy_store import get_current_site_id, policy_store
         if persist:
-            from .policy_store import policy_store
             saved_policy, _ = policy_store.save_policy(policy, actor=actor, site_id=site_id)
         else:
             saved_policy = policy
 
-        from .policy_store import get_current_site_id
-        resolved_site = get_current_site_id(site_id)
-        if resolved_site:
-            site_bucket = self._site_policies.setdefault(resolved_site, {})
+        if not policy_store.is_live_frappe:
+            # Standalone (tests) only: with a database, the store is the single source of truth,
+            # so no process-wide copy can go stale across workers.
+            site_bucket = self._site_policies.setdefault(get_current_site_id(site_id), {})
             doctype_policies = site_bucket.setdefault(saved_policy.doctype, [])
             for idx, existing in enumerate(doctype_policies):
                 if existing.policy_id == saved_policy.policy_id:
                     doctype_policies[idx] = saved_policy
                     return saved_policy
             doctype_policies.append(saved_policy)
-        else:
-            self._register_default(saved_policy)
         return saved_policy
 
     def unregister_policy(
@@ -437,30 +398,18 @@ class RuntimePolicyCatalog:
         actor: str = "System",
         site_id: Optional[str] = None,
     ) -> bool:
-        """Removes a policy from the catalog and persistent site store by policy_id."""
+        """Removes a site policy. Built-in Tier 0 invariants cannot be removed."""
+        if self.is_protected_policy_id(policy_id):
+            raise PermissionError(f"Policy '{policy_id}' is a built-in Tier 0 invariant and cannot be removed")
         from .policy_store import get_current_site_id, policy_store
         removed = False
-        resolved_site = get_current_site_id(site_id)
-        if resolved_site and resolved_site in self._site_policies:
-            site_bucket = self._site_policies[resolved_site]
-            doctypes = [doctype] if doctype else list(site_bucket.keys())
-            for dt in doctypes:
-                if dt in site_bucket:
-                    initial_len = len(site_bucket[dt])
-                    site_bucket[dt] = [p for p in site_bucket[dt] if p.policy_id != policy_id]
-                    if len(site_bucket[dt]) < initial_len:
-                        removed = True
-        else:
-            doctypes = [doctype] if doctype else list(self._default_policies.keys())
-            for dt in doctypes:
-                if dt in self._default_policies:
-                    initial_len = len(self._default_policies[dt])
-                    self._default_policies[dt] = [p for p in self._default_policies[dt] if p.policy_id != policy_id]
-                    if len(self._default_policies[dt]) < initial_len:
-                        removed = True
-
-        audit = policy_store.delete_policy(policy_id, actor=actor, site_id=site_id)
-        if audit is not None:
+        site_bucket = self._site_policies.get(get_current_site_id(site_id), {})
+        for dt in ([doctype] if doctype else list(site_bucket.keys())):
+            if dt in site_bucket:
+                before = len(site_bucket[dt])
+                site_bucket[dt] = [p for p in site_bucket[dt] if p.policy_id != policy_id]
+                removed = removed or len(site_bucket[dt]) < before
+        if policy_store.delete_policy(policy_id, actor=actor, site_id=site_id) is not None:
             removed = True
         return removed
 
@@ -470,36 +419,32 @@ class RuntimePolicyCatalog:
         stage: Optional[str] = None,
         site_id: Optional[str] = None,
     ) -> List[RuntimePolicy]:
-        """Returns all active policies for the specified DocType and lifecycle stage on the site."""
+        """Active policies for the DocType and stage on the site.
+
+        Built-in Tier 0 policies always apply and always win over a site policy with the same
+        id. A store read error propagates (the caller denies; fail closed).
+        """
         from .policy_store import get_current_site_id, policy_store
         norm_stage = normalize_stage(stage)
-        resolved_site = get_current_site_id(site_id)
+        site = get_current_site_id(site_id)
 
-        # 1. Built-in Tier 0 default policies
-        default_for_dt = [
-            p for p in self._default_policies.get(doctype, [])
-            if p.active and is_policy_applicable_to_stage(p, norm_stage)
-        ]
-
-        # 2. In-memory site policies
-        site_in_mem = []
-        if resolved_site and resolved_site in self._site_policies:
-            site_in_mem = [
-                p for p in self._site_policies[resolved_site].get(doctype, [])
+        site_policies: List[RuntimePolicy] = []
+        if not policy_store.is_live_frappe:
+            site_policies.extend(
+                p for p in self._site_policies.get(site, {}).get(doctype, [])
                 if p.active and is_policy_applicable_to_stage(p, norm_stage)
-            ]
-
-        # 3. Persisted site policies
-        persisted = policy_store.get_policies(
-            doctype=doctype, stage=stage, active_only=True, site_id=site_id
+            )
+        site_policies.extend(
+            policy_store.get_policies(doctype=doctype, stage=stage, active_only=True, site_id=site_id)
         )
 
-        combined: Dict[str, RuntimePolicy] = {p.policy_id: p for p in default_for_dt}
-        for p in site_in_mem:
-            combined[p.policy_id] = p
-        for p in persisted:
-            combined[p.policy_id] = p
-
+        combined: Dict[str, RuntimePolicy] = {}
+        for p in site_policies:
+            if not self.is_protected_policy_id(p.policy_id):
+                combined[p.policy_id] = p
+        for p in self._default_policies.get(doctype, []):
+            if p.active and is_policy_applicable_to_stage(p, norm_stage):
+                combined[p.policy_id] = p
         return list(combined.values())
 
     def _evaluate_single_policy(
@@ -516,7 +461,10 @@ class RuntimePolicyCatalog:
         # Step 1: Check whether condition triggers
         condition_triggered = False
         if policy.condition_expr:
-            condition_triggered = evaluate_condition_expr(policy.condition_expr, doc, user_roles)
+            try:
+                condition_triggered = evaluate_condition_expr(policy.condition_expr, doc, user_roles)
+            except Exception:
+                return False  # A condition that cannot be evaluated safely is a violation (fail closed)
         else:
             if policy.policy_type in (PolicyType.SUBMIT_LOCK, "SUBMIT_LOCK"):
                 condition_triggered = is_field_changed(doc, policy.target_field)
@@ -566,7 +514,21 @@ class RuntimePolicyCatalog:
         if user_roles is None:
             user_roles = []
 
-        policies = self.get_active_policies(doctype, stage=stage, site_id=site_id)
+        try:
+            policies = self.get_active_policies(doctype, stage=stage, site_id=site_id)
+        except Exception:
+            # The policy store could not be read: deny rather than skip persisted policies.
+            result = PolicyEvaluationResult(
+                allowed=False,
+                violated_policies=[POLICY_STORE_UNAVAILABLE],
+                reasons=["Runtime policies could not be loaded; the change is refused (fail closed)."],
+            )
+            if raise_exception:
+                raise RuntimePolicyViolation(
+                    f"Runtime Policy Violation [{POLICY_STORE_UNAVAILABLE}]: {result.reasons[0]}",
+                    policy_id=POLICY_STORE_UNAVAILABLE, result=result,
+                )
+            return result
         violated_policies: List[str] = []
         reasons: List[str] = []
 

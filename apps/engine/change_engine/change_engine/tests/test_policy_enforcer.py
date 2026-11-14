@@ -363,7 +363,7 @@ class TestRuntimePolicyEnforcer(unittest.TestCase):
             error_message="Cannot modify internal notes after submission.",
             active=True,
         )
-        register_runtime_policy(lock_policy)
+        register_runtime_policy(lock_policy, caller_roles=["System Manager"])  # admin only (CE-SEC-003)
 
         submitted_so = MockFrappeDoc(
             doctype="Sales Order",

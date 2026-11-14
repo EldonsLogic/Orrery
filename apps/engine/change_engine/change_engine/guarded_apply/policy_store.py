@@ -1,9 +1,18 @@
 """
 Change Engine Policy Persistence Store (CE-SEC-003)
 
-Provides site-isolated persistence, revision tracking, and audit logging
-for runtime policies. Replaces ephemeral in-memory storage with durable
-per-site persistence.
+Site-isolated persistence, revision tracking and audit logging for runtime policies.
+
+Security properties:
+- The site comes only from `frappe.local.site` under Frappe; a different caller-supplied site
+  is refused.
+- Every database read or write error raises PolicyStoreError; nothing falls back to an empty
+  list, so enforcement denies instead of skipping persisted policies (fail closed).
+- The tables are created by the migration patch `change_engine.patches.ce_sec_003_create_policy_tables`,
+  never from a request or validate hook (DDL would commit the open transaction).
+- The revision is read with SELECT ... FOR UPDATE in the same transaction as the write.
+- The audit table is append-only in this code (no update or delete path). The database does
+  not enforce immutability; that would need grants or triggers and is not claimed here.
 """
 
 import copy
@@ -20,23 +29,54 @@ except ImportError:
 from .policy_enforcer import PolicyType, RuntimePolicy, normalize_stage
 
 
-def get_current_site_id(explicit_site: Optional[str] = None) -> str:
-    """Resolves the current site ID.
+def _db_datetime(value: Optional[str]) -> Optional[str]:
+    """An ISO timestamp as a naive UTC 'YYYY-MM-DD HH:MM:SS.ffffff' string for a DATETIME(6) column."""
+    if not value:
+        return None
+    parsed = datetime.datetime.fromisoformat(str(value))
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return parsed.strftime("%Y-%m-%d %H:%M:%S.%f")
 
-    Under Frappe, uses `frappe.local.site`.
-    In standalone mode, falls back to explicit_site or 'default'.
-    """
-    if explicit_site:
-        return explicit_site
-    if frappe is not None and hasattr(frappe, "local") and getattr(frappe.local, "site", None):
-        return str(frappe.local.site)
+
+class PolicyStoreError(RuntimeError):
+    """The policy store could not be read or written. Callers must deny, never skip."""
+
+
+def _frappe_site() -> Optional[str]:
+    """The request's site from Frappe (or the test double installed on the endpoints module)."""
+    if frappe is not None:
+        try:
+            site = getattr(frappe.local, "site", None)
+        except Exception:
+            site = None
+        if site:
+            return str(site)
     try:
         from change_engine.api import endpoints
-        if getattr(endpoints, "frappe", None) and hasattr(endpoints.frappe, "local") and getattr(endpoints.frappe.local, "site", None):
-            return str(endpoints.frappe.local.site)
+        fake = getattr(endpoints, "frappe", None)
+        site = getattr(getattr(fake, "local", None), "site", None) if fake is not None else None
+        if site:
+            return str(site)
     except Exception:
         pass
-    return "default"
+    return None
+
+
+def get_current_site_id(explicit_site: Optional[str] = None) -> str:
+    """The current site. Under Frappe only `frappe.local.site` counts.
+
+    An explicit site is accepted only in standalone tests (no Frappe site) or when it equals
+    the Frappe site; anything else is refused, so one tenant cannot address another.
+    """
+    site = _frappe_site()
+    if site:
+        if explicit_site and explicit_site != site:
+            raise PermissionError("Site mismatch: the site comes from the request context only")
+        return site
+    if frappe is not None and getattr(frappe, "db", None) is not None:
+        raise PermissionError("No site in the request context")
+    return explicit_site or "default"
 
 
 class PolicyStore:
@@ -57,8 +97,6 @@ class PolicyStore:
         self._audits: Dict[str, List[Dict[str, Any]]] = {}
         # Standalone per-site revision history: site_id -> {policy_id: [snapshot_dict]}
         self._revisions: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
-        # Cached tables initialized
-        self._tables_initialized: set = set()
 
     @property
     def is_live_frappe(self) -> bool:
@@ -68,60 +106,13 @@ class PolicyStore:
             and getattr(self._frappe.db, "sql", None) is not None
         )
 
-    def _ensure_tables(self, site_id: str) -> None:
-        """Creates policy and audit tables if running against a live Frappe database."""
-        if not self.is_live_frappe or site_id in self._tables_initialized:
-            return
-        try:
-            self._frappe.db.sql(f"""
-                CREATE TABLE IF NOT EXISTS `{self.POLICY_TABLE}` (
-                    name VARCHAR(140) PRIMARY KEY,
-                    policy_id VARCHAR(140) NOT NULL,
-                    site_id VARCHAR(140) NOT NULL,
-                    doctype VARCHAR(140) NOT NULL,
-                    policy_type VARCHAR(64) NOT NULL,
-                    target_field VARCHAR(140),
-                    governance_tier INT DEFAULT 1,
-                    condition_expr TEXT,
-                    required_role VARCHAR(255),
-                    error_message TEXT,
-                    stage VARCHAR(64),
-                    active TINYINT DEFAULT 1,
-                    revision INT DEFAULT 1,
-                    created_by VARCHAR(140),
-                    created_at DATETIME(6),
-                    updated_by VARCHAR(140),
-                    updated_at DATETIME(6),
-                    UNIQUE KEY uq_site_policy (site_id, policy_id),
-                    INDEX idx_site_dt_act (site_id, doctype, active)
-                ) ENGINE=InnoDB
-            """)
-            self._frappe.db.sql(f"""
-                CREATE TABLE IF NOT EXISTS `{self.AUDIT_TABLE}` (
-                    name VARCHAR(140) PRIMARY KEY,
-                    audit_id VARCHAR(140) NOT NULL,
-                    site_id VARCHAR(140) NOT NULL,
-                    policy_id VARCHAR(140) NOT NULL,
-                    doctype VARCHAR(140) NOT NULL,
-                    revision INT NOT NULL,
-                    action VARCHAR(64) NOT NULL,
-                    changed_by VARCHAR(140),
-                    payload_before LONGTEXT,
-                    payload_after LONGTEXT,
-                    timestamp DATETIME(6),
-                    INDEX idx_site_pol (site_id, policy_id),
-                    INDEX idx_timestamp (timestamp)
-                ) ENGINE=InnoDB
-            """)
-            self._tables_initialized.add(site_id)
-        except Exception:
-            pass
-
-    def get_policy(self, policy_id: str, site_id: Optional[str] = None) -> Optional[RuntimePolicy]:
-        """Retrieves a single policy by ID for the specified site."""
+    def get_policy(
+        self, policy_id: str, site_id: Optional[str] = None, for_update: bool = False
+    ) -> Optional[RuntimePolicy]:
+        """Retrieves a single policy by ID for the site. Raises PolicyStoreError on a read error."""
         site = get_current_site_id(site_id)
         if self.is_live_frappe:
-            self._ensure_tables(site)
+            lock = " FOR UPDATE" if for_update else ""
             try:
                 res = self._frappe.db.sql(
                     f"""
@@ -131,8 +122,7 @@ class PolicyStore:
                            created_by, created_at, updated_by, updated_at
                     FROM `{self.POLICY_TABLE}`
                     WHERE site_id = %s AND policy_id = %s
-                    LIMIT 1
-                    """,
+                    LIMIT 1""" + lock,
                     (site, policy_id),
                     as_dict=True,
                 )
@@ -155,8 +145,8 @@ class PolicyStore:
                         updated_by=row.get("updated_by"),
                         updated_at=str(row["updated_at"]) if row.get("updated_at") else None,
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                raise PolicyStoreError(f"Policy read failed: {exc}") from exc
             return None
 
         # Standalone in-memory fallback
@@ -176,7 +166,6 @@ class PolicyStore:
         norm_stage = normalize_stage(stage)
 
         if self.is_live_frappe:
-            self._ensure_tables(site)
             try:
                 query = f"""
                     SELECT policy_id, doctype, policy_type, target_field,
@@ -217,8 +206,8 @@ class PolicyStore:
                     if not stage or is_policy_applicable_to_stage(pol, norm_stage):
                         policies.append(pol)
                 return policies
-            except Exception:
-                return []
+            except Exception as exc:
+                raise PolicyStoreError(f"Policy read failed: {exc}") from exc
 
         # Standalone in-memory fallback
         site_store = self._sites.get(site, {})
@@ -241,11 +230,14 @@ class PolicyStore:
         site_id: Optional[str] = None,
     ) -> Tuple[RuntimePolicy, Dict[str, Any]]:
         """Saves (creates or updates) a policy for the site, incrementing revision and logging audit."""
+        if policy.policy_id.upper().startswith("TIER0_") or policy.governance_tier != 1:
+            raise PermissionError("Only Tier 1 policies are stored; Tier 0 invariants are built in")
         site = get_current_site_id(site_id)
         now_dt = datetime.datetime.now(datetime.timezone.utc)
         now_iso = now_dt.isoformat()
 
-        existing = self.get_policy(policy.policy_id, site_id=site)
+        # Locks the row (live database) so two writers cannot both compute the same revision.
+        existing = self.get_policy(policy.policy_id, site_id=site, for_update=True)
         payload_before = existing.to_dict() if existing else None
 
         if existing:
@@ -292,7 +284,6 @@ class PolicyStore:
         }
 
         if self.is_live_frappe:
-            self._ensure_tables(site)
             name = f"{site}::{saved_policy.policy_id}"
             try:
                 self._frappe.db.sql(
@@ -337,9 +328,9 @@ class PolicyStore:
                         1 if saved_policy.active else 0,
                         saved_policy.revision,
                         saved_policy.created_by,
-                        saved_policy.created_at,
+                        _db_datetime(saved_policy.created_at),
                         saved_policy.updated_by,
-                        saved_policy.updated_at,
+                        _db_datetime(saved_policy.updated_at),
                     ),
                 )
                 audit_name = f"{site}::{audit_id}"
@@ -365,7 +356,7 @@ class PolicyStore:
                     ),
                 )
             except Exception as e:
-                raise RuntimeError(f"Database policy persistence failed: {e}")
+                raise PolicyStoreError(f"Database policy persistence failed: {e}") from e
             return saved_policy, audit_record
 
         # Standalone in-memory fallback
@@ -388,7 +379,7 @@ class PolicyStore:
     ) -> Optional[Dict[str, Any]]:
         """Deletes a policy from site storage and records an audit record."""
         site = get_current_site_id(site_id)
-        existing = self.get_policy(policy_id, site_id=site)
+        existing = self.get_policy(policy_id, site_id=site, for_update=True)
         if not existing:
             return None
 
@@ -409,7 +400,6 @@ class PolicyStore:
         }
 
         if self.is_live_frappe:
-            self._ensure_tables(site)
             try:
                 self._frappe.db.sql(
                     f"DELETE FROM `{self.POLICY_TABLE}` WHERE site_id = %s AND policy_id = %s",
@@ -438,7 +428,7 @@ class PolicyStore:
                     ),
                 )
             except Exception as e:
-                raise RuntimeError(f"Database policy deletion failed: {e}")
+                raise PolicyStoreError(f"Database policy deletion failed: {e}") from e
             return audit_record
 
         # Standalone in-memory fallback
@@ -464,7 +454,6 @@ class PolicyStore:
         """Returns the audit trail for policies on a site."""
         site = get_current_site_id(site_id)
         if self.is_live_frappe:
-            self._ensure_tables(site)
             try:
                 query = f"""
                     SELECT audit_id, site_id, policy_id, doctype, revision,
@@ -498,8 +487,8 @@ class PolicyStore:
                     rec["timestamp"] = str(rec["timestamp"])
                     res.append(rec)
                 return res
-            except Exception:
-                return []
+            except Exception as exc:
+                raise PolicyStoreError(f"Audit read failed: {exc}") from exc
 
         site_audits = self._audits.get(site, [])
         matched = []

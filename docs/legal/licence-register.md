@@ -26,7 +26,7 @@ Principle 1: Build on open source; record every licence. Every adopted open-sour
 | Component | Upstream / image | Pinned version | Licence | Role / Why used | Boundary notes |
 |---|---|---|---|---|---|
 | **MariaDB** | `mariadb` official Docker image | 10.6 | GNU GPL v2.0 | Primary relational database for engine tenant sites. | Standard server backend; isolated network in Docker. |
-| **Redis** | `redis` official Docker image | 7.2.7-alpine | BSD-3-Clause | Cache and background queue broker for Frappe bench. | Pinned to 7.2.7-alpine (BSD-3-Clause) in dev compose to prevent licence ambiguity (resolves Q-15 for dev bench). |
+| **Redis** | `redis` official Docker image | 7.2.7-alpine | BSD-3-Clause (source; counsel review pending) | Cache and background queue broker for Frappe bench. | The dev image is pinned by digest. [Upstream source licence](https://github.com/redis/redis/blob/7.2.7/COPYING), accessed 2026-11-11; image contents and legal interpretation remain UNVERIFIED (Q-15). |
 
 ## 4. Verification and maintenance
 

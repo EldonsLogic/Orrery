@@ -1,6 +1,6 @@
 # Engine adapter
 
-Version: 0.1.0
+Version: 0.1.1
 Status: draft
 Owner: eldon
 Plan IDs: BPL-025 (this contract, fake, conformance suite), BPL-026 (compiled artifact), BPL-012 and ERP-012 (real adapter), BPL-007 (apply), BPL-027 (integration)
@@ -29,7 +29,7 @@ All schemas are JSON Schema draft 2020-12 with `urn:platform:contract:*` ids. Cr
 3. **Fail closed.** Unknown version, unknown step kind, integrity failure, lookup error, missing approval: refuse, change nothing, record an audit id.
 4. **Deterministic.** Same site state + same request gives the same plan, preview and export bytes.
 5. **No data loss.** Removal is quarantine (hidden, not required, data kept). No operation drops stored data in 0.1.0.
-6. **Atomic per artifact.** Every step and post-condition succeeds, or the site ends on the base revision, or the site is marked `recovery_required` and blocked (5.6).
+6. **Journaled and recoverable per artifact (ADR-0028, Proposed).** Every step and post-condition succeeds, or executed steps are compensated and the site ends on the base revision, or the site is marked `recovery_required` and blocked until a human resolves it (5.6). Atomicity is promised only where it is demonstrated; a compensated state is verified by export hash, not assumed.
 
 ## 4. Call model
 ### 4.1 Envelope
@@ -126,7 +126,9 @@ Outcome `status`:
 | `compensated` | Failed during `execute` or `reconcile`; executed steps undone | base revision, active export identical to before |
 | `recovery_required` | Partial state could not be undone or the outcome could not be persisted | blocked for apply and rollback until a human resolves it |
 
-Atomicity is compensation, not one database transaction: storage changes commit implicitly in the seed engine (UNVERIFIED for any other engine), so the adapter must journal each executed step in the `prepare` record and its own audit store. `compensated` means the active export hash equals the pre-apply hash; quarantined leftovers from compensated additions appear only in `retained`.
+Recovery is compensation and forward repair, not one database transaction (ADR-0028): storage changes commit implicitly in the seed engine (UNVERIFIED for any other engine), so the adapter must journal each executed step in the `prepare` record and its own audit store. `compensated` means the active export hash equals the pre-apply hash; quarantined leftovers from compensated additions appear only in `retained`.
+
+Change classes (ADR-0028). Every step falls in one class, and the recovery differs: (1) transactional change that truly rolls back; (2) partially applied configuration, recovered by compensation or forward repair; (3) a posted financial document, corrected only by correcting entries, never by this adapter's rollback; (4) an external submission or send, which cannot be undone. This contract's steps are classes 1 and 2 only. Classes 3 and 4 carry a durable operation identity in their own contracts, and a visible outcome is reconciled before any retry.
 
 Restore rule: an add step (`*.add`, `*.upsert`, `*.enable`) whose subject is quarantined or disabled with an identical definition restores it with its data; with a different definition the step is `blocked` (`definition_conflict`).
 

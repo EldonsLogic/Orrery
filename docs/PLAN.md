@@ -157,7 +157,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-001 | G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench | Runtime | G1 | LEG-004 | partner | done |
 | ERP-002 | Spike: 50-tenant load test on one bench pool | Runtime | G1 | ERP-003 | partner | todo |
 | ERP-003 | Scripted site-per-tenant creation | Runtime | G1 | ERP-001 | partner | todo |
-| ERP-004 | Version pin and upgrade policy document | Runtime | G1 | ERP-001 | partner | todo |
+| ERP-004 | Version pin and upgrade policy document | Runtime | G1 | ERP-001 | partner | doing |
 | ERP-005 | Core module scope for trading and distribution (selling, buying, stock, accounts) | Runtime | G1 | ERP-001 | partner | doing |
 | ERP-006 | Arabic and RTL translation completion for in-scope modules | Runtime | G1 | ERP-005 | partner | todo |
 | ERP-007 | Bilingual tax invoice PDF print format | Runtime | G1 | CMP-003,ERP-006 | partner | todo |
@@ -331,6 +331,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-021 | Phase 0 engine proof suite on a pinned bench: two-tenant isolation, one reconciled transaction, denied operation on failure, interrupted guarded change with recovery, duplicate-effect prevention, one minimal real adapter integration | Runtime | G1 | ERP-001,BPL-029 | partner | todo |
 | ERP-022 | Phase 1A manual golden system on the real bench: hand-timed, ledger and stock independently checked, Arabic document output and role views reviewed | Runtime | G1 | ERP-021,BPL-028 | partner | todo |
 | ERP-023 | Action-policy enforcement in the engine: approval binding and policy evaluation fail closed, tested against the SEC-019 table | Runtime | G2 | ERP-021,SEC-019 | partner | todo |
+| ERP-024 | Move the bench database off end-of-life MariaDB 10.6: pick the target version (Q-25), build the bench on it, run the bench tests and the ERP-021 suite if it exists by then, record the result | Runtime | G1 | ERP-001 | partner | todo |
 | QA-018 | Automatic acceptance test per configured tenant: scripted transactions in, expected ledger postings out | Quality | G1 | BPL-028 | eldon | todo |
 | QA-019 | Scoped-chat leak canaries: planted values in out-of-scope records and adversarial prompts per role, including reports and aggregates | Quality | G2 | OPR-004,SEC-019 | eldon | todo |
 | QA-020 | Optional experiment: bounded-decision model for intent routing compared with a small general model and rules on synthetic Arabic and English cases; not a dependency, synthetic data only | Quality | G2 | QA-001 | eldon | todo |

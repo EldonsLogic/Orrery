@@ -1,0 +1,807 @@
+{
+  "$schema": "../engine-mapping.schema.json",
+  "version": "0.1.0",
+  "mappingId": "golden-path-trading-sale",
+  "status": "draft",
+  "verification": {
+    "benchRun": "none",
+    "notes": "Every engine-side name here is UNVERIFIED until ERP-021 and ERP-022 run on the pinned bench."
+  },
+  "blueprintRef": {
+    "contract": "0.1.0",
+    "fixture": "services/blueprint/fixtures/trading-distribution.blueprint.json"
+  },
+  "engine": {
+    "adapter": "change_engine",
+    "versionSet": "UNVERIFIED: not pinned yet (ERP-001, ERP-004)"
+  },
+  "entities": [
+    {
+      "blueprintEntity": "customer",
+      "engineDocType": "Customer",
+      "kind": "master",
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {
+          "blueprintField": "customer_name",
+          "blueprintType": "string",
+          "engineField": "customer_name",
+          "engineType": "Data"
+        }
+      ]
+    },
+    {
+      "blueprintEntity": "item",
+      "engineDocType": "Item",
+      "kind": "master",
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {
+          "blueprintField": "item_code",
+          "blueprintType": "string",
+          "engineField": "item_code",
+          "engineType": "Data"
+        },
+        {
+          "blueprintField": "item_name",
+          "blueprintType": "string",
+          "engineField": "item_name",
+          "engineType": "Data"
+        },
+        {
+          "blueprintField": "unit",
+          "blueprintType": "select",
+          "engineField": "stock_uom",
+          "engineType": "Link",
+          "engineLinkDoctype": "UOM"
+        },
+        {
+          "blueprintField": "cost_price",
+          "blueprintType": "money",
+          "engineField": "valuation_rate",
+          "engineType": "Currency",
+          "notes": "Opening cost used for the opening stock entry. Hidden from sales (see role masks)."
+        },
+        {
+          "blueprintField": "selling_price",
+          "blueprintType": "money",
+          "engineField": null,
+          "engineType": "Currency",
+          "via": {
+            "engineDocType": "Item Price",
+            "engineField": "price_list_rate",
+            "key": {
+              "item_code": "item_code",
+              "price_list": "default selling price list"
+            }
+          },
+          "notes": "The engine keeps the price on a price row, not on the item."
+        }
+      ]
+    },
+    {
+      "blueprintEntity": "sales_order",
+      "engineDocType": "Sales Order",
+      "kind": "document",
+      "submittable": true,
+      "ledgerEffect": "none",
+      "fields": [
+        {
+          "blueprintField": "customer",
+          "blueprintType": "link",
+          "engineField": "customer",
+          "engineType": "Link",
+          "engineLinkDoctype": "Customer"
+        },
+        {
+          "blueprintField": "order_date",
+          "blueprintType": "date",
+          "engineField": "transaction_date",
+          "engineType": "Date"
+        },
+        {
+          "blueprintField": "delivery_date",
+          "blueprintType": "date",
+          "engineField": "delivery_date",
+          "engineType": "Date"
+        },
+        {
+          "blueprintField": "warehouse",
+          "blueprintType": "select",
+          "engineField": "set_warehouse",
+          "engineType": "Link",
+          "engineLinkDoctype": "Warehouse"
+        },
+        {
+          "blueprintField": "discount_percent",
+          "blueprintType": "percent",
+          "engineField": "additional_discount_percentage",
+          "engineType": "Percent"
+        },
+        {
+          "blueprintField": "subtotal",
+          "blueprintType": "money",
+          "engineField": "total",
+          "engineType": "Currency",
+          "computed": {
+            "authority": "engine",
+            "expression": "sum of line_total",
+            "inputs": [
+              "line_total"
+            ],
+            "aggregation": {
+              "over": "lines",
+              "function": "sum",
+              "field": "line_total"
+            },
+            "rounding": {
+              "precision": 2,
+              "mode": "half_up"
+            },
+            "recalculateOn": [
+              "line_changed",
+              "line_added",
+              "line_removed"
+            ]
+          }
+        },
+        {
+          "blueprintField": "vat_amount",
+          "blueprintType": "money",
+          "engineField": "total_taxes_and_charges",
+          "engineType": "Currency",
+          "computed": {
+            "authority": "engine",
+            "expression": "0 on the golden path (no tax); the tax variant is a later path",
+            "inputs": [
+              "subtotal"
+            ],
+            "rounding": {
+              "precision": 2,
+              "mode": "half_up"
+            },
+            "recalculateOn": [
+              "subtotal_changed",
+              "tax_changed"
+            ]
+          }
+        },
+        {
+          "blueprintField": "total_amount",
+          "blueprintType": "money",
+          "engineField": "grand_total",
+          "engineType": "Currency",
+          "computed": {
+            "authority": "engine",
+            "expression": "subtotal * (1 - discount_percent / 100) + vat_amount",
+            "inputs": [
+              "subtotal",
+              "discount_percent",
+              "vat_amount"
+            ],
+            "rounding": {
+              "precision": 2,
+              "mode": "half_up"
+            },
+            "recalculateOn": [
+              "subtotal_changed",
+              "discount_changed",
+              "tax_changed"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "blueprintEntity": "sales_order_line",
+      "engineDocType": "Sales Order Item",
+      "kind": "child",
+      "parent": {
+        "blueprintEntity": "sales_order",
+        "relation": "lines",
+        "engineField": "items"
+      },
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {
+          "blueprintField": "item",
+          "blueprintType": "link",
+          "engineField": "item_code",
+          "engineType": "Link",
+          "engineLinkDoctype": "Item"
+        },
+        {
+          "blueprintField": "quantity",
+          "blueprintType": "decimal",
+          "engineField": "qty",
+          "engineType": "Float"
+        },
+        {
+          "blueprintField": "unit_price",
+          "blueprintType": "money",
+          "engineField": "rate",
+          "engineType": "Currency"
+        },
+        {
+          "blueprintField": "discount_percent",
+          "blueprintType": "percent",
+          "engineField": "discount_percentage",
+          "engineType": "Percent"
+        },
+        {
+          "blueprintField": "line_total",
+          "blueprintType": "money",
+          "engineField": "amount",
+          "engineType": "Currency",
+          "computed": {
+            "authority": "engine",
+            "expression": "quantity * unit_price * (1 - discount_percent / 100)",
+            "inputs": [
+              "quantity",
+              "unit_price",
+              "discount_percent"
+            ],
+            "rounding": {
+              "precision": 2,
+              "mode": "half_up"
+            },
+            "recalculateOn": [
+              "quantity",
+              "unit_price",
+              "discount_percent"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "blueprintEntity": "delivery_note",
+      "engineDocType": "Delivery Note",
+      "kind": "document",
+      "submittable": true,
+      "ledgerEffect": "stock_and_gl",
+      "fields": [
+        {
+          "blueprintField": "sales_order",
+          "blueprintType": "link",
+          "engineField": null,
+          "engineType": "Link",
+          "engineLinkDoctype": "Sales Order",
+          "notes": "The engine links the order on each line (against_sales_order and its row), not on the header."
+        },
+        {
+          "blueprintField": "customer",
+          "blueprintType": "link",
+          "engineField": "customer",
+          "engineType": "Link",
+          "engineLinkDoctype": "Customer"
+        },
+        {
+          "blueprintField": "delivery_date",
+          "blueprintType": "date",
+          "engineField": "posting_date",
+          "engineType": "Date"
+        },
+        {
+          "blueprintField": "warehouse",
+          "blueprintType": "select",
+          "engineField": "set_warehouse",
+          "engineType": "Link",
+          "engineLinkDoctype": "Warehouse"
+        }
+      ]
+    },
+    {
+      "blueprintEntity": "delivery_note_line",
+      "engineDocType": "Delivery Note Item",
+      "kind": "child",
+      "parent": {
+        "blueprintEntity": "delivery_note",
+        "relation": "lines",
+        "engineField": "items"
+      },
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {
+          "blueprintField": "item",
+          "blueprintType": "link",
+          "engineField": "item_code",
+          "engineType": "Link",
+          "engineLinkDoctype": "Item"
+        },
+        {
+          "blueprintField": "quantity",
+          "blueprintType": "decimal",
+          "engineField": "qty",
+          "engineType": "Float"
+        }
+      ]
+    },
+    {
+      "blueprintEntity": "sales_invoice",
+      "engineDocType": "Sales Invoice",
+      "kind": "document",
+      "submittable": true,
+      "ledgerEffect": "gl",
+      "fields": [
+        {
+          "blueprintField": "customer",
+          "blueprintType": "link",
+          "engineField": "customer",
+          "engineType": "Link",
+          "engineLinkDoctype": "Customer"
+        },
+        {
+          "blueprintField": "sales_order",
+          "blueprintType": "link",
+          "engineField": null,
+          "engineType": "Link",
+          "engineLinkDoctype": "Sales Order",
+          "notes": "Linked on each line, like the delivery."
+        },
+        {
+          "blueprintField": "invoice_date",
+          "blueprintType": "date",
+          "engineField": "posting_date",
+          "engineType": "Date"
+        },
+        {
+          "blueprintField": "discount_percent",
+          "blueprintType": "percent",
+          "engineField": "additional_discount_percentage",
+          "engineType": "Percent"
+        },
+        {
+          "blueprintField": "subtotal",
+          "blueprintType": "money",
+          "engineField": "total",
+          "engineType": "Currency",
+          "computed": {
+            "authority": "engine",
+            "expression": "sum of line_total",
+            "inputs": [
+              "line_total"
+            ],
+            "aggregation": {
+              "over": "lines",
+              "function": "sum",
+              "field": "line_total"
+            },
+            "rounding": {
+              "precision": 2,
+              "mode": "half_up"
+            },
+            "recalculateOn": [
+              "line_changed",
+              "line_added",
+              "line_removed"
+            ]
+          }
+        },
+        {
+          "blueprintField": "vat_amount",
+          "blueprintType": "money",
+          "engineField": "total_taxes_and_charges",
+          "engineType": "Currency",
+          "computed": {
+            "authority": "engine",
+            "expression": "0 on the golden path (no tax); the tax variant is a later path",
+            "inputs": [
+              "subtotal"
+            ],
+            "rounding": {
+              "precision": 2,
+              "mode": "half_up"
+            },
+            "recalculateOn": [
+              "subtotal_changed",
+              "tax_changed"
+            ]
+          }
+        },
+        {
+          "blueprintField": "total_amount",
+          "blueprintType": "money",
+          "engineField": "grand_total",
+          "engineType": "Currency",
+          "computed": {
+            "authority": "engine",
+            "expression": "subtotal * (1 - discount_percent / 100) + vat_amount",
+            "inputs": [
+              "subtotal",
+              "discount_percent",
+              "vat_amount"
+            ],
+            "rounding": {
+              "precision": 2,
+              "mode": "half_up"
+            },
+            "recalculateOn": [
+              "subtotal_changed",
+              "discount_changed",
+              "tax_changed"
+            ]
+          }
+        },
+        {
+          "blueprintField": "outstanding_amount",
+          "blueprintType": "money",
+          "engineField": "outstanding_amount",
+          "engineType": "Currency",
+          "notes": "Derived by the engine from its payment ledger. The platform never sums invoices to get a receivable."
+        }
+      ]
+    },
+    {
+      "blueprintEntity": "sales_invoice_line",
+      "engineDocType": "Sales Invoice Item",
+      "kind": "child",
+      "parent": {
+        "blueprintEntity": "sales_invoice",
+        "relation": "lines",
+        "engineField": "items"
+      },
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {
+          "blueprintField": "item",
+          "blueprintType": "link",
+          "engineField": "item_code",
+          "engineType": "Link",
+          "engineLinkDoctype": "Item"
+        },
+        {
+          "blueprintField": "quantity",
+          "blueprintType": "decimal",
+          "engineField": "qty",
+          "engineType": "Float"
+        },
+        {
+          "blueprintField": "unit_price",
+          "blueprintType": "money",
+          "engineField": "rate",
+          "engineType": "Currency"
+        },
+        {
+          "blueprintField": "discount_percent",
+          "blueprintType": "percent",
+          "engineField": "discount_percentage",
+          "engineType": "Percent"
+        },
+        {
+          "blueprintField": "line_total",
+          "blueprintType": "money",
+          "engineField": "amount",
+          "engineType": "Currency",
+          "computed": {
+            "authority": "engine",
+            "expression": "quantity * unit_price * (1 - discount_percent / 100)",
+            "inputs": [
+              "quantity",
+              "unit_price",
+              "discount_percent"
+            ],
+            "rounding": {
+              "precision": 2,
+              "mode": "half_up"
+            },
+            "recalculateOn": [
+              "quantity",
+              "unit_price",
+              "discount_percent"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "blueprintRole": "owner",
+      "engineRole": "platform_owner",
+      "grants": [
+        {
+          "blueprintEntity": "customer",
+          "actions": [
+            "read",
+            "create",
+            "update",
+            "export"
+          ]
+        },
+        {
+          "blueprintEntity": "item",
+          "actions": [
+            "read",
+            "create",
+            "update",
+            "export"
+          ]
+        },
+        {
+          "blueprintEntity": "sales_order",
+          "actions": [
+            "read",
+            "create",
+            "update",
+            "cancel",
+            "approve",
+            "export"
+          ]
+        },
+        {
+          "blueprintEntity": "delivery_note",
+          "actions": [
+            "read",
+            "export"
+          ]
+        },
+        {
+          "blueprintEntity": "sales_invoice",
+          "actions": [
+            "read",
+            "cancel",
+            "export"
+          ]
+        }
+      ]
+    },
+    {
+      "blueprintRole": "sales_rep",
+      "engineRole": "platform_sales",
+      "grants": [
+        {
+          "blueprintEntity": "customer",
+          "actions": [
+            "read",
+            "create",
+            "update"
+          ]
+        },
+        {
+          "blueprintEntity": "item",
+          "actions": [
+            "read"
+          ],
+          "fieldMasks": [
+            {
+              "blueprintField": "cost_price",
+              "access": "none"
+            }
+          ]
+        },
+        {
+          "blueprintEntity": "sales_order",
+          "actions": [
+            "read",
+            "create",
+            "update",
+            "submit",
+            "cancel"
+          ]
+        },
+        {
+          "blueprintEntity": "delivery_note",
+          "actions": [
+            "read"
+          ]
+        },
+        {
+          "blueprintEntity": "sales_invoice",
+          "actions": [
+            "read"
+          ]
+        }
+      ]
+    },
+    {
+      "blueprintRole": "warehouse_keeper",
+      "engineRole": "platform_warehouse",
+      "grants": [
+        {
+          "blueprintEntity": "item",
+          "actions": [
+            "read"
+          ],
+          "fieldMasks": [
+            {
+              "blueprintField": "selling_price",
+              "access": "none"
+            },
+            {
+              "blueprintField": "cost_price",
+              "access": "none"
+            }
+          ]
+        },
+        {
+          "blueprintEntity": "sales_order",
+          "actions": [
+            "read",
+            "submit"
+          ],
+          "fieldMasks": [
+            {
+              "blueprintField": "subtotal",
+              "access": "none"
+            },
+            {
+              "blueprintField": "vat_amount",
+              "access": "none"
+            },
+            {
+              "blueprintField": "total_amount",
+              "access": "none"
+            },
+            {
+              "blueprintField": "discount_percent",
+              "access": "none"
+            }
+          ]
+        },
+        {
+          "blueprintEntity": "delivery_note",
+          "actions": [
+            "read",
+            "create",
+            "update",
+            "submit"
+          ]
+        }
+      ]
+    },
+    {
+      "blueprintRole": "accountant",
+      "engineRole": "platform_finance",
+      "grants": [
+        {
+          "blueprintEntity": "customer",
+          "actions": [
+            "read",
+            "update",
+            "export"
+          ]
+        },
+        {
+          "blueprintEntity": "item",
+          "actions": [
+            "read",
+            "export"
+          ]
+        },
+        {
+          "blueprintEntity": "sales_order",
+          "actions": [
+            "read",
+            "submit",
+            "export"
+          ]
+        },
+        {
+          "blueprintEntity": "delivery_note",
+          "actions": [
+            "read",
+            "export"
+          ]
+        },
+        {
+          "blueprintEntity": "sales_invoice",
+          "actions": [
+            "read",
+            "create",
+            "update",
+            "submit",
+            "cancel",
+            "export"
+          ]
+        }
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "id": "create_sales_order",
+      "description": "Sales creates a draft sales order",
+      "blueprintAction": "create",
+      "toEntity": "sales_order",
+      "engineMethod": "insert a draft Sales Order through the document API",
+      "idempotencyKeyParts": [
+        "tenant",
+        "mapping_version",
+        "client_request_id"
+      ],
+      "humanFloor": false
+    },
+    {
+      "id": "submit_sales_order",
+      "description": "Submit the sales order",
+      "blueprintAction": "submit",
+      "engineMethod": "submit the Sales Order document",
+      "idempotencyKeyParts": [
+        "tenant",
+        "sales_order",
+        "sales_order_revision"
+      ],
+      "preconditions": [
+        "order has at least one line",
+        "customer and items exist"
+      ],
+      "humanFloor": false
+    },
+    {
+      "id": "create_delivery_draft_from_order",
+      "description": "Warehouse creates the delivery draft from the order",
+      "blueprintAction": "create",
+      "fromEntity": "sales_order",
+      "toEntity": "delivery_note",
+      "engineMethod": "mapped document: make a Delivery Note from the Sales Order",
+      "idempotencyKeyParts": [
+        "tenant",
+        "sales_order",
+        "sales_order_revision"
+      ],
+      "preconditions": [
+        "sales order is submitted",
+        "delivered quantity does not exceed the ordered remaining quantity",
+        "stock on hand covers the quantity"
+      ],
+      "humanFloor": false
+    },
+    {
+      "id": "submit_delivery",
+      "description": "Warehouse submits the delivery; the engine posts the stock movement and the cost of goods entry",
+      "blueprintAction": "submit",
+      "engineMethod": "submit the Delivery Note document",
+      "idempotencyKeyParts": [
+        "tenant",
+        "delivery_note",
+        "delivery_note_revision"
+      ],
+      "preconditions": [
+        "a repeat submit creates no second movement"
+      ],
+      "humanFloor": true,
+      "expectedEffects": "docs/specs/golden-path-trading-sale.md section 5"
+    },
+    {
+      "id": "create_invoice_draft_from_delivery",
+      "description": "Finance creates the invoice draft from the delivery",
+      "blueprintAction": "create",
+      "fromEntity": "delivery_note",
+      "toEntity": "sales_invoice",
+      "engineMethod": "mapped document: make a Sales Invoice from the Delivery Note, with stock update switched off",
+      "idempotencyKeyParts": [
+        "tenant",
+        "delivery_note",
+        "delivery_note_revision"
+      ],
+      "preconditions": [
+        "the invoice must not move stock again",
+        "invoiced quantity does not exceed delivered quantity"
+      ],
+      "humanFloor": false
+    },
+    {
+      "id": "post_invoice",
+      "description": "Finance posts the invoice to the ledger",
+      "blueprintAction": "submit",
+      "engineMethod": "submit the Sales Invoice document",
+      "idempotencyKeyParts": [
+        "tenant",
+        "sales_invoice",
+        "sales_invoice_revision"
+      ],
+      "preconditions": [
+        "amounts equal the order and delivery lines",
+        "a repeat submit creates no second posting"
+      ],
+      "humanFloor": true,
+      "expectedEffects": "docs/specs/golden-path-trading-sale.md section 5"
+    }
+  ]
+}

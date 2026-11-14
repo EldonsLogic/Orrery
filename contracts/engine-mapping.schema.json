@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-mapping",
+  "title": "Blueprint-to-engine mapping",
+  "description": "Draft contract (BPL-029, proposed in ADR-0030). A versioned mapping from Blueprint entities, fields, roles and operations to the pinned engine's document types, fields, roles and actions. The compiler and the engine adapter both read it; the real-engine proof (ERP-021, ERP-022) checks it on the bench. Every engine-side name is UNVERIFIED until a bench run confirms it. The engine's own totals are authoritative: a mapped computed field names how the engine derives it, it does not ask the platform to recompute it.",
+  "version": "0.1.0",
+  "type": "object",
+  "required": ["version", "mappingId", "status", "blueprintRef", "engine", "entities", "roles", "operations"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$", "description": "Version of this mapping document (semantic versioning)." },
+    "mappingId": { "type": "string", "pattern": "^[a-z][a-z0-9_.-]*$" },
+    "status": { "enum": ["draft", "verified"], "description": "verified only after a bench run on the pinned engine passes the real-adapter checks." },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "benchRun": { "type": "string", "description": "Reference to the recorded bench run (a log or plan ID), or 'none'." },
+        "notes": { "type": "string" }
+      }
+    },
+    "blueprintRef": {
+      "type": "object",
+      "required": ["contract", "fixture"],
+      "additionalProperties": false,
+      "properties": {
+        "contract": { "type": "string", "description": "Blueprint schema version the mapping targets, for example 0.1.0." },
+        "fixture": { "type": "string", "description": "Path of the Blueprint file whose entity, field and role ids this mapping uses." }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "required": ["adapter", "versionSet"],
+      "additionalProperties": false,
+      "properties": {
+        "adapter": { "type": "string" },
+        "versionSet": { "type": "string", "description": "The pinned engine version set (ERP-001, ERP-004), or 'UNVERIFIED: not pinned yet'." }
+      }
+    },
+    "entities": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/entityMapping" } },
+    "roles": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/roleMapping" } },
+    "operations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/operation" } },
+    "unmapped": {
+      "type": "array",
+      "description": "Blueprint fields on mapped entities that this mapping deliberately does not cover yet.",
+      "items": {
+        "type": "object",
+        "required": ["blueprintEntity", "blueprintField", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "blueprintEntity": { "type": "string" },
+          "blueprintField": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "computed": {
+      "type": "object",
+      "description": "How the engine derives a computed field. The inputs, the aggregation over child lines and the recalculation triggers must be stated so a total can be traced to its lines.",
+      "required": ["authority", "expression", "inputs", "rounding"],
+      "additionalProperties": false,
+      "properties": {
+        "authority": { "const": "engine", "description": "The engine owns the number; the platform never recomputes it." },
+        "expression": { "type": "string", "description": "Plain arithmetic over the listed inputs, used only to document and to check golden numbers in tests." },
+        "inputs": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "aggregation": {
+          "type": "object",
+          "required": ["over", "function", "field"],
+          "additionalProperties": false,
+          "properties": {
+            "over": { "type": "string", "description": "Child relation id on this entity." },
+            "function": { "enum": ["sum"] },
+            "field": { "type": "string", "description": "Child field id that is aggregated." }
+          }
+        },
+        "rounding": {
+          "type": "object",
+          "required": ["precision", "mode"],
+          "additionalProperties": false,
+          "properties": {
+            "precision": { "type": "integer", "minimum": 0, "maximum": 6 },
+            "mode": { "enum": ["half_up", "half_even", "engine_default"] }
+          }
+        },
+        "recalculateOn": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "fieldMapping": {
+      "type": "object",
+      "required": ["blueprintField", "blueprintType", "engineType"],
+      "additionalProperties": false,
+      "properties": {
+        "blueprintField": { "type": "string" },
+        "blueprintType": { "type": "string" },
+        "engineField": { "type": ["string", "null"] },
+        "engineType": { "type": "string" },
+        "engineLinkDoctype": { "type": "string", "description": "For link fields: the engine document type linked to." },
+        "via": {
+          "type": "object",
+          "description": "The value lives on another engine document, for example the selling price on a price row.",
+          "required": ["engineDocType", "engineField", "key"],
+          "additionalProperties": false,
+          "properties": {
+            "engineDocType": { "type": "string" },
+            "engineField": { "type": "string" },
+            "key": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        },
+        "computed": { "$ref": "#/$defs/computed" },
+        "notes": { "type": "string" }
+      }
+    },
+    "entityMapping": {
+      "type": "object",
+      "required": ["blueprintEntity", "engineDocType", "kind", "submittable", "ledgerEffect", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "blueprintEntity": { "type": "string" },
+        "engineDocType": { "type": "string" },
+        "kind": { "enum": ["master", "document", "child"] },
+        "parent": {
+          "type": "object",
+          "required": ["blueprintEntity", "relation", "engineField"],
+          "additionalProperties": false,
+          "properties": {
+            "blueprintEntity": { "type": "string" },
+            "relation": { "type": "string" },
+            "engineField": { "type": "string", "description": "The parent's child-table field." }
+          }
+        },
+        "submittable": { "type": "boolean" },
+        "ledgerEffect": { "enum": ["none", "stock", "gl", "stock_and_gl"], "description": "What posting this document causes in the engine. The platform never writes these entries itself." },
+        "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fieldMapping" } }
+      }
+    },
+    "roleMapping": {
+      "type": "object",
+      "required": ["blueprintRole", "engineRole", "grants"],
+      "additionalProperties": false,
+      "properties": {
+        "blueprintRole": { "type": "string" },
+        "engineRole": { "type": "string", "description": "A role the adapter creates and owns; never a built-in engine role." },
+        "grants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["blueprintEntity", "actions"],
+            "additionalProperties": false,
+            "properties": {
+              "blueprintEntity": { "type": "string" },
+              "actions": { "type": "array", "items": { "type": "string" } },
+              "fieldMasks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["blueprintField", "access"],
+                  "additionalProperties": false,
+                  "properties": { "blueprintField": { "type": "string" }, "access": { "enum": ["none", "read"] } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "required": ["id", "blueprintAction", "engineMethod", "idempotencyKeyParts", "humanFloor"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "description": { "type": "string" },
+        "blueprintAction": { "type": "string" },
+        "fromEntity": { "type": "string" },
+        "toEntity": { "type": "string" },
+        "engineMethod": { "type": "string", "description": "The engine's supported document operation. Never a raw ledger write." },
+        "idempotencyKeyParts": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "preconditions": { "type": "array", "items": { "type": "string" } },
+        "humanFloor": { "type": "boolean", "description": "True when a person must approve this action (ADR-0027)." },
+        "expectedEffects": { "type": "string", "description": "Pointer to the expected ledger and stock results, for example a section of the golden path." }
+      }
+    }
+  }
+}

@@ -119,6 +119,28 @@ jobs:
       - name: Template tests
         run: python3 -m pytest services/discovery/tests -q
 
+  script-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - name: Script tests (phase exit check)
+        run: python3 -m pytest scripts/tests -q
+
+  dev-bench-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Dev bench contract, pin and entrypoint tests (live and networked build tests skip without a bench)
+        working-directory: infra/dev/docker
+        run: python3 -m unittest discover -s tests -v
+
   contracts:
     runs-on: ubuntu-latest
     steps:

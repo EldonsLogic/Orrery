@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 4 | 38 | 0 | 55 |
+| G0 | 13 | 5 | 38 | 0 | 56 |
 | G1 | 73 | 4 | 14 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 265 | 9 | 52 | 0 | 326 |
+| all | 265 | 10 | 52 | 0 | 327 |
 
 ## Built so far (done)
 
@@ -191,6 +191,7 @@ Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 - ERP-004: Version pin and upgrade policy document
 - ERP-005: Core module scope for trading and distribution (selling, buying, stock, accounts)
+- GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032)
 
 Ready next (dependencies done), by gate:
 - CE-SEC-005 (G1): Change engine: CI against a real Frappe bench instead of mocks
@@ -233,10 +234,12 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (eldon)
+- GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032) (partner)
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 (eldon)
 
 ## Last 10 log files
 
+- [2026-11-14-partner-claude-code-gov-040-founder-answers.md](log/2026-11-14-partner-claude-code-gov-040-founder-answers.md): Recorded the founders' answers to Q-17, Q-18 and Q-19 from the PR #48 comment: ADR-0031 accepted, new ADR-0032 accepted. Applied Eldon's review of #48 and merged main.
 - [2026-11-14-partner-claude-code-erp-005-review-fixes.md](log/2026-11-14-partner-claude-code-erp-005-review-fixes.md): Applied Eldon's review of PR #49. The ERP-005 row is back to `doing`, the spec now says Desk hiding is not enforcement, and the Q-22 question now covers negative amounts.
 - [2026-11-14-partner-claude-code-erp-004-review-fixes.md](log/2026-11-14-partner-claude-code-erp-004-review-fixes.md): Applied Eldon's review of PR #50. ERP-004 is back to `doing`, Q-25 now has the engine's own MariaDB support range, and the MariaDB move is a new plan row (ERP-024).
 - [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
@@ -244,9 +247,8 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-14-partner-antigravity-erp-005-core-module-scope.md](log/2026-11-14-partner-antigravity-erp-005-core-module-scope.md): Defined the v1 core module, doctype, report, print format, and configuration-guardrail scope for trading and distribution in `docs/specs/core-module-scope-trading.md`, grounded in read-only inspection of the pinned synthetic bench.
 - [2026-11-14-partner-antigravity-erp-004-version-policy.md](log/2026-11-14-partner-antigravity-erp-004-version-policy.md): Drafted `docs/architecture/engine-version-policy.md` for ERP-004 covering the current pinned engine/dependency set, pin immutability rules, upstream lifecycle facts cited as of 2026-11-14 (flagging MariaDB 10.6 Community EOL on 2026-07-06), upgrade classes, gate-based upgrade/rollback procedure, security exposure rules, governance interactions, and open founder decisions.
 - [2026-11-14-eldon-claude-code-close-merged-rows.md](log/2026-11-14-eldon-claude-code-close-merged-rows.md): Closed the plan rows whose work merged in PRs 44, 45 and 46, as the plan rules require.
+- [2026-11-13-partner-claude-code-post-merge-review-and-q17-q19.md](log/2026-11-13-partner-claude-code-post-merge-review-and-q17-q19.md): Post-merge cross-model review (Opus against the Sonnet author) of Eldon's merged PRs #44, #45 and #46, which the partner had approved verbally; review posted as PR comments, with a correction that the approval was given; open question Q-17 on recording approvals as GitHub reviews.
 - [2026-11-11-partner-codex-erp-001-rebase.md](log/2026-11-11-partner-codex-erp-001-rebase.md): Rebased ERP-001 on current main and claimed the row for the partner; the bench remains under verification.
-- [2026-11-11-partner-codex-erp-001-preflight.md](log/2026-11-11-partner-codex-erp-001-preflight.md): Reviewed the ERP-001 bench and the golden path using cached image metadata; the live bench proof remains open.
-- [2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md](log/2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md): Wrote the phased delivery document with lanes and the phase to gate map, four proposed ADRs, 19 new plan rows and the phase exit plan rows, for the partner to review.
 
 ## ADRs with status Proposed
 

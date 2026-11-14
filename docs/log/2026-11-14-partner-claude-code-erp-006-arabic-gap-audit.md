@@ -30,4 +30,4 @@ Measured Arabic coverage of the v1 trading scope on the pinned bench: the shippe
 Not measured.
 
 ## Next step
-ERP-006: fix runtime loading of compiled catalogues in infra/dev/docker after #39 merges (section 6 task 1), then supply missing strings as configuration and get the accountant terminology review (Q-28).
+ERP-006: runtime loading is fixed in PR #39 (section 6 task 1). Next, supply missing strings as configuration and get the accountant terminology review (Q-28).

@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 11 | 11 | 34 | 0 | 56 |
+| G0 | 11 | 12 | 34 | 0 | 57 |
 | G1 | 73 | 4 | 14 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 263 | 16 | 48 | 0 | 327 |
+| all | 263 | 17 | 48 | 0 | 328 |
 
 ## Built so far (done)
 
@@ -65,7 +65,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GTM-001: Niche decision: trading and distribution first
 - GOV-031: Four phase-1 markets, no fixed launch order: ADR-0024, rules, docs, code defaults for QA, partner notified
 - GOV-032: Independent founder lanes: every open row owned, no cross-founder dependency inside a gate, interface rows, plan check in CI (ADR-0025)
-- GOV-040: Contracts check script: every contract schema valid, examples validate, refs resolve; CI job
+- GOV-041: Contracts check script: every contract schema valid, examples validate, refs resolve; CI job
 
 ## Ready to start (todo, all dependencies done), by gate
 
@@ -183,6 +183,7 @@ Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 - ERP-004: Version pin and upgrade policy document
 - ERP-005: Core module scope for trading and distribution (selling, buying, stock, accounts)
+- GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032)
 
 Ready next (dependencies done), by gate:
 - CE-SEC-005 (G1): Change engine: CI against a real Frappe bench instead of mocks
@@ -230,21 +231,22 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety (eldon)
 - GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests) (eldon)
 - GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows (eldon)
+- GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032) (partner)
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 (eldon)
 - BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022 (eldon)
 
 ## Last 10 log files
 
+- [2026-11-14-partner-claude-code-gov-040-founder-answers.md](log/2026-11-14-partner-claude-code-gov-040-founder-answers.md): Recorded the founders' answers to Q-17, Q-18 and Q-19 from the PR #48 comment: ADR-0031 accepted, new ADR-0032 accepted. Applied Eldon's review of #48 and merged main.
 - [2026-11-14-partner-claude-code-erp-005-review-fixes.md](log/2026-11-14-partner-claude-code-erp-005-review-fixes.md): Applied Eldon's review of PR #49. The ERP-005 row is back to `doing`, the spec now says Desk hiding is not enforcement, and the Q-22 question now covers negative amounts.
 - [2026-11-14-partner-claude-code-erp-004-review-fixes.md](log/2026-11-14-partner-claude-code-erp-004-review-fixes.md): Applied Eldon's review of PR #50. ERP-004 is back to `doing`, Q-25 now has the engine's own MariaDB support range, and the MariaDB move is a new plan row (ERP-024).
 - [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
 - [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
 - [2026-11-14-partner-antigravity-erp-005-core-module-scope.md](log/2026-11-14-partner-antigravity-erp-005-core-module-scope.md): Defined the v1 core module, doctype, report, print format, and configuration-guardrail scope for trading and distribution in `docs/specs/core-module-scope-trading.md`, grounded in read-only inspection of the pinned synthetic bench.
 - [2026-11-14-partner-antigravity-erp-004-version-policy.md](log/2026-11-14-partner-antigravity-erp-004-version-policy.md): Drafted `docs/architecture/engine-version-policy.md` for ERP-004 covering the current pinned engine/dependency set, pin immutability rules, upstream lifecycle facts cited as of 2026-11-14 (flagging MariaDB 10.6 Community EOL on 2026-07-06), upgrade classes, gate-based upgrade/rollback procedure, security exposure rules, governance interactions, and open founder decisions.
+- [2026-11-14-eldon-claude-code-renumber-contracts-check-row.md](log/2026-11-14-eldon-claude-code-renumber-contracts-check-row.md): Renumbered this branch's "Contracts check script" row again, from GOV-040 to GOV-041, because #48 merged to `main` using GOV-040 for the founder answers. Earlier logs that say GOV-033 or GOV-040 for the contracts check mean GOV-041 (logs are append-only).
 - [2026-11-14-eldon-claude-code-merge-main-into-adapter-contracts.md](log/2026-11-14-eldon-claude-code-merge-main-into-adapter-contracts.md): Merged `main` into the BPL-025/BPL-026 draft branch (PR 40) so it no longer conflicts. The draft contracts themselves are unchanged.
 - [2026-11-14-eldon-claude-code-bpl-025-fake-adapter.md](log/2026-11-14-eldon-claude-code-bpl-025-fake-adapter.md): Built the in-memory fake of the engine adapter (all ten operations, journaled recoverable apply of ADR-0028, idempotency, per-site lock, tenant from context only, fail closed) and the conformance suite: one pytest test per ADP-C-001 to ADP-C-070, run through an `AdapterHarness` so the real adapter (BPL-012, ERP-012) can run the same tests via `ADAPTER_HARNESS=module:factory`. 193 adapter tests and the whole `services/blueprint/tests` suite pass (615). Nothing here is verified on an engine (UNVERIFIED). Branch `bpl-025-fake-adapter` is cut from `bpl-025-026-adapter-contracts` (PR 40, draft); not committed or pushed.
-- [2026-11-14-eldon-claude-code-adapter-adr-0028-wording.md](log/2026-11-14-eldon-claude-code-adapter-adr-0028-wording.md): Reworded the draft adapter and build-states contracts from "atomic apply and inverse for every change" to the journaled, recoverable apply of ADR-0028 (Proposed). Wording only: no schema, step or test id changed.
-- [2026-11-11-partner-codex-erp-001-rebase.md](log/2026-11-11-partner-codex-erp-001-rebase.md): Rebased ERP-001 on current main and claimed the row for the partner; the bench remains under verification.
 
 ## ADRs with status Proposed
 

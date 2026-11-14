@@ -13,10 +13,15 @@ DB_PORT="${DB_PORT:-3306}"
 REDIS_CACHE_HOST="${REDIS_CACHE_HOST:-redis-cache}"
 REDIS_QUEUE_HOST="${REDIS_QUEUE_HOST:-redis-queue}"
 
-echo "=== Initializing Orrery Engine Dev Environment (Frappe/ERPNext/HRMS v15) ==="
+echo "=== Initializing the platform engine dev environment (Frappe/ERPNext/HRMS v15) ==="
 
 # 1. Generate common_site_config.json if not present or needs update
 mkdir -p "${SITES_DIR}"
+
+# Link the image's built assets and compiled translations into sites/, as the
+# upstream image entrypoint does; the engine reads them from sites/assets.
+rm -rf "${SITES_DIR}/assets"
+ln -s "${BENCH_DIR}/assets" "${SITES_DIR}/assets"
 cat <<EOF > "${CONFIG_FILE}"
 {
   "db_host": "${DB_HOST}",

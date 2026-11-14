@@ -16,7 +16,7 @@ A module, doctype, report, or setting earns a place in v1 only if it traces to a
 
 Everything else in the engine stays **hidden by configuration** (module profiles, role permissions, workspaces, domain settings), never by forking the engine or writing per-client code ([ADR-0008](../decisions/ADR-0008-no-client-specific-code.md)). Tenant users never access the engine's Desk or portal directly; all customer traffic goes through the platform gateway and web app ([ADR-0016](../decisions/ADR-0016-engine-invisibility.md), `ERP-020`).
 
-Statuses: `in scope` (compiled/exposed in v1), `hidden` (present in engine, blocked from tenant roles/UI/tool API), `deferred` (reserved for a later gate or row).
+Statuses: `in scope` (compiled/exposed in v1), `hidden` (present in engine, blocked from tenant roles/UI/tool API), `deferred` (reserved for a later gate or row), `system-only` (must stay enabled for the engine to work, but no tenant role or tool gets any permission on it).
 
 ## 2. DocType scope by area
 
@@ -62,7 +62,7 @@ Child tables (`istable=1`) are listed in parentheses under their parent so `ERP-
 | `Material Request` (Sub; `Material Request Item`) | in scope | G2 | Stock | Reorder and internal purchase/transfer requests ([module-map](../product/module-map.md)) |
 | `Stock Ledger Entry`, `Bin` | in scope | G1 | Stock | Read-only engine ledger & bin qty; `ERP-014`/`ERP-015` checks |
 | `Stock Settings` (S) | in scope | G1 | Stock | Valuation method, negative-stock block, over-delivery block |
-| `Repost Item Valuation` (Sub), `Stock Reposting Settings` (S) | in scope | G1 | Stock | Engine internal valuation reposting (system-only, hidden from tenant roles) |
+| `Repost Item Valuation` (Sub), `Stock Reposting Settings` (S) | system-only | G1 | Stock | Must stay enabled because the engine queues valuation reposts after back-dated stock entries. No tenant role gets any permission on these doctypes, and neither does the tool API (PROPOSED). |
 | `Batch`, `Serial and Batch Bundle` (Sub) | hidden | - | Stock | Optional per tenant (`module-map`: batches optional); enabled only via `ERP-011` component (PROPOSED) |
 | `Landed Cost Voucher` (Sub) | hidden | - | Stock | Import landed-cost allocation; deferred/optional `ERP-011` candidate (PROPOSED) |
 | `Serial No`, `Quality Inspection*`, `Pick List`, `Packing Slip`, `Delivery Trip`, `Delivery Settings` (S), `Shipment*`, `Putaway Rule`, `Item Alternative`, `Item Attribute`, `Item Variant Settings` (S), `Item Manufacturer`, `Manufacturer`, `Customs Tariff Number`, `Inventory Dimension`, `Quick Stock Balance` (S), `Closing Stock Balance`, `Stock Reservation Entry`, `UOM Category` | hidden | - | Stock | Advanced warehousing, variants, QA, and shipping logistics out of v1 trading scope |
@@ -165,7 +165,7 @@ Observed on bench: `hrms` `15.64.8` exposes 78 `HR` doctypes and 22 `Payroll` do
 
 All settings and fields below were observed on `erp001.localhost` (values shown are observed bench defaults vs required v1 configuration):
 
-1. **Module and UI hiding (configuration, no fork)**:
+1. **Module and UI hiding (configuration, no fork). This is not enforcement.** The settings in this item change only what Desk shows, and tenants never use Desk (`ADR-0016`). They tidy the internal view but block nothing. A tenant or agent can still reach a hidden doctype through the engine's API unless role permissions deny it (item 2, `ERP-008`) and the gateway or tool allow-list refuses it (`PLT-024`). Enforcement rests on those two layers. `Employee` sits in the `Setup` module, which cannot be blocked, so a Module Profile cannot hide it; G1 relies on role permissions alone for `Employee`.
    - `Module Profile` (`block_modules` table using `Block Module`) assigned on `User.module_profile`: block all out-of-scope `Module Def` names (`Manufacturing`, `Projects`, `Assets`, `CRM`, `Support`, `Subcontracting`, `Quality Management`, `Maintenance`, `Website`, `Portal`, `EDI`, `HR`, `Payroll`, `Regional`).
    - `Domain Settings` (`active_domains` table; observed `Domain` records: `Manufacturing`, `Retail`): keep empty so domain-specific doctypes/fields stay inactive.
    - `Workspace` (`is_hidden = 1` on unused workspaces) and `Role.desk_access = 0` for all tenant roles (`ERP-020`).

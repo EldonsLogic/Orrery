@@ -10,7 +10,7 @@ Measured read-only on 2026-11-14 on the pinned synthetic bench (site `erp001.loc
 ## 1. Headline
 
 1. **Arabic does not load on the bench at runtime.** The engine looks for compiled catalogues in `sites/assets/locale` (`frappe/gettext/translate.py`, `get_locale_dir`). On our bench that folder does not exist: the compiled `frappe.mo` and `erpnext.mo` sit in `assets/locale/ar/LC_MESSAGES` at the bench root, The upstream image's entrypoint (`/usr/local/bin/entrypoint.sh`) creates the link `sites/assets -> assets` at startup; our `infra/dev/docker/entrypoint.sh` replaces that entrypoint and does not create the link. The same missing link means the bench serves no built static assets either. There is no compiled `hrms.mo` at all, because the Dockerfile installs HRMS with pip and never compiles its catalogue into `assets/locale`. The engine's own loader (`get_translations_from_apps("ar")`) returned **0** strings. There are **0** `Translation` records for `ar` on the site. This was a bench defect, not a gap in upstream translations; it is fixed in PR #39 (section 6, task 1).
-2. **The shipped Arabic source catalogues cover the in-scope screens well.** Of 1922 unique in-scope strings, 1770 (92.1%) have a non-fuzzy Arabic entry in the shipped `ar.po` files; 152 are missing. All 30 unconditional in-scope report names are translated, and so is the batch-only `Batch-Wise Balance History`.
+2. **The shipped Arabic source catalogues cover the in-scope screens well.** Of 1922 unique in-scope strings, 1770 (92.1%) have a non-fuzzy Arabic entry in the shipped `ar.po` files, and 152 do not. 45 of those 152 are not translatable text (section 3.1). **The real translation gap is 107 strings** (1,770 of 1,877 translatable strings covered, 94.3%). All 30 unconditional in-scope report names are translated, and so is the batch-only `Batch-Wise Balance History`.
 3. **Most of the gap is in settings screens** (`Accounts Settings` 32 missing, `Stock Settings` 27, `Buying Settings` 12, `Selling Settings` 9). Tenants never see these screens directly; the platform configures them. The gap on the transaction screens (orders, invoices, delivery notes, payments) is small.
 4. **Coverage is not correctness.** No one has checked that the existing Arabic accounting and tax terms are right. That needs a human Arabic-speaking accountant (section 5).
 
@@ -36,7 +36,27 @@ Measured read-only on 2026-11-14 on the pinned synthetic bench (site `erp001.loc
 | **Unique strings overall** | 1922 | 1770 | 152 | 92.1% |
 | Report names (30) | 30 | 30 | 0 | 100.0% |
 
-Missing by kind: 107 labels, 45 select options, 25 descriptions, 0 doctype names (counted per doctype).
+Missing by kind: 107 labels, 45 select options, 25 descriptions, 0 doctype names (counted per doctype). The 107 labels here is a coincidence with the 107 strings below; the two counts measure different things.
+
+### 3.1 Not translatable: excluded from the work
+
+45 of the 152 missing unique strings are codes or formats, not text. Translating them would be wrong and could break things:
+- 31 naming-series and number-format patterns, for example `CUST-.YYYY.-`, `ACC-SINV-.YYYY.-`, `PRLE-.####`, `#,###.##` and `#.###,##`. The engine parses these. A translated pattern would change document numbers or number display.
+- 10 barcode type codes: `EAN`, `EAN-8`, `EAN-12`, `GS1`, `GTIN`, `ISBN-10`, `ISBN-13`, `ISSN`, `PZN`, `UPC-A`.
+- 2 valuation-method codes: `FIFO` and `LIFO`. These are standard abbreviations, and `Moving Average`, the method chosen under Q-21, is translated.
+- 2 internal tree fields: `Lft` and `Rgt` on `Account` and `Company`. No tenant ever sees them.
+
+That leaves **107 translatable strings missing** (103 label entries and 24 description entries, counted per doctype). By area:
+
+| Area | Missing (all) | Not translatable | Missing translatable | Coverage of translatable |
+|---|---|---|---|---|
+| Selling | 20 | 3 | 17 | 96.9% |
+| Buying | 22 | 2 | 20 | 94.2% |
+| Stock | 56 | 22 | 34 | 96.9% |
+| Accounts | 66 | 10 | 56 | 96.2% |
+| Setup and masters | 13 | 12 | 1 | 99.7% |
+
+This is approximate in one direction. Only the missing strings were classified, so patterns the shipped `ar.po` happens to "translate" are still counted as covered. One Accounts Settings description holds an HTML link (`Learn about <a href=...>Common Party</a>`). It is counted as translatable, because its words need Arabic.
 
 ## 4. Missing strings (complete list)
 
@@ -100,11 +120,11 @@ Mechanisms observed in the engine: compiled gettext catalogues per app (`.mo` un
 
 1. **Fix runtime loading on the bench** (partner, `infra/dev/docker`). Make compiled catalogues available under `sites/assets/locale` and compile HRMS's catalogue at build time. Check: `get_translations_from_apps("ar")` returns more than 0 strings and a known label renders in Arabic. Done in PR #39 (ERP-001): the entrypoint now creates the link and the build compiles the HRMS catalogue; with the rebuilt image the engine loads 16,144 Arabic strings, including HRMS labels. The running bench uses the earlier image until it is recreated.
 2. **Make this audit a script with a plan row** in `scripts/` or `infra/dev/docker` so CI can rerun it on every version bump (ERP-004 gate 6). Check: same numbers as section 3 on the same pins.
-3. **Supply the 152 missing strings** as site `Translation` records shipped through configuration (country pack or base component), not per tenant. Draft wording PROPOSED by a model, then approved by a human. Check: coverage 100% on the in-scope list.
+3. **Supply the 107 translatable missing strings** (section 3.1) as site `Translation` records shipped through configuration (country pack or base component), not per tenant. Never add translations for the 45 codes and formats. Draft wording PROPOSED by a model, then approved by a human. Check: 100% coverage of the translatable in-scope strings, and no `Translation` record for any naming-series, number-format or code string.
 4. **Accountant terminology review** of the accounting and tax terms in scope, per market where wording differs. Check: signed review list in the repo; corrections shipped as `Translation` records.
 5. **Platform-side mapping** of engine errors and labels that pass through the gateway into platform i18n keys (with PLT-024). Check: no untranslated engine text in Arabic UI tests.
 
 ## 7. Open questions
 
-- Q-28: Who is the Arabic-speaking accountant reviewer for terminology, and do KSA, UAE, Egypt and Qatar need different wording for any terms? (added to [open-questions.md](../open-questions.md))
+- Q-28: Who reviews the Arabic terminology? Answered by the founders on 2026-11-14 (PR #48 comment). A native Arabic speaker reviews the Phase 1A invoice. The accountant terminology review (task 4) can wait until Phase 2. Q-28 sits with the other accountant reviews (BPL-028, LEG-019, CMP-032), so one reviewer search covers all of them.
 - Q-29: Should missing strings be contributed upstream as well as shipped as our own `Translation` records? (added to [open-questions.md](../open-questions.md))

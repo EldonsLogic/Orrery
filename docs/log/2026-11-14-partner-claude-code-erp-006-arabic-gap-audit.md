@@ -15,7 +15,7 @@ Measured Arabic coverage of the v1 trading scope on the pinned bench: the shippe
 
 ## Decisions
 - None. Tasks in section 6 of the spec are PROPOSED.
-- The Codex delegate (GPT-6.1 Terra) found the catalogues but did not finish; this session computed the numbers and wrote the spec. Cross-model review is still owed: the other founder should review with a model other than Claude.
+- The Codex delegate (GPT-6.1 Terra) found the catalogues but did not finish; this session computed the numbers and wrote the spec. The cross-model review (Antigravity, Gemini) was done later in this session and applied; see the Review section below. A second non-Claude review of the final text follows in the review-fixes log.
 
 ## Evidence (2026-11-14, read-only, synthetic site erp001.localhost)
 - Shipped `ar.po` (frappe, erpnext, hrms): 15,996 non-empty entries (15,846 differ from English), 0 fuzzy.

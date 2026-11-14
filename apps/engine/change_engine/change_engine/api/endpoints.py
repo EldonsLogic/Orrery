@@ -128,8 +128,19 @@ _REGISTRABLE_POLICY_FIELDS = (
 
 
 def _in_frappe_request() -> bool:
-    """True inside a Frappe request or job (a session user always exists there, Guest at least)."""
-    return bool(frappe is not None and getattr(getattr(frappe, "session", None), "user", None))
+    """True inside a Frappe runtime: a session user or a request site exists.
+
+    Detected independently of the session, so a Frappe context with a missing or malformed
+    session is still treated as Frappe (no roles, caller context refused), never as standalone.
+    """
+    if frappe is None:
+        return False
+    try:
+        if getattr(getattr(frappe, "session", None), "user", None):
+            return True
+        return bool(getattr(getattr(frappe, "local", None), "site", None))
+    except Exception:
+        return True  # an unreadable Frappe context is treated as Frappe, with no identity
 
 
 def _reject_caller_context(kwargs: Optional[Dict[str, Any]]) -> None:
@@ -170,7 +181,7 @@ def _require_admin_caller(kwargs: Optional[Dict[str, Any]] = None) -> None:
 
 def _policy_actor(kwargs: Optional[Dict[str, Any]]) -> str:
     if _in_frappe_request():
-        return str(frappe.session.user)
+        return str(getattr(getattr(frappe, "session", None), "user", None) or "Guest")
     return str((kwargs or {}).get("actor") or "System")
 
 

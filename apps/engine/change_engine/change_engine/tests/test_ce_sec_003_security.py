@@ -253,5 +253,48 @@ class TestMigration(unittest.TestCase):
         self.assertNotIn("CREATE TABLE", store_src)
 
 
+class TestReviewFollowUps(unittest.TestCase):
+    """Findings from the different-model review of the first fix."""
+
+    def setUp(self):
+        self._orig_frappe = endpoints.frappe
+        policy_catalog.reset()
+
+    def tearDown(self):
+        endpoints.frappe = self._orig_frappe
+        policy_catalog.reset()
+
+    def test_store_refuses_to_delete_a_tier0_row(self):
+        store = store_module.policy_store
+        store._sites.setdefault("default", {})["TIER0_SO_CREDIT_LIMIT_BYPASS"] = _policy("TIER0_SO_CREDIT_LIMIT_BYPASS")
+        with self.assertRaises(PermissionError):
+            store.delete_policy("TIER0_SO_CREDIT_LIMIT_BYPASS")
+        self.assertIn("TIER0_SO_CREDIT_LIMIT_BYPASS", store._sites["default"])
+
+    def test_frappe_context_without_session_is_not_standalone(self):
+        f = types.SimpleNamespace(session=None, local=types.SimpleNamespace(site="tenant_a.localhost"),
+                                  get_roles=lambda _u: ["System Manager"])
+        endpoints.frappe = f
+        with self.assertRaises(PermissionError):
+            endpoints.register_runtime_policy(_policy(), caller_roles=["System Manager"])
+        with self.assertRaises(PermissionError):
+            endpoints.get_runtime_policies(doctype="Sales Order")
+
+    def test_frappe_runtime_without_db_interface_fails_closed(self):
+        broken = types.SimpleNamespace(db=types.SimpleNamespace(), local=types.SimpleNamespace(site="tenant_a.localhost"))
+        store = PolicyStore(frappe_module=broken)
+        for call in (lambda: store.get_policies(doctype="Sales Order"), lambda: store.get_policy("X"),
+                     lambda: store.get_audit_trail(), lambda: store.save_policy(_policy())):
+            with self.assertRaises(PolicyStoreError):
+                call()
+
+    def test_creation_does_not_upsert(self):
+        """A new policy is a plain INSERT, so a concurrent creation fails instead of overwriting."""
+        db = _RecordingDB()
+        PolicyStore(frappe_module=types.SimpleNamespace(db=db)).save_policy(_policy())
+        insert = next(q for q in db.queries if q.startswith("INSERT INTO `tabChange Engine Policy`"))
+        self.assertNotIn("ON DUPLICATE KEY UPDATE", insert)
+
+
 if __name__ == "__main__":
     unittest.main()

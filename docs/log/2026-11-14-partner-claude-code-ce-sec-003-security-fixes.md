@@ -58,6 +58,25 @@ Should-fix items:
 - **The patch through `bench migrate`.** The patch ran by direct call, not through `bench migrate` with the app installed from this branch.
 - **The HTTP surface.** The whitelisted endpoints were not called over HTTP through the gateway.
 
+## Different-model review (Codex, GPT-6.1 Terra) and follow-up fixes
+The review said not to merge yet. It found three blocking items, all fixed in this session:
+1. **The store could delete a persisted Tier 0 row** if called directly. `delete_policy` now refuses `TIER0_` ids. Test added.
+2. **A Frappe context without a session user was treated as standalone.** Frappe is now detected by the session user or by the request site. A Frappe context with no session gets no roles and has caller context refused. Test added.
+3. **A broken database interface fell back to the in-memory store.** The store now uses memory only when it is explicitly standalone, meaning there is no Frappe request site. Inside a Frappe runtime, a missing `db.sql` raises `PolicyStoreError`. Test added.
+
+Should-fix from the same review:
+- **Creating a policy is now a plain INSERT** (no upsert). A concurrent creation of the same id now fails on the unique key instead of overwriting it at revision 1. A real concurrent run is still not done.
+- **Audit immutability is by convention only.** It stays documented as such.
+
+Evidence after the fixes:
+- 111 unit tests, OK (24 in the security file).
+- The live check on the synthetic bench passes again: revisions 1 and 2, Tier 0 and site mismatch refused, rollback clean.
+
+Side note on the test suite:
+- The existing test `test_live_mariadb_suite_b`, already on main, logs in to any MariaDB on `127.0.0.1:3306` as root/admin by default and creates its own database `ce_poc_db`.
+- On this machine that port belongs to the old prototype's local database container, not the platform bench, so this session's runs and the reviewer's touched only `ce_poc_db` there.
+- Nothing was deleted. The test should skip unless it is explicitly enabled; that change is proposed as a follow-up, not part of this PR.
+
 ## Decisions
 - None.
 

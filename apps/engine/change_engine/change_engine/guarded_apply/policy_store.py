@@ -106,10 +106,26 @@ class PolicyStore:
             and getattr(self._frappe.db, "sql", None) is not None
         )
 
+    def _require_backend(self) -> None:
+        """Use the in-memory store only when explicitly standalone (no Frappe request context).
+
+        Inside a Frappe runtime (a request site exists) a missing database interface is a
+        failure, never a reason to fall back to memory and skip persisted policies.
+        """
+        if self.is_live_frappe or self._frappe is None:
+            return
+        try:
+            site = getattr(getattr(self._frappe, "local", None), "site", None)
+        except Exception:
+            site = "unknown"
+        if site:
+            raise PolicyStoreError("Frappe runtime without a usable database interface (fail closed)")
+
     def get_policy(
         self, policy_id: str, site_id: Optional[str] = None, for_update: bool = False
     ) -> Optional[RuntimePolicy]:
         """Retrieves a single policy by ID for the site. Raises PolicyStoreError on a read error."""
+        self._require_backend()
         site = get_current_site_id(site_id)
         if self.is_live_frappe:
             lock = " FOR UPDATE" if for_update else ""
@@ -162,6 +178,7 @@ class PolicyStore:
         site_id: Optional[str] = None,
     ) -> List[RuntimePolicy]:
         """Retrieves policies for a site with optional doctype, stage, and active filters."""
+        self._require_backend()
         site = get_current_site_id(site_id)
         norm_stage = normalize_stage(stage)
 
@@ -232,6 +249,7 @@ class PolicyStore:
         """Saves (creates or updates) a policy for the site, incrementing revision and logging audit."""
         if policy.policy_id.upper().startswith("TIER0_") or policy.governance_tier != 1:
             raise PermissionError("Only Tier 1 policies are stored; Tier 0 invariants are built in")
+        self._require_backend()
         site = get_current_site_id(site_id)
         now_dt = datetime.datetime.now(datetime.timezone.utc)
         now_iso = now_dt.isoformat()
@@ -299,6 +317,7 @@ class PolicyStore:
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s
                     )
+                    """ + ("""
                     ON DUPLICATE KEY UPDATE
                         doctype = VALUES(doctype),
                         policy_type = VALUES(policy_type),
@@ -312,7 +331,7 @@ class PolicyStore:
                         revision = VALUES(revision),
                         updated_by = VALUES(updated_by),
                         updated_at = VALUES(updated_at)
-                    """,
+                    """ if existing else ""),
                     (
                         name,
                         saved_policy.policy_id,
@@ -377,7 +396,10 @@ class PolicyStore:
         actor: str = "System",
         site_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Deletes a policy from site storage and records an audit record."""
+        """Deletes a policy from site storage and records an audit record. Tier 0 ids are refused."""
+        if policy_id.upper().startswith("TIER0_"):
+            raise PermissionError("Tier 0 invariants cannot be deleted")
+        self._require_backend()
         site = get_current_site_id(site_id)
         existing = self.get_policy(policy_id, site_id=site, for_update=True)
         if not existing:
@@ -452,6 +474,7 @@ class PolicyStore:
         site_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Returns the audit trail for policies on a site."""
+        self._require_backend()
         site = get_current_site_id(site_id)
         if self.is_live_frappe:
             try:

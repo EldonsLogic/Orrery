@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 13 | 10 | 33 | 0 | 56 |
-| G1 | 73 | 3 | 15 | 0 | 91 |
+| G1 | 72 | 4 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 265 | 14 | 48 | 0 | 327 |
+| all | 264 | 15 | 48 | 0 | 327 |
 
 ## Built so far (done)
 
@@ -83,8 +83,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (34)
-- BPL-014: Component certification levels and test harness (owner eldon)
+**G1** (33)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
 - CE-SEC-005: Change engine: CI against a real Frappe bench instead of mocks (owner partner)
@@ -134,6 +133,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 
 Doing:
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise)
+- BPL-014: Component certification levels and test harness
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
@@ -156,7 +156,6 @@ Ready next (dependencies done), by gate:
 - LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
 - LEG-003 (G0): Engage counsel in KSA, UAE, Egypt and Qatar; scope of work
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
-- BPL-014 (G1): Component certification levels and test harness
 - BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
 - BRD-012 (G1): Icon set licence check
 - DAT-001 (G1): Data classification and retention policy
@@ -226,6 +225,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
+- BPL-014: Component certification levels and test harness (eldon)
 - ERP-004: Version pin and upgrade policy document (partner)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
@@ -241,6 +241,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-15-eldon-claude-code-adr-0034-reviewed-reviewer.md](log/2026-11-15-eldon-claude-code-adr-0034-reviewed-reviewer.md): Q-19 first step: a component at `reviewed` or above must name a reviewer in `reviewedBy`, and a ledger or tax component may wait for review at `tested` (proposed in ADR-0034). BPL-014 stays doing: the test harness part is not started.
 - [2026-11-14-partner-claude-code-gov-040-founder-answers.md](log/2026-11-14-partner-claude-code-gov-040-founder-answers.md): Recorded the founders' answers to Q-17, Q-18 and Q-19 from the PR #48 comment: ADR-0031 accepted, new ADR-0032 accepted. Applied Eldon's review of #48 and merged main.
 - [2026-11-14-partner-claude-code-erp-005-review-fixes.md](log/2026-11-14-partner-claude-code-erp-005-review-fixes.md): Applied Eldon's review of PR #49. The ERP-005 row is back to `doing`, the spec now says Desk hiding is not enforcement, and the Q-22 question now covers negative amounts.
 - [2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md](log/2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md): Recorded the founders' answers to Q-21, Q-22 and Q-28 in ADR-0033, confirmed the two engine settings on the bench, and closed ERP-005.
@@ -250,7 +251,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-14-partner-antigravity-erp-005-core-module-scope.md](log/2026-11-14-partner-antigravity-erp-005-core-module-scope.md): Defined the v1 core module, doctype, report, print format, and configuration-guardrail scope for trading and distribution in `docs/specs/core-module-scope-trading.md`, grounded in read-only inspection of the pinned synthetic bench.
 - [2026-11-14-partner-antigravity-erp-004-version-policy.md](log/2026-11-14-partner-antigravity-erp-004-version-policy.md): Drafted `docs/architecture/engine-version-policy.md` for ERP-004 covering the current pinned engine/dependency set, pin immutability rules, upstream lifecycle facts cited as of 2026-11-14 (flagging MariaDB 10.6 Community EOL on 2026-07-06), upgrade classes, gate-based upgrade/rollback procedure, security exposure rules, governance interactions, and open founder decisions.
 - [2026-11-13-partner-claude-code-post-merge-review-and-q17-q19.md](log/2026-11-13-partner-claude-code-post-merge-review-and-q17-q19.md): Post-merge cross-model review (Opus against the Sonnet author) of Eldon's merged PRs #44, #45 and #46, which the partner had approved verbally; review posted as PR comments, with a correction that the approval was given; open question Q-17 on recording approvals as GitHub reviews.
-- [2026-11-11-partner-codex-erp-001-rebase.md](log/2026-11-11-partner-codex-erp-001-rebase.md): Rebased ERP-001 on current main and claimed the row for the partner; the bench remains under verification.
 
 ## ADRs with status Proposed
 
@@ -260,3 +260,4 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [ADR-0028-recoverable-journaled-change-apply](decisions/ADR-0028-recoverable-journaled-change-apply.md)
 - [ADR-0029-engine-disclosure-wording-and-saas-only](decisions/ADR-0029-engine-disclosure-wording-and-saas-only.md)
 - [ADR-0030-blueprint-to-engine-mapping-contract](decisions/ADR-0030-blueprint-to-engine-mapping-contract.md)
+- [ADR-0034-reviewed-level-needs-a-named-reviewer](decisions/ADR-0034-reviewed-level-needs-a-named-reviewer.md)

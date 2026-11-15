@@ -121,3 +121,22 @@ def test_garbage_input_fails_closed():
     assert admitted == [] and issues == []
     reg = Registry.from_manifests([None, 5, [], {"id": 3}])
     assert reg.list_components() == []
+
+
+def test_reviewed_needs_a_named_reviewer():
+    """ADR-0034: a manifest never says reviewed when nobody is named."""
+    for reviewers in ([], None):
+        cert = {"level": "reviewed"}
+        if reviewers is not None:
+            cert["reviewedBy"] = reviewers
+        assert "REG-001" in codes(Registry.from_manifests([variant(certification=cert)]).errors)
+    ok = {"level": "reviewed", "reviewedBy": ["example-reviewer"]}
+    assert Registry.from_manifests([variant(certification=ok)]).ok
+
+
+def test_ledger_or_tax_component_may_wait_for_review_at_tested():
+    """ADR-0034: awaiting review is written as tested (sandbox only), never as reviewed."""
+    waiting = {"level": "tested", "touchesLedgerOrTax": True}
+    assert Registry.from_manifests([variant(certification=waiting)]).ok
+    draft = {"level": "draft", "touchesLedgerOrTax": True}
+    assert "REG-001" in codes(Registry.from_manifests([variant(certification=draft)]).errors)

@@ -40,3 +40,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0031-rigid-zone-code-authorship.md](ADR-0031-rigid-zone-code-authorship.md) | Who may write rigid-zone code, and what it must pass | Accepted |
 | [ADR-0032-approval-is-a-recorded-review.md](ADR-0032-approval-is-a-recorded-review.md) | Approval is a recorded GitHub review | Accepted |
 | [ADR-0033-v1-valuation-rounding-and-arabic-review.md](ADR-0033-v1-valuation-rounding-and-arabic-review.md) | v1 stock valuation, rounding and Arabic review defaults | Accepted |
+| [ADR-0034-reviewed-level-needs-a-named-reviewer.md](ADR-0034-reviewed-level-needs-a-named-reviewer.md) | A reviewed component names its reviewer | Proposed |

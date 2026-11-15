@@ -180,6 +180,38 @@ def site_at_rev1(h, tenant="t_alpha", site_class="production"):
 
 
 # ------------------------------------------------------------------ derived artifacts (stand-ins for the compiler)
+def invert_step(step: dict) -> dict | None:
+    """The inverse of one step as the compiler would emit it (None when this stand-in cannot invert the kind)."""
+    kind, inv = step["kind"], copy.deepcopy(step)
+    params = inv["params"]
+    if kind.endswith(".add"):
+        undo = next((kind[:-4] + ending for ending in (".quarantine", ".disable") if kind[:-4] + ending in _PHASE), None)
+        if undo is None:
+            return None
+        inv.update(kind=undo, phase=_PHASE[undo], impact="destructive", ddlImpact="none")
+    elif kind.endswith(".quarantine"):
+        inv.update(kind=kind[:-11] + ".add", phase=_PHASE[kind[:-11] + ".add"], impact="data_shape", ddlImpact="additive")
+    elif kind.endswith(".set_property"):
+        params["before"], params["after"] = step["params"]["after"], step["params"]["before"]
+    else:
+        return None
+    return inv
+
+
+def with_inverse(art: dict) -> dict:
+    """Give `art` the real inverse of its own steps (reverse order, renumbered), then seal it."""
+    inverse = [invert_step(s) for s in art["steps"]]
+    if None in inverse or not inverse:
+        return seal(art)
+    inverse = sorted(inverse, key=lambda s: (s["phase"], s["pointer"], s["kind"]))
+    for i, s in enumerate(inverse, 1):
+        s["seq"] = i
+    art["inverse"]["steps"] = inverse
+    art["inverse"]["postConditions"] = [{"id": f"pc_{i:03d}", "check": "quarantined" if s["kind"].endswith(".quarantine") else "disabled" if s["kind"].endswith(".disable") else "exists",
+                                         "pointer": s["pointer"]} for i, s in enumerate(inverse, 1) if s["kind"].endswith((".quarantine", ".disable", ".add"))]
+    return seal(art)
+
+
 def variant(steps: list[dict], pcs: list[dict] | None = None, template: str = "add-field", **risk) -> dict:
     """A sealed forward artifact (base revision 1) with the given steps, built from a sample so the rest is valid."""
     art = sample(template)
@@ -191,7 +223,7 @@ def variant(steps: list[dict], pcs: list[dict] | None = None, template: str = "a
         {"id": f"pc_{i:03d}", "check": "exists", "pointer": s["pointer"]} for i, s in enumerate(steps, 1)
         if s["kind"].endswith((".add", ".upsert"))]
     art["risk"].update(risk)
-    return seal(art)
+    return with_inverse(art)
 
 
 def field_step(entity: str, fid: str, kind="field.add", ftype="integer", **props) -> dict:

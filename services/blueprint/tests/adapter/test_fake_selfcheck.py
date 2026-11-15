@@ -6,6 +6,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from adapter import testkit as t
+from conftest import optional
 from adapter.contract import _REGISTRY, artifact_hashes, canon
 from adapter.harness import FakeHarness, make_harness
 
@@ -48,3 +49,23 @@ def test_default_harness_is_the_fake(monkeypatch):
     assert isinstance(make_harness(), FakeHarness)
     monkeypatch.setenv("ADAPTER_HARNESS", "adapter.harness:FakeHarness")
     assert isinstance(make_harness(), FakeHarness)
+
+
+def test_a_missing_required_capability_fails_the_run_instead_of_skipping():
+    import pytest
+    class Bare(FakeHarness):
+        def advance_time(self, seconds):
+            raise NotImplementedError
+
+    with pytest.raises(pytest.fail.Exception, match="INCOMPLETE CONFORMANCE RUN"):
+        optional(Bare().advance_time, 1)
+
+
+def test_the_fake_provides_every_harness_extension():
+    h = FakeHarness()
+    t.provision(h)
+    h.on_lock_held(lambda: None)
+    h.advance_time(1)
+    h.set_site_state("t_alpha", "failed")
+    assert isinstance(h.audit_log(), list) and h.dropped_data() == [] and isinstance(h.execution_journal(), list)
+    assert isinstance(h.without_test_hooks(), FakeHarness)

@@ -5,7 +5,7 @@ Status: draft. Owner: eldon. Contract: [contracts/engine-adapter.md](../../../co
 An in-memory fake of every adapter operation (`capabilities`, `provision_site`, `site_status`, `plan`, `preview`, `apply`, `rollback`, `export_config`, `sync_members`, `health`) and the pytest suite that holds any adapter to the contract. It models behaviour only; **nothing here is evidence about a real engine (UNVERIFIED until ERP-001 and BPL-012 run it on a bench).** Synthetic data only.
 
 ## What the fake does
-- `apply` and `rollback` run the six stages (acquire, inspect, prepare, execute, reconcile, finalize) with compensation. Each executed step is journaled (a snapshot before it); a failure compensates in reverse, then the export hash is compared with the pre-apply hash. A compensation failure, or a failed finalize, leaves the site `recovery_required`, which blocks later `apply`, `rollback` and `plan` (verdict `rejected`).
+- `apply` and `rollback` run the six stages (acquire, inspect, prepare, execute, reconcile, finalize) with compensation. Each step is journaled before it runs; a failure compensates in reverse order by running the matching step of the stored inverse (same pointer; an initial build has no inverse, so the fake derives the undo: additions quarantined or disabled, settings set back), then the export hash is compared with the pre-apply hash. Quarantined leftovers of compensated additions stay in `retained`. A missing or wrong inverse step makes the compensation fail (`recovery_required`). A compensation failure, or a failed finalize, leaves the site `recovery_required`, which blocks later `apply`, `rollback` and `plan` (verdict `rejected`).
 - One lock per site; keys are scoped (tenant, operation, key) and bound to the sha256 of the input; plan tokens bind tenant, artifact hash, export hash and adapter version, and expire.
 - Tenant comes only from `context.tenantId`. Unknown input keys, a bad context, a bad artifact hash, unknown versions and over-limit requests are refused before anything changes.
 - Removal is quarantine; a re-add with the same definition restores the element at its old position with its data. The fake never removes stored data.
@@ -20,7 +20,7 @@ Each test is named after its item: `test_adp_c_043_...` is ADP-C-043. The harnes
 
 ## Running the suite against another adapter
 Implement `AdapterHarness` ([harness.py](harness.py)) and point `ADAPTER_HARNESS=module:factory` at a zero-argument factory. The suite imports only the harness, the contract schemas and the canonical-hash helper, never adapter internals.
-Beyond section 15.1 (`call`, `fault`, `data_probe`, `auth_probe`, `action_probe`, `events`, `reset`) these ADP-C items need small extensions, all optional (a missing one skips that test and the skip is visible):
+Beyond section 15.1 (`call`, `fault`, `data_probe`, `auth_probe`, `action_probe`, `events`, `reset`) these ADP-C items need small extensions, all required: a harness that lacks one makes the tests that need it fail, and any skipped test fails the run, so a green run never hides a missing capability:
 
 | Extension | Used by | Meaning |
 |---|---|---|
@@ -29,6 +29,8 @@ Beyond section 15.1 (`call`, `fault`, `data_probe`, `auth_probe`, `action_probe`
 | `set_site_state(tenant, state)` | 017 | put a site in `provisioning` or `failed` |
 | `audit_log()` | 070 | audit records with `auditId` |
 | `dropped_data()` | 050 | pointers whose data an operation removed (must be empty) |
+| `plan_evidence(ref)` | 050 | the adapter's internal plan evidence (storage statements) for an `evidenceRef` |
+| `execution_journal()` | 047 | every step run, in order: `artifactId`, `seq`, `phase` (`execute` or `compensate`) |
 | `without_test_hooks()` | 069 | a production-like instance with no fault hooks |
 
 `fault(stage, ...)` stages: `prepare`, `execute` (with `step_seq`), `reconcile` (with `post_condition_id`), `finalize`, `deadline` (the deadline passes during `execute`: the call returns `timeout` after the artifact finished, and a retry with the same key returns the stored outcome). `during_compensation=True` makes the compensation that follows also fail.

@@ -198,6 +198,27 @@ def _set_path(doc: dict, prop: str, params: dict) -> None:
         cur.pop(segs[-1], None)
 
 
+def _statements(step: dict) -> list[str]:
+    """Simulated storage statements for a step, kept as internal plan evidence only. Removal is quarantine (a state flag),
+    so no statement ever drops or deletes stored data (contract principle 5)."""
+    kind, pointer = step["kind"], step["pointer"]
+    if kind == "entity.add":
+        return [f"CREATE TABLE store_{step['subject']['id']} (id VARCHAR PRIMARY KEY)"]
+    if kind == "field.add":
+        parent = step["subject"]["parents"][0]["id"]
+        return [f"ALTER TABLE store_{parent} ADD COLUMN {step['subject']['id']} NULL"]
+    if kind.endswith((".quarantine", ".disable")):
+        return [f"UPDATE element_state SET state = '{kind.rsplit('.', 1)[1]}d' WHERE pointer = '{pointer}'"]
+    return [f"UPDATE element_config SET value = ? WHERE pointer = '{pointer}'"]
+
+
+def _prune_empty(doc: dict) -> None:
+    for key in [k for k, v in doc.items() if isinstance(v, dict)]:
+        _prune_empty(doc[key])
+        if not doc[key]:
+            del doc[key]
+
+
 class _Site:
     def __init__(self, params: dict):
         self.state = "ready"
@@ -218,12 +239,6 @@ class _Site:
         self.idem: dict[tuple, tuple[str, dict]] = {}
         self.evidence: dict[str, list] = {}
 
-    def snapshot(self) -> dict:
-        return copy.deepcopy({"config": self.config, "retained": self.retained})
-
-    def restore(self, snap: dict) -> None:
-        self.config, self.retained = copy.deepcopy(snap["config"]), copy.deepcopy(snap["retained"])
-
     def status(self) -> dict:
         return {"state": self.state, "siteClass": self.site_class, "engineTarget": copy.deepcopy(self.engine_target),
                 "blueprintId": self.blueprint_id, "applied": copy.deepcopy(self.applied), "lockedBy": self.lock}
@@ -240,6 +255,7 @@ class FakeAdapter:
         self._faults: list[dict] = []
         self._lock_hook: Callable[[], None] | None = None
         self.dropped_data: list[str] = []  # nothing ever appends: the fake never removes stored data (ADP-C-050)
+        self._exec_log: list[dict] = []  # every step run, forward or compensating, in order: independent execution evidence (ADP-C-047)
 
     # ---------------------------------------------------------------- test hooks
     def _need_hooks(self):
@@ -270,6 +286,16 @@ class FakeAdapter:
                 raise ValueError("no active element at pointer")
             site.data[pointer] = value
         return site.data.get(pointer)
+
+    def plan_evidence(self, tenant_id, evidence_ref):
+        """Internal plan evidence (section 5.4): the storage statements a plan would run. Never part of a response."""
+        self._need_hooks()
+        return list(self.sites[tenant_id].evidence[evidence_ref])
+
+    def execution_journal(self):
+        """Every step this adapter ran, forward or compensating, kept apart from the export (ADP-C-047)."""
+        self._need_hooks()
+        return copy.deepcopy(self._exec_log)
 
     def auth_probe(self, tenant_id, member_ref):
         self._need_hooks()
@@ -586,7 +612,7 @@ class FakeAdapter:
         token = self._token(context["tenantId"], artifact["integrity"]["contentHash"], config_hash)
         site.tokens[token] = self.now
         evidence = "evd_" + hashlib.sha256(token.encode()).hexdigest()[:24]
-        site.evidence[evidence] = [f"{s['seq']}:{s['disposition']}" for s in result["steps"]]
+        site.evidence[evidence] = [stmt for step in artifact["steps"] for stmt in _statements(step)]
         return {"planToken": token, "artifactId": artifact["artifactId"], "siteConfigHash": config_hash,
                 "verdict": result["verdict"], "steps": result["steps"], "storage": result["storage"],
                 "evidenceRef": evidence, "expiresInSeconds": PLAN_TOKEN_TTL}, False
@@ -642,6 +668,10 @@ class FakeAdapter:
         if kind == "settings.set":
             doc = cfg["settings"].setdefault(segs[0], {})
             _set_path(doc, params["property"], params)
+            if "after" not in params:  # a property removed (an undone first set): leave no empty settings shell behind
+                _prune_empty(doc)
+                if not doc:
+                    del cfg["settings"][segs[0]]
         elif kind.endswith((".set_property", ".configure")):
             elem = _walk(cfg, segs)
             _set_path(elem, params["property"], params)
@@ -719,7 +749,6 @@ class FakeAdapter:
         def finish(status, error=None, hash_after=None):
             state.update(status=status, error=error, export_hash=hash_after)
 
-        pre_snapshot = site.snapshot()
         pre_hash = sha(self._export(site))
         try:
             self._inspect(context, inp, site, operation, forward, artifact)
@@ -730,7 +759,8 @@ class FakeAdapter:
                 steps = [{"seq": s["seq"], "status": "already_present"} for s in artifact["steps"]]
         else:
             stages.append({"stage": "inspect", "status": "done"})
-            self._execute_all(site, artifact, steps, pcs, stages, finish, pre_snapshot, pre_hash, timed_out, operation)
+            self._execute_all(site, artifact, steps, pcs, stages, finish, pre_hash, timed_out, operation,
+                              forward if operation == "rollback" else artifact.get("inverse"))
         if site.lock == op_id:
             site.lock = None
             if site.state == "applying":
@@ -799,12 +829,12 @@ class FakeAdapter:
         if issued is None or token != expected or self.now - issued > PLAN_TOKEN_TTL:
             reject("plan_token_invalid")
 
-    def _execute_all(self, site, artifact, steps, pcs, stages, finish, pre_snapshot, pre_hash, timed_out, operation="apply"):
+    def _execute_all(self, site, artifact, steps, pcs, stages, finish, pre_hash, timed_out, operation="apply", counterpart=None):
         if self._take_fault("prepare"):
             stages.append({"stage": "prepare", "status": "failed"})
             finish("failed_clean", AdapterError("engine_unavailable", stage="prepare").to_error())
             return
-        journal: list[tuple[int, dict]] = []  # (seq, snapshot taken before the step): the durable step journal
+        journal: list[dict] = []  # the durable step journal: one entry per step started, in execution order
         stages.append({"stage": "prepare", "status": "done"})
         failure: AdapterError | None = None
         comp_fault = False
@@ -813,14 +843,17 @@ class FakeAdapter:
             hook()
         for step, entry in zip(artifact["steps"], steps):
             seq = step["seq"]
-            journal.append((seq, site.snapshot()))
+            entry_j = {"artifactId": artifact["artifactId"], "seq": seq, "step": step, "executed": False, "before": self._read_prop(site, step)}
+            journal.append(entry_j)
             if self._take_fault("deadline", seq):
                 timed_out["v"] = True
             fault = self._take_fault("execute", seq)
             if fault:
                 entry["status"], failure, comp_fault = "failed", AdapterError("engine_unavailable", {"stepSeq": seq}, stage="execute"), fault["comp"]
                 break
+            self._exec_log.append({"artifactId": artifact["artifactId"], "seq": seq, "phase": "execute"})
             self._exec(site, step)
+            entry_j["executed"] = True
             entry["status"] = "applied"
         stages.append({"stage": "execute", "status": "failed" if failure else "done"})
         doc = self._export(site, None)
@@ -838,7 +871,7 @@ class FakeAdapter:
                     comp_fault = bool(fail_pc and fail_pc["comp"])
             stages.append({"stage": "reconcile", "status": "failed" if failure else "done"})
         if failure:
-            self._compensate(site, artifact, steps, stages, finish, journal, pre_snapshot, pre_hash, failure, comp_fault)
+            self._compensate(site, steps, stages, finish, journal, pre_hash, failure, comp_fault, counterpart)
             return
         if self._take_fault("finalize"):
             site.state = "recovery_required"
@@ -855,16 +888,59 @@ class FakeAdapter:
         stages.append({"stage": "finalize", "status": "done"})
         finish("applied", None, sha(self._export(site)))
 
-    def _compensate(self, site, artifact, steps, stages, finish, journal, pre_snapshot, pre_hash, failure, comp_fault):
+    @staticmethod
+    def _read_prop(site: _Site, step: dict):
+        """The value a settings.set step is about to overwrite, kept in the journal for steps that carry no stored inverse."""
+        if step["kind"] != "settings.set":
+            return None
+        cur = site.config["settings"].get(_segs(step["pointer"])[0], {})
+        for seg in _segs(step["params"]["property"]):
+            cur = cur.get(seg, _MISSING) if isinstance(cur, dict) else _MISSING
+        return _MISSING if cur is _MISSING else copy.deepcopy(cur)
+
+    @staticmethod
+    def _undo_for(entry: dict, counterpart: dict | None, used: set) -> dict:
+        """The step that undoes a journaled step: the matching step (same pointer and property) of the stored inverse
+        (section 5.6, compensate). An artifact with no stored inverse (initial build, base null) has none, so the undo is
+        derived from the step itself: additions are quarantined or disabled, settings are set back to what they were."""
+        step = entry["step"]
+        if counterpart is not None:
+            key = (step["pointer"], step["params"].get("property"))
+            for cand in counterpart["steps"]:
+                if id(cand) not in used and (cand["pointer"], cand["params"].get("property")) == key:
+                    used.add(id(cand))
+                    return cand
+            raise RuntimeError("the stored inverse has no step for " + step["pointer"])
+        kind = step["kind"]
+        if kind == "settings.set":
+            params = {"property": step["params"]["property"]}
+            if entry["before"] is not _MISSING:
+                params["after"] = entry["before"]
+            return {**step, "params": params}
+        if kind.endswith(".add"):
+            return {**step, "kind": kind[:-4] + ".quarantine"}
+        if kind.endswith((".upsert", ".enable")):
+            return {**step, "kind": kind.rsplit(".", 1)[0] + ".disable"}
+        raise RuntimeError("no stored inverse for " + kind)
+
+    def _compensate(self, site, steps, stages, finish, journal, pre_hash, failure, comp_fault, counterpart):
+        """Undo the journaled steps newest first by running their inverse steps; then check the active export equals the
+        pre-apply export. Quarantined leftovers of compensated additions stay in `retained` (section 5.6)."""
+        used: set = set()
         try:
-            for seq, snap in reversed(journal):
+            for entry in reversed(journal):
                 if comp_fault:
                     raise RuntimeError("compensation fault")
-                site.restore(snap)
-                next(s for s in steps if s["seq"] == seq)["status"] = "compensated" if seq != failure.details.get("stepSeq") else "failed"
+                status = next(s for s in steps if s["seq"] == entry["seq"])
+                if entry["executed"]:
+                    self._exec_log.append({"artifactId": entry["artifactId"], "seq": entry["seq"], "phase": "compensate"})
+                    self._exec(site, self._undo_for(entry, counterpart, used))
+                    status["status"] = "compensated"
+                else:
+                    status["status"] = "failed"  # the failing step never took effect in the fake
             if sha(self._export(site)) != pre_hash:
                 raise RuntimeError("compensated state differs from the pre-apply export")
-        except RuntimeError:
+        except Exception:  # any failed undo leaves a partial state a human must resolve
             site.state = "recovery_required"
             stages.append({"stage": "compensate", "status": "failed"})
             finish("recovery_required", AdapterError("recovery_required", stage="compensate").to_error())

@@ -73,11 +73,28 @@ def h():
 
 
 def optional(fn, *args, **kwargs):
-    """Call an optional harness extension; skip (visibly) when this harness does not provide it."""
+    """Call a harness extension the conformance run needs. A harness that lacks it FAILS the run: a missing
+    capability must never turn a required test into a skip (README.md lists the extensions)."""
     try:
         return fn(*args, **kwargs)
     except NotImplementedError:
-        pytest.skip(f"harness does not implement {getattr(fn, '__name__', 'extension')}")
+        pytest.fail(f"INCOMPLETE CONFORMANCE RUN: the harness does not implement {getattr(fn, '__name__', 'an extension')}, "
+                    "which a required ADP-C test needs", pytrace=False)
+
+
+_skipped: list[str] = []
+
+
+def pytest_runtest_logreport(report):
+    if report.skipped and "adapter/" in report.nodeid.replace("\\", "/"):
+        _skipped.append(report.nodeid)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """A conformance run with any skipped test is not a pass: it is explicitly incomplete."""
+    if _skipped and session.exitstatus == 0:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+        print(f"\nINCOMPLETE CONFORMANCE RUN: {len(_skipped)} test(s) skipped, so this run does not count as a pass: {_skipped[:5]}")
 
 
 def event_types(h, since=0):

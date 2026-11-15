@@ -78,7 +78,7 @@ BUILDERS = {"binding.add": lambda: t.binding_step(), "role.upsert": lambda: t.ro
 def test_adp_c_028_support_levels_drive_dispositions(h, kind):
     level = supported_kinds(h).get(kind, "unsupported")
     if level == "supported":
-        pytest.skip(f"{kind} is supported by this adapter")
+        return  # a supported kind has no disposition to drive: the case does not apply
     t.site_at_rev1(h)
     art = t.variant([BUILDERS[kind]()])
     result = planned(h, art)

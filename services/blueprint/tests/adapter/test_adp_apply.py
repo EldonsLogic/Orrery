@@ -1,5 +1,6 @@
 """ADP-C-034 to ADP-C-050: apply (journaled, recoverable) and quarantine."""
 import copy
+import re
 
 import pytest
 
@@ -53,7 +54,7 @@ def test_adp_c_036_missing_approvals(h):
     build = t.initial_build()
     plan = planned(h, build)
     if plan["verdict"] != "needs_gate_approval":
-        pytest.skip("initial build needs no gate on this adapter")
+        return  # this adapter needs no gate for the initial build: the missing-gate case does not exist (not a skip, not a claim)
     before, ev = t.snapshot(h), len(h.events())
     assert t.code_of(raw_apply(h, build, plan["planToken"], {"changeApproved": t.ulid()})) == "approval_missing"
     assert_no_effect(h, "t_alpha", before, ev, allow=FAILED)
@@ -158,6 +159,19 @@ def test_adp_c_042_concurrent_apply(h):
 
 
 # ---------------------------------------------------------------- failure and recovery
+NOTE_A, NOTE_B = "/entities/customer/fields/note_a", "/entities/customer/fields/note_b"
+
+
+def assert_compensated(h, before, leftovers=()):
+    """Section 5.6: the active export and the site status equal the pre-apply ones; quarantined leftovers of compensated
+    additions appear only in `retained`, and nothing else is retained."""
+    after = t.snapshot(h)
+    assert (after[0], after[2]) == (before[0], before[2])
+    retained = t.export(h)["retained"]
+    assert sorted(r["pointer"] for r in retained) == sorted(leftovers)
+    assert all(r["state"] in ("quarantined", "disabled") for r in retained)
+
+
 def failed_outcome(h, fault_args, art=None):
     t.site_at_rev1(h)
     art = art or t.two_fields()
@@ -172,7 +186,8 @@ def test_adp_c_043_fault_at_step_compensates(h):
     assert out["status"] == "compensated" and out["error"]["code"] == "engine_unavailable"
     assert [s["status"] for s in out["steps"]] == ["compensated", "failed"]
     assert out["site"]["applied"] == t.status(h)["applied"] and out["site"]["state"] == "ready"
-    assert out["exportHash"] == before[0] and t.snapshot(h) == before
+    assert out["exportHash"] == before[0]
+    assert_compensated(h, before, [NOTE_A])
     assert event_types(h, ev) == ["blueprint.apply_failed"]
     assert t.apply_artifact(h, t.two_fields())["result"]["status"] == "applied"  # nothing is stuck
 
@@ -185,7 +200,20 @@ def test_adp_c_043_fault_in_initial_build(h):
     assert out["status"] == "compensated"
     assert [s["status"] for s in out["steps"]][:6] == ["compensated"] * 6 and out["steps"][6]["status"] == "failed"
     assert {s["status"] for s in out["steps"][7:]} == {"not_run"}
-    assert t.snapshot(h) == before
+    assert_compensated(h, before, [])  # the six undone steps are settings: set back, nothing left over
+
+
+def test_adp_c_043_late_fault_in_initial_build_quarantines_additions(h):
+    t.provision(h)
+    before = t.snapshot(h)
+    build = t.initial_build()
+    n = len(build["steps"])
+    h.fault("execute", step_seq=n)
+    out = result_of(t.apply_artifact(h, build))
+    assert out["status"] == "compensated" and out["steps"][-1]["status"] == "failed"
+    added = {s["pointer"] for s in build["steps"] if s["kind"] != "settings.set"} - {build["steps"][-1]["pointer"]}
+    assert added
+    assert_compensated(h, before, added)
 
 
 def test_adp_c_044_postcondition_fault(h):
@@ -194,7 +222,7 @@ def test_adp_c_044_postcondition_fault(h):
     assert out["error"]["code"] == "postcondition_failed" and out["error"]["details"]["postConditionId"] == "pc_002"
     assert {"id": "pc_002", "passed": False} in out["postConditions"]
     assert {s["status"] for s in out["steps"]} == {"compensated"}
-    assert t.snapshot(h) == before and event_types(h, ev) == ["blueprint.apply_failed"]
+    assert_compensated(h, before, [NOTE_A, NOTE_B]) and event_types(h, ev) == ["blueprint.apply_failed"]
 
 
 def test_adp_c_045_fault_during_compensation_blocks_site(h):
@@ -234,17 +262,30 @@ def test_adp_c_047_deadline_expiry_never_runs_a_step_twice(h):
     plan = planned(h, art)
     approvals = {"changeApproved": t.ulid()}
     key = t.key()
+    before_hash = t.export(h)["exportHash"]
     h.fault("deadline", step_seq=2)
     first = raw_apply(h, art, plan["planToken"], approvals, k=key)
-    assert t.code_of(first) in {"timeout", None}
-    again = raw_apply(h, art, plan["planToken"], approvals, k=key)
-    assert again["ok"] and again["result"]["status"] in {"in_progress", "applied"}
+    assert t.code_of(first) == "timeout"
+    outcome = None
+    for _ in range(5):  # a retry with the same key: in_progress while running, then the final outcome
+        again = raw_apply(h, art, plan["planToken"], approvals, k=key)
+        assert again["ok"], again
+        outcome = again["result"]
+        if outcome["status"] != "in_progress":
+            break
+    assert outcome["status"] in {"applied", "compensated"}, "the apply never reached an outcome after the deadline"
+    ran = [(e["seq"], e["phase"]) for e in optional(h.execution_journal) if e["artifactId"] == art["artifactId"]]
+    forward = [seq for seq, phase in ran if phase == "execute"]
+    assert len(forward) == len(set(forward)), f"a step ran twice: {ran}"  # independent of the export
     fields = [f["id"] for f in t.export(h)["export"]["sections"]["entities"][0]["fields"]]
-    assert fields.count("note_a") <= 1 and fields.count("note_b") <= 1
-    if again["result"]["status"] == "applied":
+    if outcome["status"] == "applied":
+        assert sorted(forward) == [1, 2] and [p for _, p in ran].count("compensate") == 0
         assert {"note_a", "note_b"} <= set(fields)
         assert event_types(h).count("blueprint.applied") == 2  # initial build and this apply, once each
-    assert t.status(h)["state"] in {"ready", "applying"}
+    else:  # no partial state: everything that ran was undone, exactly once
+        assert sorted(seq for seq, phase in ran if phase == "compensate") == sorted(forward)
+        assert t.export(h)["exportHash"] == before_hash
+    assert t.status(h)["state"] == "ready"
 
 
 # ---------------------------------------------------------------- quarantine, restore, no data loss
@@ -288,6 +329,39 @@ def test_adp_c_049_restore_same_definition_blocks_different(h):
     assert not t.export(h)["retained"]
 
 
+DROP = re.compile(r"(?i)\b(drop|delete\s+from|truncate)\b")
+
+
+def drop_statements(evidence: list[str]) -> list[str]:
+    return [stmt for stmt in evidence if DROP.search(stmt)]
+
+
+def test_adp_c_050_drop_scan_catches_a_drop():
+    assert drop_statements(["ALTER TABLE x DROP COLUMN y"]) and drop_statements(["delete from x"])
+    assert not drop_statements(["ALTER TABLE x ADD COLUMN y NULL", "UPDATE element_state SET state = 'quarantined'"])
+
+
+def test_adp_c_050_plan_evidence_has_no_drop_statement(h):
+    """Engine-adapter 14, ADP-C-050: judged on the adapter's own plan evidence, not on a harness report."""
+    t.site_at_rev1(h)
+    add, remove = t.sample("add-field"), t.sample("remove-field")
+    at_rev1 = [add, t.two_fields()]  # additions: storage statements
+    checked = 0
+
+    def scan(arts):
+        nonlocal checked
+        for art in arts:
+            evidence = optional(h.plan_evidence, planned(h, art)["evidenceRef"])
+            assert evidence, "plan evidence is empty: nothing to judge"
+            assert not drop_statements(evidence), evidence
+            checked += len(evidence)
+
+    scan(at_rev1)
+    assert t.apply_artifact(h, add)["result"]["status"] == "applied"
+    scan([remove, add["inverse"]])  # revision 2: the removal and the rollback of the addition (both quarantine)
+    assert checked == 5
+
+
 def test_adp_c_050_nothing_removes_stored_data(h):
     t.site_at_rev1(h)
     t.apply_artifact(h, t.sample("add-field"))
@@ -297,5 +371,59 @@ def test_adp_c_050_nothing_removes_stored_data(h):
     t.rollback(h, t.sample("add-field"))
     h.fault("execute", step_seq=2)
     t.apply_artifact(h, t.two_fields())
-    assert optional(h.dropped_data) == []
-    assert h.data_probe(FIELD) == 7
+    assert h.data_probe(FIELD) == 7  # the stored value survived every operation above, quarantine and rollback included
+    assert optional(h.dropped_data) == []  # the harness report agrees; it is a second witness, not the judge
+
+
+# ---------------------------------------------------------------- compensation runs the stored inverse steps (section 5.6)
+def two_step_over_rev2(h):
+    """Site at revision 2 (payment_terms_days present with data), and a forward artifact that adds note_a and quarantines it."""
+    t.site_at_rev1(h)
+    assert t.apply_artifact(h, t.sample("add-field"))["result"]["status"] == "applied"
+    h.data_probe(FIELD, 30)
+    removal = t.sample("remove-field")["steps"][0]
+    return t.variant([t.field_step("customer", "note_a"), removal], template="remove-field")
+
+
+def test_compensation_runs_inverse_steps_in_reverse_and_restores_retained_data(h):
+    art = two_step_over_rev2(h)
+    before = t.snapshot(h)
+    h.fault("reconcile", post_condition_id="pc_001")
+    out = result_of(t.apply_artifact(h, art))
+    assert out["status"] == "compensated" and out["error"]["code"] == "postcondition_failed"
+    journal = [e for e in optional(h.execution_journal) if e["artifactId"] == art["artifactId"]]
+    assert [(e["seq"], e["phase"]) for e in journal] == [(1, "execute"), (2, "execute"), (2, "compensate"), (1, "compensate")]
+    assert "payment_terms_days" in customer_fields(h)  # the quarantine was undone by its inverse (field.add), data kept
+    assert h.data_probe(FIELD) == 30
+    assert_compensated(h, before, [NOTE_A])  # the addition's inverse quarantined it; it is retained, not active, not erased
+
+
+@pytest.mark.parametrize("damage", ["missing_step", "wrong_step"])
+def test_compensation_without_a_correct_inverse_is_recovery_required(h, damage):
+    t.site_at_rev1(h)
+    art = t.two_fields()
+    inv = art["inverse"]
+    if damage == "missing_step":
+        inv["steps"] = [s for s in inv["steps"] if not s["pointer"].endswith("note_b")]
+    else:  # same pointer, but it does not undo the addition
+        wrong = next(s for s in inv["steps"] if s["pointer"].endswith("note_b"))
+        wrong.update(kind="field.set_property", phase=6, params={"property": "/min", "before": None, "after": 5})
+    t.seal(art)
+    h.fault("reconcile", post_condition_id="pc_001")
+    out = result_of(t.apply_artifact(h, art))
+    assert out["status"] == "recovery_required" and out["error"]["code"] == "recovery_required"
+    assert t.status(h)["state"] == "recovery_required"
+
+
+def test_failed_rollback_compensates_through_the_forward_steps(h):
+    t.site_at_rev1(h)
+    add = t.sample("add-field")
+    assert t.apply_artifact(h, add)["result"]["status"] == "applied"
+    h.data_probe(FIELD, 11)
+    before = t.snapshot(h)
+    h.fault("reconcile", post_condition_id="pc_001")
+    out = result_of(t.rollback(h, add))
+    assert out["status"] == "compensated" and out["operation"] == "rollback"
+    assert "payment_terms_days" in customer_fields(h) and h.data_probe(FIELD) == 11
+    assert_compensated(h, before, [])
+    assert t.status(h)["applied"]["artifactId"] == add["artifactId"]

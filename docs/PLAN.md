@@ -158,7 +158,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-002 | Spike: 50-tenant load test on one bench pool | Runtime | G1 | ERP-003 | partner | todo |
 | ERP-003 | Scripted site-per-tenant creation | Runtime | G1 | ERP-001 | partner | todo |
 | ERP-004 | Version pin and upgrade policy document | Runtime | G1 | ERP-001 | partner | doing |
-| ERP-005 | Core module scope for trading and distribution (selling, buying, stock, accounts) | Runtime | G1 | ERP-001 | partner | doing |
+| ERP-005 | Core module scope for trading and distribution (selling, buying, stock, accounts) | Runtime | G1 | ERP-001 | partner | done |
 | ERP-006 | Arabic and RTL translation completion for in-scope modules | Runtime | G1 | ERP-005 | partner | todo |
 | ERP-007 | Bilingual tax invoice PDF print format | Runtime | G1 | CMP-003,ERP-006 | partner | todo |
 | ERP-008 | Blueprint roles to engine roles and user permissions mapping | Runtime | G1 | BPL-002 | partner | todo |
@@ -327,7 +327,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-039 | Market-pack track plan: owner and capacity per active pack, what "right away" means per market, country release checklist adopted | Governance | G1 | GOV-036 | eldon | todo |
 | GOV-040 | Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032) | Governance | G0 | GOV-008 | partner | doing |
 | BPL-028 | Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 | Blueprint | G0 | GOV-036 | eldon | doing |
-| BPL-029 | Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022 | Blueprint | G0 | BPL-028,BPL-026 | eldon | done |
+| BPL-029 | Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022 | Blueprint | G0 | BPL-028,BPL-026 | eldon | doing |
 | BPL-030 | Phase 1B builder reproduction: the builder reproduces the golden Blueprint over repeated runs; one guarded change with a diff and tested recovery; setup time, corrections and AI cost measured | Blueprint | G2 | BPL-029,ERP-022 | eldon | todo |
 | ERP-021 | Phase 0 engine proof suite on a pinned bench: two-tenant isolation, one reconciled transaction, denied operation on failure, interrupted guarded change with recovery, duplicate-effect prevention, one minimal real adapter integration | Runtime | G1 | ERP-001,BPL-029 | partner | todo |
 | ERP-022 | Phase 1A manual golden system on the real bench: hand-timed, ledger and stock independently checked, Arabic document output and role views reviewed | Runtime | G1 | ERP-021,BPL-028 | partner | todo |

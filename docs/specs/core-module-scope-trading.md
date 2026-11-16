@@ -1,6 +1,6 @@
 # Core module scope for trading and distribution
 
-Status: draft
+Status: accepted (scope for G1; Q-23 and Q-24 stay open and are tracked as open questions, not blockers)
 Owner: partner
 
 Plan ID: ERP-005 (feeds ERP-006, ERP-010, ERP-011, ERP-014).
@@ -175,14 +175,14 @@ All settings and fields below were observed on `erp001.localhost` (values shown 
    - `User Permission` + `System Settings.apply_strict_user_permissions` (observed default `0`): set `1` when multi-branch/warehouse scoping is active.
 3. **Accounting, stock, and rounding guardrails**:
    - `Company.enable_perpetual_inventory` (observed default `1`): keep `1` so `Delivery Note` / `Purchase Receipt` / `Stock Entry` post to GL automatically.
-   - `Stock Settings.valuation_method` (observed default `"FIFO"`; `Item.valuation_method` options: `FIFO`, `Moving Average`, `LIFO`): **mismatch with [golden-path-trading-sale.md](golden-path-trading-sale.md)** which specifies Moving Average; resolve before `ERP-014`/`ERP-022` (see Section 8).
+   - `Stock Settings.valuation_method` (observed default `"FIFO"`; `Item.valuation_method` options: `FIFO`, `Moving Average`, `LIFO`): **decided: provisioning sets `Moving Average` explicitly, before the first stock transaction** (ADR-0033, Q-21; verified on the bench).
    - `Stock Settings.allow_negative_stock` (`0`) and `over_delivery_receipt_allowance` (`0`): keep `0`.
    - `Accounts Settings.over_billing_allowance` (`0`), `unlink_payment_on_cancellation_of_invoice` (`1`), `unlink_advance_payment_on_cancelation_of_order` (`1`): keep as observed.
    - `Accounts Settings.enable_immutable_ledger` (observed default `0`): `PROPOSED` set to `1` ([03-erp-runtime.md](03-erp-runtime.md)); verify cancellation/credit-note behaviour on the bench (`ERP-021`).
    - `Accounts Settings.check_supplier_invoice_uniqueness` (observed default `0`): `PROPOSED` set to `1`.
    - `Selling Settings.editable_price_list_rate` (observed default `0`): keep `0` to enforce price lists (`ERP-011`).
    - `Sales Invoice.update_stock` (observed default `0`): keep `0` when invoicing from `Delivery Note` so stock is not deducted twice.
-   - `System Settings.rounding_method` (observed default `"Banker's Rounding (legacy)"`; options: `Banker's Rounding (legacy)`, `Banker's Rounding`, `Commercial Rounding`): **mismatch with `BPL-029` mapping fixture** (`half_up`); resolve before `ERP-014` (Section 8). `Global Defaults.disable_rounded_total` (observed `0`): confirm per country pack.
+   - `System Settings.rounding_method` (observed default `"Banker's Rounding (legacy)"`; options: `Banker's Rounding (legacy)`, `Banker's Rounding`, `Commercial Rounding`): **decided: provisioning sets `Commercial Rounding`, which rounds half away from zero for negative amounts too, so credit notes mirror invoices** (ADR-0033, Q-22; verified on the bench). `Global Defaults.disable_rounded_total` (observed `0`): confirm per country pack.
 4. **Engine invisibility (`ADR-0016`, `ERP-020`)**:
    - `System Settings`: `enable_telemetry = 0` (observed `1`), `disable_system_update_notification = 1` (observed `0`), `enable_onboarding = 0` (observed `0`), and replace `app_name` (observed `"ERPNext"`) and `otp_issuer_name` (observed `"Frappe Framework"`). Gateway strips engine paths/headers/cookies (`PLT-024`).
 
@@ -204,7 +204,7 @@ Per [ADR-0024](../decisions/ADR-0024-four-phase-1-markets.md), KSA, UAE, Egypt, 
 ## 8. Open questions and founder decisions needed
 
 Tracked in [../open-questions.md](../open-questions.md) as Q-21 to Q-24:
-1. **Inventory valuation default (`FIFO` vs `Moving Average`)**: Bench `Stock Settings.valuation_method` defaults to `FIFO`, while [golden-path-trading-sale.md](golden-path-trading-sale.md) assumes Moving Average. Decide whether provisioning sets `Moving Average` or the golden path uses `FIFO`.
-2. **Rounding method (`Banker's Rounding (legacy)` vs `Commercial Rounding`)**: Bench `System Settings.rounding_method` defaults to `Banker's Rounding (legacy)`, while `BPL-029` expects `half_up` (`Commercial Rounding`). Decide standard v1 tenant setting (`ERP-014`).
+1. **Inventory valuation default:** resolved by ADR-0033 (Moving Average, set explicitly).
+2. **Rounding method:** resolved by ADR-0033 (Commercial Rounding, half away from zero).
 3. **Immutable ledger (`Accounts Settings.enable_immutable_ledger`)**: Observed default is `0`. Confirm setting to `1` and verify cancel/credit-note ergonomics on the bench (`ERP-021`).
 4. **Optional v1 trading doctypes**: Confirm whether `Batch` / `Serial and Batch Bundle`, `Landed Cost Voucher`, and `Request for Quotation` / `Supplier Quotation` stay hidden by default and ship only as optional `ERP-011` components.

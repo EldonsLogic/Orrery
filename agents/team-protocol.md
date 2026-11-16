@@ -91,3 +91,15 @@ Finish with the roster, task graph, artifacts, evidence, limits and next steps, 
 - Orchestrators give each sub-agent an explicit list of allowed paths, forbid git, and check `git status` afterwards.
 - No role merges its own pull request or pushes to `main`.
 - Phase and gate exits use [../docs/GATES.md](../docs/GATES.md) and the exit check described there.
+
+## 14. Efficient review workflow
+Applies to authors, the partner and working agents. It makes reviews faster without changing any rule: approval gates, founder responsibilities, security review, rigid-zone human review ([ADR-0031](../docs/decisions/ADR-0031-rigid-zone-code-authorship.md)), recorded approval ([ADR-0032](../docs/decisions/ADR-0032-approval-is-a-recorded-review.md)), lanes and phase-exit checks stay as they are. A proposed gate change is written up separately for both founders' agreement.
+
+1. **Prepare before requesting review.** One focused PR per plan row, relevant checks passing. The description says what behaviour changes, the risks, the test evidence, the dependencies and open questions, and how to view the result when it is visible (AGENTS.md, Branches and PRs).
+2. **Keep changes reviewable.** Split large work into coherent PRs in dependency order where practical; each one must stay understandable and testable on its own.
+3. **Review fixes efficiently.** A re-review request gives the commit last reviewed, the new commit, the findings being answered and the relevant test results. The reviewer starts with the changed areas and widens the review when the fix touches surrounding behaviour or adds risk.
+4. **Match effort to risk.** A smaller model suffices for routine documentation and mechanical changes. Use the strongest appropriate model for security, architecture, accounting, tax and compliance ([routing.md](routing.md)). A change is still reviewed with a different model than the one that wrote it.
+5. **Run independent work in parallel.** Once a PR is stable, CI, cross-model review and security review may run together. Respect dependencies when ordering PRs and approvals; a stacked PR is not approved before the one under it.
+6. **Automate mechanical checks.** CI handles deterministic checks: formatting, generated files, schema validation and plan consistency. Give the reviewer the diff, the relevant decisions, the evidence and the specific risks, not the whole repository.
+7. **Measure improvements.** Record review turnaround, review rounds, model-usage data where available, and defects found after merge, in the session log or the benchmark (GOV-038). Compare a process change with a baseline before adopting it.
+

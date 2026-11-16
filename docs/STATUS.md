@@ -253,6 +253,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 ## Last 10 log files
 
 - [2026-11-16-partner-codex-erp-003-provisioning-review.md](log/2026-11-16-partner-codex-erp-003-provisioning-review.md): Addressed the ERP-003 provisioning review with input validation, redaction, supported configuration commands, and fail-closed app verification.
+- [2026-11-16-partner-codex-ce-sec-003-fresh-install.md](log/2026-11-16-partner-codex-ce-sec-003-fresh-install.md): Fixed missing policy tables on fresh installation and before model synchronization.
 - [2026-11-16-eldon-claude-gov-019-labels-and-board.md](log/2026-11-16-eldon-claude-gov-019-labels-and-board.md): Chose the label set and board mapping, created 31 labels in the repo, and wrote the mapping doc. The board itself is not created: it needs a token with the `project` scope.
 - [2026-11-16-eldon-claude-gov-019-board.md](log/2026-11-16-eldon-claude-gov-019-board.md): Created the Plan project board (projects/3) with Plan ID, Gate, Area and Owner fields, linked it to the repo, and closed GOV-019.
 - [2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md](log/2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md): Closed the trial of the cross-model review routine using the real PRs from this period: code written with Claude and reviewed by the partner's GPT-based agent (#40, #56, #57, #58, #59).
@@ -261,7 +262,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-16-eldon-claude-code-fix-59-review.md](log/2026-11-16-eldon-claude-code-fix-59-review.md): Answered the partner's change request on #59: section 14 item 6 now lists only the checks CI enforces and marks a formatter and other generated-file checks as planned.
 - [2026-11-16-eldon-claude-code-fix-58-review.md](log/2026-11-16-eldon-claude-code-fix-58-review.md): Answered the partner's security review on #58 (reviewed commit 32c8c44): R4 now always needs a second, different, eligible human; no single-approver fallback is active until Q-41 is decided; AP-FIN-02 says so.
 - [2026-11-16-eldon-claude-code-fix-57-review.md](log/2026-11-16-eldon-claude-code-fix-57-review.md): Answered the partner's security review on #57 (reviewed commit 4286e77): the registry now enforces a fail-closed production eligibility boundary (only certified and regulated), with tests, and ADR-0034 states it.
-- [2026-11-16-eldon-claude-code-efficient-review-workflow.md](log/2026-11-16-eldon-claude-code-efficient-review-workflow.md): Added the efficient review workflow (seven points, from the partner's request relayed by Eldon) as section 14 of agents/team-protocol.md and linked it from AGENTS.md and CLAUDE.md. No gate, lane, security-review, rigid-zone or phase-exit rule changed.
 
 ## ADRs with status Proposed
 

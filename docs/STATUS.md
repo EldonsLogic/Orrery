@@ -250,6 +250,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 ## Last 10 log files
 
 - [2026-11-16-eldon-claude-code-review-tiers.md](log/2026-11-16-eldon-claude-code-review-tiers.md): Drafted ADR-0035 (Proposed): risk-tiered review, block only on defects, two rounds, larger PRs, logs for code PRs only, stay at the current gate, generated STATUS. Eldon agreed in chat; it changes approval gates, so the partner must agree through a recorded review.
+- [2026-11-16-eldon-claude-code-fix-58-review.md](log/2026-11-16-eldon-claude-code-fix-58-review.md): Answered the partner's security review on #58 (reviewed commit 32c8c44): R4 now always needs a second, different, eligible human; no single-approver fallback is active until Q-41 is decided; AP-FIN-02 says so.
 - [2026-11-16-eldon-claude-code-agents-work-freely.md](log/2026-11-16-eldon-claude-code-agents-work-freely.md): AGENTS.md now lets both founders' agents work and merge on their own under the ADR-0035 tiers (Eldon's instruction; the partner is told in the PR).
 - [2026-11-16-eldon-claude-code-agents-may-push.md](log/2026-11-16-eldon-claude-code-agents-may-push.md): Both founders (together, in chat) gave coding agents standing permission to commit, push their feature branch and open PRs. AGENTS.md and CLAUDE.md now say so; main, force-push and unreviewed merges stay forbidden.
 - [2026-11-15-eldon-claude-code-sec-019-action-policy-table.md](log/2026-11-15-eldon-claude-code-sec-019-action-policy-table.md): Drafted the action-policy table spec for ADR-0027: table schema, risk classes, approval binding to a payload hash, separation of duties, lifecycle with cancellation, failure and expiry, break-glass, fail-closed enforcement, agents as draft-only actors, approval events, and a starter table for the six golden-path actions.
@@ -258,7 +259,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md](log/2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md): Recorded the founders' answers to Q-21, Q-22 and Q-28 in ADR-0033, confirmed the two engine settings on the bench, and closed ERP-005.
 - [2026-11-14-partner-claude-code-erp-004-review-fixes.md](log/2026-11-14-partner-claude-code-erp-004-review-fixes.md): Applied Eldon's review of PR #50. ERP-004 is back to `doing`, Q-25 now has the engine's own MariaDB support range, and the MariaDB move is a new plan row (ERP-024).
 - [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
-- [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
 
 ## ADRs with status Proposed
 

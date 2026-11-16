@@ -125,7 +125,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-011 | Event stream contract implementation | Blueprint | G1 | BPL-002 | eldon | done |
 | BPL-012 | Engine adapter implementation in apps/engine that passes the BPL-025 conformance tests | Blueprint | G1 | BPL-025 | partner | todo |
 | BPL-013 | Branding section in the Blueprint schema (ADR-0014) | Blueprint | G1 | BPL-002 | eldon | done |
-| BPL-014 | Component certification levels and test harness | Blueprint | G1 | BPL-010 | eldon | todo |
+| BPL-014 | Component certification levels and test harness | Blueprint | G1 | BPL-010 | eldon | doing |
 | BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | eldon | todo |
 | BPL-016 | Component request pipeline: gap to AI-drafted request with spec and tests | Blueprint | G2 | BPL-014,DSC-006 | eldon | todo |
 | BPL-017 | Factory: AI drafts component code and tests from a request | Blueprint | G2 | BPL-015,PLT-009 | eldon | todo |
@@ -329,6 +329,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-043 | Risk-tiered review and fewer rounds (ADR-0035, Proposed): docs-only, ordinary and rigid-zone tiers, block only on defects, two rounds, larger PRs, no logs for docs-only PRs, generated STATUS; needs both founders' agreement | Governance | G0 | GOV-034 | eldon | doing |
 | GOV-044 | Standing permission for coding agents to commit, push their feature branch and open PRs (founders' agreement, AGENTS.md and CLAUDE.md); main, force-push and merges stay restricted | Governance | G0 | GOV-034 | eldon | doing |
 | GOV-045 | Both founders' agents work and merge on their own under ADR-0035 tiers: next ready row, fix real defects, merge Tier 1 on green CI and Tier 2 after the other side has reviewed | Governance | G0 | GOV-034 | eldon | doing |
+| GOV-042 | Efficient review workflow for authors, the partner and agents: detailed in agents/team-protocol.md section 14, linked from AGENTS.md and CLAUDE.md; no change to gates, lanes, security or rigid-zone review or the phase exit check | Governance | G0 | GOV-034 | eldon | doing |
 | BPL-028 | Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 | Blueprint | G0 | GOV-036 | eldon | doing |
 | BPL-029 | Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022 | Blueprint | G0 | BPL-028,BPL-026 | eldon | doing |
 | BPL-030 | Phase 1B builder reproduction: the builder reproduces the golden Blueprint over repeated runs; one guarded change with a diff and tested recovery; setup time, corrections and AI cost measured | Blueprint | G2 | BPL-029,ERP-022 | eldon | todo |
@@ -339,7 +340,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-018 | Automatic acceptance test per configured tenant: scripted transactions in, expected ledger postings out | Quality | G1 | BPL-028 | eldon | todo |
 | QA-019 | Scoped-chat leak canaries: planted values in out-of-scope records and adversarial prompts per role, including reports and aggregates | Quality | G2 | OPR-004,SEC-019 | eldon | todo |
 | QA-020 | Optional experiment: bounded-decision model for intent routing compared with a small general model and rules on synthetic Arabic and English cases; not a dependency, synthetic data only | Quality | G2 | QA-001 | eldon | todo |
-| SEC-019 | Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails | Security | G1 | SEC-001 | eldon | todo |
+| SEC-019 | Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails | Security | G1 | SEC-001 | eldon | doing |
 | SEC-020 | Agent least-privilege role spec: grant, scope, tools, expiry, revocation, owner change, audit identity, cost cap, kill switch | Security | G1 | SEC-019 | eldon | todo |
 | LEG-019 | Real-data entry checklist and live-posting checklist per market, and the manual accountant sign-off route for the pilot | Legal | G2 | CMP-001 | eldon | todo |
 | CMP-032 | Market-pack release checklist template: legal and accounting scope, e-invoicing, data processing, evidence, accountant review, operational controls | Compliance | G1 | CMP-001 | partner | todo |

@@ -250,6 +250,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 ## Last 10 log files
 
 - [2026-11-16-eldon-claude-code-review-tiers.md](log/2026-11-16-eldon-claude-code-review-tiers.md): Drafted ADR-0035 (Proposed): risk-tiered review, block only on defects, two rounds, larger PRs, logs for code PRs only, stay at the current gate, generated STATUS. Eldon agreed in chat; it changes approval gates, so the partner must agree through a recorded review.
+- [2026-11-16-eldon-claude-code-fix-59-review.md](log/2026-11-16-eldon-claude-code-fix-59-review.md): Answered the partner's change request on #59: section 14 item 6 now lists only the checks CI enforces and marks a formatter and other generated-file checks as planned.
 - [2026-11-16-eldon-claude-code-efficient-review-workflow.md](log/2026-11-16-eldon-claude-code-efficient-review-workflow.md): Added the efficient review workflow (seven points, from the partner's request relayed by Eldon) as section 14 of agents/team-protocol.md and linked it from AGENTS.md and CLAUDE.md. No gate, lane, security-review, rigid-zone or phase-exit rule changed.
 - [2026-11-16-eldon-claude-code-agents-may-push.md](log/2026-11-16-eldon-claude-code-agents-may-push.md): Both founders (together, in chat) gave coding agents standing permission to commit, push their feature branch and open PRs. AGENTS.md and CLAUDE.md now say so; main, force-push and unreviewed merges stay forbidden.
 - [2026-11-14-partner-claude-code-gov-040-founder-answers.md](log/2026-11-14-partner-claude-code-gov-040-founder-answers.md): Recorded the founders' answers to Q-17, Q-18 and Q-19 from the PR #48 comment: ADR-0031 accepted, new ADR-0032 accepted. Applied Eldon's review of #48 and merged main.
@@ -258,7 +259,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-14-partner-claude-code-erp-004-review-fixes.md](log/2026-11-14-partner-claude-code-erp-004-review-fixes.md): Applied Eldon's review of PR #50. ERP-004 is back to `doing`, Q-25 now has the engine's own MariaDB support range, and the MariaDB move is a new plan row (ERP-024).
 - [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
 - [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
-- [2026-11-14-partner-antigravity-erp-005-core-module-scope.md](log/2026-11-14-partner-antigravity-erp-005-core-module-scope.md): Defined the v1 core module, doctype, report, print format, and configuration-guardrail scope for trading and distribution in `docs/specs/core-module-scope-trading.md`, grounded in read-only inspection of the pinned synthetic bench.
 
 ## ADRs with status Proposed
 

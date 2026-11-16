@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 9 | 37 | 0 | 59 |
-| G1 | 72 | 4 | 15 | 0 | 91 |
+| G0 | 9 | 12 | 40 | 0 | 61 |
+| G1 | 67 | 9 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 264 | 14 | 52 | 0 | 330 |
+| all | 255 | 22 | 55 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -29,8 +29,10 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-011: Agent role specs, routing rules, model registry
 - GOV-012: Fill model registry rows for Codex and Antigravity
 - GOV-013: Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11
+- GOV-014: Trial the cross-model PR review routine on the first real PR
 - GOV-015: Draft ADR-0001..0014
 - GOV-018: Retire docs/HANDOFF.md in favour of docs/log and STATUS
+- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs
 - GOV-021: Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI)
 - GOV-022: Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md)
 - GOV-023: Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS
@@ -70,36 +72,30 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety
 - GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests)
 - GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows
+- GOV-041: Contracts check script: every contract schema valid, examples validate, refs resolve; CI job
 
 ## Ready to start (todo, all dependencies done), by gate
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (11)
-- BPL-025: Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently (owner eldon)
-- BPL-026: Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures (owner eldon)
+**G0** (7)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner eldon)
-- GOV-014: Trial the cross-model PR review routine on the first real PR (owner eldon)
-- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (owner eldon)
 - GOV-037: After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency (owner eldon)
 - INF-013: Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) (owner eldon)
 - LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (35)
-- BPL-014: Component certification levels and test harness (owner eldon)
+**G1** (31)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
 - CE-SEC-005: Change engine: CI against a real Frappe bench instead of mocks (owner partner)
-- CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance (owner partner)
 - CMP-005: Hijri date support in fields, display and print (owner partner)
 - CMP-006: KSA chart of accounts template and tax codes (owner partner)
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
 - DAT-001: Data classification and retention policy (owner eldon)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner eldon)
-- ERP-006: Arabic and RTL translation completion for in-scope modules (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
 - ERP-014: Accounting correctness property tests (ledger balances, tax, rounding) (owner partner)
@@ -122,7 +118,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - SEC-002: Secrets management design (store, rotate, never in repo) (owner partner)
 - SEC-003: Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data (owner eldon)
 - SEC-018: Brand asset upload security rules (spec): allowed types, size limits, SVG sanitiser requirements, scan policy, storage isolation; enforced by SEC-006 (owner eldon)
-- SEC-019: Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails (owner eldon)
 - WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner eldon)
 
 **G2** (8)
@@ -140,29 +135,29 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 
 Doing:
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise)
+- BPL-014: Component certification levels and test harness
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
+- BPL-025: Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently
+- BPL-026: Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures
 - GOV-043: Risk-tiered review and fewer rounds (ADR-0035, Proposed): docs-only, ordinary and rigid-zone tiers, block only on defects, two rounds, larger PRs, no logs for docs-only PRs, generated STATUS; needs both founders' agreement
 - GOV-044: Standing permission for coding agents to commit, push their feature branch and open PRs (founders' agreement, AGENTS.md and CLAUDE.md); main, force-push and merges stay restricted
 - GOV-045: Both founders' agents work and merge on their own under ADR-0035 tiers: next ready row, fix real defects, merge Tier 1 on green CI and Tier 2 after the other side has reviewed
+- GOV-042: Efficient review workflow for authors, the partner and agents: detailed in agents/team-protocol.md section 14, linked from AGENTS.md and CLAUDE.md; no change to gates, lanes, security or rigid-zone review or the phase exit check
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2
 - BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022
+- SEC-019: Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails
 
 Ready next (dependencies done), by gate:
-- BPL-025 (G0): Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently
-- BPL-026 (G0): Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures
 - GOV-002 (G0): Create GitHub organisation, transfer repo, decide final repo name
 - GOV-010 (G0): Install pre-commit hooks on both founders' machines
-- GOV-014 (G0): Trial the cross-model PR review routine on the first real PR
-- GOV-019 (G0): Pick issue/PR labels and project board mapping to PLAN IDs
 - GOV-037 (G0): After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency
 - INF-013 (G0): Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018)
 - LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
 - LEG-003 (G0): Engage counsel in KSA, UAE, Egypt and Qatar; scope of work
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
-- BPL-014 (G1): Component certification levels and test harness
 - BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
 - BRD-012 (G1): Icon set licence check
 - DAT-001 (G1): Data classification and retention policy
@@ -178,7 +173,6 @@ Ready next (dependencies done), by gate:
 - QA-003 (G1): Model bake-off on the Arabic eval set
 - SEC-003 (G1): Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data
 - SEC-018 (G1): Brand asset upload security rules (spec): allowed types, size limits, SVG sanitiser requirements, scan policy, storage isolation; enforced by SEC-006
-- SEC-019 (G1): Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails
 - WEB-017 (G1): Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016)
 - BPL-021 (G2): Blueprint versioning and schema migration
 - FND-002 (G2): Accelerator evaluation (Hub71+, Antler) after the spike
@@ -194,17 +188,18 @@ Waiting on dependencies: 148 row(s).
 
 Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
+- CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance
+- CMP-003: ZATCA Phase 1 invoice generation (QR, mandatory fields)
 - ERP-003: Scripted site-per-tenant creation
 - ERP-004: Version pin and upgrade policy document
+- ERP-006: Arabic and RTL translation completion for in-scope modules
 - GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032)
 
 Ready next (dependencies done), by gate:
 - CE-SEC-005 (G1): Change engine: CI against a real Frappe bench instead of mocks
-- CMP-002 (G1): Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance
 - CMP-005 (G1): Hijri date support in fields, display and print
 - CMP-006 (G1): KSA chart of accounts template and tax codes
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
-- ERP-006 (G1): Arabic and RTL translation completion for in-scope modules
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - ERP-009 (G1): Engine event emitter feeding the event stream
 - ERP-014 (G1): Accounting correctness property tests (ledger balances, tax, rounding)
@@ -218,7 +213,7 @@ Ready next (dependencies done), by gate:
 - SEC-002 (G1): Secrets management design (store, rotate, never in repo)
 - ERP-010 (G2): HRMS skeleton: employees, leave, payroll structure, only what v1 needs
 
-Waiting on dependencies: 62 row(s).
+Waiting on dependencies: 61 row(s).
 
 Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one).
 
@@ -234,31 +229,39 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
+- CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance (partner)
+- CMP-003: ZATCA Phase 1 invoice generation (QR, mandatory fields) (partner)
+- BPL-014: Component certification levels and test harness (eldon)
 - ERP-003: Scripted site-per-tenant creation (partner)
 - ERP-004: Version pin and upgrade policy document (partner)
+- ERP-006: Arabic and RTL translation completion for in-scope modules (partner)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (eldon)
+- BPL-025: Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently (eldon)
+- BPL-026: Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures (eldon)
 - GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032) (partner)
 - GOV-043: Risk-tiered review and fewer rounds (ADR-0035, Proposed): docs-only, ordinary and rigid-zone tiers, block only on defects, two rounds, larger PRs, no logs for docs-only PRs, generated STATUS; needs both founders' agreement (eldon)
 - GOV-044: Standing permission for coding agents to commit, push their feature branch and open PRs (founders' agreement, AGENTS.md and CLAUDE.md); main, force-push and merges stay restricted (eldon)
 - GOV-045: Both founders' agents work and merge on their own under ADR-0035 tiers: next ready row, fix real defects, merge Tier 1 on green CI and Tier 2 after the other side has reviewed (eldon)
+- GOV-042: Efficient review workflow for authors, the partner and agents: detailed in agents/team-protocol.md section 14, linked from AGENTS.md and CLAUDE.md; no change to gates, lanes, security or rigid-zone review or the phase exit check (eldon)
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 (eldon)
 - BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022 (eldon)
+- SEC-019: Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails (eldon)
 
 ## Last 10 log files
 
 - [2026-11-16-partner-codex-erp-003-provisioning-review.md](log/2026-11-16-partner-codex-erp-003-provisioning-review.md): Addressed the ERP-003 provisioning review with input validation, redaction, supported configuration commands, and fail-closed app verification.
+- [2026-11-16-eldon-claude-gov-019-labels-and-board.md](log/2026-11-16-eldon-claude-gov-019-labels-and-board.md): Chose the label set and board mapping, created 31 labels in the repo, and wrote the mapping doc. The board itself is not created: it needs a token with the `project` scope.
+- [2026-11-16-eldon-claude-gov-019-board.md](log/2026-11-16-eldon-claude-gov-019-board.md): Created the Plan project board (projects/3) with Plan ID, Gate, Area and Owner fields, linked it to the repo, and closed GOV-019.
+- [2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md](log/2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md): Closed the trial of the cross-model review routine using the real PRs from this period: code written with Claude and reviewed by the partner's GPT-based agent (#40, #56, #57, #58, #59).
 - [2026-11-16-eldon-claude-code-review-tiers.md](log/2026-11-16-eldon-claude-code-review-tiers.md): Drafted ADR-0035 (Proposed): risk-tiered review, block only on defects, two rounds, larger PRs, logs for code PRs only, stay at the current gate, generated STATUS. Eldon agreed in chat; it changes approval gates, so the partner must agree through a recorded review.
-- [2026-11-16-eldon-claude-code-agents-work-freely.md](log/2026-11-16-eldon-claude-code-agents-work-freely.md): AGENTS.md now lets both founders' agents work and merge on their own under the ADR-0035 tiers (Eldon's instruction; the partner is told in the PR).
-- [2026-11-16-eldon-claude-code-agents-may-push.md](log/2026-11-16-eldon-claude-code-agents-may-push.md): Both founders (together, in chat) gave coding agents standing permission to commit, push their feature branch and open PRs. AGENTS.md and CLAUDE.md now say so; main, force-push and unreviewed merges stay forbidden.
-- [2026-11-14-partner-claude-code-gov-040-founder-answers.md](log/2026-11-14-partner-claude-code-gov-040-founder-answers.md): Recorded the founders' answers to Q-17, Q-18 and Q-19 from the PR #48 comment: ADR-0031 accepted, new ADR-0032 accepted. Applied Eldon's review of #48 and merged main.
-- [2026-11-14-partner-claude-code-erp-005-review-fixes.md](log/2026-11-14-partner-claude-code-erp-005-review-fixes.md): Applied Eldon's review of PR #49. The ERP-005 row is back to `doing`, the spec now says Desk hiding is not enforcement, and the Q-22 question now covers negative amounts.
-- [2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md](log/2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md): Recorded the founders' answers to Q-21, Q-22 and Q-28 in ADR-0033, confirmed the two engine settings on the bench, and closed ERP-005.
-- [2026-11-14-partner-claude-code-erp-004-review-fixes.md](log/2026-11-14-partner-claude-code-erp-004-review-fixes.md): Applied Eldon's review of PR #50. ERP-004 is back to `doing`, Q-25 now has the engine's own MariaDB support range, and the MariaDB move is a new plan row (ERP-024).
-- [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
-- [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
+- [2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md](log/2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md): After #55 merged, the golden path records the valuation and rounding rows as confirmed on the bench (ADR-0033 evidence). The mapping fixture now uses `half_away_from_zero` (#53); ADR-0033's sentence that the fixture's `half_up` means this rule is superseded by that change (ADR text is not edited).
+- [2026-11-16-eldon-claude-code-fix-59-review.md](log/2026-11-16-eldon-claude-code-fix-59-review.md): Answered the partner's change request on #59: section 14 item 6 now lists only the checks CI enforces and marks a formatter and other generated-file checks as planned.
+- [2026-11-16-eldon-claude-code-fix-58-review.md](log/2026-11-16-eldon-claude-code-fix-58-review.md): Answered the partner's security review on #58 (reviewed commit 32c8c44): R4 now always needs a second, different, eligible human; no single-approver fallback is active until Q-41 is decided; AP-FIN-02 says so.
+- [2026-11-16-eldon-claude-code-fix-57-review.md](log/2026-11-16-eldon-claude-code-fix-57-review.md): Answered the partner's security review on #57 (reviewed commit 4286e77): the registry now enforces a fail-closed production eligibility boundary (only certified and regulated), with tests, and ADR-0034 states it.
+- [2026-11-16-eldon-claude-code-efficient-review-workflow.md](log/2026-11-16-eldon-claude-code-efficient-review-workflow.md): Added the efficient review workflow (seven points, from the partner's request relayed by Eldon) as section 14 of agents/team-protocol.md and linked it from AGENTS.md and CLAUDE.md. No gate, lane, security-review, rigid-zone or phase-exit rule changed.
 
 ## ADRs with status Proposed
 
@@ -268,4 +271,5 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [ADR-0028-recoverable-journaled-change-apply](decisions/ADR-0028-recoverable-journaled-change-apply.md)
 - [ADR-0029-engine-disclosure-wording-and-saas-only](decisions/ADR-0029-engine-disclosure-wording-and-saas-only.md)
 - [ADR-0030-blueprint-to-engine-mapping-contract](decisions/ADR-0030-blueprint-to-engine-mapping-contract.md)
+- [ADR-0034-reviewed-level-needs-a-named-reviewer](decisions/ADR-0034-reviewed-level-needs-a-named-reviewer.md)
 - [ADR-0035-risk-tiered-review](decisions/ADR-0035-risk-tiered-review.md)

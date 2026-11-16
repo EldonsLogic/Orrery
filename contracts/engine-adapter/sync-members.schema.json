@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:sync-members:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: sync_members()",
+  "description": "Reconcile the site's shadow engine users with the tenant's memberships and role assignments (ADR-0007 items 4, 9, 11, 13). Shadow users have no password, no API key, no email delivery and cannot sign in. There is no field for any of these.",
+  "anyOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/response" }],
+  "$defs": {
+    "request": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }],
+      "properties": {
+        "input": {
+          "type": "object", "required": ["idempotencyKey", "mode", "syncVersion", "members"], "additionalProperties": false,
+          "properties": {
+            "idempotencyKey": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/idempotencyKey" },
+            "mode": { "enum": ["full", "delta"], "description": "full: members is the complete desired set; shadow users not listed are disabled. delta: only the listed members change." },
+            "syncVersion": { "type": "integer", "minimum": 1, "description": "Monotonic per tenant, issued by the assignment store. Lower than or equal to the last applied version: stale_sync_version (a replay with the same idempotency key returns the stored result instead)." },
+            "members": {
+              "type": "array", "maxItems": 1000,
+              "items": {
+                "type": "object", "required": ["memberRef", "status", "roleIds"], "additionalProperties": false,
+                "properties": {
+                  "memberRef": { "type": "string", "pattern": "^m_[A-Za-z0-9]{8,64}$", "description": "Opaque, stable, per-tenant membership reference. Not an email, phone or global person id." },
+                  "status": { "enum": ["active", "disabled"] },
+                  "roleIds": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" }, "description": "Blueprint role ids; each must be an active role in the site's applied configuration (else unknown_role, nothing changed)." },
+                  "displayName": { "type": "string", "minLength": 1, "maxLength": 140, "description": "Shown in the tenant's own records (for example 'created by'). Personal data." }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "response": { "oneOf": [{ "$ref": "#/$defs/ok" }, { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/errorResponse" }] },
+    "ok": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/okResponseBase" }],
+      "properties": {
+        "result": {
+          "type": "object", "required": ["syncVersion", "created", "updated", "disabled", "unchanged"], "additionalProperties": false,
+          "properties": {
+            "syncVersion": { "type": "integer", "minimum": 1, "description": "Last applied version after this call." },
+            "created": { "type": "integer", "minimum": 0 },
+            "updated": { "type": "integer", "minimum": 0 },
+            "disabled": { "type": "integer", "minimum": 0 },
+            "unchanged": { "type": "integer", "minimum": 0 }
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

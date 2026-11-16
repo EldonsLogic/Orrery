@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:health:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: health()",
+  "description": "Site health when context.tenantId is a tenant; adapter and shared-pool health when it is 'platform'. No side effects, no tenant data.",
+  "anyOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/response" }],
+  "$defs": {
+    "request": { "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }], "properties": { "input": { "type": "object", "maxProperties": 0 } } },
+    "response": { "oneOf": [{ "$ref": "#/$defs/ok" }, { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/errorResponse" }] },
+    "ok": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/okResponseBase" }],
+      "properties": {
+        "result": {
+          "type": "object", "required": ["status", "checks", "adapterVersion"], "additionalProperties": false,
+          "properties": {
+            "status": { "enum": ["ok", "degraded", "down"], "description": "Worst status of the checks." },
+            "adapterVersion": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/semver" },
+            "checks": {
+              "type": "array", "maxItems": 16,
+              "items": {
+                "type": "object", "required": ["name", "status"], "additionalProperties": false,
+                "properties": {
+                  "name": { "enum": ["database", "workers", "queue", "file_store", "scheduler", "site_lock", "recovery"] },
+                  "status": { "enum": ["ok", "degraded", "down"] },
+                  "latencyMs": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

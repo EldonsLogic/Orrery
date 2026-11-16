@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:error:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: error object",
+  "description": "Typed, stable error. No free-text message: the text shown to anyone is rendered from messageKey in their language. details holds only the listed neutral keys. Engine names, object or table names, SQL, file paths and stack traces never appear; the adapter keeps them in its internal log under the same auditId.",
+  "type": "object",
+  "required": ["code", "messageKey", "retryable"],
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "enum": [
+        "invalid_request", "unsupported_contract_version", "unsupported_engine_target", "unsupported_step_kind",
+        "permission_denied", "approval_missing", "tenant_not_found", "site_not_ready", "site_exists_different_target",
+        "artifact_integrity_failed", "artifact_not_found", "blueprint_mismatch", "base_revision_mismatch",
+        "plan_rejected", "plan_token_invalid", "concurrent_change", "idempotency_conflict", "recovery_required",
+        "postcondition_failed", "rollback_not_possible", "stale_sync_version", "unknown_role",
+        "limit_exceeded", "timeout", "engine_unavailable", "internal_error"
+      ]
+    },
+    "messageKey": { "type": "string", "pattern": "^errors\\.adapter\\.[a-z_]+$", "description": "errors.adapter.<code>." },
+    "retryable": { "type": "boolean" },
+    "retryAfterMs": { "type": "integer", "minimum": 0, "maximum": 600000 },
+    "stage": { "enum": ["validate", "authorize", "acquire", "inspect", "prepare", "execute", "reconcile", "finalize", "compensate"] },
+    "details": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "stepSeq": { "type": "integer", "minimum": 1 },
+        "pointer": { "type": "string", "maxLength": 512, "pattern": "^(/[^/]*)*$" },
+        "postConditionId": { "type": "string", "pattern": "^pc_[0-9]{3,4}$" },
+        "reasonCode": { "type": "string", "pattern": "^[a-z_]{3,48}$", "description": "One of the plan reason codes (engine-adapter.md section 5.4)." },
+        "fields": { "type": "array", "maxItems": 32, "items": { "type": "string", "maxLength": 256, "pattern": "^(/[^/]*)*$" }, "description": "Request pointers that failed validation." },
+        "limit": { "type": "string", "pattern": "^[a-z_]{3,48}$" },
+        "allowed": { "type": "integer", "minimum": 0 },
+        "actual": { "type": "integer", "minimum": 0 },
+        "supported": { "type": "array", "maxItems": 32, "items": { "type": "string", "maxLength": 64 } }
+      }
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "code": { "enum": ["concurrent_change", "timeout", "engine_unavailable"] } } }, "then": { "properties": { "retryable": { "const": true } } } },
+    { "if": { "properties": { "code": { "enum": ["invalid_request", "unsupported_contract_version", "unsupported_engine_target", "unsupported_step_kind", "permission_denied", "approval_missing", "artifact_integrity_failed", "blueprint_mismatch", "plan_rejected", "idempotency_conflict", "recovery_required", "rollback_not_possible", "stale_sync_version", "unknown_role", "limit_exceeded", "site_exists_different_target"] } } }, "then": { "properties": { "retryable": { "const": false } } } }
+  ]
+}

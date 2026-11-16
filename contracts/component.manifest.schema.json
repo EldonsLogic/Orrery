@@ -117,7 +117,7 @@
       "properties": {
         "level": {
           "enum": ["draft", "tested", "reviewed", "certified", "regulated"],
-          "description": "draft: authored, not usable by tenants. tested: all blocking tests pass in CI. reviewed: a named engineer reviewed code and config. certified: reviewed + canary on test tenants + Arabic/RTL checks. regulated: certified + compliance evidence (for example ZATCA sandbox pass) and a named compliance owner."
+          "description": "draft: authored, not usable by tenants. tested: all blocking tests pass in CI. reviewed: a named engineer reviewed code and config; reviewedBy must list at least one login (ADR-0034). certified: reviewed + canary on test tenants + Arabic/RTL checks. regulated: certified + compliance evidence (for example ZATCA sandbox pass) and a named compliance owner."
         },
         "reviewedBy": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z0-9-]{1,39}$" }, "description": "GitHub logins." },
         "certifiedAt": { "type": "string", "format": "date-time" },
@@ -137,12 +137,16 @@
       },
       "allOf": [
         {
+          "if": { "properties": { "level": { "enum": ["reviewed", "certified", "regulated"] } }, "required": ["level"] },
+          "then": { "required": ["reviewedBy"], "properties": { "reviewedBy": { "minItems": 1 } } }
+        },
+        {
           "if": { "properties": { "level": { "enum": ["certified", "regulated"] } }, "required": ["level"] },
           "then": { "required": ["reviewedBy", "certifiedAt", "evidence"], "properties": { "reviewedBy": { "minItems": 1 }, "evidence": { "minItems": 1 } } }
         },
         {
           "if": { "properties": { "touchesLedgerOrTax": { "const": true } }, "required": ["touchesLedgerOrTax"] },
-          "then": { "properties": { "level": { "enum": ["reviewed", "certified", "regulated"] } } }
+          "then": { "properties": { "level": { "enum": ["tested", "reviewed", "certified", "regulated"] } } }
         }
       ]
     },

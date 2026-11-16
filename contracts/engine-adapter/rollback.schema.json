@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:rollback:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: rollback()",
+  "description": "Apply the stored inverse of the artifact currently applied to the context tenant's site. The caller passes the forward artifact; the adapter uses its embedded inverse after checking integrity and that it matches the record of the last apply. Data-destructive parts are quarantine, never deletion. Response: the outcome object of apply.schema.json with operation 'rollback'.",
+  "anyOf": [{ "$ref": "#/$defs/request" }, { "$ref": "urn:platform:contract:engine-adapter:apply:0.1.0#/$defs/response" }],
+  "$defs": {
+    "request": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }],
+      "properties": {
+        "input": {
+          "type": "object", "required": ["idempotencyKey", "forwardArtifact", "reason", "approvals"], "additionalProperties": false,
+          "properties": {
+            "idempotencyKey": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/idempotencyKey" },
+            "forwardArtifact": { "$ref": "urn:platform:contract:compiled-artifact:0.1.0" },
+            "reason": { "enum": ["owner_request", "apply_failed", "simulation_failed", "support_action"] },
+            "approvals": {
+              "type": "object", "required": ["rollbackApproved"], "additionalProperties": false,
+              "properties": {
+                "rollbackApproved": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/ulid", "description": "Event id of the approval of this rollback (blueprint.change_approved for the inverse revision)." },
+                "gateApproved": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/ulid" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

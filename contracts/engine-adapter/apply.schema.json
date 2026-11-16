@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:engine-adapter:apply:0.1.0",
+  "version": "0.1.0",
+  "title": "Engine adapter: apply()",
+  "description": "Apply one compiled artifact to the context tenant's site, atomically per artifact (all steps and post-conditions, or compensated back to the base revision). Also defines the outcome object shared with rollback().",
+  "anyOf": [{ "$ref": "#/$defs/request" }, { "$ref": "#/$defs/response" }],
+  "$defs": {
+    "request": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/requestEnvelope" }],
+      "properties": {
+        "input": {
+          "type": "object", "required": ["idempotencyKey", "artifact", "planToken", "approvals"], "additionalProperties": false,
+          "properties": {
+            "idempotencyKey": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/idempotencyKey" },
+            "artifact": { "$ref": "urn:platform:contract:compiled-artifact:0.1.0" },
+            "planToken": { "type": "string", "pattern": "^pln_[A-Za-z0-9_-]{16,128}$" },
+            "approvals": { "$ref": "#/$defs/approvals" }
+          }
+        }
+      }
+    },
+    "approvals": {
+      "type": "object", "required": ["changeApproved"], "additionalProperties": false,
+      "description": "Event ids (contract 4) of the recorded approvals. The adapter checks presence and format, records them in its audit and refuses when a required one is missing (approval_missing). Their truth is the control plane's responsibility.",
+      "properties": {
+        "changeApproved": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/ulid", "description": "blueprint.change_approved event id." },
+        "gateApproved": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/ulid", "description": "Required when plan verdict was needs_gate_approval. Event type to be added (section 10 of engine-adapter.md)." },
+        "teamReviewed": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/ulid", "description": "build.review_passed event id. Required when artifact.risk.requiresTeamReview is true." }
+      }
+    },
+    "response": { "oneOf": [{ "$ref": "#/$defs/ok" }, { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/errorResponse" }] },
+    "ok": {
+      "allOf": [{ "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/okResponseBase" }],
+      "properties": { "result": { "$ref": "#/$defs/outcome" } },
+      "unevaluatedProperties": false
+    },
+    "outcome": {
+      "type": "object",
+      "required": ["operationId", "operation", "artifactId", "status", "stages", "steps", "postConditions", "site"],
+      "additionalProperties": false,
+      "properties": {
+        "operationId": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/operationId" },
+        "operation": { "enum": ["apply", "rollback"] },
+        "artifactId": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/artifactId", "description": "For rollback: the inverse artifact that was applied." },
+        "status": { "enum": ["in_progress", "applied", "already_applied", "rejected", "failed_clean", "compensated", "recovery_required"], "description": "See engine-adapter.md section 5.6." },
+        "stages": {
+          "type": "array", "maxItems": 9,
+          "items": {
+            "type": "object", "required": ["stage", "status"], "additionalProperties": false,
+            "properties": {
+              "stage": { "enum": ["acquire", "inspect", "prepare", "execute", "reconcile", "finalize", "compensate"] },
+              "status": { "enum": ["done", "failed", "skipped", "running"] },
+              "durationMs": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "steps": {
+          "type": "array", "maxItems": 500,
+          "items": {
+            "type": "object", "required": ["seq", "status"], "additionalProperties": false,
+            "properties": {
+              "seq": { "type": "integer", "minimum": 1 },
+              "status": { "enum": ["applied", "already_present", "compensated", "failed", "not_run"] }
+            }
+          }
+        },
+        "postConditions": {
+          "type": "array", "maxItems": 1000,
+          "items": {
+            "type": "object", "required": ["id", "passed"], "additionalProperties": false,
+            "properties": { "id": { "type": "string", "pattern": "^pc_[0-9]{3,4}$" }, "passed": { "type": "boolean" } }
+          }
+        },
+        "site": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/siteStatus", "description": "Site state after the operation." },
+        "exportHash": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/sha256", "description": "export_config hash after the operation; present when status is applied, already_applied or compensated." },
+        "eventIds": { "type": "array", "maxItems": 16, "items": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/ulid" }, "description": "Contract-4 events emitted for this operation." },
+        "error": { "$ref": "urn:platform:contract:engine-adapter:error:0.1.0" }
+      },
+      "allOf": [
+        { "if": { "properties": { "status": { "enum": ["rejected", "failed_clean", "compensated", "recovery_required"] } } }, "then": { "required": ["error"] } },
+        { "if": { "properties": { "status": { "enum": ["applied", "already_applied"] } } }, "then": { "required": ["exportHash"], "not": { "required": ["error"] } } }
+      ]
+    }
+  }
+}

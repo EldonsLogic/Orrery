@@ -40,9 +40,9 @@ The gate may loosen per plan tier later (for example no human review for templat
 
 ## Rollback rules
 1. **Before live:** any state may return to `draft`. Sandbox tenants are destroyed; nothing is retained except the Blueprint revisions and the audit trail.
-2. **After live:** a change creates a new Blueprint revision and goes through diff, simulation against the tenant's own history, approval, apply. Apply is atomic per change set and every change set has a stored inverse (the "undo plan").
+2. **After live:** a change creates a new Blueprint revision and goes through diff, simulation against the tenant's own history, approval, apply. Apply is journaled and recoverable (ADR-0028, Proposed): durable checkpoints, a site lock, and a defined recovery step for every stage. A configuration change that has a stored inverse can be undone as a new revision; atomicity is promised only where it is demonstrated.
 3. **Data-destructive inverses** (dropping a field that holds data) are never automatic: the change engine quarantines the field (soft delete), keeps data for a retention window, and only a human can purge it.
-4. **Failed apply:** the engine adapter reports failure, the change set is rolled back with its inverse, the tenant stays on the previous revision, an `blueprint.apply_failed` event is raised and the team is notified.
+4. **Failed apply:** the engine adapter reports failure, executed steps are compensated using the stored inverse where one exists, the tenant stays on the previous revision or the site is marked `recovery_required` and blocked until a human resolves it, an `blueprint.apply_failed` event is raised and the team is notified.
 5. **Engine upgrades** follow canary rules in [engine-adapter.md](../docs/architecture/engine-adapter.md) and do not change `buildState`.
 6. **Ledger-affecting data** (posted documents) is never rolled back by Blueprint rollback. Corrections are new documents (credit notes, reversals), as the engine requires.
 

@@ -90,6 +90,26 @@ class Registry:
                         break
         return out
 
+    # Environments a component may be used in, by certification level (docs/architecture/component-library.md).
+    # Fails closed: an unknown level or environment is never eligible.
+    _ELIGIBLE_LEVELS = {
+        "sandbox": ("tested", "reviewed", "certified", "regulated"),
+        "production": ("certified", "regulated"),
+    }
+
+    def eligible(self, environment: str) -> list[tuple[str, str]]:
+        """(component id, version) pairs a tenant may use in `environment` ("sandbox" or "production").
+        A ledger or tax component at `tested` or `reviewed` is never production eligible (ADR-0034).
+        Any other environment name returns an empty list."""
+        levels = self._ELIGIBLE_LEVELS.get(environment) if isinstance(environment, str) else None
+        if not levels:
+            return []
+        return [(cid, v) for cid in self.list_components() for v in self.versions(cid)
+                if self._by_id[cid][v].get("certification", {}).get("level") in levels]
+
+    def is_eligible(self, component_id: str, version: str, environment: str) -> bool:
+        return (component_id, version) in self.eligible(environment)
+
     def as_validation_context_registry(self) -> dict[str, list[dict]]:
         """Shape of `ValidationContext.registry`: component id -> list of manifests (lowest version first)."""
         return {cid: [copy.deepcopy(self._by_id[cid][v]) for v in self.versions(cid)] for cid in self.list_components()}

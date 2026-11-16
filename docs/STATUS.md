@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 9 | 12 | 40 | 0 | 61 |
-| G1 | 69 | 7 | 15 | 0 | 91 |
+| G1 | 68 | 8 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 257 | 20 | 55 | 0 | 332 |
+| all | 256 | 21 | 55 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -190,6 +190,7 @@ Waiting on dependencies: 148 row(s).
 Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 - CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance
+- CMP-003: ZATCA Phase 1 invoice generation (QR, mandatory fields)
 - ERP-004: Version pin and upgrade policy document
 - ERP-006: Arabic and RTL translation completion for in-scope modules
 - GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032)
@@ -213,7 +214,7 @@ Ready next (dependencies done), by gate:
 - SEC-002 (G1): Secrets management design (store, rotate, never in repo)
 - ERP-010 (G2): HRMS skeleton: employees, leave, payroll structure, only what v1 needs
 
-Waiting on dependencies: 62 row(s).
+Waiting on dependencies: 61 row(s).
 
 Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one).
 
@@ -230,6 +231,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
 - CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance (partner)
+- CMP-003: ZATCA Phase 1 invoice generation (QR, mandatory fields) (partner)
 - BPL-014: Component certification levels and test harness (eldon)
 - ERP-004: Version pin and upgrade policy document (partner)
 - ERP-006: Arabic and RTL translation completion for in-scope modules (partner)

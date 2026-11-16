@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:compiled-artifact:0.1.0",
+  "version": "0.1.0",
+  "title": "Compiled artifact",
+  "description": "What the Blueprint compiler produces and the engine adapter's plan, preview, apply and rollback consume. One artifact moves one tenant from one Blueprint revision (base) to another (target). Steps are engine-neutral; the adapter maps them to engine objects. Rules that JSON Schema cannot express are listed in x-validator-rules and in contracts/engine-adapter.md section 9. Tenant identity is never carried here: it comes from the platform context of the adapter call.",
+  "type": "object",
+  "required": ["artifactSchema", "artifactId", "kind", "compiler", "blueprint", "engineTarget", "components", "steps", "postConditions", "risk", "inverse", "integrity"],
+  "additionalProperties": false,
+  "properties": {
+    "artifactSchema": { "const": "0.1.0", "description": "Version of this schema the artifact follows." },
+    "artifactId": { "type": "string", "pattern": "^art_[a-f0-9]{32}$", "description": "'art_' plus the first 32 hex characters of integrity.contentHash. Deterministic: the same content always has the same id." },
+    "kind": { "enum": ["forward", "inverse"], "description": "forward: compiled from diff(base, target). inverse: compiled from invert(diff); stored inside its forward artifact." },
+    "compiler": {
+      "type": "object", "required": ["name", "version"], "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{1,31}$" },
+        "version": { "$ref": "#/$defs/semver" }
+      },
+      "description": "Same Blueprint revisions + same component versions + same compiler version = byte-identical artifact."
+    },
+    "blueprint": {
+      "type": "object", "required": ["id", "base", "target", "diffHash"], "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$", "description": "meta.id of the Blueprint (one per tenant)." },
+        "base": { "oneOf": [{ "$ref": "#/$defs/revisionRef" }, { "type": "null" }], "description": "Revision the site must be on before apply. null only for the initial build of an empty site." },
+        "target": { "$ref": "#/$defs/revisionRef" },
+        "diffHash": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }], "description": "sha256 of the canonical JSON of the bpdiff diff object (forward) or of invert(diff) (inverse). null only when base is null." }
+      }
+    },
+    "engineTarget": {
+      "type": "object", "required": ["adapter", "versionSet"], "additionalProperties": false,
+      "properties": {
+        "adapter": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,31}$", "description": "Internal adapter id (Blueprint meta.engineTarget.adapter). Never shown to customers." },
+        "versionSet": { "type": "string", "minLength": 1, "maxLength": 64, "description": "Pinned engine version set id." }
+      }
+    },
+    "components": {
+      "type": "array", "maxItems": 200,
+      "description": "Resolved component versions (registry resolution) required by the target revision, sorted by id. Unique ids.",
+      "items": {
+        "type": "object", "required": ["id", "version"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}$" },
+          "version": { "$ref": "#/$defs/semver" },
+          "packageHash": { "$ref": "#/$defs/sha256", "description": "Optional until the manifest carries a package hash (threat-model-contracts section 7)." }
+        }
+      }
+    },
+    "steps": {
+      "type": "array", "maxItems": 500,
+      "description": "Ordered neutral steps. seq is 1..n without gaps; ordered by phase, then by pointer (Unicode code point order). See engine-adapter.md section 9.",
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "skippedOps": {
+      "type": "array", "maxItems": 2000,
+      "description": "Diff operations that produce no adapter step, with the reason. Sorted by pointer. Lets a reader account for every op of the diff.",
+      "items": {
+        "type": "object", "required": ["pointer", "reason"], "additionalProperties": false,
+        "properties": {
+          "pointer": { "$ref": "#/$defs/pointer" },
+          "reason": { "enum": ["meta", "branding", "integration", "i18n_glossary", "provenance"], "description": "meta: meta/* bookkeeping. branding: compiled to tenant tokens by the platform, not the engine. integration: connectors. i18n_glossary: chat vocabulary. provenance: authoring trail." }
+        }
+      }
+    },
+    "postConditions": {
+      "type": "array", "maxItems": 1000,
+      "description": "Checks the adapter must verify after the last step, before reporting applied. Sorted by id.",
+      "items": { "$ref": "#/$defs/postCondition" }
+    },
+    "risk": { "$ref": "#/$defs/risk" },
+    "inverse": {
+      "oneOf": [{ "$ref": "#" }, { "type": "null" }],
+      "description": "The stored undo artifact (kind inverse). Required for a forward artifact with a base; null for an inverse and for an initial build (rollback of an initial build is destroying the sandbox, build-states rollback rule 1)."
+    },
+    "integrity": {
+      "type": "object", "required": ["algorithm", "contentHash", "signature"], "additionalProperties": false,
+      "properties": {
+        "algorithm": { "const": "sha256-canonical-json-v1", "description": "sha256 over the canonical JSON (sorted keys, no spaces, UTF-8, no NaN, same as bpdiff) of the artifact without artifactId and integrity. The embedded inverse is hashed as it stands, including its own id and integrity." },
+        "contentHash": { "$ref": "#/$defs/sha256" },
+        "signature": {
+          "oneOf": [{ "type": "null" }, {
+            "type": "object", "required": ["alg", "keyId", "value"], "additionalProperties": false,
+            "properties": {
+              "alg": { "enum": ["ed25519"] },
+              "keyId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.:-]{2,127}$" },
+              "value": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,512}$", "description": "base64url signature over the contentHash string." }
+            }
+          }],
+          "description": "Extension point, null in 0.1.0. When signing lands (ADR needed), the compiler signs contentHash and the adapter verifies it against keys it holds."
+        }
+      }
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "inverse" } } }, "then": { "properties": { "inverse": { "type": "null" }, "blueprint": { "properties": { "base": { "$ref": "#/$defs/revisionRef" } } } } } },
+    { "if": { "properties": { "kind": { "const": "forward" }, "blueprint": { "properties": { "base": { "type": "object" } } } } }, "then": { "properties": { "inverse": { "type": "object", "properties": { "kind": { "const": "inverse" } } } } } },
+    { "if": { "properties": { "blueprint": { "properties": { "base": { "type": "null" } } } } }, "then": { "properties": { "inverse": { "type": "null" }, "kind": { "const": "forward" } } } }
+  ],
+  "$defs": {
+    "semver": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$" },
+    "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "pointer": { "type": "string", "maxLength": 512, "pattern": "^(/[^/]*)*$", "description": "bpdiff pointer: RFC 6901 form where keyed array elements are addressed by key, for example /entities/customer/fields/phone." },
+    "revisionRef": {
+      "type": "object", "required": ["hash", "revision"], "additionalProperties": false,
+      "properties": {
+        "hash": { "$ref": "#/$defs/sha256", "description": "blueprint_hash(): sha256 of the canonical JSON of the whole revision, as in bpdiff." },
+        "revision": { "type": "integer", "minimum": 1, "description": "meta.revision." }
+      }
+    },
+    "impact": { "enum": ["cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"] },
+    "subject": {
+      "type": "object", "required": ["kind", "id", "parents"], "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["company", "compliance", "i18n", "location", "component", "entity", "field", "option", "relation", "binding", "role", "workflow", "approval", "report"] },
+        "id": { "type": ["string", "null"], "maxLength": 128, "description": "Element key; null for sections without elements (company, compliance, i18n)." },
+        "parents": {
+          "type": "array", "maxItems": 4,
+          "items": { "type": "object", "required": ["kind", "id"], "additionalProperties": false, "properties": { "kind": { "type": "string", "pattern": "^[a-z_]+$" }, "id": { "type": "string", "maxLength": 128 } } }
+        }
+      }
+    },
+    "stepKind": {
+      "enum": [
+        "settings.set",
+        "component.enable", "component.configure", "component.disable",
+        "location.upsert", "location.disable",
+        "entity.add", "entity.set_property", "entity.quarantine",
+        "field.add", "field.set_property", "field.reorder", "field.quarantine",
+        "option.add", "option.reorder", "option.quarantine",
+        "relation.add", "relation.set_property", "relation.quarantine",
+        "binding.add", "binding.set_property", "binding.disable",
+        "role.upsert", "role.disable",
+        "workflow.upsert", "workflow.disable",
+        "approval.upsert", "approval.disable",
+        "report.upsert", "report.disable"
+      ]
+    },
+    "noSecretKeys": { "propertyNames": { "not": { "pattern": "[Pp]assword|[Ss]ecret|[Aa]pi_?[Kk]ey|[Tt]oken|[Cc]redential" } } },
+    "definition": { "allOf": [{ "$ref": "#/$defs/noSecretKeys" }], "type": "object", "maxProperties": 64, "description": "A Blueprint node copied verbatim from the target (add, upsert, enable) or base (quarantine, disable) revision. Untrusted tenant data: never interpolated into code or queries." },
+    "params": {
+      "type": "object", "maxProperties": 8, "allOf": [{ "$ref": "#/$defs/noSecretKeys" }],
+      "properties": {
+        "definition": { "$ref": "#/$defs/definition" },
+        "property": { "type": "string", "maxLength": 256, "pattern": "^(/[^/]+)+$", "description": "Pointer below the subject, for example /required or /parameters/max_discount." },
+        "before": { "description": "Value in the base revision; absent when the property was absent." },
+        "after": { "description": "Value in the target revision; absent when the property is removed." },
+        "order": { "type": "array", "maxItems": 500, "items": { "type": "string", "maxLength": 128 }, "description": "reorder: full key list in target order." },
+        "previousOrder": { "type": "array", "maxItems": 500, "items": { "type": "string", "maxLength": 128 } }
+      },
+      "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "required": ["seq", "phase", "kind", "subject", "pointer", "impact", "ddlImpact", "reversible", "params", "sourceOps"],
+      "additionalProperties": false,
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "phase": { "type": "integer", "minimum": 1, "maximum": 18 },
+        "kind": { "$ref": "#/$defs/stepKind" },
+        "subject": { "$ref": "#/$defs/subject" },
+        "pointer": { "$ref": "#/$defs/pointer", "description": "Pointer of the subject in the Blueprint." },
+        "impact": { "$ref": "#/$defs/impact", "description": "Highest impact (bpdiff order) of the source ops." },
+        "ddlImpact": { "enum": ["none", "additive", "semantic"], "description": "Storage impact. none: metadata only. additive: new nullable storage (entity, field, relation). semantic: changes how stored values are typed or constrained. Destructive storage changes (dropping storage) cannot be expressed in 0.1.0: removal is quarantine." },
+        "reversible": { "type": "boolean", "description": "true when the inverse step restores the exact prior state, data included. false steps are refused by automatic rollback (adapter error rollback_not_possible)." },
+        "params": { "$ref": "#/$defs/params" },
+        "sourceOps": { "type": "array", "minItems": 1, "maxItems": 500, "items": { "$ref": "#/$defs/pointer" }, "description": "Pointers of the diff ops this step implements, sorted." }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "enum": ["entity.add", "field.add", "option.add", "relation.add", "binding.add", "location.upsert", "component.enable", "role.upsert", "workflow.upsert", "approval.upsert", "report.upsert", "entity.quarantine", "field.quarantine", "option.quarantine", "relation.quarantine", "binding.disable", "location.disable", "component.disable", "role.disable", "workflow.disable", "approval.disable", "report.disable"] } } }, "then": { "properties": { "params": { "required": ["definition"], "maxProperties": 1 } } } },
+        { "if": { "properties": { "kind": { "enum": ["settings.set", "entity.set_property", "field.set_property", "relation.set_property", "binding.set_property", "component.configure"] } } }, "then": { "properties": { "params": { "required": ["property"], "anyOf": [{ "required": ["before"] }, { "required": ["after"] }], "not": { "anyOf": [{ "required": ["definition"] }, { "required": ["order"] }] } } } } },
+        { "if": { "properties": { "kind": { "enum": ["field.reorder", "option.reorder"] } } }, "then": { "properties": { "params": { "required": ["order", "previousOrder"], "maxProperties": 2 } } } },
+        { "if": { "properties": { "kind": { "const": "settings.set" } } }, "then": { "properties": { "phase": { "const": 1 } } } },
+        { "if": { "properties": { "kind": { "enum": ["component.enable", "component.configure"] } } }, "then": { "properties": { "phase": { "const": 2 } } } },
+        { "if": { "properties": { "kind": { "const": "location.upsert" } } }, "then": { "properties": { "phase": { "const": 3 } } } },
+        { "if": { "properties": { "kind": { "const": "entity.add" } } }, "then": { "properties": { "phase": { "const": 4 }, "ddlImpact": { "const": "additive" } } } },
+        { "if": { "properties": { "kind": { "enum": ["field.add", "relation.add", "option.add", "binding.add"] } } }, "then": { "properties": { "phase": { "const": 5 } } } },
+        { "if": { "properties": { "kind": { "enum": ["entity.set_property", "field.set_property", "relation.set_property", "binding.set_property", "field.reorder", "option.reorder"] } } }, "then": { "properties": { "phase": { "const": 6 } } } },
+        { "if": { "properties": { "kind": { "const": "role.upsert" } } }, "then": { "properties": { "phase": { "const": 7 } } } },
+        { "if": { "properties": { "kind": { "const": "workflow.upsert" } } }, "then": { "properties": { "phase": { "const": 8 } } } },
+        { "if": { "properties": { "kind": { "const": "approval.upsert" } } }, "then": { "properties": { "phase": { "const": 9 } } } },
+        { "if": { "properties": { "kind": { "const": "report.upsert" } } }, "then": { "properties": { "phase": { "const": 10 } } } },
+        { "if": { "properties": { "kind": { "const": "report.disable" } } }, "then": { "properties": { "phase": { "const": 11 } } } },
+        { "if": { "properties": { "kind": { "const": "approval.disable" } } }, "then": { "properties": { "phase": { "const": 12 } } } },
+        { "if": { "properties": { "kind": { "const": "workflow.disable" } } }, "then": { "properties": { "phase": { "const": 13 } } } },
+        { "if": { "properties": { "kind": { "const": "role.disable" } } }, "then": { "properties": { "phase": { "const": 14 } } } },
+        { "if": { "properties": { "kind": { "enum": ["binding.disable", "option.quarantine", "relation.quarantine", "field.quarantine"] } } }, "then": { "properties": { "phase": { "const": 15 }, "ddlImpact": { "const": "none" } } } },
+        { "if": { "properties": { "kind": { "const": "entity.quarantine" } } }, "then": { "properties": { "phase": { "const": 16 }, "ddlImpact": { "const": "none" } } } },
+        { "if": { "properties": { "kind": { "const": "location.disable" } } }, "then": { "properties": { "phase": { "const": 17 } } } },
+        { "if": { "properties": { "kind": { "const": "component.disable" } } }, "then": { "properties": { "phase": { "const": 18 } } } }
+      ]
+    },
+    "postCondition": {
+      "type": "object", "required": ["id", "check", "pointer"], "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^pc_[0-9]{3,4}$" },
+        "check": { "enum": ["exists", "quarantined", "disabled", "property_equals", "count_equals", "order_equals"], "description": "Evaluated against the adapter's own export_config after apply. exists: active element at pointer (in export). quarantined / disabled: pointer listed in export_config retained with that state, data kept, not in export. property_equals: property under pointer equals expected. count_equals: number of active elements in the collection at pointer equals expected. order_equals: active keys of the collection at pointer, in order, equal expected." },
+        "pointer": { "$ref": "#/$defs/pointer" },
+        "property": { "type": "string", "maxLength": 256, "pattern": "^(/[^/]+)+$" },
+        "expected": { "description": "Required for property_equals (any JSON), count_equals (integer >= 0) and order_equals (array of keys)." }
+      },
+      "allOf": [
+        { "if": { "properties": { "check": { "const": "property_equals" } } }, "then": { "required": ["property", "expected"] } },
+        { "if": { "properties": { "check": { "const": "count_equals" } } }, "then": { "required": ["expected"], "properties": { "expected": { "type": "integer", "minimum": 0 } } } },
+        { "if": { "properties": { "check": { "const": "order_equals" } } }, "then": { "required": ["expected"], "properties": { "expected": { "type": "array", "items": { "type": "string" } } } } }
+      ]
+    },
+    "risk": {
+      "type": "object",
+      "required": ["counts", "total", "maxImpact", "needsDdlPlanGate", "touchesCompliance", "touchesAccess", "touchesLedgerOrTax", "requiresTeamReview", "irreversibleSteps"],
+      "additionalProperties": false,
+      "description": "counts, total, maxImpact, touchesCompliance and touchesAccess are copied from the bpdiff risk of the source diff. needsDdlPlanGate is the diff value OR any step with ddlImpact other than none. touchesLedgerOrTax: a step's subject is bound to, or is, a component whose manifest marks it ledger or tax affecting. requiresTeamReview = touchesCompliance OR touchesLedgerOrTax (build-states, changes after go-live).",
+      "properties": {
+        "counts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"],
+          "properties": {
+            "cosmetic": { "type": "integer", "minimum": 0 }, "config": { "type": "integer", "minimum": 0 }, "data_shape": { "type": "integer", "minimum": 0 }, "destructive": { "type": "integer", "minimum": 0 },
+            "compliance": { "type": "integer", "minimum": 0 }, "access": { "type": "integer", "minimum": 0 }, "branding": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "total": { "type": "integer", "minimum": 0 },
+        "maxImpact": { "oneOf": [{ "$ref": "#/$defs/impact" }, { "type": "null" }] },
+        "needsDdlPlanGate": { "type": "boolean" },
+        "touchesCompliance": { "type": "boolean" },
+        "touchesAccess": { "type": "boolean" },
+        "touchesLedgerOrTax": { "type": "boolean" },
+        "requiresTeamReview": { "type": "boolean" },
+        "irreversibleSteps": { "type": "integer", "minimum": 0, "description": "Number of steps with reversible false." }
+      }
+    }
+  },
+  "x-validator-rules": [
+    "integrity.contentHash equals sha256 of the canonical JSON of the artifact without artifactId and integrity; artifactId equals 'art_' + the first 32 hex characters of that hash.",
+    "steps[].seq is 1..n in array order; steps are sorted by (phase, pointer, kind); no two steps share (kind, pointer).",
+    "components are sorted by id with unique ids; skippedOps by pointer; postConditions by id; sourceOps within a step by pointer.",
+    "Every op of the source diff appears exactly once, either in some step's sourceOps or in skippedOps.",
+    "blueprint.target.hash equals the bpdiff target hash of the source diff; blueprint.base.hash equals its base hash; diffHash equals sha256 of the canonical diff.",
+    "For an embedded inverse: inverse.blueprint.base equals this artifact's blueprint.target, inverse.blueprint.target equals this artifact's blueprint.base, and inverse.engineTarget equals engineTarget.",
+    "No key anywhere in params (at any depth) matches the secret-key pattern of $defs.noSecretKeys; no value is a credential, URL with userinfo, or engine object name.",
+    "No step kind, subject kind or params key names an engine object, table, column, module or product: steps are neutral and the adapter maps them.",
+    "The canonical JSON of the whole artifact (inverse included) is at most 1 048 576 bytes; nesting depth of params is at most 32.",
+    "risk is consistent with steps: irreversibleSteps equals the count of steps with reversible false; needsDdlPlanGate is true if any step has ddlImpact other than none."
+  ]
+}

@@ -1,0 +1,293 @@
+{
+  "artifactSchema": "0.1.0",
+  "artifactId": "art_ff9ffb5c4eb65e191858da88aba5b96e",
+  "kind": "forward",
+  "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
+  "blueprint": {
+    "id": "example-trading-001",
+    "base": {"hash": "sha256:3ae76a1ad19c165efa6da7c69a01812ce1f92acfb728936236e2ec00347b1d02", "revision": 1},
+    "target": {"hash": "sha256:4079fde2e3c5ba7a29d9611c79e0a08b1b33ca2624b31040a59e304741f203ef", "revision": 2},
+    "diffHash": "sha256:6c765172932db1e9caeace50752c357f6e3c8d7195bef5815cf5e2c8011551fb"
+  },
+  "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+  "components": [
+    {"id": "compliance.zatca_sa", "version": "0.1.0"},
+    {"id": "core.customer", "version": "0.1.0"},
+    {"id": "core.item", "version": "0.1.0"},
+    {"id": "core.sales_invoice", "version": "0.1.0"},
+    {"id": "core.sales_order", "version": "0.1.0"}
+  ],
+  "steps": [
+    {
+      "seq": 1,
+      "phase": 8,
+      "kind": "workflow.upsert",
+      "subject": {"kind": "workflow", "id": "sales_order_flow", "parents": []},
+      "pointer": "/workflows/sales_order_flow",
+      "impact": "access",
+      "ddlImpact": "none",
+      "reversible": true,
+      "params": {
+        "definition": {
+          "id": "sales_order_flow",
+          "entity": "sales_order",
+          "labels": {"ar": "مسار أمر البيع", "en": "Sales order flow"},
+          "states": [
+            {"id": "draft", "kind": "initial", "labels": {"ar": "مسودة", "en": "Draft"}},
+            {
+              "id": "pending_approval",
+              "kind": "normal",
+              "locksEditing": true,
+              "labels": {"ar": "بانتظار الاعتماد", "en": "Pending approval"}
+            },
+            {"id": "approved", "kind": "normal", "locksEditing": true, "labels": {"ar": "معتمد", "en": "Approved"}},
+            {"id": "on_hold", "kind": "normal", "labels": {"ar": "معلّق", "en": "On hold"}},
+            {
+              "id": "delivered",
+              "kind": "final",
+              "locksEditing": true,
+              "labels": {"ar": "تم التسليم", "en": "Delivered"}
+            },
+            {"id": "cancelled", "kind": "final", "locksEditing": true, "labels": {"ar": "ملغى", "en": "Cancelled"}}
+          ],
+          "transitions": [
+            {
+              "id": "submit_small",
+              "from": "draft",
+              "to": "approved",
+              "actionLabels": {"ar": "اعتماد", "en": "Confirm"},
+              "allowedRoles": ["sales_rep", "owner"],
+              "guards": [{"field": "total_amount", "op": "lt", "value": 50000}]
+            },
+            {
+              "id": "submit_large",
+              "from": "draft",
+              "to": "pending_approval",
+              "actionLabels": {"ar": "إرسال للاعتماد", "en": "Send for approval"},
+              "allowedRoles": ["sales_rep", "owner"],
+              "guards": [{"field": "total_amount", "op": "gte", "value": 50000}],
+              "notify": ["owner"]
+            },
+            {
+              "id": "approve_large",
+              "from": "pending_approval",
+              "to": "approved",
+              "actionLabels": {"ar": "اعتماد", "en": "Approve"},
+              "allowedRoles": ["owner"],
+              "approval": "large_order_approval"
+            },
+            {
+              "id": "deliver",
+              "from": "approved",
+              "to": "delivered",
+              "actionLabels": {"ar": "تأكيد التسليم", "en": "Confirm delivery"},
+              "allowedRoles": ["warehouse_keeper", "owner"]
+            },
+            {
+              "id": "cancel_draft",
+              "from": "draft",
+              "to": "cancelled",
+              "actionLabels": {"ar": "إلغاء", "en": "Cancel"},
+              "allowedRoles": ["sales_rep", "owner"]
+            },
+            {
+              "id": "hold",
+              "from": "approved",
+              "to": "on_hold",
+              "actionLabels": {"ar": "تعليق", "en": "Hold"},
+              "allowedRoles": ["owner"]
+            },
+            {
+              "id": "release",
+              "from": "on_hold",
+              "to": "approved",
+              "actionLabels": {"ar": "إلغاء التعليق", "en": "Release"},
+              "allowedRoles": ["owner"]
+            }
+          ],
+          "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": true, "editedBy": "owner"}
+        }
+      },
+      "sourceOps": [
+        "/workflows/sales_order_flow/states/on_hold",
+        "/workflows/sales_order_flow/transitions/hold",
+        "/workflows/sales_order_flow/transitions/release"
+      ]
+    }
+  ],
+  "skippedOps": [{"pointer": "/meta/revision", "reason": "meta"}],
+  "postConditions": [
+    {"id": "pc_001", "check": "exists", "pointer": "/workflows/sales_order_flow/states/on_hold"},
+    {
+      "id": "pc_002",
+      "check": "order_equals",
+      "pointer": "/workflows/sales_order_flow/states",
+      "expected": ["draft", "pending_approval", "approved", "on_hold", "delivered", "cancelled"]
+    },
+    {
+      "id": "pc_003",
+      "check": "count_equals",
+      "pointer": "/workflows/sales_order_flow/transitions",
+      "expected": 7
+    }
+  ],
+  "risk": {
+    "counts": {"cosmetic": 1, "config": 1, "data_shape": 0, "destructive": 0, "compliance": 0, "access": 2, "branding": 0},
+    "total": 4,
+    "maxImpact": "access",
+    "needsDdlPlanGate": false,
+    "touchesCompliance": false,
+    "touchesAccess": true,
+    "touchesLedgerOrTax": false,
+    "requiresTeamReview": false,
+    "irreversibleSteps": 0
+  },
+  "inverse": {
+    "artifactSchema": "0.1.0",
+    "artifactId": "art_1fd1fd1f0520cea2120f5fec5abd9f5e",
+    "kind": "inverse",
+    "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
+    "blueprint": {
+      "id": "example-trading-001",
+      "base": {"hash": "sha256:4079fde2e3c5ba7a29d9611c79e0a08b1b33ca2624b31040a59e304741f203ef", "revision": 2},
+      "target": {"hash": "sha256:3ae76a1ad19c165efa6da7c69a01812ce1f92acfb728936236e2ec00347b1d02", "revision": 1},
+      "diffHash": "sha256:543deaf825ca33146b73ff2a39ef4501b51ecbc5692ecc55d17363994f673825"
+    },
+    "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+    "components": [
+      {"id": "compliance.zatca_sa", "version": "0.1.0"},
+      {"id": "core.customer", "version": "0.1.0"},
+      {"id": "core.item", "version": "0.1.0"},
+      {"id": "core.sales_invoice", "version": "0.1.0"},
+      {"id": "core.sales_order", "version": "0.1.0"}
+    ],
+    "steps": [
+      {
+        "seq": 1,
+        "phase": 8,
+        "kind": "workflow.upsert",
+        "subject": {"kind": "workflow", "id": "sales_order_flow", "parents": []},
+        "pointer": "/workflows/sales_order_flow",
+        "impact": "destructive",
+        "ddlImpact": "none",
+        "reversible": true,
+        "params": {
+          "definition": {
+            "id": "sales_order_flow",
+            "entity": "sales_order",
+            "labels": {"ar": "مسار أمر البيع", "en": "Sales order flow"},
+            "states": [
+              {"id": "draft", "kind": "initial", "labels": {"ar": "مسودة", "en": "Draft"}},
+              {
+                "id": "pending_approval",
+                "kind": "normal",
+                "locksEditing": true,
+                "labels": {"ar": "بانتظار الاعتماد", "en": "Pending approval"}
+              },
+              {"id": "approved", "kind": "normal", "locksEditing": true, "labels": {"ar": "معتمد", "en": "Approved"}},
+              {
+                "id": "delivered",
+                "kind": "final",
+                "locksEditing": true,
+                "labels": {"ar": "تم التسليم", "en": "Delivered"}
+              },
+              {"id": "cancelled", "kind": "final", "locksEditing": true, "labels": {"ar": "ملغى", "en": "Cancelled"}}
+            ],
+            "transitions": [
+              {
+                "id": "submit_small",
+                "from": "draft",
+                "to": "approved",
+                "actionLabels": {"ar": "اعتماد", "en": "Confirm"},
+                "allowedRoles": ["sales_rep", "owner"],
+                "guards": [{"field": "total_amount", "op": "lt", "value": 50000}]
+              },
+              {
+                "id": "submit_large",
+                "from": "draft",
+                "to": "pending_approval",
+                "actionLabels": {"ar": "إرسال للاعتماد", "en": "Send for approval"},
+                "allowedRoles": ["sales_rep", "owner"],
+                "guards": [{"field": "total_amount", "op": "gte", "value": 50000}],
+                "notify": ["owner"]
+              },
+              {
+                "id": "approve_large",
+                "from": "pending_approval",
+                "to": "approved",
+                "actionLabels": {"ar": "اعتماد", "en": "Approve"},
+                "allowedRoles": ["owner"],
+                "approval": "large_order_approval"
+              },
+              {
+                "id": "deliver",
+                "from": "approved",
+                "to": "delivered",
+                "actionLabels": {"ar": "تأكيد التسليم", "en": "Confirm delivery"},
+                "allowedRoles": ["warehouse_keeper", "owner"]
+              },
+              {
+                "id": "cancel_draft",
+                "from": "draft",
+                "to": "cancelled",
+                "actionLabels": {"ar": "إلغاء", "en": "Cancel"},
+                "allowedRoles": ["sales_rep", "owner"]
+              }
+            ],
+            "provenance": {"source": "template", "ref": "trading_distribution@0.1.0", "humanEdited": true, "editedBy": "owner"}
+          }
+        },
+        "sourceOps": [
+          "/workflows/sales_order_flow/states/on_hold",
+          "/workflows/sales_order_flow/transitions/hold",
+          "/workflows/sales_order_flow/transitions/release"
+        ]
+      }
+    ],
+    "skippedOps": [{"pointer": "/meta/revision", "reason": "meta"}],
+    "postConditions": [
+      {
+        "id": "pc_001",
+        "check": "order_equals",
+        "pointer": "/workflows/sales_order_flow/states",
+        "expected": ["draft", "pending_approval", "approved", "delivered", "cancelled"]
+      },
+      {
+        "id": "pc_002",
+        "check": "count_equals",
+        "pointer": "/workflows/sales_order_flow/transitions",
+        "expected": 5
+      }
+    ],
+    "risk": {
+      "counts": {
+        "cosmetic": 1,
+        "config": 0,
+        "data_shape": 0,
+        "destructive": 1,
+        "compliance": 0,
+        "access": 2,
+        "branding": 0
+      },
+      "total": 4,
+      "maxImpact": "destructive",
+      "needsDdlPlanGate": true,
+      "touchesCompliance": false,
+      "touchesAccess": true,
+      "touchesLedgerOrTax": false,
+      "requiresTeamReview": false,
+      "irreversibleSteps": 0
+    },
+    "inverse": null,
+    "integrity": {
+      "algorithm": "sha256-canonical-json-v1",
+      "contentHash": "sha256:1fd1fd1f0520cea2120f5fec5abd9f5e46d4aa17d818462f4eaf4385af08f2aa",
+      "signature": null
+    }
+  },
+  "integrity": {
+    "algorithm": "sha256-canonical-json-v1",
+    "contentHash": "sha256:ff9ffb5c4eb65e191858da88aba5b96e2068083b9ebd29116ff09f5bb656dd89",
+    "signature": null
+  }
+}

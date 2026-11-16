@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 10 | 37 | 0 | 60 |
+| G0 | 11 | 12 | 38 | 0 | 61 |
 | G1 | 71 | 5 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 263 | 16 | 52 | 0 | 331 |
+| all | 261 | 18 | 53 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -70,14 +70,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-034: Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety
 - GOV-035: Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests)
 - GOV-036: Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows
+- GOV-041: Contracts check script: every contract schema valid, examples validate, refs resolve; CI job
 
 ## Ready to start (todo, all dependencies done), by gate
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (11)
-- BPL-025: Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently (owner eldon)
-- BPL-026: Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures (owner eldon)
+**G0** (9)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner eldon)
 - GOV-014: Trial the cross-model PR review routine on the first real PR (owner eldon)
@@ -144,6 +143,8 @@ Doing:
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation
 - BRD-011: Font licence and Arabic typography verification
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
+- BPL-025: Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently
+- BPL-026: Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures
 - GOV-043: Risk-tiered review and fewer rounds (ADR-0035, Proposed): docs-only, ordinary and rigid-zone tiers, block only on defects, two rounds, larger PRs, no logs for docs-only PRs, generated STATUS; needs both founders' agreement
 - GOV-044: Standing permission for coding agents to commit, push their feature branch and open PRs (founders' agreement, AGENTS.md and CLAUDE.md); main, force-push and merges stay restricted
 - GOV-045: Both founders' agents work and merge on their own under ADR-0035 tiers: next ready row, fix real defects, merge Tier 1 on green CI and Tier 2 after the other side has reviewed
@@ -153,8 +154,6 @@ Doing:
 - SEC-019: Action-policy table spec (ADR-0027): roles, separation of duties, approval binding, behaviour on cancellation, failure and emergency access, enforcement when the model or gateway fails
 
 Ready next (dependencies done), by gate:
-- BPL-025 (G0): Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently
-- BPL-026 (G0): Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures
 - GOV-002 (G0): Create GitHub organisation, transfer repo, decide final repo name
 - GOV-010 (G0): Install pre-commit hooks on both founders' machines
 - GOV-014 (G0): Trial the cross-model PR review routine on the first real PR
@@ -240,6 +239,8 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) (eldon)
+- BPL-025: Engine adapter contract (contracts/engine-adapter.md), in-memory fake adapter and conformance tests, so the compiler and the real engine are built independently (eldon)
+- BPL-026: Compiled-artifact contract (contracts/compiled-artifact.schema.json) with sample artifacts, so apply and rollback are built against fixtures (eldon)
 - GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032) (partner)
 - GOV-043: Risk-tiered review and fewer rounds (ADR-0035, Proposed): docs-only, ordinary and rigid-zone tiers, block only on defects, two rounds, larger PRs, no logs for docs-only PRs, generated STATUS; needs both founders' agreement (eldon)
 - GOV-044: Standing permission for coding agents to commit, push their feature branch and open PRs (founders' agreement, AGENTS.md and CLAUDE.md); main, force-push and merges stay restricted (eldon)
@@ -259,8 +260,8 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-16-eldon-claude-code-efficient-review-workflow.md](log/2026-11-16-eldon-claude-code-efficient-review-workflow.md): Added the efficient review workflow (seven points, from the partner's request relayed by Eldon) as section 14 of agents/team-protocol.md and linked it from AGENTS.md and CLAUDE.md. No gate, lane, security-review, rigid-zone or phase-exit rule changed.
 - [2026-11-16-eldon-claude-code-agents-work-freely.md](log/2026-11-16-eldon-claude-code-agents-work-freely.md): AGENTS.md now lets both founders' agents work and merge on their own under the ADR-0035 tiers (Eldon's instruction; the partner is told in the PR).
 - [2026-11-16-eldon-claude-code-agents-may-push.md](log/2026-11-16-eldon-claude-code-agents-may-push.md): Both founders (together, in chat) gave coding agents standing permission to commit, push their feature branch and open PRs. AGENTS.md and CLAUDE.md now say so; main, force-push and unreviewed merges stay forbidden.
+- [2026-11-16-eldon-claude-code-adapter-contract-0-1-2.md](log/2026-11-16-eldon-claude-code-adapter-contract-0-1-2.md): Engine adapter contract 0.1.2 resolves the open questions the partner's review of PR 56 found blocking (Q-36 to Q-40), as a patch-level clarification on the draft contract branch (PR 40).
 - [2026-11-15-eldon-claude-code-sec-019-action-policy-table.md](log/2026-11-15-eldon-claude-code-sec-019-action-policy-table.md): Drafted the action-policy table spec for ADR-0027: table schema, risk classes, approval binding to a payload hash, separation of duties, lifecycle with cancellation, failure and expiry, break-glass, fail-closed enforcement, agents as draft-only actors, approval events, and a starter table for the six golden-path actions.
-- [2026-11-15-eldon-claude-code-adr-0034-reviewed-reviewer.md](log/2026-11-15-eldon-claude-code-adr-0034-reviewed-reviewer.md): Q-19 first step: a component at `reviewed` or above must name a reviewer in `reviewedBy`, and a ledger or tax component may wait for review at `tested` (proposed in ADR-0034). BPL-014 stays doing: the test harness part is not started.
 
 ## ADRs with status Proposed
 

@@ -11,6 +11,7 @@ Q-19 (answered by the founder on PR #48, 2026-11-14): a manifest must never say 
 - `reviewedBy` must list at least one GitHub login at levels `reviewed`, `certified` and `regulated`.
 - A component that touches the ledger or tax may be at `tested` while it waits for review (sandbox only, per the certification table). `draft` is still refused for it. No new level is added.
 - Moving to `reviewed` is a recorded review (ADR-0032) by a founder who did not write or prompt the code; the login in `reviewedBy` is that reviewer.
+- **Production boundary (fail closed):** only `certified` and `regulated` components are production eligible; `tested` and `reviewed` are sandbox only; `draft`, an unknown level and an unknown environment are never eligible. The registry enforces this in `Registry.eligible(environment)` and `is_eligible` (tested in `test_registry_admission.py`). The compiler and any tenant publish path (BPL-027, ERP-012) must call it; no production compiler exists yet, so that call is a requirement on those rows, not something already enforced end to end.
 - The schema cannot check that the reviewer differs from the author. The registry or CI check for that is a follow-up.
 
 ## Alternatives rejected

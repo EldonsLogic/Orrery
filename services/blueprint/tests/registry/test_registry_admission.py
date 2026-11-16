@@ -140,3 +140,29 @@ def test_ledger_or_tax_component_may_wait_for_review_at_tested():
     assert Registry.from_manifests([variant(certification=waiting)]).ok
     draft = {"level": "draft", "touchesLedgerOrTax": True}
     assert "REG-001" in codes(Registry.from_manifests([variant(certification=draft)]).errors)
+
+
+def test_production_eligibility_is_fail_closed():
+    """ADR-0034: a ledger or tax component waiting at tested or reviewed is sandbox only."""
+    waiting = Registry.from_manifests([variant(certification={"level": "tested", "touchesLedgerOrTax": True})])
+    mid = fixture_manifest("stock.ledger")  # reviewed, touches ledger
+    mid_reg = Registry.from_manifests([mid])
+    cid, ver = waiting.list_components()[0], waiting.versions(waiting.list_components()[0])[0]
+    assert waiting.is_eligible(cid, ver, "sandbox")
+    assert not waiting.is_eligible(cid, ver, "production")
+    mcid = mid_reg.list_components()[0]
+    mver = mid_reg.versions(mcid)[0]
+    assert mid_reg.is_eligible(mcid, mver, "sandbox") and not mid_reg.is_eligible(mcid, mver, "production")
+    # unknown environment or garbage input: nothing is eligible
+    for env in ("staging", "", None, 7):
+        assert waiting.eligible(env) == []
+    # draft is never eligible anywhere
+    draft = Registry.from_manifests([variant(certification={"level": "draft"})])
+    assert draft.eligible("sandbox") == [] and draft.eligible("production") == []
+
+
+def test_certified_is_production_eligible():
+    cert = {"level": "certified", "reviewedBy": ["example-reviewer"], "certifiedAt": "2026-01-01T00:00:00Z",
+            "evidence": [{"kind": "ci_run", "ref": "example-run"}]}
+    reg = Registry.from_manifests([variant(certification=cert)])
+    assert reg.ok and len(reg.eligible("production")) == 1 and len(reg.eligible("sandbox")) == 1

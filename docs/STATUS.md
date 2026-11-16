@@ -234,6 +234,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-16-partner-codex-erp-003-provisioning-review.md](log/2026-11-16-partner-codex-erp-003-provisioning-review.md): Addressed the ERP-003 provisioning review with input validation, redaction, supported configuration commands, and fail-closed app verification.
 - [2026-11-14-partner-claude-code-erp-005-review-fixes.md](log/2026-11-14-partner-claude-code-erp-005-review-fixes.md): Applied Eldon's review of PR #49. The ERP-005 row is back to `doing`, the spec now says Desk hiding is not enforcement, and the Q-22 question now covers negative amounts.
 - [2026-11-14-partner-claude-code-erp-004-review-fixes.md](log/2026-11-14-partner-claude-code-erp-004-review-fixes.md): Applied Eldon's review of PR #50. ERP-004 is back to `doing`, Q-25 now has the engine's own MariaDB support range, and the MariaDB move is a new plan row (ERP-024).
 - [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
@@ -243,7 +244,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-11-partner-codex-erp-003-rebase.md](log/2026-11-11-partner-codex-erp-003-rebase.md): Rebased the ERP-003 change on the refreshed ERP-001 branch and kept its row doing pending a live bench proof.
 - [2026-11-11-partner-codex-erp-001-rebase.md](log/2026-11-11-partner-codex-erp-001-rebase.md): Rebased ERP-001 on current main and claimed the row for the partner; the bench remains under verification.
 - [2026-11-11-partner-codex-erp-001-preflight.md](log/2026-11-11-partner-codex-erp-001-preflight.md): Reviewed the ERP-001 bench and the golden path using cached image metadata; the live bench proof remains open.
-- [2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md](log/2026-11-11-eldon-claude-code-phased-delivery-adrs-rows.md): Wrote the phased delivery document with lanes and the phase to gate map, four proposed ADRs, 19 new plan rows and the phase exit plan rows, for the partner to review.
 
 ## ADRs with status Proposed
 

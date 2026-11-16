@@ -1,6 +1,6 @@
 # Engine adapter
 
-Version: 0.1.1
+Version: 0.1.2
 Status: draft
 Owner: eldon
 Plan IDs: BPL-025 (this contract, fake, conformance suite), BPL-026 (compiled artifact), BPL-012 and ERP-012 (real adapter), BPL-007 (apply), BPL-027 (integration)
@@ -49,7 +49,7 @@ The adapter authenticates the calling **service** (mutual TLS or signed service 
 | `apply`, `rollback` | control_plane | production site: user, or support with `supportGrantId`; never agent, never null. Sandbox site: also system or agent |
 | `sync_members` | control_plane, identity | system or user |
 
-A refused call returns `permission_denied`, changes nothing and emits `permission.denied`.
+A refused call returns `permission_denied`, changes nothing and emits exactly one `permission.denied` and no other event (8.2).
 
 ### 4.3 Version negotiation
 - `context.contractVersion` must match a value in `capabilities().contractVersions` on major and minor while the major is 0 (minor bumps may break, contracts README rule 1); patch may differ. Else `unsupported_contract_version` with `details.supported`.
@@ -72,7 +72,7 @@ A refused call returns `permission_denied`, changes nothing and emits `permissio
 | `health()` | none | status, checks | none | yes |
 
 ### 5.1 capabilities
-Lists every kind of the artifact `stepKind` enum, sorted, with `supported`, `gated` (plan always asks for gate approval) or `unsupported`. `exportedProperties` names, per subject kind, the Blueprint properties the adapter persists and exports; the fake and the real adapter declare the same lists for one contract version (16.6). Test-only fault hooks (15.1) are never listed and never present in production builds.
+Lists every kind of the artifact `stepKind` enum, sorted, with `supported`, `gated` (plan always asks for gate approval) or `unsupported`. `exportedProperties` names, per subject kind, the Blueprint properties the adapter persists and exports; the fake and the real adapter declare the same lists for one contract version (16.3). Its keys are exactly these subject kinds, no others: `settings_company`, `settings_compliance`, `settings_intl` (the Blueprint `settings` sections `company`, `compliance` and `i18n`; the key pattern `^[a-z_]+$` has no digits, so `i18n` is spelled `intl`), `component`, `location`, `entity`, `field`, `relation`, `role`, `workflow`, `state`, `transition`, `approval`, `report`. A kind with no persisted property is listed with an empty array. The property lists inside each key stay open (16.3). Test-only fault hooks (15.1) are never listed and never present in production builds.
 
 ### 5.2 provision_site and site_status
 `provision_site` creates one isolated site for the context tenant (ADR-0006) on the requested version set, with the country pack, bound to one `blueprintId`. Same key: stored result, `replayed: true`. New key, same parameters, site exists: current status, no second site. Different `engineTarget` or `blueprintId`: `site_exists_different_target`. Site states: `absent`, `provisioning`, `ready`, `applying`, `recovery_required`, `failed`. `applied` is the last artifact applied or rolled back to, with the revision the site matches. No hostnames, database names or engine identifiers are returned. Tenant lifecycle (trial, active, suspended) is the control plane's, not the adapter's.
@@ -105,13 +105,13 @@ Six audited stages, in this order (names map to the existing change engine, sect
 
 | Stage | Does | Failure gives |
 |---|---|---|
-| `acquire` | Take the site lock (one apply or rollback per site); bind `idempotencyKey` to the canonical input hash | `concurrent_change` (retryable), `idempotency_conflict`, or the stored outcome on replay |
+| `acquire` | Look up `idempotencyKey` first (a known key with the same input returns the stored outcome, or `in_progress` while it runs; with other input `idempotency_conflict`); then take the site lock (one apply or rollback per site); then create the operation record (5.6.1) | `idempotency_conflict`, `concurrent_change` (retryable), both before the record exists |
 | `inspect` | Re-run every plan check; verify `planToken` (same artifact, same tenant, not expired, current export hash equals `siteConfigHash`); check `approvals` | `plan_token_invalid`, `plan_rejected`, `approval_missing`, `base_revision_mismatch`, `recovery_required` |
 | `prepare` | Persist the durable intent (operation id, artifact hash, plan evidence, approvals) and its audit record before any change | `failed_clean` |
 | `execute` | Run steps in `seq` order | go to `compensate` |
 | `reconcile` | Read back the configuration, verify every post-condition | go to `compensate` with `postcondition_failed` |
 | `finalize` | Persist the outcome, update `site.applied`, emit events, release the lock | `recovery_required` if the outcome cannot be persisted |
-| `compensate` | Only on failure after `execute` began: undo executed steps in reverse order with the matching steps of the stored inverse (same pointer) | `recovery_required` if any compensation fails |
+| `compensate` | Only on failure after `execute` began: undo executed steps in reverse order with the matching steps of the stored inverse (same pointer); with no stored inverse (initial build) as in 5.6.2 | `recovery_required` if any compensation fails |
 
 Approvals: `changeApproved` always; `gateApproved` when the verdict is `needs_gate_approval`; `teamReviewed` when `risk.requiresTeamReview`. The adapter checks presence and format and records them; their truth is the control plane's (15.3).
 
@@ -121,7 +121,7 @@ Outcome `status`:
 | `in_progress` | Returned to a retry with the same key while running | locked |
 | `applied` | All steps and post-conditions passed | target revision |
 | `already_applied` | Site already holds this artifact (different key) | unchanged |
-| `rejected` | Refused in `acquire` or `inspect`; nothing changed | base revision |
+| `rejected` | Refused in `inspect`; nothing changed | base revision |
 | `failed_clean` | Failed in `prepare`; nothing changed | base revision |
 | `compensated` | Failed during `execute` or `reconcile`; executed steps undone | base revision, active export identical to before |
 | `recovery_required` | Partial state could not be undone or the outcome could not be persisted | blocked for apply and rollback until a human resolves it |
@@ -132,8 +132,14 @@ Change classes (ADR-0028). Every step falls in one class, and the recovery diffe
 
 Restore rule: an add step (`*.add`, `*.upsert`, `*.enable`) whose subject is quarantined or disabled with an identical definition restores it with its data; with a different definition the step is `blocked` (`definition_conflict`).
 
+#### 5.6.1 Operation record
+The operation record of an `apply` or `rollback` exists from the moment `acquire` succeeds: the key is bound to the input hash, the lock is held, and the record holds `operationId`, operation, input hash and artifact id. Everything refused before that moment (validation, authorisation, versions, integrity, engine target, limits, `tenant_not_found`, `site_not_ready`, `idempotency_conflict`, `concurrent_change`) returns the `ok: false` envelope, stores nothing under the key and emits no event except `permission.denied` for 4.2. Everything decided from `inspect` on returns `ok: true` with an outcome (status `rejected` or later), is stored under the key and emits the events of 8.2. `prepare` makes the record durable before the first change; the step journal is appended to it.
+
+#### 5.6.2 Compensation without a stored inverse (initial build)
+An initial build (base null) carries no inverse (9.6). Its compensation is the removal from the active configuration of what this apply created, derived from the step journal, never from the live site: each executed step is undone newest first by `*.add` to `*.quarantine`, `*.upsert` or `*.enable` to `*.disable` (same pointer), and `settings.set` to a `settings.set` of the value the journal recorded before the step ran (the property is unset when it had none). Any other step kind in an artifact without an inverse cannot be compensated and ends `recovery_required`. Each undo step is journaled with phase `compensate` before it runs. Removal follows principle 5: no stored data is dropped; created elements end in `retained` as quarantined or disabled. Success is verified as for any compensation: the active export hash equals the pre-apply hash (for a new site, the empty export). This is compensation inside a failed apply; rolling back a successful initial build is still not an adapter operation (5.7).
+
 ### 5.7 rollback
-Input is the **forward** artifact; the adapter uses its embedded `inverse`. Checks: integrity of both; `forwardArtifact.artifactId` equals `site.applied.artifactId` (else `rollback_not_possible`, `reasonCode` `not_latest`); `inverse` not null (`no_inverse`); `risk.irreversibleSteps` is 0 (`irreversible_step`). Then it runs `plan` and the six stages of `apply` on the inverse internally. A rollback whose inverse plan needs the gate requires `approvals.gateApproved`. Destructive inverse steps are quarantine (build-states rollback rule 3). Ledger-affecting records are never rolled back (build-states rule 6); the adapter refuses inverse steps on protected subjects like any other step. Rolling back an initial build is not an adapter operation: the sandbox is destroyed (build-states rule 1).
+Input is the **forward** artifact; the adapter uses its embedded `inverse`. The outcome's `artifactId`, `steps` and `postConditions` are those of the inverse that ran. After a successful rollback, `site.applied` names the artifact the site was on before the rolled-back one was applied (the artifact rolled back to, whose target revision equals the forward base), never the inverse; the adapter keeps the per-site history of applied artifacts for this. Because an initial build cannot be rolled back, `site.applied` never returns to null through rollback. Checks: integrity of both; `forwardArtifact.artifactId` equals `site.applied.artifactId` (else `rollback_not_possible`, `reasonCode` `not_latest`); `inverse` not null (`no_inverse`); `risk.irreversibleSteps` is 0 (`irreversible_step`). Then it runs `plan` and the six stages of `apply` on the inverse internally. A rollback whose inverse plan needs the gate requires `approvals.gateApproved`. Destructive inverse steps are quarantine (build-states rollback rule 3). Ledger-affecting records are never rolled back (build-states rule 6); the adapter refuses inverse steps on protected subjects like any other step. Rolling back an initial build is not an adapter operation: the sandbox is destroyed (build-states rule 1).
 
 ### 5.8 export_config
 Returns the active configuration in Blueprint shape (`export`), its `exportHash`, and `retained` (quarantined or disabled elements, by pointer, not hashed). Rules:
@@ -180,7 +186,7 @@ Error object: error.schema.json. `code` is stable; `messageKey` is `errors.adapt
 | `engine_unavailable` | engine down or overloaded | yes |
 | `internal_error` | adapter bug | maybe |
 
-Errors before `acquire` (validation, authorisation, versions, integrity, limits) use the `ok: false` envelope. Once an operation record exists, `apply` and `rollback` return `ok: true` with an outcome whose `error` explains a non-success status.
+Errors before the operation record exists (5.6.1: validation, authorisation, versions, integrity, limits, site lookup, and the `acquire` failures `idempotency_conflict` and `concurrent_change`) use the `ok: false` envelope. Once an operation record exists, `apply` and `rollback` return `ok: true` with an outcome whose `error` explains a non-success status.
 
 ## 7. Idempotency, timeouts, retries
 - Keys are scoped `(tenant, operation, key)` and bound to the sha256 of the canonical `input`. Same key, same input: stored result, `replayed: true`, no new effect, no new event. Same key, other input: `idempotency_conflict`. Retention at least 30 days (`idempotencyRetentionSeconds`).
@@ -204,7 +210,18 @@ The adapter is the only producer of these; the control plane must not emit them 
 | rollback fails | `blueprint.apply_failed` | `change_id` = inverse artifactId, `error_code` |
 | any call refused by 4.2 | `permission.denied` | per registry |
 
-`already_applied`, replays, plan, preview, export, status, capabilities and health emit no event. Role assignment events (`role.assigned`, `role.revoked`) belong to the membership store, not to `sync_members`.
+Exact events per case (one call, exactly these, each once; a rejection records the refusal, it does not change the site):
+| Case | Response | Events |
+|---|---|---|
+| Refused by 4.2 | `ok: false`, `permission_denied` | one `permission.denied` |
+| Any other refusal before the operation record exists (5.6.1), any operation | `ok: false` | none |
+| `apply` or `rollback` ends `rejected` in `inspect` (`plan_token_invalid`, `plan_rejected`, `approval_missing`, `unsupported_step_kind`, `blueprint_mismatch`, `base_revision_mismatch`, `recovery_required`, `artifact_not_found`, `rollback_not_possible`) | outcome `rejected` | one `blueprint.apply_failed` |
+| `apply` or `rollback` ends `failed_clean`, `compensated` or `recovery_required` | outcome | one `blueprint.apply_failed` |
+| `apply` ends `applied` / `rollback` ends `applied` | outcome | one `blueprint.applied` / one `blueprint.rolled_back` |
+| `already_applied`, a replay, `in_progress`, a `timeout` response (its stored outcome emitted its own event once) | outcome or `ok: false` | none |
+| `plan` or `preview` with any verdict, `export_config`, `site_status`, `capabilities`, `health`, `provision_site`, `sync_members` | any | none (section 10 proposes events for the last two) |
+
+Role assignment events (`role.assigned`, `role.revoked`) belong to the membership store, not to `sync_members`.
 
 ## 9. Compiled artifact rules (BPL-026)
 ### 9.1 Identity and integrity
@@ -280,7 +297,7 @@ Exceeding one gives `limit_exceeded` with `limit`, `allowed`, `actual`; nothing 
 Existing role-based checks inside the module (`AUTHORIZED_ROLLBACK_ROLES`, governance roles) are engine-side defence in depth; they do not replace 4.2.
 
 ## 14. Conformance
-Any adapter (the fake in `services/blueprint/adapter`, the real one in `apps/engine`) must pass every item. "No effect" means: `export_config` hash, `retained`, `site_status` and the event log are unchanged. The suite uses the three sample artifacts plus fixtures it derives from them, and the harness hooks in 15.1.
+Any adapter (the fake in `services/blueprint/adapter`, the real one in `apps/engine`) must pass every item. "No effect" means no change to engine data: `export_config` hash, `retained`, `site_status` and every stored value (`data_probe`) are unchanged. The audit record and the events that record the refusal itself are not effects: they are allowed and required, exactly as the 8.2 table lists them for the case (none, one `permission.denied`, or one `blueprint.apply_failed`); any other event is an effect. The suite uses the three sample artifacts plus fixtures it derives from them, and the harness hooks in 15.1.
 
 Envelope, security, invisibility
 - ADP-C-001 Every response of every operation validates against that operation's schema (ok or error branch).
@@ -290,14 +307,14 @@ Envelope, security, invisibility
 - ADP-C-005 Every error has `messageKey` = `errors.adapter.<code>` and only the allowed `details` keys; `retryable` matches section 6.
 - ADP-C-006 No serialised response, error, event or export in the whole suite matches the denylist: `(?i)frappe|erpnext`, `Traceback`, `(?i)\b(alter|drop|create)\s+table\b`, `(?i)\bselect\s.+\bfrom\b`, `\.py\b`, `/home/`, `/var/`, plus markers the adapter's owner adds. The values of `adapterId` and `engineTarget.adapter` are excluded from the scan (internal ids, section 12).
 - ADP-C-007 After any operation in tenant A, `export_config`, `retained` and `site_status` of tenant B are unchanged.
-- ADP-C-008 Rollback in tenant B with an artifact applied only in A fails (`artifact_not_found`, `blueprint_mismatch` or `rollback_not_possible`), no effect.
+- ADP-C-008 Rollback in tenant B with an artifact applied only in A fails (`artifact_not_found`, `blueprint_mismatch` or `rollback_not_possible`), no effect; as an outcome `rejected` with one `blueprint.apply_failed` in tenant B, as an `ok: false` envelope with no event.
 - ADP-C-009 Any operation except `capabilities`, `health` (platform) and `provision_site` for a tenant without a site gives `tenant_not_found` or `site_not_ready`.
-- ADP-C-010 Each operation called by a service not allowed in 4.2 gives `permission_denied`, no effect, and one `permission.denied` event.
+- ADP-C-010 Each operation called by a service not allowed in 4.2 gives `permission_denied`, no effect, exactly one `permission.denied` event and no other event.
 - ADP-C-011 `apply` or `rollback` on a production site with `onBehalfOf` null or of kind agent gives `permission_denied`; support without `supportGrantId` gives `invalid_request`.
 - ADP-C-012 Changing `onBehalfOf.roleIds` alone never changes the result of a configuration operation.
 
 Capabilities and site
-- ADP-C-013 `capabilities` lists every artifact step kind exactly once, sorted, and two calls return byte-identical results.
+- ADP-C-013 `capabilities` lists every artifact step kind exactly once, sorted, its `exportedProperties` keys are exactly the 5.1 list, and two calls return byte-identical results.
 - ADP-C-014 `provision_site` on an absent site reaches `ready` with the requested `engineTarget`, `siteClass`, `blueprintId` and `applied: null`.
 - ADP-C-015 `provision_site` replay with the same key returns `replayed: true`; a new key with the same parameters creates no second site.
 - ADP-C-016 `provision_site` with another `engineTarget` or `blueprintId` for an existing site gives `site_exists_different_target`.
@@ -324,28 +341,28 @@ Plan and preview
 - ADP-C-033 `preview.delta` contains only neutral change kinds and pointers.
 
 Apply
-- ADP-C-034 `apply` with a missing, foreign-artifact, foreign-tenant or expired `planToken` gives `plan_token_invalid`, no effect.
-- ADP-C-035 `apply` after the configuration changed since `plan` (another artifact applied) gives `plan_token_invalid`, no effect.
-- ADP-C-036 `apply` for a `needs_gate_approval` plan without `gateApproved`, or with `requiresTeamReview` and no `teamReviewed`, gives `approval_missing`, no effect.
-- ADP-C-037 `apply` for a `rejected` plan gives `plan_rejected` with `stepSeq` and `reasonCode`, no effect.
+- ADP-C-034 `apply` with a missing, foreign-artifact, foreign-tenant or expired `planToken` gives outcome `rejected` with `plan_token_invalid`, no effect, one `blueprint.apply_failed`.
+- ADP-C-035 `apply` after the configuration changed since `plan` (another artifact applied) gives outcome `rejected` with `plan_token_invalid`, no effect, one `blueprint.apply_failed`.
+- ADP-C-036 `apply` for a `needs_gate_approval` plan without `gateApproved`, or with `requiresTeamReview` and no `teamReviewed`, gives outcome `rejected` with `approval_missing`, no effect, one `blueprint.apply_failed`.
+- ADP-C-037 `apply` for a `rejected` plan gives outcome `rejected` with `plan_rejected`, `stepSeq` and `reasonCode`, no effect, one `blueprint.apply_failed`.
 - ADP-C-038 Applying each sample in order (add field, remove field; add workflow state) gives `applied`, every step `applied`, every post-condition passed, `site.applied` = artifact and target revision, `exportHash` equal to a fresh `export_config`.
 - ADP-C-039 Replay with the same key and input returns the stored outcome with `replayed: true`, no second effect, no second event.
-- ADP-C-040 The same key with different input gives `idempotency_conflict`, no effect.
+- ADP-C-040 The same key with different input gives `idempotency_conflict` in the `ok: false` envelope (5.6.1), no effect, no event.
 - ADP-C-041 A new key for an artifact the site already holds gives `already_applied`, no effect, no event.
-- ADP-C-042 Two concurrent applies on one site: exactly one runs; the other gets `concurrent_change` with `retryAfterMs`.
+- ADP-C-042 Two concurrent applies on one site: exactly one runs; the other gets `concurrent_change` with `retryAfterMs` in the `ok: false` envelope, and no event.
 - ADP-C-043 Fault at step k: steps before k are `compensated`, status `compensated`, `site.applied` unchanged, export hash equal to before, one `blueprint.apply_failed`.
 - ADP-C-044 Fault in a post-condition: status `compensated`, error `postcondition_failed` with `postConditionId`.
 - ADP-C-045 Fault during compensation: status `recovery_required`; site state `recovery_required`; later `apply` and `rollback` give `recovery_required`.
 - ADP-C-046 Fault in `prepare`: status `failed_clean`, no effect except the audit record and one `blueprint.apply_failed`.
-- ADP-C-047 Deadline expiry during `execute`: no partial state; a retry with the same key returns `in_progress` or the final outcome; steps never run twice.
+- ADP-C-047 Deadline expiry during `execute`: no partial state; a retry with the same key returns `in_progress` or the final outcome; `execution_journal` shows no step run twice.
 - ADP-C-048 After the remove-field sample, the field is not in `export`, is in `retained` as `quarantined`, and a value written to it before is readable after restore.
 - ADP-C-049 Re-adding a quarantined field with the same definition restores it with its data; with a different definition, plan gives `blocked` with `definition_conflict`.
-- ADP-C-050 No operation in the suite removes stored data (fake: asserted directly; real adapter: plan evidence contains no drop statement).
+- ADP-C-050 No operation in the suite removes stored data: `data_probe` values survive, `dropped_data` is empty, and `plan_evidence` for every plan in the suite contains no drop statement.
 
 Rollback
-- ADP-C-051 Rollback of the latest applied artifact gives `applied` with `operation: rollback`, `site.applied.revision` = forward base, and an `exportHash` byte-identical to the one before the forward apply.
-- ADP-C-052 Rollback of an artifact that is not the latest applied gives `rollback_not_possible` (`not_latest`), no effect.
-- ADP-C-053 Rollback of an artifact with `inverse: null` or `irreversibleSteps` above 0 gives `rollback_not_possible`.
+- ADP-C-051 Rollback of the latest applied artifact gives `applied` with `operation: rollback`, `artifactId` = the inverse's, `site.applied` = the artifact applied before the forward one (its id, and revision = forward base), and an `exportHash` byte-identical to the one before the forward apply.
+- ADP-C-052 Rollback of an artifact that is not the latest applied gives outcome `rejected` with `rollback_not_possible` (`not_latest`), no effect, one `blueprint.apply_failed`.
+- ADP-C-053 Rollback of an artifact with `inverse: null` or `irreversibleSteps` above 0 gives outcome `rejected` with `rollback_not_possible`, no effect, one `blueprint.apply_failed`.
 - ADP-C-054 A forward artifact whose embedded inverse was altered gives `artifact_integrity_failed`.
 - ADP-C-055 Rollback replay and key conflict behave as ADP-C-039 and ADP-C-040.
 - ADP-C-056 A successful rollback emits one `blueprint.rolled_back` with `change_id` = forward artifact id and `revision` = base revision.
@@ -369,6 +386,7 @@ Events, health, determinism
 - ADP-C-068 `health` validates; for a tenant without a site it gives `site_not_ready` or `tenant_not_found`.
 - ADP-C-069 Production builds expose no fault hooks: the hooks are absent from `capabilities` and calling them fails.
 - ADP-C-070 Every changing call writes exactly one audit record whose `auditId` is the response's; reads also write one.
+- ADP-C-071 Fault at step k of an initial build: status `compensated`, the active export equals the pre-apply export, every element the executed steps created is in `retained` (quarantined or disabled), and `execution_journal` shows steps k-1 down to 1 with phase `compensate` (5.6.2).
 
 ## 15. How the two sides build in parallel
 | | Eldon (compiler side) | Partner (engine side) |
@@ -378,7 +396,25 @@ Events, health, determinism
 | Joins at | BPL-027: compile the trading fixture and apply it through the real adapter; ADP-C-060 |
 
 ### 15.1 Harness
-`AdapterHarness`: `call(operation, context, input) -> response`; `fault(stage, step_seq=None, post_condition_id=None, during_compensation=False)` (test builds only); `data_probe(pointer, value)` writes and reads a stored value for quarantine tests; `auth_probe(member_ref)` and `action_probe(member_ref)` for shadow users; `events()` returns emitted events; `reset()`. The suite never imports adapter internals.
+`AdapterHarness` is the only door the suite uses; it never imports adapter internals. Every method is required: a harness without one fails the tests that need it, and a run with any skipped test is not a pass. Methods marked "test builds" are absent from production builds (ADP-C-069).
+
+| Method | Semantics |
+|---|---|
+| `call(operation, context, input) -> response` | One adapter call, exactly as the platform makes it |
+| `fault(stage, step_seq=None, post_condition_id=None, during_compensation=False)` (test builds) | Arms one fault, consumed by the next matching apply or rollback. Stages: `prepare`, `execute` (at `step_seq`), `reconcile` (`post_condition_id`, or any when null), `finalize`, `deadline` (the deadline passes during `execute` at `step_seq`: the adapter finishes or compensates the artifact, the call returns `timeout`, and a retry with the same key returns the stored outcome). `during_compensation=True` also makes the compensation that follows fail |
+| `data_probe(pointer, value=None, tenant_id=None)` | Writes `value` (when not null) to the stored data of the field at `pointer` and returns what is stored (quarantine and no-data-loss tests) |
+| `auth_probe(member_ref, tenant_id=None)` | `{exists, canAuthenticate, emailSent}` for a shadow user |
+| `action_probe(member_ref, tenant_id=None)` | `{allowed}`: whether the shadow user can act on the tenant's behalf |
+| `events()` | Every event the adapter handed to the producer, in order, with `eventId`, `type`, `data` |
+| `reset()` | Empty adapter: no sites, events, audit records or journal |
+| `on_lock_held(callback)` (test builds) | Runs `callback` once while the next apply or rollback holds the site lock (ADP-C-042) |
+| `advance_time(seconds)` (test builds) | Moves the adapter clock forward; used for plan token expiry (ADP-C-034) |
+| `set_site_state(tenant_id, state)` (test builds) | Puts an existing site in `provisioning` or `failed` (ADP-C-017) |
+| `audit_log()` | The internal audit records (8.1), each with at least `auditId` (ADP-C-070) |
+| `dropped_data()` | Pointers whose stored data any operation removed; must stay empty (ADP-C-050) |
+| `plan_evidence(evidence_ref, tenant_id=None)` | The adapter's own internal plan evidence for a `plan` result's `evidenceRef`: the list of storage statements that apply would run, as the adapter recorded it at plan time (not produced by the harness). Unknown ref: an error, never an empty list. Read only by the suite; never returned through `call` (section 12) (ADP-C-050) |
+| `execution_journal()` | The durable step journal of 5.6, across all operations, in the order steps ran: `{artifactId, seq, phase}` with `phase` `execute` or `compensate`, one entry per step actually run (a step that failed before taking effect is not listed). It is read from the adapter's journal, not reconstructed from exports, so it is independent proof that no step ran twice (ADP-C-047, ADP-C-071) |
+| `without_test_hooks()` | A fresh instance built like production, with every "test builds" method absent or failing (ADP-C-069) |
 
 ### 15.2 The compiler side must not assume
 - That the real adapter supports every step kind: read `capabilities` and expect `unsupported`.
@@ -401,7 +437,7 @@ That the other side has shipped: each tests only against the contract, the sampl
 ## 16. Open questions (not decided here)
 1. Service authentication between our services and the adapter (mutual TLS or signed tokens) and who issues the identities. Needs INF and SEC input.
 2. Whether `apply` takes a full site backup before `prepare` for production sites, or relies on per-step journals only.
-3. Exact `exportedProperties` per kind, and whether all label locales round-trip through the engine (affects ADP-C-032 and ADP-C-060).
+3. Exact `exportedProperties` property lists per kind (the key names are fixed in 5.1 since 0.1.2), and whether all label locales round-trip through the engine (affects ADP-C-032 and ADP-C-060).
 4. Gate approval event: add `blueprint.gate_approved` (section 10) or reuse `blueprint.change_approved`.
 5. Whether `semantic` changes (for example making a field required with existing empty values) are ever allowed in 0.1.0 or always blocked.
 6. Who maintains the protected-subject list neutrally (it is engine-specific today, in `safety_guardrails.py`).
@@ -417,3 +453,6 @@ That the other side has shipped: each tests only against the contract, the sampl
 - The bpdiff diff format is a draft (services/blueprint/diff); `diffHash` and `risk` follow its 0.1.0 output.
 - Default deadlines and limits are proposals, UNVERIFIED until ERP-002.
 - The approval event ids are recorded, not verified, by the adapter; the control plane is trusted for them over the authenticated service channel.
+
+## 18. Changes
+- 0.1.2 (patch, clarifications from the PR 56 review; open-questions Q-36 to Q-40): "no effect" means no change to engine data, and refusal events are listed per case (14, 8.2); operation record created when `acquire` succeeds (5.6.1); compensation of an initial build (5.6.2); `site.applied` after rollback (5.7); `exportedProperties` key names (5.1); harness extensions in 15.1; ADP-C-071 added.

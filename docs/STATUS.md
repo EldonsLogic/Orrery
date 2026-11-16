@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 9 | 12 | 40 | 0 | 61 |
-| G1 | 67 | 9 | 15 | 0 | 91 |
+| G1 | 66 | 9 | 16 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 255 | 22 | 55 | 0 | 332 |
+| all | 254 | 22 | 56 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -46,6 +46,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - CE-SEC-002: Change engine: role lookup must fail closed, never fall back to System Manager on error
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
 - SEC-001: Threat model for the five parts and four contracts
+- SEC-003: Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data
 - BPL-001: Import the prototype change engine into apps/engine as the change-engine module (renamed)
 - BPL-002: Blueprint schema v0 in contracts/
 - BPL-003: Blueprint validator
@@ -87,7 +88,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (31)
+**G1** (30)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
 - CE-SEC-005: Change engine: CI against a real Frappe bench instead of mocks (owner partner)
@@ -116,19 +117,23 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - QA-003: Model bake-off on the Arabic eval set (owner eldon)
 - QA-016: Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) (owner partner)
 - SEC-002: Secrets management design (store, rotate, never in repo) (owner partner)
-- SEC-003: Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data (owner eldon)
 - SEC-018: Brand asset upload security rules (spec): allowed types, size limits, SVG sanitiser requirements, scan policy, storage isolation; enforced by SEC-006 (owner eldon)
 - WEB-017: Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) (owner eldon)
 
-**G2** (8)
+**G2** (10)
 - BPL-021: Blueprint versioning and schema migration (owner eldon)
+- DSC-010: Connector framework: tiers, sandboxing, audit, untrusted-content handling (owner eldon)
 - ERP-010: HRMS skeleton: employees, leave, payroll structure, only what v1 needs (owner partner)
 - FND-002: Accelerator evaluation (Hub71+, Antler) after the spike (owner eldon)
 - GOV-027: Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public (owner eldon)
 - OPR-003: Tool API generator: typed actions per tenant from the Blueprint (owner eldon)
 - PLT-005: Identity service (users, sessions, per-tenant roles) (owner eldon)
+- QA-006: Prompt-injection eval suite (owner eldon)
 - QA-020: Optional experiment: bounded-decision model for intent routing compared with a small general model and rules on synthetic Arabic and English cases; not a dependency, synthetic data only (owner eldon)
 - SEC-007: Dependency and SBOM scanning for Python and Node (beyond dependabot actions) (owner eldon)
+
+**G3** (1)
+- INF-009: Decide where the isolated browser runner lives (open question) (owner partner)
 
 
 ## Queue: eldon
@@ -171,18 +176,19 @@ Ready next (dependencies done), by gate:
 - GTM-019 (G1): Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires
 - INF-012 (G1): Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018)
 - QA-003 (G1): Model bake-off on the Arabic eval set
-- SEC-003 (G1): Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data
 - SEC-018 (G1): Brand asset upload security rules (spec): allowed types, size limits, SVG sanitiser requirements, scan policy, storage isolation; enforced by SEC-006
 - WEB-017 (G1): Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016)
 - BPL-021 (G2): Blueprint versioning and schema migration
+- DSC-010 (G2): Connector framework: tiers, sandboxing, audit, untrusted-content handling
 - FND-002 (G2): Accelerator evaluation (Hub71+, Antler) after the spike
 - GOV-027 (G2): Repo is public only for a while (founder, 2026-11-07): before switching back to private, decide the GitHub plan, because branch protection needs a paid plan on a private repo; forks and caches of anything published stay public
 - OPR-003 (G2): Tool API generator: typed actions per tenant from the Blueprint
 - PLT-005 (G2): Identity service (users, sessions, per-tenant roles)
+- QA-006 (G2): Prompt-injection eval suite
 - QA-020 (G2): Optional experiment: bounded-decision model for intent routing compared with a small general model and rules on synthetic Arabic and English cases; not a dependency, synthetic data only
 - SEC-007 (G2): Dependency and SBOM scanning for Python and Node (beyond dependabot actions)
 
-Waiting on dependencies: 148 row(s).
+Waiting on dependencies: 146 row(s).
 
 ## Queue: partner
 
@@ -212,8 +218,9 @@ Ready next (dependencies done), by gate:
 - QA-016 (G1): Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016)
 - SEC-002 (G1): Secrets management design (store, rotate, never in repo)
 - ERP-010 (G2): HRMS skeleton: employees, leave, payroll structure, only what v1 needs
+- INF-009 (G3): Decide where the isolated browser runner lives (open question)
 
-Waiting on dependencies: 61 row(s).
+Waiting on dependencies: 60 row(s).
 
 Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one).
 
@@ -254,6 +261,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 - [2026-11-16-partner-codex-erp-003-provisioning-review.md](log/2026-11-16-partner-codex-erp-003-provisioning-review.md): Addressed the ERP-003 provisioning review with input validation, redaction, supported configuration commands, and fail-closed app verification.
 - [2026-11-16-partner-codex-ce-sec-003-fresh-install.md](log/2026-11-16-partner-codex-ce-sec-003-fresh-install.md): Fixed missing policy tables on fresh installation and before model synchronization.
+- [2026-11-16-eldon-claude-sec-003-prompt-injection-design.md](log/2026-11-16-eldon-claude-sec-003-prompt-injection-design.md): Drafted the prompt-injection defence design (SEC-003): trust levels L0-L3 with taint propagation, instruction-hierarchy rules, tool allowlists mapped to the action-policy risk classes, egress and memory controls, 34 attack cases for QA-006 and 36 requirements (PI-001 to PI-036) for DSC-010, INF-009 and the gateway. Status stays draft; eight founder decisions are listed in the document.
 - [2026-11-16-eldon-claude-gov-019-labels-and-board.md](log/2026-11-16-eldon-claude-gov-019-labels-and-board.md): Chose the label set and board mapping, created 31 labels in the repo, and wrote the mapping doc. The board itself is not created: it needs a token with the `project` scope.
 - [2026-11-16-eldon-claude-gov-019-board.md](log/2026-11-16-eldon-claude-gov-019-board.md): Created the Plan project board (projects/3) with Plan ID, Gate, Area and Owner fields, linked it to the repo, and closed GOV-019.
 - [2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md](log/2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md): Closed the trial of the cross-model review routine using the real PRs from this period: code written with Claude and reviewed by the partner's GPT-based agent (#40, #56, #57, #58, #59).
@@ -261,7 +269,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md](log/2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md): After #55 merged, the golden path records the valuation and rounding rows as confirmed on the bench (ADR-0033 evidence). The mapping fixture now uses `half_away_from_zero` (#53); ADR-0033's sentence that the fixture's `half_up` means this rule is superseded by that change (ADR text is not edited).
 - [2026-11-16-eldon-claude-code-fix-59-review.md](log/2026-11-16-eldon-claude-code-fix-59-review.md): Answered the partner's change request on #59: section 14 item 6 now lists only the checks CI enforces and marks a formatter and other generated-file checks as planned.
 - [2026-11-16-eldon-claude-code-fix-58-review.md](log/2026-11-16-eldon-claude-code-fix-58-review.md): Answered the partner's security review on #58 (reviewed commit 32c8c44): R4 now always needs a second, different, eligible human; no single-approver fallback is active until Q-41 is decided; AP-FIN-02 says so.
-- [2026-11-16-eldon-claude-code-fix-57-review.md](log/2026-11-16-eldon-claude-code-fix-57-review.md): Answered the partner's security review on #57 (reviewed commit 4286e77): the registry now enforces a fail-closed production eligibility boundary (only certified and regulated), with tests, and ADR-0034 states it.
 
 ## ADRs with status Proposed
 

@@ -38,7 +38,7 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/ST
 - One branch per task, named with the plan ID: `sec-003-injection-design`. One PR per branch.
 - After the bootstrap commit, never push to `main`; PRs only, with the PR template filled in.
 - Cross-model review: a change written with one model is reviewed with a different one.
-- Commit or push only when the session task says so. Pushing is handled by the founders' own setup; do not add remotes or create repos.
+- Standing permission from both founders: a coding agent may commit, push its own feature branch and open or update its PR with `gh`. Never push to `main`, never force-push, never merge a PR without the founder's say-so and the other founder's review, and do not add remotes or create repos. Sub-agents stay forbidden from git unless their brief says otherwise.
 - CI needs: docs gate, secret scan, and a new log file in any PR that touches files outside `docs/` and `.github/`.
 - Keep progress viewable (ADR-0018). A PR that changes visible behaviour says how to view it (preview link or exact steps) in its description. If something needed to view progress does not exist (a preview project, the dev server, access, keys), stop and ask the founders to create it, listing exactly what is needed and where secrets go; never guess or work around it. Dev hosts get synthetic data only.
 

@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 9 | 12 | 40 | 0 | 61 |
-| G1 | 66 | 9 | 16 | 0 | 91 |
+| G1 | 65 | 9 | 17 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 254 | 22 | 56 | 0 | 332 |
+| all | 253 | 22 | 57 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -47,6 +47,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - CE-SEC-004: Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL
 - SEC-001: Threat model for the five parts and four contracts
 - SEC-003: Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data
+- DAT-001: Data classification and retention policy
 - BPL-001: Import the prototype change engine into apps/engine as the change-engine module (renamed)
 - BPL-002: Blueprint schema v0 in contracts/
 - BPL-003: Blueprint validator
@@ -88,14 +89,13 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (30)
+**G1** (29)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
 - CE-SEC-005: Change engine: CI against a real Frappe bench instead of mocks (owner partner)
 - CMP-005: Hijri date support in fields, display and print (owner partner)
 - CMP-006: KSA chart of accounts template and tax codes (owner partner)
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
-- DAT-001: Data classification and retention policy (owner eldon)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner eldon)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
@@ -165,7 +165,6 @@ Ready next (dependencies done), by gate:
 - LEG-005 (G0): Register domains and social handles for the working name (hold only)
 - BRD-004 (G1): Token layering: base, product theme, tenant overrides, user preference
 - BRD-012 (G1): Icon set licence check
-- DAT-001 (G1): Data classification and retention policy
 - DAT-002 (G1): Anonymised sample datasets for dev, demos and evals (no real customer data)
 - FND-001 (G1): Investor shortlist from research/05, re-verified
 - GOV-016 (G1): Autonomy metrics file and monthly reporting template (strategy/08)
@@ -265,10 +264,10 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-16-eldon-claude-gov-019-labels-and-board.md](log/2026-11-16-eldon-claude-gov-019-labels-and-board.md): Chose the label set and board mapping, created 31 labels in the repo, and wrote the mapping doc. The board itself is not created: it needs a token with the `project` scope.
 - [2026-11-16-eldon-claude-gov-019-board.md](log/2026-11-16-eldon-claude-gov-019-board.md): Created the Plan project board (projects/3) with Plan ID, Gate, Area and Owner fields, linked it to the repo, and closed GOV-019.
 - [2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md](log/2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md): Closed the trial of the cross-model review routine using the real PRs from this period: code written with Claude and reviewed by the partner's GPT-based agent (#40, #56, #57, #58, #59).
+- [2026-11-16-eldon-claude-dat-001-classification-retention.md](log/2026-11-16-eldon-claude-dat-001-classification-retention.md): Drafted the data classification (five classes C0 to C4 plus a personal-data tag, decision rule, handling matrix, 24-row assignment table) and the retention policy (per-market statutory tables for Saudi Arabia, the UAE, Egypt and Qatar, legal hold, offboarding, backups, AI retention, 12 decisions).
 - [2026-11-16-eldon-claude-code-review-tiers.md](log/2026-11-16-eldon-claude-code-review-tiers.md): Drafted ADR-0035 (Proposed): risk-tiered review, block only on defects, two rounds, larger PRs, logs for code PRs only, stay at the current gate, generated STATUS. Eldon agreed in chat; it changes approval gates, so the partner must agree through a recorded review.
 - [2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md](log/2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md): After #55 merged, the golden path records the valuation and rounding rows as confirmed on the bench (ADR-0033 evidence). The mapping fixture now uses `half_away_from_zero` (#53); ADR-0033's sentence that the fixture's `half_up` means this rule is superseded by that change (ADR text is not edited).
 - [2026-11-16-eldon-claude-code-fix-59-review.md](log/2026-11-16-eldon-claude-code-fix-59-review.md): Answered the partner's change request on #59: section 14 item 6 now lists only the checks CI enforces and marks a formatter and other generated-file checks as planned.
-- [2026-11-16-eldon-claude-code-fix-58-review.md](log/2026-11-16-eldon-claude-code-fix-58-review.md): Answered the partner's security review on #58 (reviewed commit 32c8c44): R4 now always needs a second, different, eligible human; no single-approver fallback is active until Q-41 is decided; AP-FIN-02 says so.
 
 ## ADRs with status Proposed
 

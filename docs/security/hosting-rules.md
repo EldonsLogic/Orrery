@@ -48,4 +48,4 @@ No processor is used for tenant data until it is on the list with: purpose, data
 | Keys | One key per environment, held in the gateway only, never client-side |
 
 ## Data export and deletion SLAs
-TBD (research needed, counsel). Targets to set: export delivery time, deletion time after termination, backup purge time, retention holds for tax records (periods UNVERIFIED in [../compliance/country-matrix.md](../compliance/country-matrix.md)).
+TBD (research needed, counsel); the retention and deletion rules and the open decisions are in [data-retention.md](data-retention.md), the classes in [data-classification.md](data-classification.md). Targets to set: export delivery time, deletion time after termination, backup purge time, retention holds for tax records (periods UNVERIFIED in [../compliance/country-matrix.md](../compliance/country-matrix.md)).

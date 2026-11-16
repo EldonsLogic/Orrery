@@ -20,8 +20,8 @@ Out (later paths): payments, the purchase cycle, returns, any tax (a tax variant
 | Opening stock | 100 pieces at cost 10.00, posted once as the opening balance |
 | Customer | CUST-001 |
 | Selling price | 15.00 per piece (price list) |
-| Inventory method | Perpetual (stock movements post to the ledger), Moving Average valuation, set explicitly by provisioning and not left to the engine default (founder answer to Q-21). UNVERIFIED on the bench; the accountant confirms before Phase 2 |
-| Rounding | Commercial rounding: half away from zero, so a credit note mirrors its invoice (founder answer to Q-22). Negative amounts round by magnitude. UNVERIFIED: confirm the engine setting on the bench |
+| Inventory method | Perpetual (stock movements post to the ledger), Moving Average valuation, set explicitly by provisioning and not left to the engine default (founder answer to Q-21). Confirmed on the pinned bench on a synthetic site (Moving Average gives 115, then 126.25; evidence in [ADR-0033](../decisions/ADR-0033-v1-valuation-rounding-and-arabic-review.md)); the accountant confirms before Phase 2 |
+| Rounding | Commercial rounding: half away from zero, so a credit note mirrors its invoice (founder answer to Q-22). Negative amounts round by magnitude. Confirmed on the pinned bench on a synthetic site (-0.105 rounds to -0.11, so a credit note mirrors its invoice; ADR-0033). The mapping fixture's `half_away_from_zero` means this rule |
 
 Opening entry: debit Inventory 1,000.00, credit Opening equity 1,000.00.
 

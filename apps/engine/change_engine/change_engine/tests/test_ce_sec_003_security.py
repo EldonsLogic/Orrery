@@ -244,9 +244,21 @@ class TestFailClosed(unittest.TestCase):
 
 
 class TestMigration(unittest.TestCase):
+    def test_fresh_install_creates_policy_tables_before_model_sync(self):
+        from change_engine import hooks
+        self.assertEqual(
+            hooks.before_install,
+            "change_engine.patches.ce_sec_003_create_policy_tables.execute",
+        )
+
     def test_tables_come_from_a_registered_patch(self):
         patches = (APP_DIR / "patches.txt").read_text().splitlines()
         self.assertIn("change_engine.patches.ce_sec_003_create_policy_tables", patches)
+        self.assertLess(
+            patches.index("change_engine.patches.ce_sec_003_create_policy_tables"),
+            patches.index("[post_model_sync]"),
+            "Policy tables must exist before document validation during model sync",
+        )
         patch = (APP_DIR / "patches" / "ce_sec_003_create_policy_tables.py").read_text()
         self.assertIn("CREATE TABLE IF NOT EXISTS", patch)
         store_src = (APP_DIR / "guarded_apply" / "policy_store.py").read_text()

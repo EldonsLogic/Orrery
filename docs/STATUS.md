@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 11 | 12 | 38 | 0 | 61 |
+| G0 | 10 | 13 | 38 | 0 | 61 |
 | G1 | 71 | 5 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 261 | 18 | 53 | 0 | 332 |
+| all | 260 | 19 | 53 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -76,11 +76,10 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its files.
 
-**G0** (9)
+**G0** (8)
 - GOV-002: Create GitHub organisation, transfer repo, decide final repo name (owner eldon)
 - GOV-010: Install pre-commit hooks on both founders' machines (owner eldon)
 - GOV-014: Trial the cross-model PR review routine on the first real PR (owner eldon)
-- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (owner eldon)
 - GOV-037: After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency (owner eldon)
 - INF-013: Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) (owner eldon)
 - LEG-001: Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype (owner eldon)
@@ -137,6 +136,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 ## Queue: eldon
 
 Doing:
+- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (labels and mapping done; board needs a `project` token scope)
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise)
 - BPL-014: Component certification levels and test harness
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
@@ -157,7 +157,6 @@ Ready next (dependencies done), by gate:
 - GOV-002 (G0): Create GitHub organisation, transfer repo, decide final repo name
 - GOV-010 (G0): Install pre-commit hooks on both founders' machines
 - GOV-014 (G0): Trial the cross-model PR review routine on the first real PR
-- GOV-019 (G0): Pick issue/PR labels and project board mapping to PLAN IDs
 - GOV-037 (G0): After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency
 - INF-013 (G0): Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018)
 - LEG-001 (G0): Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype
@@ -231,6 +230,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Items in progress
 
+- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (labels and mapping done; board needs a `project` token scope) (eldon)
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
 - BPL-014: Component certification levels and test harness (eldon)
@@ -252,6 +252,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-16-eldon-claude-gov-019-labels-and-board.md](log/2026-11-16-eldon-claude-gov-019-labels-and-board.md): Chose the label set and board mapping, created 31 labels in the repo, and wrote the mapping doc. The board itself is not created: it needs a token with the `project` scope.
 - [2026-11-16-eldon-claude-code-review-tiers.md](log/2026-11-16-eldon-claude-code-review-tiers.md): Drafted ADR-0035 (Proposed): risk-tiered review, block only on defects, two rounds, larger PRs, logs for code PRs only, stay at the current gate, generated STATUS. Eldon agreed in chat; it changes approval gates, so the partner must agree through a recorded review.
 - [2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md](log/2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md): After #55 merged, the golden path records the valuation and rounding rows as confirmed on the bench (ADR-0033 evidence). The mapping fixture now uses `half_away_from_zero` (#53); ADR-0033's sentence that the fixture's `half_up` means this rule is superseded by that change (ADR text is not edited).
 - [2026-11-16-eldon-claude-code-fix-59-review.md](log/2026-11-16-eldon-claude-code-fix-59-review.md): Answered the partner's change request on #59: section 14 item 6 now lists only the checks CI enforces and marks a formatter and other generated-file checks as planned.
@@ -261,7 +262,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-16-eldon-claude-code-agents-work-freely.md](log/2026-11-16-eldon-claude-code-agents-work-freely.md): AGENTS.md now lets both founders' agents work and merge on their own under the ADR-0035 tiers (Eldon's instruction; the partner is told in the PR).
 - [2026-11-16-eldon-claude-code-agents-may-push.md](log/2026-11-16-eldon-claude-code-agents-may-push.md): Both founders (together, in chat) gave coding agents standing permission to commit, push their feature branch and open PRs. AGENTS.md and CLAUDE.md now say so; main, force-push and unreviewed merges stay forbidden.
 - [2026-11-16-eldon-claude-code-adapter-contract-0-1-2.md](log/2026-11-16-eldon-claude-code-adapter-contract-0-1-2.md): Engine adapter contract 0.1.2 resolves the open questions the partner's review of PR 56 found blocking (Q-36 to Q-40), as a patch-level clarification on the draft contract branch (PR 40).
-- [2026-11-15-eldon-claude-code-sec-019-action-policy-table.md](log/2026-11-15-eldon-claude-code-sec-019-action-policy-table.md): Drafted the action-policy table spec for ADR-0027: table schema, risk classes, approval binding to a payload hash, separation of duties, lifecycle with cancellation, failure and expiry, break-glass, fail-closed enforcement, agents as draft-only actors, approval events, and a starter table for the six golden-path actions.
 
 ## ADRs with status Proposed
 

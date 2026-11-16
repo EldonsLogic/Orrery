@@ -83,7 +83,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-015 | Egress and credential controls for the isolated browser runner | Security | G3 | INF-009 | partner | todo |
 | SEC-016 | Independent penetration test | Security | G3 | SEC-012 | eldon | todo |
 | SEC-017 | Security certification readiness (ISO 27001 or SOC 2; pick one with counsel) | Security | G5 | SEC-016 | eldon | todo |
-| DAT-001 | Data classification and retention policy | Data | G1 | SEC-001 | eldon | todo |
+| DAT-001 | Data classification and retention policy | Data | G1 | SEC-001 | eldon | done |
 | DAT-002 | Anonymised sample datasets for dev, demos and evals (no real customer data) | Data | G1 | - | eldon | todo |
 | DAT-003 | Data residency map: what is stored where, which model region sees what | Data | G2 | DAT-001,INF-001 | eldon | todo |
 | DAT-004 | Per-tenant backups and point-in-time restore | Data | G3 | INF-005 | partner | todo |

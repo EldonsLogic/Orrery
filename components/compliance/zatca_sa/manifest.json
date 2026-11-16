@@ -42,7 +42,7 @@
     }
   ],
   "certification": {
-    "level": "reviewed",
+    "level": "tested",
     "touchesLedgerOrTax": true,
     "reviewedBy": []
   },

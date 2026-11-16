@@ -109,6 +109,20 @@ class TestZatcaVATValidation(unittest.TestCase):
             errors = seller.validate(is_seller=True)
             self.assertEqual(errors, [])
 
+    def test_zatca_illustrative_sample_number_is_not_a_valid_seller_number(self):
+        """The VAT number in ZATCA's QR worked example (guideline section 6.4) is illustrative.
+
+        It does not follow rule BR-KSA-40 (15 digits, first and last digit 3), so a real seller
+        record with that number is refused. The QR vector test encodes it directly and does not
+        go through seller validation.
+        """
+        seller = ZatcaParty(
+            name="Bobs Basement Records",
+            vat_number="100025906700003",
+            address=ZatcaAddress("Street", "1", "12345", "Riyadh", "Olaya", "SA"),
+        )
+        self.assertTrue(any("VAT registration number" in e for e in seller.validate(is_seller=True)))
+
     def test_invalid_vat_numbers(self):
         invalid_cases = [
             ("100000000000003", "does not start with 3"),

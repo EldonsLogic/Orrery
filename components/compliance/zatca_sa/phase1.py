@@ -25,7 +25,9 @@ from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # KSA 15-digit VAT number format: begins with '3' and ends with '3'.
-# UNVERIFIED: the rule is widely used but its official source is not yet cited here.
+# Rule BR-KSA-40, ZATCA Electronic Invoice XML Implementation Standard (accessed 2026-11-16). The rule
+# text was confirmed through secondary sources only; the official PDF text is still to be re-read
+# (CMP-001). ZATCA's QR worked example uses an illustrative number that does not follow this rule.
 KSA_VAT_REGEX = re.compile(r"^3\d{13}3$")
 DATE_REGEX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_REGEX = re.compile(r"^\d{2}:\d{2}(:\d{2})?$")

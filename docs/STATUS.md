@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 9 | 12 | 40 | 0 | 61 |
-| G1 | 68 | 8 | 15 | 0 | 91 |
+| G1 | 67 | 9 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 256 | 21 | 55 | 0 | 332 |
+| all | 255 | 22 | 55 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -87,7 +87,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (32)
+**G1** (31)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
 - CE-SEC-005: Change engine: CI against a real Frappe bench instead of mocks (owner partner)
@@ -96,7 +96,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
 - DAT-001: Data classification and retention policy (owner eldon)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner eldon)
-- ERP-003: Scripted site-per-tenant creation (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
 - ERP-014: Accounting correctness property tests (ledger balances, tax, rounding) (owner partner)
@@ -191,6 +190,7 @@ Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 - CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance
 - CMP-003: ZATCA Phase 1 invoice generation (QR, mandatory fields)
+- ERP-003: Scripted site-per-tenant creation
 - ERP-004: Version pin and upgrade policy document
 - ERP-006: Arabic and RTL translation completion for in-scope modules
 - GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032)
@@ -200,7 +200,6 @@ Ready next (dependencies done), by gate:
 - CMP-005 (G1): Hijri date support in fields, display and print
 - CMP-006 (G1): KSA chart of accounts template and tax codes
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
-- ERP-003 (G1): Scripted site-per-tenant creation
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - ERP-009 (G1): Engine event emitter feeding the event stream
 - ERP-014 (G1): Accounting correctness property tests (ledger balances, tax, rounding)
@@ -233,6 +232,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance (partner)
 - CMP-003: ZATCA Phase 1 invoice generation (QR, mandatory fields) (partner)
 - BPL-014: Component certification levels and test harness (eldon)
+- ERP-003: Scripted site-per-tenant creation (partner)
 - ERP-004: Version pin and upgrade policy document (partner)
 - ERP-006: Arabic and RTL translation completion for in-scope modules (partner)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
@@ -252,6 +252,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-16-partner-codex-erp-003-provisioning-review.md](log/2026-11-16-partner-codex-erp-003-provisioning-review.md): Addressed the ERP-003 provisioning review with input validation, redaction, supported configuration commands, and fail-closed app verification.
 - [2026-11-16-eldon-claude-gov-019-labels-and-board.md](log/2026-11-16-eldon-claude-gov-019-labels-and-board.md): Chose the label set and board mapping, created 31 labels in the repo, and wrote the mapping doc. The board itself is not created: it needs a token with the `project` scope.
 - [2026-11-16-eldon-claude-gov-019-board.md](log/2026-11-16-eldon-claude-gov-019-board.md): Created the Plan project board (projects/3) with Plan ID, Gate, Area and Owner fields, linked it to the repo, and closed GOV-019.
 - [2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md](log/2026-11-16-eldon-claude-gov-014-cross-model-review-trial.md): Closed the trial of the cross-model review routine using the real PRs from this period: code written with Claude and reviewed by the partner's GPT-based agent (#40, #56, #57, #58, #59).
@@ -261,7 +262,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-16-eldon-claude-code-fix-58-review.md](log/2026-11-16-eldon-claude-code-fix-58-review.md): Answered the partner's security review on #58 (reviewed commit 32c8c44): R4 now always needs a second, different, eligible human; no single-approver fallback is active until Q-41 is decided; AP-FIN-02 says so.
 - [2026-11-16-eldon-claude-code-fix-57-review.md](log/2026-11-16-eldon-claude-code-fix-57-review.md): Answered the partner's security review on #57 (reviewed commit 4286e77): the registry now enforces a fail-closed production eligibility boundary (only certified and regulated), with tests, and ADR-0034 states it.
 - [2026-11-16-eldon-claude-code-efficient-review-workflow.md](log/2026-11-16-eldon-claude-code-efficient-review-workflow.md): Added the efficient review workflow (seven points, from the partner's request relayed by Eldon) as section 14 of agents/team-protocol.md and linked it from AGENTS.md and CLAUDE.md. No gate, lane, security-review, rigid-zone or phase-exit rule changed.
-- [2026-11-16-eldon-claude-code-agents-work-freely.md](log/2026-11-16-eldon-claude-code-agents-work-freely.md): AGENTS.md now lets both founders' agents work and merge on their own under the ADR-0035 tiers (Eldon's instruction; the partner is told in the PR).
 
 ## ADRs with status Proposed
 

@@ -34,7 +34,7 @@ request -> spec -> build -> test -> certify -> publish -> (deprecate -> retire)
 | `reviewed` | Engineer reviewed code and config | Sandbox and team-reviewed builds |
 | `certified` | Reviewed + canary + Arabic/RTL checks | Production |
 | `regulated` | Certified + compliance evidence (for example ZATCA sandbox) + named compliance owner | Production, required for e-invoicing and tax |
-Components with `touchesLedgerOrTax` cannot be below `reviewed`; the manifest schema enforces it.
+From `reviewed` up, `reviewedBy` must name at least one reviewer (ADR-0034, Proposed). A component with `touchesLedgerOrTax` cannot be `draft`; while it waits for review it stays at `tested` (sandbox only). The manifest schema enforces both.
 
 ## Compatibility matrix
 Maintained by CI: rows are component versions, columns are engine version sets (pinned sets from [engine-adapter](engine-adapter.md)). A cell is `tested-pass`, `tested-fail` or `untested`. The compiler refuses `fail` and `untested` cells for production. A new engine set cannot be promoted until every in-use component has a passing cell.

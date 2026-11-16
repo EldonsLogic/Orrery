@@ -7,6 +7,7 @@ Empty until gate G1; each runbook is written when the process first exists, test
 
 | Runbook | Gate | Notes |
 |---|---|---|
+| Labels and project board mapping | G0 | [labels-and-board.md](labels-and-board.md), GOV-019 |
 | Tenant provision (scripted, per region) | G1 | Site creation, keys, storage, roles, baseline Blueprint |
 | Deploy and rollback (services, engine apps, components) | G1 | IaC, staging first, version pins |
 | Backup and restore (per tenant) | G3 | Scheduled restore test, logged |

@@ -65,6 +65,7 @@ Details in [agents/routing.md](agents/routing.md) and the step-by-step [agents/d
 ## Working principles and the agent team
 - Four habits for every agent ([agents/working-principles.md](agents/working-principles.md)): think before coding (state assumptions, ask when unclear), simplicity first, surgical changes (every changed line traces to the task), goal-driven execution (write the check first, loop until it passes).
 - Team protocol ([agents/team-protocol.md](agents/team-protocol.md), roles in [agents/roles.md](agents/roles.md)): inspect real tools first; start with three to five roles; loop observe, plan, execute, verify, record; a fresh reviewer verifies; improve a prompt or role only by a versioned PR measured against a baseline. Improvements never change approval gates, evaluation rules, lanes or the phase exit check.
+- Efficient review workflow ([agents/team-protocol.md](agents/team-protocol.md) section 14): prepare a focused PR with evidence, give re-reviews the old and new commit and the findings, match model strength to risk, run CI and reviews in parallel, automate mechanical checks, measure turnaround and rounds. It changes no gate, lane, security review, rigid-zone review or phase exit rule.
 
 ## Security rules
 - Never commit secrets, `.env*` (except `.env.example`), keys, customer data or real pilot data. Use anonymised samples.

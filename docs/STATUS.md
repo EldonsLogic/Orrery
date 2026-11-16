@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 9 | 12 | 40 | 0 | 61 |
-| G1 | 70 | 6 | 15 | 0 | 91 |
+| G1 | 69 | 7 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 258 | 19 | 55 | 0 | 332 |
+| all | 257 | 20 | 55 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -87,7 +87,7 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (33)
+**G1** (32)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
 - CE-SEC-005: Change engine: CI against a real Frappe bench instead of mocks (owner partner)
@@ -97,7 +97,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - DAT-001: Data classification and retention policy (owner eldon)
 - DAT-002: Anonymised sample datasets for dev, demos and evals (no real customer data) (owner eldon)
 - ERP-003: Scripted site-per-tenant creation (owner partner)
-- ERP-006: Arabic and RTL translation completion for in-scope modules (owner partner)
 - ERP-008: Blueprint roles to engine roles and user permissions mapping (owner partner)
 - ERP-009: Engine event emitter feeding the event stream (owner partner)
 - ERP-014: Accounting correctness property tests (ledger balances, tax, rounding) (owner partner)
@@ -192,6 +191,7 @@ Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
 - CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance
 - ERP-004: Version pin and upgrade policy document
+- ERP-006: Arabic and RTL translation completion for in-scope modules
 - GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032)
 
 Ready next (dependencies done), by gate:
@@ -200,7 +200,6 @@ Ready next (dependencies done), by gate:
 - CMP-006 (G1): KSA chart of accounts template and tax codes
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
 - ERP-003 (G1): Scripted site-per-tenant creation
-- ERP-006 (G1): Arabic and RTL translation completion for in-scope modules
 - ERP-008 (G1): Blueprint roles to engine roles and user permissions mapping
 - ERP-009 (G1): Engine event emitter feeding the event stream
 - ERP-014 (G1): Accounting correctness property tests (ledger balances, tax, rounding)
@@ -233,6 +232,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance (partner)
 - BPL-014: Component certification levels and test harness (eldon)
 - ERP-004: Version pin and upgrade policy document (partner)
+- ERP-006: Arabic and RTL translation completion for in-scope modules (partner)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)
 - BRD-007: Brand asset pipeline: logo variants, auto-derived dark variant, size generation (eldon)
 - BRD-011: Font licence and Arabic typography verification (eldon)

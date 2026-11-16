@@ -27,7 +27,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-011 | Agent role specs, routing rules, model registry | Governance | G0 | GOV-003 | eldon | done |
 | GOV-012 | Fill model registry rows for Codex and Antigravity | Governance | G0 | GOV-011 | partner | done |
 | GOV-013 | Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11 | Governance | G0 | GOV-009 | partner | done |
-| GOV-014 | Trial the cross-model PR review routine on the first real PR | Governance | G0 | GOV-008 | eldon | todo |
+| GOV-014 | Trial the cross-model PR review routine on the first real PR | Governance | G0 | GOV-008 | eldon | done |
 | GOV-015 | Draft ADR-0001..0014 | Governance | G0 | GOV-004 | eldon | done |
 | GOV-016 | Autonomy metrics file and monthly reporting template (strategy/08) | Governance | G1 | GOV-004 | eldon | todo |
 | GOV-017 | Exceptions register process (every manual step logged with reason) | Governance | G2 | GOV-016 | eldon | todo |

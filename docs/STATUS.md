@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 10 | 13 | 38 | 0 | 61 |
+| G0 | 10 | 12 | 39 | 0 | 61 |
 | G1 | 71 | 5 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 260 | 19 | 53 | 0 | 332 |
+| all | 260 | 18 | 54 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -31,6 +31,7 @@ Current gate: G0 (see [GATES.md](GATES.md))
 - GOV-013: Partner reviews ADR-0001..0014 and strategy decisions D-P2-1..11
 - GOV-015: Draft ADR-0001..0014
 - GOV-018: Retire docs/HANDOFF.md in favour of docs/log and STATUS
+- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs
 - GOV-021: Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI)
 - GOV-022: Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md)
 - GOV-023: Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS
@@ -136,7 +137,6 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 ## Queue: eldon
 
 Doing:
-- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (labels and mapping done; board needs a `project` token scope)
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise)
 - BPL-014: Component certification levels and test harness
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject
@@ -230,7 +230,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Items in progress
 
-- GOV-019: Pick issue/PR labels and project board mapping to PLAN IDs (labels and mapping done; board needs a `project` token scope) (eldon)
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
 - BPL-014: Component certification levels and test harness (eldon)
@@ -253,6 +252,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 ## Last 10 log files
 
 - [2026-11-16-eldon-claude-gov-019-labels-and-board.md](log/2026-11-16-eldon-claude-gov-019-labels-and-board.md): Chose the label set and board mapping, created 31 labels in the repo, and wrote the mapping doc. The board itself is not created: it needs a token with the `project` scope.
+- [2026-11-16-eldon-claude-gov-019-board.md](log/2026-11-16-eldon-claude-gov-019-board.md): Created the Plan project board (projects/3) with Plan ID, Gate, Area and Owner fields, linked it to the repo, and closed GOV-019.
 - [2026-11-16-eldon-claude-code-review-tiers.md](log/2026-11-16-eldon-claude-code-review-tiers.md): Drafted ADR-0035 (Proposed): risk-tiered review, block only on defects, two rounds, larger PRs, logs for code PRs only, stay at the current gate, generated STATUS. Eldon agreed in chat; it changes approval gates, so the partner must agree through a recorded review.
 - [2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md](log/2026-11-16-eldon-claude-code-golden-path-bench-confirmed.md): After #55 merged, the golden path records the valuation and rounding rows as confirmed on the bench (ADR-0033 evidence). The mapping fixture now uses `half_away_from_zero` (#53); ADR-0033's sentence that the fixture's `half_up` means this rule is superseded by that change (ADR text is not edited).
 - [2026-11-16-eldon-claude-code-fix-59-review.md](log/2026-11-16-eldon-claude-code-fix-59-review.md): Answered the partner's change request on #59: section 14 item 6 now lists only the checks CI enforces and marks a formatter and other generated-file checks as planned.
@@ -261,7 +261,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-16-eldon-claude-code-efficient-review-workflow.md](log/2026-11-16-eldon-claude-code-efficient-review-workflow.md): Added the efficient review workflow (seven points, from the partner's request relayed by Eldon) as section 14 of agents/team-protocol.md and linked it from AGENTS.md and CLAUDE.md. No gate, lane, security-review, rigid-zone or phase-exit rule changed.
 - [2026-11-16-eldon-claude-code-agents-work-freely.md](log/2026-11-16-eldon-claude-code-agents-work-freely.md): AGENTS.md now lets both founders' agents work and merge on their own under the ADR-0035 tiers (Eldon's instruction; the partner is told in the PR).
 - [2026-11-16-eldon-claude-code-agents-may-push.md](log/2026-11-16-eldon-claude-code-agents-may-push.md): Both founders (together, in chat) gave coding agents standing permission to commit, push their feature branch and open PRs. AGENTS.md and CLAUDE.md now say so; main, force-push and unreviewed merges stay forbidden.
-- [2026-11-16-eldon-claude-code-adapter-contract-0-1-2.md](log/2026-11-16-eldon-claude-code-adapter-contract-0-1-2.md): Engine adapter contract 0.1.2 resolves the open questions the partner's review of PR 56 found blocking (Q-36 to Q-40), as a patch-level clarification on the draft contract branch (PR 40).
 
 ## ADRs with status Proposed
 

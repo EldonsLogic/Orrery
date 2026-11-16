@@ -25,8 +25,7 @@ Not used: priority labels (order is by dependency and gate), size labels, per-pe
 
 ## Board (GitHub Projects, one board "Plan")
 
-Fields mirror the table columns: `Plan ID`, `Gate`, `Area`, `Owner`, `Status` (`todo`, `doing`, `blocked`, `done`).
-Columns are the four statuses. Filter the default view to the current gate (`Current gate:` in [GATES.md](../GATES.md)).
+Board: https://github.com/users/EldonsLogic/projects/3 (linked to the repo, created by GOV-019).
+Fields mirror the table columns: `Plan ID`, `Gate`, `Area`, `Owner`, `Status` (`Todo`, `In Progress`, `Done`). GitHub's built-in Status has no blocked option, so a blocked row keeps its status and carries the `blocked` label.
+Filter the default view to the current gate (`Current gate:` in [GATES.md](../GATES.md)).
 Rules: a card is created only for a plan row; moving a card never replaces editing the row in the PR that does the work. If they disagree, PLAN.md wins.
-
-One-time setup left to a founder: creating the board needs a GitHub token with the `project` scope (`gh auth refresh -s project`). Until then PLAN.md and [STATUS.md](../STATUS.md) are the board.

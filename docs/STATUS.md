@@ -9,12 +9,12 @@ Current gate: G0 (see [GATES.md](GATES.md))
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
 | G0 | 9 | 12 | 40 | 0 | 61 |
-| G1 | 71 | 5 | 15 | 0 | 91 |
+| G1 | 70 | 6 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 259 | 18 | 55 | 0 | 332 |
+| all | 258 | 19 | 55 | 0 | 332 |
 
 ## Built so far (done)
 
@@ -87,11 +87,10 @@ Claim one by setting it `doing` with an owner in docs/PLAN.md before editing its
 - LEG-003: Engage counsel in KSA, UAE, Egypt and Qatar; scope of work (owner eldon)
 - LEG-005: Register domains and social handles for the working name (hold only) (owner eldon)
 
-**G1** (34)
+**G1** (33)
 - BRD-004: Token layering: base, product theme, tenant overrides, user preference (owner eldon)
 - BRD-012: Icon set licence check (owner eldon)
 - CE-SEC-005: Change engine: CI against a real Frappe bench instead of mocks (owner partner)
-- CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance (owner partner)
 - CMP-005: Hijri date support in fields, display and print (owner partner)
 - CMP-006: KSA chart of accounts template and tax codes (owner partner)
 - CMP-021: Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) (owner partner)
@@ -191,12 +190,12 @@ Waiting on dependencies: 148 row(s).
 
 Doing:
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory
+- CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance
 - ERP-004: Version pin and upgrade policy document
 - GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032)
 
 Ready next (dependencies done), by gate:
 - CE-SEC-005 (G1): Change engine: CI against a real Frappe bench instead of mocks
-- CMP-002 (G1): Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance
 - CMP-005 (G1): Hijri date support in fields, display and print
 - CMP-006 (G1): KSA chart of accounts template and tax codes
 - CMP-021 (G1): Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015)
@@ -231,6 +230,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 - LEG-002: Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) (eldon)
 - CE-SEC-003: Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory (partner)
+- CMP-002: Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance (partner)
 - BPL-014: Component certification levels and test harness (eldon)
 - ERP-004: Version pin and upgrade policy document (partner)
 - BRD-006: Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject (eldon)

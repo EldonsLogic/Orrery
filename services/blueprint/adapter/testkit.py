@@ -28,7 +28,7 @@ def ulid() -> str:
     return out
 
 
-def ctx(tenant="t_alpha", service="control_plane", who=USER, version="0.1.1", **extra) -> dict:
+def ctx(tenant="t_alpha", service="control_plane", who=USER, version="0.1.2", **extra) -> dict:
     caller = {"service": service, "onBehalfOf": copy.deepcopy(who)}
     return {"contractVersion": version, "requestId": ulid(), "correlationId": "corr-" + tenant, "tenantId": tenant,
             "caller": caller, "deadlineMs": 60000, **extra}
@@ -120,6 +120,12 @@ def code_of(resp: dict) -> str | None:
     return err["code"] if err else None
 
 
+def rejected_error(resp: dict) -> dict:
+    """The error of an apply or rollback refused in `inspect`: an outcome `rejected`, not an envelope (section 5.6.1)."""
+    assert resp["ok"] and resp["result"]["status"] == "rejected", resp
+    return resp["result"]["error"]
+
+
 def provision(h, tenant="t_alpha", site_class="production", blueprint_id=BLUEPRINT_ID, target=None, k=None):
     return h.call("provision_site", ctx(tenant), {"idempotencyKey": k or key(), "engineTarget": copy.deepcopy(target or ENGINE_TARGET),
                                                    "countryPack": "sa", "siteClass": site_class, "blueprintId": blueprint_id})
@@ -165,7 +171,7 @@ def status(h, tenant="t_alpha"):
 
 
 def snapshot(h, tenant="t_alpha") -> tuple:
-    """What 'no effect' compares (section 14): export hash, retained, site status. Events are compared separately."""
+    """What 'no effect' compares (section 14): export hash, retained, site status. Events are compared separately (8.2)."""
     e = export(h, tenant)
     return e["exportHash"], canon(e["retained"]), canon(status(h, tenant))
 

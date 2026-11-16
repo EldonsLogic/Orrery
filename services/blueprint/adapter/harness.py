@@ -2,7 +2,7 @@
 
 The real adapter (apps/engine, BPL-012) provides its own subclass and points `ADAPTER_HARNESS=module:factory` at it.
 Every method here is required: a harness that raises NotImplementedError for one makes the tests that need it FAIL,
-so a green run always means every ADP-C item ran. (Q-34 proposes adding the extensions to the contract's 15.1.)
+so a green run always means every ADP-C item ran. Every method, extensions included, is defined in the contract's 15.1 (0.1.2).
 """
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ class AdapterHarness(abc.ABC):
     @abc.abstractmethod
     def reset(self) -> None: ...
 
-    # --- extensions needed by specific ADP-C items (documented in README.md; required for a complete run)
+    # --- the rest of section 15.1 (0.1.2): needed by specific ADP-C items, required for a complete run
     def on_lock_held(self, callback: Callable[[], None]) -> None:
         """Run callback once while the next apply or rollback holds the site lock (ADP-C-042)."""
         raise NotImplementedError
@@ -65,11 +65,13 @@ class AdapterHarness(abc.ABC):
         raise NotImplementedError
 
     def plan_evidence(self, evidence_ref: str, tenant_id: str | None = None) -> list[str]:
-        """The adapter's internal plan evidence (storage statements) for an `evidenceRef` (ADP-C-050)."""
+        """The adapter's own plan evidence (storage statements recorded at plan time) for an `evidenceRef`; an unknown
+        ref is an error (ADP-C-050)."""
         raise NotImplementedError
 
     def execution_journal(self) -> list[dict]:
-        """Every step the adapter ran, in order: {artifactId, seq, phase: execute|compensate}. Independent of the export (ADP-C-047)."""
+        """The durable step journal: every step actually run, in order, {artifactId, seq, phase: execute|compensate}.
+        Read from the adapter, not reconstructed from exports (ADP-C-047, ADP-C-071)."""
         raise NotImplementedError
 
     def without_test_hooks(self) -> "AdapterHarness":
@@ -117,14 +119,6 @@ class FakeHarness(AdapterHarness):
 
     def dropped_data(self):
         return list(self.adapter.dropped_data)
-
-    def plan_evidence(self, evidence_ref: str, tenant_id: str | None = None) -> list[str]:
-        """The adapter's internal plan evidence (storage statements) for an `evidenceRef` (ADP-C-050)."""
-        raise NotImplementedError
-
-    def execution_journal(self) -> list[dict]:
-        """Every step the adapter ran, in order: {artifactId, seq, phase: execute|compensate}. Independent of the export (ADP-C-047)."""
-        raise NotImplementedError
 
     def plan_evidence(self, evidence_ref, tenant_id=None):
         return self.adapter.plan_evidence(tenant_id or self.default_tenant, evidence_ref)

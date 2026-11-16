@@ -101,9 +101,9 @@ def event_types(h, since=0):
     return [e["type"] for e in h.events()[since:]]
 
 
-def assert_no_effect(h, tenant, before, events_before, allow=()):
-    """Section 14 'no effect': export hash, retained and site status unchanged, and no event beyond `allow`."""
+def assert_no_effect(h, tenant, before, events_before, expect=()):
+    """Section 14 'no effect': no change to engine data (export hash, retained, site status), and the events are exactly
+    the ones 8.2 lists for the case (`expect`, in order, each once): none, one permission.denied or one apply_failed."""
     from adapter import testkit as t
     assert t.snapshot(h, tenant) == before
-    assert set(event_types(h, events_before)) <= set(allow)
-    assert len(event_types(h, events_before)) <= 1 or not allow
+    assert event_types(h, events_before) == list(expect)

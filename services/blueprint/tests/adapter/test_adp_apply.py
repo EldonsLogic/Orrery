@@ -7,7 +7,7 @@ import pytest
 from adapter import testkit as t
 from conftest import assert_no_effect, event_types, optional
 
-FAILED = {"blueprint.apply_failed"}
+FAILED = ["blueprint.apply_failed"]  # the one event of an apply rejected in inspect (8.2)
 
 
 def result_of(resp):
@@ -35,8 +35,8 @@ def test_adp_c_034_plan_token_checks(h):
     for token in ("pln_" + "z" * 24, planned(h, art, "t_beta")["planToken"], planned(h, other)["planToken"], expired):
         before, ev = t.snapshot(h), len(h.events())
         resp = raw_apply(h, art, token)  # missing, foreign tenant, foreign artifact, expired
-        assert t.code_of(resp) == "plan_token_invalid", token
-        assert_no_effect(h, "t_alpha", before, ev, allow=FAILED)
+        assert t.rejected_error(resp)["code"] == "plan_token_invalid", token
+        assert_no_effect(h, "t_alpha", before, ev, expect=FAILED)
 
 
 def test_adp_c_035_stale_token_after_other_change(h):
@@ -45,8 +45,8 @@ def test_adp_c_035_stale_token_after_other_change(h):
     token = planned(h, art)["planToken"]
     assert t.apply_artifact(h, other)["result"]["status"] == "applied"
     before, ev = t.snapshot(h), len(h.events())
-    assert t.code_of(raw_apply(h, art, token)) == "plan_token_invalid"
-    assert_no_effect(h, "t_alpha", before, ev, allow=FAILED)
+    assert t.rejected_error(raw_apply(h, art, token))["code"] == "plan_token_invalid"
+    assert_no_effect(h, "t_alpha", before, ev, expect=FAILED)
 
 
 def test_adp_c_036_missing_approvals(h):
@@ -56,12 +56,14 @@ def test_adp_c_036_missing_approvals(h):
     if plan["verdict"] != "needs_gate_approval":
         return  # this adapter needs no gate for the initial build: the missing-gate case does not exist (not a skip, not a claim)
     before, ev = t.snapshot(h), len(h.events())
-    assert t.code_of(raw_apply(h, build, plan["planToken"], {"changeApproved": t.ulid()})) == "approval_missing"
-    assert_no_effect(h, "t_alpha", before, ev, allow=FAILED)
+    assert t.rejected_error(raw_apply(h, build, plan["planToken"], {"changeApproved": t.ulid()}))["code"] == "approval_missing"
+    assert_no_effect(h, "t_alpha", before, ev, expect=FAILED)
     team = t.variant([t.field_step("customer", "n9")], requiresTeamReview=True)
     t.site_at_rev1(h, "t_beta")
     tp = planned(h, team, "t_beta")
-    assert t.code_of(raw_apply(h, team, tp["planToken"], {"changeApproved": t.ulid()}, "t_beta")) == "approval_missing"
+    before, ev = t.snapshot(h, "t_beta"), len(h.events())
+    assert t.rejected_error(raw_apply(h, team, tp["planToken"], {"changeApproved": t.ulid()}, "t_beta"))["code"] == "approval_missing"
+    assert_no_effect(h, "t_beta", before, ev, expect=FAILED)
     ok = raw_apply(h, team, tp["planToken"], {"changeApproved": t.ulid(), "teamReviewed": t.ulid()}, "t_beta")
     assert ok["result"]["status"] == "applied"
 
@@ -73,11 +75,11 @@ def test_adp_c_037_rejected_plan(h):
     assert plan["verdict"] == "rejected"
     before, ev = t.snapshot(h), len(h.events())
     resp = raw_apply(h, art, plan["planToken"])
-    err = t.error_of(resp)
+    err = t.rejected_error(resp)
     assert err["code"] == "plan_rejected"
     blocked = next(step for step in plan["steps"] if step["disposition"] == "blocked")
     assert err["details"] == {"stepSeq": blocked["seq"], "reasonCode": "protected_subject"}
-    assert_no_effect(h, "t_alpha", before, ev, allow=FAILED)
+    assert_no_effect(h, "t_alpha", before, ev, expect=FAILED)
 
 
 # ---------------------------------------------------------------- the happy path
@@ -123,7 +125,8 @@ def test_adp_c_040_same_key_other_input(h):
     key = t.key()
     assert raw_apply(h, art, plan["planToken"], k=key)["result"]["status"] == "applied"
     before, ev = t.snapshot(h), len(h.events())
-    assert t.code_of(raw_apply(h, art, plan["planToken"], {"changeApproved": t.ulid()}, k=key)) == "idempotency_conflict"
+    resp = raw_apply(h, art, plan["planToken"], {"changeApproved": t.ulid()}, k=key)
+    assert not resp["ok"] and resp["error"]["code"] == "idempotency_conflict"  # before the operation record (5.6.1)
     assert_no_effect(h, "t_alpha", before, ev)
 
 
@@ -152,8 +155,10 @@ def test_adp_c_042_concurrent_apply(h):
     first = raw_apply(h, art, token)
     assert first["result"]["status"] == "applied"
     assert seen["status"]["state"] == "applying" and seen["status"]["lockedBy"]
+    assert not seen["resp"]["ok"]  # refused in acquire, before the operation record exists (5.6.1)
     err = seen["resp"]["error"]
     assert err["code"] == "concurrent_change" and err["retryable"] and err["retryAfterMs"] >= 0
+    assert "blueprint.apply_failed" not in event_types(h)
     assert t.status(h)["state"] == "ready"
     assert event_types(h).count("blueprint.applied") == 2  # initial build and this apply, not the refused one
 
@@ -214,6 +219,26 @@ def test_adp_c_043_late_fault_in_initial_build_quarantines_additions(h):
     added = {s["pointer"] for s in build["steps"] if s["kind"] != "settings.set"} - {build["steps"][-1]["pointer"]}
     assert added
     assert_compensated(h, before, added)
+
+
+def test_adp_c_071_initial_build_compensation_is_journaled_removal(h):
+    """Section 5.6.2: no stored inverse, so the undo is derived from the journal: additions quarantined or disabled,
+    settings set back; every undo step journaled with phase compensate, newest first; no data dropped."""
+    t.provision(h)
+    before, ev = t.snapshot(h), len(h.events())
+    build = t.initial_build()
+    k = len(build["steps"])
+    h.fault("execute", step_seq=k)
+    out = result_of(t.apply_artifact(h, build))
+    assert out["status"] == "compensated" and out["exportHash"] == before[0]
+    created = {s["pointer"] for s in build["steps"][:k - 1] if s["kind"] != "settings.set"}
+    assert created and {r["pointer"] for r in t.export(h)["retained"]} == created
+    assert_compensated(h, before, created)
+    journal = [(e["seq"], e["phase"]) for e in optional(h.execution_journal) if e["artifactId"] == build["artifactId"]]
+    ran = list(range(1, k))
+    assert journal == [(s, "execute") for s in ran] + [(s, "compensate") for s in reversed(ran)]
+    assert optional(h.dropped_data) == []
+    assert event_types(h, ev) == ["blueprint.apply_failed"]
 
 
 def test_adp_c_044_postcondition_fault(h):

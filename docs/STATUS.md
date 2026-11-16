@@ -242,6 +242,7 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 
 ## Last 10 log files
 
+- [2026-11-16-eldon-claude-code-align-fake-contract-0-1-2.md](log/2026-11-16-eldon-claude-code-align-fake-contract-0-1-2.md): Merged engine adapter contract 0.1.2 (bpl-025-026-adapter-contracts, which resolves Q-36 to Q-40) into the fake-adapter branch and aligned the fake and the conformance suite with it; 625 tests pass in services/blueprint/tests, none skipped.
 - [2026-11-16-eldon-claude-code-adapter-contract-0-1-2.md](log/2026-11-16-eldon-claude-code-adapter-contract-0-1-2.md): Engine adapter contract 0.1.2 resolves the open questions the partner's review of PR 56 found blocking (Q-36 to Q-40), as a patch-level clarification on the draft contract branch (PR 40).
 - [2026-11-15-eldon-claude-code-fix-56-review.md](log/2026-11-15-eldon-claude-code-fix-56-review.md): Fixed the partner's blocking review findings on PR 56 (fake adapter): compensation now runs the stored inverse steps in reverse; a missing harness capability or any skip fails the conformance run; ADP-C-050 judges the adapter's plan evidence; ADP-C-047 uses an execution journal and checks how the apply ends; open questions Q-36 to Q-40 appended.
 - [2026-11-14-partner-claude-code-gov-040-founder-answers.md](log/2026-11-14-partner-claude-code-gov-040-founder-answers.md): Recorded the founders' answers to Q-17, Q-18 and Q-19 from the PR #48 comment: ADR-0031 accepted, new ADR-0032 accepted. Applied Eldon's review of #48 and merged main.
@@ -251,7 +252,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
 - [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
 - [2026-11-14-partner-antigravity-erp-005-core-module-scope.md](log/2026-11-14-partner-antigravity-erp-005-core-module-scope.md): Defined the v1 core module, doctype, report, print format, and configuration-guardrail scope for trading and distribution in `docs/specs/core-module-scope-trading.md`, grounded in read-only inspection of the pinned synthetic bench.
-- [2026-11-14-partner-antigravity-erp-004-version-policy.md](log/2026-11-14-partner-antigravity-erp-004-version-policy.md): Drafted `docs/architecture/engine-version-policy.md` for ERP-004 covering the current pinned engine/dependency set, pin immutability rules, upstream lifecycle facts cited as of 2026-11-14 (flagging MariaDB 10.6 Community EOL on 2026-07-06), upgrade classes, gate-based upgrade/rollback procedure, security exposure rules, governance interactions, and open founder decisions.
 
 ## ADRs with status Proposed
 

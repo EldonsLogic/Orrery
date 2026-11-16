@@ -10,7 +10,7 @@ from adapter import testkit as t
 from adapter.contract import canon, sha
 from conftest import assert_no_effect, event_types
 
-FAILED = {"blueprint.apply_failed"}
+FAILED = ["blueprint.apply_failed"]  # the one event of a rollback rejected in inspect (8.2)
 GOLDEN = Path(__file__).with_name("golden_export_hashes.json")
 
 
@@ -21,23 +21,25 @@ def applied(h, art, tenant="t_alpha"):
 
 
 def test_adp_c_051_rollback_restores_the_exact_export(h):
-    t.site_at_rev1(h)
+    build = t.site_at_rev1(h)
     fwd = t.sample("add-field")
     before = t.export(h)["exportHash"]
     applied(h, fwd)
     out = t.rollback(h, fwd)["result"]
     assert out["status"] == "applied" and out["operation"] == "rollback" and out["artifactId"] == fwd["inverse"]["artifactId"]
-    assert out["site"]["applied"]["revision"] == fwd["blueprint"]["base"]
+    # site.applied names the artifact rolled back to, never the inverse (section 5.7)
+    assert out["site"]["applied"] == {"artifactId": build["artifactId"], "revision": fwd["blueprint"]["base"]}
     assert out["exportHash"] == t.export(h)["exportHash"] == before
 
 
 def test_adp_c_051_rollback_of_a_quarantine_restores_the_field(h):
     t.site_at_rev1(h)
-    applied(h, t.sample("add-field"))
+    add = t.sample("add-field")
+    applied(h, add)
     mid = t.export(h)["exportHash"]
     applied(h, t.sample("remove-field"))
     assert t.rollback(h, t.sample("remove-field"))["result"]["exportHash"] == mid
-    assert t.status(h)["applied"]["revision"] == t.sample("remove-field")["blueprint"]["base"]
+    assert t.status(h)["applied"] == {"artifactId": add["artifactId"], "revision": t.sample("remove-field")["blueprint"]["base"]}
 
 
 def test_adp_c_052_rollback_of_older_artifact(h):
@@ -46,25 +48,27 @@ def test_adp_c_052_rollback_of_older_artifact(h):
     applied(h, t.sample("remove-field"))
     before, ev = t.snapshot(h), len(h.events())
     resp = t.rollback(h, t.sample("add-field"))
-    err = t.error_of(resp)
+    err = t.rejected_error(resp)
     assert err["code"] == "rollback_not_possible" and err["details"]["reasonCode"] == "not_latest"
-    assert_no_effect(h, "t_alpha", before, ev, allow=FAILED)
+    assert_no_effect(h, "t_alpha", before, ev, expect=FAILED)
 
 
 def test_adp_c_053_no_inverse_or_irreversible(h):
     build = t.site_at_rev1(h)
     before, ev = t.snapshot(h), len(h.events())
     assert build["inverse"] is None
-    err = t.error_of(t.rollback(h, build))
+    err = t.rejected_error(t.rollback(h, build))
     assert err["code"] == "rollback_not_possible" and err["details"]["reasonCode"] == "no_inverse"
-    assert_no_effect(h, "t_alpha", before, ev, allow=FAILED)
+    assert_no_effect(h, "t_alpha", before, ev, expect=FAILED)
     art = t.sample("add-field")
     art["risk"]["irreversibleSteps"] = 1
     art["steps"][0]["reversible"] = False
     art = t.seal(art)
     applied(h, art)
-    err = t.error_of(t.rollback(h, art))
+    before, ev = t.snapshot(h), len(h.events())
+    err = t.rejected_error(t.rollback(h, art))
     assert err["code"] == "rollback_not_possible" and err["details"]["reasonCode"] == "irreversible_step"
+    assert_no_effect(h, "t_alpha", before, ev, expect=FAILED)
 
 
 def test_adp_c_054_altered_inverse(h):

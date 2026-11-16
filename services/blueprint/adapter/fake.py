@@ -1,4 +1,4 @@
-"""In-memory fake of the engine adapter (contracts/engine-adapter.md 0.1.1, BPL-025).
+"""In-memory fake of the engine adapter (contracts/engine-adapter.md 0.1.2, BPL-025).
 
 Purpose: let the compiler side build and test against the contract before the real adapter exists, and give the
 conformance suite (services/blueprint/tests/adapter) a reference that passes every ADP-C item.
@@ -19,7 +19,7 @@ from .contract import CONTRACTS, artifact_hashes, canon, response_validator, sch
 
 ADAPTER_ID = "frappe"  # internal id; the sample artifacts name it in engineTarget.adapter (contract open question 12)
 ADAPTER_VERSION = "0.1.0"
-CONTRACT_VERSIONS = ["0.1.1"]
+CONTRACT_VERSIONS = ["0.1.2"]
 ARTIFACT_SCHEMA_VERSIONS = ["0.1.0"]
 VERSION_SETS = ["set-example", "set-example-2"]
 PLAN_TOKEN_TTL = 900
@@ -71,7 +71,7 @@ SEMANTIC_PROPS = {"/type", "/unique", "/indexed", "/precision", "/maxLength", "/
 
 SECTION_OF = {"component": "components", "location": "locations", "entity": "entities", "role": "roles",
               "workflow": "workflows", "approval": "approvals", "report": "reports"}
-SETTINGS = ("company", "compliance", "i18n")  # exportedProperties keys: settings_company, settings_compliance, settings_intl (the contract key pattern ^[a-z_]+$ has no digits)
+SETTINGS = ("company", "compliance", "i18n")  # exportedProperties keys: settings_company, settings_compliance, settings_intl (contract 5.1)
 EXPORTED = {
     "settings_company": ["legalName", "tradeName", "country", "crNumber", "vatNumber", "sizeBand", "industry", "languages", "locale"],
     "settings_compliance": ["country", "countryPack", "eInvoicing", "vat", "hijriDisplay", "documentLanguages", "payroll"],
@@ -902,7 +902,8 @@ class FakeAdapter:
     def _undo_for(entry: dict, counterpart: dict | None, used: set) -> dict:
         """The step that undoes a journaled step: the matching step (same pointer and property) of the stored inverse
         (section 5.6, compensate). An artifact with no stored inverse (initial build, base null) has none, so the undo is
-        derived from the step itself: additions are quarantined or disabled, settings are set back to what they were."""
+        derived from the journal (section 5.6.2): additions are quarantined or disabled, settings are set back to the
+        journaled prior value; any other kind cannot be compensated (recovery_required)."""
         step = entry["step"]
         if counterpart is not None:
             key = (step["pointer"], step["params"].get("property"))

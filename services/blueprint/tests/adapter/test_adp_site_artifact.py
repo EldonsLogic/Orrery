@@ -8,6 +8,9 @@ from adapter import testkit as t
 from adapter.contract import CONTRACTS, canon
 from conftest import assert_no_effect, optional
 
+EXPORTED_KEYS = {"settings_company", "settings_compliance", "settings_intl", "component", "location", "entity", "field",
+                 "relation", "role", "workflow", "state", "transition", "approval", "report"}  # contract 5.1 (0.1.2)
+
 ARTIFACT_OPS = ["plan", "preview", "apply", "rollback"]
 
 
@@ -27,6 +30,7 @@ def test_adp_c_013_capabilities_lists_every_kind_sorted_and_stable(h):
     second = h.call("capabilities", t.ctx("t_alpha"), {})["result"]
     listed = [k["kind"] for k in first["stepKinds"]]
     assert listed == sorted(kinds) and len(set(listed)) == len(listed)
+    assert set(first["exportedProperties"]) == EXPORTED_KEYS  # section 5.1 fixes the key names
     assert canon(first) == canon(second)
     assert first["features"]["previewPredictsExport"] is True  # required of the fake (ADP-C-032)
 

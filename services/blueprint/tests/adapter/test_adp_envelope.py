@@ -150,7 +150,8 @@ def test_adp_c_008_rollback_foreign_artifact(h):
     before, ev = t.snapshot(h, "t_beta"), len(h.events())
     resp = t.rollback(h, fwd, "t_beta")
     assert t.code_of(resp) in {"artifact_not_found", "blueprint_mismatch", "rollback_not_possible"}
-    assert_no_effect(h, "t_beta", before, ev, allow={"blueprint.apply_failed"})
+    # an outcome `rejected` emits its one apply_failed; an envelope refusal emits nothing (8.2)
+    assert_no_effect(h, "t_beta", before, ev, expect=["blueprint.apply_failed"] if resp["ok"] else [])
 
 
 def test_adp_c_009_tenant_without_site(h):
@@ -176,8 +177,7 @@ def test_adp_c_010_service_not_allowed(h, op):
     before, ev = t.snapshot(h), len(h.events())
     resp = h.call(op, t.ctx(service=DENIED[op]), valid_input(op))
     assert t.code_of(resp) == "permission_denied"
-    assert event_types(h, ev) == ["permission.denied"]
-    assert t.snapshot(h) == before
+    assert_no_effect(h, "t_alpha", before, ev, expect=["permission.denied"])
 
 
 @pytest.mark.parametrize("op", ["apply", "rollback"])

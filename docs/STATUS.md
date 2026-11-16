@@ -8,13 +8,13 @@ Current gate: G0 (see [GATES.md](GATES.md))
 
 | Gate | todo | doing | done | blocked | total |
 |---|---|---|---|---|---|
-| G0 | 13 | 8 | 37 | 0 | 58 |
+| G0 | 13 | 9 | 37 | 0 | 59 |
 | G1 | 72 | 4 | 15 | 0 | 91 |
 | G2 | 117 | 1 | 0 | 0 | 118 |
 | G3 | 47 | 0 | 0 | 0 | 47 |
 | G4 | 8 | 0 | 0 | 0 | 8 |
 | G5 | 7 | 0 | 0 | 0 | 7 |
-| all | 264 | 13 | 52 | 0 | 329 |
+| all | 264 | 14 | 52 | 0 | 330 |
 
 ## Built so far (done)
 
@@ -146,6 +146,7 @@ Doing:
 - WEB-018: Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018)
 - GOV-043: Risk-tiered review and fewer rounds (ADR-0035, Proposed): docs-only, ordinary and rigid-zone tiers, block only on defects, two rounds, larger PRs, no logs for docs-only PRs, generated STATUS; needs both founders' agreement
 - GOV-044: Standing permission for coding agents to commit, push their feature branch and open PRs (founders' agreement, AGENTS.md and CLAUDE.md); main, force-push and merges stay restricted
+- GOV-045: Both founders' agents work and merge on their own under ADR-0035 tiers: next ready row, fix real defects, merge Tier 1 on green CI and Tier 2 after the other side has reviewed
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2
 - BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022
 
@@ -242,12 +243,14 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - GOV-040: Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032) (partner)
 - GOV-043: Risk-tiered review and fewer rounds (ADR-0035, Proposed): docs-only, ordinary and rigid-zone tiers, block only on defects, two rounds, larger PRs, no logs for docs-only PRs, generated STATUS; needs both founders' agreement (eldon)
 - GOV-044: Standing permission for coding agents to commit, push their feature branch and open PRs (founders' agreement, AGENTS.md and CLAUDE.md); main, force-push and merges stay restricted (eldon)
+- GOV-045: Both founders' agents work and merge on their own under ADR-0035 tiers: next ready row, fix real defects, merge Tier 1 on green CI and Tier 2 after the other side has reviewed (eldon)
 - BPL-028: Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 (eldon)
 - BPL-029: Blueprint-to-engine mapping spec for customer, item price, sales order and invoice (versioned contract plus fixtures); interface row for ERP-021 and ERP-022 (eldon)
 
 ## Last 10 log files
 
 - [2026-11-16-eldon-claude-code-review-tiers.md](log/2026-11-16-eldon-claude-code-review-tiers.md): Drafted ADR-0035 (Proposed): risk-tiered review, block only on defects, two rounds, larger PRs, logs for code PRs only, stay at the current gate, generated STATUS. Eldon agreed in chat; it changes approval gates, so the partner must agree through a recorded review.
+- [2026-11-16-eldon-claude-code-agents-work-freely.md](log/2026-11-16-eldon-claude-code-agents-work-freely.md): AGENTS.md now lets both founders' agents work and merge on their own under the ADR-0035 tiers (Eldon's instruction; the partner is told in the PR).
 - [2026-11-16-eldon-claude-code-agents-may-push.md](log/2026-11-16-eldon-claude-code-agents-may-push.md): Both founders (together, in chat) gave coding agents standing permission to commit, push their feature branch and open PRs. AGENTS.md and CLAUDE.md now say so; main, force-push and unreviewed merges stay forbidden.
 - [2026-11-14-partner-claude-code-gov-040-founder-answers.md](log/2026-11-14-partner-claude-code-gov-040-founder-answers.md): Recorded the founders' answers to Q-17, Q-18 and Q-19 from the PR #48 comment: ADR-0031 accepted, new ADR-0032 accepted. Applied Eldon's review of #48 and merged main.
 - [2026-11-14-partner-claude-code-erp-006-review-fixes.md](log/2026-11-14-partner-claude-code-erp-006-review-fixes.md): Applied Eldon's review of PR #51. The gap is now 107 translatable strings, not 152. Q-28 is answered and linked to the other accountant reviews. Main is merged into the branch.
@@ -256,7 +259,6 @@ Unassigned rows not done: 0 (assign an owner in docs/PLAN.md when you claim one)
 - [2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md](log/2026-11-14-partner-claude-code-erp-005-close-valuation-rounding.md): Recorded the founders' answers to Q-21, Q-22 and Q-28 in ADR-0033, confirmed the two engine settings on the bench, and closed ERP-005.
 - [2026-11-14-partner-claude-code-erp-004-review-fixes.md](log/2026-11-14-partner-claude-code-erp-004-review-fixes.md): Applied Eldon's review of PR #50. ERP-004 is back to `doing`, Q-25 now has the engine's own MariaDB support range, and the MariaDB move is a new plan row (ERP-024).
 - [2026-11-14-partner-claude-code-erp-001-review-fixes.md](log/2026-11-14-partner-claude-code-erp-001-review-fixes.md): Applied Eldon's review of PR #39: the live verifier now has the HTTP check its test expects, CI runs the bench tests, the README states the spike's limits, and this log corrects the earlier logs' claims.
-- [2026-11-14-partner-claude-code-erp-001-bench-proof.md](log/2026-11-14-partner-claude-code-erp-001-bench-proof.md): Committed the hardened ERP-001 dev bench (digest pins, enforced HRMS commit, local-only ports, tests), proved it with a clean build and a live synthetic site, and marked ERP-001 done.
 
 ## ADRs with status Proposed
 

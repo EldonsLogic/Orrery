@@ -165,7 +165,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-009 | Engine event emitter feeding the event stream | Runtime | G1 | BPL-011 | partner | todo |
 | ERP-010 | HRMS skeleton: employees, leave, payroll structure, only what v1 needs | Runtime | G2 | ERP-005 | partner | todo |
 | ERP-011 | Component pack v1 for trading and distribution (price lists, credit limits, rep commission) | Runtime | G2 | BPL-014,ERP-005 | partner | todo |
-| ERP-012 | Frappe implementation of the engine adapter | Runtime | G1 | BPL-012,ERP-001 | partner | todo |
+| ERP-012 | Frappe implementation of the engine adapter | Runtime | G1 | BPL-012,ERP-001 | partner | done |
 | ERP-013 | Opening balances and master data importer | Runtime | G3 | DSC-011 | partner | todo |
 | ERP-014 | Accounting correctness property tests (ledger balances, tax, rounding) | Runtime | G1 | ERP-005,QA-001 | partner | todo |
 | ERP-015 | Inventory valuation correctness tests | Runtime | G2 | ERP-014 | partner | todo |

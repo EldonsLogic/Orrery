@@ -1,8 +1,8 @@
 # ADR-0022: Web stack for the marketing site and the app
 
-Status: Proposed
+Status: Accepted
 Owner: eldon
-Approved by: pending (Eldon to approve; partner review pending). Proposal written for WEB-018, log 2026-11-07-eldon-claude-code-web-stack-adr.
+Approved by: Eldon, in chat on 2026-11-17 ("do the best practice and best approach on all items and proceed"). The partner's review is not recorded; if the partner disagrees, he supersedes this ADR. Proposal written for WEB-018, log 2026-11-07-eldon-claude-code-web-stack-adr.
 
 ## Context
 WEB-018 asks for the web stack before any screen is built. ADR-0018 (Proposed) already picks Vercel for per-PR previews, and says the first thing hosted is the design-system preview pages, then clickable chat screens. Fixed constraints:
@@ -14,7 +14,7 @@ WEB-018 asks for the web stack before any screen is built. ADR-0018 (Proposed) a
 - Hijri and Gregorian date entry, Eastern Arabic digits, bidi-safe mixed text (WEB-016, [calendars-and-locale](../architecture/calendars-and-locale.md)).
 
 ## Decision
-PROPOSED, recommended: **one TypeScript and React stack for both the marketing site and the app, on Next.js**, in one small workspace under `web/`.
+**One TypeScript and React stack for both the marketing site and the app, on Next.js**, in one small workspace under `web/`.
 1. **Framework: Next.js (App Router) with React and TypeScript in strict mode**, for both `web/marketing` and `web/app`. One stack means shared tokens, i18n, components and tests, and the best fit with Vercel previews.
 2. **Rendering by surface.** Marketing: static generation, fully cacheable, no customer data. App: the browser renders tenant screens and calls our in-country gateway directly; the Next.js server holds no tenant data and does not proxy business data. This keeps Vercel usable for previews (synthetic data only) and lets production serve the app as static files or a standalone Node container from an in-country host. Where production runs is decided with hosting (INF-001).
 3. **Styling: plain CSS with CSS custom properties from `docs/brand/tokens` (CSS Modules per component).** No utility framework with its own colour palette, so a hard-coded colour cannot slip in; a lint rule rejects hex, rgb and font-family literals outside the token files. Logical properties only (`margin-inline-start`, not `margin-left`), so RTL needs no mirrored stylesheet.

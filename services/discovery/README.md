@@ -79,3 +79,14 @@ Tests: `tests/connectors/` (fake connectors only; requirement IDs PI-002 to PI-0
 - Budgets: rows, columns, cells and sheets are constructor limits (default 50000, 256, 200000, 100); input bytes, steps, fields and characters come from the framework `Limits`.
 
 Tests: `tests/connectors/tabular/`. Not covered: .xls and other formats are refused, not read; pivot tables, charts, merged cells, rich-text formatting and cell styles are ignored.
+
+## Odoo extractor (DSC-012)
+
+`connectors/odoo/` is a tier 1 (official API, read-only) connector, id `discovery.odoo`, `writes=False`, capability `read`. Generic: no client specifics. Offline and stdlib only: the only I/O seam is an injected `Transport` (`call(model, method, args, kwargs) -> JSON`) that the platform vault supplies ready-made; this package contains no network code and never sees credentials.
+
+- Read-only in code (PI-006): `ReadOnlyGateway` passes only `search_read`, `read`, `search_count`, `fields_get`, `name_get` and `common.version`. `ODO-002` write-style names (write, create, unlink, execute, action_, button_, private), `ODO-001` any other method, `ODO-003` model not on the configurable allow-list, `ODO-004` bad arguments (unknown keyword, `search_read` without a page limit of 1 to 500), `ODO-005` secret-like key in input, `ODO-008` transport failure (its message is dropped), `ODO-009` malformed response. The runner reports them as `CON-010` plus the class name.
+- Budgets: hard page size (max 500), `max_pages`, `max_records_per_model`, `max_records_total` stop paging and report `budget_stopped_paging` (rows read versus `search_count`); the framework `Limits` and `Budget` still apply.
+- Output: one entity per model; per field a label (`column_header`), a spec (type, neutral type, required, relation, selection, translate) and a mapping line, then one `cell` per record value. many2one gives the name plus `#id`, x2many an id list, `False` on non-boolean fields is empty (counted, not emitted), selection keeps the key. Arabic labels and values are data; every string is L3 via the runner; instruction-like text is flagged, never acted on. Binary fields are never fetched (`binary_not_fetched`); secret-like field names are withheld.
+- Data tables in `connectors/odoo/mapping.py`: `DEFAULT_MODELS` (trading business) and `MAPPING` (source model/field to neutral name and type; the Blueprint mapping is DSC-013). Fields without a mapping are reported (`unmapped_field`, `unmapped_model`), never dropped.
+
+Tests: `tests/connectors/odoo/` (FakeTransport, synthetic data). Not covered: any real Odoo version quirk beyond the generic shapes, domain filters, incremental sync, and the transport itself (vault-side).

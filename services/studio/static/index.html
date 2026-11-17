@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alexandria:wght@500;600&amp;family=Readex+Pro:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="/tokens/tokens.css">
+<link rel="stylesheet" href="/tokens/tokens.proposed.css">
+<link rel="stylesheet" href="/app.css">
+<script src="/i18n.js" defer></script>
+<script src="/qr.js" defer></script>
+<script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#panel" data-i18n="app.skip"></a>
+<header class="top">
+  <div class="brand">
+    <h1 data-i18n="app.title"></h1>
+    <span id="engineBadge" class="badge warn" role="status"></span>
+  </div>
+  <div class="tools">
+    <button type="button" class="btn ghost" id="langBtn"></button>
+    <button type="button" class="btn ghost" id="themeBtn"></button>
+    <button type="button" class="btn ghost" id="resetBtn" data-i18n="app.reset"></button>
+  </div>
+</header>
+<p class="sub" data-i18n="app.subtitle"></p>
+<p class="err" id="globalErr" role="alert" hidden></p>
+
+<main class="layout">
+  <section class="card editor" aria-labelledby="edTitle">
+    <h2 id="edTitle" data-i18n="editor.title"></h2>
+
+    <fieldset>
+      <legend data-i18n="editor.company"></legend>
+      <div class="grid2">
+        <label><span data-i18n="editor.legalEn"></span><input id="legalEn" dir="ltr" lang="en" maxlength="200" autocomplete="off"></label>
+        <label><span data-i18n="editor.legalAr"></span><input id="legalAr" dir="rtl" lang="ar" maxlength="200" autocomplete="off"></label>
+        <label><span data-i18n="editor.tradeEn"></span><input id="tradeEn" dir="ltr" lang="en" maxlength="200" autocomplete="off"></label>
+        <label><span data-i18n="editor.tradeAr"></span><input id="tradeAr" dir="rtl" lang="ar" maxlength="200" autocomplete="off"></label>
+      </div>
+      <p class="err" id="companyErr" role="alert" hidden></p>
+    </fieldset>
+
+    <fieldset>
+      <legend data-i18n="editor.components"></legend>
+      <p class="hint" data-i18n="editor.componentsHint"></p>
+      <div id="components" class="comps"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend data-i18n="editor.labels"></legend>
+      <label><span data-i18n="editor.entity"></span><select id="entitySel"></select></label>
+      <div class="grid2">
+        <label><span data-i18n="editor.labelEn"></span><input id="entEn" dir="ltr" lang="en" maxlength="200" autocomplete="off"></label>
+        <label><span data-i18n="editor.labelAr"></span><input id="entAr" dir="rtl" lang="ar" maxlength="200" autocomplete="off"></label>
+      </div>
+      <p class="err" id="labelErr" role="alert" hidden></p>
+    </fieldset>
+
+    <fieldset>
+      <legend data-i18n="editor.brand"></legend>
+      <div class="row">
+        <input type="color" id="colorPick">
+        <label class="grow"><span data-i18n="editor.hex"></span><input id="colorHex" dir="ltr" maxlength="7" spellcheck="false" autocomplete="off"></label>
+      </div>
+      <p class="err" id="brandErr" role="alert" hidden></p>
+    </fieldset>
+  </section>
+
+  <section class="card panel" id="panel" aria-labelledby="panelTitle">
+    <h2 id="panelTitle" class="sr" data-i18n="panel.title"></h2>
+    <div class="tabs" role="tablist" id="tabs">
+      <button type="button" role="tab" id="tab-compile" aria-controls="pane-compile" data-tab="compile" data-i18n="tab.compile"></button>
+      <button type="button" role="tab" id="tab-apply" aria-controls="pane-apply" data-tab="apply" data-i18n="tab.apply"></button>
+      <button type="button" role="tab" id="tab-brand" aria-controls="pane-brand" data-tab="brand" data-i18n="tab.brand"></button>
+      <button type="button" role="tab" id="tab-invoice" aria-controls="pane-invoice" data-tab="invoice" data-i18n="tab.invoice"></button>
+    </div>
+
+    <div role="tabpanel" id="pane-compile" aria-labelledby="tab-compile" class="pane">
+      <div id="compileStatus" class="status" aria-live="polite"></div>
+      <div id="refusals" class="refusals"></div>
+      <div id="kinds" class="chips" role="group"></div>
+      <div class="scroll"><table><thead><tr>
+        <th class="num" data-i18n="steps.seq"></th><th class="num" data-i18n="steps.phase"></th><th data-i18n="steps.kind"></th>
+        <th data-i18n="steps.subject"></th><th data-i18n="steps.impact"></th><th data-i18n="steps.ddl"></th>
+      </tr></thead><tbody id="steps"></tbody></table></div>
+      <p class="hint" data-i18n="compile.note"></p>
+    </div>
+
+    <div role="tabpanel" id="pane-apply" aria-labelledby="tab-apply" class="pane" hidden>
+      <div class="row wrap">
+        <button type="button" class="btn" id="applyBtn" data-i18n="apply.apply"></button>
+        <button type="button" class="btn ghost" id="rollbackBtn" data-i18n="apply.rollback"></button>
+        <span class="row">
+          <button type="button" class="btn ghost" id="failBtn" data-i18n="apply.fail"></button>
+          <label class="inline"><span data-i18n="apply.failStep"></span><input id="failStep" type="number" min="1" value="40" dir="ltr"></label>
+        </span>
+      </div>
+      <p class="hint" data-i18n="apply.note"></p>
+      <ol id="stages" class="stages"></ol>
+      <div class="meter"><div class="row"><span id="stepCount" class="hint"></span><span id="pcCount" class="hint"></span></div>
+        <div class="bar"><div id="bar"></div></div></div>
+      <div id="applyResult" class="result" aria-live="polite"></div>
+      <h3 data-i18n="apply.siteNow"></h3>
+      <div id="siteNow" class="site"></div>
+    </div>
+
+    <div role="tabpanel" id="pane-brand" aria-labelledby="tab-brand" class="pane" hidden>
+      <div id="brandStatus" class="status" aria-live="polite"></div>
+      <div class="previews">
+        <div class="pv" id="pvLight"></div>
+        <div class="pv" id="pvDark"></div>
+      </div>
+      <div id="findings" class="finds"></div>
+      <p class="hint" data-i18n="brand.note"></p>
+    </div>
+
+    <div role="tabpanel" id="pane-invoice" aria-labelledby="tab-invoice" class="pane" hidden>
+      <div class="row wrap">
+        <div class="seg" id="marketSeg" role="group"></div>
+        <div class="seg" id="invLangSeg" role="group"></div>
+        <label class="inline"><span data-i18n="inv.pick"></span><select id="invSel"></select></label>
+      </div>
+      <p class="notice" id="invNotice"></p>
+      <div id="invoice" class="invoice"></div>
+      <div class="qrbox">
+        <div id="qr" class="qr" role="img"></div>
+        <div class="qrinfo">
+          <h3 data-i18n="inv.qrTitle"></h3>
+          <div class="scroll short"><table><tbody id="tlv"></tbody></table></div>
+          <label><span data-i18n="inv.payload"></span><textarea id="b64" readonly rows="3" dir="ltr"></textarea></label>
+          <button type="button" class="btn ghost" id="copyBtn" data-i18n="inv.copy"></button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

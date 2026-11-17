@@ -282,20 +282,73 @@ def propose_configuration_change(
         }
 
     # Step 1: Policy & Invariant Evaluation
-    validation_result = validate_mutation_safety(proposal_payload)
+    try:
+        validation_result = validate_mutation_safety(proposal_payload)
+    except ZoneSafetyViolation as exc:
+        return {
+            "status": "REJECTED",
+            "success": False,
+            "stage": "SAFETY_GUARDRAILS",
+            "disposition": "ZONE_SAFETY_VIOLATION",
+            "reason": str(exc),
+            "proposal": proposal_payload,
+            "ddl_plan": None,
+        }
 
     # Step 2: DDL Plan Gate Inspection (Zero DDL executed)
+    adapter = kwargs.get("adapter") or kwargs.get("db")
+    if adapter is None and frappe is not None and getattr(getattr(frappe, "db", None), "sql", None):
+        adapter = FrappeDeploymentAdapter()
+
     changes = proposal_payload.get("changes", [])
     ddl_plan_result = None
+    existing_cols = (
+        adapter.get_table_columns_description(doctype)
+        if adapter is not None and hasattr(adapter, "get_table_columns_description")
+        else None
+    )
+    base_revision_hash = (
+        adapter.get_doctype_revision_hash(doctype)
+        if adapter is not None and hasattr(adapter, "get_doctype_revision_hash")
+        else "rev_default"
+    )
+
     if proposal_payload.get("intent") == "add_custom_fields" and changes:
-        field_def = changes[0]
-        ddl_plan = inspect_frappe_ddl_plan(doctype, field_def)
+        all_statements: List[str] = []
+        per_field: List[Dict[str, Any]] = []
+        all_inspectable = True
+        all_approved = True
+        rejection_reasons: List[str] = []
+        for field_def in changes:
+            ddl_plan = inspect_frappe_ddl_plan(
+                doctype,
+                field_def,
+                existing_columns_desc=existing_cols,
+            )
+            all_statements.extend(ddl_plan.statements)
+            per_field.append(
+                {
+                    "fieldname": field_def.get("fieldname"),
+                    "inspectable": ddl_plan.inspectable,
+                    "statements": ddl_plan.statements,
+                    "is_approved_additive_only": ddl_plan.is_approved_additive_only,
+                    "rejection_reason": ddl_plan.rejection_reason,
+                }
+            )
+            if not ddl_plan.inspectable:
+                all_inspectable = False
+            if not ddl_plan.is_approved_additive_only:
+                all_approved = False
+                if ddl_plan.rejection_reason:
+                    rejection_reasons.append(ddl_plan.rejection_reason)
         ddl_plan_result = {
-            "inspectable": ddl_plan.inspectable,
-            "statements": ddl_plan.statements,
-            "is_approved_additive_only": ddl_plan.is_approved_additive_only,
-            "rejection_reason": ddl_plan.rejection_reason,
+            "inspectable": all_inspectable,
+            "statements": all_statements,
+            "is_approved_additive_only": all_approved,
+            "rejection_reason": "; ".join(rejection_reasons) if rejection_reasons else None,
         }
+        if len(per_field) > 1:
+            ddl_plan_result["per_field"] = per_field
     elif proposal_payload.get("intent") in ("set_property", "quarantine_custom_field", "update_field_property", "property_setter"):
         ddl_plan_result = {
             "inspectable": True,
@@ -304,17 +357,50 @@ def propose_configuration_change(
             "rejection_reason": None,
         }
 
-    return {
-        "status": "PROPOSED",
-        "success": True,
+    preview_payload = {
+        "doctype": doctype,
+        "intent": intent,
+        "base_revision_hash": base_revision_hash,
+        "changes": changes,
+        "statements": ddl_plan_result["statements"] if ddl_plan_result else [],
+    }
+    preview_digest = hashlib.sha256(
+        json.dumps(preview_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+    ddl_approved = (
+        True
+        if ddl_plan_result is None
+        else bool(ddl_plan_result.get("inspectable") and ddl_plan_result.get("is_approved_additive_only"))
+    )
+
+    resp: Dict[str, Any] = {
+        "status": "PROPOSED" if ddl_approved else "REJECTED",
+        "success": ddl_approved,
         "proposal": proposal_payload,
         "validation": validation_result,
         "ddl_plan": ddl_plan_result,
+        "preview_digest": preview_digest,
+        "base_revision_hash": base_revision_hash,
+        "preview": {
+            "doctype": doctype,
+            "intent": intent,
+            "base_revision_hash": base_revision_hash,
+            "preview_digest": preview_digest,
+            "ddl_gate_passed": ddl_approved,
+            "statements": preview_payload["statements"],
+        },
         "preview_fidelity_notice": (
             "Layout, labels, and field controls previewed. "
             "ERPNext tax/pricing recalculations and server validations execute on real documents."
         ),
     }
+    if not ddl_approved and ddl_plan_result is not None:
+        resp["stage"] = "INSPECT"
+        resp["disposition"] = "DDL_PLAN_REJECTED"
+        resp["fallback_action"] = "QUEUE_FOR_CONTROLLED_ADMIN_DEPLOYMENT"
+        resp["reason"] = ddl_plan_result.get("rejection_reason") or "DDL plan gate rejected proposal."
+    return resp
 
 
 # Frappe whitelisted decorator when running inside Frappe
@@ -509,6 +595,30 @@ class FrappeDeploymentAdapter:
             except Exception:
                 pass
 
+    def mark_recovery_required(self, deployment_id: str, reason: str = "") -> None:
+        """Best-effort recovery marker when Stage 6 finalization fails after DDL."""
+        if not self.in_memory:
+            try:
+                self._ensure_audit_table()
+                self._frappe.db.sql(f"""
+                    UPDATE `{self.audit_table}`
+                    SET status = 'RECOVERY_REQUIRED',
+                        outcome_json = %s,
+                        updated_at = NOW(6)
+                    WHERE deployment_id = %s
+                """, (json.dumps({"deployment_id": deployment_id, "status": "RECOVERY_REQUIRED", "reason": reason}), deployment_id))
+                if hasattr(self._frappe.db, "commit"):
+                    self._frappe.db.commit()
+            except Exception:
+                pass
+        elif deployment_id in self.audit_journal:
+            self.audit_journal[deployment_id]["status"] = "RECOVERY_REQUIRED"
+            self.audit_journal[deployment_id]["outcome"] = {
+                "deployment_id": deployment_id,
+                "status": "RECOVERY_REQUIRED",
+                "reason": reason,
+            }
+
     def is_target_in_recovery_required(self, site_id: str, doctype: str) -> bool:
         if self.target_in_recovery:
             return True
@@ -516,7 +626,7 @@ class FrappeDeploymentAdapter:
             try:
                 res = self._frappe.db.sql(f"""
                     SELECT COUNT(*) FROM `{self.audit_table}`
-                    WHERE site_id = %s AND doctype = %s AND status = 'RECOVERY_REQUIRED'
+                    WHERE site_id = %s AND doctype = %s AND status IN ('RECOVERY_REQUIRED', 'PREPARED')
                 """, (site_id, doctype))
                 if res and res[0][0] > 0:
                     return True
@@ -525,7 +635,7 @@ class FrappeDeploymentAdapter:
             return False
         for rec in self.audit_journal.values():
             if rec.get("site_id") == site_id and rec.get("doctype") == doctype:
-                if rec.get("status") == "RECOVERY_REQUIRED":
+                if rec.get("status") in ("RECOVERY_REQUIRED", "PREPARED"):
                     return True
         return False
 
@@ -1143,12 +1253,6 @@ def apply_configuration_change(
     if not deployment_id:
         deployment_id = kwargs.get("deployment_id") or f"dep_{uuid.uuid4().hex[:12]}"
 
-    # Extract field_def from proposal if needed
-    if not field_def and isinstance(proposal, dict):
-        changes = proposal.get("changes", [])
-        if changes:
-            field_def = changes[0]
-
     # Normalize JSON proposal if serialized over RPC
     if isinstance(proposal, str):
         try:
@@ -1156,9 +1260,12 @@ def apply_configuration_change(
         except Exception:
             pass
 
+    proposal_envelope = proposal if (isinstance(proposal, dict) and isinstance(proposal.get("proposal"), dict)) else None
+    inner_proposal = proposal_envelope["proposal"] if proposal_envelope is not None else proposal
+
     # Extract field_def from proposal if needed
-    if not field_def and isinstance(proposal, dict):
-        changes = proposal.get("changes", [])
+    if not field_def and isinstance(inner_proposal, dict):
+        changes = inner_proposal.get("changes", [])
         if changes:
             field_def = changes[0]
 
@@ -1219,8 +1326,8 @@ def apply_configuration_change(
 
     # Step 1.2: Check intent and route to appropriate declarative engine
     intent = None
-    if isinstance(proposal, dict):
-        intent = proposal.get("intent")
+    if isinstance(inner_proposal, dict):
+        intent = inner_proposal.get("intent")
     if not intent and isinstance(field_def, dict):
         if "property" in field_def or "property_name" in field_def:
             intent = "set_property"
@@ -1245,11 +1352,11 @@ def apply_configuration_change(
     forward_kwargs.pop("intent", None)
 
     if intent in ("create_workflow", "workflow_action", "workflow"):
-        wf_data = (proposal.get("workflow") or proposal.get("workflow_def")) if isinstance(proposal, dict) else (kwargs.get("workflow_def") or kwargs.get("workflow"))
+        wf_data = (inner_proposal.get("workflow") or inner_proposal.get("workflow_def")) if isinstance(inner_proposal, dict) else (kwargs.get("workflow_def") or kwargs.get("workflow"))
         return apply_workflow_change(doctype=doctype, deployment_id=deployment_id, workflow_def=wf_data, user_roles=user_roles, **forward_kwargs)
 
     if intent in ("create_report", "report", "report_builder"):
-        rep_data = (proposal.get("report") or proposal.get("report_def")) if isinstance(proposal, dict) else (kwargs.get("report_def") or kwargs.get("report"))
+        rep_data = (inner_proposal.get("report") or inner_proposal.get("report_def")) if isinstance(inner_proposal, dict) else (kwargs.get("report_def") or kwargs.get("report"))
         return apply_report_change(doctype=doctype, deployment_id=deployment_id, report_def=rep_data, user_roles=user_roles, **forward_kwargs)
 
     if intent in ("set_property", "update_field_property", "property_setter", "quarantine_custom_field") or (isinstance(field_def, dict) and ("property" in field_def or "property_name" in field_def)):
@@ -1273,7 +1380,7 @@ def apply_configuration_change(
         )
 
     # Step 1.5: Validate mutation safety against Zone rules & Tier 0 invariants
-    proposal_payload = proposal if isinstance(proposal, dict) else {
+    proposal_payload = dict(inner_proposal) if isinstance(inner_proposal, dict) else {
         "target_doctype": doctype,
         "intent": "add_custom_fields",
         "changes": [field_def],
@@ -1322,6 +1429,112 @@ def apply_configuration_change(
             base_revision_hash = "rev_default"
 
     lock_wait_seconds = int(kwargs.get("lock_wait_seconds", 3))
+
+    # Step 4.5: Verify preview & DDL plan gate binding if preview metadata was provided (BPL-007)
+    ddl_plan_container = proposal_envelope if proposal_envelope is not None else proposal
+    proposal_ddl_plan = (ddl_plan_container.get("ddl_plan") if isinstance(ddl_plan_container, dict) else None)
+    if isinstance(proposal_ddl_plan, dict) and not proposal_ddl_plan.get("is_approved_additive_only", True):
+        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        return {
+            "deployment_id": deployment_id,
+            "status": "REJECTED",
+            "success": False,
+            "stage": "INSPECT",
+            "disposition": "DDL_PLAN_REJECTED",
+            "fallback_action": "QUEUE_FOR_CONTROLLED_ADMIN_DEPLOYMENT",
+            "reason": proposal_ddl_plan.get("rejection_reason") or "Previewed DDL plan was not approved additive-only.",
+            "doctype": doctype,
+            "fieldname": field_def.get("fieldname"),
+            "execution_time_ms": execution_time_ms,
+        }
+
+    expected_preview_digest = kwargs.get("preview_digest") or (
+        ddl_plan_container.get("preview_digest") if isinstance(ddl_plan_container, dict) else None
+    )
+    expected_statements = kwargs.get("expected_ddl_plan_statements") or (
+        proposal_ddl_plan.get("statements") if isinstance(proposal_ddl_plan, dict) else None
+    )
+    if expected_preview_digest is not None or expected_statements is not None:
+        if hasattr(db, "inspect_ddl_plan") and callable(getattr(db, "inspect_ddl_plan", None)):
+            live_plan = db.inspect_ddl_plan(doctype, field_def)
+        else:
+            cols = db.get_table_columns_description(doctype) if hasattr(db, "get_table_columns_description") else None
+            live_plan = inspect_frappe_ddl_plan(doctype, field_def, existing_columns_desc=cols)
+        if not live_plan.inspectable or not live_plan.is_approved_additive_only:
+            execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "success": False,
+                "stage": "INSPECT",
+                "disposition": "DDL_PLAN_REJECTED",
+                "fallback_action": "QUEUE_FOR_CONTROLLED_ADMIN_DEPLOYMENT",
+                "reason": live_plan.rejection_reason or "Live DDL plan gate rejected change.",
+                "doctype": doctype,
+                "fieldname": field_def.get("fieldname"),
+                "execution_time_ms": execution_time_ms,
+            }
+        if expected_statements is not None and list(live_plan.statements) != list(expected_statements):
+            execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "success": False,
+                "stage": "INSPECT",
+                "disposition": "PREVIEW_MISMATCH",
+                "reason": (
+                    f"Live DDL plan {live_plan.statements!r} differs from previewed plan {list(expected_statements)!r}."
+                ),
+                "doctype": doctype,
+                "fieldname": field_def.get("fieldname"),
+                "execution_time_ms": execution_time_ms,
+            }
+        if expected_preview_digest is not None:
+            digest_intent = (
+                inner_proposal.get("intent")
+                if isinstance(inner_proposal, dict) and "intent" in inner_proposal
+                else (intent or "add_custom_fields")
+            )
+            if (
+                isinstance(inner_proposal, dict)
+                and "changes" in inner_proposal
+                and inner_proposal["changes"] != [field_def]
+            ):
+                execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                return {
+                    "deployment_id": deployment_id,
+                    "status": "REJECTED",
+                    "success": False,
+                    "stage": "INSPECT",
+                    "disposition": "PREVIEW_MISMATCH",
+                    "reason": "Deployed field_def does not match previewed proposal changes.",
+                    "doctype": doctype,
+                    "fieldname": field_def.get("fieldname"),
+                    "execution_time_ms": execution_time_ms,
+                }
+            preview_payload = {
+                "doctype": doctype,
+                "intent": digest_intent,
+                "base_revision_hash": base_revision_hash,
+                "changes": [field_def],
+                "statements": live_plan.statements,
+            }
+            computed_digest = hashlib.sha256(
+                json.dumps(preview_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            if computed_digest != expected_preview_digest:
+                execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                return {
+                    "deployment_id": deployment_id,
+                    "status": "REJECTED",
+                    "success": False,
+                    "stage": "INSPECT",
+                    "disposition": "PREVIEW_MISMATCH",
+                    "reason": "Preview digest mismatch against current DocType revision or DDL plan.",
+                    "doctype": doctype,
+                    "fieldname": field_def.get("fieldname"),
+                    "execution_time_ms": execution_time_ms,
+                }
 
     # Step 5: Execute 6-stage durable deployment sequence (§8 & §9)
     try:

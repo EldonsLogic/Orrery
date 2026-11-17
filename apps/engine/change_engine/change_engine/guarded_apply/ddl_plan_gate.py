@@ -26,9 +26,9 @@ class DDLPlanInspection:
     rejection_reason: Optional[str] = None
 
 
-# ADR-001 Rev 2.3 §6.1/§6.2 Approval Regex
+# ADR-001 Rev 2.3 §6.1/§6.2 Approval Regex (comma permitted strictly inside decimal(w,p))
 APPROVED_DDL_REGEX = re.compile(
-    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` [A-Za-z0-9_() ']+$"
+    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` (?:decimal\(\d+,\d+\)|[A-Za-z0-9_() '.])+$"
 )
 
 # MariaDB v15 Type Mapping matching Frappe v15 mariadb/database.py
@@ -367,6 +367,45 @@ def validate_ddl_plan(statements: List[str]) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
+def _normalize_zero_decimal_defaults(
+    table_columns: Dict[str, Any],
+    current_columns: Dict[str, Any],
+    *,
+    exclude_fieldname: str,
+) -> None:
+    """Normalize MariaDB INFORMATION_SCHEMA `'0.000000000'` defaults on untouched decimal
+    columns when the DocField default is empty/None (matches SimulatedDbColumn semantics
+    and avoids Frappe DbColumn.default_changed_for_decimal phantom MODIFY noise).
+    """
+    for cname, col in table_columns.items():
+        if cname == exclude_fieldname:
+            continue
+        if getattr(col, "fieldtype", None) not in ("Currency", "Float", "Percent", "Duration"):
+            continue
+        if getattr(col, "default", None) not in (None, ""):
+            continue
+        cur_col = current_columns.get(cname.lower())
+        if not cur_col:
+            continue
+        cur_type = cur_col.get("type", "") if isinstance(cur_col, dict) else getattr(cur_col, "type", "")
+        if "decimal" not in str(cur_type):
+            continue
+        cur_def = cur_col.get("default") if isinstance(cur_col, dict) else getattr(cur_col, "default", None)
+        if cur_def in (None, "", "NULL"):
+            continue
+        try:
+            if float(str(cur_def).strip("'\"")) == 0.0:
+                current_columns[cname.lower()] = ColumnDesc(
+                    name=cur_col.get("name", cname) if isinstance(cur_col, dict) else getattr(cur_col, "name", cname),
+                    type=cur_type,
+                    default=None,
+                    index=int(bool(cur_col.get("index", 0) if isinstance(cur_col, dict) else getattr(cur_col, "index", 0))),
+                    unique=int(bool(cur_col.get("unique", 0) if isinstance(cur_col, dict) else getattr(cur_col, "unique", 0))),
+                )
+        except (ValueError, TypeError):
+            continue
+
+
 def _inspect_with_frappe_mariadb_table(
     doctype: str,
     field_def: Dict[str, Any],
@@ -404,6 +443,12 @@ def _inspect_with_frappe_mariadb_table(
             table.setup_table_columns()
 
         new_fname = field_def["fieldname"]
+        _normalize_zero_decimal_defaults(
+            table.columns,
+            table.current_columns,
+            exclude_fieldname=new_fname,
+        )
+
         new_col = DbColumn(
             table=table,
             fieldname=new_fname,

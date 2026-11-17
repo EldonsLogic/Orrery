@@ -184,7 +184,11 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install -r services/blueprint/requirements.txt
+      - run: pip install -r services/blueprint/requirements.txt "pydantic>=2"
+      - name: Apply with preview & DDL plan gate tests (BPL-007)
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_007_apply_preview_gate.py -q
       - name: Engine adapter unit tests (BPL-012)
         env:
           PYTHONPATH: apps/engine/change_engine

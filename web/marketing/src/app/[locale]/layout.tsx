@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
-import { NextIntlClientProvider } from 'next-intl';
-import { directionOf, isLocale, locales, messages } from '../../i18n';
+import { Providers } from '../../components/Providers';
+import { directionOf, isLocale, locales } from '../../i18n';
 import '../../styles/tokens.generated.css';
 
 export const dynamicParams = false;
@@ -16,9 +16,7 @@ export default async function LocaleLayout({ children, params }: { children: Rea
   return (
     <html lang={locale} dir={directionOf(locale)}>
       <body>
-        <NextIntlClientProvider locale={locale} messages={messages[locale]} timeZone="UTC">
-          {children}
-        </NextIntlClientProvider>
+        <Providers locale={locale}>{children}</Providers>
       </body>
     </html>
   );

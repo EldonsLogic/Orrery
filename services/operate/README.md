@@ -8,3 +8,7 @@ Purpose: Part 4. Chat runtime, intent router, per-tenant tool API gateway and ge
 Planned contents: tool generator, authorisation gateway (fail closed), semantic layer, agent runner, memory store.
 
 **Empty until gate G1.**
+
+## Tool API generator (OPR-003)
+`toolapi/` turns a validated Blueprint into the per-tenant typed tool definitions of [contracts/tool-api.md](../../contracts/tool-api.md): `generate_tool_api(blueprint, registry=None)` (pure, deterministic, refusals coded `TAPI-`), `check_tool_api(defs)` (re-checks the hard rules on any set) and a CLI.
+Risk classes, effects and labels are data in `toolapi/policy.py`. Run: `PYTHONPATH=services/operate python3 -m toolapi services/blueprint/fixtures/trading-distribution.blueprint.json`. Tests: `python3 -m pytest services/operate/tests -q`.

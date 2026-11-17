@@ -194,3 +194,13 @@ jobs:
           ADAPTER_HARNESS: change_engine.adapter.harness:make_harness
           PYTHONPATH: services/blueprint:apps/engine/change_engine
         run: python3 -m pytest services/blueprint/tests/adapter -q
+
+  theme-engine-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      - name: Theme engine tests (BRD-005)
+        run: node --test web/app/theme/

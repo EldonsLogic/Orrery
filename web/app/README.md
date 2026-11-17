@@ -6,3 +6,6 @@ Owner: unassigned
 Purpose: the product app. One chat plus role-based views, approval inbox, Settings > Branding, login page, tenant-branded documents. Screens: [docs/product/app-screens.md](../../docs/product/app-screens.md). Tokens: [docs/brand/tokens](../../docs/brand/tokens/tokens.json). Theming: [theming](../../docs/architecture/theming.md). Every string through i18n; RTL from day one.
 
 **Empty until gate G1.**
+
+## Theme engine (BRD-005)
+`theme/theme-engine.js` is the user theme preference (light, dark, system) with per-user persistence; see [theming](../../docs/architecture/theming.md). Run its tests with `node --test web/app/theme/` (Node 20, no packages).

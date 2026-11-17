@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-COMP-007",
+      "path": ""
+    }
+  ]
+}

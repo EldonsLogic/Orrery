@@ -1,0 +1,21 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "BP-CMP-001",
+      "path": "/components/0/id"
+    },
+    {
+      "code": "BP-CMP-003",
+      "path": "/components/4/id"
+    },
+    {
+      "code": "BP-CMP-003",
+      "path": "/components/5/id"
+    },
+    {
+      "code": "BP-CMP-003",
+      "path": "/components/7/id"
+    }
+  ]
+}

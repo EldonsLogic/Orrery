@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-MAP-006",
+      "path": "/roles/1/grants/1/actions"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "environment": "production",
+  "errors": [
+    {
+      "code": "CMP-COMP-004",
+      "path": "/components/14"
+    }
+  ]
+}

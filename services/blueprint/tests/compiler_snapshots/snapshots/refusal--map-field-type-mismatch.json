@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-MAP-002",
+      "path": "/entities/0/fields/0/blueprintType"
+    }
+  ]
+}

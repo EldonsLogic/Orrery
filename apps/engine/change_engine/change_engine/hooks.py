@@ -25,3 +25,10 @@ doc_events = {
         "before_update_after_submit": "change_engine.api.endpoints.enforce_runtime_policies_on_update_after_submit",
     }
 }
+
+# Jinja print-format helper for bilingual Arabic/English tax invoice rendering (ERP-007).
+jinja = {
+    "methods": [
+        "change_engine.print_formats.bilingual_tax_invoice.render_frappe_sales_invoice_html",
+    ]
+}

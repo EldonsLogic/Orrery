@@ -1,1 +1,4 @@
-{"min_pass_rate": 0.0, "note": "set by QA-003 bake-off"}
+{
+  "min_pass_rate": 0.85,
+  "note": "set by QA-003 bake-off to the strategy/08 release-gate target for client 1; Opus-class 91% and Sonnet-class 89% on this set, Haiku-class 83%; five known set issues (see docs/research/qa-003-arabic-bakeoff.md)"
+}

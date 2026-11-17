@@ -178,3 +178,27 @@ def test_real_sets_validate():
 
 def test_run_missing_set_errors():
     assert cli.main(["--sets-dir", SETS, "run", "--set", "nope", "--adapter", "null"]) == 2
+
+
+def test_replay_adapter_scores_recorded_answers(tmp_path):
+    import json as _json
+    from evals.harness.adapters import get_adapter
+    from evals.harness.records import load_set
+    recs, errs = load_set("arabic_core")
+    assert not errs
+    path = tmp_path / "r.jsonl"
+    lines = []
+    for rec in recs[:5]:
+        e = rec["expected"]
+        lines.append(_json.dumps({"id": rec["id"], "kind": e["type"], "intent": e.get("intent"), "tool": e.get("tool"),
+                                  "args": e.get("args", {}), "normalized": e.get("normalized", {}),
+                                  "text": " ".join(e.get("must_include", []))}, ensure_ascii=False))
+    lines.append("not json")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    ad = get_adapter(f"replay:{path}")
+    from evals.harness.scorers import score_record
+    for rec in recs[:5]:
+        ok, _ = score_record(rec, ad.respond(rec))
+        assert ok
+    ok, _ = score_record(recs[6], ad.respond(recs[6]))  # not in the file: no response
+    assert not ok

@@ -149,3 +149,21 @@ jobs:
       - run: pip install -r services/blueprint/requirements.txt
       - name: Contract schemas and examples
         run: python3 scripts/check_contracts.py
+
+  engine-adapter-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r services/blueprint/requirements.txt
+      - name: Engine adapter unit tests (BPL-012)
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_012_engine_adapter.py -q
+      - name: Engine adapter conformance suite (BPL-025 via change_engine.adapter)
+        env:
+          ADAPTER_HARNESS: change_engine.adapter.harness:make_harness
+          PYTHONPATH: services/blueprint:apps/engine/change_engine
+        run: python3 -m pytest services/blueprint/tests/adapter -q

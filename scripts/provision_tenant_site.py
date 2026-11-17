@@ -15,8 +15,10 @@ Notes and unverified surfaces:
 - ADR-0016 engine invisibility is enforced by network isolation and the API gateway,
   NOT by site_config.json keys in this script. This script defaults developer_mode to 0
   unless explicitly enabled, and does not claim to disable Desk or default web routes.
-- Live execution of `bench new-site` (--db-name, --db-password) and `bench set-config`
-  against the pinned Frappe v15 container remains UNVERIFIED until run on a live bench.
+- Upstream Frappe v15 `bench new-site` exposes no envvar or stdin options for
+  `--db-root-password`, `--admin-password`, or `--db-password`. Host CLI argv never
+  contains secrets (forwarded via `docker compose exec -T -e`), though the ephemeral
+  `bench new-site` process inside the isolated engine container receives them as flags.
 """
 
 from __future__ import annotations
@@ -488,20 +490,35 @@ class TenantProvisioner:
         }
 
 
-def _write_credentials_file(path: Path, payload: Dict[str, Any]) -> None:
-    """Write sensitive provisioning credentials to disk with mode 0600."""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    fd = os.open(str(path), flags, 0o600)
+def _reserve_credentials_file(path: Path) -> int:
+    """Exclusively reserve a 0600 credentials file before provisioning starts."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        return os.open(str(path), flags, 0o600)
+    except OSError as exc:
+        raise ProvisioningError(f"Cannot reserve credentials file '{path}': {exc}") from exc
+
+
+def _write_reserved_credentials_file(fd: int, payload: Dict[str, Any]) -> None:
+    """Write sensitive provisioning credentials to an already reserved file descriptor."""
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
             handle.write("\n")
+            handle.flush()
     except Exception:
         try:
             os.close(fd)
         except OSError:
             pass
         raise
+
+
+def _write_credentials_file(path: Path, payload: Dict[str, Any]) -> None:
+    """Write sensitive provisioning credentials to disk with mode 0600."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(str(path), flags, 0o600)
+    _write_reserved_credentials_file(fd, payload)
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
@@ -553,6 +570,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     compose_project = args.compose_project or os.environ.get("COMPOSE_PROJECT_NAME") or None
 
+    creds_fd: Optional[int] = None
+    creds_path: Optional[Path] = None
     try:
         config = TenantConfig(
             tenant_id=args.tenant_id,
@@ -572,12 +591,30 @@ def main(argv: Optional[List[str]] = None) -> int:
             compose_file=Path(args.compose_file),
             service_name=args.service,
         )
-        result = provisioner.provision(dry_run=args.dry_run)
 
         if not args.dry_run and args.credentials_file:
             creds_path = Path(args.credentials_file)
-            _write_credentials_file(
-                creds_path,
+            creds_fd = _reserve_credentials_file(creds_path)
+
+        try:
+            result = provisioner.provision(dry_run=args.dry_run)
+        except Exception:
+            if creds_fd is not None:
+                try:
+                    os.close(creds_fd)
+                except OSError:
+                    pass
+                creds_fd = None
+                if creds_path is not None:
+                    try:
+                        creds_path.unlink()
+                    except OSError:
+                        pass
+            raise
+
+        if creds_fd is not None and creds_path is not None:
+            _write_reserved_credentials_file(
+                creds_fd,
                 {
                     "tenant_id": result["tenant_id"],
                     "site_name": result["site_name"],
@@ -588,6 +625,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "db_password": result["db_password"],
                 },
             )
+            creds_fd = None
             result.pop("admin_password", None)
             result.pop("db_password", None)
             result["credentials_file"] = str(creds_path)

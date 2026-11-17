@@ -491,6 +491,37 @@ class TestERP003TenantProvisioning(unittest.TestCase):
         self.assertEqual(payload["plan"]["service"], "engine")
         self.assertEqual(payload["plan"]["site_name"], "doha-traders.localhost")
 
+    def test_12_credentials_file_precheck_aborts_before_provisioning_and_cleans_up_on_error(self):
+        """Existing/invalid credentials-file aborts before subprocess runs; failed provision removes empty reservation."""
+        from provision_tenant_site import main as cli_main
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            existing = Path(tmpdir) / "already-here.json"
+            existing.write_text("{}", encoding="utf-8")
+
+            with mock.patch("provision_tenant_site.subprocess.run") as run_mock:
+                rc = cli_main([
+                    "--tenant-id", "doha-traders",
+                    "--country", "QA",
+                    "--compose-project", "platform-test",
+                    "--credentials-file", str(existing),
+                    "--json",
+                ])
+            self.assertEqual(rc, 1)
+            run_mock.assert_not_called()
+
+            reserved = Path(tmpdir) / "failed-run.json"
+            with mock.patch("provision_tenant_site.TenantProvisioner.provision", side_effect=ProvisioningError("boom")):
+                rc_fail = cli_main([
+                    "--tenant-id", "doha-traders",
+                    "--country", "QA",
+                    "--compose-project", "platform-test",
+                    "--credentials-file", str(reserved),
+                    "--json",
+                ])
+            self.assertEqual(rc_fail, 1)
+            self.assertFalse(reserved.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

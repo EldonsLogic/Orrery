@@ -98,6 +98,6 @@ def check(artifact: dict) -> list[Issue]:
     return issues
 
 
-def to_bytes(artifact: dict) -> bytes:
+def to_bytes(value: Any) -> bytes:
     """The file form the CLI writes: sorted keys, two-space indent, UTF-8, trailing newline. Same input, same bytes."""
-    return (json.dumps(artifact, sort_keys=True, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
+    return (json.dumps(value, sort_keys=True, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")

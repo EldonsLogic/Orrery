@@ -256,7 +256,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-003 | Model bake-off on the Arabic eval set | Quality | G1 | QA-002 | eldon | todo |
 | QA-004 | Compiler snapshot tests on Blueprint fixtures | Quality | G1 | BPL-004 | eldon | done |
 | QA-005 | Agent behaviour evals (tool choice, refusal, confirm-before-write) | Quality | G2 | OPR-002,QA-001 | eldon | todo |
-| QA-006 | Prompt-injection eval suite | Quality | G2 | SEC-003,QA-001 | eldon | todo |
+| QA-006 | Prompt-injection eval suite | Quality | G2 | SEC-003,QA-001 | eldon | done |
 | QA-007 | Contrast tests for tenant themes in light and dark | Quality | G2 | BRD-006 | eldon | todo |
 | QA-008 | RTL visual regression tests, including tenant-branded screens and documents | Quality | G2 | BRD-010 | eldon | todo |
 | QA-009 | End-to-end rehearsal: discovery to simulated Blueprint to live on synthetic data | Quality | G2 | BPL-020,DSC-009,OPR-010 | eldon | todo |

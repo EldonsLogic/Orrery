@@ -67,3 +67,15 @@ Interview engine and prompts, import readers (Excel, documents with OCR, connect
 | `connectors/runner.py` | `run_connector(connector, source_bytes, ctx, sink)`: restricted call, budgets, sanitise, L3 envelope on every field (set only here), audit events, fail closed |
 
 Tests: `tests/connectors/` (fake connectors only; requirement IDs PI-002 to PI-007 in test names). Open questions Q-90 to Q-95.
+
+## Excel and CSV connector (DSC-011)
+
+`connectors/tabular/` is the first real connector: tier 2 (file upload), `writes=False`, capabilities `read` and `parse`, id `discovery.tabular`. `register(registry)` adds it; `run_connector` then wraps every cell, header, comment and defined name in an L3 envelope. Stdlib only, nothing evaluated, no network, no file access.
+
+- CSV: UTF-8 (with or without BOM), UTF-16 with BOM, else windows-1256; delimiter comma, semicolon or tab by a fixed score on the first 20 records; header row = first of the first 10 non-empty rows whose cells are all non-numeric text (a label only, A06). The encoding and delimiter used are reported as info issues.
+- XLSX: hand-parsed OOXML. Refused with a coded class: `Tab001` legacy .xls, .xlsb, .ods or other formats; `Tab002` encrypted; `Tab003` zip bomb (ratio and size caps, 200 entries), nested archive, zip64, path traversal; `Tab004` DOCTYPE or ENTITY (also UTF-16 XML); `Tab005` macros; `Tab006` malformed; `Tab007` undecodable text. The runner reports an extract fault as `CON-010` plus the class name, so the code is in the reason text.
+- Hidden sheets, rows and columns are emitted with `visible=false` (not model-facing unless the owner opts in via `include_hidden`) and a `hidden_sheet`, `hidden_rows` or `hidden_columns` issue (A05). Comments and defined names are L3 text.
+- Formulas are never evaluated: the cached value is kept, `formula` issue. Text starting with `=`, `+`, `-`, `@`, tab or CR (plain numbers excepted) is kept and reported as `formula_like`. Dates become ISO strings only when the number format is clearly a date; other numbers stay raw.
+- Budgets: rows, columns, cells and sheets are constructor limits (default 50000, 256, 200000, 100); input bytes, steps, fields and characters come from the framework `Limits`.
+
+Tests: `tests/connectors/tabular/`. Not covered: .xls and other formats are refused, not read; pivot tables, charts, merged cells, rich-text formatting and cell styles are ignored.

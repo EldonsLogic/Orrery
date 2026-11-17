@@ -62,3 +62,12 @@ The platform mark appears in the app chrome as "Powered by". `branding.poweredBy
 - A tenant cannot read another tenant's assets or tokens (isolation test).
 
 Plan IDs: BRD (token layering, theme engine, asset pipeline), WEB (Branding settings screen, login page, document templates), PLT (brand storage, entitlements), SEC (asset upload security), QA (contrast and RTL tests).
+
+## Theme engine (BRD-005)
+Code: [web/app/theme/theme-engine.js](../../web/app/theme/theme-engine.js). A framework-agnostic module; root, storage, `matchMedia` and the remote persister are injected, so it runs under Node tests.
+- Modes `light | dark | system`. Light and dark set `data-theme` on the root and `color-scheme`; `system` removes the attribute so the `prefers-color-scheme` CSS rules apply. System changes are followed only in `system` mode.
+- Layer 4 only: the engine never writes a colour token or a tenant token.
+- Persistence is per user: the storage key contains tenant id and user id; missing or malformed ids are refused (`THM-IDS-MISSING`). A stored value must be exactly one of the three modes, otherwise `system`. Storage failures (private mode, quota) fall back to memory without errors.
+- Server-side preference: an injected `remote` persister (async `load`, `save`) is supported, last write wins, and failures keep the local value with `THM-REMOTE-LOAD-FAILED` or `THM-REMOTE-SAVE-FAILED`. The module has no network code and defines no endpoint.
+- No flash: `bootScript(key)` returns the text of a small inline script that sets `data-theme` before first paint. Under a strict Content-Security-Policy an inline script needs a nonce or a hash of its exact text; the platform computes it at serve time (open question Q-97).
+- Tests: `node --test web/app/theme/` (CI job `theme-engine-tests`).

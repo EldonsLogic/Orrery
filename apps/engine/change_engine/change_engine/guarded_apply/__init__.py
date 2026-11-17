@@ -30,25 +30,42 @@ from .policy_enforcer import (
 
 from .property_setter_engine import execute_property_setter_deployment, PROPERTY_TYPE_MAP
 from .rollback_engine import execute_rollback
-from .workflow_engine import (
-    WorkflowStateModel,
-    WorkflowTransitionModel,
-    WorkflowDefinition,
-    WorkflowValidationResult,
-    validate_workflow_state_machine,
-    execute_workflow_deployment,
-    generate_mermaid_graph,
-)
-from .report_engine import (
-    ReportColumn,
-    ReportFilter,
-    ReportChartConfig,
-    ReportDefinition,
-    ReportValidationResult,
-    validate_report_definition,
-    get_report_preview_data,
-    execute_report_deployment,
-)
+try:
+    from .workflow_engine import (
+        WorkflowStateModel,
+        WorkflowTransitionModel,
+        WorkflowDefinition,
+        WorkflowValidationResult,
+        validate_workflow_state_machine,
+        execute_workflow_deployment,
+        generate_mermaid_graph,
+    )
+    from .report_engine import (
+        ReportColumn,
+        ReportFilter,
+        ReportChartConfig,
+        ReportDefinition,
+        ReportValidationResult,
+        validate_report_definition,
+        get_report_preview_data,
+        execute_report_deployment,
+    )
+except ImportError:  # pragma: no cover - allows non-pydantic conformance runs
+    WorkflowStateModel = None
+    WorkflowTransitionModel = None
+    WorkflowDefinition = None
+    WorkflowValidationResult = None
+    validate_workflow_state_machine = None
+    execute_workflow_deployment = None
+    generate_mermaid_graph = None
+    ReportColumn = None
+    ReportFilter = None
+    ReportChartConfig = None
+    ReportDefinition = None
+    ReportValidationResult = None
+    validate_report_definition = None
+    get_report_preview_data = None
+    execute_report_deployment = None
 from .cross_doc_policy import (
     CrossDocPolicy,
     CrossDocPolicyCatalog,

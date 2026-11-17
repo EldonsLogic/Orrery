@@ -222,3 +222,14 @@ jobs:
           node-version: 20
       - name: Theme engine tests (BRD-005)
         run: node --test web/app/theme/
+
+  operate-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r services/blueprint/requirements.txt pytest
+      - name: Tool API generator tests (OPR-003)
+        run: python3 -m pytest services/operate/tests -q

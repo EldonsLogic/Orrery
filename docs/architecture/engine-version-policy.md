@@ -17,18 +17,18 @@ Values below are copied from [Dockerfile](../../infra/dev/docker/Dockerfile), [d
 | ERPNext | `15.124.5` (`v15.124.5`), metadata commit `e5cde8c4b9e3f7f567a92ca3e65fd411402b89ce` | GNU GPL v3.0 | Version verified on synthetic site |
 | Frappe HRMS | `v15.64.8` (`15.64.8`), `HRMS_COMMIT=186900a6e3db4e6f927f1ee20df745bbb082638a` | GNU GPL v3.0 | Commit verified at build and runtime |
 | Change engine | `0.1.0` (`apps/engine/change_engine/`, adapted from `f0ce226dd8d050fbc947caf50657e651e01792b8`) | Proprietary / Founder contribution | Mounted read-write; version verified on synthetic site |
-| MariaDB | `mariadb:10.6@sha256:f1c56f035ed268a0d7c2c2e06dc879f6319b997cb434cf822a4cfd72a7aa184d` | GNU GPL v2.0 | **Past Community EOL (`2026-07-06`)**; runtime version check not in `verify_dev_bench.py` |
+| MariaDB | `mariadb:11.4@sha256:f6eca93803e34766e787a96bad9e2ac5abbcdcb8e7f390a6f34e9bf3eee525e6` | GNU GPL v2.0 | Verified on synthetic bench (`11.4.13-MariaDB-ubu2404`); `verify_dev_bench.py`, bench tests, and `ERP-021` Phase 0 suite all passed on `2026-11-17`. `bench new-site` emits non-blocking `not yet tested with Frappe Framework` warning (`setup_db.py`) |
 | Redis (`redis-cache`, `redis-queue`) | `redis:7.2.7-alpine@sha256:ddd16a9b1575a774c7e62956be8daa1de5b32cfb5c25b7a216aefed8e0919f9b` | BSD-3-Clause source; counsel review pending (`Q-15`) | `PING` verified; container contents/licence reading `UNVERIFIED` |
 | Python and Node runtimes | Inherited from base image | PSF / MIT | Not explicitly pinned or checked in repo (`UNVERIFIED`) |
 | ERPGulf ZATCA | `Planned` (`CMP-002`) | MIT | Not yet pinned or built |
 
-Additional `UNVERIFIED` bench state: on `2026-11-14`, `docker compose build --no-cache engine` succeeded cleanly, while `verify_dev_bench.py` passed against an existing synthetic site created on `2026-11-11`. Running `bench new-site` from a freshly rebuilt image and running real-tenant production workloads remain `UNVERIFIED`.
+Additional `UNVERIFIED` bench state: on `2026-11-17` (`ERP-024`), an isolated bench booted cleanly on `mariadb:11.4@sha256:f6eca93803e34766e787a96bad9e2ac5abbcdcb8e7f390a6f34e9bf3eee525e6` (`11.4.13-MariaDB-ubu2404`), provisioned two synthetic `.localhost` sites via `bench new-site`, and passed `verify_dev_bench.py`, the `infra/dev/docker/tests` suite (16 passed, 1 networked build test skipped), and the `ERP-021` Phase 0 suite (`E0-1`..`E0-6` `"all_passed": true`). Running real-tenant production workloads and `bench build --no-cache` from scratch against remote registries on every commit remain `UNVERIFIED`.
 
 ## 2. Pin rules
 
 - **Immutability:** Every OCI base and service image must resolve by `@sha256:` digest (human-readable tag retained alongside for clarity). Every upstream app cloned outside the base image must pin a release tag and verify its exact 40-character commit SHA at build time (`HRMS_COMMIT`). Local apps (`change_engine` and future `core`, `compliance`, `components`) track repo HEAD and declare `__version__`.
 - **Single source of truth:** Today, pins are duplicated across [Dockerfile](../../infra/dev/docker/Dockerfile), [docker-compose.dev.yml](../../infra/dev/docker/docker-compose.dev.yml), [verify_dev_bench.py](../../infra/dev/docker/verify_dev_bench.py), [licence-register.md](../legal/licence-register.md), and [NOTICE.md](../../NOTICE.md). **Proposed (`Q-26`):** consolidate all runtime pins into one machine-readable manifest read by Docker builds, Compose/IaC, tests, and verifiers so values cannot drift.
-- **Automated build and verifier checks:** [test_dev_bench_pins.py](../../infra/dev/docker/tests/test_dev_bench_pins.py) enforces `@sha256:` resolution for `engine`, `mariadb`, `redis-cache`, and `redis-queue`. [test_hrms_build_pin.py](../../infra/dev/docker/tests/test_hrms_build_pin.py) verifies build failure on commit mismatch. [verify_dev_bench.py](../../infra/dev/docker/verify_dev_bench.py) checks live app versions, HRMS commit, and Redis `PONG` (gap: it does not yet assert MariaDB version, Python/Node versions, or `frappe`/`erpnext` commits).
+- **Automated build and verifier checks:** [test_dev_bench_pins.py](../../infra/dev/docker/tests/test_dev_bench_pins.py) enforces `@sha256:` resolution for `engine`, `mariadb`, `redis-cache`, and `redis-queue`. [test_hrms_build_pin.py](../../infra/dev/docker/tests/test_hrms_build_pin.py) verifies build failure on commit mismatch. [verify_dev_bench.py](../../infra/dev/docker/verify_dev_bench.py) checks live app versions, HRMS commit, MariaDB `11.4.` series via `SELECT VERSION()`, and Redis `PONG` (gap: it does not yet assert Python/Node versions or `frappe`/`erpnext` commits).
 - **Change authority:** Pins live in `partner`-owned `infra/` and `apps/engine/` paths ([ADR-0020](../decisions/ADR-0020-lane-guard.md)). Any pin change requires a PR reviewed by the other founder or a different model; changes touching auth, tenancy, contracts, or compliance require security review ([RULES](../RULES.md) rule 42).
 
 ## 3. Upstream facts with sources
@@ -52,7 +52,7 @@ All external facts below were checked on `2026-11-14`:
   - `10.6` to `10.8` is the only band the engine calls tested. `10.7` and `10.8` were short-term releases that are long out of support.
   - Frappe's `bench` boilerplate CI also uses `mariadb:10.6` (`frappe/utils/boilerplate.py`).
   - So every maintained MariaDB branch (`10.11`, `11.4`, `11.8`, `12.3`) is one the pinned engine labels untested. Community reports that `10.11` runs `v15` without problems are anecdotal (UNVERIFIED: [discuss.frappe.io thread](https://discuss.frappe.io/t/mariadb-version-compatibility-issue-with-erpnext-15-on-ubuntu-24-04-lts/143511), accessed `2026-11-14`).
-  - Q-25 is therefore a trade-off between a database without security fixes and one the engine has not tested. It is not a free upgrade. Plan row `ERP-024` tests the chosen version on the bench.
+  - Q-25 is therefore a trade-off between a database without security fixes and one the engine has not tested. It is not a free upgrade. Plan row `ERP-024` tested `mariadb:11.4` (`11.4.13-MariaDB-ubu2404`) on the bench on `2026-11-17` with all verifier checks and `ERP-021` Phase 0 proofs passing.
 - **Redis support:** `7.2.x` has extended security support until `7.4` end of support, alongside `7.4.x` and `8.2.x`–`8.10.x`. Redis permits `7.2` users to apply security patches from `7.4+` under `BSD-3-Clause` ([Redis SECURITY.md](https://raw.githubusercontent.com/redis/redis/unstable/SECURITY.md), accessed `2026-11-14`). Exact calendar EOL date for `7.2` and Frappe `v15` minimum Redis server version remain `UNVERIFIED`.
 
 ## 4. Upgrade classes
@@ -87,7 +87,7 @@ No release advances to the next gate until the current gate passes and is logged
   - **CRITICAL or actively exploited CVE** on a gateway-reachable, auth, or cross-tenant boundary blocks new tenant provisioning and non-security deploys until patched, blocked at the gateway (`PLT-024`), or formally risk-accepted by both founders.
   - **HIGH CVE** on an active engine or runtime path gates the next staging-to-production promotion until patched or mitigated.
   - **MEDIUM/LOW or unreachable CVEs** roll into the next scheduled patch train.
-  - **Finding (the rules above are PROPOSED and not ratified, Q-27):** MariaDB `10.6` is already Community EOL and receives no security fixes. Under the proposed rules it would have to be replaced before production hosting (`INF-005`). It is not urgent for the dev bench, which holds synthetic data only. Plan row `ERP-024` tracks the move.
+  - **Finding (the rules above are PROPOSED and not ratified, Q-27):** MariaDB `10.6` reached Community EOL on `2026-07-06` and receives no security fixes. Under `ERP-024`, the dev bench (`infra/dev/docker`) moved to maintained `mariadb:11.4` (`11.4.13-MariaDB-ubu2404`), leaving `Q-25` open only for founder confirmation on `INF-005` production targeting.
 - **Emergency hotfix path:** Apply temporary gateway mitigation (`PLT-024`) first if an upstream fix is unavailable -> prepare minimal pin-bump PR -> pass Gate 3, Gate 4, `ERP-014`/`SEC-004` smoke, and per-tenant snapshot -> canary then fleet rollout -> log outcome with cross-model/other-founder review.
 
 ## 7. Interaction with existing rules
@@ -100,7 +100,7 @@ No release advances to the next gate until the current gate passes and is logged
 ## 8. Open questions and founder decisions
 
 - **Existing open items:** `Q-6` (real-workload proof on pinned `v15` set and move policy) and `Q-15` (Redis `7.2.x` licence reading vs Valkey) in [open-questions.md](../open-questions.md).
-- **New decisions needed (added as `Q-25`..`Q-27` in [open-questions.md](../open-questions.md)):**
-  - `Q-25`: Should `mariadb:10.6` (EOL `2026-07-06`) be moved to a maintained LTS (`10.11`, `11.4` or `11.8`), given that the pinned engine calls every one of them untested (section 3)? The compatibility test is plan row `ERP-024`.
-  - `Q-26`: Replace duplicated pins across Docker/Compose/verifier with one machine-readable manifest and extend `verify_dev_bench.py` to check MariaDB, Python, Node, and `frappe`/`erpnext` commits?
+- **Decisions tracked from this policy (`Q-25`..`Q-27` in [open-questions.md](../open-questions.md)):**
+  - `Q-25`: Dev bench moved onto `mariadb:11.4` under `ERP-024` with passing bench tests and `ERP-021` Phase 0 suite (`11.4.13-MariaDB-ubu2404`); confirm `11.4` LTS as the `INF-005` target in review.
+  - `Q-26`: Replace duplicated pins across Docker/Compose/verifier with one machine-readable manifest and extend `verify_dev_bench.py` (which now checks MariaDB `11.4.x`) to also check Python, Node, and `frappe`/`erpnext` commits?
   - `Q-27`: Ratify the proposed gate-based security exposure rules and define the trigger rule for planning the Frappe `v15` (`End of 2027` EOL) to `v16` (Python `>=3.14`) upgrade?

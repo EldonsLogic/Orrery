@@ -10,7 +10,7 @@ This directory defines a local, synthetic-data-only Docker development bench for
 
 The environment stands up:
 1. **Engine**: a digest-pinned Frappe/ERPNext image with HRMS and the local `apps/engine/change_engine` app mounted in editable mode.
-2. **Database**: MariaDB 10.6 configured with `utf8mb4` and InnoDB.
+2. **Database**: MariaDB 11.4 configured with `utf8mb4` and InnoDB.
 3. **Cache and queue**: two Redis 7.2.7-alpine services. The licence review remains open (Q-15).
 
 Compose project names scope containers and volumes. Database and Redis publish no host ports; the engine binds only to IPv4 loopback for local verification. It must not be exposed to customers or the internet (ADR-0016).
@@ -25,7 +25,7 @@ Compose project names scope containers and volumes. Database and Redis publish n
 | **ERPNext** | `v15.124.5` | Image metadata reports `e5cde8c4b9e3f7f567a92ca3e65fd411402b89ce` | GNU GPL v3.0 | Core trading and accounting modules |
 | **Frappe HRMS** | `v15.64.8` | Build checks `186900a6e3db4e6f927f1ee20df745bbb082638a` | GNU GPL v3.0 | HR skeleton |
 | **Change Engine** | `0.1.0` | Repository local (`apps/engine/change_engine/`) | Founder contribution | DDL plan gate, audited apply, runtime policies |
-| **MariaDB** | `10.6` | Image digest in Compose | GNU GPL v2.0 | Relational persistence |
+| **MariaDB** | `11.4` | Image digest in Compose | GNU GPL v2.0 | Relational persistence |
 | **Redis** | `7.2.7-alpine` | Image digest in Compose | BSD-3-Clause source; counsel review pending | Cache and queue |
 
 The Frappe/ERPNext base is `frappe/erpnext@sha256:6e016c0fc3aec5b32c14ff7c2ac97523cc864748c83ce75197779b8fe5a665a8`. The cached image reports the versions above, but its Frappe source revision is absent from its metadata. Redis source licence: [upstream](https://github.com/redis/redis/blob/7.2.7/COPYING), accessed 2026-11-11. The exact image digests used here were tested on `linux/amd64`; other architectures are UNVERIFIED.

@@ -17,7 +17,7 @@ Version pin: one consistent Frappe / ERPNext / HRMS version set pinned under ERP
 - Frappe Framework: `v15.126.0` in the pinned base image; the source commit in that image is UNVERIFIED.
 - ERPNext: `v15.124.5` (image metadata reports commit `e5cde8c4b9e3f7f567a92ca3e65fd411402b89ce`).
 - Frappe HRMS: `v15.64.8` (the build checks commit `186900a6e3db4e6f927f1ee20df745bbb082638a`).
-- Dev environment: [infra/dev/docker/](../../infra/dev/docker/README.md) (MariaDB 10.6, Redis 7.2.7-alpine BSD-3-Clause).
+- Dev environment: [infra/dev/docker/](../../infra/dev/docker/README.md) (MariaDB 11.4, Redis 7.2.7-alpine BSD-3-Clause).
 
 Licence note: Frappe is MIT; ERPNext and HRMS are GPL-3. SaaS only, never distributed without legal review.
 

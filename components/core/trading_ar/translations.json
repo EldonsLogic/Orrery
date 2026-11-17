@@ -1,0 +1,742 @@
+{
+  "language": "ar",
+  "version": "0.1.0",
+  "sourceSpec": "docs/specs/arabic-translation-gap-trading.md",
+  "reviewStatus": "proposed_for_native_speaker_review",
+  "excluded": {
+    "namingSeriesPatterns": [
+      "ACC-BTN-.YYYY.-",
+      "ACC-JV-.YYYY.-",
+      "ACC-PAY-.YYYY.-",
+      "ACC-PINV-.YYYY.-",
+      "ACC-PINV-RET-.YYYY.-",
+      "ACC-SINV-.YYYY.-",
+      "ACC-SINV-RET-.YYYY.-",
+      "CUST-.YYYY.-",
+      "MAT-DN-.YYYY.-",
+      "MAT-DN-RET-.YYYY.-",
+      "MAT-MR-.YYYY.-",
+      "MAT-PR-RET-.YYYY.-",
+      "MAT-PRE-.YYYY.-",
+      "MAT-RECO-.YYYY.-",
+      "MAT-STE-.YYYY.-",
+      "PRLE-.####",
+      "PUR-ORD-.YYYY.-",
+      "SAL-ORD-.YYYY.-",
+      "SAL-QTN-.YYYY.-",
+      "STO-ITEM-.YYYY.-",
+      "SUP-.YYYY.-"
+    ],
+    "numberFormats": [
+      "# ###,##",
+      "# ###.##",
+      "#'###.##",
+      "#, ###.##",
+      "#,###",
+      "#,###.##",
+      "#,###.###",
+      "#,##,###.##",
+      "#.###",
+      "#.###,##"
+    ],
+    "barcodeTypes": [
+      "EAN",
+      "EAN-8",
+      "EAN-12",
+      "GS1",
+      "GTIN",
+      "ISBN-10",
+      "ISBN-13",
+      "ISSN",
+      "PZN",
+      "UPC-A"
+    ],
+    "valuationMethods": [
+      "FIFO",
+      "LIFO"
+    ],
+    "internalTreeFields": [
+      "Lft",
+      "Rgt"
+    ]
+  },
+  "entries": [
+    {
+      "source": "Account Balance (From)",
+      "translation": "رصيد الحساب (من)",
+      "kind": "label",
+      "doctypes": ["Payment Entry"]
+    },
+    {
+      "source": "Account Balance (To)",
+      "translation": "رصيد الحساب (إلى)",
+      "kind": "label",
+      "doctypes": ["Payment Entry"]
+    },
+    {
+      "source": "Additional Discount per Stock Unit",
+      "translation": "خصم إضافي لكل وحدة مخزون",
+      "kind": "label",
+      "doctypes": [
+        "Sales Order Item",
+        "Quotation Item",
+        "Purchase Order Item",
+        "Delivery Note Item",
+        "Purchase Receipt Item",
+        "Sales Invoice Item",
+        "Purchase Invoice Item"
+      ]
+    },
+    {
+      "source": "Allow Internal Transfers at Arm's Length Price",
+      "translation": "السماح بالتحويلات الداخلية بسعر السوق المحايد",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Allow Negative rates for Items",
+      "translation": "السماح بأسعار سالبة للأصناف",
+      "kind": "label",
+      "doctypes": ["Selling Settings"]
+    },
+    {
+      "source": "Allow multi-currency invoices against single party account",
+      "translation": "السماح بفواتير متعددة العملات مقابل حساب طرف واحد",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Apply TDS",
+      "translation": "تطبيق الضريبة المقتطعة عند المنبع",
+      "kind": "label",
+      "doctypes": [
+        "Purchase Order Item",
+        "Purchase Receipt Item",
+        "Purchase Invoice Item"
+      ]
+    },
+    {
+      "source": "Asset Gross Value",
+      "translation": "القيمة الإجمالية للأصل",
+      "kind": "label",
+      "doctypes": ["Sales Invoice Item"]
+    },
+    {
+      "source": "Asset Value After Depreciation",
+      "translation": "قيمة الأصل بعد الإهلاك",
+      "kind": "label",
+      "doctypes": ["Sales Invoice Item"]
+    },
+    {
+      "source": "Auto Create Purchase Receipt",
+      "translation": "إنشاء إيصال استلام مشتريات تلقائياً",
+      "kind": "label",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "Auto Create Serial and Batch Bundle For Outward",
+      "translation": "إنشاء حزمة أرقام تسلسلية ودفعات تلقائياً للصادر",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Auto Create Subcontracting Order",
+      "translation": "إنشاء أمر مقاولات باطنية تلقائياً",
+      "kind": "label",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "Auto Insert Item Price If Missing",
+      "translation": "إدراج سعر الصنف تلقائياً إذا كان مفقوداً",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Auto Reconcile Payments",
+      "translation": "تسوية المدفوعات تلقائياً",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Auto Reconciliation Job Trigger",
+      "translation": "مشغّل مهمة التسوية التلقائية",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Auto Reserve Serial and Batch Nos",
+      "translation": "حجز الأرقام التسلسلية وأرقام الدفعات تلقائياً",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Auto Reserve Stock for Sales Order on Purchase",
+      "translation": "حجز المخزون لأمر البيع تلقائياً عند الشراء",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Automatically Add Taxes from Taxes and Charges Template",
+      "translation": "إضافة الضرائب تلقائياً من قالب الضرائب والرسوم",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Automatically Fetch Payment Terms from Order/Quotation",
+      "translation": "جلب شروط الدفع تلقائياً من أمر البيع أو عرض السعر",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Base Tax Withholding Net Total",
+      "translation": "صافي الإجمالي الأساسي الخاضع للاستقطاع الضريبي",
+      "kind": "label",
+      "doctypes": [
+        "Purchase Order",
+        "Purchase Receipt",
+        "Purchase Invoice"
+      ]
+    },
+    {
+      "source": "Basis for tax calculation",
+      "translation": "أساس احتساب الضريبة",
+      "kind": "description",
+      "doctypes": [
+        "Sales Taxes and Charges",
+        "Purchase Taxes and Charges"
+      ]
+    },
+    {
+      "source": "Bill for Rejected Quantity in Purchase Invoice",
+      "translation": "إصدار فاتورة شراء للكمية المرفوضة",
+      "kind": "label",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "Book Tax Loss on Early Payment Discount",
+      "translation": "ترحيل خسارة الضريبة عند خصم السداد المبكر",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Calculate Product Bundle Price based on Child Items' Rates",
+      "translation": "احتساب سعر حزمة المنتج بناءً على أسعار الأصناف الفرعية",
+      "kind": "label",
+      "doctypes": ["Selling Settings"]
+    },
+    {
+      "source": "Changes",
+      "translation": "التغييرات",
+      "kind": "label",
+      "doctypes": ["Sales Invoice"]
+    },
+    {
+      "source": "Chart Of Accounts",
+      "translation": "دليل الحسابات",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Conditions will be applied on all the selected items combined.",
+      "translation": "تُطبّق الشروط على جميع الأصناف المحددة مجتمعة.",
+      "kind": "description",
+      "doctypes": ["Pricing Rule"]
+    },
+    {
+      "source": "Convert Item Description to Clean HTML in Transactions",
+      "translation": "تحويل وصف الصنف إلى HTML نظيف في المعاملات",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Credit Limit Settings",
+      "translation": "إعدادات حد الائتمان",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Data Fetch Method",
+      "translation": "طريقة جلب البيانات",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Delete Accounting and Stock Ledger Entries on deletion of Transaction",
+      "translation": "حذف قيود الأستاذ المحاسبي وأستاذ المخزون عند حذف المعاملة",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Disable Last Purchase Rate",
+      "translation": "تعطيل آخر سعر شراء",
+      "kind": "label",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "Disable Serial No And Batch Selector",
+      "translation": "تعطيل محدّد الأرقام التسلسلية والدفعات",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Discount applied in the reference document currency.",
+      "translation": "الخصم المطبّق بعملة المستند المرجعي.",
+      "kind": "description",
+      "doctypes": ["Payment Entry Reference"]
+    },
+    {
+      "source": "Do Not Update Serial / Batch on Creation of Auto Bundle",
+      "translation": "عدم تحديث الرقم التسلسلي أو الدفعة عند إنشاء الحزمة التلقائية",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Do Not Use Batch-wise Valuation",
+      "translation": "عدم استخدام التقييم حسب الدفعة",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Don't Reserve Sales Order Qty on Sales Return",
+      "translation": "عدم حجز كمية أمر البيع عند مرتجع المبيعات",
+      "kind": "label",
+      "doctypes": ["Selling Settings"]
+    },
+    {
+      "source": "Dont Recompute tax",
+      "translation": "عدم إعادة احتساب الضريبة",
+      "kind": "label",
+      "doctypes": ["Sales Taxes and Charges"]
+    },
+    {
+      "source": "Enable Discount Accounting for Selling",
+      "translation": "تفعيل محاسبة الخصومات للمبيعات",
+      "kind": "label",
+      "doctypes": ["Selling Settings"]
+    },
+    {
+      "source": "Enable Stock Reservation",
+      "translation": "تفعيل حجز المخزون",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Fetch Valuation Rate for Internal Transaction",
+      "translation": "جلب سعر التقييم للمعاملة الداخلية",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Financial reports will be generated using GL Entry doctypes (should be enabled if Period Closing Voucher is not posted for all years sequentially or missing)",
+      "translation": "سيتم إنشاء التقارير المالية باستخدام قيود دفتر الأستاذ العام (ينبغي تفعيله إذا لم يُرحّل قيد إقفال الفترة لكل السنوات بالتسلسل أو كان مفقوداً)",
+      "kind": "description",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Finished Good Quantity",
+      "translation": "كمية المنتج تام الصنع",
+      "kind": "label",
+      "doctypes": ["Stock Entry"]
+    },
+    {
+      "source": "From Opportunity",
+      "translation": "من فرصة بيعية",
+      "kind": "label",
+      "doctypes": ["Customer"]
+    },
+    {
+      "source": "From Prospect",
+      "translation": "من عميل محتمل",
+      "kind": "label",
+      "doctypes": ["Customer"]
+    },
+    {
+      "source": "Have Default Naming Series for Batch ID?",
+      "translation": "هل توجد سلسلة ترقيم افتراضية لمعرّف الدفعة؟",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "How often should Project and Company be updated based on Sales Transactions? Daily refreshes nightly; Monthly refreshes on the 1st of each month.",
+      "translation": "كم مرة ينبغي تحديث المشروع والشركة بناءً على معاملات المبيعات؟ التحديث اليومي يتم ليلاً؛ والتحديث الشهري يتم في اليوم الأول من كل شهر.",
+      "kind": "description",
+      "doctypes": ["Selling Settings"]
+    },
+    {
+      "source": "How often should Project be updated of Total Purchase Cost ?",
+      "translation": "كم مرة ينبغي تحديث المشروع بإجمالي تكلفة المشتريات؟",
+      "kind": "description",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "If <b>Enabled</b> - Reconciliation happens on the <b>Advance Payment posting date</b><br>\nIf <b>Disabled</b> - Reconciliation happens on oldest of 2 Dates: <b>Invoice Date</b> or the <b>Advance Payment posting date</b><br>",
+      "translation": "إذا كان <b>مفعّلاً</b> - تتم التسوية في <b>تاريخ ترحيل الدفعة المقدمة</b><br>\nإذا كان <b>معطّلاً</b> - تتم التسوية في أقدم التاريخين: <b>تاريخ الفاتورة</b> أو <b>تاريخ ترحيل الدفعة المقدمة</b><br>",
+      "kind": "description",
+      "doctypes": ["Company"]
+    },
+    {
+      "source": "If enabled, do not update serial / batch values in the stock transactions on creation of auto Serial \n / Batch Bundle.",
+      "translation": "عند التفعيل، لا يتم تحديث قيم الأرقام التسلسلية أو الدفعات في حركات المخزون عند إنشاء حزمة أرقام تسلسلية / دفعات تلقائية.",
+      "kind": "description",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "If your CSV uses a different delimiter, add that character here, ensuring no spaces or additional characters are included.",
+      "translation": "إذا كان ملف CSV يستخدم محدّداً مختلفاً، فأضف ذلك الرمز هنا مع التأكد من عدم تضمين أي مسافات أو أحرف إضافية.",
+      "kind": "description",
+      "doctypes": ["Bank Statement Import"]
+    },
+    {
+      "source": "Ignore Account Closing Balance",
+      "translation": "تجاهل رصيد إقفال الحساب",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Internal Customer",
+      "translation": "عميل داخلي",
+      "kind": "label",
+      "doctypes": ["Customer"]
+    },
+    {
+      "source": "Internal Supplier",
+      "translation": "مورّد داخلي",
+      "kind": "label",
+      "doctypes": ["Supplier"]
+    },
+    {
+      "source": "Is Scrap Item",
+      "translation": "صنف خردة / تالف",
+      "kind": "label",
+      "doctypes": ["Stock Entry Detail"]
+    },
+    {
+      "source": "Issue a debit note with 0 qty against an existing Sales Invoice",
+      "translation": "إصدار إشعار مدين بكمية 0 مقابل فاتورة مبيعات قائمة",
+      "kind": "description",
+      "doctypes": ["Sales Invoice"]
+    },
+    {
+      "source": "Learn about <a href=\"https://docs.erpnext.com/docs/v13/user/manual/en/accounts/articles/common_party_accounting#:~:text=Common%20Party%20Accounting%20in%20ERPNext,Invoice%20against%20a%20primary%20Supplier.\">Common Party</a>",
+      "translation": "تعرّف على <a href=\"https://docs.erpnext.com/docs/v13/user/manual/en/accounts/articles/common_party_accounting#:~:text=Common%20Party%20Accounting%20in%20ERPNext,Invoice%20against%20a%20primary%20Supplier.\">الطرف المشترك</a>",
+      "kind": "description",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Maintain Same Rate Throughout Internal Transaction",
+      "translation": "الحفاظ على نفس السعر خلال المعاملة الداخلية",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Mention if non-standard Receivable account",
+      "translation": "يُذكر إذا كان حساب الذمم المدينة غير قياسي",
+      "kind": "description",
+      "doctypes": ["Customer"]
+    },
+    {
+      "source": "Merge Similar Account Heads",
+      "translation": "دمج بنود الحسابات المتشابهة",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Naming Series and Price Defaults",
+      "translation": "سلاسل الترقيم وإعدادات الأسعار الافتراضية",
+      "kind": "label",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "Over Picking Allowance",
+      "translation": "نسبة السماح لتجاوز الالتقاط",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Over Transfer Allowance",
+      "translation": "نسبة السماح لتجاوز التحويل",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "POS Setting",
+      "translation": "إعدادات نقاط البيع",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Partial stock can be reserved. For example, If you have a Sales Order of 100 units and the Available Stock is 90 units then a Stock Reservation Entry will be created for 90 units.",
+      "translation": "يمكن حجز المخزون جزئياً. على سبيل المثال، إذا كان لديك أمر بيع بمقدار 100 وحدة والمخزون المتاح 90 وحدة، فسيتم إنشاء قيد حجز مخزون بمقدار 90 وحدة.",
+      "kind": "description",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Payment Entry Settings",
+      "translation": "إعدادات قيد الدفع",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Payment Request created from Sales Order or Purchase Order will be in Draft status. When disabled document will be in unsaved state.",
+      "translation": "طلب الدفع المنشأ من أمر البيع أو أمر الشراء سيكون في حالة مسودة. عند التعطيل سيكون المستند في حالة غير محفوظة.",
+      "kind": "description",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Payment Term Discount",
+      "translation": "خصم شرط الدفع",
+      "kind": "label",
+      "doctypes": ["Payment Entry Reference"]
+    },
+    {
+      "source": "Payment Term Discounts Calculated",
+      "translation": "تم احتساب خصومات شروط الدفع",
+      "kind": "label",
+      "doctypes": ["Payment Entry"]
+    },
+    {
+      "source": "Period Closing Settings",
+      "translation": "إعدادات إقفال الفترة",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Posting Date Inheritance for Exchange Gain / Loss",
+      "translation": "توريث تاريخ الترحيل لفروق أسعار الصرف",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Quality Inspection Settings",
+      "translation": "إعدادات فحص الجودة",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Reconciliation Queue Size",
+      "translation": "حجم قائمة انتظار التسوية",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Role Allowed to Create/Edit Back-dated Transactions",
+      "translation": "الدور المسموح له بإنشاء أو تعديل معاملات بتاريخ رجعي",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Role Allowed to Over Bill",
+      "translation": "الدور المسموح له بالفوترة الزائدة",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Role Allowed to Override Stop Action",
+      "translation": "الدور المسموح له بتجاوز إجراء الإيقاف",
+      "kind": "label",
+      "doctypes": [
+        "Selling Settings",
+        "Buying Settings",
+        "Accounts Settings"
+      ]
+    },
+    {
+      "source": "Role allowed to bypass Credit Limit",
+      "translation": "الدور المسموح له بتجاوز حد الائتمان",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Round Tax Amount Row-wise",
+      "translation": "تقريب مبلغ الضريبة لكل سطر",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Sales Update Frequency in Company and Project",
+      "translation": "وتيرة تحديث المبيعات في الشركة والمشروع",
+      "kind": "label",
+      "doctypes": ["Selling Settings"]
+    },
+    {
+      "source": "Select Dispatch Address",
+      "translation": "اختيار عنوان الإرسال",
+      "kind": "label",
+      "doctypes": ["Purchase Invoice"]
+    },
+    {
+      "source": "Serial & Batch Item Settings",
+      "translation": "إعدادات أصناف الأرقام التسلسلية والدفعات",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Set Incoming Rate as Zero for Expired Batch",
+      "translation": "تعيين سعر الوارد صفراً للدفعة منتهية الصلاحية",
+      "kind": "label",
+      "doctypes": ["Selling Settings"]
+    },
+    {
+      "source": "Set Valuation Rate for Rejected Materials",
+      "translation": "تعيين سعر التقييم للمواد المرفوضة",
+      "kind": "label",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "Show Account Balance",
+      "translation": "إظهار رصيد الحساب",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Show Balances in Chart Of Accounts",
+      "translation": "إظهار الأرصدة في دليل الحسابات",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Show Barcode Field in Stock Transactions",
+      "translation": "إظهار حقل الباركود في حركات المخزون",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Show Party Balance",
+      "translation": "إظهار رصيد الطرف",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Show Pay Button in Purchase Order Portal",
+      "translation": "إظهار زر الدفع في بوابة أمر الشراء",
+      "kind": "label",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "Show Taxes as Table in Print",
+      "translation": "إظهار الضرائب كجدول في الطباعة",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Stock Transactions Settings",
+      "translation": "إعدادات حركات المخزون",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Stock UOM Quantity",
+      "translation": "كمية وحدة قياس المخزون",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Supplier Primary Address",
+      "translation": "العنوان الرئيسي للمورّد",
+      "kind": "label",
+      "doctypes": ["Supplier"]
+    },
+    {
+      "source": "Supplier Primary Contact",
+      "translation": "جهة الاتصال الرئيسية للمورّد",
+      "kind": "label",
+      "doctypes": ["Supplier"]
+    },
+    {
+      "source": "System will notify to increase or decrease quantity or amount",
+      "translation": "سينبّه النظام بزيادة أو إنقاص الكمية أو المبلغ",
+      "kind": "description",
+      "doctypes": ["Pricing Rule"]
+    },
+    {
+      "source": "Tax Withheld Vouchers",
+      "translation": "سندات الضريبة المستقطعة",
+      "kind": "label",
+      "doctypes": ["Purchase Invoice"]
+    },
+    {
+      "source": "Tax Withholding Net Total",
+      "translation": "صافي الإجمالي الخاضع للاستقطاع الضريبي",
+      "kind": "label",
+      "doctypes": [
+        "Purchase Order",
+        "Purchase Receipt",
+        "Purchase Invoice"
+      ]
+    },
+    {
+      "source": "Tax-exclusive additional discount carried from a source document, per stock unit.",
+      "translation": "خصم إضافي غير شامل للضريبة منقول من مستند مصدر، لكل وحدة مخزون.",
+      "kind": "description",
+      "doctypes": [
+        "Sales Order Item",
+        "Quotation Item",
+        "Purchase Order Item",
+        "Delivery Note Item",
+        "Purchase Receipt Item",
+        "Sales Invoice Item",
+        "Purchase Invoice Item"
+      ]
+    },
+    {
+      "source": "The percentage you are allowed to bill more against the amount ordered. For example, if the order value is $100 for an item and tolerance is set as 10%, then you are allowed to bill up to $110",
+      "translation": "النسبة المئوية المسموح بفوترتها زيادةً عن المبلغ المطلوب. على سبيل المثال، إذا كانت قيمة الطلب لصنف ما 100 دولار ونسبة التسامح 10%، يُسمح لك بالفوترة حتى 110 دولارات",
+      "kind": "description",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Update Existing Price List Rate",
+      "translation": "تحديث سعر قائمة الأسعار الحالية",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Update Price List Based On",
+      "translation": "تحديث قائمة الأسعار بناءً على",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Update frequency of Project",
+      "translation": "وتيرة تحديث المشروع",
+      "kind": "label",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "Use Legacy Controller For Period Closing Voucher",
+      "translation": "استخدام وحدة التحكم القديمة لسند إقفال الفترة",
+      "kind": "label",
+      "doctypes": ["Accounts Settings"]
+    },
+    {
+      "source": "Use Prices from Default Price List as Fallback",
+      "translation": "استخدام الأسعار من قائمة الأسعار الافتراضية كخيار احتياطي",
+      "kind": "label",
+      "doctypes": ["Selling Settings"]
+    },
+    {
+      "source": "Use Serial / Batch Fields",
+      "translation": "استخدام حقول الرقم التسلسلي / الدفعة",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "Validate Consumed Qty (as per BOM)",
+      "translation": "التحقق من الكمية المستهلكة (وفق قائمة المواد)",
+      "kind": "label",
+      "doctypes": ["Buying Settings"]
+    },
+    {
+      "source": "Validate Material Transfer Warehouses",
+      "translation": "التحقق من مستودعات تحويل المواد",
+      "kind": "label",
+      "doctypes": ["Stock Settings"]
+    },
+    {
+      "source": "While making a Purchase Receipt or Purchase Invoice from a Purchase Order, use the exchange rate on its posting date rather than inheriting it from the Purchase Order.",
+      "translation": "عند إنشاء إيصال استلام مشتريات أو فاتورة شراء من أمر شراء، استخدم سعر الصرف في تاريخ ترحيله بدلاً من توريثه من أمر الشراء.",
+      "kind": "description",
+      "doctypes": ["Buying Settings"]
+    }
+  ]
+}

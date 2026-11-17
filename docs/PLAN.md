@@ -91,7 +91,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DAT-006 | Tenant export in an open format | Data | G3 | PLT-004 | partner | todo |
 | DAT-007 | Tenant deletion with verification and certificate | Data | G3 | PLT-004 | partner | todo |
 | DAT-008 | Anonymisation pipeline for promoting generalised patterns across tenants | Data | G4 | DAT-001,LEG-013 | eldon | todo |
-| DAT-009 | Synthetic data generator for dev, demos and previews (no real data; ADR-0018) | Data | G1 | DAT-002 | eldon | todo |
+| DAT-009 | Synthetic data generator for dev, demos and previews (no real data; ADR-0018) | Data | G1 | DAT-002 | eldon | done |
 | CMP-001 | Re-verify UNVERIFIED regulation rows in research/03 against official sources | Compliance | G0 | LEG-003 | eldon | todo |
 | CMP-002 | Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance | Compliance | G1 | ERP-001 | partner | done |
 | CMP-003 | ZATCA Phase 1 invoice generation (QR, mandatory fields) | Compliance | G1 | CMP-002 | partner | doing |
@@ -254,7 +254,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-001 | Eval framework and CI hook | Quality | G1 | GOV-006 | eldon | done |
 | QA-002 | Arabic eval set v0 (100 prompts: accounting terms, dialects, numbers) | Quality | G1 | QA-001 | eldon | done |
 | QA-003 | Model bake-off on the Arabic eval set | Quality | G1 | QA-002 | eldon | todo |
-| QA-004 | Compiler snapshot tests on Blueprint fixtures | Quality | G1 | BPL-004 | eldon | todo |
+| QA-004 | Compiler snapshot tests on Blueprint fixtures | Quality | G1 | BPL-004 | eldon | done |
 | QA-005 | Agent behaviour evals (tool choice, refusal, confirm-before-write) | Quality | G2 | OPR-002,QA-001 | eldon | todo |
 | QA-006 | Prompt-injection eval suite | Quality | G2 | SEC-003,QA-001 | eldon | todo |
 | QA-007 | Contrast tests for tenant themes in light and dark | Quality | G2 | BRD-006 | eldon | todo |

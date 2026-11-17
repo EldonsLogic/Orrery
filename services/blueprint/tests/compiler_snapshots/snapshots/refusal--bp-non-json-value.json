@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-INPUT-001",
+      "path": ""
+    }
+  ]
+}

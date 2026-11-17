@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-MAP-007",
+      "path": "/entities/0/ledgerEffect"
+    }
+  ]
+}

@@ -16,12 +16,10 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Docs checks (includes STATUS.md freshness)
+      - name: Docs checks
         run: python3 scripts/check_docs.py
-      - name: STATUS.md is current
-        run: |
-          python3 scripts/build_status.py
-          git diff --exit-code docs/STATUS.md
+      - name: Show the current status in the run summary
+        run: python3 scripts/build_status.py >> "$GITHUB_STEP_SUMMARY"
 
   secret-scan:
     runs-on: ubuntu-latest

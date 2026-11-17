@@ -29,9 +29,6 @@ def main():
     check("on a feature branch, not main", branch not in ("", "main"), "create a branch named with the plan ID")
     rc, status = out("git", "status", "--porcelain")
     check("working tree is committed", rc == 0 and status == "", "commit or discard your changes")
-    out(sys.executable, "scripts/build_status.py")
-    rc, diff = out("git", "diff", "--name-only", "docs/STATUS.md")
-    check("docs/STATUS.md is regenerated and committed", diff == "", "run build_status.py and commit docs/STATUS.md")
     for s in ("check_docs.py", "check_repo_hygiene.py", "scan_secrets.py"):
         rc, o = out(sys.executable, f"scripts/{s}")
         check(f"scripts/{s}", rc == 0, o.splitlines()[-1] if o else "")

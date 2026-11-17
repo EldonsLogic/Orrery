@@ -22,7 +22,7 @@ def main():
         print(f"- {r['ID']} [{r['Owner']}] {r['Item']}")
     if not doing:
         print("- none")
-    print("\nNext: read docs/STATUS.md, then pick a todo item whose Depends are all done.")
+    print("\nNext: run python3 scripts/build_status.py (current gate, ready rows), then pick a todo item whose Depends are all done.")
 
 
 if __name__ == "__main__":

@@ -189,6 +189,10 @@ jobs:
         env:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_012_engine_adapter.py -q
+      - name: Phase 0 engine proof unit and contract tests (ERP-021)
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_021_phase0_proofs.py -v
       - name: Engine adapter conformance suite (BPL-025 via change_engine.adapter)
         env:
           ADAPTER_HARNESS: change_engine.adapter.harness:make_harness

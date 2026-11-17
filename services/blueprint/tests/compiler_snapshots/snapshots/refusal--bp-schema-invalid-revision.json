@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "BP-SCHEMA-001",
+      "path": "/meta/revision"
+    }
+  ]
+}

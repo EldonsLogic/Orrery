@@ -150,6 +150,31 @@ jobs:
       - name: Contract schemas and examples
         run: python3 scripts/check_contracts.py
 
+  trading-ar-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r services/blueprint/requirements.txt
+      - name: Trading Arabic pack and engine audit tests
+        run: |
+          python3 -m unittest discover -s components/core/trading_ar/tests -v
+          python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_006_arabic_translations.py -v
+
+  zatca-phase1-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: ZATCA Phase 1 component and engine wrapper tests (CMP-003)
+        run: |
+          python3 -m unittest discover -s components/compliance/zatca_sa/tests -t . -v
+          python3 -m unittest apps/engine/change_engine/change_engine/tests/test_zatca_phase1_engine.py -v
+
   engine-adapter-conformance:
     runs-on: ubuntu-latest
     steps:

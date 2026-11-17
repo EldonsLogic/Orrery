@@ -1,0 +1,73 @@
+{
+  "environment": "production",
+  "errors": [
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/0"
+    },
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/1"
+    },
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/10"
+    },
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/13"
+    },
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/2"
+    },
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/3"
+    },
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/4"
+    },
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/5"
+    },
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/6"
+    },
+    {
+      "code": "CMP-COMP-003",
+      "path": "/components/9"
+    },
+    {
+      "code": "CMP-COMP-004",
+      "path": "/components/11"
+    },
+    {
+      "code": "CMP-COMP-004",
+      "path": "/components/12"
+    },
+    {
+      "code": "CMP-COMP-004",
+      "path": "/components/14"
+    },
+    {
+      "code": "CMP-COMP-004",
+      "path": "/components/15"
+    },
+    {
+      "code": "CMP-COMP-004",
+      "path": "/components/7"
+    },
+    {
+      "code": "CMP-COMP-004",
+      "path": "/components/8"
+    },
+    {
+      "code": "CMP-MAP-005",
+      "path": "/status"
+    }
+  ]
+}

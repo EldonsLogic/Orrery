@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-MAP-008",
+      "path": "/entities/2/fields/5/computed/rounding/precision"
+    }
+  ]
+}

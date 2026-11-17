@@ -1,0 +1,9 @@
+{
+  "environment": "staging",
+  "errors": [
+    {
+      "code": "CMP-ENV-001",
+      "path": ""
+    }
+  ]
+}

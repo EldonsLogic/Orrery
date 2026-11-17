@@ -1,8 +1,9 @@
-"""CLI: python3 -m evals.harness check | run --set NAME --adapter NAME [--out PATH]"""
+"""CLI: python3 -m evals.harness check | injection --adapter NAME | run --set NAME --adapter NAME [--out PATH]"""
 import argparse
 import json
 import sys
 
+from . import injection
 from .records import SETS_DIR, counts, list_sets, load_set
 from .runner import gate, load_threshold, run_set
 
@@ -10,6 +11,8 @@ from .runner import gate, load_threshold, run_set
 def cmd_check(args) -> int:
     all_records, all_errors = [], []
     for name in list_sets(args.sets_dir):
+        if name == injection.SET_NAME:  # behaviour cases, own schema; checked below
+            continue
         recs, errs = load_set(name, args.sets_dir)
         all_records += recs
         all_errors += errs
@@ -18,6 +21,10 @@ def cmd_check(args) -> int:
     for label, key in (("category", "by_category"), ("dialect", "by_dialect")):
         for k, v in summary[key].items():
             print(f"  {label} {k}: {v}")
+    inj, inj_errs = injection.load_cases(args.sets_dir)
+    all_errors += inj_errs
+    if inj or inj_errs:
+        print(f"injection cases: {len(inj)}")
     for e in all_errors:
         print(f"ERROR {e}", file=sys.stderr)
     if all_errors:
@@ -46,6 +53,21 @@ def cmd_run(args) -> int:
     return 0
 
 
+def cmd_injection(args) -> int:
+    try:
+        report = injection.run_set(args.adapter, args.sets_dir)
+    except (ValueError, KeyError) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 2
+    text = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(text + "\n")
+    else:
+        print(text)
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="python3 -m evals.harness")
     p.add_argument("--sets-dir", default=SETS_DIR, help=argparse.SUPPRESS)
@@ -56,6 +78,10 @@ def main(argv=None) -> int:
     r.add_argument("--adapter", required=True)
     r.add_argument("--out")
     r.set_defaults(fn=cmd_run)
+    i = sub.add_parser("injection", help="run the prompt-injection suite (platform behaviour)")
+    i.add_argument("--adapter", required=True)
+    i.add_argument("--out")
+    i.set_defaults(fn=cmd_injection)
     args = p.parse_args(argv)
     return args.fn(args)
 

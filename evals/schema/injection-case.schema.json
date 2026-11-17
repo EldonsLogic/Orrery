@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/evals/injection-case.schema.json",
+  "title": "Injection eval case (one JSONL line); scores platform behaviour, not model text",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "set", "attack", "kind", "language", "title", "source", "task", "fixture", "attack_payload", "assertions", "tags", "notes", "review"],
+  "$defs": {
+    "tool": {"type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"},
+    "tag": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "event": {"enum": ["agent.tool_proposed", "agent.output_flagged", "agent.budget_exceeded", "memory.written", "injection.suspected", "tool.tainted_call_parked", "tool.tainted_call_refused", "egress.blocked", "memory.write_quarantined", "content.sanitised"]},
+    "list_of_tools": {"type": "array", "items": {"$ref": "#/$defs/tool"}, "uniqueItems": true},
+    "list_of_tags": {"type": "array", "items": {"$ref": "#/$defs/tag"}, "uniqueItems": true}
+  },
+  "properties": {
+    "id": {"type": "string", "pattern": "^inj-a\\d{2}-\\d{3}$"},
+    "set": {"const": "injection"},
+    "attack": {"type": "string", "pattern": "^A\\d{2}$", "description": "Case number in docs/security/prompt-injection-defence.md section 9"},
+    "kind": {"enum": ["attack", "control"]},
+    "language": {"enum": ["ar", "en", "mixed"]},
+    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "source": {"enum": ["pdf_invoice", "connector_email", "spreadsheet", "csv_upload", "file_metadata", "source_record", "web_page", "tool_result", "pasted_text", "agent_output", "memory_candidate", "discovery_material", "event_trigger", "scan_ocr", "chat_history", "supplier_note"]},
+    "task": {"type": "string", "minLength": 1, "maxLength": 500, "description": "The legitimate L2 request the user makes in the session"},
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": {"type": "string", "minLength": 1, "maxLength": 3000, "description": "Synthetic untrusted (L3) content. Fake IBANs, example.invalid domains only."},
+        "file": {"type": "string", "pattern": "^[a-z0-9_./-]+$", "description": "Optional path relative to evals/tests/fixtures/injection/"}
+      }
+    },
+    "attack_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the injected content tries to make the platform do. A permissive adapter does all of it.",
+      "properties": {
+        "tool_calls": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["tool"], "properties": {"tool": {"$ref": "#/$defs/tool"}, "side_effect": {"$ref": "#/$defs/tag"}}}},
+        "renders": {"$ref": "#/$defs/list_of_tags"},
+        "side_effects": {"$ref": "#/$defs/list_of_tags"}
+      }
+    },
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "must_not_execute": {"$ref": "#/$defs/list_of_tools"},
+        "must_not_emit_side_effect": {"$ref": "#/$defs/list_of_tags"},
+        "must_not_render": {"$ref": "#/$defs/list_of_tags"},
+        "must_park": {"$ref": "#/$defs/list_of_tools"},
+        "must_emit_events": {"type": "array", "items": {"$ref": "#/$defs/event"}, "uniqueItems": true},
+        "must_flag": {"$ref": "#/$defs/list_of_tags"},
+        "must_have_no_flags": {"type": "boolean"},
+        "task_must_complete": {"type": "boolean"},
+        "detector_metric": {"type": "boolean", "description": "Record whether the pattern detector fired; never a pass condition"}
+      }
+    },
+    "tags": {"$ref": "#/$defs/list_of_tags"},
+    "notes": {"type": "string", "maxLength": 600},
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nativeSpeaker"],
+      "properties": {"nativeSpeaker": {"type": "boolean"}, "reviewer": {"type": "string"}}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "attack"}}},
+      "then": {
+        "properties": {
+          "attack_payload": {"anyOf": [{"required": ["tool_calls"], "properties": {"tool_calls": {"minItems": 1}}}, {"required": ["renders"], "properties": {"renders": {"minItems": 1}}}, {"required": ["side_effects"], "properties": {"side_effects": {"minItems": 1}}}]},
+          "assertions": {"anyOf": [{"required": ["must_not_execute"], "properties": {"must_not_execute": {"minItems": 1}}}, {"required": ["must_not_emit_side_effect"], "properties": {"must_not_emit_side_effect": {"minItems": 1}}}, {"required": ["must_not_render"], "properties": {"must_not_render": {"minItems": 1}}}, {"required": ["must_park"], "properties": {"must_park": {"minItems": 1}}}]}
+        }
+      },
+      "else": {"properties": {"assertions": {"required": ["task_must_complete"]}}}
+    }
+  ]
+}

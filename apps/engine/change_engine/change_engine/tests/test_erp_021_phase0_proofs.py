@@ -151,7 +151,7 @@ class TestErp021OfflineAdapterAndComponentContracts(unittest.TestCase):
             "provision_site",
             _ctx("t_alpha", "u_prov"),
             {
-                "idempotencyKey": "u_prov_0001",
+                "idempotencyKey": "u_prov_000000001",
                 "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
                 "countryPack": "sa",
                 "siteClass": "sandbox",
@@ -171,7 +171,7 @@ class TestErp021OfflineAdapterAndComponentContracts(unittest.TestCase):
         svc_denied = ce.call(
             "apply",
             _ctx("t_alpha", "u_svc", service="observability"),
-            {"idempotencyKey": "u_svc_0001"},
+            {"idempotencyKey": "u_svc_0000000001"},
         )
         self.assertFalse(svc_denied["ok"])
         self.assertEqual(svc_denied["error"]["code"], "permission_denied")
@@ -185,7 +185,7 @@ class TestErp021OfflineAdapterAndComponentContracts(unittest.TestCase):
                 "blueprint": {
                     "id": "example-trading-001",
                     "base": None,
-                    "target": {"id": "example-trading-001", "revision": 1, "sha256": "0" * 64},
+                    "target": {"hash": "sha256:" + "0" * 64, "revision": 1},
                     "diffHash": None,
                 },
                 "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
@@ -212,7 +212,7 @@ class TestErp021OfflineAdapterAndComponentContracts(unittest.TestCase):
                     }
                 ],
                 "skippedOps": [],
-                "postConditions": [{"id": "pc_1", "check": "exists", "pointer": "/entities/customer"}],
+                "postConditions": [{"id": "pc_001", "check": "exists", "pointer": "/entities/customer"}],
                 "risk": {
                     "counts": {"cosmetic": 0, "config": 0, "data_shape": 1, "destructive": 0, "compliance": 0, "access": 0, "branding": 0},
                     "total": 1,
@@ -234,7 +234,7 @@ class TestErp021OfflineAdapterAndComponentContracts(unittest.TestCase):
             "apply",
             _ctx("t_alpha", "u_fault"),
             {
-                "idempotencyKey": "u_fault_0001",
+                "idempotencyKey": "u_fault_00000001",
                 "artifact": art,
                 "planToken": plan["result"]["planToken"],
                 "approvals": {

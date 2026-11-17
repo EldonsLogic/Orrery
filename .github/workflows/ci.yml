@@ -253,7 +253,7 @@ jobs:
           pip-audit -r evals/requirements.txt
       - name: Software bill of materials (CycloneDX) for the Python requirements
         run: pip-audit -r services/blueprint/requirements.txt -f cyclonedx-json -o sbom-python.cdx.json
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom-python
           path: sbom-python.cdx.json

@@ -55,3 +55,15 @@ Unknown keys, values that are not strings, numbers, booleans or lists of those, 
 
 ### Not done
 Interview engine and prompts, import readers (Excel, documents with OCR, connectors), source-to-Blueprint mapping, gap analysis, visual Blueprint, quote, and the pre-tenant workspace. Other templates (retail, services, contracting) do not exist.
+
+## Connector runtime boundary (DSC-010)
+
+`connectors/` is the framework every connector runs behind, not a connector. Offline, stdlib only, no file or network access.
+
+| Module | Content |
+|---|---|
+| `connectors/model.py` | `Connector` protocol (tier, `extract`, `normalise`, `writes=False`, read-side `capabilities`), `Registry`, `RunContext`, `Limits`, `Budget`, coded refusals (`CON-001` to `CON-019`) |
+| `connectors/sanitise.py`, `detect.py` | Section 3.3 steps (bidi, zero-width, tag characters; digits and confusables in a comparison copy) and the en and ar instruction-like pattern list (metric only) |
+| `connectors/runner.py` | `run_connector(connector, source_bytes, ctx, sink)`: restricted call, budgets, sanitise, L3 envelope on every field (set only here), audit events, fail closed |
+
+Tests: `tests/connectors/` (fake connectors only; requirement IDs PI-002 to PI-007 in test names). Open questions Q-90 to Q-95.

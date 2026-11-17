@@ -72,7 +72,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-004 | Cross-tenant isolation test suite | Security | G1 | ERP-003 | partner | todo |
 | SEC-005 | MFA for owners, staff and support access | Security | G2 | PLT-005 | eldon | todo |
 | SEC-006 | Brand asset upload enforcement in storage: PNG/JPG/SVG only, size limits, SVG sanitiser, malware scan, per-tenant storage (rules from SEC-018) | Security | G2 | PLT-017,SEC-018 | partner | todo |
-| SEC-007 | Dependency and SBOM scanning for Python and Node (beyond dependabot actions) | Security | G2 | GOV-006 | eldon | todo |
+| SEC-007 | Dependency and SBOM scanning for Python and Node (beyond dependabot actions) | Security | G2 | GOV-006 | eldon | done |
 | SEC-008 | Audit log integrity: append-only, hash-chained, exported off-box | Security | G2 | PLT-015 | eldon | todo |
 | SEC-009 | Rate limits and abuse controls on chat and gateway | Security | G2 | PLT-009 | eldon | todo |
 | SEC-010 | Sandbox and static analysis for factory-built components | Security | G2 | BPL-015 | eldon | todo |
@@ -118,7 +118,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-004 | Compiler: Blueprint to engine configuration | Blueprint | G1 | BPL-003,BPL-025 | eldon | done |
 | BPL-005 | Hand-written trading and distribution Blueprint fixture | Blueprint | G1 | BPL-002 | eldon | done |
 | BPL-006 | Blueprint diff | Blueprint | G1 | BPL-003 | eldon | done |
-| BPL-007 | Apply with preview and DDL plan gate (change engine) | Blueprint | G1 | BPL-026,BPL-001,BPL-012 | partner | todo |
+| BPL-007 | Apply with preview and DDL plan gate (change engine) | Blueprint | G1 | BPL-026,BPL-001,BPL-012 | partner | done |
 | BPL-008 | Rollback to a previous Blueprint version | Blueprint | G1 | BPL-007 | partner | todo |
 | BPL-009 | Component manifest schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | done |
 | BPL-010 | Component registry (list, version, compatibility) | Blueprint | G1 | BPL-009 | eldon | done |
@@ -146,7 +146,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-008 | Quote generator from Blueprint and gap analysis | Discovery | G2 | DSC-006 | eldon | todo |
 | DSC-009 | Owner approval flow (draft to owner_approved) | Discovery | G2 | DSC-007,BPL-020 | eldon | todo |
 | DSC-010 | Connector framework: tiers, sandboxing, audit, untrusted-content handling | Discovery | G2 | DSC-003,SEC-003 | eldon | done |
-| DSC-011 | Excel and CSV import connector | Discovery | G2 | DSC-010 | eldon | todo |
+| DSC-011 | Excel and CSV import connector | Discovery | G2 | DSC-010 | eldon | done |
 | DSC-012 | Odoo extractor: read-only API access, export mapping | Discovery | G2 | DSC-010 | eldon | todo |
 | DSC-013 | Odoo to Blueprint field-mapping library | Discovery | G2 | DSC-012 | eldon | todo |
 | DSC-014 | Document intake with Arabic OCR (invoices, receipts, photos) | Discovery | G2 | DSC-010,QA-002 | eldon | todo |

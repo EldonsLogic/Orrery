@@ -32,3 +32,9 @@ Source of the v1 list: [../strategy/05-hosting-and-data.md](../strategy/05-hosti
 5. CI runs mocks, not a real Frappe bench.
 6. No LICENSE file.
 Tracked as SEC items in [../PLAN.md](../PLAN.md). Gate G0 requires 1-4 fixed.
+
+## Dependency and SBOM scanning (SEC-007)
+- Dependabot watches the GitHub Actions, the Python requirement files (`services/blueprint`, `evals`, `apps/engine/change_engine`) and the Node package in `web/app/theme`, weekly.
+- CI job `dependency-audit` runs `pip-audit` (pinned version) on the Python requirement files and fails on a known vulnerability, and publishes a CycloneDX software bill of materials as the `sbom-python` build artifact.
+- Not covered yet: Node audit (the only Node package has no dependencies), container image scanning and the engine's own pinned dependencies (partner lane, INF rows), licence scanning (see the licence register), and hash-pinned installs (threat T6 asks for them; recorded as an open point below).
+- Open point: requirement files use ranges in `evals/requirements.txt`; moving to exact pins with hashes is a separate row.

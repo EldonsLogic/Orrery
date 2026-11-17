@@ -225,7 +225,12 @@ def execute_single_field_deployment(
                 {"payload_hash": payload_hash, "outcome": outcome},
             )
         except Exception as fin_exc:
-            # If finalization fails after DDL, preserve RECOVERY_REQUIRED / unfinalized journal warning
+            # If finalization fails after DDL, preserve RECOVERY_REQUIRED on audit journal and return it
+            if hasattr(db, "mark_recovery_required") and callable(getattr(db, "mark_recovery_required", None)):
+                try:
+                    db.mark_recovery_required(deployment_id, str(fin_exc))
+                except Exception:
+                    pass
             outcome = {
                 **outcome,
                 "status": "RECOVERY_REQUIRED",

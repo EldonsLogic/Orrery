@@ -103,3 +103,6 @@ The canonical list from Phase 1-2 is [strategy/open-questions.md](strategy/open-
 | Q-97 | BRD-005 the no-flash boot script is inline text, so a strict CSP needs a nonce or a hash of its exact text. Which one does the app shell use, and who computes it at serve time? | eldon | G2 | BRD-005 |
 | Q-98 | BRD-005 Studio (`services/studio/static/app.js`) still has its own ad-hoc theme switch with a global storage key. Adopt the shared module (separate plan row, different lane) or leave Studio as a dev tool? | eldon | G2 | BRD-005 |
 | Q-99 | BRD-005 when a remote value and a local value differ at sign-in on a new device, the rule is last write wins by call order, with no timestamps. Is that enough, or do we need a server timestamp? | eldon | G2 | BRD-005 |
+| Q-100 | BPL-022 autonomy rate. Contract 1 v0.1.0 has no print format collection, so that kind always counts 0; the contract needs one for it to count. | eldon | G2 | BPL-022 |
+| Q-101 | BPL-022 autonomy rate. A removed element is listed only and does not lower the rate; should it lower the rate or become its own exceptions class? | eldon | G2 | BPL-022 |
+| Q-102 | BPL-022 autonomy rate. An entity's content excludes its fields, so adding or removing a field does not mark the entity manual; confirm. | eldon | G2 | BPL-022 |

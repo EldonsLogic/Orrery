@@ -4,3 +4,19 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  - package-ecosystem: pip
+    directory: /services/blueprint
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /evals
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /apps/engine/change_engine
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /web/app/theme
+    schedule:
+      interval: weekly

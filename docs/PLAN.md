@@ -72,7 +72,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-004 | Cross-tenant isolation test suite | Security | G1 | ERP-003 | partner | todo |
 | SEC-005 | MFA for owners, staff and support access | Security | G2 | PLT-005 | eldon | todo |
 | SEC-006 | Brand asset upload enforcement in storage: PNG/JPG/SVG only, size limits, SVG sanitiser, malware scan, per-tenant storage (rules from SEC-018) | Security | G2 | PLT-017,SEC-018 | partner | todo |
-| SEC-007 | Dependency and SBOM scanning for Python and Node (beyond dependabot actions) | Security | G2 | GOV-006 | eldon | todo |
+| SEC-007 | Dependency and SBOM scanning for Python and Node (beyond dependabot actions) | Security | G2 | GOV-006 | eldon | done |
 | SEC-008 | Audit log integrity: append-only, hash-chained, exported off-box | Security | G2 | PLT-015 | eldon | todo |
 | SEC-009 | Rate limits and abuse controls on chat and gateway | Security | G2 | PLT-009 | eldon | todo |
 | SEC-010 | Sandbox and static analysis for factory-built components | Security | G2 | BPL-015 | eldon | todo |

@@ -9,7 +9,7 @@ Every rule the founders have set or settled, in one place. [AGENTS.md](../AGENTS
 1. Two founders work in parallel, on different AI subscriptions and tools (Claude Code, Codex, Antigravity, others). The repo is the shared memory. Nothing important lives only in a chat or on a laptop.
 2. Any agent must be able to start cold: read [AGENTS.md](../AGENTS.md), this file, [STATUS.md](STATUS.md) and the latest 3 logs, then work. Files are plain Markdown or JSON; no tool-specific features.
 3. Delegate by model tier: strongest model for thinking, architecture, security, accounting and tax logic and planning; mid for scoped implementation and spec execution; small for boilerplate, tests, docs and search ([agents/routing.md](../agents/routing.md), [agents/delegation-playbook.md](../agents/delegation-playbook.md)). Save tokens: scoped tasks, read indexes not folders, parallel subagents for independent work.
-4. Always update your work: end every session with a log file, updated PLAN statuses, regenerated STATUS, and a pushed branch with a PR. No log, no merge. The next agent, possibly on another machine, depends on it.
+4. Always update your work: end every session with a log file, updated PLAN statuses, and a pushed branch with a PR. No log, no merge. The next agent, possibly on another machine, depends on it.
 5. Caution is the default: one writer per path, claim a plan row before editing, pull and rebase first, never edit someone else's `doing` area, small PRs, no force-push, no history rewrite ([AGENTS.md](../AGENTS.md) two-person rules).
 6. Ask the founders when something is unclear instead of guessing. Put open points in [open-questions.md](open-questions.md).
 7. Use your own judgment. Do not copy blindly: adapt outside code to the architecture and drop what does not fit (example: [PROVENANCE](../apps/engine/change_engine/PROVENANCE.md)).
@@ -21,7 +21,7 @@ Every rule the founders have set or settled, in one place. [AGENTS.md](../AGENTS
 11. The repo holds project content only. Never commit scratch or temp files, session briefs, rendered images, downloads, exports, archives, PDFs or office files, local paths, personal notes, secrets or customer data. Files over 1 MB are rejected. Enforced by `scripts/check_repo_hygiene.py` (CI and pre-commit).
 12. Sales, partner, investor and other external documents (for example the partner brief) are produced outside the repo. Any unverified figure in them is labelled. Plans and research they draw on live in `docs/`.
 13. Helper scripts written during a session stay outside the repo. Only reusable tools go in `scripts/`, with a plan row.
-14. Logs and decision records are append-only: new file per session, supersede an ADR instead of editing it. Generated files (`docs/STATUS.md`, `docs/brand/tokens/*.css`, `docs/brand/logo/*`) are never hand-edited; regenerate them.
+14. Logs and decision records are append-only: new file per session, supersede an ADR instead of editing it. Generated files (`docs/brand/tokens/*.css`, `docs/brand/logo/*`) are never hand-edited; regenerate them.
 15. New top-level folders or `docs/` folders need an ADR. Put each file where [AGENTS.md](../AGENTS.md) says.
 16. No timelines or calendar dates in plans. Work is ordered by dependency and gates ([GATES.md](GATES.md)). Session logs carry dates.
 17. Importing outside code is its own PR with a `PROVENANCE.md` (source, commit, kept, removed, changed). Licences go in [NOTICE.md](../NOTICE.md).

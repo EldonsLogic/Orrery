@@ -69,7 +69,7 @@ Every open plan row has exactly one owner, and the plan never makes one founder 
 1. Pick a row from "Ready to start" in STATUS.md; set it `doing` with your name; pull the latest `main`.
 2. Create a branch named with the plan ID (for example `bpl-003-validator`).
 3. Work, delegating scoped sub-tasks by model tier ([delegation playbook](../agents/delegation-playbook.md)).
-4. Finish: new session log (`python3 scripts/new_log.py ...`), update PLAN statuses, then run `python3 scripts/finish_session.py` (regenerates STATUS, runs every check, verifies the push and the PR). Open the PR with how to view the change.
+4. Finish: new session log (`python3 scripts/new_log.py ...`), update PLAN statuses, then run `python3 scripts/finish_session.py` (runs every check, verifies the push and the PR). Open the PR with how to view the change.
 5. The other founder reviews it (with a different model than the author used). Merge only after all checks pass, by a founder or by an agent the founder has authorised (RULES.md rule 10). Nobody pushes to `main`.
 6. Delete the merged branch.
 

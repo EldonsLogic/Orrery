@@ -19,18 +19,18 @@ We are a product company, not a software house. "Orrery" is a working name, not 
 10. Be blunt. Flag claims as UNVERIFIED; cite URL and access date (YYYY-MM-DD) for external facts.
 
 ## Current gate
-See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/STATUS.md](docs/STATUS.md). Do not build for a later gate without a plan row. Application code is allowed only where a plan row for the current gate asks for it.
+See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the status printed by `python3 scripts/build_status.py` ([docs/STATUS.md](docs/STATUS.md) explains it). Do not build for a later gate without a plan row. Application code is allowed only where a plan row for the current gate asks for it.
 
 ## Session start checklist
 1. Identify which founder you are working with: Eldon (GitHub `EldonsLogic`) or the partner (GitHub `sayegh9`). Check `gh api user --jq .login`, or `git config user.name` and `user.email`, or ask; never assume. It decides the log `--author` (eldon or partner) and your lane in [docs/ONBOARDING.md](docs/ONBOARDING.md).
 2. `git pull` (or confirm you are on the latest main). If the person you work with has not done the one-time setup, walk them through [docs/ONBOARDING.md](docs/ONBOARDING.md) first; it also defines the two founders' lanes (stay in your lane's paths).
-3. Read [docs/RULES.md](docs/RULES.md) (every standing founder rule), `docs/STATUS.md` and the latest 3 files in `docs/log/` (or run `python3 scripts/session_start.py`).
+3. Read [docs/RULES.md](docs/RULES.md) (every standing founder rule), the output of `python3 scripts/build_status.py` and the latest 3 files in `docs/log/` (or run `python3 scripts/session_start.py`).
 4. Pick a `todo` row in [docs/PLAN.md](docs/PLAN.md) whose Depends are `done`; set it `doing` with an owner.
 
 ## Session end checklist
 1. `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>`; fill it in.
 2. Update statuses in `docs/PLAN.md`; add ADR or open-question entries if a decision or doubt arose.
-3. Run `python3 scripts/finish_session.py` (regenerates STATUS, runs every check and the task trail, verifies the branch is pushed and a PR is open). Do not stop until it prints FINISHED. Every commit message names a plan ID; never bypass hooks.
+3. Run `python3 scripts/finish_session.py` (runs every check and the task trail, verifies the branch is pushed and a PR is open). Do not stop until it prints FINISHED. Every commit message names a plan ID; never bypass hooks.
 4. If your work closes a phase or a gate, run `python3 scripts/phase_exit_check.py --phase <name>` and record the exit in a log (see [docs/GATES.md](docs/GATES.md)). Nothing from the next phase counts as passed before that run is recorded.
 5. Push your branch and open a PR. Work left only on a machine or in a chat is lost work.
 
@@ -48,7 +48,7 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the generated [docs/ST
 - One writer per path: claim a plan row (`doing` + owner) before touching its files; never edit paths under someone else's `doing` row. `git pull --rebase` before starting and before opening a PR. No force-push, no history rewrite, no merging your own PR without the other founder's review.
 - Lanes are enforced: `scripts/lanes.json` maps paths to each founder; editing the other's lane fails CI unless your session log has `Cross-lane: approved by <eldon|partner> (where and when)` after real agreement (ADR-0020).
 - Small PRs (about 400 changed lines or less, excluding generated files). Logs and decision records are append-only: new file per session, never edit an old log, supersede an ADR instead of editing it.
-- Generated files are never hand-edited: `docs/STATUS.md`, `docs/brand/tokens/*.css`, `docs/brand/logo/*`. Regenerate them with their script.
+- Generated files are never hand-edited: `docs/brand/tokens/*.css`, `docs/brand/logo/*`. Regenerate them with their script.
 - The repo holds project content only. Never commit: scratch or temp files, session briefs, rendered images, downloads, exports, archives, PDFs or office files, local paths, personal notes, sales or partner or investor documents (those live outside the repo), copies of third-party code (except a documented import with a `PROVENANCE.md`), secrets, customer data. Files over 1 MB are rejected.
 - Helper scripts you write for a session stay outside the repo. Only reusable tools go in `scripts/`, with a plan row.
 - Put every file where the table below says; new top-level folders or new `docs/` folders need an ADR. `python3 scripts/check_repo_hygiene.py` enforces layout, names, types, sizes, local paths and the retired project name. Run it before finishing; CI runs it too.

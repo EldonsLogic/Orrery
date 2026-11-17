@@ -24,8 +24,6 @@ jobs:
         id: checks
         continue-on-error: true
         run: |
-          python3 scripts/build_status.py
-          git diff --exit-code docs/STATUS.md
           python3 scripts/check_docs.py
           python3 scripts/check_repo_hygiene.py
           python3 scripts/scan_secrets.py

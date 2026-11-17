@@ -1,0 +1,42 @@
+{
+  "preview": {
+    "title": "Design system preview",
+    "intro": "Tokens, type, theme and direction samples. Synthetic data only.",
+    "controls": {
+      "theme": "Theme",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "themeSystem": "System",
+      "language": "Language",
+      "direction": "Direction",
+      "directionAuto": "From language",
+      "directionRtl": "Right to left",
+      "directionLtr": "Left to right"
+    },
+    "language": { "ar": "Arabic", "en": "English" },
+    "colours": { "title": "Colour tokens" },
+    "type": {
+      "title": "Type scale",
+      "display": "Display",
+      "h1": "Heading 1",
+      "h2": "Heading 2",
+      "h3": "Heading 3",
+      "body": "Body text",
+      "small": "Small text",
+      "caption": "Caption",
+      "sample": "A clear sentence for the owner."
+    },
+    "digits": {
+      "title": "Numbers and dates",
+      "western": "Western digits",
+      "eastern": "Eastern Arabic digits",
+      "amountLabel": "Amount",
+      "dateLabel": "Date (Gregorian)",
+      "count": "{count, plural, =0 {No invoices} one {One invoice} other {# invoices}}"
+    },
+    "bidi": {
+      "title": "Mixed direction text",
+      "sample": "Invoice <ref>INV-0042</ref> for <name>Gulf Trading Co.</name> is due."
+    }
+  }
+}

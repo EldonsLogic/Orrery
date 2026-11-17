@@ -1,0 +1,25 @@
+.page {
+  min-block-size: 100vh;
+  padding: calc(var(--space-unit) * 4);
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: var(--text-display-size);
+  line-height: var(--text-display-line);
+  font-weight: var(--text-display-weight);
+}
+
+.link {
+  color: var(--color-primary);
+}
+
+.link:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}

@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-BP-001",
+      "path": "/meta/engineTarget/versionSet"
+    }
+  ]
+}

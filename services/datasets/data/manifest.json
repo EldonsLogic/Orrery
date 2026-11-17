@@ -1,0 +1,87 @@
+{
+  "base_date": "2026-10-04",
+  "classification": "C1",
+  "dataset": "orrery-synthetic-trading-distribution",
+  "files": [
+    {
+      "bytes": 53662,
+      "counts": {
+        "credit_notes": 1,
+        "customers": 9,
+        "delivery_notes": 7,
+        "items": 13,
+        "opening_stock": 25,
+        "payments": 2,
+        "price_lists": 2,
+        "sales_invoices": 7,
+        "sales_orders": 11,
+        "suppliers": 4,
+        "warehouses": 2
+      },
+      "market": "EG",
+      "path": "egy.json",
+      "sha256": "0be11402e362b3caeb87521e0a87f4834bc4460262a1d72c904c1e362af3630b"
+    },
+    {
+      "bytes": 53304,
+      "counts": {
+        "credit_notes": 1,
+        "customers": 9,
+        "delivery_notes": 7,
+        "items": 13,
+        "opening_stock": 25,
+        "payments": 2,
+        "price_lists": 2,
+        "sales_invoices": 7,
+        "sales_orders": 11,
+        "suppliers": 4,
+        "warehouses": 2
+      },
+      "market": "SA",
+      "path": "ksa.json",
+      "sha256": "d14fe15ec04efd88486d8f4ae299ac7966462e74d8b0ca579a98f0d39912610b"
+    },
+    {
+      "bytes": 53093,
+      "counts": {
+        "credit_notes": 1,
+        "customers": 9,
+        "delivery_notes": 7,
+        "items": 13,
+        "opening_stock": 25,
+        "payments": 2,
+        "price_lists": 2,
+        "sales_invoices": 7,
+        "sales_orders": 11,
+        "suppliers": 4,
+        "warehouses": 2
+      },
+      "market": "QA",
+      "path": "qat.json",
+      "sha256": "6ccaf5a719872fef1597f46915dca7b2a706dd5a6c09733396a4c0c13587272e"
+    },
+    {
+      "bytes": 53270,
+      "counts": {
+        "credit_notes": 1,
+        "customers": 9,
+        "delivery_notes": 7,
+        "items": 13,
+        "opening_stock": 25,
+        "payments": 2,
+        "price_lists": 2,
+        "sales_invoices": 7,
+        "sales_orders": 11,
+        "suppliers": 4,
+        "warehouses": 2
+      },
+      "market": "AE",
+      "path": "uae.json",
+      "sha256": "c7d6e3f1e91129742511fdfde3b677250386c8ae87333d7088b27fe1d511ab70"
+    }
+  ],
+  "generator_version": "1.0.0",
+  "seed": 20261101,
+  "synthetic": true,
+  "total_bytes": 213329
+}

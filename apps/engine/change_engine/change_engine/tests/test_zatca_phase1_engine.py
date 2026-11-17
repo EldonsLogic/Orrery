@@ -69,6 +69,32 @@ class TestEngineZatcaPhase1(unittest.TestCase):
         self.assertEqual(invoice.totals.grand_total, Decimal("115.00"))
         self.assertEqual(decode_phase1_tlv(invoice.qr_code_tlv)[4], "115.00")
 
+    def test_bench_import_resolves_without_repo_root_on_sys_path(self):
+        """Importing change_engine.compliance from a bench cwd works without repo root on PYTHONPATH."""
+        from pathlib import Path
+        import subprocess
+        import sys
+
+        app_root = Path(__file__).resolve().parents[2]
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-c",
+                (
+                    "import sys; "
+                    f"sys.path.insert(0, {str(app_root)!r}); "
+                    "import change_engine.compliance as c; "
+                    "assert hasattr(c, 'generate_phase1_invoice')"
+                ),
+            ],
+            cwd="/tmp",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

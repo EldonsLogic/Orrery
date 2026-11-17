@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-MAP-003",
+      "path": "/engine/versionSet"
+    }
+  ]
+}

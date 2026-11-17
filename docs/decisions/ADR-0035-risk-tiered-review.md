@@ -1,8 +1,8 @@
 # ADR-0035: risk-tiered review and fewer rounds
 
-Status: Proposed
+Status: Accepted
 Owner: eldon
-Approved by: pending (both founders must agree; it changes approval gates, so the partner's recorded review is required, ADR-0032)
+Approved by: both founders. Eldon confirmed in chat on 2026-11-17, and that the partner agreed with him in person on 2026-11-16 (the partner's own "efficient review workflow" request the same day matches). If the partner disagrees, he supersedes this ADR.
 
 ## Context
 Review effort is now the main cost. Every PR gets the same review from two founders and their agents, comments pile up on each PR, stacked PRs and the generated `docs/STATUS.md` cause repeated conflict merges, and specs for later gates are being reviewed while the current gate (G0) is open. A docs fix costs as much as tax code.

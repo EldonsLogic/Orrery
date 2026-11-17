@@ -27,7 +27,7 @@ One writer per path. Launch agents together only when their write paths do not o
 After each agent: `git status` must show only the allowed paths; run the checks yourself; open the key outputs; re-compute any numbers; spot-check claims against sources; render visual work and look at it. Fix what is wrong, or send it back with specifics.
 
 ## 6. Integrate and leave a trail
-Update the plan row statuses, write the session log (`scripts/new_log.py`), regenerate `docs/STATUS.md`, commit on a branch named with the plan ID, push, open a PR. Do not merge your own PR. Clean up: remove temp files outside the repo, delete merged branches and any worktrees.
+Update the plan row statuses, write the session log (`scripts/new_log.py`), commit on a branch named with the plan ID, push, open a PR. Do not merge your own PR. Clean up: remove temp files outside the repo, delete merged branches and any worktrees.
 
 ## 7. Lessons we learned (do not repeat)
 - Large prompts to sub-agents failed intermittently: use brief files.

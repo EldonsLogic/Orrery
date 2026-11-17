@@ -25,8 +25,6 @@ def main():
         print("Blocked: never push to main. Push a branch named with the plan ID and open a PR (AGENTS.md).")
         return 1
     rc = 0
-    rc |= run(sys.executable, "scripts/build_status.py")
-    rc |= run("git", "diff", "--exit-code", "docs/STATUS.md")
     for s in ("check_docs.py", "check_repo_hygiene.py", "scan_secrets.py"):
         rc |= run(sys.executable, f"scripts/{s}")
     base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()

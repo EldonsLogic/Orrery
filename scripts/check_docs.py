@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Docs gate: required files, log headers, ADR index, PLAN table, links, STATUS freshness.
+"""Docs gate: required files, log headers, ADR index, PLAN table, links.
 
 --allow-missing-prefix a/,b/  skip required-file and link checks for paths under these
 prefixes (used while other authors' paths are still being written).
@@ -95,10 +95,6 @@ def main():
                 continue
             msg = f"{rel}: broken link -> {target}"
             (errors if is_core else warnings).append(msg)
-
-    status = ROOT / "docs/STATUS.md"
-    if status.exists() and status.read_text(encoding="utf-8") != build_status.render():
-        errors.append("docs/STATUS.md is stale: run python3 scripts/build_status.py")
 
     for w in warnings:
         print("WARN ", w)

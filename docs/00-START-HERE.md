@@ -11,7 +11,7 @@ The platform (working name Orrery, not trademark-cleared) is an AI-native busine
 2. Read [STATUS.md](STATUS.md) (generated: gate, what is built, what is ready to start) and the latest 3 files in [log/](log/README.md), newest first.
 3. Take a row from "Ready to start" in STATUS.md or a `todo` row in [PLAN.md](PLAN.md) whose dependencies are `done`. Claim it (`doing` plus owner), work on a branch named with its plan ID.
 4. Delegate scoped sub-tasks by model tier: [agents/delegation-playbook.md](../agents/delegation-playbook.md) (it also holds a paste-ready starter prompt).
-5. Finish with a log file, updated PLAN, regenerated STATUS, passing checks, a pushed branch and a PR. Do not merge your own PR.
+5. Finish with a log file, updated PLAN, passing checks, a pushed branch and a PR. Do not merge your own PR.
 
 ## What exists today
 | Area | State | Where |

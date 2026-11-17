@@ -1,0 +1,71 @@
+{
+  "$schema": "../../../contracts/component.manifest.schema.json",
+  "id": "core.trading_ar",
+  "version": "0.1.0",
+  "kind": "configurable",
+  "name": {
+    "ar": "حزمة الترجمة العربية لنطاق التجارة والتوزيع",
+    "en": "Arabic Trading & Distribution Translation Pack"
+  },
+  "description": "Supplies the 107 missing translatable Arabic labels and descriptions for the in-scope trading and distribution DocTypes (ERP-005 / ERP-006) as site-level Translation records, while excluding non-translatable naming series, number formats, barcode types, FIFO/LIFO, and internal tree fields.",
+  "provides": [
+    {
+      "capability": "core.i18n.trading_ar",
+      "artifacts": [
+        {
+          "type": "function",
+          "ref": "components.core.trading_ar.loader.load_translations"
+        },
+        {
+          "type": "function",
+          "ref": "components.core.trading_ar.loader.is_excluded_source"
+        },
+        {
+          "type": "function",
+          "ref": "components.core.trading_ar.loader.apply_trading_ar_translations"
+        }
+      ]
+    }
+  ],
+  "requires": [],
+  "parameters": [],
+  "tests": [
+    {
+      "id": "test_trading_ar_unit",
+      "kind": "arabic_text",
+      "path": "tests/test_trading_ar.py",
+      "blocking": true
+    }
+  ],
+  "certification": {
+    "level": "tested",
+    "touchesLedgerOrTax": false,
+    "reviewedBy": []
+  },
+  "engineCompatibility": {
+    "adapter": "change_engine",
+    "engineRange": ">=0.1.0 <1.0.0",
+    "testedAgainst": [
+      "frappe-15.126.0-erpnext-15.124.5-hrms-15.64.8"
+    ]
+  },
+  "licence": {
+    "spdx": "LicenseRef-Proprietary"
+  },
+  "owner": {
+    "github": "sayegh9"
+  },
+  "i18n": {
+    "locales": [
+      "ar",
+      "en"
+    ],
+    "rtlVerified": true,
+    "stringsFile": "translations.json"
+  },
+  "dataHandling": {
+    "storesPersonalData": false,
+    "sendsDataToModels": false,
+    "promotableToLibrary": true
+  }
+}

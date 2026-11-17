@@ -1,0 +1,2085 @@
+{
+  "config": {
+    "rounding": {
+      "decimals": 2,
+      "mode": "ROUND_HALF_UP",
+      "note": "half away from zero; VAT rounded once per document on the net total"
+    },
+    "valuation": "moving_average",
+    "vat": {
+      "prices_include_vat": false,
+      "rate_percent": "0",
+      "source": "synthetic test configuration for this dataset; not tax logic, not verified against any authority (UNVERIFIED)"
+    }
+  },
+  "credit_notes": [
+    {
+      "credit_date": "2026-10-20",
+      "customer": "CUST-005",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "0.50"
+        ],
+        "net_total": "0.50",
+        "subtotal": "0.50",
+        "total": "0.50",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "0.50"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "id": "CN-0001",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-008",
+          "line_net": "0.50",
+          "quantity": 2,
+          "unit_price": "0.25"
+        }
+      ],
+      "reason": "price_correction",
+      "returns_to_stock": false,
+      "sales_invoice": "INV-0006"
+    }
+  ],
+  "customers": [
+    {
+      "city_ar": "الريان",
+      "city_en": "Al Rayyan",
+      "code": "CUST-001",
+      "cr_number": "CR-99999-6799",
+      "credit_limit": "50000.00",
+      "customer_group": "wholesale",
+      "customer_type": "company",
+      "disabled": false,
+      "edge_cases": [],
+      "email": "accounts@al-rabee-foodstuff-trading-w-l-l-11.example.org",
+      "name_ar": "الربيع للمواد الغذائية ذ.م.م",
+      "name_en": "Al Rabee Foodstuff Trading W.L.L.",
+      "payment_terms_days": 30,
+      "phone": "+974 000 000 0011",
+      "price_list": "PL-WHOLESALE",
+      "synthetic": true,
+      "vat_number": "9999957919"
+    },
+    {
+      "city_ar": "الوكرة",
+      "city_en": "Al Wakrah",
+      "code": "CUST-002",
+      "cr_number": "CR-99999-7729",
+      "credit_limit": "50000.00",
+      "customer_group": "wholesale",
+      "customer_type": "company",
+      "disabled": false,
+      "edge_cases": [],
+      "email": "accounts@al-amwaj-catering-supplies-w-l-l-12.example.com",
+      "name_ar": "الأمواج للتموين ذ.م.م",
+      "name_en": "Al Amwaj Catering Supplies W.L.L.",
+      "payment_terms_days": 30,
+      "phone": "+974 000 000 0012",
+      "price_list": "PL-WHOLESALE",
+      "synthetic": true,
+      "vat_number": "9999974329"
+    },
+    {
+      "city_ar": "الدوحة",
+      "city_en": "Doha",
+      "code": "CUST-003",
+      "cr_number": "CR-99999-5857",
+      "credit_limit": "50000.00",
+      "customer_group": "wholesale",
+      "customer_type": "company",
+      "disabled": false,
+      "edge_cases": [],
+      "email": "accounts@al-sanabel-cleaning-supplies-w-l-l-13.example.org",
+      "name_ar": "السنابل للمنظفات ذ.م.م",
+      "name_en": "Al Sanabel Cleaning Supplies W.L.L.",
+      "payment_terms_days": 30,
+      "phone": "+974 000 000 0013",
+      "price_list": "PL-WHOLESALE",
+      "synthetic": true,
+      "vat_number": "9999986489"
+    },
+    {
+      "city_ar": "الريان",
+      "city_en": "Al Rayyan",
+      "code": "CUST-004",
+      "cr_number": "CR-99999-1710",
+      "credit_limit": "50000.00",
+      "customer_group": "key_account",
+      "customer_type": "company",
+      "disabled": false,
+      "edge_cases": [],
+      "email": "accounts@al-rihab-office-supplies-w-l-l-14.example.com",
+      "name_ar": "الرحاب للمستلزمات المكتبية ذ.م.م",
+      "name_en": "Al Rihab Office Supplies W.L.L.",
+      "payment_terms_days": 45,
+      "phone": "+974 000 000 0014",
+      "price_list": "PL-WHOLESALE",
+      "synthetic": true,
+      "vat_number": "9999925869"
+    },
+    {
+      "city_ar": "الدوحة",
+      "city_en": "Doha",
+      "code": "CUST-005",
+      "cr_number": null,
+      "credit_limit": "50000.00",
+      "customer_group": "retail",
+      "customer_type": "individual",
+      "disabled": false,
+      "edge_cases": [],
+      "email": "accounts@nasser-sample-15.example.org",
+      "name_ar": "ناصر التجريبي",
+      "name_en": "Nasser Sample",
+      "payment_terms_days": 30,
+      "phone": "+974 000 000 0015",
+      "price_list": "PL-RETAIL",
+      "synthetic": true,
+      "vat_number": null
+    },
+    {
+      "city_ar": "الريان",
+      "city_en": "Al Rayyan",
+      "code": "CUST-006",
+      "cr_number": "CR-99999-5696",
+      "credit_limit": "50000.00",
+      "customer_group": "wholesale",
+      "customer_type": "company",
+      "disabled": false,
+      "edge_cases": [
+        "long_name"
+      ],
+      "email": "accounts@synthetic-long-name-test-trading-and-dis-16.example.org",
+      "name_ar": "اسم طويل تجريبي للتجارة والتوزيع للمواد الغذائية الجافة والمشروبات والمنظفات ومستلزمات التغليف والتعبئة اسم طويل تجريبي للتجارة والتوزيع للم",
+      "name_en": "Synthetic Long Name Test Trading and Distribution of Dry Foodstuff Beverages Cleaning and Packaging Supplies Synthetic Long Name Test Tradin",
+      "payment_terms_days": 30,
+      "phone": "+974 000 000 0016",
+      "price_list": "PL-WHOLESALE",
+      "synthetic": true,
+      "vat_number": "9999939559"
+    },
+    {
+      "city_ar": "الوكرة",
+      "city_en": "Al Wakrah",
+      "code": "CUST-007",
+      "cr_number": "CR-99999-4591",
+      "credit_limit": "500.00",
+      "customer_group": "wholesale",
+      "customer_type": "company",
+      "disabled": false,
+      "edge_cases": [
+        "apostrophes"
+      ],
+      "email": "accounts@abu-al-ma-ali-sons-trading-est-ma-ali-s-17.example.org",
+      "name_ar": "مؤسسة «أبو المعالي» وأولاده",
+      "name_en": "Abu Al-Ma'ali & Sons' Trading Est. (Ma’ali’s)",
+      "payment_terms_days": 45,
+      "phone": "+974 000 000 0017",
+      "price_list": "PL-WHOLESALE",
+      "synthetic": true,
+      "vat_number": "9999929389"
+    },
+    {
+      "bidi_controls": [
+        "U+200F",
+        "U+2067",
+        "U+2069"
+      ],
+      "city_ar": "الدوحة",
+      "city_en": "Doha",
+      "code": "CUST-008",
+      "cr_number": "CR-99999-5439",
+      "credit_limit": "50000.00",
+      "customer_group": "wholesale",
+      "customer_type": "company",
+      "disabled": false,
+      "edge_cases": [
+        "bidi_control_characters"
+      ],
+      "email": "accounts@bidi-edge-trading-18.example.org",
+      "name_ar": "تجربة ثنائية الاتجاه \u200f(Bidi)\u200f للتجارة",
+      "name_en": "Bidi Edge \u2067تجربة\u2069 Trading",
+      "payment_terms_days": 45,
+      "phone": "+974 000 000 0018",
+      "price_list": "PL-WHOLESALE",
+      "synthetic": true,
+      "vat_number": "9999966879"
+    },
+    {
+      "city_ar": "الريان",
+      "city_en": "Al Rayyan",
+      "code": "CUST-009",
+      "cr_number": "CR-99999-8480",
+      "credit_limit": "50000.00",
+      "customer_group": "wholesale",
+      "customer_type": "company",
+      "disabled": false,
+      "edge_cases": [
+        "arabic_indic_digits"
+      ],
+      "email": "accounts@store-no-7-trading-123-19.example.com",
+      "name_ar": "متجر رقم ٧ للتجارة ١٢٣",
+      "name_en": "Store No. 7 Trading 123",
+      "payment_terms_days": 45,
+      "phone": "+974 000 000 0019",
+      "price_list": "PL-WHOLESALE",
+      "synthetic": true,
+      "vat_number": "9999959029"
+    }
+  ],
+  "delivery_notes": [
+    {
+      "customer": "CUST-001",
+      "delivery_date": "2026-10-06",
+      "expected": {
+        "cost_of_goods_sold": "100.00",
+        "valuation": "moving_average (single cost, no receipts)"
+      },
+      "id": "DN-0001",
+      "lines": [
+        {
+          "item": "ITEM-001",
+          "quantity": 10
+        }
+      ],
+      "sales_order": "SO-0001",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-001",
+      "delivery_date": "2026-10-08",
+      "expected": {
+        "cost_of_goods_sold": "100.00",
+        "valuation": "moving_average (single cost, no receipts)"
+      },
+      "id": "DN-0002",
+      "lines": [
+        {
+          "item": "ITEM-001",
+          "quantity": 10
+        }
+      ],
+      "sales_order": "SO-0002",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-002",
+      "delivery_date": "2026-10-10",
+      "expected": {
+        "cost_of_goods_sold": "1208.00",
+        "valuation": "moving_average (single cost, no receipts)"
+      },
+      "id": "DN-0003",
+      "lines": [
+        {
+          "item": "ITEM-002",
+          "quantity": 8
+        },
+        {
+          "item": "ITEM-003",
+          "quantity": 6
+        },
+        {
+          "item": "ITEM-004",
+          "quantity": 25
+        }
+      ],
+      "sales_order": "SO-0003",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-003",
+      "delivery_date": "2026-10-12",
+      "expected": {
+        "cost_of_goods_sold": "2030.78",
+        "valuation": "moving_average (single cost, no receipts)"
+      },
+      "id": "DN-0004",
+      "lines": [
+        {
+          "item": "ITEM-005",
+          "quantity": 5
+        },
+        {
+          "item": "ITEM-006",
+          "quantity": 26
+        },
+        {
+          "item": "ITEM-007",
+          "quantity": 7
+        }
+      ],
+      "sales_order": "SO-0004",
+      "warehouse": "W2"
+    },
+    {
+      "customer": "CUST-004",
+      "delivery_date": "2026-10-14",
+      "expected": {
+        "cost_of_goods_sold": "989.40",
+        "valuation": "moving_average (single cost, no receipts)"
+      },
+      "id": "DN-0005",
+      "lines": [
+        {
+          "item": "ITEM-002",
+          "quantity": 12
+        }
+      ],
+      "sales_order": "SO-0005",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-005",
+      "delivery_date": "2026-10-16",
+      "expected": {
+        "cost_of_goods_sold": "430.39",
+        "valuation": "moving_average (single cost, no receipts)"
+      },
+      "id": "DN-0006",
+      "lines": [
+        {
+          "item": "ITEM-008",
+          "quantity": 11
+        },
+        {
+          "item": "ITEM-009",
+          "quantity": 18
+        },
+        {
+          "item": "ITEM-010",
+          "quantity": 9
+        }
+      ],
+      "sales_order": "SO-0006",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-002",
+      "delivery_date": "2026-10-18",
+      "expected": {
+        "cost_of_goods_sold": "1.00",
+        "valuation": "moving_average (single cost, no receipts)"
+      },
+      "id": "DN-0007",
+      "lines": [
+        {
+          "item": "ITEM-013",
+          "quantity": 1
+        }
+      ],
+      "sales_order": "SO-0007",
+      "warehouse": "W1"
+    }
+  ],
+  "expected": {
+    "label": "synthetic test expectations, not tax authority output",
+    "receivables_by_customer": {
+      "CUST-001": "285.00",
+      "CUST-002": "681.64",
+      "CUST-003": "0.00",
+      "CUST-004": "1280.40",
+      "CUST-005": "720.32"
+    },
+    "receivables_total": "2967.36",
+    "stock_balances": [
+      {
+        "item": "ITEM-001",
+        "quantity": 80,
+        "stock_value": "800.00",
+        "valuation_rate": "10.00",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-002",
+        "quantity": 296,
+        "stock_value": "24405.20",
+        "valuation_rate": "82.45",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-003",
+        "quantity": 237,
+        "stock_value": "9456.30",
+        "valuation_rate": "39.90",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-004",
+        "quantity": 193,
+        "stock_value": "2385.48",
+        "valuation_rate": "12.36",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-005",
+        "quantity": 370,
+        "stock_value": "14837.00",
+        "valuation_rate": "40.10",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-006",
+        "quantity": 250,
+        "stock_value": "13520.00",
+        "valuation_rate": "54.08",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-007",
+        "quantity": 244,
+        "stock_value": "14786.40",
+        "valuation_rate": "60.60",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-008",
+        "quantity": 165,
+        "stock_value": "305.25",
+        "valuation_rate": "1.85",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-009",
+        "quantity": 223,
+        "stock_value": "3153.22",
+        "valuation_rate": "14.14",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-010",
+        "quantity": 353,
+        "stock_value": "6099.84",
+        "valuation_rate": "17.28",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-011",
+        "quantity": 359,
+        "stock_value": "1507.80",
+        "valuation_rate": "4.20",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-012",
+        "quantity": 40,
+        "stock_value": "37800.00",
+        "valuation_rate": "945.00",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-013",
+        "quantity": 237,
+        "stock_value": "237.00",
+        "valuation_rate": "1.00",
+        "warehouse": "W1"
+      },
+      {
+        "item": "ITEM-002",
+        "quantity": 215,
+        "stock_value": "17726.75",
+        "valuation_rate": "82.45",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-003",
+        "quantity": 227,
+        "stock_value": "9057.30",
+        "valuation_rate": "39.90",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-004",
+        "quantity": 240,
+        "stock_value": "2966.40",
+        "valuation_rate": "12.36",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-005",
+        "quantity": 318,
+        "stock_value": "12751.80",
+        "valuation_rate": "40.10",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-006",
+        "quantity": 344,
+        "stock_value": "18603.52",
+        "valuation_rate": "54.08",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-007",
+        "quantity": 284,
+        "stock_value": "17210.40",
+        "valuation_rate": "60.60",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-008",
+        "quantity": 285,
+        "stock_value": "527.25",
+        "valuation_rate": "1.85",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-009",
+        "quantity": 174,
+        "stock_value": "2460.36",
+        "valuation_rate": "14.14",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-010",
+        "quantity": 309,
+        "stock_value": "5339.52",
+        "valuation_rate": "17.28",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-011",
+        "quantity": 344,
+        "stock_value": "1444.80",
+        "valuation_rate": "4.20",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-012",
+        "quantity": 40,
+        "stock_value": "37800.00",
+        "valuation_rate": "945.00",
+        "warehouse": "W2"
+      },
+      {
+        "item": "ITEM-013",
+        "quantity": 345,
+        "stock_value": "345.00",
+        "valuation_rate": "1.00",
+        "warehouse": "W2"
+      }
+    ]
+  },
+  "item_groups": [
+    {
+      "code": "food_dry",
+      "name_ar": "مواد غذائية جافة",
+      "name_en": "Dry food"
+    },
+    {
+      "code": "beverages",
+      "name_ar": "مشروبات",
+      "name_en": "Beverages"
+    },
+    {
+      "code": "cleaning",
+      "name_ar": "منظفات",
+      "name_en": "Cleaning"
+    },
+    {
+      "code": "packaging",
+      "name_ar": "تغليف",
+      "name_en": "Packaging"
+    },
+    {
+      "code": "stationery",
+      "name_ar": "قرطاسية",
+      "name_en": "Stationery"
+    }
+  ],
+  "items": [
+    {
+      "barcode": "9990000000001",
+      "code": "ITEM-001",
+      "cost_price": "10.00",
+      "is_stock_item": true,
+      "item_group": "stationery",
+      "name_ar": "دفتر ملاحظات A5",
+      "name_en": "Notebook A5",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "piece",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000002",
+      "code": "ITEM-002",
+      "cost_price": "82.45",
+      "is_stock_item": true,
+      "item_group": "food_dry",
+      "name_ar": "أرز حبة طويلة 10 كجم",
+      "name_en": "Long grain rice 10 kg",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "carton",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000003",
+      "code": "ITEM-003",
+      "cost_price": "39.90",
+      "is_stock_item": true,
+      "item_group": "food_dry",
+      "name_ar": "سكر أبيض 1 كجم",
+      "name_en": "White sugar 1 kg",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "carton",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000004",
+      "code": "ITEM-004",
+      "cost_price": "12.36",
+      "is_stock_item": true,
+      "item_group": "beverages",
+      "name_ar": "مياه معبأة 330 مل",
+      "name_en": "Bottled water 330 ml",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "carton",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000005",
+      "code": "ITEM-005",
+      "cost_price": "40.10",
+      "is_stock_item": true,
+      "item_group": "beverages",
+      "name_ar": "عصير برتقال 1 لتر",
+      "name_en": "Orange juice 1 L",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "carton",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000006",
+      "code": "ITEM-006",
+      "cost_price": "54.08",
+      "is_stock_item": true,
+      "item_group": "cleaning",
+      "name_ar": "سائل غسيل الأطباق 750 مل",
+      "name_en": "Dish soap 750 ml",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "carton",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000007",
+      "code": "ITEM-007",
+      "cost_price": "60.60",
+      "is_stock_item": true,
+      "item_group": "cleaning",
+      "name_ar": "منظف أرضيات 4 لتر",
+      "name_en": "Floor cleaner 4 L",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "carton",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000008",
+      "code": "ITEM-008",
+      "cost_price": "1.85",
+      "is_stock_item": true,
+      "item_group": "packaging",
+      "name_ar": "كرتون تغليف متوسط",
+      "name_en": "Corrugated box M",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "piece",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000009",
+      "code": "ITEM-009",
+      "cost_price": "14.14",
+      "is_stock_item": true,
+      "item_group": "packaging",
+      "name_ar": "رول غلاف شد",
+      "name_en": "Stretch film roll",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "piece",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000010",
+      "code": "ITEM-010",
+      "cost_price": "17.28",
+      "is_stock_item": true,
+      "item_group": "stationery",
+      "name_ar": "أقلام حبر أزرق",
+      "name_en": "Ballpoint pens blue",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "carton",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000011",
+      "code": "ITEM-011",
+      "cost_price": "4.20",
+      "is_stock_item": true,
+      "item_group": "food_dry",
+      "name_ar": "عدس أحمر",
+      "name_en": "Red lentils",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "kg",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000012",
+      "code": "ITEM-012",
+      "cost_price": "945.00",
+      "is_stock_item": true,
+      "item_group": "stationery",
+      "name_ar": "طبلية ورق تصوير",
+      "name_en": "Copy paper pallet",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "pallet",
+      "vat_rate_percent": "0"
+    },
+    {
+      "barcode": "9990000000013",
+      "code": "ITEM-013",
+      "cost_price": "1.00",
+      "is_stock_item": true,
+      "item_group": "stationery",
+      "name_ar": "صنف تجريبي للتقريب",
+      "name_en": "Rounding probe item",
+      "reorder_level": 20,
+      "synthetic": true,
+      "unit": "piece",
+      "vat_rate_percent": "0"
+    }
+  ],
+  "meta": {
+    "base_date": "2026-10-04",
+    "blueprint_fixture": "services/blueprint/fixtures/trading-distribution.blueprint.json",
+    "classification": "C1",
+    "country_ar": "دولة قطر",
+    "country_en": "Qatar",
+    "currency": "QAR",
+    "generator_version": "1.0.0",
+    "golden_path": "docs/specs/golden-path-trading-sale.md (ITEM-001, W1, CUST-001 and SO-0001 / SO-0002 follow it; here VAT is applied at the configured rate, the golden path itself has no tax)",
+    "market": "QA",
+    "notice": "Synthetic data (class C1). Names, identifiers, phones and emails are invented. Amounts under `expected` are synthetic test expectations computed with Decimal, not tax authority output.",
+    "seed": 20261101,
+    "synthetic": true
+  },
+  "opening_stock": [
+    {
+      "item": "ITEM-001",
+      "quantity": 100,
+      "valuation_rate": "10.00",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-002",
+      "quantity": 316,
+      "valuation_rate": "82.45",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-002",
+      "quantity": 215,
+      "valuation_rate": "82.45",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-003",
+      "quantity": 243,
+      "valuation_rate": "39.90",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-003",
+      "quantity": 227,
+      "valuation_rate": "39.90",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-004",
+      "quantity": 218,
+      "valuation_rate": "12.36",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-004",
+      "quantity": 240,
+      "valuation_rate": "12.36",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-005",
+      "quantity": 370,
+      "valuation_rate": "40.10",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-005",
+      "quantity": 323,
+      "valuation_rate": "40.10",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-006",
+      "quantity": 250,
+      "valuation_rate": "54.08",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-006",
+      "quantity": 370,
+      "valuation_rate": "54.08",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-007",
+      "quantity": 244,
+      "valuation_rate": "60.60",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-007",
+      "quantity": 291,
+      "valuation_rate": "60.60",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-008",
+      "quantity": 176,
+      "valuation_rate": "1.85",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-008",
+      "quantity": 285,
+      "valuation_rate": "1.85",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-009",
+      "quantity": 241,
+      "valuation_rate": "14.14",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-009",
+      "quantity": 174,
+      "valuation_rate": "14.14",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-010",
+      "quantity": 362,
+      "valuation_rate": "17.28",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-010",
+      "quantity": 309,
+      "valuation_rate": "17.28",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-011",
+      "quantity": 359,
+      "valuation_rate": "4.20",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-011",
+      "quantity": 344,
+      "valuation_rate": "4.20",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-012",
+      "quantity": 40,
+      "valuation_rate": "945.00",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-012",
+      "quantity": 40,
+      "valuation_rate": "945.00",
+      "warehouse": "W2"
+    },
+    {
+      "item": "ITEM-013",
+      "quantity": 238,
+      "valuation_rate": "1.00",
+      "warehouse": "W1"
+    },
+    {
+      "item": "ITEM-013",
+      "quantity": 345,
+      "valuation_rate": "1.00",
+      "warehouse": "W2"
+    }
+  ],
+  "payments": [
+    {
+      "amount": "966.22",
+      "bank_reference": "SYN-QA-0001",
+      "customer": "CUST-002",
+      "id": "PAY-0001",
+      "method": "bank_transfer",
+      "payment_type": "receive",
+      "posting_date": "2026-10-16",
+      "sales_invoice": "INV-0003"
+    },
+    {
+      "amount": "2427.73",
+      "bank_reference": "SYN-QA-0002",
+      "customer": "CUST-003",
+      "id": "PAY-0002",
+      "method": "mada",
+      "payment_type": "receive",
+      "posting_date": "2026-10-18",
+      "sales_invoice": "INV-0004"
+    }
+  ],
+  "price_lists": [
+    {
+      "code": "PL-WHOLESALE",
+      "customer_groups": [
+        "wholesale",
+        "key_account"
+      ],
+      "is_default": true,
+      "name_ar": "قائمة أسعار الجملة",
+      "name_en": "Wholesale price list",
+      "rates": {
+        "ITEM-001": "15.00",
+        "ITEM-002": "106.70",
+        "ITEM-003": "51.45",
+        "ITEM-004": "18.54",
+        "ITEM-005": "54.45",
+        "ITEM-006": "72.80",
+        "ITEM-007": "82.82",
+        "ITEM-008": "2.83",
+        "ITEM-009": "21.72",
+        "ITEM-010": "25.92",
+        "ITEM-011": "6.10",
+        "ITEM-012": "1312.50",
+        "ITEM-013": "37.50"
+      }
+    },
+    {
+      "code": "PL-RETAIL",
+      "customer_groups": [
+        "retail"
+      ],
+      "is_default": false,
+      "name_ar": "قائمة أسعار التجزئة",
+      "name_en": "Retail price list",
+      "rates": {
+        "ITEM-001": "15.00",
+        "ITEM-002": "117.37",
+        "ITEM-003": "56.60",
+        "ITEM-004": "20.39",
+        "ITEM-005": "59.90",
+        "ITEM-006": "80.08",
+        "ITEM-007": "91.10",
+        "ITEM-008": "3.11",
+        "ITEM-009": "23.89",
+        "ITEM-010": "28.51",
+        "ITEM-011": "6.71",
+        "ITEM-012": "1443.75",
+        "ITEM-013": "37.50"
+      }
+    }
+  ],
+  "roles": [
+    {
+      "id": "owner",
+      "name_ar": "المالك",
+      "name_en": "Owner"
+    },
+    {
+      "id": "general_manager",
+      "name_ar": "المدير العام",
+      "name_en": "General manager"
+    },
+    {
+      "id": "accountant",
+      "name_ar": "المحاسب",
+      "name_en": "Accountant"
+    },
+    {
+      "id": "sales_rep",
+      "name_ar": "مندوب مبيعات",
+      "name_en": "Sales representative"
+    },
+    {
+      "id": "branch_sales_manager",
+      "name_ar": "مدير مبيعات الفرع",
+      "name_en": "Branch sales manager"
+    },
+    {
+      "id": "purchasing_officer",
+      "name_ar": "مسؤول المشتريات",
+      "name_en": "Purchasing officer"
+    },
+    {
+      "id": "warehouse_keeper",
+      "name_ar": "أمين المستودع",
+      "name_en": "Warehouse keeper"
+    },
+    {
+      "id": "auditor",
+      "name_ar": "المدقق",
+      "name_en": "Auditor"
+    }
+  ],
+  "sales_invoices": [
+    {
+      "credit_note": null,
+      "credited_amount": "0.00",
+      "customer": "CUST-001",
+      "delivery_note": "DN-0001",
+      "discount_percent": "0",
+      "due_date": "2026-11-05",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "150.00"
+        ],
+        "net_total": "150.00",
+        "subtotal": "150.00",
+        "total": "150.00",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "150.00"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "id": "INV-0001",
+      "invoice_date": "2026-10-06",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-001",
+          "line_net": "150.00",
+          "quantity": 10,
+          "unit_price": "15.00"
+        }
+      ],
+      "outstanding_amount": "150.00",
+      "paid_amount": "0.00",
+      "sales_order": "SO-0001",
+      "zatca_status": null
+    },
+    {
+      "credit_note": null,
+      "credited_amount": "0.00",
+      "customer": "CUST-001",
+      "delivery_note": "DN-0002",
+      "discount_percent": "10",
+      "due_date": "2026-11-07",
+      "expected": {
+        "document_discount": "15.00",
+        "line_nets": [
+          "150.00"
+        ],
+        "net_total": "135.00",
+        "subtotal": "150.00",
+        "total": "135.00",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "135.00"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "id": "INV-0002",
+      "invoice_date": "2026-10-08",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-001",
+          "line_net": "150.00",
+          "quantity": 10,
+          "unit_price": "15.00"
+        }
+      ],
+      "outstanding_amount": "135.00",
+      "paid_amount": "0.00",
+      "sales_order": "SO-0002",
+      "zatca_status": null
+    },
+    {
+      "credit_note": null,
+      "credited_amount": "0.00",
+      "customer": "CUST-002",
+      "delivery_note": "DN-0003",
+      "discount_percent": "0",
+      "due_date": "2026-11-09",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "853.60",
+          "293.26",
+          "463.50"
+        ],
+        "net_total": "1610.36",
+        "subtotal": "1610.36",
+        "total": "1610.36",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "1610.36"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "id": "INV-0003",
+      "invoice_date": "2026-10-10",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-002",
+          "line_net": "853.60",
+          "quantity": 8,
+          "unit_price": "106.70"
+        },
+        {
+          "discount_percent": "5",
+          "item": "ITEM-003",
+          "line_net": "293.26",
+          "quantity": 6,
+          "unit_price": "51.45"
+        },
+        {
+          "discount_percent": "0",
+          "item": "ITEM-004",
+          "line_net": "463.50",
+          "quantity": 25,
+          "unit_price": "18.54"
+        }
+      ],
+      "outstanding_amount": "644.14",
+      "paid_amount": "966.22",
+      "sales_order": "SO-0003",
+      "zatca_status": null
+    },
+    {
+      "credit_note": null,
+      "credited_amount": "0.00",
+      "customer": "CUST-003",
+      "delivery_note": "DN-0004",
+      "discount_percent": "5",
+      "due_date": "2026-11-11",
+      "expected": {
+        "document_discount": "127.78",
+        "line_nets": [
+          "272.25",
+          "1703.52",
+          "579.74"
+        ],
+        "net_total": "2427.73",
+        "subtotal": "2555.51",
+        "total": "2427.73",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "2427.73"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "id": "INV-0004",
+      "invoice_date": "2026-10-12",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-005",
+          "line_net": "272.25",
+          "quantity": 5,
+          "unit_price": "54.45"
+        },
+        {
+          "discount_percent": "10",
+          "item": "ITEM-006",
+          "line_net": "1703.52",
+          "quantity": 26,
+          "unit_price": "72.80"
+        },
+        {
+          "discount_percent": "0",
+          "item": "ITEM-007",
+          "line_net": "579.74",
+          "quantity": 7,
+          "unit_price": "82.82"
+        }
+      ],
+      "outstanding_amount": "0.00",
+      "paid_amount": "2427.73",
+      "sales_order": "SO-0004",
+      "zatca_status": null
+    },
+    {
+      "credit_note": null,
+      "credited_amount": "0.00",
+      "customer": "CUST-004",
+      "delivery_note": "DN-0005",
+      "discount_percent": "0",
+      "due_date": "2026-11-28",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "1280.40"
+        ],
+        "net_total": "1280.40",
+        "subtotal": "1280.40",
+        "total": "1280.40",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "1280.40"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "id": "INV-0005",
+      "invoice_date": "2026-10-14",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-002",
+          "line_net": "1280.40",
+          "quantity": 12,
+          "unit_price": "106.70"
+        }
+      ],
+      "outstanding_amount": "1280.40",
+      "paid_amount": "0.00",
+      "sales_order": "SO-0005",
+      "zatca_status": null
+    },
+    {
+      "credit_note": "CN-0001",
+      "credited_amount": "0.50",
+      "customer": "CUST-005",
+      "delivery_note": "DN-0006",
+      "discount_percent": "0",
+      "due_date": "2026-11-15",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "34.21",
+          "430.02",
+          "256.59"
+        ],
+        "net_total": "720.82",
+        "subtotal": "720.82",
+        "total": "720.82",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "720.82"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "id": "INV-0006",
+      "invoice_date": "2026-10-16",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-008",
+          "line_net": "34.21",
+          "quantity": 11,
+          "unit_price": "3.11"
+        },
+        {
+          "discount_percent": "0",
+          "item": "ITEM-009",
+          "line_net": "430.02",
+          "quantity": 18,
+          "unit_price": "23.89"
+        },
+        {
+          "discount_percent": "0",
+          "item": "ITEM-010",
+          "line_net": "256.59",
+          "quantity": 9,
+          "unit_price": "28.51"
+        }
+      ],
+      "outstanding_amount": "720.32",
+      "paid_amount": "0.00",
+      "sales_order": "SO-0006",
+      "zatca_status": null
+    },
+    {
+      "credit_note": null,
+      "credited_amount": "0.00",
+      "customer": "CUST-002",
+      "delivery_note": "DN-0007",
+      "discount_percent": "0",
+      "due_date": "2026-11-17",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "37.50"
+        ],
+        "net_total": "37.50",
+        "subtotal": "37.50",
+        "total": "37.50",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "37.50"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "id": "INV-0007",
+      "invoice_date": "2026-10-18",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-013",
+          "line_net": "37.50",
+          "quantity": 1,
+          "unit_price": "37.50"
+        }
+      ],
+      "outstanding_amount": "37.50",
+      "paid_amount": "0.00",
+      "sales_order": "SO-0007",
+      "zatca_status": null
+    }
+  ],
+  "sales_orders": [
+    {
+      "customer": "CUST-001",
+      "delivery_date": "2026-10-06",
+      "discount_percent": "0",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "150.00"
+        ],
+        "net_total": "150.00",
+        "subtotal": "150.00",
+        "total": "150.00",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "150.00"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0001",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-001",
+          "line_net": "150.00",
+          "quantity": 10,
+          "unit_price": "15.00"
+        }
+      ],
+      "notes_ar": "تسليم ١٠ قطع",
+      "notes_en": "Deliver 10 pieces",
+      "order_date": "2026-10-04",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "golden",
+      "status": "invoiced",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-001",
+      "delivery_date": "2026-10-08",
+      "discount_percent": "10",
+      "expected": {
+        "document_discount": "15.00",
+        "line_nets": [
+          "150.00"
+        ],
+        "net_total": "135.00",
+        "subtotal": "150.00",
+        "total": "135.00",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "135.00"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0002",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-001",
+          "line_net": "150.00",
+          "quantity": 10,
+          "unit_price": "15.00"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-06",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "golden_discount",
+      "status": "invoiced",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-002",
+      "delivery_date": "2026-10-10",
+      "discount_percent": "0",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "853.60",
+          "293.26",
+          "463.50"
+        ],
+        "net_total": "1610.36",
+        "subtotal": "1610.36",
+        "total": "1610.36",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "1610.36"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0003",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-002",
+          "line_net": "853.60",
+          "quantity": 8,
+          "unit_price": "106.70"
+        },
+        {
+          "discount_percent": "5",
+          "item": "ITEM-003",
+          "line_net": "293.26",
+          "quantity": 6,
+          "unit_price": "51.45"
+        },
+        {
+          "discount_percent": "0",
+          "item": "ITEM-004",
+          "line_net": "463.50",
+          "quantity": 25,
+          "unit_price": "18.54"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-08",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "part_paid",
+      "status": "invoiced",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-003",
+      "delivery_date": "2026-10-12",
+      "discount_percent": "5",
+      "expected": {
+        "document_discount": "127.78",
+        "line_nets": [
+          "272.25",
+          "1703.52",
+          "579.74"
+        ],
+        "net_total": "2427.73",
+        "subtotal": "2555.51",
+        "total": "2427.73",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "2427.73"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0004",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-005",
+          "line_net": "272.25",
+          "quantity": 5,
+          "unit_price": "54.45"
+        },
+        {
+          "discount_percent": "10",
+          "item": "ITEM-006",
+          "line_net": "1703.52",
+          "quantity": 26,
+          "unit_price": "72.80"
+        },
+        {
+          "discount_percent": "0",
+          "item": "ITEM-007",
+          "line_net": "579.74",
+          "quantity": 7,
+          "unit_price": "82.82"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-10",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "paid",
+      "status": "invoiced",
+      "warehouse": "W2"
+    },
+    {
+      "customer": "CUST-004",
+      "delivery_date": "2026-10-14",
+      "discount_percent": "0",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "2134.00"
+        ],
+        "net_total": "2134.00",
+        "subtotal": "2134.00",
+        "total": "2134.00",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "2134.00"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0005",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-002",
+          "line_net": "2134.00",
+          "quantity": 20,
+          "unit_price": "106.70"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-12",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "partial_delivery",
+      "status": "approved",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-005",
+      "delivery_date": "2026-10-16",
+      "discount_percent": "0",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "34.21",
+          "430.02",
+          "256.59"
+        ],
+        "net_total": "720.82",
+        "subtotal": "720.82",
+        "total": "720.82",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "720.82"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0006",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-008",
+          "line_net": "34.21",
+          "quantity": 11,
+          "unit_price": "3.11"
+        },
+        {
+          "discount_percent": "0",
+          "item": "ITEM-009",
+          "line_net": "430.02",
+          "quantity": 18,
+          "unit_price": "23.89"
+        },
+        {
+          "discount_percent": "0",
+          "item": "ITEM-010",
+          "line_net": "256.59",
+          "quantity": 9,
+          "unit_price": "28.51"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-14",
+      "price_list": "PL-RETAIL",
+      "scenario": "credit_note",
+      "status": "invoiced",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-002",
+      "delivery_date": "2026-10-18",
+      "discount_percent": "0",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "37.50"
+        ],
+        "net_total": "37.50",
+        "subtotal": "37.50",
+        "total": "37.50",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "37.50"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0007",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-013",
+          "line_net": "37.50",
+          "quantity": 1,
+          "unit_price": "37.50"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-16",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "rounding_probe",
+      "status": "invoiced",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-006",
+      "delivery_date": "2026-10-20",
+      "discount_percent": "0",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "73.20",
+          "2625.00"
+        ],
+        "net_total": "2698.20",
+        "subtotal": "2698.20",
+        "total": "2698.20",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "2698.20"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0008",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-011",
+          "line_net": "73.20",
+          "quantity": 12,
+          "unit_price": "6.10"
+        },
+        {
+          "discount_percent": "0",
+          "item": "ITEM-012",
+          "line_net": "2625.00",
+          "quantity": 2,
+          "unit_price": "1312.50"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-18",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "long_name_open",
+      "status": "approved",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-007",
+      "delivery_date": "2026-10-22",
+      "discount_percent": "0",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "1312.50"
+        ],
+        "net_total": "1312.50",
+        "subtotal": "1312.50",
+        "total": "1312.50",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "1312.50"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": "credit_limit_exceeded",
+      "id": "SO-0009",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-012",
+          "line_net": "1312.50",
+          "quantity": 1,
+          "unit_price": "1312.50"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-20",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "credit_limit_exceeded",
+      "status": "pending_approval",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-008",
+      "delivery_date": "2026-10-24",
+      "discount_percent": "0",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "241.02"
+        ],
+        "net_total": "241.02",
+        "subtotal": "241.02",
+        "total": "241.02",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "241.02"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0010",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-004",
+          "line_net": "241.02",
+          "quantity": 13,
+          "unit_price": "18.54"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-22",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "bidi_draft",
+      "status": "draft",
+      "warehouse": "W1"
+    },
+    {
+      "customer": "CUST-009",
+      "delivery_date": "2026-10-26",
+      "discount_percent": "0",
+      "expected": {
+        "document_discount": "0.00",
+        "line_nets": [
+          "48.11"
+        ],
+        "net_total": "48.11",
+        "subtotal": "48.11",
+        "total": "48.11",
+        "vat_amount": "0.00",
+        "vat_lines": [
+          {
+            "rate_percent": "0",
+            "tax_amount": "0.00",
+            "taxable_amount": "48.11"
+          }
+        ],
+        "vat_unrounded": "0"
+      },
+      "hold_reason": null,
+      "id": "SO-0011",
+      "lines": [
+        {
+          "discount_percent": "0",
+          "item": "ITEM-008",
+          "line_net": "48.11",
+          "quantity": 17,
+          "unit_price": "2.83"
+        }
+      ],
+      "notes_ar": "",
+      "notes_en": "",
+      "order_date": "2026-10-24",
+      "price_list": "PL-WHOLESALE",
+      "scenario": "arabic_indic_open",
+      "status": "approved",
+      "warehouse": "W1"
+    }
+  ],
+  "suppliers": [
+    {
+      "city_ar": "الريان",
+      "city_en": "Al Rayyan",
+      "code": "SUP-001",
+      "cr_number": "CR-99999-6772",
+      "disabled": false,
+      "edge_cases": [],
+      "email": "accounts@al-sahm-distribution-w-l-l-51.example.org",
+      "name_ar": "السهم للتوزيع ذ.م.م",
+      "name_en": "Al Sahm Distribution W.L.L.",
+      "payment_terms_days": 30,
+      "phone": "+974 000 000 0051",
+      "supplier_type": "local",
+      "synthetic": true,
+      "vat_number": "9999926009"
+    },
+    {
+      "city_ar": "الوكرة",
+      "city_en": "Al Wakrah",
+      "code": "SUP-002",
+      "cr_number": "CR-99999-1112",
+      "disabled": false,
+      "edge_cases": [],
+      "email": "accounts@al-yanabee-imports-w-l-l-52.example.org",
+      "name_ar": "الينابيع للاستيراد ذ.م.م",
+      "name_en": "Al Yanabee Imports W.L.L.",
+      "payment_terms_days": 30,
+      "phone": "+974 000 000 0052",
+      "supplier_type": "importer",
+      "synthetic": true,
+      "vat_number": "9999926089"
+    },
+    {
+      "city_ar": "الدوحة",
+      "city_en": "Doha",
+      "code": "SUP-003",
+      "cr_number": "CR-99999-6266",
+      "disabled": false,
+      "edge_cases": [],
+      "email": "accounts@al-ghadeer-food-industries-w-l-l-53.example.com",
+      "name_ar": "الغدير للصناعات الغذائية ذ.م.م",
+      "name_en": "Al Ghadeer Food Industries W.L.L.",
+      "payment_terms_days": 30,
+      "phone": "+974 000 000 0053",
+      "supplier_type": "manufacturer",
+      "synthetic": true,
+      "vat_number": "9999932669"
+    },
+    {
+      "city_ar": "الريان",
+      "city_en": "Al Rayyan",
+      "code": "SUP-004",
+      "cr_number": "CR-99999-1770",
+      "disabled": false,
+      "edge_cases": [],
+      "email": "accounts@al-ghusn-packaging-w-l-l-54.example.com",
+      "name_ar": "الغصن للتغليف ذ.م.م",
+      "name_en": "Al Ghusn Packaging W.L.L.",
+      "payment_terms_days": 30,
+      "phone": "+974 000 000 0054",
+      "supplier_type": "importer",
+      "synthetic": true,
+      "vat_number": "9999973789"
+    }
+  ],
+  "tenant": {
+    "country": "QA",
+    "cr_number": "CR-99999-0001",
+    "currency": "QAR",
+    "email": "finance@al-manara.example.com",
+    "id": "TENANT-QA",
+    "language_primary": "ar",
+    "language_secondary": [
+      "en"
+    ],
+    "legal_name_ar": "المنارة للتجارة ذ.م.م",
+    "legal_name_en": "Al Manara Trading W.L.L.",
+    "phone": "+974 000 000 0001",
+    "synthetic": true,
+    "timezone": "Asia/Qatar",
+    "trade_name_ar": "المنارة",
+    "trade_name_en": "Al Manara",
+    "vat_number": "9999900019"
+  },
+  "units": [
+    {
+      "code": "piece",
+      "name_ar": "قطعة",
+      "name_en": "Piece"
+    },
+    {
+      "code": "carton",
+      "name_ar": "كرتونة",
+      "name_en": "Carton"
+    },
+    {
+      "code": "kg",
+      "name_ar": "كيلوغرام",
+      "name_en": "Kilogram"
+    },
+    {
+      "code": "pallet",
+      "name_ar": "طبلية",
+      "name_en": "Pallet"
+    }
+  ],
+  "users": [
+    {
+      "email": "owner@tenant-qa.example.com",
+      "id": "user-owner",
+      "name_ar": "ليلى التجريبي",
+      "name_en": "Layla Sample",
+      "role": "owner",
+      "synthetic": true
+    },
+    {
+      "email": "general.manager@tenant-qa.example.com",
+      "id": "user-general_manager",
+      "name_ar": "رنا التجريبي",
+      "name_en": "Rana Sample",
+      "role": "general_manager",
+      "synthetic": true
+    },
+    {
+      "email": "accountant@tenant-qa.example.com",
+      "id": "user-accountant",
+      "name_ar": "طارق التجريبي",
+      "name_en": "Tarek Sample",
+      "role": "accountant",
+      "synthetic": true
+    },
+    {
+      "email": "sales.rep@tenant-qa.example.com",
+      "id": "user-sales_rep",
+      "name_ar": "هدى التجريبي",
+      "name_en": "Huda Sample",
+      "role": "sales_rep",
+      "synthetic": true
+    },
+    {
+      "email": "branch.sales.manager@tenant-qa.example.com",
+      "id": "user-branch_sales_manager",
+      "name_ar": "دانة التجريبي",
+      "name_en": "Dana Sample",
+      "role": "branch_sales_manager",
+      "synthetic": true
+    },
+    {
+      "email": "purchasing.officer@tenant-qa.example.com",
+      "id": "user-purchasing_officer",
+      "name_ar": "يوسف التجريبي",
+      "name_en": "Yousef Sample",
+      "role": "purchasing_officer",
+      "synthetic": true
+    },
+    {
+      "email": "warehouse.keeper@tenant-qa.example.com",
+      "id": "user-warehouse_keeper",
+      "name_ar": "ماجد التجريبي",
+      "name_en": "Majed Sample",
+      "role": "warehouse_keeper",
+      "synthetic": true
+    },
+    {
+      "email": "auditor@tenant-qa.example.com",
+      "id": "user-auditor",
+      "name_ar": "سامي التجريبي",
+      "name_en": "Sami Sample",
+      "role": "auditor",
+      "synthetic": true
+    }
+  ],
+  "warehouses": [
+    {
+      "city_en": "Doha",
+      "code": "W1",
+      "location_id": "wh_doha",
+      "name_ar": "مستودع الدوحة",
+      "name_en": "Doha warehouse"
+    },
+    {
+      "city_en": "Al Rayyan",
+      "code": "W2",
+      "location_id": "wh_al_rayyan",
+      "name_ar": "مستودع الريان",
+      "name_en": "Al Rayyan warehouse"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-ART-005",
+      "path": "/steps"
+    }
+  ]
+}

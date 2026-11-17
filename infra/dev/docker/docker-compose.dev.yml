@@ -48,6 +48,7 @@ services:
       - SITE_NAME=${SITE_NAME:-dev.localhost}
     volumes:
       - ../../../apps/engine/change_engine:/home/frappe/frappe-bench/apps/change_engine:rw
+      - ../../../components:/home/frappe/frappe-bench/components:ro
       - sites_data:/home/frappe/frappe-bench/sites
       - logs_data:/home/frappe/frappe-bench/logs
     ports:

@@ -50,7 +50,7 @@ def resolve_components(blueprint: dict, registry: Any, environment: str) -> tupl
             else:
                 issues.append(Issue("CMP-COMP-003", where, f"'{cid}' {version} at level '{level}' is not eligible "
                                                            f"for {environment}"))
-            continue
+        # Kept even when ineligible (the issue already refuses), so later checks do not report follow-on noise.
         resolved[cid] = m
     for r in registry.compatible(blueprint.get("components", []), blueprint["meta"].get("engineTarget")):
         if not r.ok and r.component in resolved:

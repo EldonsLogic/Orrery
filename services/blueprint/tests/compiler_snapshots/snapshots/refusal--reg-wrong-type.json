@@ -1,0 +1,9 @@
+{
+  "environment": "sandbox",
+  "errors": [
+    {
+      "code": "CMP-REG-002",
+      "path": ""
+    }
+  ]
+}

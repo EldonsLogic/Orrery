@@ -8,6 +8,8 @@
     "eldon": [
       "contracts/",
       "services/blueprint/",
+      "services/datasets/",
+      "services/studio/",
       "services/discovery/",
       "services/operate/",
       "web/",

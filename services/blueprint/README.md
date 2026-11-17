@@ -1,6 +1,6 @@
 # services/blueprint
 
-Status: draft (validator implemented, BPL-003; compiler, diff, simulator, registry, factory queue and token resolver not started)
+Status: draft (validator implemented, BPL-003; compiler implemented, BPL-004; token resolver implemented, BRD-004; diff, simulator, registry, factory queue not started)
 Owner: unassigned
 
 Purpose: Part 2 service layer. Blueprint validator, compiler (neutral form + adapter calls), simulator, registry, factory queue, branding token resolver. The change engine itself lives in [apps/engine](../../apps/engine/README.md). Spec: [02-blueprint-and-library](../../docs/specs/02-blueprint-and-library.md).
@@ -105,6 +105,21 @@ apply(invert(d), rev_b) == rev_a   # the stored inverse is the undo point
 ```
 
 Run from the repo root: `PYTHONPATH=services/blueprint/diff python3 -m bpdiff A.json B.json [--json] [--apply-check]` (exit 0 same, 1 differs, 2 error). `blueprint.propose_change` and `blueprint.explain_diff` build on this; the diff holds no prose. Tests: `tests/diff/`, run with the rest of the suite.
+
+## Compiler
+
+Python package `compiler/` (BPL-004). Reuses `validator`, `registry` and `bpdiff`; standard library and `jsonschema`. Compiles one Blueprint revision into the initial-build artifact (base null) of [compiled-artifact.schema.json](../../contracts/compiled-artifact.schema.json), following [engine-adapter.md](../../contracts/engine-adapter.md) section 9. Deterministic and pure; values in steps are copied verbatim from the Blueprint, never computed. The engine mapping is a gate only (checked against the Blueprint, unknown keys refused), not copied into the artifact.
+
+```python
+from compiler import compile_blueprint, plan_view
+r = compile_blueprint(blueprint, registry, mapping, environment="sandbox")   # or "production"
+r.ok, r.artifact, r.errors        # errors: Issue(code, path, message), sorted; no artifact on refusal
+plan_view(r.artifact)             # steps with dependsOn / forwardRefs / unresolved
+```
+
+Gates, each fail closed: validator errors (their `BP-*` codes), `CMP-ENV-001` environment, `CMP-REG-*` registry, `CMP-COMP-001..007` (missing, no version in range, not eligible, ledger or tax below the allowed level, engine incompatible, unresolved dependency, cycle), `CMP-MAP-001..008` (schema and unknown keys, unknown Blueprint ids, adapter or version set, contract version, draft mapping in production, grant beyond role, ledger effect without ledger component, precision mismatch), `CMP-ART-001..005` (op without rule, secret-like key, limits, schema or integrity, engine name), `CMP-INTERNAL-001`. Open questions are listed in `compiler/__init__.py`.
+
+Run from the repo root: `PYTHONPATH=services/blueprint python3 -m compiler BLUEPRINT.json --mapping MAPPING.json --registry DIR [--environment sandbox|production] --out ARTIFACT.json [--plan PLAN.json]` (also `python3 -m services.blueprint.compiler ...`). The default environment is production. Exit 0 artifact written, 1 refused or unreadable. Tests: `tests/compiler/` (golden file `tests/compiler/fixtures/trading-distribution.expected-artifact.json`); the round trip through the fake adapter runs when `services/blueprint/adapter` (BPL-025) is present.
 
 ## Event stream
 

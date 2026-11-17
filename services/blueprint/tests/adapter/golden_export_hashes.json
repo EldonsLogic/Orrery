@@ -1,0 +1,6 @@
+{
+  "initial_build": "sha256:22c3fe29f3567db5f4997e6c4dc8b29b7234091f7df6c5d9e305897d82558990",
+  "add_field": "sha256:272fbcb3e6d183e7a7d60175afd26087452a0ec93cf4f43dfdd6d9020d39d47f",
+  "remove_field": "sha256:9921d4137b2e5785346a37f62cf37043a2f4f3d64f05ba3f6efcbbd58a6daa35",
+  "rollback_remove_field": "sha256:272fbcb3e6d183e7a7d60175afd26087452a0ec93cf4f43dfdd6d9020d39d47f"
+}

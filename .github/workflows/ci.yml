@@ -279,12 +279,8 @@ jobs:
           node-version: 20
       - name: Enable pnpm (version from web/package.json)
         run: corepack enable
-      - name: Install (first run creates the lockfile; switched to frozen once it is committed)
-        run: pnpm install --no-frozen-lockfile
-      - uses: actions/upload-artifact@v7
-        with:
-          name: web-pnpm-lock
-          path: web/pnpm-lock.yaml
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
       - name: Lint
         run: pnpm lint
       - name: Tokens-only and logical-property check

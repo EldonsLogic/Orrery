@@ -4,6 +4,8 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from change_engine.adapter.engine import ChangeEngineAdapter, HooksDisabled
+from change_engine.adapter.frappe_backend import FrappeRuntimeBackend, FrappeSiteResolver
+from change_engine.adapter.simulated_frappe import SimulatedFrappeRuntime
 
 try:
     from adapter.harness import AdapterHarness as _BaseHarness
@@ -75,7 +77,11 @@ class ChangeEngineHarness(_BaseHarness):
 
     def without_test_hooks(self) -> "ChangeEngineHarness":
         return ChangeEngineHarness(
-            ChangeEngineAdapter(test_hooks=False, db_path=self.db_path),
+            ChangeEngineAdapter(
+                test_hooks=False,
+                db_path=self.db_path,
+                frappe_backend=self.adapter.frappe_backend,
+            ),
             default_tenant=self.default_tenant,
             db_path=self.db_path,
         )
@@ -86,4 +92,39 @@ def make_harness() -> ChangeEngineHarness:
     return ChangeEngineHarness()
 
 
-__all__ = ["ChangeEngineHarness", "HooksDisabled", "make_harness"]
+def make_frappe_adapter(
+    *,
+    simulated: bool = False,
+    db_path: str = ":memory:",
+    site_resolver: FrappeSiteResolver | None = None,
+    frappe_factory: Callable[[], Any] | None = None,
+    auto_create_sites: bool = False,
+    sites_path: str | None = None,
+    test_hooks: bool = True,
+) -> ChangeEngineAdapter:
+    """Create a ChangeEngineAdapter wired to FrappeRuntimeBackend (fails closed unless simulated=True or frappe_factory is set)."""
+    if frappe_factory is None and simulated:
+        sim = SimulatedFrappeRuntime()
+        frappe_factory = lambda: sim  # noqa: E731
+        auto_create_sites = True
+    backend = FrappeRuntimeBackend(
+        site_resolver=site_resolver,
+        frappe_factory=frappe_factory,
+        auto_create_sites=auto_create_sites,
+        sites_path=sites_path,
+    )
+    return ChangeEngineAdapter(test_hooks=test_hooks, db_path=db_path, frappe_backend=backend)
+
+
+def make_frappe_harness(*, simulated: bool = True, db_path: str = ":memory:") -> ChangeEngineHarness:
+    """Factory referenced by ADAPTER_HARNESS=change_engine.adapter.harness:make_frappe_harness."""
+    return ChangeEngineHarness(adapter=make_frappe_adapter(simulated=simulated, db_path=db_path), db_path=db_path)
+
+
+__all__ = [
+    "ChangeEngineHarness",
+    "HooksDisabled",
+    "make_frappe_adapter",
+    "make_frappe_harness",
+    "make_harness",
+]

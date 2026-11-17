@@ -189,10 +189,10 @@ jobs:
         env:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_007_apply_preview_gate.py -q
-      - name: Engine adapter unit tests (BPL-012)
+      - name: Engine adapter unit tests (BPL-012, ERP-012)
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_012_engine_adapter.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_012_engine_adapter.py apps/engine/change_engine/change_engine/tests/test_erp_012_frappe_adapter.py -q
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         env:
           PYTHONPATH: apps/engine/change_engine
@@ -200,6 +200,11 @@ jobs:
       - name: Engine adapter conformance suite (BPL-025 via change_engine.adapter)
         env:
           ADAPTER_HARNESS: change_engine.adapter.harness:make_harness
+          PYTHONPATH: services/blueprint:apps/engine/change_engine
+        run: python3 -m pytest services/blueprint/tests/adapter -q
+      - name: Frappe runtime engine adapter conformance suite (ERP-012 via make_frappe_harness)
+        env:
+          ADAPTER_HARNESS: change_engine.adapter.harness:make_frappe_harness
           PYTHONPATH: services/blueprint:apps/engine/change_engine
         run: python3 -m pytest services/blueprint/tests/adapter -q
 

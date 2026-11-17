@@ -265,16 +265,57 @@ def _prune_empty(doc: dict[str, Any]) -> None:
 
 
 class ChangeEngineAdapter:
-    """Real engine adapter backed by change_engine guarded_apply and SQLiteAdapterStore."""
+    """Real engine adapter backed by change_engine guarded_apply, SQLiteAdapterStore, and optional FrappeRuntimeBackend."""
 
-    def __init__(self, test_hooks: bool = True, db_path: str = ":memory:") -> None:
+    def __init__(
+        self,
+        test_hooks: bool = True,
+        db_path: str = ":memory:",
+        frappe_backend: Any | None = None,
+    ) -> None:
         self.test_hooks = test_hooks
         self.db_path = db_path
         self.store = SQLiteAdapterStore(db_path=db_path)
+        self.frappe_backend = frappe_backend
         self.now = 0
         self._seq = self._initial_seq()
         self._faults: list[dict[str, Any]] = []
         self._lock_hook: Callable[[], None] | None = None
+
+    @staticmethod
+    def _site_snapshot(site: SiteRecord) -> dict[str, Any]:
+        return {
+            "state": site.state,
+            "site_class": site.site_class,
+            "engine_target": site.engine_target,
+            "blueprint_id": site.blueprint_id,
+            "country_pack": site.country_pack,
+            "applied": site.applied,
+            "applied_ids": set(site.applied_ids),
+            "history": site.history,
+            "sync_version": site.sync_version,
+            "config": site.config,
+            "retained": site.retained,
+        }
+
+    def execute_as_caller(
+        self,
+        tenant_id: str,
+        caller: dict[str, Any] | None,
+        fn: Callable[[Any], Any],
+    ) -> Any:
+        """Execute a tenant operation under caller's own Frappe User permissions (T36)."""
+        if self.frappe_backend is None:
+            raise AdapterError("engine_unavailable", stage="execute")
+        try:
+            return self.frappe_backend.execute_as_caller(tenant_id, caller, fn)
+        except AdapterError:
+            raise
+        except Exception as exc:
+            code = getattr(exc, "code", "engine_unavailable")
+            details = getattr(exc, "details", {})
+            stage = getattr(exc, "stage", "execute")
+            raise AdapterError(code, details, stage=stage) from None
 
     def _initial_seq(self) -> int:
         existing = self.store.audit_log()
@@ -325,6 +366,8 @@ class ChangeEngineAdapter:
             raise KeyError(tenant_id)
         site.state = state
         self.store.save_site(site)
+        if self.frappe_backend is not None:
+            self.frappe_backend.persist_site_state(tenant_id, self._site_snapshot(site))
 
     def data_probe(self, tenant_id: str, pointer: str, value: Any = None) -> Any:
         self._need_hooks()
@@ -336,7 +379,11 @@ class ChangeEngineAdapter:
         if value is not None:
             if _walk(site.config, _cfg_segs(pointer)) is _MISSING:
                 raise ValueError("no active element at pointer")
+            if self.frappe_backend is not None and entity_id != "_global":
+                return self.frappe_backend.data_probe(tenant_id, pointer, value)
             return self.store.write_field_data(tenant_id, entity_id, pointer, value)
+        if self.frappe_backend is not None and entity_id != "_global":
+            return self.frappe_backend.data_probe(tenant_id, pointer, None)
         return self.store.read_field_data(tenant_id, entity_id, pointer)
 
     def plan_evidence(self, tenant_id: str, evidence_ref: str) -> list[str]:
@@ -353,6 +400,8 @@ class ChangeEngineAdapter:
         self._need_hooks()
         if self.store.get_site(tenant_id) is None:
             raise KeyError(tenant_id)
+        if self.frappe_backend is not None:
+            return self.frappe_backend.auth_probe(tenant_id, member_ref)
         member = self.store.get_member(tenant_id, member_ref)
         if member is None:
             return {"exists": False, "canAuthenticate": False, "emailSent": False}
@@ -366,6 +415,8 @@ class ChangeEngineAdapter:
         self._need_hooks()
         if self.store.get_site(tenant_id) is None:
             raise KeyError(tenant_id)
+        if self.frappe_backend is not None:
+            return self.frappe_backend.action_probe(tenant_id, member_ref)
         member = self.store.get_member(tenant_id, member_ref)
         return {"allowed": bool(member and member["status"] == "active")}
 
@@ -380,6 +431,8 @@ class ChangeEngineAdapter:
 
     def reset(self) -> None:
         self.store.reset()
+        if self.frappe_backend is not None:
+            self.frappe_backend.reset_site()
         self.now = 0
         self._seq = 0
         self._faults.clear()
@@ -424,6 +477,14 @@ class ChangeEngineAdapter:
         except AdapterError as exc:
             response = {"ok": False, "error": exc.to_error(), "auditId": audit["auditId"]}
             audit["result"] = exc.code
+        except Exception as exc:
+            code = getattr(exc, "code", None)
+            if isinstance(code, str):
+                err = AdapterError(code, getattr(exc, "details", None), stage=getattr(exc, "stage", "execute"))
+            else:
+                err = AdapterError("engine_unavailable", stage="execute")
+            response = {"ok": False, "error": err.to_error(), "auditId": audit["auditId"]}
+            audit["result"] = err.code
         finally:
             self.store.update_audit(audit)
         return response
@@ -613,6 +674,9 @@ class ChangeEngineAdapter:
                 raise AdapterError("site_exists_different_target")
             return site.status(), False
 
+        candidate = SiteRecord(tenant, inp)
+        if self.frappe_backend is not None:
+            self.frappe_backend.provision_tenant_site(tenant, inp, self._site_snapshot(candidate))
         site = self.store.create_site(tenant, inp)
         result = site.status()
         self._idem_store(site, "provision_site", inp, result)
@@ -623,14 +687,20 @@ class ChangeEngineAdapter:
 
     def _op_health(self, context, inp, site, audit):
         if context["tenantId"] == "platform":
-            checks = [{"name": "database", "status": "ok"}, {"name": "workers", "status": "ok"}]
+            if self.frappe_backend is not None:
+                checks = self.frappe_backend.check_health("platform")
+            else:
+                checks = [{"name": "database", "status": "ok"}, {"name": "workers", "status": "ok"}]
         else:
             site = self._need_site(site, ready=False)
-            checks = [
-                {"name": "database", "status": "ok"},
-                {"name": "site_lock", "status": "ok"},
-                {"name": "recovery", "status": "down" if site.state == "recovery_required" else "ok"},
-            ]
+            if self.frappe_backend is not None:
+                checks = self.frappe_backend.check_health(site.tenant_id, site.state)
+            else:
+                checks = [
+                    {"name": "database", "status": "ok"},
+                    {"name": "site_lock", "status": "ok"},
+                    {"name": "recovery", "status": "down" if site.state == "recovery_required" else "ok"},
+                ]
         order = {"ok": 0, "degraded": 1, "down": 2}
         status = max((c["status"] for c in checks), key=lambda s: order[s])
         return {"status": status, "adapterVersion": ADAPTER_VERSION, "checks": checks}, False
@@ -739,6 +809,8 @@ class ChangeEngineAdapter:
                 if ddl != "none" or kind in ("field.add", "entity.add")
                 else None
             )
+            if reason is None and self.frappe_backend is not None and kind == "field.add":
+                reason = self.frappe_backend.inspect_step_plan(site.tenant_id, step, held is not None)
             if reason and reason[0] == "blocked":
                 return "blocked", reason[1], ddl
             if reason:
@@ -906,6 +978,8 @@ class ChangeEngineAdapter:
                 coll.append(defn)
 
         if persist_storage:
+            if self.frappe_backend is not None:
+                self.frappe_backend.execute_step(site.tenant_id, step)
             if kind == "entity.add":
                 self.store.ensure_entity_table(site.tenant_id, str(segs[1] if len(segs) > 1 else "entity"))
             elif kind == "field.add" and len(segs) >= 4 and segs[0] == "entities":
@@ -1002,6 +1076,11 @@ class ChangeEngineAdapter:
             if site.state == "applying":
                 site.state = "ready"
         self.store.save_site(site)
+        if self.frappe_backend is not None:
+            try:
+                self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
+            except Exception:
+                pass
 
         status, error = state["status"], state["error"]
         target_rev = artifact["blueprint"]["target"]["revision"]
@@ -1131,7 +1210,18 @@ class ChangeEngineAdapter:
                 comp_fault = bool(fault["comp"])
                 break
             self.store.append_journal(site.tenant_id, artifact["artifactId"], seq, "execute")
-            self._exec(site, step, persist_storage=True)
+            try:
+                self._exec(site, step, persist_storage=True)
+            except Exception as exc:
+                entry["status"] = "failed"
+                err_code = getattr(exc, "code", None)
+                err_details = getattr(exc, "details", None)
+                if not isinstance(err_code, str):
+                    err_code = "engine_unavailable"
+                    err_details = {}
+                failure = AdapterError(err_code, {"stepSeq": seq, **(err_details or {})}, stage="execute")
+                comp_fault = err_code == "recovery_required"
+                break
             entry_j["executed"] = True
             entry["status"] = "applied"
 
@@ -1287,9 +1377,14 @@ class ChangeEngineAdapter:
                     member["status"] = "disabled"
                     disabled += 1
 
+        if self.frappe_backend is not None:
+            self.frappe_backend.sync_members(site.tenant_id, inp["members"], inp["mode"], members)
+
         self.store.replace_members(site.tenant_id, members)
         site.sync_version = inp["syncVersion"]
         self.store.save_site(site)
+        if self.frappe_backend is not None:
+            self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
         result = {
             "syncVersion": site.sync_version,
             "created": created,

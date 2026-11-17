@@ -126,3 +126,9 @@ Run from the repo root: `PYTHONPATH=services/blueprint python3 -m compiler BLUEP
 Python package `events/evstream/` (BPL-011), the reference implementation of contract 4: ULIDs, `build_event` (tenant and actor only from the authenticated context), `validate_event` (envelope, per-type data schemas, size, depth and whole-record caps, personal-data minimisation), an append-only `MemoryStore` (per-tenant sequence assigned by the store, dedupe, gap detection, causation check), `redact_for_model`, tenant JSONL export and `verify_chain`. Error codes `EVS-xxx`. Full documentation: [events/README.md](events/README.md).
 
 Run from `services/blueprint/events`: `PYTHONPATH=. python3 -m evstream validate FILE.json|FILE.jsonl` or `types` (exit 0 ok, 1 problems). Tests: `tests/events/`, run with the rest of the suite.
+
+## Blueprint migration
+
+Python package `migrate/` (BPL-021). Pure, deterministic, standard library; reuses `validator` to re-check the result when the target is the schema's current version. `migrate(blueprint, target_version=None, allow_non_draft=False)` finds the chain of registered steps (`@register("0.1.0", "0.2.0")`) from `meta.schemaVersion` to the target (default latest), applies them to a deep copy and returns `MigrationResult(blueprint, steps, errors)`; each step records its change list. Refuses with `MIG-*` codes: malformed, unknown or future versions, downgrades, gaps, a non-draft Blueprint without the flag, a step that changes `meta.revision`, `id` or `buildState`, a result the validator rejects. Only 0.1.0 exists, so today a migration is a no-op; tests use a fake 0.1.0 to 0.2.0 step. Rules: [docs/architecture/blueprint-versioning.md](../../docs/architecture/blueprint-versioning.md).
+
+Run from the repo root: `PYTHONPATH=services/blueprint python3 -m migrate BLUEPRINT.json [--to X.Y.Z] [--allow-non-draft]` (prints JSON; exit 1 on a refusal). Tests: `tests/migrate/`.

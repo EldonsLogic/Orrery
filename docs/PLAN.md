@@ -174,7 +174,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-018 | Component pack for a second vertical | Runtime | G4 | DSC-018 | partner | todo |
 | OPR-001 | Agent runtime: loop, tool calls, traces, budgets | Operate | G2 | PLT-009 | eldon | todo |
 | OPR-002 | Intent router: discover, ask, act, change | Operate | G2 | OPR-001 | eldon | todo |
-| OPR-003 | Tool API generator: typed actions per tenant from the Blueprint | Operate | G2 | BPL-003 | eldon | todo |
+| OPR-003 | Tool API generator: typed actions per tenant from the Blueprint | Operate | G2 | BPL-003 | eldon | done |
 | OPR-004 | Tool permission enforcement with the caller's own role and scope | Operate | G2 | OPR-003,ERP-008 | eldon | todo |
 | OPR-005 | Confirm-before-write previews for chat actions | Operate | G2 | OPR-004 | eldon | todo |
 | OPR-006 | Semantic layer for metrics | Operate | G2 | BPL-003,ERP-009 | eldon | todo |

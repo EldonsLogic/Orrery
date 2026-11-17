@@ -25,6 +25,7 @@ EXPECTED_VERSIONS = {
     "change_engine": "0.1.0",
 }
 EXPECTED_HRMS_COMMIT = "186900a6e3db4e6f927f1ee20df745bbb082638a"
+EXPECTED_MARIADB_SERIES = "11.4."
 
 
 def compose(project, *args):
@@ -109,6 +110,24 @@ def main():
     if revision is None or revision.returncode != 0 or revision.stdout.strip() != EXPECTED_HRMS_COMMIT:
         print("The HRMS source commit does not match the pinned set.", file=sys.stderr)
         return 1
+
+    db_version = compose(
+        project, "exec", "-T", "engine", "env/bin/python", "-c",
+        "import os, sys, frappe; os.chdir('sites'); "
+        "frappe.init(site=sys.argv[1], sites_path='.'); frappe.connect(); "
+        "print(frappe.db.sql('SELECT VERSION()')[0][0]); frappe.destroy()",
+        site,
+    )
+    actual_db_version = db_version.stdout.strip().splitlines()[-1] if (
+        db_version and db_version.returncode == 0 and db_version.stdout.strip()
+    ) else ""
+    if not actual_db_version.startswith(EXPECTED_MARIADB_SERIES):
+        print(
+            f"MariaDB version {actual_db_version or 'unknown'!r} does not match expected {EXPECTED_MARIADB_SERIES}x.",
+            file=sys.stderr,
+        )
+        return 1
+
     for service in ("redis-cache", "redis-queue"):
         response = compose(project, "exec", "-T", service, "redis-cli", "ping")
         if response is None or response.returncode != 0 or response.stdout.strip() != "PONG":
@@ -118,7 +137,10 @@ def main():
         print("HTTP endpoint is not ready on 127.0.0.1 (set ENGINE_PORT to the host port).",
               file=sys.stderr)
         return 1
-    print(f"Verified synthetic site {site} on project {project}: apps, versions, HRMS commit, Redis and HTTP.")
+    print(
+        f"Verified synthetic site {site} on project {project}: "
+        f"apps, versions, HRMS commit, MariaDB {actual_db_version}, Redis and HTTP."
+    )
     return 0
 
 

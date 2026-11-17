@@ -1,6 +1,6 @@
 services:
   mariadb:
-    image: mariadb:10.6@sha256:f1c56f035ed268a0d7c2c2e06dc879f6319b997cb434cf822a4cfd72a7aa184d
+    image: mariadb:11.4@sha256:f6eca93803e34766e787a96bad9e2ac5abbcdcb8e7f390a6f34e9bf3eee525e6
     restart: unless-stopped
     command:
       - --character-set-server=utf8mb4

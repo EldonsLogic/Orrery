@@ -233,7 +233,7 @@ class Session:
                               reasonCode=(err.get("details") or {}).get("reasonCode"))
         return resp["result"]
 
-    def _engine_artifact(self) -> tuple:
+    def _engine_artifact(self, extra_unsupported: tuple = ()) -> tuple:
         """Re-target a copy for the engine (compiler open question 4) and drop field types it cannot store."""
         adapter_id = self._call("capabilities", {}, "/engine")["adapterId"]
         bp, mp, mans = copy.deepcopy(self.blueprint), copy.deepcopy(self.mapping), copy.deepcopy(self._manifests)
@@ -242,7 +242,8 @@ class Session:
             m["engineCompatibility"]["adapter"] = adapter_id
         dropped = 0
         for e in bp["entities"]:
-            keep = [f for f in e["fields"] if f.get("type") not in self.engine.unsupported_field_types]
+            skip = tuple(self.engine.unsupported_field_types) + tuple(extra_unsupported)
+            keep = [f for f in e["fields"] if f.get("type") not in skip]
             dropped, e["fields"] = dropped + len(e["fields"]) - len(keep), keep
         r = self._compile(bp, Registry.from_manifests(mans), mp)
         if not r.ok:
@@ -297,6 +298,11 @@ class Session:
                 self.provisioned = True
             before = self._export()["exportHash"]
             preview = self._call("preview", {"artifact": art}, "/artifact")
+            if preview["verdict"] == "rejected" and self.engine.kind == "plugged":
+                # A plugged engine cannot list its unsupported value types (contract 0.1.2, Studio question 7), and the
+                # real adapter rejects 'attachment' fields like the fake does. Retry once without them; say so in the result.
+                art, dropped = self._engine_artifact(extra_unsupported=("attachment",))
+                preview = self._call("preview", {"artifact": art}, "/artifact")
             if preview["verdict"] == "rejected":
                 raise StudioError(409, "STUDIO-PREVIEW-REJECTED", "/artifact", verdict="rejected")
             plan = self._call("plan", {"artifact": art}, "/artifact")

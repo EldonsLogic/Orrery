@@ -13,7 +13,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from .markers import ENGINE_FIELD_NAMES, contains_engine_marker, contains_engine_structure
+from .markers import ENGINE_FIELD_NAMES, FORBIDDEN_SOURCES, contains_engine_marker, contains_engine_trace
 
 _KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _SCALARS = (str, int, float, bool)
@@ -39,6 +39,8 @@ def validate_schema(spec: object, _depth: int = 0) -> None:
     if _depth > MAX_DEPTH:
         raise ValueError("schema too deep")
     if isinstance(spec, Field):
+        if spec.source is not None and (not isinstance(spec.source, str) or spec.source in FORBIDDEN_SOURCES):
+            raise ValueError(f"field source {spec.source!r} is an engine message or exception channel")
         validate_schema(spec.spec, _depth + 1)
     elif spec in _SCALARS:
         return
@@ -72,7 +74,7 @@ def _project(value: object, spec: object, depth: int) -> object:
             return value
     elif spec is str:
         if isinstance(value, str):
-            if contains_engine_structure(value):  # last resort, strict patterns only
+            if contains_engine_trace(value):  # last resort: trace fingerprints only, never routes or bare words
                 raise RenderError("engine_structure_in_body")
             return value
     elif isinstance(spec, list):

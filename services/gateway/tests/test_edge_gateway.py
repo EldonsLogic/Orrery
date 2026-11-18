@@ -272,6 +272,30 @@ class FalsePositiveTests(unittest.TestCase):
         resp = gw.handle(request())
         self.assertEqual((resp.status, json.loads(resp.body)), (200, body))
 
+    def test_route_like_tenant_values_do_not_fail_the_list(self):
+        """Re-review N1: one record mentioning /app, /desk or site-packages must not 500 the whole list."""
+        schema = {"items": [{"item_name": str}]}
+        names = ["See /app for details", "مكتب/desk", "قسم /app", "Notes: /printview layout", "pip site-packages folder",
+                 "Front desk"]
+        body = {"items": [{"item_name": n} for n in names]}
+        gw, _ = make_gateway(lambda r: ok_json(body), schema=schema)
+        resp = gw.handle(request())
+        self.assertEqual((resp.status, json.loads(resp.body)), (200, body))
+
+    def test_trace_fingerprints_in_values_still_fail_closed(self):
+        schema = {"items": [{"item_name": str}]}
+        for leak in ("Traceback (most recent call last):", "frappe.exceptions.ValidationError", "pymysql.err.OperationalError",
+                     "werkzeug.exceptions.NotFound", "File apps/frappe/frappe/app.py"):
+            with self.subTest(leak=leak):
+                gw, _ = make_gateway(lambda r, leak=leak: ok_json({"items": [{"item_name": leak}]}), schema=schema)
+                self.assertEqual(gw.handle(request()).status, 500)
+
+    def test_engine_message_channels_cannot_be_a_field_source(self):
+        """Re-review L1: a schema may not wire _server_messages or exception keys into a response."""
+        for src in ("_server_messages", "exc", "exc_type", "__onload", "_debug_messages"):
+            with self.subTest(src=src), self.assertRaises(ValueError):
+                Route(lambda r: None, schema={"note": Field(str, source=src)})
+
     def test_detectors(self):
         for text in ("Frappe", "ERPNext", "go to Desk now", "/api/method/x", "X-Page-Name", "Traceback (most recent call last)",
                      "/app/customer", "werkzeug"):

@@ -25,7 +25,7 @@ from .result import to_bytes  # noqa: E402
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="toolapi", description="Generate the typed tool definitions for a Blueprint.")
     ap.add_argument("blueprint", type=Path)
-    ap.add_argument("--registry", type=Path, help="optional JSON: entity_classes and entity_effects overrides")
+    ap.add_argument("--registry", type=Path, help="optional L0 JSON: source, entity_classes and entity_effects (may only raise)")
     args = ap.parse_args(argv)
     try:
         blueprint = json.loads(args.blueprint.read_text(encoding="utf-8"))
@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR TAPI-INPUT-002 /: cannot read input ({type(exc).__name__})", file=sys.stderr)
         return 1
     result = generate_tool_api(blueprint, registry)
-    issues = list(result.errors) or check_tool_api(result.definition_set())
+    issues = list(result.errors) or check_tool_api(result.definition_set(), registry)
     if issues:
         for i in issues:
             print(f"ERROR {i}", file=sys.stderr)

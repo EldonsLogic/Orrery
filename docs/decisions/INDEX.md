@@ -42,3 +42,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0033-v1-valuation-rounding-and-arabic-review.md](ADR-0033-v1-valuation-rounding-and-arabic-review.md) | v1 stock valuation, rounding and Arabic review defaults | Accepted |
 | [ADR-0035-risk-tiered-review.md](ADR-0035-risk-tiered-review.md) | Risk-tiered review and fewer rounds | Accepted |
 | [ADR-0034-reviewed-level-needs-a-named-reviewer.md](ADR-0034-reviewed-level-needs-a-named-reviewer.md) | A reviewed component names its reviewer | Proposed |
+| [ADR-0036-tool-api-domain-errors.md](ADR-0036-tool-api-domain-errors.md) | Tool API domain error codes and catalog | Proposed |

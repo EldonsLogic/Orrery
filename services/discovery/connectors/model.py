@@ -1,13 +1,29 @@
 """Connector protocol, limits, budget, run context and the registry (PI-006)."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Protocol, runtime_checkable
+
+# What "sandbox" means in this package (PI-006): a LOGICAL boundary only. Connectors run in the
+# caller's process; the runner restricts what they may declare and return (capability allow-list,
+# tier/capability/output consistency, labelled and sanitised output, platform-owned budget). It does
+# NOT stop a connector from calling the network or the filesystem. OS-level isolation (worker
+# process, no network, rlimits, wall-clock kill) is a later infra row; until then only reviewed
+# first-party connectors may be registered.
+SANDBOX = "logical"
 
 TIERS = {1: "api_read_only", 2: "file_upload", 3: "document_ocr", 4: "inbox_forward", 5: "isolated_browser"}
 # Allow-list: a connector may only declare read-side capabilities. Anything else (network, send,
 # write, exec, ...) is refused at registration and at run (PI-006).
 ALLOWED_CAPABILITIES = frozenset({"read", "parse", "ocr", "decode"})
+# Capabilities each tier may declare, and the output a capability unlocks (checked at registration
+# and again against what the connector returns).
+TIER_CAPABILITIES = {1: frozenset({"read", "parse"}), 2: frozenset({"read", "parse", "decode"}),
+                     3: frozenset({"read", "parse", "ocr", "decode"}), 4: frozenset({"read", "parse", "decode"}),
+                     5: frozenset()}
+ID_RE = re.compile(r"^[a-z][a-z0-9_.\-]{0,63}$")
+VERSION_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+\-]{0,31}$")
 DATA_CLASSES = ("C0", "C1", "C2", "C3", "C4")
 
 
@@ -34,21 +50,51 @@ class Limits:
     max_fields: int = 20_000
     max_field_chars: int = 20_000
     max_total_chars: int = 2_000_000
-    max_steps: int = 100_000
+    # About 16 steps per cell end to end (parse, JSON check twice, label). max_fields (20,000) is the
+    # tighter cap, so 500,000 steps cover a full default job; a test pins that alignment.
+    max_steps: int = 500_000
     max_depth: int = 8
 
 
 class Budget:
-    """Deterministic time-like budget: connectors call tick(); no clocks are read."""
+    """Deterministic time-like budget: connectors call tick(); no clocks are read.
+
+    The limit is set once by the platform. `max_steps` and `used` are read-only properties, and the
+    runner hands connectors a `handle()` (tick only) and re-checks the real budget after each phase."""
+    __slots__ = ("_max", "_used")
 
     def __init__(self, max_steps: int):
-        self.max_steps = max_steps
-        self.used = 0
+        self._max = max_steps
+        self._used = 0
+
+    @property
+    def max_steps(self) -> int:
+        return self._max
+
+    @property
+    def used(self) -> int:
+        return self._used
 
     def tick(self, n: int = 1) -> None:
-        self.used += n
-        if self.used > self.max_steps:
-            raise BudgetExceeded("steps", self.max_steps)
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            raise BudgetExceeded("steps", self._max)  # a negative tick would refund budget
+        self._used += n
+        if self._used > self._max:
+            raise BudgetExceeded("steps", self._max)
+
+    def handle(self) -> "BudgetHandle":
+        """What a connector receives: it can spend, never read internals or change the limit."""
+        return BudgetHandle(self.tick)
+
+
+class BudgetHandle:
+    __slots__ = ("tick",)
+
+    def __init__(self, tick: Callable[..., None]):
+        object.__setattr__(self, "tick", tick)
+
+    def __setattr__(self, k: str, v: Any) -> None:
+        raise AttributeError("budget handle is read-only")
 
 
 @dataclass(frozen=True)
@@ -78,9 +124,10 @@ class Connector(Protocol):
 
 def check_connector(c: Any) -> None:
     """Raise ConnectorRefusal unless the connector may run at all."""
-    for attr in ("id", "version"):
-        if not isinstance(getattr(c, attr, None), str) or not getattr(c, attr):
-            raise ConnectorRefusal("CON-003", f"connector missing {attr}")
+    for attr, rx in (("id", ID_RE), ("version", VERSION_RE)):
+        v = getattr(c, attr, None)
+        if not isinstance(v, str) or not rx.match(v):  # these strings reach every envelope's source
+            raise ConnectorRefusal("CON-003", f"connector missing or malformed {attr}")
     for m in ("extract", "normalise"):
         if not callable(getattr(c, m, None)):
             raise ConnectorRefusal("CON-003", f"connector missing {m}")
@@ -97,6 +144,9 @@ def check_connector(c: Any) -> None:
     bad = sorted(str(x) for x in caps if x not in ALLOWED_CAPABILITIES)
     if bad:
         raise ConnectorRefusal("CON-002", f"side-effecting or unknown capability: {', '.join(bad)} (PI-006)")
+    extra = sorted(str(x) for x in caps if x not in TIER_CAPABILITIES[tier])
+    if extra:
+        raise ConnectorRefusal("CON-018", f"capability not allowed for tier {tier}: {', '.join(extra)}")
 
 
 class Registry:

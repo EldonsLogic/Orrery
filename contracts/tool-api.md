@@ -1,6 +1,6 @@
 # Tool API
 
-Version: 0.1.0
+Version: 0.2.0
 Status: draft
 Owner: eldon
 
@@ -118,6 +118,26 @@ The chat can never do anything the user could not do in the engine's own UI with
 | `internal_error` | Our bug | maybe |
 
 `message_key` is an i18n key; the chat renders it in the user's language. Never put raw engine stack traces, SQL or other tenants' data in an error.
+
+### 7.1 Domain errors (optional `domain` block)
+A business failure may add a `domain` block. The top-level `code`, `message_key` and `retryable` stay as above (a client that ignores `domain` behaves exactly as before).
+```json
+{"status": "error", "error": {"code": "guard_failed", "message_key": "errors.guard_failed", "retryable": false, "details": {},
+  "domain": {"code": "insufficient_stock", "params": {"item": "ITEM-0001", "warehouse": "Main-Store", "shortfall_qty": "12.5"}}}, "audit_id": "aud_..."}
+```
+- `domain.code` is an id from the versioned catalog [tool-api-error-catalog.json](tool-api-error-catalog.json) ([schema](tool-api-error-catalog.schema.json)). Each entry fixes its top-level class, `retryable`, typed `params` slots (type, max length; free text only if marked `escaped`), `message_key` `errors.domain.<id>`, English and Arabic `messages` with `{slot}` placeholders, a `review` state and an `owner_action`.
+- **Messages come only from the catalog.** Engine text is never passed through. Params are validated against the slots, escaped and stripped of bidi controls when rendered; a locale without text falls back to English.
+- An unmapped engine failure stays `engine_error` with **no** `domain`. A catalog code or params that fail validation produce `internal_error` with only a correlation id in `details`.
+- The gateway maps engine failures to catalog ids (PLT-024); the catalog never names engine concepts.
+
+| `domain.code` | Top-level class |
+|---|---|
+| `insufficient_stock`, `fiscal_period_closed`, `credit_limit_exceeded`, `document_not_submittable`, `negative_valuation_blocked` | `guard_failed` |
+| `record_already_submitted`, `record_already_cancelled`, `linked_document_exists`, `stale_approval_state` | `conflict` |
+| `duplicate_tax_id`, `required_field_missing`, `tax_registration_invalid` | `invalid_arguments` |
+| `unbalanced_entry`, `currency_rate_missing` | `engine_error` |
+
+`stale_approval_state` ties to the action-policy record revision: the record changed after approval was requested, so the approval must be re-reviewed. Decision: [ADR-0036](../docs/decisions/ADR-0036-tool-api-domain-errors.md).
 
 ## 8. Audit fields (every call, success or failure)
 `audit_id`, `ts`, `tenant_id`, `user_id`, `role_ids`, `session_id`, `chat_turn_id`, `agent_id` (if any), `tool`, `tool_version`, `blueprint_revision`, `idempotency_key`, `arguments_hash` and redacted arguments, `status`, `error_code`, `approval_id`, `model_id` and `prompt_version` that proposed the call, `latency_ms`, `engine_refs` (ids of records touched). Written to the event stream as `tool.called` ([events.md](events.md)); immutable.

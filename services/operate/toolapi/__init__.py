@@ -9,7 +9,9 @@ Contract: contracts/tool-api.md 0.1.0. Pure, deterministic, no I/O. Refusals car
 Every rule that decides a risk class, an effect or a verb label lives in `policy.py` as data.
 """
 from .check import check_tool_api
+from .errors import build_error, load_catalog, render_message, validate_catalog
 from .generate import generate_tool_api
 from .result import Issue, ToolApiResult, to_bytes
 
-__all__ = ["generate_tool_api", "check_tool_api", "ToolApiResult", "Issue", "to_bytes"]
+__all__ = ["generate_tool_api", "check_tool_api", "ToolApiResult", "Issue", "to_bytes",
+           "load_catalog", "validate_catalog", "build_error", "render_message"]

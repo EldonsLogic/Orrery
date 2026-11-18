@@ -9,7 +9,7 @@ Platform name: Orrery (working name, not cleared; see ADR-0001). Say "the platfo
 Owner-led companies (10-100 staff) in KSA, UAE, Egypt and Qatar run on Excel, WhatsApp and a mix of tools. Moving to an ERP means a partner project costing 5-14x the licence in year one (UNVERIFIED partner pricing, see [../research/02-market-and-customer.md](../research/02-market-and-customer.md) section 3), and customised ERPs become a liability at upgrade time (same file, section 4). Compliance deadlines (ZATCA Phase 2 waves, UAE e-invoicing) force a decision. Evidence of buyer demand is thin and must be tested in interviews ([../strategy/01-gaps-and-risks.md](../strategy/01-gaps-and-risks.md) risk 1).
 
 ## 2. Product
-One chat, in Arabic or English. The AI interviews the owner (or reads their existing tools), drafts a visual Blueprint, assembles an ERP from vetted components, simulates a month of the business, then runs it. After go-live the same chat asks, acts, reports and changes the system. Every client build improves the platform (no client-specific code).
+One chat, in Arabic or English. The AI interviews the owner (or reads their existing tools), drafts a visual Blueprint, assembles an ERP from vetted components, simulates a month of the business, then runs it. After go-live the chat stays as an assistant that asks, acts, reports and proposes changes, and every department also works in ordinary ERP screens: dashboards, record lists and forms, submit and cancel, import and export, and print ([app-screens.md](app-screens.md)). Every client build improves the platform (no client-specific code).
 
 ## 3. Users
 See [personas.md](personas.md). Primary buyer: the owner. Strong influencer: the external accountant or VAT consultant (hypothesis). Daily users: accountant, sales, warehouse, HR. Internal: our review team.
@@ -20,7 +20,7 @@ See [personas.md](personas.md). Primary buyer: the owner. Strong influencer: the
 | Trading and distribution firm live on a compliant ERP, set up by chat, with a human-reviewed build | A general "build any app" tool |
 | ZATCA Phase 1 and 2 compliant invoicing (KSA) | Own ledger, own tax engine, own payroll maths written by AI |
 | Arabic-first, RTL, bilingual documents | Mobile native apps (responsive web first) |
-| One chat with modes: discover, ask, act, change | Two separate UIs for builders and users |
+| One app: chat builds the ERP and stays as an assistant (modes: discover, ask, act, change); ordinary screens run it | A separate builder UI, drag-and-drop builder, or a chat-only product |
 | Simulation of a month of the owner's data before go-live | On-premise or hybrid delivery |
 | Per-tenant branding and light/dark themes | Per-client code forks |
 | Entitlements and metering in place from day one | Public self-serve gating (free-first at launch) |

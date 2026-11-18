@@ -33,6 +33,33 @@ Code lives in `web/app` (empty until gate G1+). Roles: O owner, A accountant, S 
 | Settings > Data export | Leave with your data | O | Export history | Request export, request deletion |
 | Help | Support | All | Articles, contact, status | Search, contact |
 
+## Operating the ERP: record screens and department views (founder requirement, 2026-11-18)
+The ERP is operated like any ERP. Chat builds it and then stays as an assistant; it is not the only way to work. After go-live every department works in ordinary screens, because the engine's own desk is not available to customers (ADR-0016) and we build every record screen. There is no visual drag-and-drop builder.
+
+### Generic record screens (driven by the Blueprint)
+One list screen and one form screen per document type and master data, generated from the Blueprint and the Tool API (`<entity>.list`, `.read`, `.create`, `.update`, `.export`), not hand-built per client. Document types: customers, suppliers, items, price lists, quotes, sales orders, delivery notes, invoices, credit and debit notes, payments, purchase requests, purchase orders, receipts, stock transfers, stock counts, journal entries.
+| Screen | Purpose | Roles | Key data | Key actions |
+|---|---|---|---|---|
+| Record list | Find and work through records | By role and scope | Columns from the Blueprint, filters, search, saved views, status, linked counts | Filter, sort, open, create, bulk select, export, import |
+| Record form | View and edit one record | By role and scope | Fields and lines from the Blueprint, status, linked records, history, attachments | Save draft, edit, submit, cancel, amend, duplicate, print, open linked records |
+| Import | Bring in rows in bulk | O, Adm, A and the owning department | File (CSV or Excel), mapping, validation preview, error report | Upload, map, preview, fix, confirm; nothing is written until confirmed |
+| Export | Take rows out | By role and scope | Chosen list, columns, format | Download CSV or Excel; logged |
+| Print and PDF | Documents for customers and suppliers | By role | Bilingual, tenant-branded templates; compliance layout locked for tax documents | Preview, print, download, send |
+Rules: every write goes through the same checked path as chat (role and scope of the signed-in user, risk class, confirm-before-write for high-risk actions, audit event). Submit and cancel follow the document's workflow from the Blueprint. Chat can open a record, draft one or fill a form, but the user still confirms in the form.
+
+### Department views
+Each department has a home dashboard plus its own record screens. Departments and areas follow the role-view matrix.
+| Department | Home dashboard shows | Works in |
+|---|---|---|
+| Sales | Pipeline, open quotes and orders, customer balances, overdue invoices | Quotes, orders, deliveries, invoices, credit notes, customers |
+| Purchasing | Open requests and orders, receipts due, supplier balances, price changes | Suppliers, purchase requests, orders, receipts, supplier invoices |
+| Inventory and warehouse | Receipts due, deliveries, counts, low stock, stock value | Items, transfers, counts, adjustments |
+| Accounting and finance | Open items, ageing, VAT summary, bank, approvals, e-invoice status | Journal entries, payments, reconciliation, periods, reports |
+| HR (later) | Headcount, leave, payroll runs (when payroll exists) | Employees, leave, payroll |
+
+### Department assistants
+The chat assistant is scoped per department. Each department has its own assistant rules: instructions, allowed tools, limits and memory scope. They are configured in the Blueprint, not per-client code. The assistant always acts with the signed-in user's own role and scope and can never exceed them.
+
 ## Internal team console (separate app, internal identity, never customer-facing)
 | Screen | Purpose | Roles | Key data | Key actions |
 |---|---|---|---|---|

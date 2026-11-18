@@ -222,7 +222,11 @@ class FrappeRuntimeBackend:
                     pass
 
     def _deployment_adapter(self, f: Any) -> FrappeDeploymentAdapter:
-        return FrappeDeploymentAdapter(frappe_module=f, in_memory=False)
+        # An injected frappe factory is the explicit test/offline mode (simulated runtime, no
+        # real DDL); a real bench (no factory) always uses Frappe's own inspection and fails closed.
+        return FrappeDeploymentAdapter(
+            frappe_module=f, in_memory=False, offline_ddl_simulator=self._frappe_factory is not None
+        )
 
     def _ensure_state_table(self, f: Any) -> None:
         f.db.sql(

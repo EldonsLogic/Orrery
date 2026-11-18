@@ -151,7 +151,12 @@ def execute_single_field_deployment(
             existing_cols = None
             if hasattr(db, "get_table_columns_description") and callable(getattr(db, "get_table_columns_description", None)):
                 existing_cols = db.get_table_columns_description(doctype)
-            ddl_plan = inspect_frappe_ddl_plan(doctype, field_def, existing_columns_desc=existing_cols)
+            ddl_plan = inspect_frappe_ddl_plan(
+                doctype,
+                field_def,
+                existing_columns_desc=existing_cols,
+                offline_simulator=bool(getattr(db, "in_memory", False) or getattr(db, "offline_ddl_simulator", False)),
+            )
 
         # Enforce fail-closed gate validation on planned statements (§6.1 & §6.2)
         if ddl_plan.inspectable and ddl_plan.is_approved_additive_only:

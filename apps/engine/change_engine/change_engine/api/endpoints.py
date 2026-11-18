@@ -26,6 +26,7 @@ from change_engine.guarded_apply.ddl_plan_gate import (
     ColumnDesc,
     DDLPlanInspection,
     MARIADB_TYPE_MAP,
+    assess_applied_ddl,
     inspect_frappe_ddl_plan,
 )
 from change_engine.guarded_apply.schema_reconciler import (
@@ -324,6 +325,8 @@ def propose_configuration_change(
                 doctype,
                 field_def,
                 existing_columns_desc=existing_cols,
+                offline_simulator=adapter is None
+                or bool(getattr(adapter, "in_memory", False) or getattr(adapter, "offline_ddl_simulator", False)),
             )
             all_statements.extend(ddl_plan.statements)
             per_field.append(
@@ -469,7 +472,11 @@ class FrappeDeploymentAdapter:
         simulate_apply_error: bool = False,
         simulate_finalize_error: bool = False,
         use_shared_state: bool = True,
+        offline_ddl_simulator: bool = False,
     ):
+        # Explicit test/offline mode for the DDL plan gate (simulator instead of Frappe's own
+        # MariaDBTable; no real DDL runs). Never set on a live bench (ERP-027 H2).
+        self.offline_ddl_simulator = offline_ddl_simulator
         self._frappe = frappe_module if frappe_module is not None else frappe
         self.audit_table = audit_table
         self.lock_return = lock_return
@@ -490,6 +497,10 @@ class FrappeDeploymentAdapter:
             self.in_memory = not self._is_frappe_db_available()
 
         self.apply_called: bool = False
+        # ERP-027: approved plan vs what Frappe actually executed (live mode only).
+        self._approved_ddl: Dict[str, List[str]] = {}
+        self._executed_ddl: Dict[str, List[str]] = {}
+        self._before_schema: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self.cache_cleared: bool = False
         self.prepared_records: List[Dict[str, Any]] = []
         self.lock_wait_timeout_seconds: Optional[int] = None
@@ -673,24 +684,73 @@ class FrappeDeploymentAdapter:
         payload = json.dumps([[c.name, c.type, c.default] for c in cols], sort_keys=True)
         self.revision_hashes[doctype] = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
+    def _read_nullability(self, table_name: str) -> Dict[str, bool]:
+        """``{column_lower: is_nullable}`` from information_schema; ``{}`` if unreadable."""
+        try:
+            rows = self._frappe.db.sql(
+                """
+                SELECT COLUMN_NAME, IS_NULLABLE
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
+                """,
+                (table_name,),
+            )
+            return {str(r[0]).lower(): str(r[1]).upper() != "NO" for r in rows}
+        except Exception:
+            return {}
+
+    def _read_table_schema(self, doctype: str) -> Optional[Dict[str, Any]]:
+        """Whole-table fingerprint (columns and indexes) used to prove what apply changed."""
+        table_name = f"tab{doctype}"
+        try:
+            cols = self._frappe.db.sql(
+                """
+                SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
+                """,
+                (table_name,),
+            )
+            idx = self._frappe.db.sql(
+                """
+                SELECT INDEX_NAME, COLUMN_NAME, NON_UNIQUE, SEQ_IN_INDEX
+                FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
+                """,
+                (table_name,),
+            )
+            return {
+                "columns": {str(r[0]): tuple(str(x) for x in r[1:]) for r in cols},
+                "indexes": {tuple(str(x) for x in r) for r in idx},
+            }
+        except Exception:
+            return None
+
     def get_table_columns_description(self, doctype: str) -> List[ColumnDesc]:
         if self.existing_columns_desc_override is not None:
             return self.existing_columns_desc_override
         if not self.in_memory:
             table_name = f"tab{doctype}"
             try:
+                # IS_NULLABLE is not part of Frappe's own description; the DDL plan gate only
+                # normalises zero defaults on columns proven NOT NULL (ERP-027 M1).
+                nullable_by_col = self._read_nullability(table_name)
                 if hasattr(self._frappe, "db") and hasattr(self._frappe.db, "get_table_columns_description"):
                     raw_cols = self._frappe.db.get_table_columns_description(table_name)
-                    return [
-                        ColumnDesc(
-                            name=c["name"] if isinstance(c, dict) else getattr(c, "name"),
-                            type=c["type"] if isinstance(c, dict) else getattr(c, "type"),
-                            default=c.get("default") if isinstance(c, dict) else getattr(c, "default", None),
-                            index=int(c.get("index", 0) if isinstance(c, dict) else getattr(c, "index", 0)),
-                            unique=int(c.get("unique", 0) if isinstance(c, dict) else getattr(c, "unique", 0)),
+                    out = []
+                    for c in raw_cols:
+                        cname = c["name"] if isinstance(c, dict) else getattr(c, "name")
+                        out.append(
+                            ColumnDesc(
+                                name=cname,
+                                type=c["type"] if isinstance(c, dict) else getattr(c, "type"),
+                                default=c.get("default") if isinstance(c, dict) else getattr(c, "default", None),
+                                index=int(c.get("index", 0) if isinstance(c, dict) else getattr(c, "index", 0)),
+                                unique=int(c.get("unique", 0) if isinstance(c, dict) else getattr(c, "unique", 0)),
+                                nullable=nullable_by_col.get(str(cname).lower()),
+                            )
                         )
-                        for c in raw_cols
-                    ]
+                    return out
                 res = self._frappe.db.sql(
                     """
                     SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_DEFAULT
@@ -700,7 +760,10 @@ class FrappeDeploymentAdapter:
                     """,
                     (table_name,),
                 )
-                return [ColumnDesc(name=r[0], type=r[1], default=r[2]) for r in res]
+                return [
+                    ColumnDesc(name=r[0], type=r[1], default=r[2], nullable=nullable_by_col.get(str(r[0]).lower()))
+                    for r in res
+                ]
             except Exception:
                 return self._get_default_columns(doctype)
         if doctype not in self.table_columns:
@@ -755,13 +818,35 @@ class FrappeDeploymentAdapter:
                 )
                 has_col = bool(col_row)
                 rev_hash = self.get_doctype_revision_hash(doctype)
+                schema = self._read_table_schema(doctype)
+                indexes_unchanged = True
+                unapproved = False
+                if self.offline_ddl_simulator:
+                    pass  # explicit offline mode: no real DDL ran, nothing to compare
+                elif not self.apply_called:
+                    if schema is None:
+                        raise RuntimeError("before-apply table schema unreadable")
+                    self._before_schema[(doctype, expected_deployment_id)] = schema
+                else:
+                    # ERP-027: what ran must match the approved plan; unknown means unapproved.
+                    before_schema = self._before_schema.get((doctype, expected_deployment_id))
+                    unapproved, _why = assess_applied_ddl(
+                        doctype,
+                        fieldname,
+                        self._approved_ddl.get(expected_deployment_id),
+                        self._executed_ddl.get(expected_deployment_id),
+                        before_schema,
+                        schema,
+                    )
+                    if before_schema is not None and schema is not None:
+                        indexes_unchanged = before_schema.get("indexes") == schema.get("indexes")
                 return ExhaustiveSnapshot(
                     has_meta=has_meta,
                     has_col=has_col,
                     definition_matches=True,
-                    indexes_unchanged=True,
+                    indexes_unchanged=indexes_unchanged,
                     provenance_matches=True,
-                    unapproved_side_effects=False,
+                    unapproved_side_effects=unapproved,
                     revision_hash=rev_hash,
                 )
             except Exception:
@@ -798,11 +883,14 @@ class FrappeDeploymentAdapter:
             field_def=field_def,
             existing_columns_desc=cols,
             doctype_fields=self.doctype_fields_override,
+            offline_simulator=bool(self.in_memory or self.offline_ddl_simulator),
         )
 
     def persist_prepare_and_audit_intent(self, record: Dict[str, Any]) -> None:
         if self.simulate_prepare_error:
             raise RuntimeError("Fail-closed: Simulated audit prepare failure")
+
+        self._approved_ddl[record["deployment_id"]] = list(record.get("ddl_plan_statements", []))
 
         if not self.in_memory:
             self._ensure_audit_table()
@@ -895,8 +983,23 @@ class FrappeDeploymentAdapter:
             "default": field_def.get("default"),
         }
         if not self.in_memory:
-            cf_doc = self._frappe.get_doc(cf_args)
-            cf_doc.insert(ignore_permissions=True)
+            # Record every DDL statement Frappe really executes (still executed unchanged) so
+            # the after-snapshot can compare it with the approved plan (ERP-027).
+            executed = self._executed_ddl.setdefault(deployment_id, [])
+            db = self._frappe.db
+            original_sql_ddl = getattr(db, "sql_ddl", None)
+            if original_sql_ddl is not None:
+                def _recording_sql_ddl(query, *a, **kw):
+                    executed.append(str(query))
+                    return original_sql_ddl(query, *a, **kw)
+
+                db.sql_ddl = _recording_sql_ddl
+            try:
+                cf_doc = self._frappe.get_doc(cf_args)
+                cf_doc.insert(ignore_permissions=True)
+            finally:
+                if original_sql_ddl is not None:
+                    db.sql_ddl = original_sql_ddl
             if hasattr(self._frappe.db, "commit"):
                 self._frappe.db.commit()
         else:
@@ -1459,7 +1562,12 @@ def apply_configuration_change(
             live_plan = db.inspect_ddl_plan(doctype, field_def)
         else:
             cols = db.get_table_columns_description(doctype) if hasattr(db, "get_table_columns_description") else None
-            live_plan = inspect_frappe_ddl_plan(doctype, field_def, existing_columns_desc=cols)
+            live_plan = inspect_frappe_ddl_plan(
+                doctype,
+                field_def,
+                existing_columns_desc=cols,
+                offline_simulator=bool(getattr(db, "in_memory", False) or getattr(db, "offline_ddl_simulator", False)),
+            )
         if not live_plan.inspectable or not live_plan.is_approved_additive_only:
             execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return {

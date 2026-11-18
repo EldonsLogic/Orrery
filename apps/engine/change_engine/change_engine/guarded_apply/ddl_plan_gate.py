@@ -13,9 +13,12 @@ Implements ADR-001 (Rev 2.3) Sections 6.1 and 6.2:
   or multiple statements, setting is_approved_additive_only=False and explicit rejection_reason.
 """
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,24 @@ class DDLPlanInspection:
     statements: List[str]
     is_approved_additive_only: bool
     rejection_reason: Optional[str] = None
+    reason_code: Optional[str] = None
+
+
+# Coded fail-closed reasons (ERP-027). The gate must REJECT, never approve blind.
+REASON_FRAPPE_UNAVAILABLE = "DDL_GATE_FRAPPE_UNAVAILABLE"
+REASON_FRAPPE_IMPORT_FAILED = "DDL_GATE_FRAPPE_IMPORT_FAILED"
+REASON_INSPECTION_FAILED = "DDL_GATE_INSPECTION_FAILED"
+REASON_EXISTING_COLUMNS_MISSING = "DDL_GATE_EXISTING_COLUMNS_MISSING"
+REASON_TABLE_NOT_FOUND = "DDL_GATE_TABLE_NOT_FOUND"
+
+
+class FrappeInspectionError(Exception):
+    """The Frappe-native inspection could not be completed; the plan must be rejected."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 
 # ADR-001 Rev 2.3 §6.1/§6.2 Approval Regex (comma permitted strictly inside decimal(w,p))
@@ -85,13 +106,17 @@ class ColumnDesc(dict):
         default: Any = None,
         index: int = 0,
         unique: int = 0,
+        nullable: Optional[bool] = None,
     ):
+        # ``nullable`` is None when the caller could not read IS_NULLABLE; the gate then never
+        # normalises that column (fail closed). Frappe v15 ignores the extra key.
         super().__init__(
             name=name,
             type=type,
             default=default,
             index=int(bool(index)),
             unique=int(bool(unique)),
+            nullable=nullable,
         )
 
     def __getattr__(self, item):
@@ -104,20 +129,24 @@ class ColumnDesc(dict):
         self[item] = value
 
 
-_DECIMAL_FIELDTYPES = ("Currency", "Float", "Percent", "Duration", "Rating")
+# Only fieldtypes whose Frappe v15 ``DbColumn.get_definition`` emits ``not null default 0``
+# qualify (frappe/database/schema.py:201, v15.126.0: ``elif self.fieldtype in ("Currency",
+# "Float", "Percent")``). Rating and Duration get NO default clause (NULL default), so a live
+# ``0.00`` default on them is real drift and must stay a MODIFY (ERP-027 review H1).
+_DECIMAL_FIELDTYPES = ("Currency", "Float", "Percent")
 
 
 def _canonical_column_type(raw_type: Any) -> str:
-    """Canonical form of a column type string so equivalent spellings are not drift.
+    """Canonical form of a column type string: lower case and no whitespace outside quotes.
 
-    Equivalent: case, whitespace and a bare ``decimal`` (MariaDB default ``decimal(10,0)``).
-    Not equivalent (stays drift): any other precision/scale, a different type, ``unsigned``.
+    Only case and whitespace are treated as equivalent. Any other precision/scale, a different
+    type, ``unsigned`` or a synonym stays different (drift). Quoted literals are left as is.
     """
-    canon = re.sub(r"\s+", "", str(raw_type or "").lower())
-    canon = re.sub(r"\(\s*", "(", canon)
-    if canon in ("decimal", "numeric", "dec"):
-        return "decimal(10,0)"
-    return canon
+    parts = re.split(r"('(?:[^'\\]|\\.)*')", str(raw_type or ""))
+    out = []
+    for i, part in enumerate(parts):
+        out.append(part if i % 2 else re.sub(r"\s+", "", part.lower()))
+    return "".join(out)
 
 
 class SimulatedDbColumn:
@@ -383,24 +412,132 @@ def validate_ddl_plan(statements: List[str]) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
+def _split_alter_clauses(statement: str) -> Tuple[str, List[str]]:
+    """Split ``ALTER TABLE `t` a, b, c`` into (``ALTER TABLE `t```, [clauses]) ignoring commas
+    inside parentheses (``decimal(21,9)``). Returns ("", []) when it is not an ALTER TABLE."""
+    m = re.match(r"^\s*ALTER TABLE\s+(`[^`]+`)\s+(.*)$", statement.strip(), re.S | re.I)
+    if not m:
+        return "", []
+    clauses, depth, cur = [], 0, []
+    for ch in m.group(2):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            clauses.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(ch)
+    clauses.append("".join(cur).strip())
+    return m.group(1), [c for c in clauses if c]
+
+
+def _norm_sql(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text)).strip().lower()
+
+
+def assess_applied_ddl(
+    doctype: str,
+    fieldname: str,
+    approved_statements: Optional[List[str]],
+    executed_statements: Optional[List[str]],
+    before_schema: Optional[Dict[str, Any]],
+    after_schema: Optional[Dict[str, Any]],
+) -> Tuple[bool, Optional[str]]:
+    """Compare what actually ran with the approved plan (ERP-027 review H1/M1).
+
+    Returns ``(unapproved_side_effects, reason)``. Fail closed: unknown input is a side effect.
+
+    * Every executed statement must be an ``ALTER TABLE`` on the target table.
+    * The executed ``ADD COLUMN`` clauses must equal the approved ones.
+    * Frappe's own apply re-emits "phantom" ``MODIFY`` clauses that the gate normalised away
+      (651 raw clauses on the live bench). They are tolerated ONLY when they are ``MODIFY``
+      and the before/after table schemas (type, nullability, default, key, indexes) prove every
+      pre-existing column and index is unchanged and exactly ``fieldname`` was added.
+    * Anything else (other clause kinds, other tables, other DDL) is an unapproved side effect.
+
+    ``*_schema`` are ``{"columns": {name: (type, nullable, default, key)}, "indexes": set(...)}``.
+    """
+    if approved_statements is None or executed_statements is None:
+        return True, "approved plan or executed statements are unknown"
+    if before_schema is None or after_schema is None:
+        return True, "before/after table schema is unknown"
+
+    if not executed_statements and before_schema == after_schema:
+        return False, None  # nothing ran and nothing changed (clean failure)
+
+    table = f"`tab{doctype}`".lower()
+    approved_adds: List[str] = []
+    for stmt in approved_statements:
+        t, clauses = _split_alter_clauses(stmt)
+        if t.lower() != table:
+            return True, f"approved plan statement does not target {table}"
+        approved_adds.extend(_norm_sql(c) for c in clauses if c.upper().startswith("ADD COLUMN"))
+
+    executed_adds: List[str] = []
+    extra_modify = False
+    for stmt in executed_statements:
+        t, clauses = _split_alter_clauses(stmt)
+        if not clauses or t.lower() != table:
+            return True, f"executed DDL is not an ALTER TABLE on {table}: {stmt[:120]}"
+        for c in clauses:
+            up = c.upper()
+            if up.startswith("ADD COLUMN"):
+                executed_adds.append(_norm_sql(c))
+            elif up.startswith("MODIFY"):
+                extra_modify = True
+            else:
+                return True, f"executed DDL contains an unapproved clause: {c[:120]}"
+    if sorted(executed_adds) != sorted(approved_adds):
+        return True, "executed ADD COLUMN clauses differ from the approved plan"
+
+    before_cols, after_cols = before_schema.get("columns", {}), after_schema.get("columns", {})
+    if set(after_cols) - set(before_cols) != {fieldname}:
+        return True, "table columns after apply are not exactly the previous set plus the new field"
+    for name, definition in before_cols.items():
+        if after_cols.get(name) != definition:
+            return True, f"existing column '{name}' changed during apply"
+    if before_schema.get("indexes") != after_schema.get("indexes"):
+        return True, "table indexes changed during apply"
+    if extra_modify:
+        logger.warning(
+            "DDL apply on %s re-emitted MODIFY clauses beyond the approved plan; "
+            "before/after schema proves them no-ops", doctype,
+        )
+    return False, None
+
+
+def _col_get(col: Any, key: str, default: Any = None) -> Any:
+    return col.get(key, default) if isinstance(col, dict) else getattr(col, key, default)
+
+
+def _col_with(col: Any, **overrides: Any) -> Any:
+    """Copy a live column description and override only the given keys (extra keys kept)."""
+    if isinstance(col, dict):
+        copy = ColumnDesc(name=col.get("name", ""), type=col.get("type", ""))
+        copy.update(col)
+        copy.update(overrides)
+        return copy
+    copy = ColumnDesc(name=getattr(col, "name", ""), type=getattr(col, "type", ""))
+    for key in ("default", "index", "unique", "nullable"):
+        if hasattr(col, key):
+            copy[key] = getattr(col, key)
+    copy.update(overrides)
+    return copy
+
+
 def _canonicalize_current_column_types(current_columns: Dict[str, Any]) -> None:
-    """Rewrite equivalent spellings of the live column type (case, spaces, bare ``decimal``)
+    """Rewrite equivalent spellings of the live column type (case, whitespace outside quotes)
     to the canonical form Frappe generates, so Frappe's strict string comparison does not
     report them as a type change. Real precision/scale/type differences are left untouched.
     """
     for cname, cur_col in list(current_columns.items()):
-        get = cur_col.get if isinstance(cur_col, dict) else lambda k, d=None: getattr(cur_col, k, d)
-        raw_type = get("type", "")
+        raw_type = _col_get(cur_col, "type", "")
         canon = _canonical_column_type(raw_type)
         if not raw_type or canon == raw_type:
             continue
-        current_columns[cname] = ColumnDesc(
-            name=get("name", cname),
-            type=canon,
-            default=get("default", None),
-            index=get("index", 0),
-            unique=get("unique", 0),
-        )
+        current_columns[cname] = _col_with(cur_col, type=canon)
 
 
 def _normalize_zero_decimal_defaults(
@@ -412,6 +549,11 @@ def _normalize_zero_decimal_defaults(
     """Normalize MariaDB INFORMATION_SCHEMA `'0.000000000'` defaults on untouched decimal
     columns when the DocField default is empty/None (matches SimulatedDbColumn semantics
     and avoids Frappe DbColumn.default_changed_for_decimal phantom MODIFY noise).
+
+    Only Currency/Float/Percent qualify (see ``_DECIMAL_FIELDTYPES``) and only when the live
+    column is explicitly ``NOT NULL`` (``nullable is False``): Frappe's phantom MODIFY is
+    ``not null default 0``, so on a NULLable column it is a real nullability change that
+    must not be hidden. Unknown nullability is treated as nullable (fail closed).
     """
     for cname, col in table_columns.items():
         if cname == exclude_fieldname:
@@ -423,21 +565,17 @@ def _normalize_zero_decimal_defaults(
         cur_col = current_columns.get(cname.lower())
         if not cur_col:
             continue
-        cur_type = cur_col.get("type", "") if isinstance(cur_col, dict) else getattr(cur_col, "type", "")
+        if _col_get(cur_col, "nullable") is not False:
+            continue
+        cur_type = _col_get(cur_col, "type", "")
         if not _canonical_column_type(cur_type).startswith("decimal("):
             continue
-        cur_def = cur_col.get("default") if isinstance(cur_col, dict) else getattr(cur_col, "default", None)
+        cur_def = _col_get(cur_col, "default")
         if cur_def in (None, "", "NULL"):
             continue
         try:
             if float(str(cur_def).strip("'\"")) == 0.0:
-                current_columns[cname.lower()] = ColumnDesc(
-                    name=cur_col.get("name", cname) if isinstance(cur_col, dict) else getattr(cur_col, "name", cname),
-                    type=cur_type,
-                    default=None,
-                    index=int(bool(cur_col.get("index", 0) if isinstance(cur_col, dict) else getattr(cur_col, "index", 0))),
-                    unique=int(bool(cur_col.get("unique", 0) if isinstance(cur_col, dict) else getattr(cur_col, "unique", 0))),
-                )
+                current_columns[cname.lower()] = _col_with(cur_col, default=None)
         except (ValueError, TypeError):
             continue
 
@@ -446,37 +584,38 @@ def _inspect_with_frappe_mariadb_table(
     doctype: str,
     field_def: Dict[str, Any],
     existing_columns_desc: Optional[List[Any]] = None,
-) -> Optional[List[str]]:
-    """
-    Attempts to inspect DDL statements using Frappe's MariaDBTable if running
-    in an active Frappe environment with initialized database and metadata.
-    Returns None if Frappe environment is not fully available.
+) -> List[str]:
+    """Inspect the DDL plan with Frappe's own MariaDBTable on a live bench.
+
+    Fail closed: any problem raises ``FrappeInspectionError`` (a coded reason) and the caller
+    rejects the plan. There is no fallback to the simulator on this path (ERP-027 H2).
     """
     try:
         import frappe
+    except Exception as exc:
+        raise FrappeInspectionError(REASON_FRAPPE_UNAVAILABLE, f"frappe cannot be imported: {exc}")
+    try:
         from frappe.database.mariadb.schema import MariaDBTable
         from frappe.database.schema import DbColumn
+    except Exception as exc:
+        raise FrappeInspectionError(
+            REASON_FRAPPE_IMPORT_FAILED, f"Frappe schema classes cannot be imported: {exc}"
+        )
 
-        if not (hasattr(frappe, "db") and frappe.db is not None and hasattr(frappe.db, "sql_ddl")):
-            return None
+    db = getattr(frappe, "db", None)
+    if db is None or not hasattr(db, "sql_ddl"):
+        raise FrappeInspectionError(
+            REASON_FRAPPE_UNAVAILABLE, "frappe.db is not connected; the live DDL plan cannot be inspected"
+        )
+    if existing_columns_desc is None:
+        raise FrappeInspectionError(
+            REASON_EXISTING_COLUMNS_MISSING,
+            "existing column definitions were not supplied by the caller; refusing to inspect blind",
+        )
 
-        if existing_columns_desc is None:
-            if hasattr(frappe, "get_meta"):
-                try:
-                    dt_meta = frappe.get_meta(doctype)
-                    if getattr(dt_meta, "issingle", 0):
-                        return None
-                except Exception:
-                    pass
-            if hasattr(frappe.db, "table_exists") and not frappe.db.table_exists(doctype):
-                return None
-
+    try:
         table = MariaDBTable(doctype)
-
-        if existing_columns_desc is not None:
-            table.current_columns = {c["name"].lower(): c for c in existing_columns_desc}
-        else:
-            table.setup_table_columns()
+        table.current_columns = {c["name"].lower(): c for c in existing_columns_desc}
 
         new_fname = field_def["fieldname"]
         _canonicalize_current_column_types(table.current_columns)
@@ -499,17 +638,21 @@ def _inspect_with_frappe_mariadb_table(
         )
         table.columns[new_fname] = new_col
 
-        statements = []
-        original_sql_ddl = frappe.db.sql_ddl
+        statements: List[str] = []
+        original_sql_ddl = db.sql_ddl
         try:
-            frappe.db.sql_ddl = lambda q: statements.append(q)
+            db.sql_ddl = lambda q: statements.append(q)
             table.alter()
         finally:
-            frappe.db.sql_ddl = original_sql_ddl
-
+            db.sql_ddl = original_sql_ddl
         return statements
-    except Exception:
-        return None
+    except FrappeInspectionError:
+        raise
+    except Exception as exc:
+        logger.exception("DDL plan gate: Frappe inspection failed for %s", doctype)
+        raise FrappeInspectionError(
+            REASON_INSPECTION_FAILED, f"Frappe DDL plan inspection raised {type(exc).__name__}: {exc}"
+        )
 
 
 def _simulate_alter_statements(
@@ -595,6 +738,7 @@ def inspect_frappe_ddl_plan(
     existing_columns_desc: Optional[List[Any]] = None,
     doctype_fields: Optional[List[Dict[str, Any]]] = None,
     meta: Optional[Any] = None,
+    offline_simulator: bool = False,
 ) -> DDLPlanInspection:
     """
     Inspects Frappe's updatedb() DDL plan for a proposed field deployment
@@ -606,6 +750,9 @@ def inspect_frappe_ddl_plan(
     - existing_columns_desc: Optional list of column descriptions from DB
     - doctype_fields: Optional list of existing DocType field definitions
     - meta: Optional DocType meta object
+    - offline_simulator: explicit test/offline mode (default False). True uses ONLY the
+      pure-Python simulator. False uses ONLY Frappe's own MariaDBTable and fails closed (coded
+      rejection) when that inspection cannot run; it never falls back to the simulator.
     """
     if not doctype or not isinstance(doctype, str) or not doctype.strip():
         return DDLPlanInspection(
@@ -646,19 +793,7 @@ def inspect_frappe_ddl_plan(
             ),
         )
 
-    # Try Frappe-native inspection first if full environment is available
-    statements = None
-    try:
-        statements = _inspect_with_frappe_mariadb_table(
-            doctype=doctype,
-            field_def=field_def,
-            existing_columns_desc=existing_columns_desc,
-        )
-    except Exception:
-        statements = None
-
-    # Fall back to pure-Python simulator
-    if statements is None:
+    if offline_simulator:
         try:
             statements = _simulate_alter_statements(
                 doctype=doctype,
@@ -673,6 +808,22 @@ def inspect_frappe_ddl_plan(
                 statements=[],
                 is_approved_additive_only=False,
                 rejection_reason=f"DDL Plan inspection simulator failed: {exc}",
+                reason_code=REASON_INSPECTION_FAILED,
+            )
+    else:
+        try:
+            statements = _inspect_with_frappe_mariadb_table(
+                doctype=doctype,
+                field_def=field_def,
+                existing_columns_desc=existing_columns_desc,
+            )
+        except FrappeInspectionError as exc:
+            return DDLPlanInspection(
+                inspectable=False,
+                statements=[],
+                is_approved_additive_only=False,
+                rejection_reason=f"[{exc.code}] {exc.message}",
+                reason_code=exc.code,
             )
 
     is_approved, rejection_reason = validate_ddl_plan(statements)

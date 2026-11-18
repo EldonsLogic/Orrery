@@ -8,7 +8,7 @@ from typing import Protocol
 from .errors import IdentityError
 
 # Functions whose holders must use MFA. "owner" is added from SEC-005 ("MFA for
-# owners"); ADR-0007 item 6 names isAdmin and finance/accounting (see Q-144).
+# owners"); ADR-0007 item 6 names isAdmin and finance/accounting (see Q-147).
 MFA_FUNCTIONS = frozenset({"finance", "accounting", "owner"})
 OWNER_FUNCTION = "owner"
 INVITE_PERMISSION = "member.invite"

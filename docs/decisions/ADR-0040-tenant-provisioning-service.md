@@ -4,70 +4,67 @@ Status: Proposed
 Owner: partner
 Approved by: pending (cross-model review, then both founders; security review required by RULES 42 because it touches tenancy and secrets)
 
-Plan ID: PLT-003. Design only; no code until this is reviewed and accepted. Detail (step table, state machine, failure matrix, deprovisioning steps, tests PROV-T01 to PROV-T30) is in [../architecture/tenant-provisioning.md](../architecture/tenant-provisioning.md). References ADR-0038 (secrets, SEC-002), ADR-0039 (role mapping, ERP-008) and ADR-0041 (durable adapter state, ERP-026). All three are in open PRs at the time of writing (ADR-0041 was first numbered ADR-0036 and was renumbered). This ADR relies only on what ADR-0041 states: adapter state lives in the tenant database, schema creation is idempotent, and production refuses an in-memory store.
+Plan ID: PLT-003. Design only; no code until this is reviewed and accepted. Detail (step table, state machine, failure matrix, deprovisioning steps, tests PROV-T01 to PROV-T39) is in [../architecture/tenant-provisioning.md](../architecture/tenant-provisioning.md). Cross-references ADR-0038 (secrets, SEC-002, open PR #128), ADR-0039 (role mapping, ERP-008, open PR #129), and ADR-0041 (durable adapter state, ERP-026, open PR #126) in plain text until those ADRs land on `main`. This ADR relies only on what ADR-0041 states: adapter state lives in the tenant database, schema creation is idempotent, and production refuses an in-memory store.
 
 ## Context
-- Each customer is one isolated site with its own database and file store on shared in-country infrastructure (ADR-0006). ERP-003 delivered a scripted site creation on the dev bench (`scripts/provision_tenant_site.py`): validated identifiers, a deterministic database name derived from the tenant id, secrets forwarded through the container environment, and fail-closed app checks.
-- The adapter contract (contracts/engine-adapter.md) already defines `provision_site`. It is idempotent by key. A new key with the same parameters returns the existing site, and a different target gives `site_exists_different_target`. Its site states are `absent`, `provisioning`, `ready`, `applying`, `recovery_required` and `failed`. Only `control_plane` may call it. Tenant lifecycle (trial, active, suspended, exported, deleted) belongs to the control plane, not the adapter (5.2). `apply` with an initial build compensates to an empty site on failure (5.6.2). `sync_members` reconciles shadow users (5.9).
-- ERP-026 (ADR-0041) puts the adapter's durable records (idempotency keys, plans, journal, audit) in the tenant database. That database does not exist until provisioning has created it.
+- Each customer is one isolated site with its own database and file store on shared in-country infrastructure ([ADR-0006](ADR-0006-tenancy-isolation.md)). ERP-003 delivered a scripted site creation on the dev bench (`scripts/provision_tenant_site.py`): validated identifiers, a deterministic database name derived from the tenant id, secrets forwarded through the container environment, and fail-closed app checks. Today `scripts/provision_tenant_site.py` still passes DB root, Administrator, and DB user passwords via container shell argv flags (`--db-root-password`, `--admin-password`, `--db-password`); replacing that container argv path with file/fd/stdin/SQL secret delivery before production is a hard prerequisite (`ADR-0038` `SEC2-031`, `SEC2-T35`).
+- The adapter contract ([contracts/engine-adapter.md](../../contracts/engine-adapter.md)) defines `provision_site`, `site_status`, `plan`, `apply`, and `sync_members`, and restricts `provision_site` to `caller.service = control_plane`. Meanwhile, `contracts/engine-adapter/site.schema.json` sets `additionalProperties: false` with no secret-reference fields, and `ADR-0038` (open PR #128) restricts `S06` (DB root) and `S08` (Administrator password) away from steady-state `engine-adapter` processes. Provisioning therefore separates ephemeral site-creation secret custody (`provisioning-site-init`, holding short-lived `S06` + `S08` + `S05` bind without exposing them to steady-state `engine-adapter` or container argv, or else requires a follow-up `site.schema.json` contract ADR) from adapter lifecycle verification (`site_status`).
+- ERP-026 (ADR-0041, open PR #126) puts the adapter's durable records (`adapter_sites`, `adapter_idempotency`, `adapter_audit_log`) in the tenant database. That database does not exist until provisioning creates it in Step 3 (`create_site`), so `init_adapter_state` must execute inside/immediately upon DB creation inside Step 3 before app installation finishes—and retry must deterministically reconcile partial DB/filesystem state created before `adapter_sites` exists.
 - Hosting and region are not chosen (INF-001, Q-129), so pool placement and the secret store backend are interfaces here, not products.
 
 ## Decision
-1. **A provisioning service inside the control plane** runs one workflow per tenant. It calls the adapter as `caller.service = control_plane`, so the contract does not change. Only staff tooling and the signup flow can start it. The tenant id is generated by the platform and never taken from a customer request body.
-2. **Durable workflow state lives in the control plane's own database, in the tenant's region, not in the tenant database.** It must exist before the tenant database does and survive that database's deletion. It holds the request and its hash, the chosen placement, the step records, the secret ids (never values) and the audit trail. Once the site exists, the adapter keeps its own records in the tenant database per ADR-0041. Provisioning never writes there directly.
-3. **Steps** (detail section 2), each a durable record with state `pending`, `running`, `done`, `failed_retryable` or `blocked`:
-   1. `reserve`: placement and identifiers.
-   2. `create_secrets`: through `SecretStore`, ADR-0038.
-   3. `create_site`: adapter `provision_site`, with the ERP-003 mechanics underneath.
-   4. `harden_site`: customer login off, engine email off, developer mode off, Administrator login off, invisibility probe.
-   5. `init_adapter_state`: ADR-0041 store created and verified; production refuses an in-memory store.
-   6. `verify_site`.
-   7. `apply_initial_blueprint`: plan, gate approval where gated, apply.
-   8. `sync_members`: full mode, first `syncVersion`.
-   9. `baseline_permissions`: the ADR-0039 drift fingerprint.
-   10. `register_route`: the gateway routes the tenant host to the site, and only now.
-   11. `ready`: hand over to the lifecycle, PLT-004.
-4. **Every step observes, acts only if needed, then verifies.** A step first reads actual state (site status, secret metadata, route table). If its post-condition already holds, it records `done` without acting, so re-running any step is safe. Every external call uses an idempotency key derived only from the tenant id and the step, plus the Blueprint revision for apply and the sync version for sync. It never uses an attempt number, so a crash between "act" and "record" replays to the same result instead of a duplicate.
-5. **No duplicate sites or keys, by construction:**
-   - Identifiers (site name, database name, secret paths) are pure functions of the tenant id, as ERP-003 already does for the database name.
-   - Secrets are created put-if-absent at a fixed path. An existing secret is adopted, never regenerated. Rotation is a separate operation.
-   - `provision_site` with the same parameters returns the existing site. A different target blocks the workflow for a human.
-   - Placement is persisted before first use and never re-chosen.
-   - One worker per tenant holds a lease with a fencing token; a stale worker's writes are rejected.
+1. **A provisioning service in `services/provisioning/` (`partner` lane per `scripts/lanes.json`)** runs one workflow per tenant. It calls the adapter as `caller.service = control_plane` (so the external adapter contract stays unchanged, subject to the ephemeral `provisioning-site-init` boundary or any follow-up `site.schema.json` ADR). Only staff tooling and an authenticated, rate-limited signup flow backed by a **verified identity** can start it (`PROV-001`). The `tenantId` is generated by the platform, **never reused** after cancel or deprovision, and never taken from a customer request body; region, country pack, and approved Blueprint revision ([ADR-0005](ADR-0005-blueprint-governance.md)) come strictly from platform state, never from a public signup payload.
+2. **Durable workflow state lives in the control plane's regional database, not in the tenant database**, authenticated under control-plane DB credentials (`S22` in ADR-0038, open PR #128). It exists before the tenant database does and survives that database's deletion. It holds the request and its hash, canonical slug reservation (with a DB unique constraint on canonical/homograph-normalized slug), chosen placement, step records, secret ids and workflow binding metadata (never values), active legal-hold locks, and the audit trail. Once the site exists, the adapter keeps its own operational records in the tenant database per ADR-0041.
+3. **Steps** (detail section 2), using active step states (`pending`, `running`, `done`, `failed_retryable`, `blocked`) plus lease-releasing parked states (`awaiting_approval` for `gated` plans; `waiting_grace` and `waiting_recovery_window` with `resumeAt` during offboarding):
+   1. `reserve`: atomic DB unique-index claim on canonical/homograph-normalized slug (`T51`); choose pool and server by capacity; persist placement once.
+   2. `create_secrets`: through `SecretStore` (ADR-0038, `S05`, `S08`, `S09` bound per principal kind, `S10b` per-tenant DEK/backup DEK wrapped under `S10a` regional KEK, `S21` per-site `encryption_key`), plus bind/verify pool cache & queue credential (`S07`). Metadata records `{workflowId, state}`.
+   3. `create_site`: observe `site_status` **plus** raw MariaDB DB / `sites/<tenant>` filesystem state; use `provisioning-site-init` with file/fd/stdin/SQL secret delivery (never host or container argv before production) to create/reconcile partial DB/site residue and **initialize `ADR-0041` adapter tables (`init_adapter_state`) immediately upon DB creation before app installs finish**, then confirm `site_status == ready` on the exact target (`site_exists_different_target` blocks).
+   4. `harden_site`: customer login off (`UNVERIFIED` on pinned engine version until bench test), engine email off, developer mode off, Administrator login off (`UNVERIFIED` on pinned engine version until bench test; does not disable `sync_members` or break-glass `SEC2-042`). Settings verified before continuing.
+   5. `verify_adapter_state`: confirm `ADR-0041` store is present, durable, and reachable (production refuses an in-memory store).
+   6. `verify_site`: `health`, `capabilities`, and installed app list.
+   7. `apply_initial_blueprint`: `plan` (moving to lease-releasing `awaiting_approval` if `needs_gate_approval`; if the 900s `planToken` expires while parked, resume re-runs `plan` cleanly without incrementing failure attempts), then `apply` on behalf of the approving owner (verifying role/level/transition/auto-role state).
+   8. `sync_members`: full mode at `syncVersion = 1` from the external assignment store (`ADR-0039` refinement of `ADR-0007` item 9), checking `RM` rules (`scope_conflict`, disabled zero-role users).
+   9. `baseline_permissions`: compute and verify the full `ADR-0039` drift fingerprint across all engine users and unmapped/mapped DocTypes; store baseline before routing.
+   10. `register_route`: **strictly gated** on Steps 1–9 `done` AND a passing **gateway-path invisibility probe** (via a pre-route internal hostname or disabled route checked before public host binding) verifying zero engine markers in paths, headers, cookies, and error bodies (`PLT-024`, `ERP-020` prerequisites; `PROV-T32`).
+   11. `ready`: hand over to lifecycle (PLT-004).
+4. **Every step observes, acts only if needed, then verifies.** Observe reads live store/DB/filesystem/gateway state. If its post-condition holds, it records `done` without acting. External calls use deterministic keys derived only from `tenantId`, `step`, Blueprint revision (`apply`), and `syncVersion` (`sync_members`), never attempt numbers.
+5. **No duplicate sites, slug hijacks, or secret-destruction races, by construction:**
+   - Identifiers (site name, database name, secret paths) are pure functions of the never-reused `tenantId`.
+   - Secrets are created put-if-absent at fixed paths with `{workflowId, state}` metadata. Adoption happens **only** when `state == "active"` and `metadata.workflowId == currentWorkflowId`. Any existing secret in `pending_destruction` or belonging to another `workflowId` **blocks** the workflow and is never adopted (`PROV-T31`).
+   - Cancelled or deprovisioned slugs are **quarantined** (never immediately released to another tenant) so old links, webhooks, and emails cannot be hijacked (`PROV-T34`).
+   - One worker per tenant holds a lease with a monotonic fencing token; long waits (`awaiting_approval`, `waiting_grace`, `waiting_recovery_window`) release the lease until woken or scheduled.
 6. **Failure handling.**
-   - Retryable errors back off (1 s doubling, at most 5 attempts per run, contract section 7) and then block.
-   - Validation, conflict and `site_exists_different_target` block at once.
-   - A blocked workflow keeps every created resource, raises an alert and waits for a human to resume, cancel or fix.
-   - Resuming continues from the first step not `done`.
-   - **Before `register_route` no customer can reach the site, so cancelling compensates:** remove the route if any, delete the empty site and database, destroy the tenant's secrets per ADR-0038 (waiting period applies), and mark the record `cancelled`.
-   - **After `ready` there is no automatic rollback.** Later changes go through the change engine (ADR-0028) and lifecycle (PLT-004).
-   - An initial apply that ends `compensated` stays retryable with a new Blueprint revision. One that ends `recovery_required` blocks.
-7. **Initial Blueprint apply follows the normal approval path.** It applies the reviewed Blueprint revision (ADR-0005 team review) with `onBehalfOf` the approving owner, never an agent on a production site (contract 4.2). The idempotency key is derived from (tenant, revision).
-8. **Deprovisioning is a separate workflow with the same machinery**, driven by lifecycle state (PLT-004) and [data-retention.md](../security/data-retention.md). Its steps:
-   1. Remove the route and revoke sessions (identity bumps session versions).
-   2. Offer the final export (DAT-006).
-   3. Wait out the grace period (data-retention D-1). A legal hold stops every later step.
-   4. Disable shadow and agent users.
-   5. Delete the site, database and file store.
-   6. Destroy the tenant's secrets and e-invoice keys (never exported, ADR-0038), then crypto-shred the tenant's envelope keys after the recovery window (data-retention section 8).
-   7. Verify and issue the certificate (DAT-007).
-   Each step is idempotent and observable; deletion of data never runs while any hold exists.
-9. **Audit.** Every step start, outcome, retry, block, resume and cancel writes an internal audit record (actor, tenant, step, input hash, outcome, error code, timings; never a secret). Lifecycle changes emit `tenant.state_changed` (contracts/events.md). `engine.site_provisioned` stays a proposal until the events contract adds it (engine-adapter section 10). No customer-visible text names the engine (ADR-0016).
+   - Retryable errors back off (1 s doubling, at most 5 attempts per run) and then block (`planToken` expiry while `awaiting_approval` re-plans without consuming retry attempts).
+   - Validation, conflict, `pending_destruction` secret collision, and `site_exists_different_target` block at once.
+   - Cancelled before `register_route` (with atomic legal-hold check if applicable): remove internal/disabled route if any, delete empty site and DB, schedule created secrets for destruction (moving slug to quarantine/owner-retry grace), mark `cancelled`.
+   - An initial apply ending `compensated` stays retryable with a new Blueprint revision (`recovery_required` blocks). After `ready`, no automatic rollback.
+7. **Initial Blueprint apply follows the normal approval path.** Applies reviewed Blueprint revision (`ADR-0005`) with `onBehalfOf` approving owner, never an agent on production (contract 4.2).
+8. **Deprovisioning is a separate durable workflow**, driven by lifecycle (`PLT-004`) and [data-retention.md](../security/data-retention.md). Deleting any live (non-trial) tenant requires **both** the tenant owner's deletion request and a second staff approval (`DAT` / `PROV-015`). Its steps:
+   1. `close_access`: remove route, bump session versions, **engage per-tenant agent kill switch (`ALP-035`), drop queued agent triggers (`ALP-025`), pause connector jobs (`DSC-010`), and halt e-invoice submissions (`CMP-007`)**.
+   2. `final_export`: open-format export (`DAT-006`); skipped for trials that never went live.
+   3. `grace_wait`: parked `waiting_grace` (`resumeAt`, lease released). Legal hold blocks here and all later steps.
+   4. `disable_principals`: disable all shadow, agent, and support engine users.
+   5. `delete_site`: under transactional legal-hold lock (`SELECT ... FOR UPDATE` + fencing token immediately prior to each destructive external call), delete live engine site, tenant DB (which also drops `ADR-0041`'s `adapter_*` tables inside that DB, so Step 5/8 retries rely solely on control-plane records and store probes), object/file store & brand asset prefixes, search indexes, caches, per-tenant memory, chat transcripts, embeddings, AI gateway logs, and Blueprint/event tenant artifacts ([data-retention.md](../security/data-retention.md) section 7 step 5).
+   6. `destroy_secrets`: under legal-hold lock, destroy tenant secrets (`S05`, `S08`, `S09`, `S21`) and ZATCA keys (`Z1`–`Z5`, never exported); wait parked `waiting_recovery_window` (`resumeAt`, lease released).
+   7. `crypto_shred`: under legal-hold lock after recovery window, destroy per-tenant `S10b` DEKs & backup DEKs (never shared regional `S10a` KEK).
+   8. `verify_and_certify`: probe every internal/AI/search/storage system directly (no tenant DB dependency), verify deletion, and issue certificate (`DAT-007`).
+9. **Audit and retention.** Every transition writes an internal audit record (`auditId`, `workflowId`, `tenantId`, actor, step, hashes, outcome, error code, timings, fencing token; never secrets). Only the immutable deletion tombstone and hold/approval/export-hash evidence subset forms the `DAT-007` audit record retained in the control-plane DB for the longest market statutory period ([data-retention.md](../security/data-retention.md) section 6); operational traces follow short operational retention. Events: `tenant.state_changed`, `data.exported`, `data.deleted`; `engine.site_provisioned` awaits events contract ADR. No customer-visible text names the engine ([ADR-0016](ADR-0016-engine-invisibility.md)).
 
 ## Alternatives rejected
-- **One long script run end to end (ERP-003 as is):** a crash halfway leaves an unknown state, and a re-run may create a second database or new passwords.
-- **Workflow state in the tenant database:** it does not exist at the start and disappears at deletion, which is exactly when the record matters most.
-- **A general workflow engine product now:** possible later, but the step count is small. A plain durable table with leases is easier to review; revisit at ERP-002 scale.
-- **Roll back everything on any failure:** destroys evidence and can delete secrets that something already uses. Forward repair plus explicit cancel is safer.
-- **Route traffic before the initial apply so the owner can watch:** exposes a half-configured site; the owner watches progress from the control plane instead.
+- **One long script run end to end (ERP-003 as is):** crashes leave partial sites and risk duplicate DBs/keys; container argv exposes passwords in `/proc/<pid>/cmdline`.
+- **Workflow state in the tenant database:** does not exist at start and disappears when Step 5 drops the tenant DB.
+- **Holding leases across multi-day grace windows or human `gated` waits:** starves workers and hits lease expiry timeouts.
+- **Releasing slugs immediately on cancel or deprovision, or reusing `tenantId`:** enables slug hijacking and silent adoption of secrets scheduled for destruction.
+- **Publishing routes before gateway invisibility verification (deferring to `QA-016`):** leaks engine markers (`ADR-0016`) on live customer domains.
 
 ## Consequences
-- Easier: provisioning can be retried by anyone without fear; support sees exactly which step failed; the deletion path is the same machinery as creation.
-- Harder: a control-plane database becomes required at G1, in-region. Leases and fencing need tests. The hosting choice must provide placement and the secret backend.
+- Easier: crash recovery handles partial Step 3 DBs, `gated` pauses release leases cleanly, deprovisioning purges all AI/search/cache stores without depending on the deleted tenant DB, and secrets pending destruction can never be adopted.
+- Harder: requires control-plane regional DB + `S22` custody at G1, eliminating `provision_tenant_site.py` password argv flags before production, and `PLT-024`/`ERP-020` gateway readiness before Step 10 routing.
 - Must be done:
-  - Code location: `services/control-plane/` is Eldon's lane while PLT-003 is the partner's (open question in the detail doc).
-  - ADR-0041 must say how `provision_site` keeps its idempotency before the tenant database exists. This design does not depend on the answer, because the workflow is idempotent on its own side.
-  - PLT-004 owns lifecycle states, DAT-006 and DAT-007 own export and deletion proof, CMP-007 adds e-invoice unit onboarding as a later step, SEC-004 adds isolation tests on provisioned sites.
+  - Code lives in `services/provisioning/` (`partner` lane per `c51ebc8`, `#147`), coordinating control-plane DB table ownership with Eldon's `services/control-plane/`.
+  - `ADR-0041` (open PR #126) covers tenant-DB adapter schema creation; Step 3 runs `init_adapter_state` immediately upon DB creation and reconciles partial pre-schema residue.
+  - Before production: eliminate container password argv in `scripts/provision_tenant_site.py`, verify `Administrator login off` and `customer login off` on the pinned engine version, and ship `site.schema.json` follow-up ADR if `engine-adapter` is used instead of `provisioning-site-init`.
+  - Ship `PROV-T01` to `PROV-T39`; PLT-004 owns lifecycle, DAT-006/007 export/certificate, CMP-007 e-invoice onboarding, SEC-004 isolation tests.
 
 ## Supersedes
 none

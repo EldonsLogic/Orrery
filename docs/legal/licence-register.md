@@ -20,6 +20,7 @@ Principle 1: Build on open source; record every licence. Every adopted open-sour
 | Component | Upstream / source | Pinned version | Licence | Role / Why used | Boundary & compliance notes |
 |---|---|---|---|---|---|
 | **hijridate** | [github.com/dralshehri/hijridate](https://github.com/dralshehri/hijridate) (PyPI `hijridate`, successor of the deprecated `hijri-converter`; accessed 2026-11-18) | 2.6.0 | MIT (package metadata, accessed 2026-11-18) | Umm al-Qura Hijri to Gregorian conversion in the document intake (CMP-022). Tables cover 1343 to 1500 AH; outside that it raises and the intake drops the date. | Permissive, pure Python, no network. Table accuracy against the official Saudi calendar is UNVERIFIED beyond the library's own claim; a Saudi accountant should spot-check month starts before dates drive any legal or tax logic. |
+| **Lucide icons** | [github.com/lucide-icons/lucide](https://github.com/lucide-icons/lucide) (LICENSE read 2026-11-18) | 1.75.0 (release 2026-11-18) | ISC; 130-odd icons derived from Feather are MIT (Cole Bemis) | Outline icon set for the web app and marketing site (brand: 24 px, 1.75 px stroke, BRD-012). | Permissive. Keep both licence texts in the third-party notices that ship with the web bundle. Pin the version when the package is added. Directional icons mirror in RTL by our component, not by the library. Icons are used as-is; no logos of third parties. |
 
 ## 2. Forbidden components
 

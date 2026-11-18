@@ -50,7 +50,8 @@ class KsaAccountsTests(unittest.TestCase):
 
     def setUp(self):
         self.chart = load('sa_trading_chart_of_accounts.json')
-        self.defaults = load('company_account_defaults.json')
+        self.defaults_doc = load('company_account_defaults.json')
+        self.defaults = self.defaults_doc['defaults']
         self.vat = load('vat_treatments.json')
         self.numbers = set()
         self.leaves = {}
@@ -77,13 +78,20 @@ class KsaAccountsTests(unittest.TestCase):
             self.assertIn(node['account_type'], LEAF_TYPES[root])
             self.leaves[number] = (root, node['account_type'])
 
+    def test_draft_version_and_review_metadata(self):
+        for doc in (self.chart, self.defaults_doc, self.vat):
+            self.assertEqual(doc['status'], 'draft')
+            self.assertEqual(doc['version'], '0.1.0')
+            self.assertEqual(doc['review'], 'unreviewed')
+
     def test_chart_has_five_native_roots_and_bilingual_accounts(self):
-        self.assertEqual(set(self.chart), {'country_code', 'name', 'tree'})
+        self.assertEqual(set(self.chart), {'status', 'version', 'review', 'country_code', 'name', 'tree'})
         self.assertEqual(self.chart['country_code'], 'sa')
         roots = [root['root_type'] for root in self.chart['tree'].values()]
         self.assertCountEqual(roots, LEAF_TYPES.keys())
 
     def test_system_accounts_and_company_defaults(self):
+        self.assertEqual(set(self.defaults_doc), {'status', 'version', 'review', 'defaults'})
         self.assertEqual(set(self.defaults), set(DEFAULTS))
         self.assertEqual(len(self.defaults), len(set(self.defaults.values())))
         for field, kind in DEFAULTS.items():
@@ -93,6 +101,7 @@ class KsaAccountsTests(unittest.TestCase):
         self.assertEqual(self.leaves['3200'], ('Equity', 'Equity'))  # Retained earnings.
 
     def test_vat_categories_and_reason_codes(self):
+        self.assertEqual(set(self.vat), {'status', 'version', 'review', 'invoice_categories', 'treatments'})
         categories = self.vat['invoice_categories']
         self.assertEqual({code: data['invoice_rate_percent'] for code, data in categories.items()},
                          {'S': 15, 'Z': 0, 'E': 0, 'O': None})
@@ -109,6 +118,13 @@ class KsaAccountsTests(unittest.TestCase):
             for reason in categories[code]['reasons'].values():
                 self.assertTrue(reason['en'])
                 self.assertRegex(reason['ar'], r'[\u0600-\u06ff]')
+                self.assertEqual(reason['review'], 'unreviewed')
+        self.assertEqual(categories['Z']['reasons']['VATEX-SA-32']['en'], 'Export of goods')
+        self.assertEqual(categories['Z']['reasons']['VATEX-SA-32']['ar'], 'صادرات السلع من المملكة')
+        self.assertEqual(
+            categories['E']['reasons']['VATEX-SA-29']['en'],
+            'Financial services mentioned in Article 29 of the VAT Regulations',
+        )
 
     def test_tax_templates_link_to_company_posting_accounts(self):
         expected = {
@@ -126,6 +142,7 @@ class KsaAccountsTests(unittest.TestCase):
         for key, (category, rate, doctype, accounts) in expected.items():
             with self.subTest(treatment=key):
                 data = treatments[key]
+                self.assertEqual(data['review'], 'unreviewed')
                 self.assertEqual(data['invoice_category'], category)
                 self.assertEqual(data['vat_rate_percent'], rate)
                 self.assertEqual(data['posting_accounts'], accounts)

@@ -1,0 +1,35 @@
+name: Dependency audit
+
+# Weekly, and when a dependency file changes. Dependabot opens the update PRs (SEC-007).
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  pull_request:
+    paths:
+      - "services/blueprint/requirements.txt"
+      - "evals/requirements.txt"
+      - ".github/workflows/audit.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install the audit tool
+        run: pip install pip-audit==2.9.0
+      - name: Audit Python requirements for known vulnerabilities
+        run: |
+          pip-audit -r services/blueprint/requirements.txt
+          pip-audit -r evals/requirements.txt
+      - name: Software bill of materials (CycloneDX) for the Python requirements
+        run: pip-audit -r services/blueprint/requirements.txt -f cyclonedx-json -o sbom-python.cdx.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sbom-python
+          path: sbom-python.cdx.json

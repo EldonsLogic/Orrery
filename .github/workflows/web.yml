@@ -1,0 +1,47 @@
+name: Web
+
+# Runs only when the web workspace or the brand tokens change.
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "docs/brand/tokens/**"
+      - ".github/workflows/web.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - name: Theme engine tests (BRD-005)
+        run: node --test web/app/theme/
+      - name: Enable pnpm (version from web/package.json)
+        run: corepack enable
+      - name: Install (frozen lockfile)
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        working-directory: web
+        run: pnpm lint
+      - name: Tokens-only and logical-property check
+        working-directory: web
+        run: pnpm check:tokens
+      - name: Type check
+        working-directory: web
+        run: pnpm typecheck
+      - name: Unit tests
+        working-directory: web
+        run: pnpm test
+      - name: Build (both apps, static export)
+        working-directory: web
+        run: pnpm build

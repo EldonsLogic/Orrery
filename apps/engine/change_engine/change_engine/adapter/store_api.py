@@ -1,4 +1,4 @@
-"""Store interface for adapter state (ERP-026, ADR-0036) and the production guard."""
+"""Store interface for adapter state (ERP-026, ADR-0041) and the production guard."""
 from __future__ import annotations
 
 import os
@@ -55,5 +55,5 @@ def assert_store_allowed(store: AdapterStore, production: bool) -> None:
     if production and store.volatile:
         raise StoreRefused(
             "in-memory adapter store refused in production: idempotency keys, journal and audit would be lost "
-            "on restart; configure a durable store (MariaDB on the tenant database, ADR-0036)"
+            "on restart; configure a durable store (MariaDB on the tenant database, ADR-0041)"
         )

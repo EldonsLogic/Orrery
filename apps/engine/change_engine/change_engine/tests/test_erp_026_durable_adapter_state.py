@@ -1,4 +1,4 @@
-"""ERP-026: durable adapter state (ADR-0036): store conformance, production guard, restart and restore.
+"""ERP-026: durable adapter state (ADR-0041): store conformance, production guard, restart and restore.
 
 MariaDB tests run only when a throwaway server is given (otherwise skipped with the reason):
   docker run -d --name erp026-mdb -e MARIADB_ROOT_PASSWORD=pw -p 127.0.0.1:33726:3306 mariadb:10.6

@@ -1,4 +1,4 @@
-"""MariaDB-backed adapter state living beside the tenant data (ERP-026, ADR-0036).
+"""MariaDB-backed adapter state living beside the tenant data (ERP-026, ADR-0041).
 
 One schema per tenant database; every table keeps its tenant_id column anyway so a misrouted
 connection cannot read another tenant's rows. Shares the read paths of SQLiteAdapterStore through

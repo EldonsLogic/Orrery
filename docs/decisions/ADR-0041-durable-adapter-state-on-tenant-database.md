@@ -1,4 +1,4 @@
-# ADR-0036: Durable adapter state lives in the tenant database
+# ADR-0041: Durable adapter state lives in the tenant database
 
 Status: Proposed
 Owner: partner

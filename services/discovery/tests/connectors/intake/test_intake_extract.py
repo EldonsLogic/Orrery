@@ -52,8 +52,8 @@ def test_arabic_invoice_fields_digits_dates_and_envelopes():
     assert v["field:invoice_number"]["comparison"] == "2031/0042"        # comparison copy
     assert v["field:date"]["text"] == "٢٠٢٤/٠٩/١٨" and v["field:date#norm"]["text"] == "2024-09-18"
     assert v["field:date_hijri"]["text"] == "١٤٤٦/٠٣/١٥"
-    assert v["field:date_hijri#norm"]["text"] == "2024-09-19"            # civil table; Umm al-Qura says 09-18 (one day apart, flagged approximate)
-    assert "hijri_conversion_approximate" in v["field:date_hijri#meta"]["text"]
+    assert v["field:date_hijri#norm"]["text"] == "2024-09-18"            # Umm al-Qura via hijridate (CMP-022)
+    assert "hijri_conversion_approximate" not in v["field:date_hijri#meta"]["text"]
     assert v["field:seller_name"]["text"] == "شركة النور للتجارة"
     assert v["field:buyer_name"]["text"] == "شركة الأفق"
     assert v["field:tax_number_1"]["text"] == "٣٠٠٠٠٠٠٠٠٠٠٠٠٠٣" and "field:tax_number_1#norm" not in v  # raw only
@@ -205,3 +205,13 @@ def test_bad_engine_output_fails_closed():
     for eng, cls in ((Bad(), "Int008OcrInvalid"), (Boom(), "Int009OcrFailed")):
         out = run_connector(IntakeConnector(eng), png(), CTX)
         assert not out["ok"] and out["code"] == "CON-010" and cls in out["reason"]
+
+
+def test_hijri_umm_al_qura_known_dates_and_range():
+    from connectors.intake.parse import hijri_to_gregorian
+    import datetime, pytest
+    assert hijri_to_gregorian(1447, 1, 1) == datetime.date(2025, 6, 26)
+    with pytest.raises(ValueError):
+        hijri_to_gregorian(1300, 1, 1)
+    with pytest.raises(ValueError):
+        hijri_to_gregorian(1447, 2, 30)

@@ -224,7 +224,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | INF-010 | Capacity plan and hosting at volume | Infrastructure | G5 | ERP-002,INF-007 | partner | todo |
 | INF-011 | Asset delivery (CDN) for tenant brand assets | Infrastructure | G2 | INF-004 | partner | todo |
 | INF-012 | Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) | Infrastructure | G1 | GOV-009 | eldon | todo |
-| INF-013 | Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) | Infrastructure | G0 | GOV-009 | eldon | todo |
+| INF-013 | Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) | Infrastructure | G0 | GOV-009 | eldon | doing |
 | INF-014 | OS-level sandbox for untrusted uploads (container or VM with no network, read-only mount, CPU, memory and time limits, seccomp) that runs the intake parsers; required before any real customer upload (Q-133 to Q-140 follow-ups, connector runtime is only logically sandboxed today) | Infrastructure | G2 | INF-004,DSC-010 | partner | todo |
 | BRD-001 | Brand guidelines v1 (Quadrant) and placeholder logo | Brand | G0 | - | eldon | done |
 | BRD-002 | Design tokens: light and dark, CSS and JSON | Brand | G0 | BRD-001 | eldon | done |
@@ -291,7 +291,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | FND-006 | Autonomy and reuse chart for investors | Fundraising | G3 | BPL-022,GTM-006 | eldon | todo |
 | FND-007 | Cap table and funding terms with counsel | Fundraising | G3 | LEG-010 | eldon | todo |
 | CMP-021 | Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) | Compliance | G1 | BPL-002,BPL-009 | partner | todo |
-| CMP-022 | Calendar and Hijri (Umm al-Qura) conversion library choice, licence and tests | Compliance | G1 | CMP-005 | partner | todo |
+| CMP-022 | Calendar and Hijri (Umm al-Qura) conversion library choice, licence and tests | Compliance | G1 | CMP-005 | partner | done |
 | CMP-023 | Per-company calendar and week settings (week start, weekend, working days and hours, Ramadan hours, number system) | Compliance | G2 | CMP-021,CMP-022 | partner | todo |
 | CMP-024 | Holiday calendars per country with admin-editable moon-sighting overrides | Compliance | G2 | CMP-023 | partner | todo |
 | CMP-025 | Fiscal-year type and start handling; zakat period handling | Compliance | G2 | CMP-023,CMP-013 | partner | todo |
@@ -335,7 +335,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-034 | Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety | Governance | G0 | GOV-011 | eldon | done |
 | GOV-035 | Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests) | Governance | G0 | GOV-024 | eldon | done |
 | GOV-036 | Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows | Governance | G0 | GOV-035 | eldon | done |
-| GOV-037 | After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency | Governance | G0 | GOV-036 | eldon | todo |
+| GOV-037 | After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency | Governance | G0 | GOV-036 | eldon | done |
 | GOV-038 | Agent-team benchmark: baseline tasks, cost, latency and regression log used to judge prompt and role improvements | Governance | G1 | GOV-034 | eldon | done |
 | GOV-039 | Market-pack track plan: owner and capacity per active pack, what "right away" means per market, country release checklist adopted | Governance | G1 | GOV-036 | eldon | done |
 | GOV-040 | Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032) | Governance | G0 | GOV-008 | partner | done |

@@ -1,8 +1,8 @@
 # ADR-0026: Phased delivery, phase exits and the market-pack track
 
-Status: Proposed
+Status: Accepted
 Owner: eldon
-Approved by: pending (partner review of the pull request)
+Approved by: eldon (walkthrough answer, 2026-11-18); partner review on the pull request
 
 ## Context
 The founders and an independent review agreed that the product should be proven in steps, not built as described in one go. The partner's responses asked for a smaller first proof, real-engine integration, pilot safeguards and a gate map. The repository has gates G0 to G5 ([../GATES.md](../GATES.md)) and ADR-0024 (four phase-1 markets, no fixed launch order). The first leads are in Qatar. The full plan is in [../architecture/phased-delivery-and-lanes.md](../architecture/phased-delivery-and-lanes.md).

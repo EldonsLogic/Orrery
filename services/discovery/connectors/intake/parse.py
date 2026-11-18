@@ -8,6 +8,8 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
+from hijridate import Hijri
+
 _MAP = {**{0x0660 + i: ord("0") + i for i in range(10)}, **{0x06F0 + i: ord("0") + i for i in range(10)},
         0x0623: 0x0627, 0x0625: 0x0627, 0x0622: 0x0627, 0x0649: 0x064A, 0x0629: 0x0647}
 AMT = r"\d[\d,٬.٫]*"
@@ -68,10 +70,12 @@ _DMY = re.compile(r"(?<!\d)(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})(?!\d)")
 
 
 def hijri_to_gregorian(y: int, m: int, d: int) -> datetime.date:
-    """Tabular (civil) Islamic calendar. An approximation of Umm al-Qura that can differ by a day:
-    the real conversion library is UNVERIFIED (docs/architecture/calendars-and-locale.md)."""
-    jdn = d + -(-(295 * (m - 1)) // 10) + (y - 1) * 354 + (3 + 11 * y) // 30 + 1948439
-    return datetime.date.fromordinal(jdn - 1721425)  # JDN of 0001-01-01 is 1721426
+    """Umm al-Qura (the Saudi official calendar) via the pinned `hijridate` library (MIT, tables 1343-1500 AH).
+    Raises ValueError for an invalid date or a year outside the tables."""
+    try:
+        return Hijri(y, m, d).to_gregorian()
+    except OverflowError as e:
+        raise ValueError(str(e)) from e
 
 
 def find_dates(f: str) -> list:
@@ -90,7 +94,7 @@ def find_dates(f: str) -> list:
                                 "iso": datetime.date(y, mo, d).isoformat(), "approx": False, "flags": flags})
                 elif 1300 <= y <= 1500 and 1 <= mo <= 12 and 1 <= d <= 30:
                     out.append({"span": m.span(), "calendar": "hijri",
-                                "iso": hijri_to_gregorian(y, mo, d).isoformat(), "approx": True, "flags": flags})
+                                "iso": hijri_to_gregorian(y, mo, d).isoformat(), "approx": False, "flags": flags})
             except ValueError:
                 continue
     return sorted(out, key=lambda x: x["span"])

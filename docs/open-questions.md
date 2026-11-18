@@ -136,3 +136,6 @@ The canonical list from Phase 1-2 is [strategy/open-questions.md](strategy/open-
 | Q-130 | DSC-019 pre-validation. Rows with only needs_owner findings stay in accepted and are also listed for owner review; should they be held back until the owner confirms? | eldon | G2 | DSC-019 |
 | Q-131 | DSC-019 pre-validation. Same-day receipts may cover same-day issues (receipts sort first); an exact duplicate row (PRE-401) is blocking; a discount is an amount, not a percentage. Confirm each. | eldon | G2 | DSC-019 |
 | Q-132 | DSC-019 pre-validation. Not covered: Hijri conversion, currency conversion, tax-rate correctness, credit notes and returns as signed stock, warehouse transfers, phonetic or transliterated name matching. | eldon | G2 | DSC-019 |
+| Q-133 | OPR-018 domain errors. Enum slot values (such as `changed` and `kind`) render as raw English tokens inside the Arabic messages; add per-locale enum labels to the catalog? | eldon | G2 | OPR-018 |
+| Q-134 | OPR-018 domain errors. The Arabic messages are unreviewed (ADR-0033) and need a native reviewer. | eldon | G2 | OPR-018 |
+| Q-135 | OPR-018 domain errors. PLT-024 (partner) must fill the catalog from engine failures; nothing is wired yet, and ADR-0036 is Proposed and needs both founders' acceptance because it changes a contract. | both | G2 | PLT-024 |

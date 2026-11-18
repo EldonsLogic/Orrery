@@ -10,16 +10,16 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-try:
-    from jsonschema import Draft202012Validator
-except ImportError:  # pragma: no cover - optional when jsonschema is not installed
-    Draft202012Validator = None
+from jsonschema import Draft202012Validator, FormatChecker
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "pack.schema.json"
 COUNTRY_CODE_RE = re.compile(r"^[A-Za-z]{2}$")
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$")
 WEEKDAYS = frozenset({"mon", "tue", "wed", "thu", "fri", "sat", "sun"})
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+SNAKE_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+LOCALE_TAG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
+ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class CountryPackError(ValueError):
@@ -50,92 +50,27 @@ def _is_int(val: Any) -> bool:
     return isinstance(val, int) and not isinstance(val, bool)
 
 
-def _is_num(val: Any) -> bool:
-    return isinstance(val, (int, float)) and not isinstance(val, bool)
-
-
 def _load_schema(schema_path: Path | None = None) -> dict[str, Any]:
     path = schema_path or SCHEMA_PATH
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _resolve_ref(ref: str, root_schema: dict[str, Any]) -> dict[str, Any]:
-    node: Any = root_schema
-    for part in ref.lstrip("#/").split("/"):
-        node = node[part]
-    return node
-
-
-def _check_schema_node(val: Any, schema: dict[str, Any], root: dict[str, Any], path: str, errors: list[str]) -> None:
-    if "$ref" in schema:
-        schema = _resolve_ref(schema["$ref"], root)
-    if "const" in schema and val != schema["const"]:
-        errors.append(f"{path}: expected {schema['const']!r}")
-        return
-    if "enum" in schema and val not in schema["enum"]:
-        errors.append(f"{path}: value {val!r} not in {schema['enum']}")
-        return
-    expected_types = schema.get("type")
-    if expected_types is not None:
-        types = expected_types if isinstance(expected_types, list) else [expected_types]
-        ok = False
-        for t in types:
-            if t == "null" and val is None:
-                ok = True
-            elif t == "boolean" and isinstance(val, bool):
-                ok = True
-            elif t == "integer" and _is_int(val):
-                ok = True
-            elif t == "number" and _is_num(val):
-                ok = True
-            elif t == "string" and isinstance(val, str):
-                ok = True
-            elif t == "array" and isinstance(val, list):
-                ok = True
-            elif t == "object" and isinstance(val, dict):
-                ok = True
-        if not ok:
-            errors.append(f"{path}: expected type {expected_types}, got {type(val).__name__}")
-            return
-    if isinstance(val, str):
-        if "minLength" in schema and len(val) < schema["minLength"]:
-            errors.append(f"{path}: string shorter than {schema['minLength']}")
-        if "maxLength" in schema and len(val) > schema["maxLength"]:
-            errors.append(f"{path}: string longer than {schema['maxLength']}")
-        if "pattern" in schema and not re.search(schema["pattern"], val):
-            errors.append(f"{path}: '{val}' does not match pattern {schema['pattern']}")
-    elif _is_num(val):
-        if "minimum" in schema and val < schema["minimum"]:
-            errors.append(f"{path}: {val} < minimum {schema['minimum']}")
-        if "maximum" in schema and val > schema["maximum"]:
-            errors.append(f"{path}: {val} > maximum {schema['maximum']}")
-    elif isinstance(val, list):
-        if "minItems" in schema and len(val) < schema["minItems"]:
-            errors.append(f"{path}: expected at least {schema['minItems']} item(s)")
-        if "maxItems" in schema and len(val) > schema["maxItems"]:
-            errors.append(f"{path}: expected at most {schema['maxItems']} item(s)")
-        if schema.get("uniqueItems") and len(val) != len({json.dumps(x, sort_keys=True) for x in val}):
-            errors.append(f"{path}: duplicate items are not allowed")
-        if "items" in schema:
-            for idx, item in enumerate(val):
-                _check_schema_node(item, schema["items"], root, f"{path}[{idx}]", errors)
-    elif isinstance(val, dict):
-        props = schema.get("properties", {})
-        for req in schema.get("required", []):
-            if req not in val:
-                errors.append(f"{path}.{req}: missing required property")
-        addl = schema.get("additionalProperties", True)
-        for k, v in val.items():
-            if k in props:
-                _check_schema_node(v, props[k], root, f"{path}.{k}", errors)
-            elif addl is False:
-                errors.append(f"{path}.{k}: unexpected property")
-            elif isinstance(addl, dict):
-                _check_schema_node(v, addl, root, f"{path}.{k}", errors)
-
-
 def _path_overlaps(a: str, b: str) -> bool:
     return a == b or a.startswith(f"{b}.") or b.startswith(f"{a}.")
+
+
+def _check_localized_text(val: Any, prefix: str, errors: list[str]) -> None:
+    if not isinstance(val, dict):
+        errors.append(f"{prefix}: must be a localized text object")
+        return
+    for req in ("ar", "en"):
+        if req not in val:
+            errors.append(f"{prefix}.{req}: missing required locale")
+    for k, v in val.items():
+        if not isinstance(k, str) or not LOCALE_TAG_RE.match(k):
+            errors.append(f"{prefix}.{k}: invalid BCP 47 locale key")
+        if not isinstance(v, str) or not (1 <= len(v) <= 200):
+            errors.append(f"{prefix}.{k}: localized text must be 1..200 characters")
 
 
 def _check_working_time(locale: dict[str, Any], errors: list[str], prefix: str) -> None:
@@ -156,27 +91,70 @@ def _check_working_time(locale: dict[str, Any], errors: list[str], prefix: str) 
     if reduced is not None and not isinstance(reduced, list):
         errors.append(f"{prefix}.workingTime.reducedPeriods: must be a list")
         return
+    allowed_rp_keys = {"id", "labels", "rule", "gregorianFrom", "gregorianTo", "hours"}
     fixed_spans: list[tuple[date, date, int]] = []
+    seen_ids: set[str] = set()
     for idx, rp in enumerate(reduced or []):
-        if not isinstance(rp, dict) or not isinstance(rp.get("hours"), dict):
-            errors.append(f"{prefix}.workingTime.reducedPeriods[{idx}]: invalid entry")
+        rp_prefix = f"{prefix}.workingTime.reducedPeriods[{idx}]"
+        if not isinstance(rp, dict):
+            errors.append(f"{rp_prefix}: entry must be an object")
             continue
-        rf, rt = rp["hours"].get("from", ""), rp["hours"].get("to", "")
-        if not (isinstance(rf, str) and isinstance(rt, str) and TIME_RE.match(rf) and TIME_RE.match(rt) and rf < rt):
-            errors.append(f"{prefix}.workingTime.reducedPeriods[{idx}].hours: invalid range")
-        if rp.get("rule", "ramadan") == "fixed_dates":
+        extra_keys = sorted(set(rp) - allowed_rp_keys)
+        if extra_keys:
+            errors.append(f"{rp_prefix}: unexpected properties: {', '.join(extra_keys)}")
+        rp_id = rp.get("id")
+        if not isinstance(rp_id, str) or not SNAKE_ID_RE.match(rp_id):
+            errors.append(f"{rp_prefix}.id: must match Blueprint id pattern")
+        elif rp_id in seen_ids:
+            errors.append(f"{rp_prefix}.id: duplicate reduced period id '{rp_id}'")
+        else:
+            seen_ids.add(rp_id)
+        if "labels" not in rp:
+            errors.append(f"{rp_prefix}.labels: missing required property")
+        else:
+            _check_localized_text(rp["labels"], f"{rp_prefix}.labels", errors)
+
+        rule = rp.get("rule", "ramadan")
+        if rule not in {"ramadan", "fixed_dates"}:
+            errors.append(f"{rp_prefix}.rule: must be 'ramadan' or 'fixed_dates'")
+
+        hrs = rp.get("hours")
+        if not isinstance(hrs, dict) or set(hrs) != {"from", "to"}:
+            errors.append(f"{rp_prefix}.hours: must define exact keys 'from' and 'to'")
+        else:
+            rf, rt = hrs.get("from", ""), hrs.get("to", "")
+            if not (isinstance(rf, str) and isinstance(rt, str) and TIME_RE.match(rf) and TIME_RE.match(rt) and rf < rt):
+                errors.append(f"{rp_prefix}.hours: invalid range")
+
+        for d_key in ("gregorianFrom", "gregorianTo"):
+            if d_key in rp:
+                d_val = rp[d_key]
+                if not isinstance(d_val, str) or not ISO_DATE_RE.match(d_val):
+                    errors.append(f"{rp_prefix}.{d_key}: must be YYYY-MM-DD ISO date")
+                else:
+                    try:
+                        date.fromisoformat(d_val)
+                    except ValueError:
+                        errors.append(f"{rp_prefix}.{d_key}: invalid calendar date")
+
+        if rule == "fixed_dates":
+            g_from = rp.get("gregorianFrom", "")
+            g_to = rp.get("gregorianTo", "")
+            if not (isinstance(g_from, str) and isinstance(g_to, str) and ISO_DATE_RE.match(g_from) and ISO_DATE_RE.match(g_to)):
+                errors.append(f"{rp_prefix}: fixed_dates requires gregorianFrom and gregorianTo ISO dates")
+                continue
             try:
-                d_from = date.fromisoformat(str(rp.get("gregorianFrom", "")))
-                d_to = date.fromisoformat(str(rp.get("gregorianTo", "")))
+                d_from = date.fromisoformat(g_from)
+                d_to = date.fromisoformat(g_to)
             except ValueError:
-                errors.append(f"{prefix}.workingTime.reducedPeriods[{idx}]: invalid fixed_dates ISO dates")
+                errors.append(f"{rp_prefix}: invalid fixed_dates ISO dates")
                 continue
             if d_from > d_to:
-                errors.append(f"{prefix}.workingTime.reducedPeriods[{idx}]: gregorianFrom after gregorianTo")
+                errors.append(f"{rp_prefix}: gregorianFrom after gregorianTo")
             else:
                 for prev_a, prev_b, prev_i in fixed_spans:
                     if d_from <= prev_b and prev_a <= d_to:
-                        errors.append(f"{prefix}.workingTime.reducedPeriods[{idx}] overlaps [{prev_i}]")
+                        errors.append(f"{rp_prefix} overlaps [{prev_i}]")
                 fixed_spans.append((d_from, d_to, idx))
 
 
@@ -186,12 +164,10 @@ def validate_pack(pack: Any, schema_path: Path | None = None) -> list[str]:
         return ["pack: manifest must be a JSON object"]
     schema = _load_schema(schema_path)
     errors: list[str] = []
-    if Draft202012Validator is not None:
-        for err in sorted(Draft202012Validator(schema).iter_errors(pack), key=lambda e: list(e.absolute_path)):
-            loc = ".".join(map(str, err.absolute_path)) or "pack"
-            errors.append(f"{loc}: {err.message}")
-    else:
-        _check_schema_node(pack, schema, schema, "pack", errors)
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    for err in sorted(validator.iter_errors(pack), key=lambda e: list(e.absolute_path)):
+        loc = ".".join(map(str, err.absolute_path)) or "pack"
+        errors.append(f"{loc}: {err.message}")
     if errors:
         return errors
 
@@ -246,8 +222,17 @@ def _semver_key(version: str) -> tuple[int, int, int, int, str] | None:
     return (major, minor, patch, 1 if pre is None else 0, pre or "")
 
 
-def load_country_pack(country_code: str, packs_dir: Path, version: str | None = None) -> dict[str, Any]:
-    """Load and validate a country pack from `<packs_dir>/<country>/<version>/pack.json`."""
+def load_country_pack(
+    country_code: str,
+    packs_dir: Path,
+    version: str | None = None,
+    *,
+    allow_test_packs: bool = False,
+) -> dict[str, Any]:
+    """Load and validate a country pack from `<packs_dir>/<country>/<version>/pack.json`.
+
+    Packs marked `testOnly: true` are rejected unless `allow_test_packs=True`.
+    """
     if not isinstance(country_code, str) or not COUNTRY_CODE_RE.match(country_code.strip()):
         raise UnknownCountryError(f"Invalid or missing country code: {country_code!r}")
     code_upper = country_code.strip().upper()
@@ -268,9 +253,17 @@ def load_country_pack(country_code: str, packs_dir: Path, version: str | None = 
             if entry.is_dir() and (entry / "pack.json").is_file():
                 key = _semver_key(entry.name)
                 if key is not None:
-                    candidates.append((key, entry.name, entry / "pack.json"))
+                    pack_path = entry / "pack.json"
+                    if not allow_test_packs:
+                        try:
+                            raw_meta = json.loads(pack_path.read_text(encoding="utf-8"))
+                            if isinstance(raw_meta, dict) and raw_meta.get("testOnly") is True:
+                                continue
+                        except json.JSONDecodeError:
+                            pass
+                    candidates.append((key, entry.name, pack_path))
         if not candidates:
-            raise PackNotFoundError(f"No valid versioned pack found for country '{code_upper}'")
+            raise PackNotFoundError(f"No valid non-test versioned pack found for country '{code_upper}'")
         _, chosen_version, pack_file = max(candidates, key=lambda c: c[0])
 
     try:
@@ -279,6 +272,10 @@ def load_country_pack(country_code: str, packs_dir: Path, version: str | None = 
         raise PackValidationError(f"Malformed JSON in {pack_file}: {exc}") from exc
 
     validate_pack_or_raise(pack)
+    if pack.get("testOnly") is True and not allow_test_packs:
+        raise PackValidationError(
+            f"Country pack {code_upper}@{chosen_version} is marked testOnly=true and cannot be used in production"
+        )
     if pack["countryCode"] != code_upper:
         raise PackValidationError(f"Pack countryCode '{pack['countryCode']}' does not match '{code_upper}'")
     if pack["version"] != chosen_version:
@@ -464,9 +461,25 @@ def resolve_country_pack(
     company_overrides: dict[str, Any] | None = None,
     version: str | None = None,
     pack_id: str | None = None,
+    *,
+    allow_test_packs: bool = False,
+    allow_unpinned: bool = False,
 ) -> dict[str, Any]:
-    """Select, validate, and resolve a country pack with company overrides from explicit inputs."""
-    pack = load_country_pack(country_code=country_code, packs_dir=packs_dir, version=version)
+    """Select, validate, and resolve a country pack with company overrides from explicit inputs.
+
+    Requires a pinned `version` unless `allow_unpinned=True` and rejects `testOnly: true`
+    packs unless `allow_test_packs=True`.
+    """
+    if version is None and not allow_unpinned:
+        raise PackNotFoundError(
+            f"resolve_country_pack requires an explicit pinned version for country '{country_code}'"
+        )
+    pack = load_country_pack(
+        country_code=country_code,
+        packs_dir=packs_dir,
+        version=version,
+        allow_test_packs=allow_test_packs,
+    )
     if pack_id is not None and pack_id != pack["packId"]:
         raise PackValidationError(f"Requested pack_id '{pack_id}' does not match loaded pack '{pack['packId']}'")
     return apply_company_overrides(pack, company_overrides=company_overrides)

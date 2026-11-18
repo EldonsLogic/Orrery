@@ -25,6 +25,8 @@ def test_grant_lifecycle(w):
     assert code(lambda: w.support.check_access(staff, gid, "t-a", "write:invoices")) == "IDN-044"
     assert code(lambda: w.support.check_access(staff, gid, "t-b", "read:invoices")) == "IDN-042"
     w.clock.advance(3600)
+    assert code(lambda: w.support.check_access(staff, gid, "t-a", "read:invoices")) == "IDN-004"
+    staff = w.staff_claims()  # the old token is dead; a fresh one meets the expired grant
     assert code(lambda: w.support.check_access(staff, gid, "t-a", "read:invoices")) == "IDN-042"
     tenant_view = w.audit.for_tenant("t-a")
     assert any(e.action == "support.granted" for e in tenant_view)

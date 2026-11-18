@@ -2,40 +2,74 @@
 
 import importlib
 import json
+import os
+from pathlib import Path
 import sqlite3
+import subprocess
 import sys
+import threading
 from types import SimpleNamespace
 
 import pytest
 
 from change_engine import hooks
-from evstream import MemoryStore, validate_event
+from change_engine.adapter.record_events import (
+    RECORD_ENTITIES,
+    RECORD_HOOKS,
+    _import_evstream,
+    resolve_subject_id,
+)
+
+_evstream = _import_evstream()
+MemoryStore = _evstream.MemoryStore
+validate_event = _evstream.validate_event
 
 
 class Database:
-    """Use SQLite for real commits and rollbacks, substituting MariaDB's lock functions."""
+    """Use SQLite for real commits and rollbacks with real per-DB threading locks."""
 
-    def __init__(self, path):
-        self.connection = sqlite3.connect(path)
-        self.connection.executescript("""
-            CREATE TABLE IF NOT EXISTS document (name TEXT PRIMARY KEY);
-            CREATE TABLE IF NOT EXISTS `tabChange Engine Event Outbox` (
-                position INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id TEXT NOT NULL UNIQUE,
-                payload TEXT NOT NULL
-            );
-        """)
-        self.locked = False
+    _locks_guard = threading.Lock()
+    _db_locks: dict[str, threading.Lock] = {}
+
+    def __init__(self, path, *, create_tables: bool = True):
+        self.path = str(path)
+        self.connection = sqlite3.connect(self.path, check_same_thread=False, timeout=10.0)
+        if create_tables:
+            self.connection.executescript("""
+                CREATE TABLE IF NOT EXISTS document (name TEXT PRIMARY KEY);
+                CREATE TABLE IF NOT EXISTS `tabChange Engine Event Outbox` (
+                    position INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL UNIQUE,
+                    payload TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT NULL,
+                    dead_lettered_at TEXT NULL
+                );
+                CREATE TABLE IF NOT EXISTS `tabChange Engine Event Subject` (
+                    subject_id TEXT PRIMARY KEY,
+                    entity TEXT NOT NULL,
+                    record_name TEXT NOT NULL,
+                    deleted INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE(entity, record_name)
+                );
+            """)
+        with self._locks_guard:
+            self._lock = self._db_locks.setdefault(self.path, threading.Lock())
+        self.held_locks: set[str] = set()
         self.fail_commit = False
 
     def sql(self, query, params=()):
         if "GET_LOCK" in query:
-            if self.locked:
-                return [(0,)]
-            self.locked = True
-            return [(1,)]
+            key = params[0]
+            if self._lock.acquire(blocking=False):
+                self.held_locks.add(key)
+                return [(1,)]
+            return [(0,)]
         if "RELEASE_LOCK" in query:
-            self.locked = False
+            key = params[0]
+            if key in self.held_locks:
+                self.held_locks.remove(key)
+                self._lock.release()
             return [(1,)]
         return self.connection.execute(query.replace("%s", "?"), params).fetchall()
 
@@ -56,24 +90,26 @@ class Document(dict):
         return self.get("prior")
 
 
-def invoke_hook(doc, method):
+def invoke_hook(doc, method, *args):
     path = hooks.doc_events[doc.doctype][method]
     module, name = path.rsplit(".", 1)
-    getattr(importlib.import_module(module), name)(doc, method)
+    getattr(importlib.import_module(module), name)(doc, method, *args)
 
 
 @pytest.fixture
 def sites(tmp_path, monkeypatch):
     connections = []
     engine = SimpleNamespace(
-        conf={}, local=SimpleNamespace(),
+        conf={},
+        local=SimpleNamespace(),
+        flags=SimpleNamespace(in_install=False, in_migrate=False, in_patch=False),
         session=SimpleNamespace(user="frappe-private@example.invalid"),
     )
     monkeypatch.setitem(sys.modules, "frappe", engine)
 
-    def select(tenant, *, worker=False):
+    def select(tenant, *, worker=False, create_tables=True):
         # Each worker owns a separate connection to its site's database.
-        database = Database(tmp_path / tenant)
+        database = Database(tmp_path / tenant, create_tables=create_tables)
         connections.append(database.connection)
         engine.conf = {"tenant_id": tenant, "db_name": tenant}
         if worker:
@@ -86,46 +122,92 @@ def sites(tmp_path, monkeypatch):
         connection.close()
 
 
-def run_publisher(engine, append):
+def run_publisher(engine, append, **kwargs):
     engine.get_attr = lambda path: {"test.append": append}[path]
     path, = hooks.scheduler_events["all"]
     module, name = path.rsplit(".", 1)
-    return getattr(importlib.import_module(module), name)()
+    return getattr(importlib.import_module(module), name)(**kwargs)
 
 
-def test_lifecycle_hooks_deliver_contract_events_in_order(sites):
+def test_hooks_module_imports_no_adapter_at_load_and_matches_registry():
+    assert set(hooks._RECORD_DOCTYPES) == set(RECORD_ENTITIES)
+    assert set(hooks._RECORD_HOOK_METHODS) == set(RECORD_HOOKS)
+    change_engine_root = str(Path(__file__).resolve().parents[2])
+    env = {**os.environ, "PYTHONPATH": change_engine_root}
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys, change_engine.hooks; "
+            "assert not any(m.startswith('change_engine.adapter') for m in sys.modules)",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_lifecycle_hooks_deliver_contract_events_with_delete_and_rename(sites):
     engine, select = sites
     db = select("t_alpha")
     draft = Document(docstatus=0, tenant_id="t_foreign", customer="t_foreign")
     invoke_hook(draft, "after_insert")
     invoke_hook(draft, "on_update")  # The insert also runs on_update.
-    invoke_hook(Document(prior=draft, docstatus=0), "on_update")
+    invoke_hook(Document({**draft, "prior": draft, "grand_total": 150}), "on_update")
     submitted = Document(prior=draft, docstatus=1)
     invoke_hook(submitted, "on_update")  # The submit also runs on_update.
     invoke_hook(submitted, "on_submit")
-    invoke_hook(Document(prior=submitted, docstatus=1), "on_update_after_submit")
+    invoke_hook(Document(prior=submitted, docstatus=1, notes="updated"), "on_update_after_submit")
+
+    # Rename keeps the exact same surrogate subject.id and updates the reverse map.
+    renamed = Document(docstatus=1)
+    renamed.name = "ERPNext-renamed-key"
+    invoke_hook(renamed, "after_rename", draft.name, renamed.name, False)
+
     invoke_hook(Document(prior=submitted, docstatus=2), "on_cancel")
-    amended = Document(amended_from=draft.name, docstatus=0)
+    amended = Document(amended_from=renamed.name, docstatus=0)
     amended.name = "new-document-1"
     invoke_hook(amended, "after_insert")
+    invoke_hook(amended, "on_trash")
     db.commit()
 
     select("t_alpha", worker=True)
     store = MemoryStore()
-    assert run_publisher(engine, store.append) == 6
+    assert run_publisher(engine, store.append) == 8
     events = store.read("t_alpha")
     assert [event["type"] for event in events] == [
-        "sales_order.created", "sales_order.updated", "sales_order.submitted",
-        "sales_order.updated", "sales_order.cancelled", "sales_order.created",
+        "sales_order.created",
+        "sales_order.updated",
+        "sales_order.submitted",
+        "sales_order.updated",
+        "sales_order.updated",
+        "sales_order.cancelled",
+        "sales_order.created",
+        "sales_order.deleted",
     ]
-    assert [event["sequence"] for event in events] == list(range(1, 7))
+    assert [event["sequence"] for event in events] == list(range(1, 9))
     assert all(validate_event(event).ok for event in events)
     assert all(event["actor"]["kind"] == "user" for event in events)
+
+    orig_subject_id = events[0]["subject"]["id"]
+    assert orig_subject_id.startswith("rec_")
+    # Same surrogate ID across update, submit, rename, and amendment link.
+    assert events[4]["subject"]["id"] == orig_subject_id
+    assert events[4]["data"]["changed_fields"] == ["name"]
+    assert events[1]["data"]["changed_fields"] == ["grand_total"]
     assert events[2]["data"]["changes"] == {"status": "submitted"}
-    assert events[-1]["data"]["amended_from_id"] == events[0]["subject"]["id"]
-    assert events[-1]["subject"]["id"] != events[0]["subject"]["id"]
+    assert events[6]["data"]["amended_from_id"] == orig_subject_id
+    assert events[6]["subject"]["id"] != orig_subject_id
+    assert events[7]["subject"]["id"] == events[6]["subject"]["id"]
+    assert events[7]["data"]["deleted"] is True
+    # Bidirectional mapping resolves renamed and deleted records cleanly.
+    assert resolve_subject_id(db, orig_subject_id) == ("sales_order", "ERPNext-renamed-key")
+    assert resolve_subject_id(db, events[6]["subject"]["id"]) == ("sales_order", "new-document-1")
+
     visible = json.dumps(events).lower()
-    for marker in ("frappe", "erpnext", "t_foreign", "private"):
+    for marker in ("frappe", "erpnext", "t_foreign", "private", "renamed"):
         assert marker not in visible
 
 
@@ -243,3 +325,133 @@ def test_invalid_sink_acknowledgment_keeps_the_event_pending(sites, acknowledge)
     store = MemoryStore()
     assert run_publisher(engine, store.append) == 1
     assert store.read("t_alpha")[0]["type"] == "sales_order.created"
+
+
+def test_poison_row_quarantined_and_does_not_block_valid_events(sites):
+    engine, select = sites
+    db = select("t_alpha")
+    db.sql(
+        "INSERT INTO `tabChange Engine Event Outbox` (event_id, payload) VALUES (%s, %s)",
+        ("01J8ZK30000000000000000000", "{corrupt-json"),
+    )
+    bad_ack_doc = Document()
+    bad_ack_doc.name = "bad-ack-doc"
+    invoke_hook(bad_ack_doc, "after_insert")
+    good_doc = Document()
+    good_doc.name = "good-doc"
+    invoke_hook(good_doc, "after_insert")
+    db.commit()
+
+    select("t_alpha", worker=True)
+    store = MemoryStore()
+    # Corrupt JSON row dead-letters automatically, bad-ack fails on attempt 1..1 until max_attempts=2,
+    # then dead-letters on attempt 2 so good_doc delivers immediately.
+    def flaky_append(ev):
+        if "bad" in str(resolve_subject_id(db, ev["subject"]["id"])):
+            raise RuntimeError("sink rejected poison payload")
+        return store.append(ev)
+
+    with pytest.raises(RuntimeError, match="sink rejected"):
+        run_publisher(engine, flaky_append, max_attempts=2)
+    assert run_publisher(engine, flaky_append, max_attempts=2) == 1
+    assert len(store.read("t_alpha")) == 1
+    assert resolve_subject_id(db, store.read("t_alpha")[0]["subject"]["id"]) == ("sales_order", "good-doc")
+    dead = db.sql(
+        "SELECT event_id, dead_lettered_at FROM `tabChange Engine Event Outbox` WHERE dead_lettered_at IS NOT NULL"
+    )
+    assert len(dead) == 2
+
+
+def test_drains_more_than_100_rows_in_single_tick(sites):
+    engine, select = sites
+    db = select("t_alpha")
+    for idx in range(150):
+        doc = Document()
+        doc.name = f"SO-{idx:04d}"
+        invoke_hook(doc, "after_insert")
+    db.commit()
+
+    select("t_alpha", worker=True)
+    store = MemoryStore()
+    assert run_publisher(engine, store.append) == 150
+    assert len(store.read("t_alpha", limit=200)) == 150
+
+
+def test_pre_migrate_skips_during_migration_and_fails_closed_otherwise(sites):
+    engine, select = sites
+    select("t_unmigrated", worker=True, create_tables=False)
+    assert run_publisher(engine, MemoryStore().append) == 0
+
+    engine.flags.in_migrate = True
+    invoke_hook(Document(), "after_insert")
+    engine.flags.in_migrate = False
+
+    with pytest.raises(RuntimeError, match="missing; run bench migrate"):
+        invoke_hook(Document(), "after_insert")
+
+
+def test_concurrent_publishers_serialize_with_advisory_lock_without_duplicates(sites, monkeypatch):
+    engine, select = sites
+    db = select("t_alpha")
+    for idx in range(40):
+        doc = Document()
+        doc.name = f"CONC-{idx:03d}"
+        invoke_hook(doc, "after_insert")
+    db.commit()
+
+    store = MemoryStore()
+    store_lock = threading.Lock()
+    entered = threading.Event()
+    proceed = threading.Event()
+    results: list[int] = []
+    errors: list[BaseException] = []
+
+    def synchronized_append(event):
+        entered.set()
+        proceed.wait(timeout=5.0)
+        with store_lock:
+            return store.append(event)
+
+    def make_worker_frappe():
+        wdb = Database(db.path)
+        return SimpleNamespace(
+            conf={"tenant_id": "t_alpha", "db_name": "t_alpha", "record_event_sink": "test.append"},
+            local=SimpleNamespace(),
+            flags=SimpleNamespace(in_install=False, in_migrate=False, in_patch=False),
+            session=SimpleNamespace(user="frappe-private@example.invalid"),
+            db=wdb,
+            get_attr=lambda p: synchronized_append,
+        )
+
+    from change_engine.adapter import record_events
+
+    worker_one = make_worker_frappe()
+    worker_two = make_worker_frappe()
+
+    # Start worker 1, wait until it holds GET_LOCK inside append, then launch worker 2.
+    def run_w1():
+        sys.modules["frappe"] = worker_one
+        try:
+            results.append(record_events.publish_pending())
+        except BaseException as exc:  # pragma: no cover
+            errors.append(exc)
+        finally:
+            worker_one.db.connection.close()
+
+    t1 = threading.Thread(target=run_w1)
+    t1.start()
+    assert entered.wait(timeout=5.0)
+    # While worker 1 holds the DB advisory lock, worker 2 skips immediately with 0.
+    sys.modules["frappe"] = worker_two
+    try:
+        second_count = record_events.publish_pending()
+    finally:
+        worker_two.db.connection.close()
+        proceed.set()
+        t1.join(timeout=10.0)
+
+    assert not errors
+    assert second_count == 0
+    assert results == [40]
+    assert len(store.read("t_alpha")) == 40
+    assert [e["sequence"] for e in store.read("t_alpha")] == list(range(1, 41))

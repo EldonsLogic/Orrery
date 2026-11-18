@@ -11,14 +11,21 @@ from .errors import IdentityError
 from .models import OPEN_TENANT, GrantStatus, Realm, SupportGrant
 from .policy import is_owner_or_admin
 from .service import STEP_UP_MAX_AGE, IdentityService  # noqa: F401 (re-exported)
-from .tokens import AccessClaims
+from .tokens import AccessClaims, check_live
 
 MAX_SUPPORT_SECONDS = 4 * 3600
 MAX_REASON_LEN = 500
+PENDING_TTL = 24 * 3600  # a request not approved within this is dead (Q-154)
+MAX_PENDING = 5  # unexpired pending requests per staff member and tenant
 
 
-def _staff_claims(claims) -> AccessClaims:
-    if not isinstance(claims, AccessClaims) or claims.realm is not Realm.STAFF:
+def _pending_live(grant, now) -> bool:
+    return grant.requested_at + PENDING_TTL > now
+
+
+def _staff_claims(claims, now) -> AccessClaims:
+    check_live(claims, now)
+    if claims.realm is not Realm.STAFF:
         raise IdentityError("IDN-006")
     return claims
 
@@ -30,7 +37,7 @@ class SupportGrantService:
     def _live_staff(self, claims) -> AccessClaims:
         """Re-check the staff identity on every call, even after verify_staff_token:
         active, current session version, MFA."""
-        claims = _staff_claims(claims)
+        claims = _staff_claims(claims, self.idn.now())
         staff = self.idn.repo.get_staff(claims.subject)
         if staff is None or not staff.active:
             raise IdentityError("IDN-010")
@@ -61,6 +68,10 @@ class SupportGrantService:
                     or not 0 < duration <= MAX_SUPPORT_SECONDS):
                 raise IdentityError("IDN-043")
             self._open_tenant(tenant_id)
+            now = self.idn.now()
+            if sum(1 for g in self.idn.repo.pending_grants_for(staff.subject, tenant_id)
+                   if _pending_live(g, now)) >= MAX_PENDING:
+                raise IdentityError("IDN-043")
             grant_id = secrets.token_urlsafe(16)
             self.idn.repo.put_grant(SupportGrant(grant_id, staff.subject, tenant_id,
                                                  reason.strip(), scope, self.idn.now(), duration))
@@ -71,11 +82,12 @@ class SupportGrantService:
         with self.idn.decision("support.approve", Realm.CUSTOMER,
                                getattr(approver, "subject", None), self._tenant(grant_id),
                                grant_id):
-            if not isinstance(approver, AccessClaims) or approver.realm is not Realm.CUSTOMER:
-                raise IdentityError("IDN-041" if isinstance(approver, AccessClaims)
-                                    else "IDN-006")
+            check_live(approver, self.idn.now())
+            if approver.realm is not Realm.CUSTOMER:
+                raise IdentityError("IDN-041")
             grant = self.idn.repo.get_grant(grant_id)
-            if grant is None or grant.status is not GrantStatus.PENDING:
+            if (grant is None or grant.status is not GrantStatus.PENDING
+                    or not _pending_live(grant, self.idn.now())):
                 raise IdentityError("IDN-042")
             staff = self.idn.repo.get_staff(grant.staff_id)
             if staff is None or not staff.active:
@@ -91,7 +103,11 @@ class SupportGrantService:
             now = self.idn.now()
             approved = replace(grant, status=GrantStatus.APPROVED, approved_by=approver.subject,
                                approved_at=now, expires_at=now + grant.duration)
-            self.idn.repo.put_grant(approved)
+            # compare-and-set: only a still-PENDING grant can be approved, so a
+            # concurrent revoke or approval wins and nothing is extended (Q-153)
+            if not self.idn.repo.transition_grant(grant_id, frozenset({GrantStatus.PENDING}),
+                                                  approved):
+                raise IdentityError("IDN-042")
             self.idn.audit.record(at=now, action="support.granted", decision="allow", code="OK",
                                   realm=Realm.STAFF.value, subject=grant.staff_id,
                                   tenant=grant.tenant_id, detail=grant_id)
@@ -107,7 +123,12 @@ class SupportGrantService:
                 raise IdentityError("IDN-042")
             if not is_owner_or_admin(self.idn.caller_roles(caller, grant.tenant_id)):
                 raise IdentityError("IDN-040")
-            self.idn.repo.put_grant(replace(grant, status=GrantStatus.REVOKED))
+            self.idn.require_step_up(caller)
+            # revoke is terminal and wins any race: from PENDING or APPROVED only
+            if not self.idn.repo.transition_grant(
+                    grant_id, frozenset({GrantStatus.PENDING, GrantStatus.APPROVED}),
+                    replace(grant, status=GrantStatus.REVOKED)):
+                raise IdentityError("IDN-042")
 
     def check_access(self, staff: AccessClaims, grant_id: str, tenant_id: str,
                      scope_item: str) -> SupportGrant:
@@ -120,7 +141,9 @@ class SupportGrantService:
             now = self.idn.now()
             if (grant is None or grant.status is not GrantStatus.APPROVED
                     or grant.staff_id != staff.subject or grant.tenant_id != tenant_id
-                    or grant.expires_at is None or grant.expires_at <= now):
+                    or grant.expires_at is None or grant.expires_at <= now
+                    or grant.approved_at is None
+                    or grant.approved_at >= grant.requested_at + PENDING_TTL):
                 raise IdentityError("IDN-042")
             if scope_item not in grant.scope:
                 raise IdentityError("IDN-044")

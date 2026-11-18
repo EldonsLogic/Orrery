@@ -4,6 +4,7 @@ or contact addresses are recorded; only ids, decision and reason code."""
 from dataclasses import dataclass
 from typing import Optional
 
+MAX_DETAIL = 200
 ALLOW = "allow"
 DENY = "deny"
 
@@ -32,7 +33,7 @@ class AuditLog:
         if decision not in (ALLOW, DENY):
             raise ValueError("decision must be allow or deny")
         event = AuditEvent(len(self._events) + 1, at, action, decision, code, realm,
-                           subject, tenant, detail)
+                           subject, tenant, str(detail)[:MAX_DETAIL])
         self._events.append(event)
         return event
 

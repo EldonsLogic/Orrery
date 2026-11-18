@@ -13,12 +13,12 @@ from .repository import InMemoryRepository, Repository
 from .service import IdentityService
 from .signing import Signer, TestOnlyHmacSha256Signer
 from .support import SupportGrantService
-from .tokens import AccessClaims, RealmConfig
+from .tokens import AccessClaims, RealmConfig, VerifiedClaims
 
 __all__ = [
     "AccessClaims", "AuditEvent", "AuditLog", "Channel", "GrantStatus", "IdentityError",
     "IdentityService", "InMemoryRepository", "InviteService", "Membership",
     "MembershipStatus", "Person", "Realm", "RealmConfig", "Repository", "RoleInfo",
     "RoleResolver", "Signer", "StaffIdentity", "SupportGrantService", "TenantState",
-    "TenantStatus", "TestOnlyHmacSha256Signer", "TokenPair",
+    "TenantStatus", "TestOnlyHmacSha256Signer", "TokenPair", "VerifiedClaims",
 ]

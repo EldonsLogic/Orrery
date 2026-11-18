@@ -6,15 +6,17 @@ implementation must make `mark_invite_used` and `mark_refresh_used` atomic
 compare-and-set operations, or single use and reuse detection break. Family
 revocation is a durable tombstone: `put_refresh` must check it and store in one
 atomic step, so a rotation racing reuse detection cannot mint a live token in a
-revoked family. The session high-water mark per person and tenant must survive
+revoked family. `transition_grant` must be one atomic compare-and-set (a
+conditional UPDATE or single transaction); support grant approve and revoke
+rely on it. The session high-water mark per person and tenant must survive
 membership removal and never go down."""
 
 from abc import ABC, abstractmethod
 from dataclasses import replace
 from typing import Optional
 
-from .models import (Invite, Membership, Person, RefreshRecord, StaffIdentity,
-                     SupportGrant, TenantState)
+from .models import (GrantStatus, Invite, Membership, Person, RefreshRecord,
+                     StaffIdentity, SupportGrant, TenantState)
 
 
 class Repository(ABC):
@@ -70,6 +72,14 @@ class Repository(ABC):
     def put_grant(self, grant: SupportGrant) -> None: ...
     @abstractmethod
     def get_grant(self, grant_id: str) -> Optional[SupportGrant]: ...
+    @abstractmethod
+    def transition_grant(self, grant_id: str, from_statuses: frozenset,
+                         new: SupportGrant) -> bool:
+        """Atomically replace the grant with `new` only if its current status is in
+        `from_statuses`; False if unknown or already moved on (compare-and-set)."""
+    @abstractmethod
+    def pending_grants_for(self, staff_id: str, tenant_id: str) -> tuple:
+        """Grants still in PENDING status for this staff member and tenant."""
 
 
 class InMemoryRepository(Repository):
@@ -164,3 +174,15 @@ class InMemoryRepository(Repository):
 
     def get_grant(self, grant_id):
         return self._grants.get(grant_id)
+
+    def transition_grant(self, grant_id, from_statuses, new):
+        cur = self._grants.get(grant_id)
+        if cur is None or cur.status not in from_statuses or new.grant_id != grant_id:
+            return False
+        self._grants[grant_id] = new
+        return True
+
+    def pending_grants_for(self, staff_id, tenant_id):
+        return tuple(g for g in self._grants.values()
+                     if g.staff_id == staff_id and g.tenant_id == tenant_id
+                     and g.status is GrantStatus.PENDING)

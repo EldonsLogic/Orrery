@@ -6,6 +6,7 @@ customer audience names that tenant. Staff tokens carry no tenant. Every check
 fails closed with a typed IDN code."""
 
 import base64
+import contextvars
 import json
 import re
 import secrets
@@ -44,8 +45,16 @@ class RealmConfig:
         return self.audience
 
 
+_SEAL = object()  # private; only `_mint_claims` stamps it on a verified instance
+_MINTING = contextvars.ContextVar("identity_minting_claims", default=False)
+
+
 @dataclass(frozen=True)
 class AccessClaims:
+    """Claims of a token that `decode` verified. Callers cannot build one: direct
+    construction, `replace` and copies raise IDN-006, and consumers re-check the
+    seal and the time window on every use (`check_live`). Best-effort in-process
+    guard, not a security boundary; the signature is the boundary (Q-152)."""
     issuer: str
     audience: str
     subject: str
@@ -58,6 +67,43 @@ class AccessClaims:
     not_before: int
     expires_at: int
     token_id: str
+
+    def __post_init__(self):
+        if not _MINTING.get():
+            raise IdentityError("IDN-006")
+
+    def __copy__(self):
+        raise IdentityError("IDN-006")
+
+    def __deepcopy__(self, memo):
+        raise IdentityError("IDN-006")
+
+    def __reduce_ex__(self, protocol):
+        raise IdentityError("IDN-006")
+
+
+VerifiedClaims = AccessClaims  # the name consumers should use
+
+
+def _mint_claims(*args) -> AccessClaims:
+    token = _MINTING.set(True)
+    try:
+        claims = AccessClaims(*args)
+    finally:
+        _MINTING.reset(token)
+    object.__setattr__(claims, "_seal", _SEAL)
+    return claims
+
+
+def check_live(claims, now: int) -> AccessClaims:
+    """Verify-on-use: the object came from `decode` and is inside its time window."""
+    if not isinstance(claims, AccessClaims) or getattr(claims, "_seal", None) is not _SEAL:
+        raise IdentityError("IDN-006")
+    if claims.not_before > now or claims.issued_at > now:
+        raise IdentityError("IDN-005")
+    if claims.expires_at <= now:
+        raise IdentityError("IDN-004")
+    return claims
 
 
 def _b64e(raw: bytes) -> str:
@@ -168,5 +214,5 @@ def decode(token, cfg: RealmConfig, *, now: int, tenant: Optional[str]) -> Acces
         raise IdentityError("IDN-004")
     if c["exp"] - c["iat"] > MAX_TTL or c["auth_time"] > c["iat"]:
         raise IdentityError("IDN-008")
-    return AccessClaims(c["iss"], c["aud"], c["sub"], c["tid"], realm, c["sv"], c["mfa"],
+    return _mint_claims(c["iss"], c["aud"], c["sub"], c["tid"], realm, c["sv"], c["mfa"],
                         c["auth_time"], c["iat"], c["nbf"], c["exp"], c["jti"])

@@ -79,7 +79,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_027_decimal_drift.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_027_decimal_drift.py apps/engine/change_engine/change_engine/tests/test_ai_control_plane.py -q
       - name: Blueprint rollback tests (BPL-008)
         if: ${{ !cancelled() }}
         env:

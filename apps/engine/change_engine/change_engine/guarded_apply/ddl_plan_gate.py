@@ -54,9 +54,10 @@ _TYPE = r"(?:decimal\(\d+,\s*\d+\)|(?:int|bigint|varchar|time|datetime)\(\d+\)|d
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 _STRING = r"'(?:[^'\\]|\\.|'')*'"
 APPROVED_DDL_REGEX = re.compile(
-    r"ALTER TABLE (?P<table>`tab[A-Za-z0-9_ ]+`) ADD COLUMN `(?P<name>custom_[a-z0-9_]+)` "
-    rf"(?P<type>{_TYPE})(?P<required> not null)?(?: default (?P<default>{_NUMBER}|{_STRING}|NULL))?\Z",
-    re.ASCII | re.I,
+    r"(?i:ALTER TABLE) (?P<table>`tab[A-Za-z0-9_ ]+`) (?i:ADD COLUMN) `(?P<name>custom_[a-z0-9_]+)` "
+    rf"(?P<type>(?i:{_TYPE}))(?P<required>(?i: not null))?"
+    rf"(?:(?i: default )(?P<default>{_NUMBER}|{_STRING}|(?i:NULL)))?\Z",
+    re.ASCII,
 )
 
 # MariaDB v15 Type Mapping matching Frappe v15 mariadb/database.py
@@ -402,7 +403,7 @@ def validate_ddl_plan(statements: List[str]) -> Tuple[bool, Optional[str]]:
 
     stmt = statements[0]
     if not APPROVED_DDL_REGEX.fullmatch(stmt):
-        return False, f"Unapproved DDL (expected one ADD COLUMN with a literal definition): {stmt!r}"
+        return False, f"DDL statement does not match approved additive ADD COLUMN pattern: {stmt!r}"
 
     return True, None
 
@@ -558,6 +559,31 @@ def _plain_column(col: Dict[str, Any], collation: Optional[str]) -> bool:
     )
 
 
+def _quoted_default_value(literal: str) -> str:
+    """Normalize apostrophe escaping without altering case, spaces or other escapes.
+
+    The caller first validates the complete SQL string literal. MariaDB can report
+    an escaped apostrophe as two apostrophes even when the approved DDL used a
+    backslash. Consume other backslash pairs intact so an escaped backslash can
+    never accidentally expose the following character to a second decoding pass.
+    """
+    text = literal[1:-1]
+    parts: List[str] = []
+    i = 0
+    while i < len(text):
+        pair = text[i:i + 2]
+        if len(pair) == 2 and pair[0] == "\\":
+            parts.append("'" if pair[1] == "'" else pair)
+            i += 2
+        elif pair == "''":
+            parts.append("'")
+            i += 2
+        else:
+            parts.append(text[i])
+            i += 1
+    return "".join(parts)
+
+
 def noop_modify_allowlist(before_schema: Dict[str, Any]) -> Dict[str, Set[str]]:
     """Regenerate only supported Frappe restatements that preserve the BEFORE definition."""
     allowed = {}
@@ -615,7 +641,10 @@ def new_column_matches_plan(
         return actual is None
     if re.fullmatch(_NUMBER, expected):
         return actual is not None and bool(re.fullmatch(_NUMBER, actual)) and Decimal(actual) == Decimal(expected)
-    return actual == expected
+    return (
+        actual is not None and re.fullmatch(_STRING, actual) is not None
+        and _quoted_default_value(actual) == _quoted_default_value(expected)
+    )
 
 
 def ddl_batch_rejection(doctype, fieldname, approved_statements, executed_statements, before_schema, *, complete):

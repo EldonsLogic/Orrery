@@ -567,6 +567,29 @@ class TestQuoteAwareSplitter(unittest.TestCase):
 class TestApprovedColumnDefinition(unittest.TestCase):
     """Use the same grammar for planning and for read-back on MariaDB."""
 
+    def test_custom_field_identifiers_remain_lowercase_when_keywords_ignore_case(self):
+        for name in ("custom_Cargo_Id", "CUSTOM_cargo_id", "Custom_cargo_id", "custom_İd"):
+            with self.subTest(name=name):
+                self.assertFalse(validate_ddl_plan([_T + f"ADD COLUMN `{name}` varchar(140)"])[0])
+        self.assertTrue(validate_ddl_plan(["alter table `tabItem` add column `custom_cargo_id` VARCHAR(140)"])[0])
+        self.assertFalse(validate_ddl_plan(["ALTER TABLE `TABItem` ADD COLUMN `custom_x` varchar(140)"])[0])
+
+    def test_readback_accepts_equivalent_escaped_quotes_without_folding_data(self):
+        plan = _T + r"ADD COLUMN `custom_x` varchar(140) default 'O\'Reilly'"
+        self.assertTrue(new_column_matches_plan("custom_x", [plan],
+                        _after(field_col=_col(default="'O''Reilly'"))))
+        for default in ("'o''Reilly'", "'O''''Reilly'", "'O Reilly'"):
+            with self.subTest(default=default):
+                self.assertFalse(new_column_matches_plan("custom_x", [plan],
+                                 _after(field_col=_col(default=default))))
+
+    def test_quote_normalization_preserves_other_backslash_pairs(self):
+        plan = _T + r"ADD COLUMN `custom_x` varchar(140) default 'A\\B\'C'"
+        self.assertTrue(new_column_matches_plan("custom_x", [plan],
+                        _after(field_col=_col(default=r"'A\\B''C'"))))
+        self.assertFalse(new_column_matches_plan("custom_x", [plan],
+                         _after(field_col=_col(default=r"'A\B''C'"))))
+
     def test_keywords_and_commas_in_a_quoted_default_are_data(self):
         clause = _T + "ADD COLUMN `custom_x` varchar(140) default 'a, MODIFY not null'"
         self.assertTrue(validate_ddl_plan([clause])[0])

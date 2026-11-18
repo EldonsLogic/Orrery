@@ -133,6 +133,17 @@ Python package `migrate/` (BPL-021). Pure, deterministic, standard library; reus
 
 Run from the repo root: `PYTHONPATH=services/blueprint python3 -m migrate BLUEPRINT.json [--to X.Y.Z] [--allow-non-draft]` (prints JSON; exit 1 on a refusal). Tests: `tests/migrate/`.
 
+## Component factory sandbox
+
+Python package `factory/` (BPL-015). Standard library; reuses `registry` admission. `python3 -m factory check DIR [--run-tests --trusted-source] [--timeout S] [--out REPORT.json]` (from `services/blueprint`). It copies a candidate component (`manifest.json`, artifacts, tests) into a fresh temp folder, validates the manifest against the schema through the registry admission rules, and writes a JSON report (level reached, findings with `FAC-xxx` or `REG-xxx` codes) outside the component. The report path inside the component is refused.
+
+Levels: `none` (refused), `draft` (static checks pass), `tested` (every declared test ran and passed). It never grants `reviewed` or higher: that needs a named reviewer (ADR-0034); a higher declared level only gives warning `FAC-011`.
+
+Limits: 500 files, 1 MB per file, 5 MB total, 120 s wall clock for all tests (process group killed), no symlinks or special files, no absolute or `..` test paths. Test commands come only from a fixed allow-list (`pytest` on a declared test path), with no shell and a scrubbed environment (fixed PATH, HOME and TMPDIR in the temp folder, no inherited variables, so no secrets or proxy settings).
+
+**This is a logical sandbox, not a security boundary.** It uses a temp folder, a scrubbed environment and limits only. Test code still runs as the calling user with network and filesystem access. An OS-level sandbox (plan row INF-014) must exist before running third-party or customer-influenced code. So candidate commands are refused (`FAC-012`) unless `--trusted-source` is passed; the default is manifest and static checks only.
+
+Codes: `FAC-001` candidate folder, `002` manifest, `003` symlink or special file, `004` path traversal, `005` too many files, `006` too big, `007` declared test missing, `008` timeout, `009` blocking test failed, `010` non-blocking test failed (warning), `011` level capped (warning), `012` untrusted source, `013` report path, `014` command not allowed or internal error. Tests: `tests/factory/`.
 ## Exceptions register tooling
 
 Python package `exceptions/` (BPL-023), standard library only. Process and columns: [exceptions-register runbook](../../docs/runbooks/exceptions-register.md). The register is one append-only JSON Lines file per tenant in the private tenant record; the caller always passes its path, and the tool refuses a path inside this repo or a symlink. It never creates a default location.

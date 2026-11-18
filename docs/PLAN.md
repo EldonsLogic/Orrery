@@ -33,7 +33,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-017 | Exceptions register process (every manual step logged with reason) | Governance | G2 | GOV-016 | eldon | done |
 | GOV-018 | Retire docs/HANDOFF.md in favour of docs/log and STATUS | Governance | G0 | GOV-004 | eldon | done |
 | GOV-019 | Pick issue/PR labels and project board mapping to PLAN IDs | Governance | G0 | GOV-008 | eldon | done |
-| GOV-020 | Periodic plan review: re-rank, close stale rows, check gate criteria | Governance | G1 | GOV-016 | eldon | todo |
+| GOV-020 | Periodic plan review: re-rank, close stale rows, check gate criteria | Governance | G1 | GOV-016 | eldon | done |
 | GOV-021 | Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI) | Governance | G0 | GOV-004 | eldon | done |
 | GOV-022 | Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md) | Governance | G0 | GOV-004 | eldon | done |
 | GOV-023 | Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS | Governance | G0 | GOV-006 | eldon | done |
@@ -260,7 +260,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-005 | Agent behaviour evals (tool choice, refusal, confirm-before-write) | Quality | G2 | OPR-002,QA-001 | eldon | todo |
 | QA-006 | Prompt-injection eval suite | Quality | G2 | SEC-003,QA-001 | eldon | done |
 | QA-007 | Contrast tests for tenant themes in light and dark | Quality | G2 | BRD-006 | eldon | todo |
-| QA-008 | RTL visual regression tests, including tenant-branded screens and documents | Quality | G2 | BRD-010 | eldon | todo |
+| QA-008 | RTL visual regression tests, including tenant-branded screens and documents | Quality | G2 | BRD-010 | eldon | doing |
 | QA-009 | End-to-end rehearsal: discovery to simulated Blueprint to live on synthetic data | Quality | G2 | BPL-020,DSC-009,OPR-010 | eldon | todo |
 | QA-010 | Eval thresholds enforced in CI as release gate | Quality | G2 | QA-005,QA-002 | eldon | todo |
 | QA-011 | Simulator accuracy test against known outcomes | Quality | G2 | BPL-018 | eldon | todo |

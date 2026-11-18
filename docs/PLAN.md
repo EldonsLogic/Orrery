@@ -79,7 +79,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-011 | Encryption at rest and in transit; per-tenant key management | Security | G3 | INF-005 | partner | todo |
 | SEC-012 | Security baseline checklist for paying customers | Security | G3 | SEC-004,SEC-008 | eldon | todo |
 | SEC-013 | Incident response plan and PDPL breach notification process | Security | G3 | LEG-012 | eldon | todo |
-| SEC-014 | Red-team of agents: injection via uploaded documents and connectors | Security | G3 | QA-006 | eldon | todo |
+| SEC-014 | Red-team of agents: injection via uploaded documents and connectors | Security | G3 | QA-006 | eldon | done |
 | SEC-015 | Egress and credential controls for the isolated browser runner | Security | G3 | INF-009 | partner | todo |
 | SEC-016 | Independent penetration test | Security | G3 | SEC-012 | eldon | todo |
 | SEC-017 | Security certification readiness (ISO 27001 or SOC 2; pick one with counsel) | Security | G5 | SEC-016 | eldon | todo |
@@ -126,7 +126,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-012 | Engine adapter implementation in apps/engine that passes the BPL-025 conformance tests | Blueprint | G1 | BPL-025 | partner | done |
 | BPL-013 | Branding section in the Blueprint schema (ADR-0014) | Blueprint | G1 | BPL-002 | eldon | done |
 | BPL-014 | Component certification levels and test harness | Blueprint | G1 | BPL-010 | eldon | done |
-| BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | eldon | todo |
+| BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | eldon | done |
 | BPL-016 | Component request pipeline: gap to AI-drafted request with spec and tests | Blueprint | G2 | BPL-014,DSC-006 | eldon | todo |
 | BPL-017 | Factory: AI drafts component code and tests from a request | Blueprint | G2 | BPL-015,PLT-009 | eldon | todo |
 | BPL-018 | Simulator: replay a month of the owner's data on the compiled tenant | Blueprint | G2 | BPL-007,DSC-010 | eldon | todo |
@@ -134,7 +134,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-020 | Build state machine draft to live, with the human gate | Blueprint | G2 | BPL-007,PLT-013 | eldon | todo |
 | BPL-021 | Blueprint versioning and schema migration | Blueprint | G2 | BPL-006 | eldon | done |
 | BPL-022 | Reuse metrics and Platform Autonomy Rate computation | Blueprint | G2 | BPL-010,GOV-016 | eldon | done |
-| BPL-023 | Exceptions register tooling | Blueprint | G2 | GOV-017 | eldon | todo |
+| BPL-023 | Exceptions register tooling | Blueprint | G2 | GOV-017 | eldon | done |
 | BPL-024 | Promotion of generalised patterns into the library | Blueprint | G4 | DAT-008,BPL-016 | eldon | todo |
 | DSC-001 | Interview protocol v0, Arabic and English | Discovery | G1 | GTM-002 | eldon | todo |
 | DSC-002 | Template Blueprint: trading and distribution | Discovery | G1 | BPL-005 | eldon | done |
@@ -192,7 +192,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | eldon | done |
 | PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | partner | todo |
 | PLT-004 | Tenant lifecycle states: trial, active, suspended, exported, deleted | Platform | G1 | PLT-003 | partner | todo |
-| PLT-005 | Identity service (users, sessions, per-tenant roles) | Platform | G2 | PLT-002 | eldon | todo |
+| PLT-005 | Identity service (users, sessions, per-tenant roles) | Platform | G2 | PLT-002 | eldon | doing |
 | PLT-006 | Plans and entitlements model, everything unlocked at first | Platform | G2 | PLT-004 | eldon | todo |
 | PLT-007 | Usage metering for AI actions, storage, users | Platform | G2 | PLT-006,BPL-011 | eldon | todo |
 | PLT-008 | Billing and payments for our subscriptions | Platform | G3 | PLT-007,LEG-010 | eldon | todo |
@@ -301,14 +301,14 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-029 | UAE country pack and KSA country pack built on the framework | Compliance | G2 | CMP-021,CMP-006 | partner | todo |
 | ERP-019 | Dual-date display (Gregorian plus Hijri) on documents, locked regions respected | Runtime | G2 | CMP-022,ERP-016 | partner | todo |
 | ERP-020 | Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016) | ERP runtime | G1 | ERP-001 | partner | todo |
-| WEB-016 | Date pickers and entry in both Gregorian and Hijri calendars, RTL | Web | G2 | CMP-022,BRD-010 | eldon | todo |
+| WEB-016 | Date pickers and entry in both Gregorian and Hijri calendars, RTL | Web | G2 | CMP-022,BRD-010 | eldon | done |
 | WEB-017 | Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) | Web | G1 | BRD-001 | eldon | doing |
 | WEB-018 | Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) | Web | G0 | BRD-002 | eldon | done |
 | WEB-019 | Host the static design-system preview pages from docs/brand on the preview project | Web | G1 | INF-013 | eldon | todo |
 | WEB-020 | Studio: a local live app on the merged code (edit a Blueprint, compile, apply to the in-memory engine, check brand colour, read a synthetic bilingual invoice); the real adapter plugs in with STUDIO_ENGINE | Web | G1 | BPL-004,BRD-004,DAT-002 | eldon | done |
 | WEB-021 | Scaffold web/ per ADR-0022: pnpm workspace, Next.js app and marketing, token import, i18n with Arabic default, token-only lint rule, one design-system preview page, CI web job | Web | G1 | WEB-018,BRD-005 | eldon | done |
 | WEB-022 | AG-UI paper spike: map the chat-to-screen needs to AG-UI events and set security rules (docs/research/web-022-ag-ui-spike.md); the code spike and the adoption ADR belong to WEB-004 | Web | G1 | WEB-018 | eldon | done |
-| WEB-023 | Generic record list and form screens driven by the Blueprint and the Tool API: filters, search, create, edit, amend, submit, cancel, linked records, per document type and master data; role scope, risk class, confirm-before-write and audit (docs/product/app-screens.md) | Web | G2 | WEB-003,OPR-003,OPR-004 | eldon | todo |
+| WEB-023 | Generic record list and form screens driven by the Blueprint and the Tool API: filters, search, create, edit, amend, submit, cancel, linked records, per document type and master data; role scope, risk class, confirm-before-write and audit (docs/product/app-screens.md) | Web | G2 | WEB-003,OPR-003,OPR-004 | eldon | done |
 | WEB-024 | Bulk import and export per document type in the UI: CSV and Excel, mapping, validation preview, error report, nothing written until confirmed; reuses the DSC-011 tabular connector | Web | G2 | WEB-023,DSC-011 | eldon | todo |
 | WEB-025 | Department home screens: sales, purchasing, inventory and warehouse, accounting and finance (HR later), built from the record screens and the metrics layer | Web | G2 | WEB-023,WEB-006 | eldon | todo |
 | OPR-017 | Department-scoped assistants: per-department instructions, allowed tools, limits and memory scope configured in the Blueprint (contract change recorded as a short ADR per AGENTS.md), acting only with the user's own role and scope | Operate | G2 | OPR-004,OPR-011 | eldon | todo |
@@ -317,7 +317,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-025 | Print and PDF output beyond tax invoices: delivery notes, statements, purchase orders, receipts and others, bilingual and tenant-branded, compliance layout locked where required | Runtime | G2 | ERP-016 | partner | todo |
 | ERP-026 | Durable adapter state on the tenant database: a short ADR on where idempotency keys, plans, journal and audit records live, then a MariaDB-backed store beside the tenant data; production refuses an in-memory store; restart and restore tests | Runtime | G1 | ERP-012 | partner | todo |
 | ERP-027 | Fix false MODIFY COLUMN drift on decimal(21,9) columns in the DDL plan gate (Phase 0 finding) so customer-added fields on Customer, Sales Order, Sales Invoice and Item can apply | Runtime | G1 | ERP-021,BPL-007 | partner | doing |
-| QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | eldon | todo |
+| QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | eldon | done |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | partner | todo |
 | QA-017 | Smoke check that a preview URL loads and shows no engine markers (ADR-0016, ADR-0018) | Quality | G1 | INF-013 | eldon | todo |
 | GTM-017 | Egypt go-to-market assessment (phase-1 market; depends on verified regulations) | GTM | G2 | CMP-027 | eldon | todo |

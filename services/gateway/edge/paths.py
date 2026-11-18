@@ -7,23 +7,28 @@ from urllib.parse import unquote
 OWN_PREFIX = "/v1/"
 ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
 _SEGMENT_RE = re.compile(r"^[A-Za-z0-9._~-]+$")
+_FORBIDDEN_CHARS = "?#\\;"  # query, fragment, backslash, path parameter
+_ENCODED_SEPARATOR_RE = re.compile(r"%(?:2f|5c)", re.IGNORECASE)  # an encoded slash or backslash changes segmentation
 
 
 def normalise_path(raw_path: str) -> str | None:
     """Return a canonical path, or None when the path is malformed or an evasion attempt.
 
-    Rejects: query/fragment in the path, backslashes, control characters, double encoding, empty
-    segments, dot segments, path parameters (`;`) and anything outside a conservative segment alphabet.
+    Rejects: query/fragment in the path, backslashes, control characters, double encoding, encoded
+    slashes (`%2f`, `%5c`), empty segments, dot segments, path parameters (`;`) and anything outside a
+    conservative segment alphabet.
     """
     if not isinstance(raw_path, str) or not raw_path.startswith("/") or len(raw_path) > 2048:
         return None
-    if any(c in raw_path for c in "?#\;") or any(ord(c) < 0x20 or ord(c) == 0x7F for c in raw_path):
+    if any(c in raw_path for c in _FORBIDDEN_CHARS) or any(ord(c) < 0x20 or ord(c) == 0x7F for c in raw_path):
+        return None
+    if _ENCODED_SEPARATOR_RE.search(raw_path):
         return None
     try:
         decoded = unquote(raw_path, errors="strict") if "%" in raw_path else raw_path
     except UnicodeDecodeError:
         return None
-    if "%" in decoded or any(c in decoded for c in "?#\;") or any(ord(c) < 0x20 or ord(c) == 0x7F for c in decoded):
+    if "%" in decoded or any(c in decoded for c in _FORBIDDEN_CHARS) or any(ord(c) < 0x20 or ord(c) == 0x7F for c in decoded):
         return None  # double encoding or a control character hidden behind encoding
     segments = decoded[1:].split("/")
     if segments and segments[-1] == "":

@@ -150,7 +150,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-012 | Odoo extractor: read-only API access, export mapping | Discovery | G2 | DSC-010 | eldon | done |
 | DSC-013 | Odoo to Blueprint field-mapping library | Discovery | G2 | DSC-012 | eldon | done |
 | DSC-014 | Document intake with Arabic OCR (invoices, receipts, photos) | Discovery | G2 | DSC-010,QA-002 | eldon | done |
-| DSC-015 | Email and WhatsApp forwarding intake | Discovery | G3 | DSC-014 | eldon | todo |
+| DSC-015 | Email and WhatsApp forwarding intake | Discovery | G3 | DSC-014 | eldon | done |
 | DSC-016 | Accountant review view in discovery | Discovery | G3 | DSC-007 | eldon | todo |
 | DSC-017 | Owner-driven isolated read-only browser session (no stored credentials) | Discovery | G4 | DSC-010,SEC-015,INF-009 | eldon | todo |
 | DSC-018 | Second vertical template chosen from pilot evidence | Discovery | G3 | GTM-005 | eldon | todo |
@@ -296,7 +296,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-024 | Holiday calendars per country with admin-editable moon-sighting overrides | Compliance | G2 | CMP-023 | partner | todo |
 | CMP-025 | Fiscal-year type and start handling; zakat period handling | Compliance | G2 | CMP-023,CMP-013 | partner | todo |
 | CMP-026 | Timezone handling and Egypt daylight-saving rules (UNVERIFIED) | Compliance | G2 | CMP-023 | partner | todo |
-| CMP-027 | Egypt market research: e-invoicing, VAT, data protection, payroll (all UNVERIFIED) | Compliance | G1 | CMP-001 | eldon | todo |
+| CMP-027 | Egypt market research: e-invoicing, VAT, data protection, payroll (all UNVERIFIED) | Compliance | G1 | CMP-001 | eldon | done |
 | CMP-028 | Egypt country pack | Compliance | G2 | CMP-027,CMP-021 | partner | todo |
 | CMP-029 | UAE country pack and KSA country pack built on the framework | Compliance | G2 | CMP-021,CMP-006 | partner | todo |
 | ERP-019 | Dual-date display (Gregorian plus Hijri) on documents, locked regions respected | Runtime | G2 | CMP-022,ERP-016 | partner | todo |
@@ -370,3 +370,4 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-025 | Gateway token metering from the start: count tokens and cost per tenant and per call in services/gateway, so builder session cost is measured | Platform | G1 | - | partner | done |
 | GOV-041 | Contracts check script: every contract schema valid, examples validate, refs resolve; CI job | Governance | G0 | GOV-032 | eldon | done |
 | GOV-052 | Plan status hygiene: mark rows done whose work has merged (PLT-005, QA-008, WEB-017, OPR-019) | Governance | G0 | GOV-006 | eldon | done |
+| GOV-053 | Runbook: shipping plan rows with parallel subagents (worktrees, tiers, reviews, collisions) | Governance | G0 | GOV-006 | eldon | done |

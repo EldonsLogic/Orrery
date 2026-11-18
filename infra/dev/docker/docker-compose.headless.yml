@@ -1,0 +1,88 @@
+# ERP-020 / ADR-0016: headless engine stack. A full copy of docker-compose.dev.yml (same pins,
+# volumes and image build) with no published host port and internal-only networks. The gateway is
+# the only ingress: it joins the `engine_internal` network of this project (see HEADLESS.md).
+# It is a standalone file because Compose's `!reset` tag, the only way to drop the dev file's
+# port from an override, is rejected by the repo's YAML check. A test keeps the pins in step.
+services:
+  mariadb:
+    image: mariadb:11.4@sha256:f6eca93803e34766e787a96bad9e2ac5abbcdcb8e7f390a6f34e9bf3eee525e6
+    restart: unless-stopped
+    networks: [data]
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./my.cnf:/etc/mysql/conf.d/frappe.cnf:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-cache:
+    image: redis:7.2.7-alpine@sha256:ddd16a9b1575a774c7e62956be8daa1de5b32cfb5c25b7a216aefed8e0919f9b
+    restart: unless-stopped
+    networks: [data]
+
+  redis-queue:
+    image: redis:7.2.7-alpine@sha256:ddd16a9b1575a774c7e62956be8daa1de5b32cfb5c25b7a216aefed8e0919f9b
+    restart: unless-stopped
+    networks: [data]
+
+  engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+    environment:
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - REDIS_CACHE_HOST=redis-cache
+      - REDIS_QUEUE_HOST=redis-queue
+      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD in the environment}
+      - SITE_NAME=${SITE_NAME:-dev.localhost}
+      # Shared secret the gateway presents on internal API calls (route guard, X-Internal-Token).
+      - ENGINE_INTERNAL_TOKEN=${ENGINE_INTERNAL_TOKEN:?set ENGINE_INTERNAL_TOKEN (32+ chars) in the environment}
+    volumes:
+      - ../../../apps/engine/change_engine:/home/frappe/frappe-bench/apps/change_engine:rw
+      - ../../../components:/home/frappe/frappe-bench/components:ro
+      - sites_data:/home/frappe/frappe-bench/sites
+      - logs_data:/home/frappe/frappe-bench/logs
+    # Serve through the WSGI guard so blocked requests never reach the engine (the entrypoint runs
+    # a non-"start" command after its setup). Same gunicorn settings as entrypoint.sh.
+    command:
+      - sh
+      - -c
+      - >-
+        exec gunicorn --chdir="$$HOME/frappe-bench/sites" --bind=0.0.0.0:8000 --threads=4 --workers=2
+        --worker-class=gthread --worker-tmp-dir=/dev/shm --timeout=120 change_engine.wsgi:application
+    # `egress` is dev-only: the dev entrypoint pip-installs the mounted app at start and needs the
+    # package index. It is outbound only (no port is published). A hosted image bakes the app in and
+    # must drop `egress`, leaving the engine with internal networks only.
+    networks: [data, engine_internal, egress]
+
+volumes:
+  mariadb_data:
+  sites_data:
+  logs_data:
+
+networks:
+  # internal: true means no route to the host or the internet, and no published ports.
+  data:
+    internal: true
+  engine_internal:
+    internal: true
+  egress: {}

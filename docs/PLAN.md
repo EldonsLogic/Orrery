@@ -79,7 +79,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-011 | Encryption at rest and in transit; per-tenant key management | Security | G3 | INF-005 | partner | todo |
 | SEC-012 | Security baseline checklist for paying customers | Security | G3 | SEC-004,SEC-008 | eldon | todo |
 | SEC-013 | Incident response plan and PDPL breach notification process | Security | G3 | LEG-012 | eldon | todo |
-| SEC-014 | Red-team of agents: injection via uploaded documents and connectors | Security | G3 | QA-006 | eldon | todo |
+| SEC-014 | Red-team of agents: injection via uploaded documents and connectors | Security | G3 | QA-006 | eldon | done |
 | SEC-015 | Egress and credential controls for the isolated browser runner | Security | G3 | INF-009 | partner | todo |
 | SEC-016 | Independent penetration test | Security | G3 | SEC-012 | eldon | todo |
 | SEC-017 | Security certification readiness (ISO 27001 or SOC 2; pick one with counsel) | Security | G5 | SEC-016 | eldon | todo |
@@ -192,7 +192,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | eldon | done |
 | PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | partner | todo |
 | PLT-004 | Tenant lifecycle states: trial, active, suspended, exported, deleted | Platform | G1 | PLT-003 | partner | todo |
-| PLT-005 | Identity service (users, sessions, per-tenant roles) | Platform | G2 | PLT-002 | eldon | todo |
+| PLT-005 | Identity service (users, sessions, per-tenant roles) | Platform | G2 | PLT-002 | eldon | doing |
 | PLT-006 | Plans and entitlements model, everything unlocked at first | Platform | G2 | PLT-004 | eldon | todo |
 | PLT-007 | Usage metering for AI actions, storage, users | Platform | G2 | PLT-006,BPL-011 | eldon | todo |
 | PLT-008 | Billing and payments for our subscriptions | Platform | G3 | PLT-007,LEG-010 | eldon | todo |
@@ -308,10 +308,10 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | WEB-020 | Studio: a local live app on the merged code (edit a Blueprint, compile, apply to the in-memory engine, check brand colour, read a synthetic bilingual invoice); the real adapter plugs in with STUDIO_ENGINE | Web | G1 | BPL-004,BRD-004,DAT-002 | eldon | done |
 | WEB-021 | Scaffold web/ per ADR-0022: pnpm workspace, Next.js app and marketing, token import, i18n with Arabic default, token-only lint rule, one design-system preview page, CI web job | Web | G1 | WEB-018,BRD-005 | eldon | done |
 | WEB-022 | AG-UI paper spike: map the chat-to-screen needs to AG-UI events and set security rules (docs/research/web-022-ag-ui-spike.md); the code spike and the adoption ADR belong to WEB-004 | Web | G1 | WEB-018 | eldon | done |
-| WEB-023 | Generic record list and form screens driven by the Blueprint and the Tool API: filters, search, create, edit, amend, submit, cancel, linked records, per document type and master data; role scope, risk class, confirm-before-write and audit (docs/product/app-screens.md) | Web | G2 | WEB-003,OPR-003,OPR-004 | eldon | todo |
+| WEB-023 | Generic record list and form screens driven by the Blueprint and the Tool API: filters, search, create, edit, amend, submit, cancel, linked records, per document type and master data; role scope, risk class, confirm-before-write and audit (docs/product/app-screens.md) | Web | G2 | WEB-003,OPR-003,OPR-004 | eldon | done |
 | WEB-024 | Bulk import and export per document type in the UI: CSV and Excel, mapping, validation preview, error report, nothing written until confirmed; reuses the DSC-011 tabular connector | Web | G2 | WEB-023,DSC-011 | eldon | todo |
 | WEB-025 | Department home screens: sales, purchasing, inventory and warehouse, accounting and finance (HR later), built from the record screens and the metrics layer | Web | G2 | WEB-023,WEB-006 | eldon | todo |
-| OPR-017 | Department-scoped assistants: per-department instructions, allowed tools, limits and memory scope configured in the Blueprint (contract change recorded as a short ADR per AGENTS.md), acting only with the user's own role and scope | Operate | G2 | OPR-004,OPR-011 | eldon | todo |
+| OPR-017 | Department-scoped assistants: per-department instructions, allowed tools, limits and memory scope configured in the Blueprint (contract change recorded as a short ADR per AGENTS.md), acting only with the user's own role and scope | Operate | G2 | OPR-004,OPR-011 | eldon | done |
 | OPR-018 | Domain error codes in the Tool API contract (insufficient stock, closed period, duplicate tax id, missing field, stale approval) with parameter slots and bilingual messages, replacing the single engine_error; the gateway mapping is PLT-024 | Operate | G2 | OPR-003 | eldon | done |
 | OPR-019 | Manifest-declared entity risk class, Blueprint transition kind and Tool API field amendments (ADR-0037, contracts 0.2.0 / 0.3.0); Tier 3 | Operate | G2 | OPR-003 | eldon | doing |
 | ERP-025 | Print and PDF output beyond tax invoices: delivery notes, statements, purchase orders, receipts and others, bilingual and tenant-branded, compliance layout locked where required | Runtime | G2 | ERP-016 | partner | todo |

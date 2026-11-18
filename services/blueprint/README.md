@@ -44,6 +44,7 @@ Tests: `python3 -m pytest services/blueprint/tests -q` (from the repo root; `tes
 | 11 | Brand assets match stored records | `BP-ASSET-001` field mismatch or record not sanitised; `BP-ASSET-002` no record; `BP-ASSET-003` not checked, no records (warning) |
 | 12 | poweredBy.show=false needs white label | `BP-WL-001` (also when no context: fail closed) |
 | 13 | SA e-invoicing needs Arabic documents and VAT number | `BP-EINV-001` documentLanguages lacks `ar`; `BP-EINV-002` company.vatNumber missing |
+| 14 | Department assistants (ADR-0043) | `BP-AST-001` unknown role; `BP-AST-002` no role works in the department; `BP-AST-003` role not in the department (owner and general manager may invoke any); `BP-AST-005` approve, reject, `approval.decide`, blueprint or protected bank, contact or access tool; `BP-AST-006` tool names no entity or platform domain, or is not in the supplied tool set; `BP-AST-007` above R2 or unknown risk; `BP-AST-008` not agent-creatable; `BP-AST-009` R2 without `confirm`; `BP-AST-010` no assistant role may call it; `BP-AST-011` limit above platform or plan cap, or inconsistent; `BP-AST-012` instructions key not in overrides or catalog; `BP-AST-014` and `BP-AST-015` not checked, no tool set or catalog (warnings) |
 | - | Schema, internal | `BP-SCHEMA-001` schema violation or input not an object; `BP-INTERNAL-001` a rule could not run on malformed input |
 
 ### Interpretations and limits

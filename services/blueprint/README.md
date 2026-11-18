@@ -132,3 +132,35 @@ Run from `services/blueprint/events`: `PYTHONPATH=. python3 -m evstream validate
 Python package `migrate/` (BPL-021). Pure, deterministic, standard library; reuses `validator` to re-check the result when the target is the schema's current version. `migrate(blueprint, target_version=None, allow_non_draft=False)` finds the chain of registered steps (`@register("0.1.0", "0.2.0")`) from `meta.schemaVersion` to the target (default latest), applies them to a deep copy and returns `MigrationResult(blueprint, steps, errors)`; each step records its change list. Refuses with `MIG-*` codes: malformed, unknown or future versions, downgrades, gaps, a non-draft Blueprint without the flag, a step that changes `meta.revision`, `id` or `buildState`, a result the validator rejects. Only 0.1.0 exists, so today a migration is a no-op; tests use a fake 0.1.0 to 0.2.0 step. Rules: [docs/architecture/blueprint-versioning.md](../../docs/architecture/blueprint-versioning.md).
 
 Run from the repo root: `PYTHONPATH=services/blueprint python3 -m migrate BLUEPRINT.json [--to X.Y.Z] [--allow-non-draft]` (prints JSON; exit 1 on a refusal). Tests: `tests/migrate/`.
+
+## Component factory sandbox
+
+Python package `factory/` (BPL-015). Standard library; reuses `registry` admission. `python3 -m factory check DIR [--run-tests --trusted-source] [--timeout S] [--out REPORT.json]` (from `services/blueprint`). It copies a candidate component (`manifest.json`, artifacts, tests) into a fresh temp folder, validates the manifest against the schema through the registry admission rules, and writes a JSON report (level reached, findings with `FAC-xxx` or `REG-xxx` codes) outside the component. The report path inside the component is refused.
+
+Levels: `none` (refused), `draft` (static checks pass), `tested` (every declared test ran and passed). It never grants `reviewed` or higher: that needs a named reviewer (ADR-0034); a higher declared level only gives warning `FAC-011`.
+
+Limits: 500 files, 1 MB per file, 5 MB total, 120 s wall clock for all tests (process group killed), no symlinks or special files, no absolute or `..` test paths. Test commands come only from a fixed allow-list (`pytest` on a declared test path), with no shell and a scrubbed environment (fixed PATH, HOME and TMPDIR in the temp folder, no inherited variables, so no secrets or proxy settings).
+
+**This is a logical sandbox, not a security boundary.** It uses a temp folder, a scrubbed environment and limits only. Test code still runs as the calling user with network and filesystem access. An OS-level sandbox (plan row INF-014) must exist before running third-party or customer-influenced code. So candidate commands are refused (`FAC-012`) unless `--trusted-source` is passed; the default is manifest and static checks only.
+
+Codes: `FAC-001` candidate folder, `002` manifest, `003` symlink or special file, `004` path traversal, `005` too many files, `006` too big, `007` declared test missing, `008` timeout, `009` blocking test failed, `010` non-blocking test failed (warning), `011` level capped (warning), `012` untrusted source, `013` report path, `014` command not allowed or internal error. Tests: `tests/factory/`.
+## Exceptions register tooling
+
+Python package `exceptions/` (BPL-023), standard library only. Process and columns: [exceptions-register runbook](../../docs/runbooks/exceptions-register.md). The register is one append-only JSON Lines file per tenant in the private tenant record; the caller always passes its path, and the tool refuses a path inside this repo or a symlink. It never creates a default location.
+
+```python
+from exceptions import append, summary, reconcile
+append(path, {"date": "2026-11-18", "tenant": "t1", "blueprint_rev": 3, "element_pointer": "/roles/clerk",
+              "edited_by_hand": "...", "reason": "...", "class": "missing_component",
+              "proposed_automation": "...", "owner": "eldon"})   # optional: follow_up, corrects (prior row id)
+summary(path)                                  # counts of effective rows by class, tenant, tenant x class
+reconcile(path, removals, tenant, revision)    # removals: list of element pointers
+```
+
+- Ids are sequential per file (1, 2, ...), assigned on append. Nothing rewrites or deletes a line; a correction is a new row with `corrects` set to an earlier row id of the same tenant, and `summary` counts only rows not corrected.
+- A row is refused (nothing written) when text looks like an email, phone number, 9+ digit run, URL with credentials, secret assignment or key-like string, when free text is empty or over its limit (300 or 500 characters), or when a column is missing, unknown or malformed. Text is cleaned (NFKC, control, zero-width and bidi characters removed) and stored as inert data. Refusals carry `EXC-` codes (`errors.py`).
+- `reconcile` is the go-live check of the runbook: the rows of tenant plus revision must match the human edits. The CLI takes the JSON of `python3 -m metrics autonomy` and uses its `manual` and `removed` pointers as the edits (BPL-022 is read, not changed). Result lists `edits_without_row` and `rows_without_edit`; a row covers an edit when its pointer equals it or sits under it.
+
+### Run
+
+`python3 -m exceptions append|summary|reconcile REGISTER ...` from this folder, or `PYTHONPATH=services/blueprint` from the repo root (flags in `exceptions/__main__.py`). Exit 0 ok, 1 findings (reconcile mismatch, corrupt or unusable register path), 2 refusal (row or input). Tests: `tests/exceptions/`.

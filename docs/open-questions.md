@@ -139,3 +139,5 @@ The canonical list from Phase 1-2 is [strategy/open-questions.md](strategy/open-
 | Q-133 | OPR-018 domain errors. Enum slot values (such as `changed` and `kind`) render as raw English tokens inside the Arabic messages; add per-locale enum labels to the catalog? | eldon | G2 | OPR-018 |
 | Q-134 | OPR-018 domain errors. The Arabic messages are unreviewed (ADR-0033) and need a native reviewer. | eldon | G2 | OPR-018 |
 | Q-135 | OPR-018 domain errors. PLT-024 (partner) must fill the catalog from engine failures; nothing is wired yet, and ADR-0036 is Proposed and needs both founders' acceptance because it changes a contract. | both | G2 | PLT-024 |
+| Q-136 | Connector review fixes. Default per-sheet cell limit is now 18,000 (steps limit 500,000); should the platform raise field and step limits per job, at a memory cost? | eldon | G2 | DSC-011 |
+| Q-137 | Connector review fixes. Row-level and column-level styles that hide text, and conditional formatting, are not detected; the ZWJ/ZWNJ stripping in Persian text is still open; the audit sink becomes required once persistence exists. | eldon | G2 | DSC-010 |

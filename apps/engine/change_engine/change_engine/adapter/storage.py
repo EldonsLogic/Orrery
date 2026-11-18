@@ -205,6 +205,11 @@ class SQLiteAdapterStore:
     def get_site(self, tenant_id: str) -> SiteRecord | None:
         return self._sites_cache.get(tenant_id)
 
+    def hydrate_site(self, site: SiteRecord) -> SiteRecord:
+        self._sites_cache[site.tenant_id] = site
+        self.save_site(site)
+        return site
+
     def create_site(self, tenant_id: str, params: dict[str, Any]) -> SiteRecord:
         site = SiteRecord(tenant_id, params)
         self._sites_cache[tenant_id] = site

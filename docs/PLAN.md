@@ -119,7 +119,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-005 | Hand-written trading and distribution Blueprint fixture | Blueprint | G1 | BPL-002 | eldon | done |
 | BPL-006 | Blueprint diff | Blueprint | G1 | BPL-003 | eldon | done |
 | BPL-007 | Apply with preview and DDL plan gate (change engine) | Blueprint | G1 | BPL-026,BPL-001,BPL-012 | partner | done |
-| BPL-008 | Rollback to a previous Blueprint version | Blueprint | G1 | BPL-007 | partner | todo |
+| BPL-008 | Rollback to a previous Blueprint version | Blueprint | G1 | BPL-007 | partner | done |
 | BPL-009 | Component manifest schema v0 in contracts/ | Blueprint | G1 | GOV-015 | eldon | done |
 | BPL-010 | Component registry (list, version, compatibility) | Blueprint | G1 | BPL-009 | eldon | done |
 | BPL-011 | Event stream contract implementation | Blueprint | G1 | BPL-002 | eldon | done |

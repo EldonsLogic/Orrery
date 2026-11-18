@@ -1,0 +1,35 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) / 2);
+}
+
+.label {
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+  font-weight: var(--text-h3-weight);
+  color: var(--color-text);
+}
+
+:lang(ar) .label,
+:lang(ar) .hint,
+:lang(ar) .error {
+  line-height: var(--text-small-line-ar);
+}
+
+.mark {
+  color: var(--color-danger);
+}
+
+.hint {
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+.error {
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+  color: var(--color-danger);
+  font-weight: var(--text-h3-weight);
+}

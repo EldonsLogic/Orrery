@@ -13,8 +13,13 @@
       "directionRtl": "Right to left",
       "directionLtr": "Left to right"
     },
-    "language": { "ar": "Arabic", "en": "English" },
-    "colours": { "title": "Colour tokens" },
+    "language": {
+      "ar": "Arabic",
+      "en": "English"
+    },
+    "colours": {
+      "title": "Colour tokens"
+    },
     "type": {
       "title": "Type scale",
       "display": "Display",
@@ -37,6 +42,71 @@
     "bidi": {
       "title": "Mixed direction text",
       "sample": "Invoice <ref>INV-0042</ref> for <name>Gulf Trading Co.</name> is due."
+    },
+    "components": {
+      "title": "Components",
+      "intro": "Every component and variant, built only from the brand tokens.",
+      "buttons": {
+        "title": "Buttons",
+        "primary": "Save",
+        "secondary": "Cancel",
+        "danger": "Delete",
+        "ghost": "Learn more",
+        "small": "Small",
+        "large": "Large",
+        "loading": "Saving",
+        "disabled": "Unavailable",
+        "busy": "Working"
+      },
+      "fields": {
+        "title": "Form fields",
+        "textLabel": "Customer name",
+        "textHint": "As it appears on the commercial register.",
+        "required": "(required)",
+        "errorLabel": "Email",
+        "errorText": "Enter an email address in the form name@example.com.",
+        "numericLabel": "Amount",
+        "numericHint": "Digits stay left to right.",
+        "selectLabel": "Payment terms",
+        "selectHint": "Applies to new invoices.",
+        "optionNet30": "Net 30 days",
+        "optionNet60": "Net 60 days",
+        "optionCash": "Cash on delivery",
+        "checkboxLabel": "Send a copy to the accountant",
+        "checkboxHint": "One email per invoice.",
+        "checkboxErrorLabel": "I confirm the details are correct",
+        "checkboxErrorText": "Confirm before continuing."
+      },
+      "status": {
+        "title": "Badges and alerts",
+        "success": "Paid",
+        "warning": "Due soon",
+        "danger": "Overdue",
+        "neutral": "Draft",
+        "infoTitle": "Note",
+        "infoBody": "Invoices are numbered automatically.",
+        "successTitle": "Saved",
+        "successBody": "The customer was added.",
+        "warningTitle": "Check the date",
+        "warningBody": "The due date is before the invoice date.",
+        "dangerTitle": "Could not send",
+        "dangerBody": "The invoice was not sent. Try again."
+      },
+      "cards": {
+        "title": "Card, stack and spinner",
+        "cardTitle": "Open invoices",
+        "cardBody": "Twelve invoices wait for payment.",
+        "spinnerLabel": "Loading"
+      },
+      "table": {
+        "title": "Table",
+        "caption": "Recent invoices",
+        "colNumber": "Invoice",
+        "colCustomer": "Customer",
+        "colStatus": "Status",
+        "colAmount": "Amount",
+        "empty": "No invoices yet."
+      }
     }
   }
 }

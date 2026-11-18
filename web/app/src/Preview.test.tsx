@@ -23,4 +23,14 @@ describe('preview page', () => {
     expect(formatNumber('en', 1234, 'latn')).toBe('1,234');
     expect(html).toMatch(/[٠-٩]/);
   });
+
+  it('shows every component through i18n, tone roles included', () => {
+    expect(html).toContain(ar.preview.components.title);
+    expect(html).toContain(ar.preview.components.buttons.primary);
+    expect(html).toContain(ar.preview.components.table.caption);
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('role="status"');
+    expect(html).toContain('scope="row"');
+  });
 });

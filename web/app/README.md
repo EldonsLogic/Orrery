@@ -9,3 +9,6 @@ Purpose: the product app. One chat plus role-based views, approval inbox, Settin
 
 ## Theme engine (BRD-005)
 `theme/theme-engine.js` is the user theme preference (light, dark, system) with per-user persistence; see [theming](../../docs/architecture/theming.md). Run its tests with `node --test web/app/theme/` (Node 20, no packages).
+
+## UI components (BRD-010)
+`src/ui/` is the component library: Button, TextField, Select, Checkbox, Card, Badge, Alert, Spinner, Table, VisuallyHidden, Stack (import from `src/ui`). CSS Modules built only from brand tokens, logical properties only, no text inside components (every visible or aria string is a prop, so copy goes through i18n). It will move to its own package later. See every variant on the preview page, Components section.

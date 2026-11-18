@@ -1,0 +1,36 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * var(--stack-gap, 2));
+}
+
+ul.root,
+ol.root {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  flex-direction: row;
+}
+
+.wrap {
+  flex-wrap: wrap;
+}
+
+.align_start {
+  align-items: flex-start;
+}
+
+.align_center {
+  align-items: center;
+}
+
+.align_end {
+  align-items: flex-end;
+}
+
+.align_stretch {
+  align-items: stretch;
+}

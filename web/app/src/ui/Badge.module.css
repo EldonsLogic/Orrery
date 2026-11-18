@@ -1,0 +1,41 @@
+.root {
+  --badge-tone: var(--color-text);
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-unit) / 2);
+  padding-block: calc(var(--space-unit) / 4);
+  padding-inline: var(--space-unit);
+  border: 1px solid var(--badge-tone);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--badge-tone) calc(var(--status-tint-opacity) * 100%), transparent);
+  color: var(--color-text);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-h3-weight);
+  white-space: nowrap;
+}
+
+:lang(ar) .root {
+  line-height: var(--text-caption-line-ar);
+}
+
+.icon {
+  display: inline-flex;
+  color: var(--badge-tone);
+}
+
+.success {
+  --badge-tone: var(--color-success);
+}
+
+.warning {
+  --badge-tone: var(--color-warning);
+}
+
+.danger {
+  --badge-tone: var(--color-danger);
+}
+
+.neutral {
+  --badge-tone: color-mix(in srgb, var(--color-text) 60%, transparent);
+}

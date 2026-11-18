@@ -1,0 +1,51 @@
+.wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-card);
+}
+
+.table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+:lang(ar) .table {
+  line-height: var(--text-small-line-ar);
+}
+
+.caption {
+  padding-block-end: var(--space-unit);
+  text-align: start;
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h3-weight);
+  color: var(--color-text);
+}
+
+:lang(ar) .caption {
+  line-height: var(--text-h3-line-ar);
+}
+
+.cell {
+  padding: var(--space-unit) calc(var(--space-unit) * 1.5);
+  text-align: start;
+  border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+}
+
+thead .cell {
+  font-weight: var(--text-h3-weight);
+  border-block-end-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.rowHeader {
+  font-weight: var(--text-h3-weight);
+}
+
+.numeric {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: isolate;
+}

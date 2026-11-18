@@ -1,0 +1,106 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-unit);
+  box-sizing: border-box;
+  min-block-size: var(--button-height);
+  padding-inline: calc(var(--space-unit) * 2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  font-weight: var(--text-h3-weight);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease);
+}
+
+:lang(ar) .root {
+  line-height: var(--text-body-line-ar);
+}
+
+.root:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.root:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.root[aria-busy='true'] {
+  cursor: progress;
+}
+
+.sm {
+  min-block-size: calc(var(--button-height) * 0.8);
+  padding-inline: calc(var(--space-unit) * 1.5);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+:lang(ar) .sm {
+  line-height: var(--text-small-line-ar);
+}
+
+.lg {
+  min-block-size: calc(var(--button-height) * 1.2);
+  padding-inline: calc(var(--space-unit) * 3);
+}
+
+.primary {
+  background: var(--color-primary);
+  color: var(--color-background);
+}
+
+.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 88%, var(--color-text));
+}
+
+.primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 76%, var(--color-text));
+}
+
+.danger {
+  background: var(--color-danger);
+  color: var(--color-background);
+}
+
+.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 88%, var(--color-text));
+}
+
+.danger:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 76%, var(--color-text));
+}
+
+.secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-text));
+}
+
+.secondary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-surface) 84%, var(--color-text));
+}
+
+.ghost {
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.ghost:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+}

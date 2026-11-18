@@ -1,0 +1,8 @@
+.root {
+  box-sizing: border-box;
+  padding: calc(var(--space-unit) * 2);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  border-radius: var(--radius-card);
+}

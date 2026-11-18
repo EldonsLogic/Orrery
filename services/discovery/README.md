@@ -90,3 +90,15 @@ Tests: `tests/connectors/tabular/`. Not covered: .xls and other formats are refu
 - Data tables in `connectors/odoo/mapping.py`: `DEFAULT_MODELS` (trading business) and `MAPPING` (source model/field to neutral name and type; the Blueprint mapping is DSC-013). Fields without a mapping are reported (`unmapped_field`, `unmapped_model`), never dropped.
 
 Tests: `tests/connectors/odoo/` (FakeTransport, synthetic data). Not covered: any real Odoo version quirk beyond the generic shapes, domain filters, incremental sync, and the transport itself (vault-side).
+
+## Pre-validation and quarantine (DSC-019)
+
+`prevalidate/` runs BEFORE any replay or import of an owner's historical rows (already parsed by the tabular connector, the extractor or intake). Pure functions, stdlib only, no I/O, no model calls, deterministic. It flags dirty rows and quarantines them; it never corrects, rounds into place or adopts a stated figure.
+
+- `normalise_arabic(text)`: comparison key for matching only (display spelling is kept): NFKC, bidi and zero-width removed, tatweel and diacritics dropped, alef forms unified, ta marbuta to ha, alef maqsura to ya, Arabic-Indic and Eastern digits to ASCII, lower-case Latin, punctuation to spaces, business words (data list `BUSINESS_WORDS`) stripped at the edges, never to empty. Hamza on waw or ya is not unified.
+- `group_duplicates(names, threshold=1)`: groups by equal key, same token set, or edit distance up to the threshold (and at most a quarter of the shorter key; digit sequences must match). Connected components; canonical = most frequent display form, tie by first seen. Suggestions for owner confirmation, never merged.
+- `prevalidate(dataset, config)` returns a report: findings (`PRE-` code, severity `blocking`, `needs_owner` or `info`, i18n `reason_key`, row pointers as sheet and row ids, `quarantined`), `accepted`, `quarantine` (intact copy plus SHA-256), `owner_review`, counts per code, name groups. Codes: 101 negative stock, 201 to 204 dates (unparseable, future, outside period, Hijri detected not converted), 301 to 303 line and document totals and unparseable amounts, 401 to 403 duplicates, 501 missing required, 601 to 603 quantity and price signs, 701 currency mismatch, 801 and 802 duplicate party and item names. Malformed input is refused with `PRE-E01` to `PRE-E05`.
+- Defaults: line total = round(qty x price) minus discount plus VAT, ROUND_HALF_UP to 2 places, tolerance 0, compared with the stated total unrounded. Stock: receipts before issues on the same date, per item and warehouse, first negative balance only. Future-date check runs only when `today` is given in the config (no clock).
+- CLI: `cd services/discovery && python3 -m prevalidate <dataset.json> --config <config.json>` (exit 0 clean, 1 quarantined rows, 2 refusal).
+
+Tests: `tests/prevalidate/` (synthetic data only). Not covered: Hijri conversion, currency conversion, tax-rate correctness (only arithmetic), returns and credit notes as signed stock, stock moves between warehouses, fuzzy matching of phonetic or transliterated names.

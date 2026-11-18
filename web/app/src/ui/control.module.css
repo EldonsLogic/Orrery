@@ -1,0 +1,42 @@
+/* Shared look for text inputs and selects. */
+.control {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: var(--button-height);
+  padding-inline: calc(var(--space-unit) * 1.5);
+  border: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+:lang(ar) .control {
+  line-height: var(--text-body-line-ar);
+}
+
+.control:hover:not(:disabled) {
+  border-color: var(--color-text);
+}
+
+.control:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.control[aria-invalid='true'] {
+  border-color: var(--color-danger);
+  border-width: 2px;
+}
+
+.control:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control::placeholder {
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}

@@ -1,0 +1,29 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.root {
+  display: inline-block;
+  inline-size: calc(var(--space-unit) * 2);
+  block-size: calc(var(--space-unit) * 2);
+  box-sizing: border-box;
+  border: calc(var(--space-unit) / 4) solid color-mix(in srgb, currentcolor 25%, transparent);
+  border-block-start-color: currentcolor;
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    animation: none;
+    border-color: currentcolor;
+    border-style: dotted;
+  }
+}

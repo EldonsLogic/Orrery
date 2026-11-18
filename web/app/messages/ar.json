@@ -13,8 +13,13 @@
       "directionRtl": "من اليمين إلى اليسار",
       "directionLtr": "من اليسار إلى اليمين"
     },
-    "language": { "ar": "العربية", "en": "الإنجليزية" },
-    "colours": { "title": "رموز الألوان" },
+    "language": {
+      "ar": "العربية",
+      "en": "الإنجليزية"
+    },
+    "colours": {
+      "title": "رموز الألوان"
+    },
     "type": {
       "title": "سلّم الخطوط",
       "display": "عنوان عرض",
@@ -37,6 +42,71 @@
     "bidi": {
       "title": "نص باتجاهين",
       "sample": "الفاتورة <ref>INV-0042</ref> للعميل <name>Gulf Trading Co.</name> مستحقة."
+    },
+    "components": {
+      "title": "المكوّنات",
+      "intro": "كل مكوّن وكل نمط، مبنيّة من رموز العلامة التجارية فقط.",
+      "buttons": {
+        "title": "الأزرار",
+        "primary": "حفظ",
+        "secondary": "إلغاء",
+        "danger": "حذف",
+        "ghost": "اعرف المزيد",
+        "small": "صغير",
+        "large": "كبير",
+        "loading": "جارٍ الحفظ",
+        "disabled": "غير متاح",
+        "busy": "جارٍ التنفيذ"
+      },
+      "fields": {
+        "title": "حقول النماذج",
+        "textLabel": "اسم العميل",
+        "textHint": "كما يظهر في السجل التجاري.",
+        "required": "(مطلوب)",
+        "errorLabel": "البريد الإلكتروني",
+        "errorText": "أدخل بريدًا إلكترونيًا بالصيغة name@example.com.",
+        "numericLabel": "المبلغ",
+        "numericHint": "تبقى الأرقام من اليسار إلى اليمين.",
+        "selectLabel": "شروط الدفع",
+        "selectHint": "تُطبّق على الفواتير الجديدة.",
+        "optionNet30": "صافي 30 يومًا",
+        "optionNet60": "صافي 60 يومًا",
+        "optionCash": "الدفع عند الاستلام",
+        "checkboxLabel": "إرسال نسخة إلى المحاسب",
+        "checkboxHint": "رسالة واحدة لكل فاتورة.",
+        "checkboxErrorLabel": "أؤكد أن البيانات صحيحة",
+        "checkboxErrorText": "أكّد قبل المتابعة."
+      },
+      "status": {
+        "title": "الشارات والتنبيهات",
+        "success": "مدفوعة",
+        "warning": "تستحق قريبًا",
+        "danger": "متأخرة",
+        "neutral": "مسودة",
+        "infoTitle": "ملاحظة",
+        "infoBody": "تُرقَّم الفواتير تلقائيًا.",
+        "successTitle": "تم الحفظ",
+        "successBody": "تمت إضافة العميل.",
+        "warningTitle": "راجع التاريخ",
+        "warningBody": "تاريخ الاستحقاق قبل تاريخ الفاتورة.",
+        "dangerTitle": "تعذّر الإرسال",
+        "dangerBody": "لم تُرسل الفاتورة. حاول مرة أخرى."
+      },
+      "cards": {
+        "title": "البطاقة والتكديس والمؤشر",
+        "cardTitle": "الفواتير المفتوحة",
+        "cardBody": "اثنتا عشرة فاتورة بانتظار السداد.",
+        "spinnerLabel": "جارٍ التحميل"
+      },
+      "table": {
+        "title": "الجدول",
+        "caption": "أحدث الفواتير",
+        "colNumber": "الفاتورة",
+        "colCustomer": "العميل",
+        "colStatus": "الحالة",
+        "colAmount": "المبلغ",
+        "empty": "لا توجد فواتير بعد."
+      }
     }
   }
 }

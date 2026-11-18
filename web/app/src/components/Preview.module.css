@@ -28,6 +28,14 @@
   font-weight: var(--text-h2-weight);
 }
 
+.h3 {
+  margin-block: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h3-weight);
+}
+
 .controls {
   display: flex;
   flex-wrap: wrap;

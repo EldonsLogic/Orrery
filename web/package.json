@@ -5,8 +5,9 @@
   "engines": { "node": ">=20.9.0" },
   "scripts": {
     "tokens": "node scripts/copy-tokens.mjs",
-    "lint": "eslint . && node scripts/check-tokens-only.mjs",
+    "lint": "eslint . && node scripts/check-tokens-only.mjs && node scripts/check-rtl-css.mjs",
     "check:tokens": "node scripts/check-tokens-only.mjs",
+    "check:rtl": "node scripts/check-rtl-css.mjs",
     "typecheck": "pnpm tokens && pnpm -r typecheck",
     "test": "node --test scripts/ && vitest run",
     "build": "pnpm tokens && pnpm -r build"

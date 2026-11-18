@@ -15,6 +15,13 @@ Principle 1: Build on open source; record every licence. Every adopted open-sour
 | **Frappe HRMS** | [github.com/frappe/hrms](https://github.com/frappe/hrms) | 15.64.8 | GNU GPL v3.0 | Payroll and HR skeleton only for regional compliance. | SaaS-only runtime behind platform gateway (ADR-0002). Pinned for G1 dev bench under ERP-001. |
 | **ERPGulf ZATCA app** | [github.com/ERPGulf/zatca_erpgulf](https://github.com/ERPGulf/zatca_erpgulf) (accessed 2026-11-14) | v3.0.1 (draft evaluation; tag commit `d906ba7`) | MIT | Saudi ZATCA Phase 2 e-invoicing integration. | Early draft evaluation in CMP-002 ([docs/compliance/zatca-erpgulf-evaluation.md](../compliance/zatca-erpgulf-evaluation.md)). Upstream MIT licence and checked direct/runtime deps confirmed (accessed 2026-11-14); transitive tree UNVERIFIED. PROPOSED wrapper/vendoring without Desk UI (ADR-0016) requires an ADR and, if vendored, a dedicated PR with `PROVENANCE.md`. |
 
+### 1b. Python libraries used by our own services
+
+| Component | Upstream / source | Pinned version | Licence | Role / Why used | Boundary & compliance notes |
+|---|---|---|---|---|---|
+| **hijridate** | [github.com/dralshehri/hijridate](https://github.com/dralshehri/hijridate) (PyPI `hijridate`, successor of the deprecated `hijri-converter`; accessed 2026-11-18) | 2.6.0 | MIT (package metadata, accessed 2026-11-18) | Umm al-Qura Hijri to Gregorian conversion in the document intake (CMP-022). Tables cover 1343 to 1500 AH; outside that it raises and the intake drops the date. | Permissive, pure Python, no network. Table accuracy against the official Saudi calendar is UNVERIFIED beyond the library's own claim; a Saudi accountant should spot-check month starts before dates drive any legal or tax logic. |
+| **Lucide icons** | [github.com/lucide-icons/lucide](https://github.com/lucide-icons/lucide) (LICENSE read 2026-11-18) | 1.75.0 (release 2026-11-18) | ISC; 130-odd icons derived from Feather are MIT (Cole Bemis) | Outline icon set for the web app and marketing site (brand: 24 px, 1.75 px stroke, BRD-012). | Permissive. Keep both licence texts in the third-party notices that ship with the web bundle. Pin the version when the package is added. Directional icons mirror in RTL by our component, not by the library. Icons are used as-is; no logos of third parties. |
+
 ## 2. Forbidden components
 
 | Component | Upstream / source | Licence | Status | Reason |

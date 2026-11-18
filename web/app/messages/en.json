@@ -108,5 +108,59 @@
         "empty": "No invoices yet."
       }
     }
+  },
+  "auth": {
+    "backToLogin": "Back to sign in",
+    "login": {
+      "title": "Sign in",
+      "intro": "Use your work email and password.",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in",
+      "submitting": "Signing in",
+      "forgot": "Forgot your password?",
+      "errorTitle": "Could not sign in",
+      "error": "The email or password is not correct, or the account is not available. Check them and try again."
+    },
+    "reset": {
+      "title": "Reset your password",
+      "intro": "Enter your email. If it can be used to sign in, we will send reset instructions.",
+      "email": "Email",
+      "submit": "Send instructions",
+      "submitting": "Sending",
+      "sentTitle": "Check your email",
+      "sent": "If that email can be used to sign in, instructions are on their way.",
+      "errorTitle": "Could not send",
+      "error": "Something went wrong. Try again in a moment."
+    },
+    "confirm": {
+      "title": "Choose a new password",
+      "intro": "Enter a new password for your account.",
+      "password": "New password",
+      "confirm": "Repeat the new password",
+      "submit": "Save password",
+      "submitting": "Saving",
+      "mismatch": "The two passwords do not match.",
+      "doneTitle": "Password changed",
+      "done": "Your password was changed. You can sign in now.",
+      "errorTitle": "Could not change the password",
+      "error": "The link is not valid any more. Ask for a new reset link."
+    }
+  },
+  "errors": {
+    "home": "Go to the start page",
+    "retry": "Try again",
+    "notFound": {
+      "title": "Page not found",
+      "body": "The page you asked for does not exist or was moved."
+    },
+    "generic": {
+      "title": "Something went wrong",
+      "body": "We could not show this page. Try again, or come back later."
+    },
+    "global": {
+      "title": "The app could not start",
+      "body": "A serious error stopped the page. Reload it, or come back later."
+    }
   }
 }

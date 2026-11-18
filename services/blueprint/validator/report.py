@@ -58,6 +58,9 @@ class ValidationContext:
     entitlements:  plan entitlements of the tenant, for example {"white_label"}
     pack_locales:  overrides DEFAULT_PACK_LOCALES (pack id -> locale defaults)
     schema_path:   overrides the location of contracts/blueprint.schema.json
+    tool_set:      the tenant's generated Tool API definition set ({"tools": [...]}) or its tool list (ADR-0043)
+    instruction_keys: platform (L0) catalog keys usable as assistant instructions
+    assistant_caps: plan caps for assistant limits, same shape as assistants[].limits; only lower the platform caps
     """
 
     registry: dict[str, list[dict]] | None = None
@@ -67,6 +70,9 @@ class ValidationContext:
     entitlements: set[str] | None = None
     pack_locales: dict[str, dict] | None = None
     schema_path: Path | None = None
+    tool_set: dict | list | None = None
+    instruction_keys: set[str] | None = None
+    assistant_caps: dict | None = None
 
 
 def as_list(x: Any) -> list:

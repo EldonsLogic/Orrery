@@ -148,7 +148,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-010 | Connector framework: tiers, sandboxing, audit, untrusted-content handling | Discovery | G2 | DSC-003,SEC-003 | eldon | done |
 | DSC-011 | Excel and CSV import connector | Discovery | G2 | DSC-010 | eldon | done |
 | DSC-012 | Odoo extractor: read-only API access, export mapping | Discovery | G2 | DSC-010 | eldon | done |
-| DSC-013 | Odoo to Blueprint field-mapping library | Discovery | G2 | DSC-012 | eldon | todo |
+| DSC-013 | Odoo to Blueprint field-mapping library | Discovery | G2 | DSC-012 | eldon | done |
 | DSC-014 | Document intake with Arabic OCR (invoices, receipts, photos) | Discovery | G2 | DSC-010,QA-002 | eldon | done |
 | DSC-015 | Email and WhatsApp forwarding intake | Discovery | G3 | DSC-014 | eldon | todo |
 | DSC-016 | Accountant review view in discovery | Discovery | G3 | DSC-007 | eldon | todo |
@@ -237,7 +237,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BRD-009 | Design system rollout: generate all logo files, sizes, favicons, social sizes, the product design system and brand guidelines | Brand | G2 | BRD-003,LEG-008 | eldon | todo |
 | BRD-010 | UI component library built from tokens | Brand | G2 | BRD-005 | eldon | done |
 | BRD-011 | Font licence and Arabic typography verification | Brand | G1 | BRD-001 | eldon | doing |
-| BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | eldon | todo |
+| BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | eldon | done |
 | WEB-001 | Marketing website v1, bilingual | Web | G2 | BRD-009 | eldon | todo |
 | WEB-002 | Contact and waitlist form with PDPL consent | Web | G2 | WEB-001,LEG-012 | eldon | todo |
 | WEB-003 | App shell: sign-in, workspace switcher, navigation | Web | G2 | PLT-005,BRD-010 | eldon | todo |

@@ -39,7 +39,7 @@ Wrote three Proposed design ADRs, with no code, for secrets management (ADR-0038
   - No route until verified.
   - Cancel compensates only before routing.
   - Deprovisioning reuses the machinery under legal hold and crypto-shredding.
-- ADRs reference each other and ADR-0036 (ERP-026, written in parallel by another session) while all are in open PRs.
+- ADRs reference each other and ADR-0041 (ERP-026, written in parallel by another session; first numbered ADR-0036, renumbered because #120 took 0036) while all are in open PRs.
 
 ## Founder questions raised (in the detail docs, not added to open-questions.md to stay inside allowed paths)
 - SEC-002 D-1 to D-5: store product and region, cache lease, destruction waiting period, whether the ZATCA fallback signer is acceptable for the first pilot, break-glass with two founders.

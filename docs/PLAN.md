@@ -240,7 +240,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | eldon | done |
 | WEB-001 | Marketing website v1, bilingual | Web | G2 | BRD-009 | eldon | todo |
 | WEB-002 | Contact and waitlist form with PDPL consent | Web | G2 | WEB-001,LEG-012 | eldon | todo |
-| WEB-003 | App shell: sign-in, workspace switcher, navigation | Web | G2 | PLT-005,BRD-010 | eldon | todo |
+| WEB-003 | App shell: sign-in, workspace switcher, navigation | Web | G2 | PLT-005,BRD-010 | eldon | done |
 | WEB-004 | Chat screen with modes | Web | G2 | WEB-003,OPR-010 | eldon | todo |
 | WEB-005 | Approval inbox screen | Web | G2 | WEB-003,OPR-007 | eldon | todo |
 | WEB-006 | Reports and dashboard screens | Web | G2 | WEB-003,OPR-008 | eldon | todo |

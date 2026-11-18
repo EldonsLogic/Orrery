@@ -214,7 +214,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-024 | Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) | Platform | G1 | PLT-001 | partner | todo |
 | INF-001 | Hosting decision: in-country provider shortlist and choice | Infrastructure | G1 | LEG-003,CMP-019 | partner | todo |
 | INF-002 | Infrastructure as code baseline | Infrastructure | G1 | INF-001 | partner | todo |
-| INF-003 | CI/CD for services (build, test, deploy to staging) | Infrastructure | G1 | GOV-007 | partner | todo |
+| INF-003 | CI/CD for services (build, test, deploy to staging) | Infrastructure | G1 | GOV-007 | partner | doing |
 | INF-004 | Staging environment | Infrastructure | G1 | INF-002 | partner | todo |
 | INF-005 | Production environment | Infrastructure | G3 | INF-004,SEC-002 | partner | todo |
 | INF-006 | Container build and image scanning | Infrastructure | G2 | INF-003 | partner | todo |

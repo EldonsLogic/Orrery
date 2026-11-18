@@ -8,6 +8,8 @@ export type SubmitRequest = {
   action: ActionModel;
   /** Typed for the future gateway call; deliberately unused here. */
   values: Readonly<Record<string, string>>;
+  /** Bulk import (WEB-024): one value map per row; the gateway call will take them in one idempotent request. Unused here. */
+  rows?: ReadonlyArray<Readonly<Record<string, string>>>;
 };
 export type SubmitResult = { status: 'waiting_for_gateway' } | { status: 'refused' };
 

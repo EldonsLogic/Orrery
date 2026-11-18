@@ -968,6 +968,22 @@ class ChangeEngineAdapter:
     def _exec(self, site: SiteRecord, step: dict[str, Any], persist_storage: bool = True) -> None:
         kind, pointer, params = step["kind"], step["pointer"], step["params"]
         segs = _segs(pointer)
+        if persist_storage and self.frappe_backend is not None:
+            # BPL-027: the engine call runs after the in-memory change; if it fails, undo the in-memory
+            # change too, or compensation sees a config that never reached the engine and escalates to
+            # recovery_required.
+            saved = (copy.deepcopy(site.config), copy.deepcopy(site.retained))
+            try:
+                self._exec(site, step, persist_storage=False)
+                self.frappe_backend.execute_step(site.tenant_id, step)
+            except Exception:
+                site.config, site.retained = saved
+                raise
+            if kind == "entity.add":
+                self.store.ensure_entity_table(site.tenant_id, str(segs[1] if len(segs) > 1 else "entity"))
+            elif kind == "field.add" and len(segs) >= 4 and segs[0] == "entities":
+                self.store.ensure_field_column(site.tenant_id, segs[1], pointer)
+            return
         cfg = site.config
         if kind == "settings.set":
             doc = cfg["settings"].setdefault(segs[0], {})
@@ -1010,8 +1026,6 @@ class ChangeEngineAdapter:
                 coll.append(defn)
 
         if persist_storage:
-            if self.frappe_backend is not None:
-                self.frappe_backend.execute_step(site.tenant_id, step)
             if kind == "entity.add":
                 self.store.ensure_entity_table(site.tenant_id, str(segs[1] if len(segs) > 1 else "entity"))
             elif kind == "field.add" and len(segs) >= 4 and segs[0] == "entities":

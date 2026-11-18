@@ -606,17 +606,22 @@ class FrappeRuntimeBackend:
                 defn = params.get("definition") or {}
                 if defn.get("kind") == "warehouse":
                     wh_name = str(defn.get("id") or subject.get("id"))
-                    if hasattr(f.db, "exists") and f.db.exists("Warehouse", wh_name):
-                        f.db.set_value("Warehouse", wh_name, "disabled", 0)
+                    existing, company = self._find_warehouse(f, wh_name)
+                    if existing:
+                        f.db.set_value("Warehouse", existing, "disabled", 0)
                     else:
-                        f.get_doc({"doctype": "Warehouse", "warehouse_name": wh_name, "disabled": 0}).insert(ignore_permissions=True)
+                        doc = {"doctype": "Warehouse", "warehouse_name": wh_name, "disabled": 0}
+                        if company:
+                            doc["company"] = company
+                        f.get_doc(doc).insert(ignore_permissions=True)
                     if hasattr(f.db, "commit"):
                         f.db.commit()
 
             elif kind == "location.disable":
                 loc_id = str(subject.get("id") or segs[-1])
-                if hasattr(f.db, "exists") and f.db.exists("Warehouse", loc_id):
-                    f.db.set_value("Warehouse", loc_id, "disabled", 1)
+                existing, _company = self._find_warehouse(f, loc_id)
+                if existing:
+                    f.db.set_value("Warehouse", existing, "disabled", 1)
                     if hasattr(f.db, "commit"):
                         f.db.commit()
 
@@ -630,6 +635,27 @@ class FrappeRuntimeBackend:
                     params.get("after") if has_after else None,
                     unset=not has_after,
                 )
+
+    def _find_warehouse(self, f: Any, wh_name: str) -> tuple[str | None, str | None]:
+        """Return (existing warehouse name, company) for a Blueprint warehouse id (BPL-027).
+
+        The engine requires a company on a warehouse and names it "<warehouse_name> - <abbr>", so a lookup by the
+        bare id misses it and an insert without a company fails. Fails closed with site_not_ready when the engine
+        requires a company and the site has none (company setup belongs to tenant provisioning).
+        """
+        meta = f.get_meta("Warehouse") if hasattr(f, "get_meta") else None
+        company_field = meta.get_field("company") if meta is not None else None
+        if company_field is None:
+            if hasattr(f.db, "exists") and f.db.exists("Warehouse", wh_name):
+                return wh_name, None
+            return None, None
+        companies = f.get_all("Company", pluck="name", order_by="creation asc")
+        defaults = getattr(f, "defaults", None)
+        company = (defaults.get_global_default("company") if defaults is not None else None) or (companies[0] if companies else None)
+        if not company:
+            raise FrappeBackendError("site_not_ready", stage="execute")
+        existing = f.db.get_value("Warehouse", {"warehouse_name": wh_name, "company": company}, "name")
+        return (str(existing) if existing else None), company
 
     def _ensure_doctype_exists(self, f: Any, doctype: str, defn: dict[str, Any]) -> None:
         if getattr(f.db, "table_exists", None) and f.db.table_exists(doctype):

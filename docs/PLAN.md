@@ -136,7 +136,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-022 | Reuse metrics and Platform Autonomy Rate computation | Blueprint | G2 | BPL-010,GOV-016 | eldon | done |
 | BPL-023 | Exceptions register tooling | Blueprint | G2 | GOV-017 | eldon | done |
 | BPL-024 | Promotion of generalised patterns into the library | Blueprint | G4 | DAT-008,BPL-016 | eldon | todo |
-| DSC-001 | Interview protocol v0, Arabic and English | Discovery | G1 | GTM-002 | eldon | todo |
+| DSC-001 | Interview protocol v0, Arabic and English | Discovery | G1 | GTM-002 | eldon | done |
 | DSC-002 | Template Blueprint: trading and distribution | Discovery | G1 | BPL-005 | eldon | done |
 | DSC-003 | Connector interface spec and tier definitions | Discovery | G1 | GOV-015 | eldon | done |
 | DSC-004 | Template-first discovery flow: show draft, owner corrects | Discovery | G2 | DSC-002,OPR-010 | eldon | todo |

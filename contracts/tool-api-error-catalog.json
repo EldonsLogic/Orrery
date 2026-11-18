@@ -1,0 +1,241 @@
+{
+  "version": "0.1.0",
+  "entries": [
+    {
+      "id": "insufficient_stock",
+      "class": "guard_failed",
+      "retryable": false,
+      "params": {
+        "item": {
+          "type": "id",
+          "max_length": 64
+        },
+        "warehouse": {
+          "type": "id",
+          "max_length": 64
+        },
+        "shortfall_qty": {
+          "type": "decimal_string",
+          "max_length": 24
+        }
+      },
+      "message_key": "errors.domain.insufficient_stock",
+      "messages": {
+        "en": "There is not enough stock of {item} in {warehouse}. Short by {shortfall_qty}.",
+        "ar": "الكمية المتوفرة من الصنف {item} في المستودع {warehouse} غير كافية، والنقص {shortfall_qty}."
+      },
+      "review": "unreviewed",
+      "owner_action": "ask_owner"
+    },
+    {
+      "id": "fiscal_period_closed",
+      "class": "guard_failed",
+      "retryable": false,
+      "params": {
+        "period": {
+          "type": "id",
+          "max_length": 64
+        }
+      },
+      "message_key": "errors.domain.fiscal_period_closed",
+      "messages": {
+        "en": "The fiscal period {period} is closed, so nothing can be posted to it.",
+        "ar": "الفترة المالية {period} مغلقة ولا يمكن التسجيل فيها."
+      },
+      "review": "unreviewed",
+      "owner_action": "ask_owner"
+    },
+    {
+      "id": "duplicate_tax_id",
+      "class": "invalid_arguments",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.duplicate_tax_id",
+      "messages": {
+        "en": "This tax number is already registered to another party.",
+        "ar": "الرقم الضريبي مسجّل مسبقاً لجهة أخرى."
+      },
+      "review": "unreviewed",
+      "owner_action": "fix_input"
+    },
+    {
+      "id": "required_field_missing",
+      "class": "invalid_arguments",
+      "retryable": false,
+      "params": {
+        "field": {
+          "type": "id",
+          "max_length": 64
+        }
+      },
+      "message_key": "errors.domain.required_field_missing",
+      "messages": {
+        "en": "The field {field} is required.",
+        "ar": "الحقل {field} مطلوب."
+      },
+      "review": "unreviewed",
+      "owner_action": "fix_input"
+    },
+    {
+      "id": "credit_limit_exceeded",
+      "class": "guard_failed",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.credit_limit_exceeded",
+      "messages": {
+        "en": "This customer has exceeded the allowed credit limit.",
+        "ar": "تجاوز العميل حد الائتمان المسموح به."
+      },
+      "review": "unreviewed",
+      "owner_action": "ask_owner"
+    },
+    {
+      "id": "record_already_submitted",
+      "class": "conflict",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.record_already_submitted",
+      "messages": {
+        "en": "This document is already submitted and cannot be changed.",
+        "ar": "هذا المستند معتمد مسبقاً ولا يمكن تعديله."
+      },
+      "review": "unreviewed",
+      "owner_action": "fix_input"
+    },
+    {
+      "id": "record_already_cancelled",
+      "class": "conflict",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.record_already_cancelled",
+      "messages": {
+        "en": "This document is already cancelled.",
+        "ar": "هذا المستند ملغى مسبقاً."
+      },
+      "review": "unreviewed",
+      "owner_action": "fix_input"
+    },
+    {
+      "id": "document_not_submittable",
+      "class": "guard_failed",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.document_not_submittable",
+      "messages": {
+        "en": "This document cannot be submitted in its current state.",
+        "ar": "لا يمكن اعتماد هذا المستند في حالته الحالية."
+      },
+      "review": "unreviewed",
+      "owner_action": "fix_input"
+    },
+    {
+      "id": "linked_document_exists",
+      "class": "conflict",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.linked_document_exists",
+      "messages": {
+        "en": "This action is not possible because other documents are linked to this one.",
+        "ar": "لا يمكن تنفيذ الإجراء لوجود مستندات مرتبطة بهذا المستند."
+      },
+      "review": "unreviewed",
+      "owner_action": "ask_owner"
+    },
+    {
+      "id": "stale_approval_state",
+      "class": "conflict",
+      "retryable": true,
+      "params": {
+        "changed": {
+          "type": "string",
+          "max_length": 16,
+          "enum": [
+            "quantity",
+            "amount",
+            "status",
+            "approver",
+            "record"
+          ]
+        }
+      },
+      "message_key": "errors.domain.stale_approval_state",
+      "messages": {
+        "en": "The record changed after approval was requested ({changed}). Review it again.",
+        "ar": "تغيّر السجل بعد طلب الموافقة ({changed}). يرجى مراجعته من جديد."
+      },
+      "review": "unreviewed",
+      "owner_action": "retry_after_refresh"
+    },
+    {
+      "id": "unbalanced_entry",
+      "class": "engine_error",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.unbalanced_entry",
+      "messages": {
+        "en": "The entry is not balanced: total debit does not equal total credit.",
+        "ar": "القيد غير متوازن: مجموع المدين لا يساوي مجموع الدائن."
+      },
+      "review": "unreviewed",
+      "owner_action": "contact_support"
+    },
+    {
+      "id": "negative_valuation_blocked",
+      "class": "guard_failed",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.negative_valuation_blocked",
+      "messages": {
+        "en": "This operation would make the stock value negative, so it was blocked.",
+        "ar": "لا يمكن إتمام العملية لأنها تجعل قيمة المخزون سالبة."
+      },
+      "review": "unreviewed",
+      "owner_action": "ask_owner"
+    },
+    {
+      "id": "tax_registration_invalid",
+      "class": "invalid_arguments",
+      "retryable": false,
+      "params": {
+        "kind": {
+          "type": "string",
+          "max_length": 24,
+          "enum": [
+            "vat",
+            "commercial_registration",
+            "national_address"
+          ]
+        }
+      },
+      "message_key": "errors.domain.tax_registration_invalid",
+      "messages": {
+        "en": "The tax registration details are not valid ({kind}).",
+        "ar": "بيانات التسجيل الضريبي غير صالحة ({kind})."
+      },
+      "review": "unreviewed",
+      "owner_action": "fix_input"
+    },
+    {
+      "id": "currency_rate_missing",
+      "class": "engine_error",
+      "retryable": false,
+      "params": {
+        "currency": {
+          "type": "id",
+          "max_length": 8
+        },
+        "date": {
+          "type": "date",
+          "max_length": 10
+        }
+      },
+      "message_key": "errors.domain.currency_rate_missing",
+      "messages": {
+        "en": "No exchange rate is set for {currency} on {date}.",
+        "ar": "لا يوجد سعر صرف للعملة {currency} بتاريخ {date}."
+      },
+      "review": "unreviewed",
+      "owner_action": "ask_owner"
+    }
+  ]
+}

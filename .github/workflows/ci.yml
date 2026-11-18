@@ -59,6 +59,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          BASE_SHA=$(git merge-base "$BASE_SHA" "$HEAD_SHA")  # diff against the branch point, not the moved main
           changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
           outside=$(echo "$changed" | grep -v -E '^(docs/|\.github/)' || true)
           if [ -z "$outside" ]; then
@@ -78,9 +79,13 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           ACTOR: ${{ github.event.pull_request.user.login }}
-        run: python3 scripts/check_lanes.py --base "$BASE_SHA" --head "$HEAD_SHA" --actor "$ACTOR"
+        run: |
+          BASE_SHA=$(git merge-base "$BASE_SHA" "$HEAD_SHA")  # diff against the branch point, not the moved main
+          python3 scripts/check_lanes.py --base "$BASE_SHA" --head "$HEAD_SHA" --actor "$ACTOR"
       - name: Trail check (log has valid plan IDs and the rows are not still todo)
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: python3 scripts/check_pr_trail.py --base "$BASE_SHA" --head "$HEAD_SHA"
+        run: |
+          BASE_SHA=$(git merge-base "$BASE_SHA" "$HEAD_SHA")  # diff against the branch point, not the moved main
+          python3 scripts/check_pr_trail.py --base "$BASE_SHA" --head "$HEAD_SHA"

@@ -20,4 +20,4 @@ None.
 Unknown.
 
 ## Next step
-Resolve Q-162 (renumbered from Q-146 after main merge) and implement CMP-005. Follow-ups remain WEB-016, CMP-023, ERP-019 and CMP-021. No tests were run; system Python has no pip or hijridate installed.
+Resolve Q-213 (renumbered from Q-146/Q-162/Q-207 after main merge) and implement CMP-005. Follow-ups remain WEB-016, CMP-023, ERP-019 and CMP-021. No tests were run; system Python has no pip or hijridate installed.

@@ -126,7 +126,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-012 | Engine adapter implementation in apps/engine that passes the BPL-025 conformance tests | Blueprint | G1 | BPL-025 | partner | done |
 | BPL-013 | Branding section in the Blueprint schema (ADR-0014) | Blueprint | G1 | BPL-002 | eldon | done |
 | BPL-014 | Component certification levels and test harness | Blueprint | G1 | BPL-010 | eldon | done |
-| BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | eldon | todo |
+| BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | eldon | done |
 | BPL-016 | Component request pipeline: gap to AI-drafted request with spec and tests | Blueprint | G2 | BPL-014,DSC-006 | eldon | todo |
 | BPL-017 | Factory: AI drafts component code and tests from a request | Blueprint | G2 | BPL-015,PLT-009 | eldon | todo |
 | BPL-018 | Simulator: replay a month of the owner's data on the compiled tenant | Blueprint | G2 | BPL-007,DSC-010 | eldon | todo |

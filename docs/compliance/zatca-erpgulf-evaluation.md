@@ -106,6 +106,8 @@ All findings in Section 3 come from static inspection of upstream source files o
 
 ## 5. Proposed Implementation Roadmap for the Platform
 
+Decision record: [ADR-0037](../decisions/ADR-0037-zatca-phase-2-vendor-core-rebuild-state.md) (CMP-033, Proposed) chooses a hybrid: vendor the pure core, rebuild the chain, outbox and hooks.
+
 Everything in this section is `PROPOSED`. Choosing between wrapping the upstream app and vendoring/extracting modules into `components/compliance/zatca` or `apps/engine/zatca_engine` is an architectural decision that **requires an ADR** before implementation. Any vendoring or import of third-party code **requires its own dedicated PR with a `PROVENANCE.md`** (recording source URL, pinned commit, kept/removed/changed files, plus updating [../../NOTICE.md](../../NOTICE.md) per Rule 17 in [../RULES.md](../RULES.md)).
 
 To satisfy **CMP-003** (Phase 1 QR & fields) and **CMP-004** (Phase 2 sandbox clearance), the `PROPOSED` plan is:

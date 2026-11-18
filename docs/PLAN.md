@@ -156,7 +156,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-018 | Second vertical template chosen from pilot evidence | Discovery | G3 | GTM-005 | eldon | todo |
 | DSC-019 | Messy-data pre-validation and quarantine before any replay or import: Arabic name normalisation and duplicate grouping for owner confirmation (display spelling kept), date and stock-order checks, line and total reconciliation (flag, never correct), quarantine report; feeds BPL-018 and the opening-balance importer | Discovery | G2 | DSC-011,DSC-014 | eldon | done |
 | ERP-001 | G1 spike: pin Frappe, ERPNext, HRMS versions (likely v15) and stand up a bench | Runtime | G1 | LEG-004 | partner | done |
-| ERP-002 | Spike: 50-tenant load test on one bench pool | Runtime | G1 | ERP-003 | partner | todo |
+| ERP-002 | Spike: 50-tenant load test on one bench pool | Runtime | G1 | ERP-003 | partner | done |
 | ERP-003 | Scripted site-per-tenant creation | Runtime | G1 | ERP-001 | partner | done |
 | ERP-004 | Version pin and upgrade policy document | Runtime | G1 | ERP-001 | partner | done |
 | ERP-005 | Core module scope for trading and distribution (selling, buying, stock, accounts) | Runtime | G1 | ERP-001 | partner | done |

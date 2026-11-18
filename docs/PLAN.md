@@ -69,7 +69,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-001 | Threat model for the five parts and four contracts | Security | G1 | GOV-015 | eldon | done |
 | SEC-002 | Secrets management design (store, rotate, never in repo) | Security | G1 | SEC-001 | partner | todo |
 | SEC-003 | Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data | Security | G1 | SEC-001 | eldon | done |
-| SEC-004 | Cross-tenant isolation test suite | Security | G1 | ERP-003 | partner | todo |
+| SEC-004 | Cross-tenant isolation test suite | Security | G1 | ERP-003 | partner | done |
 | SEC-005 | MFA for owners, staff and support access | Security | G2 | PLT-005 | eldon | todo |
 | SEC-006 | Brand asset upload enforcement in storage: PNG/JPG/SVG only, size limits, SVG sanitiser, malware scan, per-tenant storage (rules from SEC-018) | Security | G2 | PLT-017,SEC-018 | partner | todo |
 | SEC-007 | Dependency and SBOM scanning for Python and Node (beyond dependabot actions) | Security | G2 | GOV-006 | eldon | done |

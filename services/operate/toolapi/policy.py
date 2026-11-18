@@ -13,9 +13,16 @@ RISK_ORDER = ("R0", "R1", "R2", "R3", "R4")
 # The Blueprint has no "posts to the ledger" flag yet. Interim rule (fail closed), until the reviewed component
 # manifest supplies the class: an entity id listed below has that class; an unlisted id with a ledger token (see
 # LEDGER_NAME_TOKENS) is "ledger"; any other non-child entity is refused (TAPI-CLASS-001). Unknown never means plain.
-# The lookup lives in classify.default_entity_class, the single point to replace by the manifest.
+# The lookup lives in classify.default_entity_class; manifest-declared classes are merged in classify.Policy.
 ENTITY_CLASSES = {"plain", "stock", "ledger"}
 CLASS_RANK = {"plain": 0, "stock": 1, "ledger": 2}
+# ADR-0037: a component manifest may declare an entity artifact's riskClass. It only raises the class from the reviewed
+# table, name tokens and registry; a lower declaration is refused (TAPI-MANIFEST-002). tax is the ledger class plus the
+# tax effect on writes; permission is refused like an identity entity (TAPI-DOMAIN-001). Only a manifest at a reviewed
+# certification level may give a class to an entity that has none; a draft or tested manifest can only raise.
+MANIFEST_RISK_CLASSES = ("plain", "stock", "ledger", "tax", "permission")  # order is rank
+MANIFEST_CLASS_MAP = {"plain": "plain", "stock": "stock", "ledger": "ledger", "tax": "ledger"}
+MANIFEST_REVIEWED_LEVELS = {"reviewed", "certified", "regulated"}
 # Reviewed: masters and documents that never post to the ledger or move stock themselves.
 KNOWN_PLAIN = (
     "customer", "supplier", "item", "price_list", "sales_quote", "sales_order", "purchase_order",  # fixtures
@@ -84,7 +91,7 @@ AGENT_FORBIDDEN_TOOLS = {"approval.decide", "blueprint.propose_change"}
 MAX_AGENT_RISK = "R3"
 
 # --- transition kind ------------------------------------------------------------------------------------------------
-# The Blueprint has no transition kind yet. A transition may carry an explicit `kind` (one of TRANSITION_KINDS); name
+# Blueprint 0.2.0 (ADR-0037) has an optional `transitions[].kind` (one of TRANSITION_KINDS, same enum); name
 # tokens from the id only ever add restriction. On stock and ledger entities, without an explicit kind, a transition
 # that has its own approval rule is an approval, and one that leaves a non-initial state or enters a final or
 # cancel-named state is a reversal (R4), except discarding a record in the initial state into a cancel-named state.

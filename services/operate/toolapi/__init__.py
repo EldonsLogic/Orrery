@@ -1,6 +1,6 @@
 """Tool API generator (OPR-003): validated Blueprint -> typed, per-tenant tool definitions.
 
-Contract: contracts/tool-api.md 0.1.0. Pure, deterministic, no I/O. Refusals carry `TAPI-` codes and fail closed.
+Contract: contracts/tool-api.md 0.3.0. Pure, deterministic, no I/O. Refusals carry `TAPI-` codes and fail closed.
 
     from toolapi import generate_tool_api, check_tool_api
     result = generate_tool_api(blueprint)        # result.ok, result.tools, result.content_hash, result.errors

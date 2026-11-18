@@ -25,8 +25,9 @@ def _loc(labels) -> dict:
 
 
 class _Gen:
-    def __init__(self, bp: dict, registry: dict | None):
+    def __init__(self, bp: dict, registry: dict | None, manifests: list | None = None):
         self.bp = bp
+        self.manifests = manifests
         self.errors: list[Issue] = []
         self.tools: list[dict] = []
         self.registry = registry if registry is not None else {}
@@ -37,7 +38,7 @@ class _Gen:
     # ---- setup --------------------------------------------------------------------------------------------------
     def setup(self) -> bool:
         bp = self.bp
-        self.policy = C.Policy(self.registry)
+        self.policy = C.Policy(self.registry, self.manifests)
         self.errors.extend(self.policy.errors)
         if self.policy.errors:
             return False
@@ -53,7 +54,7 @@ class _Gen:
                 self.err("TAPI-NAME-001", f"/entities/{i}/id", f"duplicate entity id {eid!r}")
             elif eid in P.PLATFORM_DOMAINS:
                 self.err("TAPI-NAME-002", f"/entities/{i}/id", f"entity id {eid!r} collides with a platform tool domain")
-            elif C.identity_entity(eid):
+            elif C.identity_entity(eid) or self.policy.permission_entity(eid):
                 self.err("TAPI-DOMAIN-001", f"/entities/{i}/id",
                          f"entity id {eid!r} is in the identity and permission domain; such changes are never generated tools")
             else:
@@ -526,15 +527,16 @@ class _Gen:
                  "Produces a diff for human review. Never applies a change.", "blueprint.propose_change")
 
 
-def generate_tool_api(blueprint, registry=None) -> ToolApiResult:
+def generate_tool_api(blueprint, registry=None, manifests=None) -> ToolApiResult:
     """Return the tool set for a validated Blueprint, or a refusal (`ok` False, `errors` set, no tools).
 
     `registry` is optional L0 configuration: {"source": "<where it came from>", "entity_classes": {entity_id:
     plain|stock|ledger}, "entity_effects": {entity_id: {ledger|tax|external_send: bool}}}. It may only raise a class and
     add effects; an attempt to lower one is refused (TAPI-REGISTRY-002). Its source and hash are recorded in the set.
-    The input is never mutated.
+    `manifests` is an optional list of resolved component manifests whose entity artifacts may declare `riskClass`
+    (ADR-0037); same raise-only rule (TAPI-MANIFEST-002), recorded as `manifests`. The input is never mutated.
     """
-    g = _Gen(blueprint, registry)
+    g = _Gen(blueprint, registry, manifests)
     if g.setup():
         for eid in sorted(g.entities):
             g.entity_tools(eid)
@@ -548,9 +550,10 @@ def generate_tool_api(blueprint, registry=None) -> ToolApiResult:
     g.errors = list(dict.fromkeys(g.errors))
     res = ToolApiResult(errors=g.errors, blueprint_revision=g.revision if not g.errors else None)
     res.registry = getattr(g, "policy", None) and g.policy.meta
+    res.manifests = getattr(g, "policy", None) and g.policy.manifest_meta
     if g.errors:
         return res
     tools = sorted(g.tools, key=lambda t: t["name"])
     res.tools = tools
-    res.content_hash = build_set(tools, g.revision, res.registry)["contentHash"]
+    res.content_hash = build_set(tools, g.revision, res.registry, res.manifests)["contentHash"]
     return res

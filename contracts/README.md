@@ -7,9 +7,9 @@ The contracts are the source of truth for how the five parts of the platform tal
 
 | # | Contract | File | Version |
 |---|---|---|---|
-| 1 | Blueprint schema | [blueprint.schema.json](blueprint.schema.json) | 0.1.0 |
-| 2 | Component manifest | [component.manifest.schema.json](component.manifest.schema.json) | 0.1.0 |
-| 3 | Tool API | [tool-api.md](tool-api.md) | 0.2.0 |
+| 1 | Blueprint schema | [blueprint.schema.json](blueprint.schema.json) | 0.2.0 |
+| 2 | Component manifest | [component.manifest.schema.json](component.manifest.schema.json) | 0.2.0 |
+| 3 | Tool API | [tool-api.md](tool-api.md) | 0.3.0 |
 | - | Tool API domain error catalog | [tool-api-error-catalog.json](tool-api-error-catalog.json), [schema](tool-api-error-catalog.schema.json) | 0.1.0 |
 | 4 | Event stream | [events.md](events.md) | 0.1.0 |
 | - | Connector interface | [connector-interface.md](connector-interface.md) | 0.1.0 |

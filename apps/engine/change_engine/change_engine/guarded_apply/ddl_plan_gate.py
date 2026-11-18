@@ -104,6 +104,22 @@ class ColumnDesc(dict):
         self[item] = value
 
 
+_DECIMAL_FIELDTYPES = ("Currency", "Float", "Percent", "Duration", "Rating")
+
+
+def _canonical_column_type(raw_type: Any) -> str:
+    """Canonical form of a column type string so equivalent spellings are not drift.
+
+    Equivalent: case, whitespace and a bare ``decimal`` (MariaDB default ``decimal(10,0)``).
+    Not equivalent (stays drift): any other precision/scale, a different type, ``unsigned``.
+    """
+    canon = re.sub(r"\s+", "", str(raw_type or "").lower())
+    canon = re.sub(r"\(\s*", "(", canon)
+    if canon in ("decimal", "numeric", "dec"):
+        return "decimal(10,0)"
+    return canon
+
+
 class SimulatedDbColumn:
     """Simulates Frappe's DbColumn alter-table calculation."""
 
@@ -241,7 +257,7 @@ class SimulatedDbColumn:
         cur_index = int(bool(current_def.get("index") if isinstance(current_def, dict) else getattr(current_def, "index", 0)))
 
         # Type change
-        if cur_type != column_type:
+        if _canonical_column_type(cur_type) != _canonical_column_type(column_type):
             self.table.change_type.append(self)
 
         # Unique change
@@ -367,6 +383,26 @@ def validate_ddl_plan(statements: List[str]) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
+def _canonicalize_current_column_types(current_columns: Dict[str, Any]) -> None:
+    """Rewrite equivalent spellings of the live column type (case, spaces, bare ``decimal``)
+    to the canonical form Frappe generates, so Frappe's strict string comparison does not
+    report them as a type change. Real precision/scale/type differences are left untouched.
+    """
+    for cname, cur_col in list(current_columns.items()):
+        get = cur_col.get if isinstance(cur_col, dict) else lambda k, d=None: getattr(cur_col, k, d)
+        raw_type = get("type", "")
+        canon = _canonical_column_type(raw_type)
+        if not raw_type or canon == raw_type:
+            continue
+        current_columns[cname] = ColumnDesc(
+            name=get("name", cname),
+            type=canon,
+            default=get("default", None),
+            index=get("index", 0),
+            unique=get("unique", 0),
+        )
+
+
 def _normalize_zero_decimal_defaults(
     table_columns: Dict[str, Any],
     current_columns: Dict[str, Any],
@@ -380,7 +416,7 @@ def _normalize_zero_decimal_defaults(
     for cname, col in table_columns.items():
         if cname == exclude_fieldname:
             continue
-        if getattr(col, "fieldtype", None) not in ("Currency", "Float", "Percent", "Duration"):
+        if getattr(col, "fieldtype", None) not in _DECIMAL_FIELDTYPES:
             continue
         if getattr(col, "default", None) not in (None, ""):
             continue
@@ -388,7 +424,7 @@ def _normalize_zero_decimal_defaults(
         if not cur_col:
             continue
         cur_type = cur_col.get("type", "") if isinstance(cur_col, dict) else getattr(cur_col, "type", "")
-        if "decimal" not in str(cur_type):
+        if not _canonical_column_type(cur_type).startswith("decimal("):
             continue
         cur_def = cur_col.get("default") if isinstance(cur_col, dict) else getattr(cur_col, "default", None)
         if cur_def in (None, "", "NULL"):
@@ -443,6 +479,7 @@ def _inspect_with_frappe_mariadb_table(
             table.setup_table_columns()
 
         new_fname = field_def["fieldname"]
+        _canonicalize_current_column_types(table.current_columns)
         _normalize_zero_decimal_defaults(
             table.columns,
             table.current_columns,

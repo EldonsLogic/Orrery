@@ -47,10 +47,13 @@ def impact_of(kind: str, sp: SPath) -> str:
         return "compliance"
     if head == "branding":
         return "branding"
+    if (head == "i18n" and len(sp) >= 3 and sp[1] == "labelOverrides"
+            and isinstance(sp[2], str) and sp[2].startswith("assistants.")):
+        return "access"  # assistant instruction text (ADR-0043): reviewed like the assistant itself
     if ("provenance" in sp or LABEL_KEYS & set(sp) or (head == "i18n" and not _starts(sp, ("i18n", "defaultLocale")))
             or any(_starts(sp, p) for p in META_COSMETIC)):
         return "cosmetic"
-    if (head in ("roles", "approvals") or ACCESS_KEYS & set(sp)
+    if (head in ("roles", "approvals", "assistants") or ACCESS_KEYS & set(sp)
             or (head == "workflows" and len(sp) >= 4 and sp[2] == "transitions"
                 and (len(sp) == 4 or sp[4] == "approval"))):
         return "access"

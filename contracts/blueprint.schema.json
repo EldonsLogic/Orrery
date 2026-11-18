@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:platform:contract:blueprint:0.2.0",
-  "version": "0.2.0",
+  "$id": "urn:platform:contract:blueprint:0.4.0",
+  "version": "0.4.0",
   "title": "Blueprint",
   "description": "Contract 1. The typed, versioned description of one tenant's business: entities, workflows, roles, approvals, reports, integrations, compliance, i18n, branding. The Blueprint is configuration, never code. Cross-reference rules that JSON Schema cannot express (ids resolve, locales covered, contrast passes) are enforced by the Blueprint validator in Part 2 and listed in x-validator-rules.",
   "type": "object",
@@ -51,7 +51,13 @@
     },
     "compliance": { "$ref": "#/$defs/compliance" },
     "i18n": { "$ref": "#/$defs/i18n" },
-    "branding": { "$ref": "#/$defs/branding" }
+    "branding": { "$ref": "#/$defs/branding" },
+    "assistants": {
+      "type": "array",
+      "maxItems": 32,
+      "description": "Optional (Blueprint 0.3.0; transition allowlist 0.4.0; ADR-0043). Department-scoped chat assistants: configuration of the one chat per department. An assistant has no identity or authority of its own; it acts only with the invoking user's role and scope.",
+      "items": { "$ref": "#/$defs/assistant" }
+    }
   },
   "x-validator-rules": [
     "company.locale fields are optional; each omitted field resolves from compliance.countryPack. The resolved locale is stored with the compiled artifact. workingHours.periods must not overlap and weekend days must not appear in workDays.",
@@ -66,9 +72,101 @@
     "Branding: primary and accent colours pass WCAG AA against the surfaces of BOTH themes after token resolution (see docs/architecture/theming.md); otherwise auto-adjust or reject.",
     "Branding assets: media type, size and sanitisation fields match the stored asset record.",
     "branding.poweredBy.show=false requires the white-label entitlement on the tenant plan.",
-    "Compliance: when compliance.eInvoicing.mode is not 'none' for country SA, documentLanguages must contain 'ar' and company.vatNumber must be set."
+    "Compliance: when compliance.eInvoicing.mode is not 'none' for country SA, documentLanguages must contain 'ar' and company.vatNumber must be set.",
+    "Assistants (ADR-0043): roles resolve and belong to the department (or are owner or general manager); the department has at least one role; tools are in the tenant's generated tool set, agent-creatable, at most R2, and every R2 tool has confirm=true; at least one invoking role may call each tool; never approve, reject, submit, cancel, amend or delete verbs, approval.decide, blueprint tools, protected bank, contact or access tools, or writes other than create, update and export on ledger- or stock-class entities, with or without a tool set; a transition tool lists its allowed transitions, none an approve, reject or reversal move or one with its own approval rule; no tool is listed twice; memory tools need a memory scope; limits are within platform and plan caps; the instructions key resolves."
   ],
   "$defs": {
+    "assistant": {
+      "type": "object",
+      "description": "ADR-0043. One department assistant. It never carries a role, scope, grant, approver or service identity: every call runs with the invoking user's own permissions, intersected with this tool list.",
+      "required": ["id", "department", "labels", "roles", "instructionsKey", "tools", "limits", "memory", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "department": {
+          "enum": ["sales", "purchasing", "warehouse", "finance", "accounting", "hr", "operations", "support"],
+          "description": "The department, named by the role function that works in it (docs/product/app-screens.md department views)."
+        },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" },
+          "description": "Role ids whose users may invoke this assistant. Being listed grants nothing: the user's own permissions still decide every call."
+        },
+        "instructionsKey": {
+          "type": "string",
+          "pattern": "^assistants\\.[a-z][a-z0-9_]{1,63}\\.[a-z][a-z0-9_.]{1,63}$",
+          "description": "i18n key of the instruction text, never inline prose. Resolved from the platform catalog (L0) or i18n.labelOverrides (tenant text, L1, slot text only: tone and terminology, never tools, roles, limits or approvals)."
+        },
+        "tools": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": ["tool"],
+            "additionalProperties": false,
+            "properties": {
+              "tool": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$", "description": "Tool API name from the tenant's generated tool set." },
+              "confirm": { "type": "boolean", "default": false, "description": "The user confirms each call over the rendered payload. Required true for R2 tools." },
+              "transitions": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "$ref": "#/$defs/id" },
+                "description": "Blueprint 0.4.0. Required on, and only allowed on, <entity>.transition tools: the transition ids this assistant may make. Never an approve, reject or reversal move; each must be agent-creatable and at most R2."
+              }
+            },
+            "if": { "properties": { "tool": { "pattern": "\\.transition$" } } },
+            "then": { "required": ["transitions"] },
+            "else": { "not": { "required": ["transitions"] } }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "required": ["perCall", "perDay"],
+          "additionalProperties": false,
+          "description": "Caps per user. The schema maxima are the platform caps; plan caps may be lower. They only restrict.",
+          "properties": {
+            "perCall": {
+              "type": "object",
+              "description": "One invocation: one user request and the tool calls it leads to.",
+              "required": ["maxToolCalls", "maxRows"],
+              "additionalProperties": false,
+              "properties": {
+                "maxToolCalls": { "type": "integer", "minimum": 1, "maximum": 20 },
+                "maxRows": { "type": "integer", "minimum": 1, "maximum": 200 }
+              }
+            },
+            "perDay": {
+              "type": "object",
+              "required": ["maxToolCalls", "maxWrites"],
+              "additionalProperties": false,
+              "properties": {
+                "maxToolCalls": { "type": "integer", "minimum": 1, "maximum": 500 },
+                "maxWrites": { "type": "integer", "minimum": 0, "maximum": 100 }
+              }
+            }
+          }
+        },
+        "memory": {
+          "type": "object",
+          "required": ["scope"],
+          "additionalProperties": false,
+          "properties": {
+            "scope": {
+              "enum": ["none", "session", "department"],
+              "description": "none: nothing kept; session: the user's current thread only; department: notes shared inside this tenant and department, read back as L3 and filtered by the reader's scope. Never cross-tenant."
+            },
+            "retentionDays": { "type": "integer", "minimum": 1, "maximum": 90, "description": "Only for department scope." }
+          },
+          "allOf": [{ "if": { "properties": { "scope": { "enum": ["none", "session"] } } }, "then": { "not": { "required": ["retentionDays"] } } }]
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
     "id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]{1,63}$",

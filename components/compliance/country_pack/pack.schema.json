@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:compliance:country-pack:0.1.0",
+  "version": "0.1.0",
+  "title": "Country Pack Manifest",
+  "description": "Schema for versioned rigid-zone country packs (SA, AE, EG, QA). Holds declarative refs, formats, defaults, and override policy; never holds tax maths or executable logic.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "packId",
+    "componentId",
+    "countryCode",
+    "version",
+    "status",
+    "evidenceStatus",
+    "name",
+    "coaTemplate",
+    "tax",
+    "eInvoicing",
+    "localeDefaults",
+    "formats",
+    "payrollHooks",
+    "printFormats",
+    "overridesPolicy",
+    "upgradePolicy"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": "0.1.0" },
+    "packId": { "type": "string", "pattern": "^[a-z]{2}(_[a-z0-9]+)?$" },
+    "componentId": { "type": "string", "pattern": "^country\\.[a-z]{2}(_[a-z0-9]+)?$" },
+    "countryCode": { "enum": ["SA", "AE", "EG", "QA"] },
+    "version": { "$ref": "#/$defs/semver" },
+    "status": { "enum": ["draft", "tested", "reviewed", "certified", "regulated"] },
+    "evidenceStatus": { "enum": ["verified_official", "secondary", "unverified"] },
+    "testOnly": { "type": "boolean" },
+    "notes": { "type": "string", "maxLength": 500 },
+    "name": { "$ref": "#/$defs/bilingualText" },
+    "coaTemplate": {
+      "type": "object",
+      "required": ["componentId", "artifactRef", "versionRange"],
+      "additionalProperties": false,
+      "properties": {
+        "componentId": { "$ref": "#/$defs/dottedId" },
+        "artifactRef": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "versionRange": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "tax": {
+      "type": "object",
+      "required": ["vatSupported", "taxCodesRef", "filingPeriods", "roundingRule", "vatNumberPattern", "crNumberPattern"],
+      "additionalProperties": false,
+      "properties": {
+        "vatSupported": { "type": "boolean" },
+        "taxCodesRef": { "type": ["string", "null"], "maxLength": 200 },
+        "filingPeriods": {
+          "type": "array",
+          "items": { "enum": ["monthly", "quarterly", "annual"] },
+          "uniqueItems": true
+        },
+        "roundingRule": { "enum": ["half_away_from_zero", "half_up", "half_even"] },
+        "vatNumberPattern": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "crNumberPattern": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "eInvoicing": {
+      "type": "object",
+      "required": ["required", "mode", "authority", "componentId", "mandatoryDocumentLanguages", "archiveRetentionYears"],
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "boolean" },
+        "mode": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" },
+        "authority": { "type": ["string", "null"], "maxLength": 120 },
+        "componentId": { "type": ["string", "null"], "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}$" },
+        "mandatoryDocumentLanguages": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$" },
+          "uniqueItems": true
+        },
+        "archiveRetentionYears": { "type": "integer", "minimum": 0, "maximum": 30 }
+      }
+    },
+    "localeDefaults": {
+      "type": "object",
+      "required": ["timezone", "calendar", "week", "workingTime", "fiscalYear", "holidays", "numberSystem", "currency"],
+      "additionalProperties": false,
+      "properties": {
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "calendar": {
+          "type": "object",
+          "required": ["primary", "secondaryDisplay"],
+          "additionalProperties": false,
+          "properties": {
+            "primary": { "enum": ["gregorian", "hijri_umm_al_qura"] },
+            "secondaryDisplay": { "enum": ["none", "gregorian", "hijri_umm_al_qura"] }
+          }
+        },
+        "week": {
+          "type": "object",
+          "required": ["startDay", "weekendDays"],
+          "additionalProperties": false,
+          "properties": {
+            "startDay": { "$ref": "#/$defs/weekday" },
+            "weekendDays": { "type": "array", "uniqueItems": true, "minItems": 1, "maxItems": 3, "items": { "$ref": "#/$defs/weekday" } }
+          }
+        },
+        "workingTime": {
+          "type": "object",
+          "required": ["workDays", "hours"],
+          "additionalProperties": false,
+          "properties": {
+            "workDays": { "type": "array", "uniqueItems": true, "minItems": 1, "items": { "$ref": "#/$defs/weekday" } },
+            "hours": {
+              "type": "object",
+              "required": ["from", "to"],
+              "additionalProperties": false,
+              "properties": {
+                "from": { "$ref": "#/$defs/timeOfDay" },
+                "to": { "$ref": "#/$defs/timeOfDay" }
+              }
+            },
+            "reducedPeriods": { "type": "array", "items": { "type": "object" } }
+          }
+        },
+        "fiscalYear": {
+          "type": "object",
+          "required": ["type", "startMonth", "startDay"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["gregorian", "hijri"] },
+            "startMonth": { "type": "integer", "minimum": 1, "maximum": 12 },
+            "startDay": { "type": "integer", "minimum": 1, "maximum": 31 }
+          }
+        },
+        "holidays": {
+          "type": "object",
+          "required": ["calendarRef"],
+          "additionalProperties": false,
+          "properties": {
+            "calendarRef": {
+              "type": "object",
+              "required": ["id", "version"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z]{2}(_[a-z0-9]+)?\\.holidays$" },
+                "version": { "$ref": "#/$defs/semver" }
+              }
+            },
+            "announcedDates": { "type": "array", "items": { "type": "object" } }
+          }
+        },
+        "numberSystem": { "enum": ["western", "eastern_arabic"] },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+      }
+    },
+    "formats": {
+      "type": "object",
+      "required": ["currency", "currencyDecimals", "gregorianDateFormat", "hijriDateFormat", "numberSystem", "decimalSeparator", "thousandsSeparator"],
+      "additionalProperties": false,
+      "properties": {
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "currencyDecimals": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "gregorianDateFormat": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "hijriDateFormat": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "numberSystem": { "enum": ["western", "eastern_arabic"] },
+        "decimalSeparator": { "enum": [".", ","] },
+        "thousandsSeparator": { "enum": [",", ".", " ", ""] }
+      }
+    },
+    "payrollHooks": {
+      "type": "object",
+      "required": ["wpsEnabled", "wpsFormatRef", "socialInsuranceRef", "eosbRuleRef"],
+      "additionalProperties": false,
+      "properties": {
+        "wpsEnabled": { "type": "boolean" },
+        "wpsFormatRef": { "type": ["string", "null"], "maxLength": 200 },
+        "socialInsuranceRef": { "type": ["string", "null"], "maxLength": 200 },
+        "eosbRuleRef": { "type": ["string", "null"], "maxLength": 200 }
+      }
+    },
+    "printFormats": {
+      "type": "object",
+      "required": ["legalLayoutPrecedence", "mandatoryLanguages", "templates"],
+      "additionalProperties": false,
+      "properties": {
+        "legalLayoutPrecedence": { "const": true },
+        "mandatoryLanguages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$" }
+        },
+        "templates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["kind", "templateRef", "componentId"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": { "enum": ["tax_invoice", "simplified_invoice", "credit_note", "debit_note", "statement"] },
+              "templateRef": { "type": "string", "minLength": 1, "maxLength": 200 },
+              "componentId": { "$ref": "#/$defs/dottedId" }
+            }
+          }
+        }
+      }
+    },
+    "overridesPolicy": {
+      "type": "object",
+      "required": ["overridablePaths", "lockedPaths"],
+      "additionalProperties": false,
+      "properties": {
+        "overridablePaths": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "lockedPaths": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "constraints": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fiscalYearLocked": { "type": "boolean" },
+            "allowedFiscalYearTypes": { "type": "array", "items": { "enum": ["gregorian", "hijri"] }, "uniqueItems": true },
+            "allowedCurrencies": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z]{3}$" }, "uniqueItems": true },
+            "allowedTimezones": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+          }
+        }
+      }
+    },
+    "upgradePolicy": {
+      "type": "object",
+      "required": ["compatibilityRange", "migrationRequired"],
+      "additionalProperties": false,
+      "properties": {
+        "compatibilityRange": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "migrationRequired": { "type": "boolean" },
+        "migrationNote": { "type": "string", "maxLength": 500 }
+      }
+    }
+  },
+  "$defs": {
+    "semver": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$" },
+    "dottedId": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}$" },
+    "weekday": { "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] },
+    "timeOfDay": { "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$" },
+    "bilingualText": {
+      "type": "object",
+      "required": ["ar", "en"],
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 120 },
+      "properties": {
+        "ar": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "en": { "type": "string", "minLength": 1, "maxLength": 120 }
+      }
+    }
+  }
+}

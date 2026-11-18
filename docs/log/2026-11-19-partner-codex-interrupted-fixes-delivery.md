@@ -29,3 +29,8 @@ Consume the three Gemini re-reviews, reproduce and fix real remaining defects, c
 ## Verification limits
 
 The test results are from this session's actual runs. Hosted gateway behavior, production workload identity, multi-tenant isolation and compliance sandbox acceptance were not tested. No CI pass or review approval is inferred from local tests.
+
+## Review update
+
+- ERP-020 head 4bf1ce8: [Gemini re-review](https://github.com/EldonsLogic/Orrery/pull/148#issuecomment-6993362597) verified every original finding fixed, with no new findings. Ready for founder review; row remains doing.
+- CE-SEC-005 fixes published at 60bc051. Independent Gemini re-review started after the pushed head was confirmed. ERP-027 independent re-review is also running at 5c97e80.

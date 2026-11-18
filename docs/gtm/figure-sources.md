@@ -1,0 +1,111 @@
+# Figure sources: co-founder research figures (GTM-018)
+
+Status: draft
+Owner: partner
+Accessed: all URLs below on 2026-11-18 unless stated.
+
+Founder rule: point at where each number came from, or don't use it.
+
+## Rules for external use
+1. A figure may appear in anything external (investor material, the website, sales decks, partner briefs, competition entries) only if its row below is **VERIFIED**, and the wording used matches the "safe wording" column, with the source named.
+2. **SECONDARY** figures may be used only with the secondary source named and the words "reported by". Never present them as fact.
+3. **FOUNDERS' TARGET / HYPOTHESIS** figures are our own goals. Say "our target" every time. Never present them as a benchmark, a result or a market statistic. We have no clients yet, so nothing is measured ([../strategy/autonomy-metrics.md](../strategy/autonomy-metrics.md)).
+4. **UNVERIFIED** figures stay out of anything external. Find a primary source first, then update this file.
+5. A primary source is the original study, regulator page, law or official publication, not a blog quoting a blog. A vendor's own page counts as SECONDARY even when it is the origin, because it sells the thing it measures.
+6. Regulatory facts change (deadlines move, waves shrink). Re-check the source before each external use, and update the access date.
+7. Statuses use the values above. A figure with no row here counts as UNVERIFIED.
+
+## Not safe for external use (as of 2026-11-18)
+- "75% of ERP projects fail" (any wording, usually credited to Gartner): no Gartner document found. UNVERIFIED.
+- "More than 70% of ERP initiatives fail" credited to Gartner: Gartner's pages refuse automated access (HTTP 403). Only TechTarget's quote of it was seen. It is a **prediction for 2027 about missing business-case goals**, not a measured failure rate. SECONDARY. Do not use it until someone reads the Gartner page and records the quote.
+- 90% and 75% autonomy, margin and eval targets: our own hypotheses. Use only as "our target" (rule 3).
+- Our time-to-go-live of 8 weeks falling to 2 weeks: a hypothesis. Use only as "our target".
+- NetSuite UAE go-live in 10-17 weeks: a vendor's own claim. SECONDARY; name the vendor if used at all.
+- Egypt: "official unified chart of accounts" requirement. UNVERIFIED; probably a confusion with the unified goods and services codes (see E-3).
+- Egypt: "withholding-tax integration" with the e-invoice system. UNVERIFIED.
+- Qatar: anything about e-invoicing dates, scope or format. The law is approved in draft only and unpublished (SECONDARY).
+- Any figure in the partner brief that is not in this file. The brief lives outside the repo (RULES 12), so the partner must check each brief figure against this table before sending the brief anywhere.
+
+## Scope note
+The partner brief that first carried these figures lives outside the repo, so its exact wording cannot be checked here. The ERP failure-rate figure **does not appear anywhere in `docs/`**: only the GTM-018 row names it. The table below covers (a) every place in `docs/` where one of the named figures appears, and (b) the usual public forms of the ERP failure figure, so the brief can be matched against them.
+
+## A. ERP failure rate and overruns
+| ID | Figure as stated | Where it appears | Source | Accessed | Exact quote | Status |
+|---|---|---|---|---|---|---|
+| A-1 | "ERP failure rate" (wording unknown) | Partner brief only (outside repo); [../PLAN.md](../PLAN.md) GTM-018 row names it | none found for a generic "failure rate" | 2026-11-18 | n/a | UNVERIFIED. Replace with A-3 or A-4 wording. |
+| A-2 | "75% of ERP projects fail" (common public form, usually credited to Gartner) | Not in `docs/`; check the brief | No primary found. Web search shows only blogs and vendor pages crediting "Gartner" with no study title, year or sample (e.g. https://www.cooperparry.com/news/avoid-erp-implementation-failures/, a NetSuite partner) | 2026-11-18 | n/a | UNVERIFIED. Do not use. |
+| A-3 | "More than 70% of ERP initiatives will fail to fully meet their original business case goals by 2027" (Gartner) | Not in `docs/`; check the brief | Primary: https://www.gartner.com/en/information-technology/insights/what-it-leaders-must-do-to-avoid-disappointing-erp-initiatives (HTTP 403, not read). Secondary: https://www.techtarget.com/enterprise-software/feature/Why-ERP-initiatives-struggle-to-deliver-business-value (2026-06-11) | 2026-11-18 | TechTarget, crediting "a 2024 Gartner prediction": "more than 70% of recent ERP initiatives will fail to fully meet their original business case goals by 2027" | SECONDARY. It is a forecast about missing business-case goals, not a measured failure rate. Safe wording only after the Gartner page is read: "Gartner predicts that by 2027 more than 70% of recently implemented ERP initiatives will not fully meet their original business-case goals." |
+| A-4 | 74% over budget; 59% over schedule; average duration 16.9 months (Panorama 2017) | Not in `docs/`; the usual source behind "74%" claims | Panorama Consulting Solutions, "2017 Report on ERP Systems and Enterprise Software", https://www.panorama-consulting.com/wp-content/uploads/2017/07/2017-ERP-Report.pdf | 2026-11-18 | "74% of respondents exceeded their original budget, which is an increase over last year." / "59% of respondents reported that they exceeded their initial project timeline." / "Overall, the average implementation duration was 16.9 months, which is a 19% decrease since last year." Sample: "polling for the 2017 Report was conducted on Panorama's website during a recent twelve-month period (March 2016 - February 2017). A total of 342 respondents completed the surveys" | VERIFIED, with limits: self-selected web survey, 342 respondents, global, data from 2016-17, no MENA split. These are overrun figures, not a failure rate. Safe wording: "In Panorama Consulting's 2017 survey (342 respondents), 74% of ERP projects ran over budget and 59% ran over schedule." Say the year. |
+
+## B. Go-live timelines
+| ID | Figure as stated | Where it appears | Source | Accessed | Exact quote | Status |
+|---|---|---|---|---|---|---|
+| B-1 | NetSuite in UAE SMBs takes 10-17 weeks to go live | [../research/02-market-and-customer.md:88](../research/02-market-and-customer.md), [:103](../research/02-market-and-customer.md) | LST Consultancy (describes itself as "a certified Oracle NetSuite Solution Provider based in the UAE"), https://lstconsultancy.com/netsuite-implementation-in-uae/ | 2026-11-18 | "A typical NetSuite implementation for a UAE small-to-mid-size business takes 10–17 weeks from kickoff to go-live." | SECONDARY (a vendor selling the implementation). Quote matches the repo figure. External use only as "one UAE NetSuite partner quotes 10-17 weeks". |
+| B-2 | Average ERP implementation lasts 16.9 months | Not in `docs/` | Panorama 2017 (row A-4) | 2026-11-18 | see A-4 | VERIFIED with the A-4 limits (global, 2016-17, mixed company sizes). Not an SME or MENA figure. |
+| B-3 | Our time to go-live: 8 weeks at client 1, then 5, 3, 2 weeks by client 20 | [../strategy/08-product-vs-software-house.md:17](../strategy/08-product-vs-software-house.md) | Our own target. Same file, line 24 | n/a | "These targets are my hypotheses, not benchmarks; set them with the founders and revise after client 1." | FOUNDERS' TARGET / HYPOTHESIS. Not measured. |
+| B-4 | Our human hours per go-live: 200, 120, 60, 30 | [../strategy/08-product-vs-software-house.md:16](../strategy/08-product-vs-software-house.md) | Our own target (line 24) | n/a | as B-3 | FOUNDERS' TARGET / HYPOTHESIS. |
+
+## C. The 90% and 75% figures
+Every 90% and 75% target in `docs/` is in our own strategy files. None is a market statistic. Where the brief says something like "90% of the ERP built automatically" or "75% faster", it is one of these targets (or a new claim not in `docs/`, which is UNVERIFIED).
+| ID | Figure as stated | Where it appears | Source | Accessed | Exact quote | Status |
+|---|---|---|---|---|---|---|
+| C-1 | Platform Autonomy Rate of 75% at client 10 (30%, 60%, 75%, 85%) | [../strategy/08-product-vs-software-house.md:15](../strategy/08-product-vs-software-house.md); definitions in [../strategy/autonomy-metrics.md:5](../strategy/autonomy-metrics.md) | Our own target (08 line 24) | n/a | "These targets are my hypotheses, not benchmarks" | FOUNDERS' TARGET / HYPOTHESIS |
+| C-2 | Component reuse ratio of 75% at client 20 | [../strategy/08-product-vs-software-house.md:18](../strategy/08-product-vs-software-house.md) | as C-1 | n/a | as C-1 | FOUNDERS' TARGET / HYPOTHESIS |
+| C-3 | Arabic eval pass rate of 90% at client 5 | [../strategy/08-product-vs-software-house.md:21](../strategy/08-product-vs-software-house.md) | as C-1 | n/a | as C-1 | FOUNDERS' TARGET / HYPOTHESIS. Measured bake-off scores are a separate thing: [../research/qa-003-arabic-bakeoff.md:19](../research/qa-003-arabic-bakeoff.md) (internal eval, not for external use without the eval set) |
+| C-4 | Setup gross margin of 75% at client 10 and 90% at client 20 | [../strategy/08-product-vs-software-house.md:23](../strategy/08-product-vs-software-house.md) | as C-1 | n/a | as C-1 | FOUNDERS' TARGET / HYPOTHESIS |
+| C-5 | Software margin target above 75% | [../strategy/06-model-strategy.md:31](../strategy/06-model-strategy.md) | Our own target | n/a | "Software-margin target (>75%) needs roughly SAR 2.5K+/month or tighter AI cost." | FOUNDERS' TARGET / HYPOTHESIS |
+| C-6 | "90% manual tasks automated" | [../research/01-competitors.md:38](../research/01-competitors.md) | A competitor's own marketing claim, already marked unverified there | n/a | n/a | UNVERIFIED (competitor claim). Never reuse it as our figure. |
+| C-7 | "switching partner after go-live is ~75% of its cases" | [../research/02-market-and-customer.md:117](../research/02-market-and-customer.md) | Single firm, self-reported; already marked as anecdote there | n/a | n/a | UNVERIFIED (anecdote) |
+
+## D. KSA (ZATCA Phase 2) lead
+| ID | Lead as stated | Where it appears | Source | Accessed | Exact quote | Status |
+|---|---|---|---|---|---|---|
+| K-1 | Cryptographic stamps; ECDSA signatures | [../compliance/country-matrix.md:71](../compliance/country-matrix.md); [../research/03-regulations.md:19](../research/03-regulations.md) (K2) | ZATCA, "Security Features Implementation Standards", v1.2, to the e-invoicing resolution dated 2023-05-19, https://zatca.gov.sa/ar/E-Invoicing/SystemsDevelopers/Documents/20230519_ZATCA_Electronic_Invoice_Security_Features_Implementation_Standards_vF.pdf (listed on https://zatca.gov.sa/en/E-Invoicing/SystemsDevelopers/Pages/Security-Requirements.aspx) | 2026-11-18 | "Cryptographic Stamps in the context of E Invoicing Implementing Resolution are defined according to the ECDSA standard." / "Hashing algorithm shall be SHA-256;" "Asymmetric key algorithm shall be ECDSA;" "Key length shall be 256." | VERIFIED |
+| K-2 | Curve secp256k1 | [../compliance/country-matrix.md:71](../compliance/country-matrix.md) | ZATCA, "E-invoicing Detailed Technical Guidelines", Version 2, Nov 2022, https://zatca.gov.sa/en/E-Invoicing/Introduction/Guidelines/Documents/E-invoicing-Detailed-Technical-Guideline.pdf, section "Additional reference: Openssl commands" | 2026-11-18 | "Generate private key: openssl ecparam -name secp256k1 -genkey -noout -out PrivateKey.pem" | VERIFIED, with a nuance: the Security Features standard says only "ECDSA" and "Key length shall be 256". The curve name appears in ZATCA's reference commands. Safe wording: "ECDSA (secp256k1 in ZATCA's reference tooling)". |
+| K-3 | Invoice hashing (hash chain) | [../compliance/country-matrix.md:71](../compliance/country-matrix.md) | ZATCA, "Electronic Invoice XML Implementation Standard", to the resolution dated 2023-05-19, https://zatca.gov.sa/ar/E-Invoicing/SystemsDevelopers/Documents/20230519_ZATCA_Electronic_Invoice_XML_Implementation_Standard_%20vF.pdf | 2026-11-18 | Business rule "BR-KSA-61 Previous invoice hash (KSA-13)", plus the Security standard: "Hashing algorithm shall be SHA-256;" | VERIFIED |
+| K-4 | UBL 2.1 XML output | [../compliance/country-matrix.md:71](../compliance/country-matrix.md) | XML Implementation Standard (as K-3), section 4 Validation | 2026-11-18 | "Tag names and attributes must be correctly written and follow the UBL 2.1 sequence" / "All UBL 2.1 mandatory elements must be present." | VERIFIED |
+| K-5 | Wave 25: revenue above SAR 187,500, integrate by 2027-02-01 | [../research/03-regulations.md:20](../research/03-regulations.md) (K3), [../research/02-market-and-customer.md:67](../research/02-market-and-customer.md) | Already recorded in 03 as VERIFIED-OFFICIAL (https://zatca.gov.sa/en/MediaCenter/News/Pages/Wave25-E-invoicing.aspx). Not re-fetched this session | 2026-11-18 (not re-opened) | see 03 K3 | VERIFIED per 03; re-check before external use (rule 6). 02:67 still says "primary not opened"; 03 supersedes it. |
+
+## E. UAE (FTA and MoF) lead
+| ID | Lead as stated | Where it appears | Source | Accessed | Exact quote | Status |
+|---|---|---|---|---|---|---|
+| U-1 | VAT 5% | [../compliance/country-matrix.md:73](../compliance/country-matrix.md); [../research/03-regulations.md:46](../research/03-regulations.md) (U5, "5% since 2018-01-01 (UNVERIFIED this session)") | UAE Ministry of Finance, "Tax", https://mof.gov.ae/en/public-finance/tax/ | 2026-11-18 | "Value Added Tax (VAT) was introduced across the UAE on 1st January 2018 at a standard rate of 5%." | VERIFIED. 03 U5 can drop its UNVERIFIED tag on the rate. |
+| U-2 | Corporate tax 9% | [../compliance/country-matrix.md:73](../compliance/country-matrix.md); [../research/03-regulations.md:49](../research/03-regulations.md) (U8) | Cabinet Decision No. 116 of 2022 on the Determination of Annual Income Subject to Corporate Tax, https://mof.gov.ae/wp-content/uploads/2023/04/Cabinet-Decision-No-116-of-2022-on-the-annual-Taxable-Income-subject-to-Corporate-Tax.pdf | 2026-11-18 | Art. 3: "the Taxable Income of a Taxable Person that exceeds the amount of (375,000) three hundred seventy-five thousand dirhams shall be subject to Corporate Tax at (9%) nine percent in the relevant Tax Period." Art. 2: taxable income "not exceeding (375,000) ... shall be subject to Corporate Tax at the rate of (0%) zero percent" | VERIFIED. Correct wording: "9% on taxable income above AED 375,000; 0% up to AED 375,000" (Qualifying Free Zone Persons have separate rules, not checked here). "Corporate tax 9%" alone overstates it for small firms. |
+| U-3 | E-invoicing: ASP appointment deadline and go-live for revenue of AED 50m or more | [../research/03-regulations.md:43](../research/03-regulations.md) (U2) | Federal Tax Authority, "UAE e-Invoicing Programme Introduction", https://tax.gov.ae/Datafolder/Files/Pdf/2026/E-invoicing/UAE-eInvoicing-Programme-30June2026.pdf (linked from https://tax.gov.ae/en/content/uae.einvoicing.aspx) | 2026-11-18 | "A targeted extension of the deadline for the appointment of eInvoicing an Accredited Service Provider (ASP), from 31 July 2026 to 30 October 2026. ... applicable to entities with annual revenues exceeding AED 50 million." / "The first phase of mandatory implementation for entities with annual revenues exceeding AED 50 million must be fully met by 01 January 2027." / "Ecosystem live ahead of the 01st July 2026 Pilot Phase" | VERIFIED for the AED 50m phase. Matches 03 U2. Dates for firms under AED 50m (2027-07-01) and government entities were not re-checked in a primary text this session: SECONDARY (EY, KPMG, Andersen summaries of Ministerial Decision 244 of 2025). Note the FTA PDF says "exceeding" AED 50m; 03 U2 says ">=". Check the decision text. |
+
+## F. Egypt (ETA) lead
+| ID | Lead as stated | Where it appears | Source | Accessed | Exact quote | Status |
+|---|---|---|---|---|---|---|
+| E-1 | E-invoicing with digital signatures | [../compliance/country-matrix.md:72](../compliance/country-matrix.md) | Egyptian Tax Authority eInvoicing SDK: "Document Signature Creation" https://sdk.invoicing.eta.gov.eg/signature-creation/ and "eInvoicing APIs" https://sdk.invoicing.eta.gov.eg/einvoicingapi/ | 2026-11-18 | "Sign the hash created using CADES-BES signature" / "Apply sha256 hash on the byte array created from canonical version byte array (using UTF-8)" / "Taxpayer can submit one or more signed documents to eInvoicing solution using this API." | VERIFIED that the official system takes signed documents (CAdES-BES over a SHA-256 hash). Not seen this session: the legal text making signing mandatory, and the phase calendar. The main ETA e-invoicing page returned 404. |
+| E-2 | E-receipt (B2C) | GTM-018 row; not in country-matrix | ETA SDK home, "Egyptian eInvoicing & eReceipt SDK" (last update 08-12-2022), https://sdk.invoicing.eta.gov.eg/ ; "Receipt Issuance FAQ" https://sdk.invoicing.eta.gov.eg/receiptissuancefaq/ | 2026-11-18 | "eInvoicing and eReceipt is the solution of the Egyptian Tax Authority" / "The issuer should have been allowed to issue receipts by assigning the B2C tag on the system." | VERIFIED that the e-receipt system exists. Which businesses must use it, and from when: SECONDARY (vendor guides, dates conflict). |
+| E-3 | "Official unified chart of accounts" | [../compliance/country-matrix.md:72](../compliance/country-matrix.md) | None found. No ETA SDK page read mentions a chart of accounts. The ETA does validate unified goods and services codes: Receipt Issuance FAQ, "System must validate goods and services codes used by the taxpayer against goods and services codes defined" and the code list "Tax SubTypes, GS1, EGS, Unit Types" | 2026-11-18 | n/a for chart of accounts | UNVERIFIED. Likely a mix-up with unified item coding (GS1/EGS). Proposed wording: "unified goods and services codes (GS1 or EGS) on every e-document". Keep "unified chart of accounts" out until a source is found. |
+| E-4 | Withholding-tax integrations | [../compliance/country-matrix.md:72](../compliance/country-matrix.md) | None found. The ETA site lists downloadable withholding return forms (https://www.eta.gov.eg/ar/content/nmadhj-aqrarat-alkhsm-walthsyl, Excel forms 11, 14, 41-47) but no electronic withholding system was found | 2026-11-18 | n/a | UNVERIFIED |
+
+## G. Qatar lead
+Qatar is in the GTM-018 row, but `docs/` records no Qatar facts ([../compliance/country-matrix.md](../compliance/country-matrix.md), Qatar section). These rows exist so the brief can be checked.
+| ID | Lead | Where it appears | Source | Accessed | Exact quote | Status |
+|---|---|---|---|---|---|---|
+| Q-1 | Income tax 10% | Not in `docs/` | General Tax Authority, "الضرائب في قطر" (Taxes in Qatar), https://www.gta.gov.qa/ar/taxes-info | 2026-11-18 | "10% من الدخل الخاضع للضريبة وتطبق على جميع الانشطة." (10% of taxable income, applied to all activities) | VERIFIED (official page; the page calls it income tax and does not say "corporate"). Who is taxable (for example the treatment of Qatari-owned shares) was not checked. |
+| Q-2 | VAT in Qatar | Not in `docs/` | The GTA pages list income, capital gains, withholding, excise and global minimum tax, with no VAT | 2026-11-18 | n/a | UNVERIFIED either way. A missing VAT entry is not a statement that no VAT applies. Do not claim either. |
+| Q-3 | E-invoicing law | Not in `docs/` | Secondary: KPMG TaxNewsFlash (2026-05-20), https://kpmg.com/us/en/taxnewsflash/news/2026/05/qatar-cabinet-approves-draft-law-e-invoicing-executive-regulations.html. No official Cabinet or GTA text found on qna.org.qa or gta.gov.qa | 2026-11-18 | "Qatar's Cabinet on May 6, 2026, approved a draft law on e-invoicing and its executive regulations." / "The draft has not been published yet" | SECONDARY. Safe wording: "Qatar's Cabinet approved a draft e-invoicing law in May 2026 (reported by KPMG); scope and dates are not published." |
+
+## Status counts
+| Status | Count | Rows |
+|---|---|---|
+| VERIFIED | 13 | A-4, B-2, K-1 to K-5, U-1, U-2, U-3 (AED 50m phase), E-1, E-2, Q-1 |
+| SECONDARY | 3 | A-3, B-1, Q-3 |
+| FOUNDERS' TARGET / HYPOTHESIS | 7 | B-3, B-4, C-1 to C-5 |
+| UNVERIFIED | 7 | A-1, A-2, C-6, C-7, E-3, E-4, Q-2 |
+Total: 30 rows. Several VERIFIED rows carry limits (year, sample, scope): read the status cell before using the figure.
+
+## Requests for the docs/strategy, docs/research and docs/compliance owners (Eldon's lane, not edited here)
+1. [../compliance/country-matrix.md:72](../compliance/country-matrix.md): change "official unified chart of accounts" to "unified goods and services codes (GS1/EGS)", or keep it with an UNVERIFIED tag; tag "withholding-tax integrations" UNVERIFIED; add sources for E-1 and E-2.
+2. [../compliance/country-matrix.md:68-74](../compliance/country-matrix.md): the KSA and UAE leads are now sourced (rows K-1 to K-4, U-1 to U-2). Point the heading to this file and narrow the UNVERIFIED tag to the Egypt items. The UAE corporate tax lead should read "9% above AED 375,000, 0% below".
+3. [../research/03-regulations.md:46](../research/03-regulations.md) (U5): the 5% VAT rate is now sourced (U-1); drop "UNVERIFIED this session" for the rate.
+4. [../research/03-regulations.md:49](../research/03-regulations.md) (U8): add the Cabinet Decision 116 of 2022 link and quote (U-2).
+5. [../research/03-regulations.md:43](../research/03-regulations.md) (U2): check ">= AED 50m" against "exceeding AED 50 million" in the FTA programme PDF (U-3).
+6. [../research/03-regulations.md:19](../research/03-regulations.md) (K2): add the ZATCA Security Features and XML Implementation Standard (2023-05-19) links; both were read this session (K-1 to K-4).
+7. [../research/02-market-and-customer.md:67](../research/02-market-and-customer.md): "primary ... (not opened)" is out of date; 03 K3 records the primary as read.
+8. [../research/02-market-and-customer.md:88](../research/02-market-and-customer.md) and [:103](../research/02-market-and-customer.md): the quote is confirmed (B-1). Keep it SECONDARY and add "vendor (NetSuite partner)".
+9. [../strategy/08-product-vs-software-house.md:15-23](../strategy/08-product-vs-software-house.md): already called hypotheses at line 24. Add "(target)" in the table header, so a copied table cannot lose the label.
+10. [../strategy/06-model-strategy.md:31](../strategy/06-model-strategy.md): fine as written ("target").

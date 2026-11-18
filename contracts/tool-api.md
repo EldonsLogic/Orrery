@@ -1,6 +1,6 @@
 # Tool API
 
-Version: 0.3.0
+Version: 0.3.1
 Status: draft
 Owner: eldon
 
@@ -107,6 +107,8 @@ Executed by the tool API gateway in Part 4, before anything reaches the engine:
 9. Write the audit record and emit events.
 
 The chat can never do anything the user could not do in the engine's own UI with the same role.
+
+**Department assistants are agent-class callers** ([ADR-0043](../docs/decisions/ADR-0043-department-assistants.md), since 0.3.1). A call made through a Blueprint `assistants[]` entry runs with the invoking user's roles and scope (steps 1 to 9) and is also treated as an agent call: the tool's and each transition's `agent_creatable` must be true, `approval.agent_required` and the agent-caller approval defaults of section 5 and section 11 (ledger, tax, export) apply, and approve and reject moves are refused even when the user could make them in person. The gateway also intersects the call with the assistant's tool list, its `transitions` allowlist and its limits. The user's own presence in the chat does not turn an assistant call into a human call.
 
 ## 5. Approval-required flag
 `approval.required` is computed at generation time from the Blueprint's approval rules and from platform policy: any tool with `effects.ledger`, `effects.tax` or `effects.external_send` is approval-required for agent callers by default. For human callers via chat, ledger/tax tools execute the same confirm step the UI would. The call returns `status: "pending_approval"` with the approval id; execution happens when an eligible approver decides. The approver cannot be the requester unless the rule allows self-approval.

@@ -45,16 +45,11 @@ class HeadlessComposeTests(unittest.TestCase):
             with self.subTest(service=name):
                 self.assertFalse(service.get("ports"), f"{name} must not publish a host port")
 
-    def test_every_network_is_internal_except_dev_egress(self):
-        self.assertEqual(set(self.config["networks"]), {"data", "engine_internal", "egress"})
+    def test_every_network_is_internal(self):
+        self.assertEqual(set(self.config["networks"]), {"data", "engine_internal"})
         for name in ("data", "engine_internal"):
             with self.subTest(network=name):
                 self.assertIs(self.config["networks"][name].get("internal"), True)
-
-    def test_only_the_engine_has_outbound_access(self):
-        for name, service in self.config["services"].items():
-            with self.subTest(service=name):
-                self.assertEqual("egress" in service["networks"], name == "engine")
 
     def test_no_service_uses_host_network_or_the_default_network(self):
         for name, service in self.config["services"].items():
@@ -67,7 +62,7 @@ class HeadlessComposeTests(unittest.TestCase):
         for name in ("mariadb", "redis-cache", "redis-queue"):
             with self.subTest(service=name):
                 self.assertEqual(set(self.config["services"][name]["networks"]), {"data"})
-        self.assertEqual(set(self.config["services"]["engine"]["networks"]), {"data", "engine_internal", "egress"})
+        self.assertEqual(set(self.config["services"]["engine"]["networks"]), {"data", "engine_internal"})
 
     def test_engine_receives_the_internal_token(self):
         self.assertEqual(self.config["services"]["engine"]["environment"]["ENGINE_INTERNAL_TOKEN"], TOKEN)
@@ -76,6 +71,7 @@ class HeadlessComposeTests(unittest.TestCase):
         command = self.config["services"]["engine"]["command"]
         script = " ".join(command)
         self.assertIn("exec gunicorn", script)
+        self.assertIn("python3 -m change_engine.api.route_guard &&", script)
         self.assertTrue(script.endswith("change_engine.wsgi:application"))
         self.assertNotIn("frappe.app:application", script)
 
@@ -84,7 +80,15 @@ class HeadlessComposeTests(unittest.TestCase):
         dev = json.loads(resolve(files=("docker-compose.dev.yml",)).stdout)["services"]
         for name, service in self.config["services"].items():
             with self.subTest(service=name):
-                for key in ("image", "build", "volumes", "healthcheck", "depends_on", "command"):
+                env = service.get("environment", {}).copy()
+                build = service.get("build", {}).copy()
+                if name == "engine":
+                    self.assertEqual(build.pop("target", None), "headless")
+                    for key in ("ENGINE_INTERNAL_TOKEN", "ENGINE_INTERNAL_TOKEN_PREVIOUS"):
+                        env.pop(key)
+                self.assertEqual(build, dev[name].get("build", {}))
+                self.assertEqual(env, dev[name].get("environment", {}))
+                for key in ("image", "restart", "volumes", "healthcheck", "depends_on", "command"):
                     if key == "command" and name == "engine":
                         continue
                     self.assertEqual(service.get(key), dev[name].get(key), key)

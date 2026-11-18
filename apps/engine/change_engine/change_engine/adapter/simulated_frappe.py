@@ -469,6 +469,18 @@ class SimulatedFrappeDB:
                 return [copy.deepcopy(row)]
             return [(row["name"], row.get("fieldtype"))]
 
+        if q_upper.startswith("DELETE FROM `TABPROPERTY SETTER`"):
+            rows = site.rows["tabProperty Setter"]
+            if len(p) == 3:
+                dt, fn, prop = p
+                doomed = [k for k, r in rows.items() if r.get("doc_type") == dt and r.get("field_name") == fn and r.get("property") == prop]
+            else:
+                dt, prop = p
+                doomed = [k for k, r in rows.items() if r.get("doc_type") == dt and not r.get("field_name") and r.get("property") == prop]
+            for k in doomed:
+                del rows[k]
+            return ()
+
         if "FROM `TABPROPERTY SETTER`" in q_upper:
             rows = site.rows["tabProperty Setter"].values()
             if len(p) == 3:
@@ -481,18 +493,6 @@ class SimulatedFrappeDB:
                 return []
             r = hit[0]
             return [copy.deepcopy(r)] if as_dict else [(r["name"], r.get("value"), r.get("property_type", "Data"))]
-
-        if q_upper.startswith("DELETE FROM `TABPROPERTY SETTER`"):
-            rows = site.rows["tabProperty Setter"]
-            if len(p) == 3:
-                dt, fn, prop = p
-                doomed = [k for k, r in rows.items() if r.get("doc_type") == dt and r.get("field_name") == fn and r.get("property") == prop]
-            else:
-                dt, prop = p
-                doomed = [k for k, r in rows.items() if r.get("doc_type") == dt and not r.get("field_name") and r.get("property") == prop]
-            for k in doomed:
-                del rows[k]
-            return ()
 
         if "`TABCHANGE ENGINE AUDIT`" in q_upper:
             tbl = site.rows["tabChange Engine Audit"]

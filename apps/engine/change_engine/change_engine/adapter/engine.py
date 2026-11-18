@@ -359,9 +359,35 @@ class ChangeEngineAdapter:
         self._need_hooks()
         self.now += seconds
 
+    def _get_or_hydrate_site(self, tenant_id: str) -> SiteRecord | None:
+        site = self.store.get_site(tenant_id)
+        if site is not None or self.frappe_backend is None or tenant_id == "platform":
+            return site
+        loader = getattr(self.frappe_backend, "load_site_state", None)
+        if not callable(loader):
+            return None
+        snap = loader(tenant_id)
+        if not snap:
+            return None
+        params = {
+            "siteClass": snap["site_class"],
+            "engineTarget": snap["engine_target"],
+            "blueprintId": snap["blueprint_id"],
+            "countryPack": snap["country_pack"],
+        }
+        site = SiteRecord(tenant_id, params)
+        site.state = snap["state"]
+        site.applied = copy.deepcopy(snap["applied"])
+        site.applied_ids = set(snap["applied_ids"])
+        site.history = copy.deepcopy(snap["history"])
+        site.sync_version = int(snap["sync_version"])
+        site.config = copy.deepcopy(snap["config"])
+        site.retained = copy.deepcopy(snap["retained"])
+        return self.store.hydrate_site(site)
+
     def set_site_state(self, tenant_id: str, state: str) -> None:
         self._need_hooks()
-        site = self.store.get_site(tenant_id)
+        site = self._get_or_hydrate_site(tenant_id)
         if site is None:
             raise KeyError(tenant_id)
         site.state = state
@@ -371,7 +397,7 @@ class ChangeEngineAdapter:
 
     def data_probe(self, tenant_id: str, pointer: str, value: Any = None) -> Any:
         self._need_hooks()
-        site = self.store.get_site(tenant_id)
+        site = self._get_or_hydrate_site(tenant_id)
         if site is None:
             raise KeyError(tenant_id)
         segs = _segs(pointer)
@@ -388,7 +414,7 @@ class ChangeEngineAdapter:
 
     def plan_evidence(self, tenant_id: str, evidence_ref: str) -> list[str]:
         self._need_hooks()
-        if self.store.get_site(tenant_id) is None:
+        if self._get_or_hydrate_site(tenant_id) is None:
             raise KeyError(tenant_id)
         return self.store.get_evidence(tenant_id, evidence_ref)
 
@@ -398,7 +424,7 @@ class ChangeEngineAdapter:
 
     def auth_probe(self, tenant_id: str, member_ref: str) -> dict[str, Any]:
         self._need_hooks()
-        if self.store.get_site(tenant_id) is None:
+        if self._get_or_hydrate_site(tenant_id) is None:
             raise KeyError(tenant_id)
         if self.frappe_backend is not None:
             return self.frappe_backend.auth_probe(tenant_id, member_ref)
@@ -413,7 +439,7 @@ class ChangeEngineAdapter:
 
     def action_probe(self, tenant_id: str, member_ref: str) -> dict[str, Any]:
         self._need_hooks()
-        if self.store.get_site(tenant_id) is None:
+        if self._get_or_hydrate_site(tenant_id) is None:
             raise KeyError(tenant_id)
         if self.frappe_backend is not None:
             return self.frappe_backend.action_probe(tenant_id, member_ref)
@@ -516,7 +542,7 @@ class ChangeEngineAdapter:
             inputHash=sha(inp),
         )
         tenant = context["tenantId"]
-        site = self.store.get_site(tenant)
+        site = self._get_or_hydrate_site(tenant)
         self._authorize(op, context, site)
         self._check_contract_version(context["contractVersion"])
         self._prechecks(op, inp)
@@ -953,6 +979,12 @@ class ChangeEngineAdapter:
         elif kind.endswith((".set_property", ".configure")):
             elem = _walk(cfg, segs)
             _set_path(elem, params["property"], params)
+            if "after" not in params:
+                prop_segs = _segs(params["property"])
+                if prop_segs and isinstance(elem, dict) and isinstance(elem.get(prop_segs[0]), dict):
+                    _prune_empty(elem[prop_segs[0]])
+                    if not elem[prop_segs[0]]:
+                        del elem[prop_segs[0]]
         elif kind.endswith(".reorder"):
             node = _walk(cfg, segs)
             node = node if isinstance(node, list) else node.get("fields", node.get("options"))

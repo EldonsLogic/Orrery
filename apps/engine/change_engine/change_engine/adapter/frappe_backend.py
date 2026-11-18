@@ -60,6 +60,7 @@ _BP_PROP_TO_FRAPPE = {
     "/hidden": ("hidden", "Check"),
     "/default": ("default", "Data"),
     "/description": ("description", "Text"),
+    "/options": ("options", "Text"),
 }
 
 
@@ -334,6 +335,56 @@ class FrappeRuntimeBackend:
             if hasattr(f.db, "commit"):
                 f.db.commit()
 
+    def load_site_state(self, tenant_id: str) -> dict[str, Any] | None:
+        try:
+            with self._site_session(tenant_id, create_if_missing=False) as (f, _):
+                rows = f.db.sql(
+                    """
+                    SELECT tenant_id, state, site_class, engine_target_json, blueprint_id,
+                           country_pack, applied_json, applied_ids_json, history_json,
+                           sync_version, config_json, retained_json
+                    FROM `tabChange Engine Blueprint State`
+                    WHERE tenant_id = %s
+                    """,
+                    (tenant_id,),
+                    as_dict=True,
+                )
+        except Exception:
+            return None
+        if not rows:
+            return None
+        row = rows[0]
+        if not isinstance(row, dict):
+            keys = (
+                "tenant_id",
+                "state",
+                "site_class",
+                "engine_target_json",
+                "blueprint_id",
+                "country_pack",
+                "applied_json",
+                "applied_ids_json",
+                "history_json",
+                "sync_version",
+                "config_json",
+                "retained_json",
+            )
+            row = dict(zip(keys, row))
+        return {
+            "tenant_id": row["tenant_id"],
+            "state": row["state"],
+            "site_class": row["site_class"],
+            "engine_target": json.loads(row["engine_target_json"]),
+            "blueprint_id": row["blueprint_id"],
+            "country_pack": row["country_pack"],
+            "applied": json.loads(row["applied_json"]) if row.get("applied_json") else None,
+            "applied_ids": set(json.loads(row["applied_ids_json"])),
+            "history": json.loads(row["history_json"]),
+            "sync_version": int(row["sync_version"]),
+            "config": json.loads(row["config_json"]),
+            "retained": json.loads(row["retained_json"]),
+        }
+
     def check_health(self, tenant_id: str, site_state_value: str | None = None) -> list[dict[str, str]]:
         if tenant_id == "platform":
             try:
@@ -493,8 +544,18 @@ class FrappeRuntimeBackend:
                 mapped = _BP_PROP_TO_FRAPPE.get(prop_ptr)
                 if mapped:
                     frappe_prop, frappe_ptype = mapped
-                    val = params.get("after")
-                    self._apply_property_setter(dep, tenant_id, doctype, fieldname, frappe_prop, val, frappe_ptype)
+                    if "after" not in params or params.get("after") is None:
+                        self._delete_property_setter(dep, doctype, fieldname, frappe_prop)
+                    else:
+                        val = params["after"]
+                        if frappe_prop == "options" and isinstance(val, list):
+                            val = "\n".join(
+                                str(o.get("value") or o.get("id") or "")
+                                if isinstance(o, dict)
+                                else str(o)
+                                for o in val
+                            )
+                        self._apply_property_setter(dep, tenant_id, doctype, fieldname, frappe_prop, val, frappe_ptype)
 
             elif kind == "workflow.upsert":
                 defn = params.get("definition") or {}
@@ -503,9 +564,12 @@ class FrappeRuntimeBackend:
             elif kind == "workflow.disable":
                 wf_id = str(subject.get("id") or segs[-1])
                 if hasattr(f.db, "exists") and f.db.exists("Workflow", wf_id):
+                    wf_dt = f.db.get_value("Workflow", wf_id, "document_type") if hasattr(f.db, "get_value") else None
                     f.db.set_value("Workflow", wf_id, "is_active", 0)
                     if hasattr(f.db, "commit"):
                         f.db.commit()
+                    if wf_dt:
+                        dep.clear_doctype_cache(str(wf_dt))
 
             elif kind == "report.upsert":
                 defn = params.get("definition") or {}
@@ -514,9 +578,12 @@ class FrappeRuntimeBackend:
             elif kind == "report.disable":
                 rep_id = str(subject.get("id") or segs[-1])
                 if hasattr(f.db, "exists") and f.db.exists("Report", rep_id):
+                    rep_dt = f.db.get_value("Report", rep_id, "ref_doctype") if hasattr(f.db, "get_value") else None
                     f.db.set_value("Report", rep_id, "disabled", 1)
                     if hasattr(f.db, "commit"):
                         f.db.commit()
+                    if rep_dt:
+                        dep.clear_doctype_cache(str(rep_dt))
 
             elif kind == "role.upsert":
                 defn = params.get("definition") or {}
@@ -554,7 +621,15 @@ class FrappeRuntimeBackend:
                         f.db.commit()
 
             elif kind == "settings.set":
-                self._sync_settings(f, segs[0] if segs else "", str(params.get("property") or ""), params.get("after"))
+                has_after = "after" in params and params.get("after") is not None
+                self._sync_settings(
+                    f,
+                    tenant_id,
+                    segs[0] if segs else "",
+                    str(params.get("property") or ""),
+                    params.get("after") if has_after else None,
+                    unset=not has_after,
+                )
 
     def _ensure_doctype_exists(self, f: Any, doctype: str, defn: dict[str, Any]) -> None:
         if getattr(f.db, "table_exists", None) and f.db.table_exists(doctype):
@@ -693,6 +768,20 @@ class FrappeRuntimeBackend:
 
     def _quarantine_field(self, dep: FrappeDeploymentAdapter, tenant_id: str, doctype: str, fieldname: str) -> None:
         self._apply_property_setter(dep, tenant_id, doctype, fieldname, "hidden", 1, "Check")
+        self._apply_property_setter(dep, tenant_id, doctype, fieldname, "reqd", 0, "Check")
+        dep.clear_doctype_cache(doctype)
+
+    def _delete_property_setter(
+        self,
+        dep: FrappeDeploymentAdapter,
+        doctype: str,
+        fieldname: str,
+        property_name: str,
+    ) -> None:
+        if property_name not in PROPERTY_TYPE_MAP:
+            return
+        dep.delete_property_setter(doctype, fieldname, property_name)
+        dep.clear_doctype_cache(doctype)
 
     def _apply_property_setter(
         self,
@@ -864,12 +953,42 @@ class FrappeRuntimeBackend:
         if status != "APPLIED":
             raise FrappeBackendError("engine_unavailable", stage="execute")
 
-    def _sync_settings(self, f: Any, section: str, prop: str, value: Any) -> None:
-        if section == "i18n" and prop == "/defaultLocale" and isinstance(value, str):
-            if hasattr(f.db, "exists") and f.db.exists("System Settings"):
-                f.db.set_value("System Settings", "System Settings", "language", value)
-        elif section == "compliance" and prop == "/country" and isinstance(value, str):
-            defaults = COUNTRY_DEFAULTS.get(value.lower())
+    def _resolve_country_defaults(self, f: Any, tenant_id: str) -> dict[str, str]:
+        pack = "sa"
+        try:
+            rows = f.db.sql(
+                "SELECT country_pack FROM `tabChange Engine Blueprint State` WHERE tenant_id = %s",
+                (tenant_id,),
+                as_dict=True,
+            )
+            if rows:
+                first = rows[0]
+                raw_pack = first.get("country_pack") if isinstance(first, dict) else first[0]
+                if isinstance(raw_pack, str) and raw_pack:
+                    pack = raw_pack.lower()
+        except Exception:
+            pass
+        return COUNTRY_DEFAULTS.get(pack, COUNTRY_DEFAULTS["sa"])
+
+    def _sync_settings(
+        self,
+        f: Any,
+        tenant_id: str,
+        section: str,
+        prop: str,
+        value: Any,
+        *,
+        unset: bool = False,
+    ) -> None:
+        if section == "i18n" and prop == "/defaultLocale":
+            target_lang = self._resolve_country_defaults(f, tenant_id)["language"] if unset else value
+            if isinstance(target_lang, str) and hasattr(f.db, "exists") and f.db.exists("System Settings"):
+                f.db.set_value("System Settings", "System Settings", "language", target_lang)
+        elif section == "compliance" and prop == "/country":
+            if unset:
+                defaults = self._resolve_country_defaults(f, tenant_id)
+            else:
+                defaults = COUNTRY_DEFAULTS.get(value.lower()) if isinstance(value, str) else None
             if defaults and hasattr(f.db, "exists") and f.db.exists("System Settings"):
                 f.db.set_value("System Settings", "System Settings", "country", defaults["country"])
                 f.db.set_value("System Settings", "System Settings", "time_zone", defaults["timezone"])

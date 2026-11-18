@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import json
-import re
 
 from . import rules as R
-from .codes import CREDENTIAL, HIGH, MEDIUM, NETWORK, SECRETS, UNPARSEABLE, Issue
+from .codes import CREDENTIAL, HIGH, MEDIUM, NETWORK, SECRETS, UNPARSEABLE, UNSUPPORTED, Issue
 from .pyscan import Declared, scan_python
 
 
@@ -45,41 +44,68 @@ def scan_json(text: str, path: str, declared: Declared, is_manifest: bool = Fals
     issues: list = []
     cursor = [0]
 
-    def walk(node, key=None, depth=0):
+    skip_keys = ("upstream", "licence", "owner", "description", "name")
+
+    def foreign(pairs) -> bool:
+        """True when the object declares a client-side document type or a non-Python script language."""
+        for k, v in pairs:
+            if not isinstance(k, str) or not isinstance(v, str):
+                continue
+            if k.lower() == "doctype" and v.strip().lower() in R.NON_PYTHON_DOCTYPES:
+                return True
+            if k.lower() in R.LANGUAGE_KEYS and v.strip().lower() not in R.PYTHON_LANGUAGES:
+                return True
+        return False
+
+    def code(node, key, line, alien):
+        k = key.lower()
+        if alien:
+            issues.append(Issue(path, line, UNSUPPORTED, HIGH, f"'{key}' holds a non-Python script (client-side "
+                                "document or declared language); it cannot be analysed"))
+            return
+        found = scan_python(node, path, declared, line_offset=line - 1, mode="exec", embedded=True)
+        if found and found[0].code == UNPARSEABLE:  # a bare expression (condition, formula)
+            found = scan_python(node.strip(), path, declared, line_offset=line - 1, mode="eval", embedded=True)
+        if found and found[0].code == UNPARSEABLE and k in R.STRICT_CODE_KEYS:
+            found = [Issue(path, line, UNSUPPORTED, HIGH, f"'{key}' holds a script that is not Python (for example "
+                           "JavaScript or a template); it cannot be analysed")]
+        issues.extend(found)
+
+    def walk(node, key=None, depth=0, alien=False):
         if depth > 60:
             issues.append(Issue(path, 1, UNPARSEABLE, HIGH, "JSON nested too deep to analyse"))
             return
         if isinstance(node, Pairs):
+            alien = alien or foreign(node)
             for k, v in node:
-                walk(v, k if isinstance(k, str) else None, depth + 1)
+                walk(v, k if isinstance(k, str) else None, depth + 1, alien)
         elif isinstance(node, list):
             for v in node:
-                walk(v, key, depth + 1)
+                walk(v, None if is_manifest and key in skip_keys else key, depth + 1, alien)
         elif isinstance(node, str):
             needle = json.dumps(node, ensure_ascii=False)[1:41].rstrip("\\")
             n = _locate(lines, needle, cursor[0])
             cursor[0] = n
             line = n + 1
-            if is_manifest and key in ("upstream", "licence", "owner", "description", "name"):
+            if is_manifest and key in skip_keys:
                 return
             issues.extend(scan_literal(path, line, node, key))
-            if key and key.lower() in R.CODE_KEYS and len(node) > 3 and re.search(r"[=()\[\]]|\bimport\b|\bdef\b|\breturn\b", node):
-                body = node
-                found = scan_python(body, path, declared, line_offset=line - 1, mode="exec", embedded=True)
-                if found and found[0].code == UNPARSEABLE:  # a bare expression (condition, formula)
-                    found = scan_python(body.strip(), path, declared, line_offset=line - 1, mode="eval", embedded=True)
-                issues.extend(found)
+            if key and key.lower() in R.CODE_KEYS and node.strip():
+                code(node, key, line, alien)
 
     walk(data)
     return issues
 
 
 def scan_text(text: str, path: str) -> list:
-    """Any other text file: literals only (credentials, key blocks, credential file names)."""
+    """Any other text file: literals (credentials, key blocks) and doctest prompts, which a test runner could execute."""
     issues = []
     for n, ln in enumerate(text.splitlines(), 1):
         if len(ln) > 100_000:
             continue
+        if ln.lstrip().startswith(">>>"):
+            issues.append(Issue(path, n, UNSUPPORTED, HIGH, "doctest prompt ('>>>') in a text file: runnable code "
+                                "outside a .py file is not allowed"))
         for rx, what in R.SECRET_LITERALS:
             if rx.search(ln):
                 issues.append(Issue(path, n, CREDENTIAL, HIGH, f"hard-coded {what}"))

@@ -70,17 +70,19 @@ def test_findings_carry_file_and_line():
     assert (i.path, i.line, i.severity) == ("m.py", 3, "high") and str(i).startswith("m.py:3 SA-003 high")
 
 
-def test_undeclared_component_and_third_party_are_medium():
-    assert has("import components.core.pricing\n", "SA-008", "medium")
-    assert has("import numpy\n", "SA-008", "medium")
+def test_imports_outside_the_allow_list_are_high():
+    assert has("import components.core.pricing\n", "SA-008")
+    assert has("import numpy\n", "SA-008")
     assert not run("import components.core.trading_ar.loader\n")        # declared in requires
+    assert not run("from components.core.trading_ar import loader\n")
+    assert not run("import components.core.demo.util\n")                # the component's own package
     assert not run("import loader\n")                                    # provided by the component
     assert not run("import pytest\n")
 
 
-def test_model_sdk_allowed_when_declared():
-    d = Declared(sends_to_models=True)
-    assert not [i for i in run("import anthropic\n", d) if i.severity == "high"]
+def test_model_sdk_high_even_when_declared():
+    # Policy (SEC-010 review): a component never imports a model SDK; model calls go through the platform.
+    assert has("import anthropic\n", "SA-008", declared=Declared(sends_to_models=True))
 
 
 def test_obfuscation_variants():
@@ -112,6 +114,11 @@ def test_url_literal_medium_but_reserved_hosts_ok():
     "import unittest\nclass T(unittest.TestCase):\n    def test(self):\n        self.assertEqual(1, 1)\n",
     "password = ''\napi_key = 'changeme'\nopen('data/rows.csv')\n",
     "x = getattr(obj, 'name')\nlabel = 'sk-learn style text'\n",
+    "author = 'Jane Doe Smith'\ntokenizer = 'bert-base-uncased'\nauthor_email = 'jane@docs.example'\n",
+    "class F(Base):\n    def __init__(self):\n        super().__init__()\n    def open(self):\n        return self.__doc__\n",
+    "from decimal import Decimal\ndef f(x: 'Decimal') -> 'list[Decimal]':\n    return [x]\n",
+    "import os.path\nfrom os import path\np = os.path.join('a', 'b') + path.sep + os.sep\n",
+    "import collections, functools, itertools, enum, uuid, textwrap, string, math, re\n__all__ = ['x']\n",
 ])
 def test_benign_code_has_no_findings(src):
     assert run(src) == [], [str(i) for i in run(src)]
@@ -169,11 +176,14 @@ def test_unsupported_and_binary_files_fail_closed(make):
 
 
 def test_manifest_requires_and_models_flag_cross_check(make):
-    d = make(lambda m: m.__setitem__("dataHandling", {"sendsDataToModels": True}))
-    (d / "x.py").write_text("import anthropic\n")
-    assert not analyse_component(d, json.loads((d / "manifest.json").read_text())).blocked
+    d = make(lambda m: m.__setitem__("requires", [{"component": "core.tax"}]))
+    (d / "x.py").write_text("from components.core.tax import vat\n")
     m = json.loads((d / "manifest.json").read_text())
-    m["dataHandling"] = {"sendsDataToModels": False}
+    assert not analyse_component(d, m).blocked
+    m["requires"] = []
+    assert analyse_component(d, m).blocked
+    (d / "x.py").write_text("import anthropic\n")
+    m["dataHandling"] = {"sendsDataToModels": True}
     assert analyse_component(d, m).blocked
 
 
@@ -196,6 +206,7 @@ def test_high_finding_blocks_tested_and_tests_not_run(make):
     d = make(test_body=body)
     rep = check(d, run_tests=True, trusted_source=True, timeout=60)
     assert rep.level_reached == "draft" and not rep.ok and not rep.tests_run and not rep.tests
+    assert not (d / f"{marker}.txt").exists()
     assert {"SA-003", "FAC-015"} <= codes(rep)
     assert rep.as_dict()["analysis"]["blocked"] is True
     f = [f for f in rep.findings if f.code == "SA-003"][0]
@@ -203,9 +214,9 @@ def test_high_finding_blocks_tested_and_tests_not_run(make):
 
 
 def test_medium_finding_is_warning_and_does_not_block(make):
-    d = make(test_body="import numpy\ndef test_ok():\n    assert True\n")
+    d = make(test_body="u = 'https://evil.net/x'\ndef test_ok():\n    assert True\n")
     rep = check(d, run_tests=True, trusted_source=True, timeout=60)
-    f = [f for f in rep.findings if f.code == "SA-008"]
+    f = [f for f in rep.findings if f.code == "SA-001"]
     assert f and not f[0].is_error
     assert rep.analysis["blocked"] is False
 

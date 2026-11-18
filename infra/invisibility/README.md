@@ -40,6 +40,15 @@ python3 -m infra.invisibility \
   --max-pages 50
 ```
 
+For an authenticated crawl pass (credentials are never printed in reports):
+```bash
+python3 -m infra.invisibility \
+  --base-url http://localhost:8080 \
+  --api-paths /api/v1/health,/api/v1/customers \
+  --auth-header "Authorization: Bearer $TOKEN" \
+  --cookie "session=$SESSION_COOKIE"
+```
+
 To output machine-readable JSON:
 ```bash
 python3 -m infra.invisibility \
@@ -60,4 +69,4 @@ python3 -m infra.invisibility \
 
 ## Disabled-until-staging note
 
-Staging does not exist yet (INF-003 / ADR-0018). Staging hosts must not be invented or assumed. The crawler tool and its unit tests are fully implemented and verified locally, but plan row QA-016 remains open (`doing`) until real staging infrastructure is deployed and the test is executed against the live staging URL. This requirement is tracked in [docs/open-questions.md](../../docs/open-questions.md) as question Q-167.
+Staging does not exist yet (INF-003 / ADR-0018). Staging hosts must not be invented or assumed. The crawler tool and its unit tests are fully implemented and verified locally, but plan row QA-016 remains open (`doing`) until real staging infrastructure is deployed and the test is executed against the live staging URL. This requirement is tracked in [docs/open-questions.md](../../docs/open-questions.md) as question Q-215.

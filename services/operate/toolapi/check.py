@@ -1,7 +1,7 @@
 """check_tool_api: re-check the hard rules on any definition set, and recompute risk, effects and agent flags.
 
 The checker does not trust what a stored set says about itself: for every entity tool it derives the entity class,
-the risk class, the effects and the agent flag again from policy (and the L0 registry the set was built with), and
+the risk class, the effects and the agent flag again from policy (and the L0 registry and manifests it was built with), and
 requires equality. The content hash is mandatory. A hash is not a signature: protect stored sets by where they live.
 """
 from __future__ import annotations
@@ -138,21 +138,25 @@ def _check_hidden_filters(t, add, p) -> None:
         add("TAPI-HIDDEN-001", p, f"field(s) {sorted(keys & hidden)} are hidden from a calling role but filterable")
 
 
-def check_tool_api(defs, registry=None) -> list[Issue]:
-    """`registry` is the L0 registry the set was generated with (required when the set records one)."""
+def check_tool_api(defs, registry=None, manifests=None) -> list[Issue]:
+    """`registry` and `manifests` are the L0 registry and resolved component manifests the set was generated with
+    (required when the set records them)."""
     issues: list[Issue] = []
     add = lambda code, ptr, fact: issues.append(Issue(code, ptr, fact))
-    declared_hash, set_registry = None, None
+    declared_hash, set_registry, set_manifests = None, None, None
     if isinstance(defs, dict):
         declared_hash, tools, set_registry = defs.get("contentHash"), defs.get("tools"), defs.get("registry")
+        set_manifests = defs.get("manifests")
     else:
         tools = defs
     if not isinstance(tools, list):
         return [Issue("TAPI-SHAPE-001", "/", "definition set must be a list of tools or an object with a tools list")]
-    policy = C.Policy(registry)
+    policy = C.Policy(registry, manifests)
     issues.extend(policy.errors)
     if (set_registry or None) != policy.meta:
         add("TAPI-REGISTRY-003", "/registry", "the registry given to the checker is not the one the set was built with")
+    if (set_manifests or None) != policy.manifest_meta:
+        add("TAPI-MANIFEST-003", "/manifests", "the manifests given to the checker are not the ones the set was built with")
     seen: set[str] = set()
     for i, t in enumerate(tools):
         name = t.get("name") if isinstance(t, dict) else None
@@ -228,7 +232,7 @@ def check_tool_api(defs, registry=None) -> list[Issue]:
             continue
         if t.get("entity_class") != cls:
             add("TAPI-CLASS-002", p, f"stored entity class {t.get('entity_class')!r} differs from policy {cls!r}")
-        if C.identity_entity(str(ent)):
+        if C.identity_entity(str(ent)) or policy.permission_entity(str(ent)):
             add("TAPI-DOMAIN-001", p, "identity and permission entities never get tools")
         _recompute_entity_tool(t, name.split(".", 1)[1], cls, policy, add, p)
     low = canonical(tools).lower()

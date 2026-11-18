@@ -1,7 +1,8 @@
 """Classification rules shared by the generator and the checker. Pure; data comes from policy.py.
 
 Every rule here fails closed: an unknown entity is refused, a name token only adds restriction, a registry only raises.
-`default_entity_class` is the single point to replace when the reviewed component manifest supplies the entity class.
+`default_entity_class` is the reviewed built-in table; `Policy` merges the L0 registry and manifest-declared classes
+(ADR-0037), each of which may only raise it.
 """
 from __future__ import annotations
 
@@ -132,11 +133,18 @@ def transition_kind(tid: str, cls: str, from_kind: str | None, to_id: str, to_ki
 class Policy:
     """Built-in classes and effects merged with an optional L0 registry, which may only raise them."""
 
-    def __init__(self, registry):
+    def __init__(self, registry, manifests=None):
         self.errors: list[Issue] = []
         self.reg_classes: dict[str, str] = {}
         self.reg_effects: dict[str, dict] = {}
         self.meta = None
+        self.man_decl: dict[str, str] = {}  # entity id -> declared riskClass (the highest across manifests)
+        self.man_reviewed: set[str] = set()  # entity ids declared by a manifest at a reviewed certification level
+        self.manifest_meta = None
+        self._load_registry(registry)
+        self._load_manifests(manifests)
+
+    def _load_registry(self, registry):
         reg = registry if registry is not None else {}
         if not isinstance(reg, dict) or set(reg) - {"source", "entity_classes", "entity_effects"}:
             self._err("TAPI-REGISTRY-001", "/registry", "registry must be a mapping with only source, entity_classes and entity_effects")
@@ -172,13 +180,61 @@ class Policy:
     def _err(self, code, ptr, fact):
         self.errors.append(Issue(code, ptr, fact))
 
+    def _load_manifests(self, manifests):
+        """Read `riskClass` from entity artifacts of resolved component manifests (ADR-0037). Raise only."""
+        if manifests is None:
+            return
+        if not isinstance(manifests, list) or not all(isinstance(m, dict) for m in manifests):
+            self._err("TAPI-MANIFEST-001", "/manifests", "manifests must be a list of component manifest objects")
+            return
+        rank = {c: i for i, c in enumerate(P.MANIFEST_RISK_CLASSES)}
+        used, decls = set(), []
+        for i, m in enumerate(manifests):
+            mid, ver = m.get("id"), m.get("version")
+            if not isinstance(mid, str) or not isinstance(ver, str):
+                self._err("TAPI-MANIFEST-001", f"/manifests/{i}", "manifest needs a string id and version")
+                continue
+            reviewed = (m.get("certification") or {}).get("level") in P.MANIFEST_REVIEWED_LEVELS
+            for j, prov in enumerate(m.get("provides") or []):
+                for k, a in enumerate((prov or {}).get("artifacts") or []):
+                    if not isinstance(a, dict) or "riskClass" not in a:
+                        continue
+                    ptr, decl, ref = f"/manifests/{mid}/provides/{j}/artifacts/{k}", a["riskClass"], a.get("ref")
+                    if a.get("type") != "entity" or not isinstance(ref, str) or decl not in rank:
+                        self._err("TAPI-MANIFEST-001", ptr, f"riskClass {decl!r} must be one of "
+                                  f"{list(P.MANIFEST_RISK_CLASSES)} on an entity artifact with a string ref")
+                        continue
+                    base = default_entity_class(ref)[0]
+                    mapped = P.MANIFEST_CLASS_MAP.get(decl)
+                    if mapped is not None and base is not None and P.CLASS_RANK[mapped] < P.CLASS_RANK[base]:
+                        self._err("TAPI-MANIFEST-002", ptr, f"manifest may not lower {ref!r} from {base} to {decl}")
+                        continue
+                    old = self.man_decl.get(ref)
+                    self.man_decl[ref] = decl if old is None or rank[decl] > rank[old] else old
+                    if reviewed:
+                        self.man_reviewed.add(ref)
+                    used.add(f"{mid}@{ver}")
+                    decls.append([mid, ver, ref, decl, reviewed])
+        if decls:
+            digest = hashlib.sha256(canonical(sorted(decls)).encode("utf-8")).hexdigest()
+            self.manifest_meta = {"components": sorted(used), "sha256": "sha256:" + digest}
+
+    def permission_entity(self, eid: str) -> bool:
+        """A manifest declared the entity in the permission domain: refused like an identity entity."""
+        return self.man_decl.get(eid) == "permission"
+
     def entity_class(self, eid: str) -> str | None:
-        return class_max(default_entity_class(eid)[0], self.reg_classes.get(eid))
+        known = class_max(default_entity_class(eid)[0], self.reg_classes.get(eid))
+        mapped = P.MANIFEST_CLASS_MAP.get(self.man_decl.get(eid))
+        if mapped is None or (known is None and eid not in self.man_reviewed):
+            return known  # an unreviewed manifest never makes an unknown entity generatable
+        return class_max(known, mapped)
 
     def effects(self, eid: str, cls: str, write: bool) -> dict:
         eff = {k: False for k in P.EFFECT_KEYS}
         if write:
             eff["ledger"] = cls in ("stock", "ledger")
+            eff["tax"] = self.man_decl.get(eid) == "tax"
             for src in (P.ENTITY_EFFECT_DEFAULTS.get(eid, {}), self.reg_effects.get(eid, {})):
                 for k, v in src.items():
                     eff[k] = eff[k] or v

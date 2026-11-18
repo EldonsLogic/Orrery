@@ -14,14 +14,17 @@ from unittest import mock
 
 DOCKER_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = DOCKER_DIR.parents[2]
-ENGINE_TEST_FILE = (
+ENGINE_TEST_DIR = (
     REPO_ROOT
     / "apps"
     / "engine"
     / "change_engine"
     / "change_engine"
     / "tests"
-    / "test_ce_sec_005_real_bench.py"
+)
+ENGINE_TEST_FILES = (
+    ENGINE_TEST_DIR / "test_ce_sec_005_real_bench.py",
+    ENGINE_TEST_DIR / "test_ce_sec_005_live_http.py",
 )
 REAL_BENCH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "real-bench.yml"
 
@@ -43,27 +46,29 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
             self.assertNotIn(value, out.getvalue())
 
     def test_integration_suite_has_zero_mocks(self) -> None:
-        src = ENGINE_TEST_FILE.read_text(encoding="utf-8")
-        tree = ast.parse(src, filename=str(ENGINE_TEST_FILE))
-        imported_modules: set[str] = set()
-        used_names: set[str] = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    imported_modules.add(alias.name)
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    imported_modules.add(node.module)
-                for alias in node.names:
-                    imported_modules.add(f"{node.module or ''}.{alias.name}")
-            elif isinstance(node, ast.Name):
-                used_names.add(node.id)
-            elif isinstance(node, ast.Attribute):
-                used_names.add(node.attr)
+        for test_file in ENGINE_TEST_FILES:
+            with self.subTest(suite=test_file.stem):
+                src = test_file.read_text(encoding="utf-8")
+                tree = ast.parse(src, filename=str(test_file))
+                imported_modules: set[str] = set()
+                used_names: set[str] = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        for alias in node.names:
+                            imported_modules.add(alias.name)
+                    elif isinstance(node, ast.ImportFrom):
+                        if node.module:
+                            imported_modules.add(node.module)
+                        for alias in node.names:
+                            imported_modules.add(f"{node.module or ''}.{alias.name}")
+                    elif isinstance(node, ast.Name):
+                        used_names.add(node.id)
+                    elif isinstance(node, ast.Attribute):
+                        used_names.add(node.attr)
 
-        self.assertFalse(any("mock" in mod.lower() for mod in imported_modules), imported_modules)
-        self.assertNotIn("SimulatedFrappeRuntime", used_names)
-        self.assertNotIn("MagicMock", used_names)
+                self.assertFalse(any("mock" in mod.lower() for mod in imported_modules), imported_modules)
+                self.assertNotIn("SimulatedFrappeRuntime", used_names)
+                self.assertNotIn("MagicMock", used_names)
 
     def test_require_real_bench_fails_closed_without_frappe(self) -> None:
         env = {
@@ -71,22 +76,19 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
             "CE_SEC_005_REAL_BENCH": "1",
             "PYTHONPATH": str(REPO_ROOT / "apps" / "engine" / "change_engine"),
         }
-        res = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "unittest",
-                "change_engine.tests.test_ce_sec_005_real_bench",
-            ],
-            cwd=str(REPO_ROOT),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        self.assertNotEqual(res.returncode, 0, "CE_SEC_005_REAL_BENCH=1 must fail closed without Frappe.")
-        self.assertIn("CE_SEC_005_REAL_BENCH=1 requires real Frappe runtime", res.stderr)
+        for test_file in ENGINE_TEST_FILES:
+            with self.subTest(suite=test_file.stem):
+                res = subprocess.run(
+                    [sys.executable, "-m", "unittest", f"change_engine.tests.{test_file.stem}"],
+                    cwd=str(REPO_ROOT),
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+                self.assertNotEqual(res.returncode, 0, "CE_SEC_005_REAL_BENCH=1 must fail closed without Frappe.")
+                self.assertIn("CE_SEC_005_REAL_BENCH=1 requires real Frappe runtime", res.stderr)
 
     def test_offline_run_skips_cleanly_without_real_bench_flag(self) -> None:
         env = {
@@ -95,22 +97,19 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
             if k not in ("CE_SEC_005_REAL_BENCH", "CE_SEC_005_SITE")
         }
         env["PYTHONPATH"] = str(REPO_ROOT / "apps" / "engine" / "change_engine")
-        res = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "unittest",
-                "change_engine.tests.test_ce_sec_005_real_bench",
-            ],
-            cwd=str(REPO_ROOT),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        self.assertEqual(res.returncode, 0, res.stderr or res.stdout)
-        self.assertIn("skipped=", res.stdout + res.stderr)
+        for test_file in ENGINE_TEST_FILES:
+            with self.subTest(suite=test_file.stem):
+                res = subprocess.run(
+                    [sys.executable, "-m", "unittest", f"change_engine.tests.{test_file.stem}"],
+                    cwd=str(REPO_ROOT),
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+                self.assertEqual(res.returncode, 0, res.stderr or res.stdout)
+                self.assertIn("skipped=", res.stdout + res.stderr)
 
     def test_orchestrator_rejects_unsafe_project_and_site_names(self) -> None:
         with self.assertRaises(ValueError):

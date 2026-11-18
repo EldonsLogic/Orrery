@@ -296,7 +296,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-024 | Holiday calendars per country with admin-editable moon-sighting overrides | Compliance | G2 | CMP-023 | partner | todo |
 | CMP-025 | Fiscal-year type and start handling; zakat period handling | Compliance | G2 | CMP-023,CMP-013 | partner | todo |
 | CMP-026 | Timezone handling and Egypt daylight-saving rules (UNVERIFIED) | Compliance | G2 | CMP-023 | partner | todo |
-| CMP-027 | Egypt market research: e-invoicing, VAT, data protection, payroll (all UNVERIFIED) | Compliance | G1 | CMP-001 | eldon | todo |
+| CMP-027 | Egypt market research: e-invoicing, VAT, data protection, payroll (all UNVERIFIED) | Compliance | G1 | CMP-001 | eldon | done |
 | CMP-028 | Egypt country pack | Compliance | G2 | CMP-027,CMP-021 | partner | todo |
 | CMP-029 | UAE country pack and KSA country pack built on the framework | Compliance | G2 | CMP-021,CMP-006 | partner | todo |
 | ERP-019 | Dual-date display (Gregorian plus Hijri) on documents, locked regions respected | Runtime | G2 | CMP-022,ERP-016 | partner | todo |

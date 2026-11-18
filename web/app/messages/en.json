@@ -201,7 +201,9 @@
       "total": "{count, plural, one {# record} other {# records}}",
       "previous": "Previous",
       "next": "Next",
-      "pageOf": "Page {page} of {pageCount}"
+      "pageOf": "Page {page} of {pageCount}",
+      "import": "Import",
+      "export": "Export"
     },
     "form": {
       "noAccess": "You do not have access to this record.",
@@ -235,6 +237,87 @@
       "empty": "empty",
       "noChanges": "No field values change; the record moves to its next status.",
       "confirm": "Confirm",
+      "back": "Go back"
+    },
+    "import": {
+      "title": "Import {entity}",
+      "noAccess": "You do not have access to import here.",
+      "blocked": "This import cannot run: you cannot fill these required fields: {fields}.",
+      "needsApproval": "Importing here needs approval and cannot be run from this screen.",
+      "steps": "Import steps",
+      "step": {
+        "upload": "1. Upload",
+        "map": "2. Map columns",
+        "preview": "3. Check",
+        "confirm": "4. Confirm"
+      },
+      "next": "Next",
+      "back": "Go back",
+      "actionLabel": "Import records",
+      "upload": {
+        "intro": "Choose a CSV file with a header row (up to {max} rows). Nothing is saved until you confirm at the end.",
+        "file": "CSV file",
+        "hint": "Excel files are not read here yet: save the sheet as CSV."
+      },
+      "fileError": {
+        "tooBig": "The file is too large.",
+        "excel": "Excel files cannot be read here yet. Save the sheet as CSV and upload that.",
+        "unterminatedQuote": "The file has an opening quote that never closes.",
+        "empty": "The file needs a header row and at least one data row.",
+        "tooManyRows": "The file has too many rows. Split it into smaller files.",
+        "unreadable": "The file could not be read."
+      },
+      "map": {
+        "intro": "Match each column of your file ({count, plural, one {# row} other {# rows}}) to a field. Columns left as skipped are ignored.",
+        "column": "File column: {header}",
+        "skip": "Skip this column",
+        "duplicate": "{field} is matched to more than one column.",
+        "missingRequired": "{field} is required: match a column to it."
+      },
+      "preview": {
+        "line": "Line",
+        "status": "Result",
+        "valid": "Ready",
+        "validCount": "{count, plural, one {# row ready} other {# rows ready}}",
+        "invalidCount": "{count, plural, one {# row with problems} other {# rows with problems}}",
+        "note": "Rows with problems are skipped. Showing the problem rows first, then a few ready rows.",
+        "caption": "Import preview",
+        "empty": "No rows to show."
+      },
+      "report": {
+        "download": "Download error report",
+        "line": "Line",
+        "field": "Field",
+        "problem": "Problem",
+        "value": "Value in file"
+      },
+      "confirm": {
+        "rows": "Records to create",
+        "skipped": "Rows skipped"
+      },
+      "errors": {
+        "required": "Required value is missing",
+        "tooLong": "Text is too long",
+        "notNumber": "Not a valid number",
+        "notInteger": "Not a whole number",
+        "tooPrecise": "Too many decimal places",
+        "notDate": "Not a valid date (use YYYY-MM-DD)",
+        "notBoolean": "Use yes or no",
+        "notOption": "Not one of the allowed values",
+        "notLink": "No such linked record",
+        "notEmail": "Not a valid email address",
+        "notPhone": "Not a valid phone number"
+      }
+    },
+    "export": {
+      "title": "Export {entity}",
+      "noAccess": "You do not have access to export this list.",
+      "id": "No.",
+      "intro": "The file will hold {count, plural, one {# record} other {# records}} and {columns} columns. Fields you cannot see are not included.",
+      "previewCaption": "Export preview",
+      "empty": "No records to export.",
+      "excelLater": "Excel files are not produced here yet. Open the CSV in your spreadsheet program.",
+      "downloadCsv": "Download CSV",
       "back": "Go back"
     }
   },

@@ -57,4 +57,4 @@ After the model choice, resume the saved fixes, validate each original failing c
 
 ## Main update reconciliation
 
-Rebased onto `9cd82cd`, preserving Eldon's completed WEB-016 and BPL-023 rows. Merged `origin/main` after `Q-161` was allocated on `main`; this session's new questions are therefore `Q-164` to `Q-166` (superseding the provisional `Q-146`–`Q-148` / `Q-147`–`Q-149` numbers above). No founder-owned row was reverted.
+Rebased onto `9cd82cd`, preserving Eldon's completed WEB-016 and BPL-023 rows. Merged `origin/main` after `Q-209` was allocated on `main`; this session's new questions are therefore `Q-210` to `Q-212` (superseding the provisional `Q-146`–`Q-148` / `Q-147`–`Q-149` / `Q-164`–`Q-166` numbers). No founder-owned row was reverted.

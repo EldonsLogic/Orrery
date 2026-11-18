@@ -1,0 +1,97 @@
+{
+  "country_code": "sa",
+  "name": "Saudi Arabia Trading and Distribution",
+  "tree": {
+    "الأصول (Assets)": {
+      "root_type": "Asset",
+      "account_number": "1000",
+      "الأصول المتداولة (Current Assets)": {
+        "account_number": "1100",
+        "النقدية في الصندوق (Cash on Hand)": {"account_number": "1110", "account_type": "Cash"},
+        "الحساب البنكي (Bank Account)": {"account_number": "1120", "account_type": "Bank"},
+        "الذمم المدينة التجارية (Trade Receivables)": {"account_number": "1130", "account_type": "Receivable"},
+        "مخصص هبوط الذمم المدينة (Receivables Impairment Allowance)": {"account_number": "1131", "account_type": "Current Asset"},
+        "مخزون البضائع (Merchandise Inventory)": {"account_number": "1140", "account_type": "Stock"},
+        "ضريبة القيمة المضافة القابلة للاسترداد (Recoverable VAT)": {
+          "account_number": "1150",
+          "ضريبة المدخلات المحلية (Domestic Input VAT)": {"account_number": "1151", "account_type": "Tax"},
+          "ضريبة المدخلات على الواردات (Import Input VAT)": {"account_number": "1152", "account_type": "Tax"},
+          "ضريبة المدخلات بالاحتساب العكسي (Reverse Charge Input VAT)": {"account_number": "1153", "account_type": "Tax"}
+        },
+        "المصروفات المدفوعة مقدما (Prepayments)": {"account_number": "1160", "account_type": "Current Asset"},
+        "دفعات مقدمة للموردين (Supplier Advances)": {"account_number": "1170", "account_type": "Current Asset"},
+        "حساب افتتاحي مؤقت (Temporary Opening)": {"account_number": "1190", "account_type": "Temporary"}
+      },
+      "الأصول غير المتداولة (Non-Current Assets)": {
+        "account_number": "1200",
+        "الممتلكات والآلات والمعدات (Property Plant and Equipment)": {"account_number": "1210", "account_type": "Fixed Asset"},
+        "مجمع الإهلاك (Accumulated Depreciation)": {"account_number": "1220", "account_type": "Accumulated Depreciation"},
+        "مشروعات رأسمالية تحت التنفيذ (Capital Work in Progress)": {"account_number": "1230", "account_type": "Capital Work in Progress"}
+      }
+    },
+    "الالتزامات (Liabilities)": {
+      "root_type": "Liability",
+      "account_number": "2000",
+      "الالتزامات المتداولة (Current Liabilities)": {
+        "account_number": "2100",
+        "الذمم الدائنة التجارية (Trade Payables)": {"account_number": "2110", "account_type": "Payable"},
+        "بضائع مستلمة غير مفوترة (Stock Received But Not Billed)": {"account_number": "2120", "account_type": "Stock Received But Not Billed"},
+        "أصول مستلمة غير مفوترة (Assets Received But Not Billed)": {"account_number": "2130", "account_type": "Asset Received But Not Billed"},
+        "المصروفات المستحقة (Accrued Expenses)": {"account_number": "2140", "account_type": "Current Liability"},
+        "دفعات مقدمة من العملاء (Customer Advances)": {"account_number": "2150", "account_type": "Current Liability"},
+        "الجزء المتداول من القروض (Current Portion of Borrowings)": {"account_number": "2160", "account_type": "Current Liability"},
+        "فروقات تقريب الأرصدة الافتتاحية (Opening Balance Round Off)": {"account_number": "2170", "account_type": "Round Off for Opening"},
+        "ضريبة القيمة المضافة المستحقة (VAT Liabilities)": {
+          "account_number": "2200",
+          "ضريبة المخرجات (Output VAT)": {"account_number": "2210", "account_type": "Tax"},
+          "ضريبة المخرجات بالاحتساب العكسي (Reverse Charge Output VAT)": {"account_number": "2220", "account_type": "Tax"},
+          "تسوية ضريبة القيمة المضافة (VAT Settlement)": {"account_number": "2230", "account_type": "Current Liability"}
+        }
+      },
+      "الالتزامات غير المتداولة (Non-Current Liabilities)": {
+        "account_number": "2300",
+        "القروض طويلة الأجل (Long-Term Borrowings)": {"account_number": "2310", "account_type": "Liability"}
+      }
+    },
+    "حقوق الملكية (Equity)": {
+      "root_type": "Equity",
+      "account_number": "3000",
+      "رأس المال (Capital)": {"account_number": "3100", "account_type": "Equity"},
+      "الأرباح المبقاة (Retained Earnings)": {"account_number": "3200", "account_type": "Equity"},
+      "توزيعات الأرباح (Distributions)": {"account_number": "3300", "account_type": "Equity"}
+    },
+    "الإيرادات (Income)": {
+      "root_type": "Income",
+      "account_number": "4000",
+      "إيرادات بيع البضائع (Merchandise Sales)": {"account_number": "4100", "account_type": "Income Account"},
+      "مردودات ومسموحات المبيعات (Sales Returns and Allowances)": {"account_number": "4200", "account_type": "Direct Income"},
+      "إيرادات تشغيلية أخرى (Other Operating Income)": {"account_number": "4300", "account_type": "Indirect Income"}
+    },
+    "المصروفات (Expenses)": {
+      "root_type": "Expense",
+      "account_number": "5000",
+      "تكاليف البضائع والمخزون (Merchandise and Inventory Costs)": {
+        "account_number": "5100",
+        "تكلفة البضاعة المباعة (Cost of Goods Sold)": {"account_number": "5110", "account_type": "Cost of Goods Sold"},
+        "تسويات المخزون (Stock Adjustment)": {"account_number": "5120", "account_type": "Stock Adjustment"},
+        "مصاريف محملة على تكلفة المخزون (Expenses Included in Inventory Valuation)": {"account_number": "5130", "account_type": "Expenses Included In Valuation"}
+      },
+      "المصروفات التشغيلية والتمويلية (Operating and Finance Expenses)": {
+        "account_number": "5200",
+        "مصروفات البيع والتوزيع (Selling and Distribution Expenses)": {"account_number": "5210", "account_type": "Indirect Expense"},
+        "المصروفات العمومية والإدارية (General and Administrative Expenses)": {"account_number": "5220", "account_type": "Indirect Expense"},
+        "مصروف الإهلاك (Depreciation Expense)": {"account_number": "5230", "account_type": "Depreciation"},
+        "تكاليف التمويل (Finance Costs)": {"account_number": "5240", "account_type": "Indirect Expense"},
+        "خسائر هبوط الذمم المدينة (Receivables Impairment Expense)": {"account_number": "5250", "account_type": "Indirect Expense"},
+        "مصاريف محملة على تكلفة الأصول (Expenses Included in Asset Valuation)": {"account_number": "5260", "account_type": "Expenses Included In Asset Valuation"},
+        "أرباح وخسائر استبعاد الأصول (Asset Disposal Gain or Loss)": {"account_number": "5270", "account_type": "Indirect Expense"}
+      },
+      "فروقات التقريب والشطب (Rounding and Write-Offs)": {
+        "account_number": "5300",
+        "فروقات التقريب (Round Off)": {"account_number": "5310", "account_type": "Round Off"},
+        "شطب الأرصدة (Write Off)": {"account_number": "5330", "account_type": "Indirect Expense"},
+        "أرباح وخسائر فروق العملة (Exchange Gain or Loss)": {"account_number": "5340", "account_type": "Indirect Expense"}
+      }
+    }
+  }
+}

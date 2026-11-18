@@ -10,7 +10,8 @@ import contextvars
 import json
 import re
 import secrets
-from dataclasses import dataclass
+import weakref
+from dataclasses import dataclass, fields
 from typing import Optional
 
 from .errors import IdentityError
@@ -45,15 +46,15 @@ class RealmConfig:
         return self.audience
 
 
-_SEAL = object()  # private; only `_mint_claims` stamps it on a verified instance
 _MINTING = contextvars.ContextVar("identity_minting_claims", default=False)
 
 
 @dataclass(frozen=True)
 class AccessClaims:
     """Claims of a token that `decode` verified. Callers cannot build one: direct
-    construction, `replace` and copies raise IDN-006, and consumers re-check the
-    seal and the time window on every use (`check_live`). Best-effort in-process
+    construction, `replace` and copies raise IDN-006, and consumers re-check on
+    every use (`check_live`) that this exact object came from `decode` with these
+    exact values, and that it is inside its time window. Best-effort in-process
     guard, not a security boundary; the signature is the boundary (Q-152)."""
     issuer: str
     audience: str
@@ -83,21 +84,56 @@ class AccessClaims:
 
 
 VerifiedClaims = AccessClaims  # the name consumers should use
+_FIELDS = tuple(f.name for f in fields(AccessClaims))
 
 
 def _mint_claims(*args) -> AccessClaims:
+    """Build an instance. It is not registered, so it fails `check_live`; only
+    `decode` registers what it builds."""
     token = _MINTING.set(True)
     try:
-        claims = AccessClaims(*args)
+        return AccessClaims(*args)
     finally:
         _MINTING.reset(token)
-    object.__setattr__(claims, "_seal", _SEAL)
-    return claims
+
+
+def _registry():
+    """Private registry: object id -> (weak reference, typed field values) for every
+    instance `decode` minted. Binding the object identity and its values means a
+    `__dict__` copy, an in-place `object.__setattr__`, a subclass or a `__class__`
+    swap all fail. Python cannot hide it from deliberate introspection (Q-152)."""
+    live = {}
+
+    def values(claims):
+        state = object.__getattribute__(claims, "__dict__")
+        return tuple((type(state.get(n)), state.get(n)) for n in _FIELDS)
+
+    def register(claims):
+        key = id(claims)
+
+        def gone(ref, key=key):
+            if live.get(key, (None,))[0] is ref:
+                del live[key]
+
+        live[key] = (weakref.ref(claims, gone), values(claims))
+        return claims
+
+    def registered(claims) -> bool:
+        if type(claims) is not AccessClaims:
+            return False
+        entry = live.get(id(claims))
+        return entry is not None and entry[0]() is claims and entry[1] == values(claims)
+
+    return register, registered
+
+
+_register, _registered = _registry()
 
 
 def check_live(claims, now: int) -> AccessClaims:
-    """Verify-on-use: the object came from `decode` and is inside its time window."""
-    if not isinstance(claims, AccessClaims) or getattr(claims, "_seal", None) is not _SEAL:
+    """Verify-on-use: this exact object came from `decode`, unchanged, and is
+    inside its time window."""
+    if not _registered(claims):
         raise IdentityError("IDN-006")
     if claims.not_before > now or claims.issued_at > now:
         raise IdentityError("IDN-005")
@@ -214,5 +250,6 @@ def decode(token, cfg: RealmConfig, *, now: int, tenant: Optional[str]) -> Acces
         raise IdentityError("IDN-004")
     if c["exp"] - c["iat"] > MAX_TTL or c["auth_time"] > c["iat"]:
         raise IdentityError("IDN-008")
-    return _mint_claims(c["iss"], c["aud"], c["sub"], c["tid"], realm, c["sv"], c["mfa"],
-                        c["auth_time"], c["iat"], c["nbf"], c["exp"], c["jti"])
+    return _register(_mint_claims(c["iss"], c["aud"], c["sub"], c["tid"], realm, c["sv"],
+                                  c["mfa"], c["auth_time"], c["iat"], c["nbf"], c["exp"],
+                                  c["jti"]))

@@ -1,0 +1,26 @@
+# SEC-004 cross-tenant isolation harness: overlay on ../docker-compose.dev.yml.
+# Adds a background worker (the dev bench runs none) so job-context isolation is
+# exercised for real. Relative paths resolve against the first compose file's
+# directory (infra/dev/docker), so the worker builds the same engine image.
+# Use only with a throwaway project name (run_isolation_suite.py sets one).
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["worker"]
+    restart: unless-stopped
+    depends_on:
+      engine:
+        condition: service_started
+    environment:
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - REDIS_CACHE_HOST=redis-cache
+      - REDIS_QUEUE_HOST=redis-queue
+      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
+    volumes:
+      - ../../../apps/engine/change_engine:/home/frappe/frappe-bench/apps/change_engine:rw
+      - sites_data:/home/frappe/frappe-bench/sites
+      - logs_data:/home/frappe/frappe-bench/logs

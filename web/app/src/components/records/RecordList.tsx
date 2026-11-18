@@ -49,9 +49,11 @@ export function RecordList({ data, entityId, caller, initialQuery }: RecordListP
     <div>
       <div className={styles.head}>
         <h1 className={styles.title}>{model.title}</h1>
-        {model.createAction ? (
-          <a className={styles.link} href={`/records/${entityId}/new/`}>{t('create')}</a>
-        ) : null}
+        <Stack direction="row" gap={2} align="center" wrap>
+          {model.createAction ? <a className={styles.link} href={`/records/${entityId}/new/`}>{t('create')}</a> : null}
+          {model.createAction ? <a className={styles.link} href={`/records/${entityId}/import/`}>{t('import')}</a> : null}
+          <a className={styles.link} href={`/records/${entityId}/export/`}>{t('export')}</a>
+        </Stack>
       </div>
       <div className={styles.bar}>
         <TextField className={styles.grow} type="search" label={t('search')} value={model.query.search} onChange={(e) => set({ search: e.target.value, page: 1 })} />

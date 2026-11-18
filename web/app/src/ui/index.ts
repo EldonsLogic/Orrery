@@ -3,6 +3,7 @@ export { Badge, type BadgeProps, type BadgeTone } from './Badge';
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from './Button';
 export { Card, type CardProps } from './Card';
 export { Checkbox, type CheckboxProps } from './Checkbox';
+export { DatePicker, type Calendar, type DatePickerLabels, type DatePickerProps } from './DatePicker';
 export { Select, type SelectProps } from './Select';
 export { Spinner, type SpinnerProps } from './Spinner';
 export { Stack, type StackProps } from './Stack';

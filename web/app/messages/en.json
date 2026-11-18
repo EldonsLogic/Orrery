@@ -106,6 +106,29 @@
         "colStatus": "Status",
         "colAmount": "Amount",
         "empty": "No invoices yet."
+      },
+      "datePicker": {
+        "title": "Date picker",
+        "calendarLabel": "Calendar",
+        "gregorian": "Gregorian",
+        "hijri": "Hijri",
+        "weekStartLabel": "Week starts on",
+        "secondary": "Show the other calendar",
+        "dueLabel": "Due date",
+        "dueHint": "Type 2025-06-26 or 1447-01-01, or open the calendar.",
+        "stored": "Stored value:",
+        "none": "none",
+        "openCalendar": "Open calendar",
+        "previousMonth": "Previous month",
+        "nextMonth": "Next month",
+        "calendarDialog": "Choose a date",
+        "invalidError": "That is not a valid date.",
+        "ambiguousError": "Day and month could be read two ways. Type the year first, for example 2025-04-03.",
+        "days": {
+          "0": "Sunday",
+          "1": "Monday",
+          "6": "Saturday"
+        }
       }
     }
   },

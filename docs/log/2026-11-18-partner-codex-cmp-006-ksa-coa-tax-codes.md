@@ -17,7 +17,7 @@ Implement CMP-006 for Saudi trading and distribution SMEs. Deliver a bilingual e
 
 - `apps/engine/compliance/ksa/` holds the native chart, number-based company defaults and VAT treatments.
 - `apps/engine/change_engine/change_engine/tests/test_cmp_006_ksa_accounts.py` checks the JSON, tree, account types, bilingual labels, defaults and VAT links.
-- [Design and sources](../compliance/ksa-coa-and-tax-codes.md) and [open questions](../open-questions.md) record Q-8 and Q-147. PLAN claims CMP-006 for the partner.
+- [Design and sources](../compliance/ksa-coa-and-tax-codes.md) and [open questions](../open-questions.md) record Q-8 and Q-168. PLAN claims CMP-006 for the partner.
 
 ## Verification
 
@@ -37,4 +37,4 @@ Unknown.
 
 ## Next step
 
-Record line-by-line human review by the founder who did not prompt the change, independent security and cross-model review, and an Arabic-speaking accountant's review. Resolve the chart adoption decision in Q-8 and invoice and posting questions in Q-147 before enabling the data for tenants.
+Record line-by-line human review by the founder who did not prompt the change, independent security and cross-model review, and an Arabic-speaking accountant's review. Resolve the chart adoption decision in Q-8 and invoice and posting questions in Q-168 before enabling the data for tenants.

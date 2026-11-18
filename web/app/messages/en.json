@@ -185,5 +185,57 @@
       "title": "The app could not start",
       "body": "A serious error stopped the page. Reload it, or come back later."
     }
+  },
+  "records": {
+    "list": {
+      "noAccess": "You do not have access to this list.",
+      "id": "No.",
+      "status": "Status",
+      "search": "Search",
+      "filterBy": "Filter by {column}",
+      "all": "All",
+      "sortBy": "Sort by {column}",
+      "caption": "{entity}",
+      "empty": "No records match.",
+      "create": "New",
+      "total": "{count, plural, one {# record} other {# records}}",
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {page} of {pageCount}"
+    },
+    "form": {
+      "noAccess": "You do not have access to this record.",
+      "titleNew": "New {entity}",
+      "titleRecord": "{entity} {id}",
+      "readOnly": "This record is read-only for you or in its current status.",
+      "required": "Required",
+      "choose": "Select",
+      "result": {
+        "waiting_for_gateway": "Not connected yet: nothing was saved. Changes start working when the platform gateway is connected.",
+        "refused": "This action cannot be run from here."
+      }
+    },
+    "actions": {
+      "create": "Create",
+      "edit": "Save changes",
+      "amend": "Amend",
+      "submit": "Submit",
+      "cancel": "Cancel",
+      "transition": "Continue",
+      "needsApproval": "Needs approval"
+    },
+    "confirm": {
+      "title": "Confirm: {action}",
+      "intro": "You are about to {action} for {entity} {id}. Check what will change.",
+      "introNew": "You are about to {action} for a new {entity}. Check what will change.",
+      "risk": "Risk level: {risk}.",
+      "sensitive": "This affects accounts, tax or something sent outside the company.",
+      "changes": "Changes",
+      "change": "{field}: {before} to {after}",
+      "empty": "empty",
+      "noChanges": "No field values change; the record moves to its next status.",
+      "confirm": "Confirm",
+      "back": "Go back"
+    }
   }
 }

@@ -79,6 +79,7 @@ class ChangeEngineHarness(_BaseHarness):
         return ChangeEngineHarness(
             ChangeEngineAdapter(
                 test_hooks=False,
+                environment="test",
                 db_path=self.db_path,
                 frappe_backend=self.adapter.frappe_backend,
             ),

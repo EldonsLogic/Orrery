@@ -29,6 +29,7 @@ from change_engine.adapter.mapping import (
     plan_statements_for_step,
 )
 from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord
+from change_engine.adapter.store_api import AdapterStore, assert_store_allowed, is_production
 
 ADAPTER_ID = "frappe"
 ADAPTER_VERSION = "0.1.0"
@@ -272,10 +273,14 @@ class ChangeEngineAdapter:
         test_hooks: bool = True,
         db_path: str = ":memory:",
         frappe_backend: Any | None = None,
+        store: AdapterStore | None = None,
+        environment: str | None = None,
     ) -> None:
         self.test_hooks = test_hooks
         self.db_path = db_path
-        self.store = SQLiteAdapterStore(db_path=db_path)
+        self.store = store if store is not None else SQLiteAdapterStore(db_path=db_path)
+        # ERP-026: production never runs on a volatile store (environment or CHANGE_ENGINE_ENV; fails closed)
+        assert_store_allowed(self.store, is_production(test_hooks, environment))
         self.frappe_backend = frappe_backend
         self.now = 0
         self._seq = self._initial_seq()

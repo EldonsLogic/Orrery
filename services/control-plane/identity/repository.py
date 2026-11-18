@@ -3,7 +3,11 @@
 No real users may be stored until Q-14 (where the identity store lives) is
 answered; the real store arrives with the identity-provider spike. A real
 implementation must make `mark_invite_used` and `mark_refresh_used` atomic
-compare-and-set operations, or single use and reuse detection break."""
+compare-and-set operations, or single use and reuse detection break. Family
+revocation is a durable tombstone: `put_refresh` must check it and store in one
+atomic step, so a rotation racing reuse detection cannot mint a live token in a
+revoked family. The session high-water mark per person and tenant must survive
+membership removal and never go down."""
 
 from abc import ABC, abstractmethod
 from dataclasses import replace
@@ -42,14 +46,26 @@ class Repository(ABC):
     def mark_invite_used(self, invite_hash: str, at: int) -> bool:
         """Atomically set used_at if unset; False if it was already used or unknown."""
     @abstractmethod
-    def put_refresh(self, record: RefreshRecord) -> None: ...
+    def put_refresh(self, record: RefreshRecord) -> bool:
+        """Atomically store unless the record's family is revoked; False if revoked."""
     @abstractmethod
     def get_refresh(self, token_hash: str) -> Optional[RefreshRecord]: ...
     @abstractmethod
     def mark_refresh_used(self, token_hash: str) -> bool:
         """Atomically mark used; False if it was already used or unknown."""
     @abstractmethod
-    def revoke_family(self, family_id: str) -> None: ...
+    def revoke_family(self, family_id: str) -> None:
+        """Tombstone the family (permanent) and flag its existing records."""
+    @abstractmethod
+    def is_family_revoked(self, family_id: str) -> bool: ...
+    @abstractmethod
+    def families_for(self, person_id: str, tenant_id: str) -> frozenset: ...
+    @abstractmethod
+    def get_session_high_water(self, person_id: str, tenant_id: str) -> int:
+        """Highest session version ever used for this person and tenant; 0 if none."""
+    @abstractmethod
+    def raise_session_high_water(self, person_id: str, tenant_id: str, version: int) -> None:
+        """Set the mark to max(current, version); it never goes down."""
     @abstractmethod
     def put_grant(self, grant: SupportGrant) -> None: ...
     @abstractmethod
@@ -62,6 +78,7 @@ class InMemoryRepository(Repository):
     def __init__(self):
         self._persons, self._staff, self._tenants = {}, {}, {}
         self._members, self._invites, self._refresh, self._grants = {}, {}, {}, {}
+        self._revoked_families, self._high_water = set(), {}
 
     def get_person(self, person_id):
         return self._persons.get(person_id)
@@ -107,7 +124,10 @@ class InMemoryRepository(Repository):
         return True
 
     def put_refresh(self, record):
+        if record.family_id in self._revoked_families:
+            return False
         self._refresh[record.token_hash] = record
+        return True
 
     def get_refresh(self, token_hash):
         return self._refresh.get(token_hash)
@@ -120,9 +140,24 @@ class InMemoryRepository(Repository):
         return True
 
     def revoke_family(self, family_id):
+        self._revoked_families.add(family_id)
         for key, rec in list(self._refresh.items()):
             if rec.family_id == family_id:
                 self._refresh[key] = replace(rec, revoked=True)
+
+    def is_family_revoked(self, family_id):
+        return family_id in self._revoked_families
+
+    def families_for(self, person_id, tenant_id):
+        return frozenset(r.family_id for r in self._refresh.values()
+                         if (r.person_id, r.tenant_id) == (person_id, tenant_id))
+
+    def get_session_high_water(self, person_id, tenant_id):
+        return self._high_water.get((person_id, tenant_id), 0)
+
+    def raise_session_high_water(self, person_id, tenant_id, version):
+        key = (person_id, tenant_id)
+        self._high_water[key] = max(self._high_water.get(key, 0), version)
 
     def put_grant(self, grant):
         self._grants[grant.grant_id] = grant

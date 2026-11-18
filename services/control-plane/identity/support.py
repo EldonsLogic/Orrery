@@ -8,13 +8,12 @@ import secrets
 from dataclasses import replace
 
 from .errors import IdentityError
-from .models import GrantStatus, Realm, SupportGrant
+from .models import OPEN_TENANT, GrantStatus, Realm, SupportGrant
 from .policy import is_owner_or_admin
-from .service import IdentityService
+from .service import STEP_UP_MAX_AGE, IdentityService  # noqa: F401 (re-exported)
 from .tokens import AccessClaims
 
 MAX_SUPPORT_SECONDS = 4 * 3600
-STEP_UP_MAX_AGE = 300  # approver must have authenticated with MFA this recently
 MAX_REASON_LEN = 500
 
 
@@ -28,6 +27,22 @@ class SupportGrantService:
     def __init__(self, identity: IdentityService):
         self.idn = identity
 
+    def _live_staff(self, claims) -> AccessClaims:
+        """Re-check the staff identity on every call, even after verify_staff_token:
+        active, current session version, MFA."""
+        claims = _staff_claims(claims)
+        staff = self.idn.repo.get_staff(claims.subject)
+        if staff is None or not staff.active:
+            raise IdentityError("IDN-010")
+        if staff.session_version != claims.session_version or claims.mfa_satisfied is not True:
+            raise IdentityError("IDN-009")
+        return claims
+
+    def _open_tenant(self, tenant_id) -> None:
+        tenant = self.idn.repo.get_tenant(tenant_id) if isinstance(tenant_id, str) else None
+        if tenant is None or tenant.status not in OPEN_TENANT:
+            raise IdentityError("IDN-011")
+
     def _tenant(self, grant_id):
         """Tenant of a grant, for the tenant-visible audit; None if unknown."""
         grant = self.idn.repo.get_grant(grant_id) if isinstance(grant_id, str) else None
@@ -37,7 +52,7 @@ class SupportGrantService:
                 duration: int) -> str:
         with self.idn.decision("support.request", Realm.STAFF,
                                getattr(staff, "subject", None), tenant_id):
-            staff = _staff_claims(staff)
+            staff = self._live_staff(staff)
             if (not isinstance(reason, str) or not reason.strip()
                     or len(reason) > MAX_REASON_LEN
                     or not isinstance(scope, frozenset) or not scope
@@ -45,8 +60,7 @@ class SupportGrantService:
                     or isinstance(duration, bool) or not isinstance(duration, int)
                     or not 0 < duration <= MAX_SUPPORT_SECONDS):
                 raise IdentityError("IDN-043")
-            if self.idn.repo.get_tenant(tenant_id) is None:
-                raise IdentityError("IDN-011")
+            self._open_tenant(tenant_id)
             grant_id = secrets.token_urlsafe(16)
             self.idn.repo.put_grant(SupportGrant(grant_id, staff.subject, tenant_id,
                                                  reason.strip(), scope, self.idn.now(), duration))
@@ -73,9 +87,8 @@ class SupportGrantService:
                 raise IdentityError("IDN-041")
             if not is_owner_or_admin(self.idn.caller_roles(approver, grant.tenant_id)):
                 raise IdentityError("IDN-040")
+            self.idn.require_step_up(approver)
             now = self.idn.now()
-            if not approver.mfa_satisfied or now - approver.auth_time > STEP_UP_MAX_AGE:
-                raise IdentityError("IDN-013")
             approved = replace(grant, status=GrantStatus.APPROVED, approved_by=approver.subject,
                                approved_at=now, expires_at=now + grant.duration)
             self.idn.repo.put_grant(approved)
@@ -101,7 +114,8 @@ class SupportGrantService:
         """Call on every staff request to tenant data, after verify_staff_token."""
         with self.idn.decision("support.access", Realm.STAFF,
                                getattr(staff, "subject", None), tenant_id, grant_id):
-            staff = _staff_claims(staff)
+            staff = self._live_staff(staff)
+            self._open_tenant(tenant_id)
             grant = self.idn.repo.get_grant(grant_id)
             now = self.idn.now()
             if (grant is None or grant.status is not GrantStatus.APPROVED

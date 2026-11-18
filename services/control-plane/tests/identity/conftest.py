@@ -33,9 +33,16 @@ class DictResolver:
 
     def __init__(self):
         self.roles = {}
+        self.permissions = {}
 
     def roles_for(self, tenant_id, person_id):
         value = self.roles.get((tenant_id, person_id), ())
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    def permissions_for(self, tenant_id, person_id):
+        value = self.permissions.get((tenant_id, person_id), frozenset())
         if isinstance(value, Exception):
             raise value
         return value
@@ -69,6 +76,7 @@ class World:
         self.add_person("p-acct", "acct@example.test", mfa=True)
         self.add_person("p-new", "new@example.test", mfa=False, member_of=())
         self.resolver.roles[("t-a", "p-owner")] = (OWNER,)
+        self.resolver.permissions[("t-a", "p-owner")] = frozenset({"member.invite"})
         self.resolver.roles[("t-a", "p-clerk")] = (SALES,)
         self.resolver.roles[("t-a", "p-acct")] = (FINANCE,)
         self.resolver.roles[("t-b", "p-acct")] = (FINANCE,)

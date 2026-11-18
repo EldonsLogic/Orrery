@@ -20,6 +20,7 @@ from .tokens import AccessClaims, RealmConfig, decode, encode
 DEFAULT_REFRESH_TTL = 12 * 3600
 MAX_SESSION_AGE = 7 * 24 * 3600  # a refresh family never outlives this after sign-in
 REVOKE_REASONS = frozenset({"compromise", "logout", "admin"})
+STEP_UP_MAX_AGE = 300  # admin-kind changes need an MFA sign-in this recent (ADR-0007 item 6)
 
 
 def secret_hash(secret: str) -> str:
@@ -96,15 +97,23 @@ class IdentityService:
         return m
 
     def _mint(self, m: Membership, mfa: bool, auth_time: int, family_id: str, now: int):
+        secret = secrets.token_urlsafe(32)
+        expires = min(now + self.refresh_ttl, auth_time + MAX_SESSION_AGE)
+        # Stored first and atomically refused if the family was revoked meanwhile,
+        # so a rotation racing reuse detection never returns a live pair.
+        if not self.repo.put_refresh(RefreshRecord(secret_hash(secret), family_id, m.person_id,
+                                                   m.tenant_id, m.session_version, mfa,
+                                                   auth_time, expires)):
+            raise IdentityError("IDN-021")
         token, exp = encode(self.customer, subject=m.person_id, tenant=m.tenant_id,
                             session_version=m.session_version, mfa_satisfied=mfa,
                             auth_time=auth_time, now=now)
-        secret = secrets.token_urlsafe(32)
-        expires = min(now + self.refresh_ttl, auth_time + MAX_SESSION_AGE)
-        self.repo.put_refresh(RefreshRecord(secret_hash(secret), family_id, m.person_id,
-                                            m.tenant_id, m.session_version, mfa, auth_time,
-                                            expires))
         return TokenPair(token, secret, exp)
+
+    def require_step_up(self, claims: AccessClaims) -> None:
+        """Fresh MFA sign-in within STEP_UP_MAX_AGE; refresh keeps the old auth_time."""
+        if not claims.mfa_satisfied or self.now() - claims.auth_time > STEP_UP_MAX_AGE:
+            raise IdentityError("IDN-013")
 
     def issue_customer_token(self, person_id, tenant_id, *, mfa_satisfied, auth_time) -> TokenPair:
         """One token for one tenant (workspace). Switching workspace calls this again."""
@@ -131,7 +140,8 @@ class IdentityService:
                 raise IdentityError("IDN-020")
             h = secret_hash(refresh_token)
             rec = self.repo.get_refresh(h)
-            if rec is None or rec.tenant_id != tenant_id or rec.revoked:
+            if (rec is None or rec.tenant_id != tenant_id or rec.revoked
+                    or self.repo.is_family_revoked(rec.family_id)):
                 raise IdentityError("IDN-020")
             if rec.used or not self.repo.mark_refresh_used(h):
                 self.repo.revoke_family(rec.family_id)
@@ -166,10 +176,23 @@ class IdentityService:
             self._bump(m, status=MembershipStatus.SUSPENDED)
 
     def remove_membership(self, person_id, tenant_id) -> None:
+        """Keeps the session high-water mark so a re-admission starts above every
+        old token, and tombstones every refresh family of the membership."""
         with self.decision("membership.remove", Realm.CUSTOMER, person_id, tenant_id):
-            if self.repo.get_membership(person_id, tenant_id) is None:
+            m = self.repo.get_membership(person_id, tenant_id)
+            if m is None:
                 raise IdentityError("IDN-009")
+            self.repo.raise_session_high_water(person_id, tenant_id, m.session_version)
+            for family_id in self.repo.families_for(person_id, tenant_id):
+                self.repo.revoke_family(family_id)
             self.repo.delete_membership(person_id, tenant_id)
+
+    def next_session_version(self, person_id, tenant_id) -> int:
+        """Session version for a new membership: above any version used before."""
+        hw = self.repo.get_session_high_water(person_id, tenant_id)
+        if not _is_int(hw) or hw < 0:
+            raise IdentityError("IDN-051")
+        return hw + 1
 
     def suspend_tenant(self, tenant_id) -> None:
         """ADR-0007 consequences: suspension blocks issuance and bumps every session."""
@@ -202,6 +225,7 @@ class IdentityService:
                 raise IdentityError("IDN-034")
             if not is_owner(self.caller_roles(caller, tenant_id)):
                 raise IdentityError("IDN-015")
+            self.require_step_up(caller)
             tenant = self.repo.get_tenant(tenant_id)
             self.repo.put_tenant(replace(tenant, mfa_for_all=enabled))
             if enabled:

@@ -1,14 +1,14 @@
 """Invites (ADR-0007 item 12): single-use, expiring, bound to an email or phone
 that the accepting person has verified, creatable only by a caller holding the
-invite permission. Permissions are passed in as data the caller resolved from
-the tenant; they are never read from the request. Only the secret's hash is
+invite permission. The permission is resolved here for the verified caller from
+the injected RoleResolver (the tenant's assignment store), never taken as input. Only the secret's hash is
 stored, and audit records the channel kind, never the address."""
 
 import secrets
 
 from .errors import IdentityError
 from .models import OPEN_TENANT, Channel, Invite, Membership, Realm
-from .policy import has_invite_permission
+from .policy import has_invite_permission, resolve_permissions
 from .service import IdentityService, secret_hash
 from .tokens import AccessClaims
 
@@ -21,15 +21,15 @@ class InviteService:
     def __init__(self, identity: IdentityService):
         self.idn = identity
 
-    def create(self, caller: AccessClaims, tenant_id: str, caller_permissions: frozenset,
-               channel: Channel, ttl: int = DEFAULT_INVITE_TTL) -> str:
+    def create(self, caller: AccessClaims, tenant_id: str, channel: Channel, ttl: int = DEFAULT_INVITE_TTL) -> str:
         """Return the invite secret (send it over `channel`; never log it)."""
         subject = getattr(caller, "subject", None)
         kind = getattr(channel, "kind", "")
         with self.idn.decision("invite.create", Realm.CUSTOMER, subject, tenant_id,
                                kind if kind in CHANNEL_KINDS else ""):
             self.idn.caller_roles(caller, tenant_id)  # verified, active, current session
-            if not has_invite_permission(caller_permissions):
+            perms = resolve_permissions(self.idn.roles, tenant_id, caller.subject)
+            if not has_invite_permission(perms):
                 raise IdentityError("IDN-030")
             if (not isinstance(channel, Channel) or channel.kind not in CHANNEL_KINDS
                     or not isinstance(channel.address, str) or not channel.address.strip()
@@ -65,10 +65,11 @@ class InviteService:
                 raise IdentityError("IDN-011")
             if self.idn.repo.get_membership(person_id, invite.tenant_id) is not None:
                 raise IdentityError("IDN-034")
+            version = self.idn.next_session_version(person_id, invite.tenant_id)
             if not self.idn.repo.mark_invite_used(h, now):  # atomic single use
                 raise IdentityError("IDN-031")
             membership = Membership(person_id, invite.tenant_id, invited_by=invite.created_by,
-                                    created_at=now)
+                                    created_at=now, session_version=version)
             self.idn.repo.put_membership(membership)
             self.idn.audit.record(at=now, action="membership.create", decision="allow",
                                   code="OK", realm=Realm.CUSTOMER.value, subject=person_id,

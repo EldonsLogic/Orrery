@@ -25,6 +25,9 @@ class RoleResolver(Protocol):
     def roles_for(self, tenant_id: str, person_id: str):
         """Return the person's roles in that tenant from the tenant's assignment store."""
 
+    def permissions_for(self, tenant_id: str, person_id: str):
+        """Return the person's permissions in that tenant (a frozenset of str)."""
+
 
 def resolve_roles(resolver, tenant_id: str, person_id: str) -> tuple:
     """Fail closed: an exception, None, a non-sequence or any non-RoleInfo item
@@ -59,6 +62,17 @@ def is_owner_or_admin(roles: tuple) -> bool:
     return any(r.is_admin or OWNER_FUNCTION in r.functions for r in roles)
 
 
-def has_invite_permission(caller_permissions) -> bool:
-    """Permissions are data the caller resolved from the tenant, never request input."""
-    return isinstance(caller_permissions, frozenset) and INVITE_PERMISSION in caller_permissions
+def resolve_permissions(resolver, tenant_id: str, person_id: str) -> frozenset:
+    """Fail closed like resolve_roles: anything but a frozenset of non-empty str is IDN-012."""
+    try:
+        result = resolver.permissions_for(tenant_id, person_id)
+    except Exception:
+        raise IdentityError("IDN-012") from None
+    if not isinstance(result, frozenset) or not all(isinstance(p, str) and p for p in result):
+        raise IdentityError("IDN-012")
+    return result
+
+
+def has_invite_permission(permissions) -> bool:
+    """`permissions` come from resolve_permissions for the caller, never request input."""
+    return isinstance(permissions, frozenset) and INVITE_PERMISSION in permissions

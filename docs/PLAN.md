@@ -126,7 +126,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-012 | Engine adapter implementation in apps/engine that passes the BPL-025 conformance tests | Blueprint | G1 | BPL-025 | partner | done |
 | BPL-013 | Branding section in the Blueprint schema (ADR-0014) | Blueprint | G1 | BPL-002 | eldon | done |
 | BPL-014 | Component certification levels and test harness | Blueprint | G1 | BPL-010 | eldon | done |
-| BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | eldon | todo |
+| BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | eldon | done |
 | BPL-016 | Component request pipeline: gap to AI-drafted request with spec and tests | Blueprint | G2 | BPL-014,DSC-006 | eldon | todo |
 | BPL-017 | Factory: AI drafts component code and tests from a request | Blueprint | G2 | BPL-015,PLT-009 | eldon | todo |
 | BPL-018 | Simulator: replay a month of the owner's data on the compiled tenant | Blueprint | G2 | BPL-007,DSC-010 | eldon | todo |
@@ -192,7 +192,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | eldon | done |
 | PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | partner | todo |
 | PLT-004 | Tenant lifecycle states: trial, active, suspended, exported, deleted | Platform | G1 | PLT-003 | partner | todo |
-| PLT-005 | Identity service (users, sessions, per-tenant roles) | Platform | G2 | PLT-002 | eldon | todo |
+| PLT-005 | Identity service (users, sessions, per-tenant roles) | Platform | G2 | PLT-002 | eldon | doing |
 | PLT-006 | Plans and entitlements model, everything unlocked at first | Platform | G2 | PLT-004 | eldon | todo |
 | PLT-007 | Usage metering for AI actions, storage, users | Platform | G2 | PLT-006,BPL-011 | eldon | todo |
 | PLT-008 | Billing and payments for our subscriptions | Platform | G3 | PLT-007,LEG-010 | eldon | todo |

@@ -65,7 +65,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CE-SEC-002 | Change engine: role lookup must fail closed, never fall back to System Manager on error | Security | G0 | BPL-001 | partner | done |
 | CE-SEC-003 | Change engine: permission check on runtime-policy registration; persist policies per site, not in process memory | Security | G0 | BPL-001 | partner | done |
 | CE-SEC-004 | Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL | Security | G0 | BPL-001 | partner | done |
-| CE-SEC-005 | Change engine: CI against a real Frappe bench instead of mocks | Security | G1 | BPL-001,ERP-001 | partner | done |
+| CE-SEC-005 | Change engine: CI against a real Frappe bench instead of mocks | Security | G1 | BPL-001,ERP-001 | partner | doing |
 | SEC-001 | Threat model for the five parts and four contracts | Security | G1 | GOV-015 | eldon | done |
 | SEC-002 | Secrets management design (store, rotate, never in repo) | Security | G1 | SEC-001 | partner | todo |
 | SEC-003 | Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data | Security | G1 | SEC-001 | eldon | done |

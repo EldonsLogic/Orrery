@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import ast
+import io
+from contextlib import redirect_stderr
 import os
 from pathlib import Path
 import subprocess
@@ -30,6 +32,16 @@ import run_real_bench_ci  # noqa: E402
 
 
 class TestCeSec005RealBenchCI(unittest.TestCase):
+    def test_failure_diagnostics_redact_credentials(self) -> None:
+        env = {"DB_ROOT_PASSWORD": "private-root-marker", "ADMIN_PASSWORD": "private-admin-marker"}
+        result = subprocess.CompletedProcess([], 0, stdout="failure private-root-marker private-admin-marker", stderr="")
+        out = io.StringIO()
+        with mock.patch.object(run_real_bench_ci, "_run_compose", return_value=result), redirect_stderr(out):
+            run_real_bench_ci._failure_diagnostics("ce005", Path("compose.yml"), env)
+        self.assertIn("failure", out.getvalue())
+        for value in env.values():
+            self.assertNotIn(value, out.getvalue())
+
     def test_integration_suite_has_zero_mocks(self) -> None:
         src = ENGINE_TEST_FILE.read_text(encoding="utf-8")
         tree = ast.parse(src, filename=str(ENGINE_TEST_FILE))
@@ -74,7 +86,7 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
             check=False,
         )
         self.assertNotEqual(res.returncode, 0, "CE_SEC_005_REAL_BENCH=1 must fail closed without Frappe.")
-        self.assertNotIn("OK (skipped=", res.stdout + res.stderr)
+        self.assertIn("CE_SEC_005_REAL_BENCH=1 requires real Frappe runtime", res.stderr)
 
     def test_offline_run_skips_cleanly_without_real_bench_flag(self) -> None:
         env = {
@@ -127,9 +139,28 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
         self.assertEqual(rc, 0)
         compose_ops = [args for kind, args in calls if kind == "compose"]
         self.assertIn(("up", "-d", "--build"), compose_ops)
-        self.assertTrue(any("change_engine.tests.test_ce_sec_005_real_bench" in args for args in compose_ops))
+        modules = ("change_engine.tests.test_ce_sec_005_real_bench", "change_engine.tests.test_ce_sec_005_live_http")
+        self.assertTrue(any(all(module in args for module in modules) for args in compose_ops))
         self.assertIn(("down", "-v", "--remove-orphans"), compose_ops)
         self.assertTrue(any(kind == "verify" for kind, _ in calls))
+
+    def test_provision_failure_keeps_synthetic_credentials_private(self) -> None:
+        """Compose must inherit credentials by name, and failures must omit child output."""
+        env = {"DB_ROOT_PASSWORD": "db-marker-005", "ADMIN_PASSWORD": "admin-marker-005"}
+        failed = subprocess.CompletedProcess([], 1, stdout=env["ADMIN_PASSWORD"], stderr=env["DB_ROOT_PASSWORD"])
+        with mock.patch.object(run_real_bench_ci, "_run_compose", return_value=failed) as compose:
+            with self.assertRaises(RuntimeError) as error:
+                run_real_bench_ci._provision_site("ce005", Path("compose.yml"), env, "ce005.localhost")
+        for secret in env.values():
+            self.assertNotIn(secret, str(error.exception))
+            self.assertFalse(any(secret in str(arg) for arg in compose.call_args.args[3:]))
+
+    def test_drop_failure_is_reported(self) -> None:
+        """A reused stack must expose site cleanup failures."""
+        failed = subprocess.CompletedProcess([], 1, stdout="", stderr="")
+        with mock.patch.object(run_real_bench_ci, "_run_compose", return_value=failed):
+            with self.assertRaisesRegex(RuntimeError, "dropping"):
+                run_real_bench_ci._drop_site("ce005", Path("compose.yml"), {"DB_ROOT_PASSWORD": "marker"}, "ce005.localhost")
 
     def test_workflow_follows_gov_049_and_runs_real_bench_ci(self) -> None:
         self.assertTrue(REAL_BENCH_WORKFLOW.is_file(), "Missing .github/workflows/real-bench.yml")

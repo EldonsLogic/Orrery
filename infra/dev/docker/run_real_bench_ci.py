@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import signal
 import socket
 import subprocess
 import sys
@@ -104,15 +105,16 @@ def _wait_for_engine_ready(
                 "engine",
                 "env/bin/python",
                 "-c",
-                "import socket, change_engine; "
+                "import socket, redis, change_engine; "
+                "assert all(redis.Redis(host=host, socket_timeout=2).ping() for host in ('redis-cache', 'redis-queue')); "
                 "s = socket.create_connection(('127.0.0.1', 8000), timeout=2); s.close()",
                 timeout=30,
             )
             if probe.returncode == 0:
                 return
-            last_err = probe.stderr or probe.stdout or "gunicorn or change_engine not ready"
+            last_err = f"gunicorn probe exited {probe.returncode}"
         else:
-            last_err = ps.stderr or ps.stdout or "compose services not running"
+            last_err = "required compose services not running"
         time.sleep(3)
     raise RuntimeError(f"Engine container did not become ready within {timeout_seconds}s: {last_err}")
 
@@ -144,9 +146,9 @@ def _provision_site(
         "exec",
         "-T",
         "-e",
-        f"DB_ROOT_PASSWORD={env['DB_ROOT_PASSWORD']}",
+        "DB_ROOT_PASSWORD",
         "-e",
-        f"ADMIN_PASSWORD={env['ADMIN_PASSWORD']}",
+        "ADMIN_PASSWORD",
         "engine",
         "sh",
         "-ec",
@@ -154,10 +156,10 @@ def _provision_site(
         "ce_sec_005_provision",
         site_name,
         db_name,
-        timeout=420,
+        timeout=900,
     )
     if res.returncode != 0:
-        raise RuntimeError(f"Failed provisioning site {site_name}:\n{res.stderr}\n{res.stdout}")
+        raise RuntimeError(f"Failed provisioning site {site_name} (exit {res.returncode}).")
 
 
 def _drop_site(
@@ -167,23 +169,25 @@ def _drop_site(
     site_name: str,
 ) -> None:
     if not SAFE_SITE_RE.fullmatch(site_name):
-        return
-    _run_compose(
+        raise ValueError("Invalid site name for cleanup")
+    result = _run_compose(
         project,
         compose_file,
         env,
         "exec",
         "-T",
         "-e",
-        f"DB_ROOT_PASSWORD={env['DB_ROOT_PASSWORD']}",
+        "DB_ROOT_PASSWORD",
         "engine",
         "sh",
         "-ec",
-        'site="$1"; bench drop-site "$site" --force --no-backup --db-root-password "$DB_ROOT_PASSWORD" || true',
+        'site="$1"; bench drop-site "$site" --force --no-backup --db-root-password "$DB_ROOT_PASSWORD"',
         "ce_sec_005_drop",
         site_name,
         timeout=180,
     )
+    if result.returncode:
+        raise RuntimeError(f"Failed dropping site {site_name} (exit {result.returncode}).")
 
 
 def _verify_http_ready(site_name: str, engine_port: int, timeout_seconds: int = 60) -> None:
@@ -201,6 +205,19 @@ def _verify_http_ready(site_name: str, engine_port: int, timeout_seconds: int = 
             pass
         time.sleep(2)
     raise RuntimeError(f"Engine HTTP endpoint did not respond on 127.0.0.1:{engine_port} for {site_name}")
+
+
+def _failure_diagnostics(project: str, compose_file: Path, env: dict[str, str]) -> None:
+    """Collect bounded synthetic-stack diagnostics before teardown, without its credentials."""
+    try:
+        result = _run_compose(project, compose_file, env, "logs", "--no-color", "--tail", "80", timeout=30)
+        output = (result.stdout or "") + (result.stderr or "")
+        for key, value in env.items():
+            if value and any(part in key.upper() for part in ("PASSWORD", "SECRET", "TOKEN", "API_KEY")):
+                output = output.replace(value, "<REDACTED>")
+        print(output[-12000:], file=sys.stderr)
+    except Exception:
+        print("Could not collect bench failure diagnostics.", file=sys.stderr)
 
 
 def run_real_bench_ci(
@@ -232,6 +249,8 @@ def run_real_bench_ci(
         engine_port=port,
     )
 
+    provisioned = False
+    succeeded = False
     try:
         if not reuse_project:
             up_args = ["up", "-d"]
@@ -246,6 +265,7 @@ def run_real_bench_ci(
         _wait_for_engine_ready(project_name, compose_file, env)
         print(f"Provisioning synthetic site {site} (erpnext, hrms, change_engine)...")
         _provision_site(project_name, compose_file, env, site)
+        provisioned = True
         _verify_http_ready(site, port)
 
         print(f"Running pinned bench verifier for {site}...")
@@ -280,19 +300,23 @@ def run_real_bench_ci(
             "-m",
             "unittest",
             "change_engine.tests.test_ce_sec_005_real_bench",
+            "change_engine.tests.test_ce_sec_005_live_http",
             "-v",
             timeout=600,
             stream=True,
         )
+        succeeded = test_res.returncode == 0
         return test_res.returncode
     finally:
+        if not succeeded:
+            _failure_diagnostics(project_name, compose_file, env)
         if not keep_stack:
-            if reuse_project:
+            if reuse_project and provisioned:
                 print(f"Dropping ephemeral site {site} from reused project {project_name}...")
                 _drop_site(project_name, compose_file, env, site)
-            else:
+            elif not reuse_project:
                 print(f"Tearing down ephemeral bench stack {project_name}...")
-                _run_compose(
+                cleanup = _run_compose(
                     project_name,
                     compose_file,
                     env,
@@ -301,6 +325,8 @@ def run_real_bench_ci(
                     "--remove-orphans",
                     timeout=180,
                 )
+                if cleanup.returncode:
+                    raise RuntimeError(f"Compose teardown failed (exit {cleanup.returncode}).")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -332,4 +358,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    def terminate(signum, _frame):
+        """Unwind through the same cleanup path as a local interruption."""
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, terminate)
+    signal.signal(signal.SIGINT, terminate)
     sys.exit(main())

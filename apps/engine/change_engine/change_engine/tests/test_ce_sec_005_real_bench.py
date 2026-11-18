@@ -20,27 +20,28 @@ import urllib.request
 import uuid
 from typing import Any, Dict, Optional
 
-from change_engine.adapter import (
-    ADAPTER_ID,
-    ChangeEngineAdapter,
-    FrappeRuntimeBackend,
-    FrappeSiteResolver,
-)
-from change_engine.adapter import contracts_support as cs
-from change_engine.api import endpoints
-from change_engine.guarded_apply.policy_enforcer import (
-    PolicyType,
-    RuntimePolicy,
-    RuntimePolicyViolation,
-    policy_catalog,
-)
-from change_engine.guarded_apply.policy_expression import PolicyExpressionError
-from change_engine.guarded_apply.policy_store import get_current_site_id, policy_store
-
 try:
     import frappe  # type: ignore[import-not-found]
 except ImportError:
     frappe = None
+
+if frappe is not None:
+    from change_engine.adapter import (
+        ADAPTER_ID,
+        ChangeEngineAdapter,
+        FrappeRuntimeBackend,
+        FrappeSiteResolver,
+    )
+    from change_engine.adapter import contracts_support as cs
+    from change_engine.api import endpoints
+    from change_engine.guarded_apply.policy_enforcer import (
+        PolicyType,
+        RuntimePolicy,
+        RuntimePolicyViolation,
+        policy_catalog,
+    )
+    from change_engine.guarded_apply.policy_expression import PolicyExpressionError
+    from change_engine.guarded_apply.policy_store import get_current_site_id, policy_store
 
 EXPECTED_APPS = ("frappe", "erpnext", "hrms", "change_engine")
 EXPECTED_VERSIONS = {
@@ -284,8 +285,8 @@ def _build_add_field_artifact(
     return _seal_artifact(forward)
 
 
-class TestCeSec005RealBench(unittest.TestCase):
-    """End-to-end change engine verification inside a live pinned Frappe bench."""
+class RealBenchTestCase(unittest.TestCase):
+    """Connects to the live pinned Frappe bench (shared by the CE-SEC-005 live suites)."""
 
     _connected_here: bool = False
     _prev_cwd: Optional[str] = None
@@ -351,6 +352,10 @@ class TestCeSec005RealBench(unittest.TestCase):
 
     def tearDown(self) -> None:
         frappe.set_user("Administrator")
+
+
+class TestCeSec005RealBench(RealBenchTestCase):
+    """End-to-end change engine verification inside a live pinned Frappe bench."""
 
     # ------------------------------------------------------------------ 1. Pinned bench & tables
     def test_01_pinned_versions_services_and_policy_tables_live(self) -> None:
@@ -626,7 +631,7 @@ class TestCeSec005RealBench(unittest.TestCase):
             site_resolver=FrappeSiteResolver(site_map={tenant: self._site}),
             sites_path=self._sites_path,
         )
-        adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
+        adapter = ChangeEngineAdapter(test_hooks=False, frappe_backend=backend)
 
         bp_id = "bp_ce005_init"
         prov = adapter.call(
@@ -701,6 +706,8 @@ class TestCeSec005RealBench(unittest.TestCase):
         frappe.db.set_value("Customer", cust_name, frappe_col, "preserved-adapter-data")
         frappe.db.commit()
 
+        # A fresh adapter must reload the applied revision from the site.
+        adapter = ChangeEngineAdapter(test_hooks=False, frappe_backend=backend)
         rb_res = adapter.call(
             "rollback",
             _adapter_ctx(tenant, "rb"),
@@ -833,13 +840,15 @@ class TestCeSec005RealBench(unittest.TestCase):
     def test_06_negative_security_regressions_real_session_and_fail_closed(self) -> None:
         staff_email = self._ensure_staff_user()
 
-        # CE-SEC-004: LLM endpoints remain completely absent from module & Frappe whitelist
+        # CE-SEC-004: no LLM endpoint in the module or among the whitelisted functions.
+        # frappe.whitelisted holds function objects, so resolve each to its dotted path.
         self.assertFalse(hasattr(endpoints, "test_llm_connection"))
         self.assertFalse(hasattr(endpoints, "get_llm_config"))
-        self.assertNotIn(
-            "change_engine.api.endpoints.test_llm_connection",
-            getattr(frappe, "whitelisted", ()),
-        )
+        whitelisted = {f"{fn.__module__}.{fn.__qualname__}" for fn in frappe.whitelisted}
+        # Positive control: the resolution finds the change engine's own endpoints.
+        self.assertIn("change_engine.api.endpoints.apply_configuration_change", whitelisted)
+        engine_llm = sorted(p for p in whitelisted if p.startswith("change_engine.") and "llm" in p.lower())
+        self.assertEqual(engine_llm, [])
 
         # CE-SEC-001 & CE-SEC-003 under a real non-admin Frappe user session
         try:
@@ -854,15 +863,16 @@ class TestCeSec005RealBench(unittest.TestCase):
             self.assertFalse(spoofed_apply["success"])
             self.assertEqual(spoofed_apply["disposition"], "UNAUTHORIZED_ROLE")
 
-            with self.assertRaises(PermissionError):
+            # No caller_roles here: the admin permission check itself must refuse the call
+            # (with caller_roles, _reject_caller_context would refuse it first).
+            with self.assertRaisesRegex(PermissionError, "admin permission required"):
                 endpoints.register_runtime_policy(
                     {
                         "policy_id": f"POL_SPOOF_{self._run_tag}",
                         "doctype": "ToDo",
                         "policy_type": "INVARIANT_GUARD",
                         "condition_expr": "description == 'x'",
-                    },
-                    caller_roles=["System Manager"],
+                    }
                 )
             with self.assertRaises(PermissionError):
                 endpoints.get_runtime_policies()

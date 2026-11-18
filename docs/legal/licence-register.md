@@ -22,6 +22,15 @@ Principle 1: Build on open source; record every licence. Every adopted open-sour
 | **hijridate** | [github.com/dralshehri/hijridate](https://github.com/dralshehri/hijridate) (PyPI `hijridate`, successor of the deprecated `hijri-converter`; accessed 2026-11-18) | 2.6.0 | MIT (package metadata, accessed 2026-11-18) | Umm al-Qura Hijri to Gregorian conversion in the document intake (CMP-022). Tables cover 1343 to 1500 AH; outside that it raises and the intake drops the date. | Permissive, pure Python, no network. Table accuracy against the official Saudi calendar is UNVERIFIED beyond the library's own claim; a Saudi accountant should spot-check month starts before dates drive any legal or tax logic. |
 | **Lucide icons** | [github.com/lucide-icons/lucide](https://github.com/lucide-icons/lucide) (LICENSE read 2026-11-18) | 1.75.0 (release 2026-11-18) | ISC; 130-odd icons derived from Feather are MIT (Cole Bemis) | Outline icon set for the web app and marketing site (brand: 24 px, 1.75 px stroke, BRD-012). | Permissive. Keep both licence texts in the third-party notices that ship with the web bundle. Pin the version when the package is added. Directional icons mirror in RTL by our component, not by the library. Icons are used as-is; no logos of third parties. |
 
+### 1c. Planned libraries (not installed)
+
+Recorded ahead of first use under ADR-0044 (Proposed). Not in any lockfile yet; the exact pin is set and this row updated by the PR that installs it (OPR-020, WEB-026).
+
+| Component | Upstream / source | Pinned version | Licence | Role / Why used | Boundary & compliance notes |
+|---|---|---|---|---|---|
+| **ag-ui-protocol** (planned) | [github.com/ag-ui-protocol/ag-ui](https://github.com/ag-ui-protocol/ag-ui), PyPI [`ag-ui-protocol`](https://pypi.org/project/ag-ui-protocol/) (accessed 2026-11-18) | Not installed; latest seen 1.0.0 (2026-09-17) | MIT (PyPI `license_expression`, accessed 2026-11-18) | Python event types and SSE encoder for the agent stream endpoint (ADR-0044). | Owned by CopilotKit; single-vendor risk, fallback in ADR-0044 item 8. Transport only; no CopilotKit runtime or integrations (advisory GHSA-chx5-hp6j-gv92 hit `ag-ui-adk`, which we do not use). Transitive dependencies UNVERIFIED until installed. |
+| **@ag-ui/client** (planned) | [github.com/ag-ui-protocol/ag-ui](https://github.com/ag-ui-protocol/ag-ui), npm [`@ag-ui/client`](https://www.npmjs.com/package/@ag-ui/client) (accessed 2026-11-18) | Not installed; latest seen 1.0.5 (release 2026-11-17) | MIT (repo `packages/client/package.json`, accessed 2026-11-18) | Browser client for the agent stream in `web/app` (ADR-0044). | Owned by CopilotKit; no CopilotKit UI components. Keep the licence text in the third-party notices of the web bundle. Transitive dependencies UNVERIFIED until installed. |
+
 ## 2. Forbidden components
 
 | Component | Upstream / source | Licence | Status | Reason |

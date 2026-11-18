@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies
-        run: pip install -r services/blueprint/requirements.txt -r evals/requirements.txt "pydantic>=2"
+        run: pip install -r services/blueprint/requirements.txt -r evals/requirements.txt -r services/discovery/requirements.txt "pydantic>=2"
       - name: Blueprint validator, compiler and adapter tests
         run: python3 -m pytest services/blueprint/tests -q
       - name: Contract example validates

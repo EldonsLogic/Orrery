@@ -30,10 +30,10 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-014 | Trial the cross-model PR review routine on the first real PR | Governance | G0 | GOV-008 | eldon | done |
 | GOV-015 | Draft ADR-0001..0014 | Governance | G0 | GOV-004 | eldon | done |
 | GOV-016 | Autonomy metrics file and monthly reporting template (strategy/08) | Governance | G1 | GOV-004 | eldon | done |
-| GOV-017 | Exceptions register process (every manual step logged with reason) | Governance | G2 | GOV-016 | eldon | todo |
+| GOV-017 | Exceptions register process (every manual step logged with reason) | Governance | G2 | GOV-016 | eldon | done |
 | GOV-018 | Retire docs/HANDOFF.md in favour of docs/log and STATUS | Governance | G0 | GOV-004 | eldon | done |
 | GOV-019 | Pick issue/PR labels and project board mapping to PLAN IDs | Governance | G0 | GOV-008 | eldon | done |
-| GOV-020 | Periodic plan review: re-rank, close stale rows, check gate criteria | Governance | G1 | GOV-016 | eldon | todo |
+| GOV-020 | Periodic plan review: re-rank, close stale rows, check gate criteria | Governance | G1 | GOV-016 | eldon | done |
 | GOV-021 | Repo hygiene checker and strict two-person and file-placement rules (AGENTS.md, scripts/check_repo_hygiene.py, CI) | Governance | G0 | GOV-004 | eldon | done |
 | GOV-022 | Onboarding guide with one-time setup, founder lanes, first tasks and pending decisions (docs/ONBOARDING.md) | Governance | G0 | GOV-004 | eldon | done |
 | GOV-023 | Task-trail gate in CI (log has valid plan IDs, rows not left todo when code changes) and per-founder queues in STATUS | Governance | G0 | GOV-006 | eldon | done |
@@ -148,7 +148,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-010 | Connector framework: tiers, sandboxing, audit, untrusted-content handling | Discovery | G2 | DSC-003,SEC-003 | eldon | done |
 | DSC-011 | Excel and CSV import connector | Discovery | G2 | DSC-010 | eldon | done |
 | DSC-012 | Odoo extractor: read-only API access, export mapping | Discovery | G2 | DSC-010 | eldon | done |
-| DSC-013 | Odoo to Blueprint field-mapping library | Discovery | G2 | DSC-012 | eldon | todo |
+| DSC-013 | Odoo to Blueprint field-mapping library | Discovery | G2 | DSC-012 | eldon | done |
 | DSC-014 | Document intake with Arabic OCR (invoices, receipts, photos) | Discovery | G2 | DSC-010,QA-002 | eldon | done |
 | DSC-015 | Email and WhatsApp forwarding intake | Discovery | G3 | DSC-014 | eldon | todo |
 | DSC-016 | Accountant review view in discovery | Discovery | G3 | DSC-007 | eldon | todo |
@@ -224,7 +224,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | INF-010 | Capacity plan and hosting at volume | Infrastructure | G5 | ERP-002,INF-007 | partner | todo |
 | INF-011 | Asset delivery (CDN) for tenant brand assets | Infrastructure | G2 | INF-004 | partner | todo |
 | INF-012 | Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) | Infrastructure | G1 | GOV-009 | eldon | todo |
-| INF-013 | Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) | Infrastructure | G0 | GOV-009 | eldon | todo |
+| INF-013 | Vercel project connected to the repo with per-PR preview links; founders create the project (ADR-0018) | Infrastructure | G0 | GOV-009 | eldon | doing |
+| INF-014 | OS-level sandbox for untrusted uploads (container or VM with no network, read-only mount, CPU, memory and time limits, seccomp) that runs the intake parsers; required before any real customer upload (Q-133 to Q-140 follow-ups, connector runtime is only logically sandboxed today) | Infrastructure | G2 | INF-004,DSC-010 | partner | todo |
 | BRD-001 | Brand guidelines v1 (Quadrant) and placeholder logo | Brand | G0 | - | eldon | done |
 | BRD-002 | Design tokens: light and dark, CSS and JSON | Brand | G0 | BRD-001 | eldon | done |
 | BRD-003 | Identity decision: final name, logo direction, Arabic spelling | Brand | G1 | LEG-008 | eldon | todo |
@@ -236,7 +237,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BRD-009 | Design system rollout: generate all logo files, sizes, favicons, social sizes, the product design system and brand guidelines | Brand | G2 | BRD-003,LEG-008 | eldon | todo |
 | BRD-010 | UI component library built from tokens | Brand | G2 | BRD-005 | eldon | done |
 | BRD-011 | Font licence and Arabic typography verification | Brand | G1 | BRD-001 | eldon | doing |
-| BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | eldon | todo |
+| BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | eldon | done |
 | WEB-001 | Marketing website v1, bilingual | Web | G2 | BRD-009 | eldon | todo |
 | WEB-002 | Contact and waitlist form with PDPL consent | Web | G2 | WEB-001,LEG-012 | eldon | todo |
 | WEB-003 | App shell: sign-in, workspace switcher, navigation | Web | G2 | PLT-005,BRD-010 | eldon | todo |
@@ -259,7 +260,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-005 | Agent behaviour evals (tool choice, refusal, confirm-before-write) | Quality | G2 | OPR-002,QA-001 | eldon | todo |
 | QA-006 | Prompt-injection eval suite | Quality | G2 | SEC-003,QA-001 | eldon | done |
 | QA-007 | Contrast tests for tenant themes in light and dark | Quality | G2 | BRD-006 | eldon | todo |
-| QA-008 | RTL visual regression tests, including tenant-branded screens and documents | Quality | G2 | BRD-010 | eldon | todo |
+| QA-008 | RTL visual regression tests, including tenant-branded screens and documents | Quality | G2 | BRD-010 | eldon | doing |
 | QA-009 | End-to-end rehearsal: discovery to simulated Blueprint to live on synthetic data | Quality | G2 | BPL-020,DSC-009,OPR-010 | eldon | todo |
 | QA-010 | Eval thresholds enforced in CI as release gate | Quality | G2 | QA-005,QA-002 | eldon | todo |
 | QA-011 | Simulator accuracy test against known outcomes | Quality | G2 | BPL-018 | eldon | todo |
@@ -290,7 +291,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | FND-006 | Autonomy and reuse chart for investors | Fundraising | G3 | BPL-022,GTM-006 | eldon | todo |
 | FND-007 | Cap table and funding terms with counsel | Fundraising | G3 | LEG-010 | eldon | todo |
 | CMP-021 | Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) | Compliance | G1 | BPL-002,BPL-009 | partner | todo |
-| CMP-022 | Calendar and Hijri (Umm al-Qura) conversion library choice, licence and tests | Compliance | G1 | CMP-005 | partner | todo |
+| CMP-022 | Calendar and Hijri (Umm al-Qura) conversion library choice, licence and tests | Compliance | G1 | CMP-005 | partner | done |
 | CMP-023 | Per-company calendar and week settings (week start, weekend, working days and hours, Ramadan hours, number system) | Compliance | G2 | CMP-021,CMP-022 | partner | todo |
 | CMP-024 | Holiday calendars per country with admin-editable moon-sighting overrides | Compliance | G2 | CMP-023 | partner | todo |
 | CMP-025 | Fiscal-year type and start handling; zakat period handling | Compliance | G2 | CMP-023,CMP-013 | partner | todo |
@@ -301,7 +302,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-019 | Dual-date display (Gregorian plus Hijri) on documents, locked regions respected | Runtime | G2 | CMP-022,ERP-016 | partner | todo |
 | ERP-020 | Engine headless and internal-only: disable Desk and default web routes for tenants; no direct internet exposure (ADR-0016) | ERP runtime | G1 | ERP-001 | partner | todo |
 | WEB-016 | Date pickers and entry in both Gregorian and Hijri calendars, RTL | Web | G2 | CMP-022,BRD-010 | eldon | todo |
-| WEB-017 | Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) | Web | G1 | BRD-001 | eldon | todo |
+| WEB-017 | Own login, password-reset, error pages, emails and print formats; no engine templates reach customers (ADR-0016) | Web | G1 | BRD-001 | eldon | doing |
 | WEB-018 | Decide the web stack (short ADR) before building screens; then host the design-system preview pages first, then clickable chat screens (ADR-0018) | Web | G0 | BRD-002 | eldon | done |
 | WEB-019 | Host the static design-system preview pages from docs/brand on the preview project | Web | G1 | INF-013 | eldon | todo |
 | WEB-020 | Studio: a local live app on the merged code (edit a Blueprint, compile, apply to the in-memory engine, check brand colour, read a synthetic bilingual invoice); the real adapter plugs in with STUDIO_ENGINE | Web | G1 | BPL-004,BRD-004,DAT-002 | eldon | done |
@@ -311,7 +312,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | WEB-024 | Bulk import and export per document type in the UI: CSV and Excel, mapping, validation preview, error report, nothing written until confirmed; reuses the DSC-011 tabular connector | Web | G2 | WEB-023,DSC-011 | eldon | todo |
 | WEB-025 | Department home screens: sales, purchasing, inventory and warehouse, accounting and finance (HR later), built from the record screens and the metrics layer | Web | G2 | WEB-023,WEB-006 | eldon | todo |
 | OPR-017 | Department-scoped assistants: per-department instructions, allowed tools, limits and memory scope configured in the Blueprint (contract change recorded as a short ADR per AGENTS.md), acting only with the user's own role and scope | Operate | G2 | OPR-004,OPR-011 | eldon | todo |
-| OPR-018 | Domain error codes in the Tool API contract (insufficient stock, closed period, duplicate tax id, missing field, stale approval) with parameter slots and bilingual messages, replacing the single engine_error; the gateway mapping is PLT-024 | Operate | G2 | OPR-003 | eldon | todo |
+| OPR-018 | Domain error codes in the Tool API contract (insufficient stock, closed period, duplicate tax id, missing field, stale approval) with parameter slots and bilingual messages, replacing the single engine_error; the gateway mapping is PLT-024 | Operate | G2 | OPR-003 | eldon | done |
+| OPR-019 | Manifest-declared entity risk class, Blueprint transition kind and Tool API field amendments (ADR-0037, contracts 0.2.0 / 0.3.0); Tier 3 | Operate | G2 | OPR-003 | eldon | doing |
 | ERP-025 | Print and PDF output beyond tax invoices: delivery notes, statements, purchase orders, receipts and others, bilingual and tenant-branded, compliance layout locked where required | Runtime | G2 | ERP-016 | partner | todo |
 | ERP-026 | Durable adapter state on the tenant database: a short ADR on where idempotency keys, plans, journal and audit records live, then a MariaDB-backed store beside the tenant data; production refuses an in-memory store; restart and restore tests | Runtime | G1 | ERP-012 | partner | todo |
 | ERP-027 | Fix false MODIFY COLUMN drift on decimal(21,9) columns in the DDL plan gate (Phase 0 finding) so customer-added fields on Customer, Sales Order, Sales Invoice and Item can apply | Runtime | G1 | ERP-021,BPL-007 | partner | todo |
@@ -334,7 +336,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-034 | Agent team protocol and 30 role contracts from the founder-supplied prompt guide (agents/team-protocol.md, agents/roles.md): start small, task graph, execution loop, evaluation, self-improvement through measured PRs, safety | Governance | G0 | GOV-011 | eldon | done |
 | GOV-035 | Phase exit rule and tool: every phase or gate closes only after a recorded exit run (RULES 48, GATES.md, scripts/phase_exit_check.py, docs/specs/phase-exit-criteria.json, CI script tests) | Governance | G0 | GOV-024 | eldon | done |
 | GOV-036 | Phased delivery document with lanes (docs/architecture/phased-delivery-and-lanes.md), proposed ADR-0026 to ADR-0029, new plan rows and the phase exit criteria rows | Governance | G0 | GOV-035 | eldon | done |
-| GOV-037 | After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency | Governance | G0 | GOV-036 | eldon | todo |
+| GOV-037 | After both founders approve ADR-0026, edit GATES.md: Saudi sandbox as a Saudi release criterion, market-conditional compliance, G1 apply wording per ADR-0028, optional simulation, per-market G3 line, and split the Arabic invoice print (ERP-007) from the ZATCA Phase 1 dependency | Governance | G0 | GOV-036 | eldon | done |
 | GOV-038 | Agent-team benchmark: baseline tasks, cost, latency and regression log used to judge prompt and role improvements | Governance | G1 | GOV-034 | eldon | done |
 | GOV-039 | Market-pack track plan: owner and capacity per active pack, what "right away" means per market, country release checklist adopted | Governance | G1 | GOV-036 | eldon | done |
 | GOV-040 | Record the founders' answers to Q-17 to Q-19: rigid-zone authorship (ADR-0031) and approval as a recorded review (ADR-0032) | Governance | G0 | GOV-008 | partner | done |

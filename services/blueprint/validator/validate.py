@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from .report import Report, ValidationContext
+from .rules_assistants import rule_assistants
 from .rules_branding import rule_assets, rule_contrast, rule_einvoicing, rule_white_label
 from .rules_components import rule_components, rule_functions
 from .rules_locale import rule_country, rule_locale
@@ -25,6 +26,7 @@ RULES: list[tuple[str, Callable]] = [
     ("assets", rule_assets),            # 11
     ("white_label", rule_white_label),  # 12
     ("einvoicing", rule_einvoicing),    # 13
+    ("assistants", rule_assistants),    # 14 (ADR-0043)
 ]
 
 

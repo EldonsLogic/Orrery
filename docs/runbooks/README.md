@@ -13,6 +13,7 @@ Empty until gate G1; each runbook is written when the process first exists, test
 | Backup and restore (per tenant) | G3 | Scheduled restore test, logged |
 | Incident response | G3 | From [../security/incident-response.md](../security/incident-response.md) |
 | Exceptions register (every manual step logged) | G2 | [exceptions-register.md](exceptions-register.md), GOV-017 |
+| Periodic plan review | G1 | [plan-review.md](plan-review.md), `scripts/plan_review.py`, GOV-020 |
 | Rotate secrets and keys | G1 | Includes ZATCA key handling, gateway keys |
 | Customer onboarding | G2 | Discovery to go-live checklist |
 | Offboard, export and delete tenant | G3 | SLAs TBD ([../security/hosting-rules.md](../security/hosting-rules.md)); rules in [../security/data-retention.md](../security/data-retention.md) |

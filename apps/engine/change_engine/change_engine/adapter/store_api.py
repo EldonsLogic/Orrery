@@ -8,7 +8,7 @@ DEV_ENVIRONMENTS = {"dev", "development", "test"}
 
 
 class StoreRefused(RuntimeError):
-    """Raised at startup when a production adapter is given a volatile store."""
+    """Raised at construction when production would run with test hooks, a volatile store or a non-production store."""
 
 
 @runtime_checkable
@@ -16,6 +16,7 @@ class AdapterStore(Protocol):
     """Durable adapter state: sites, idempotency keys, plans, journal, audit, events, members, tenant field data."""
 
     volatile: bool
+    production_grade: bool  # True only for a store inside the tenant database backup boundary (MariaDB, ADR-0041)
 
     def reset(self) -> None: ...
     def get_site(self, tenant_id: str) -> Any: ...
@@ -24,6 +25,14 @@ class AdapterStore(Protocol):
     def save_site(self, site: Any) -> None: ...
     def idem_get(self, tenant_id: str, operation: str, key: str) -> tuple[str, dict[str, Any]] | None: ...
     def idem_put(self, tenant_id: str, operation: str, key: str, input_hash: str, outcome: dict[str, Any]) -> None: ...
+    def acquire_operation(self, tenant_id: str, operation: str, key: str, input_hash: str, operation_id: str,
+                          pending: dict[str, Any], meta: dict[str, Any], *, lock: bool, lease_seconds: int) -> tuple[str, Any]: ...
+    def idem_complete(self, tenant_id: str, operation: str, key: str, operation_id: str, outcome: dict[str, Any]) -> bool: ...
+    def idem_release(self, tenant_id: str, operation: str, key: str, operation_id: str) -> None: ...
+    def expired_operations(self) -> list[dict[str, Any]]: ...
+    def recover_operation(self, rec: dict[str, Any], final: dict[str, Any] | None) -> bool: ...
+    def set_sync_version(self, tenant_id: str, version: int) -> bool: ...
+    def transaction(self) -> Any: ...
     def save_token(self, tenant_id: str, token: str, issued_at: int) -> None: ...
     def get_token_issued_at(self, tenant_id: str, token: str) -> int | None: ...
     def save_evidence(self, tenant_id: str, evidence_ref: str, statements: list[str]) -> None: ...
@@ -44,16 +53,26 @@ class AdapterStore(Protocol):
 
 
 def is_production(test_hooks: bool, environment: str | None = None) -> bool:
-    """Fail closed: only an explicit dev/test environment, or hooks on with no environment set, is non-production."""
-    env = environment or os.environ.get("CHANGE_ENGINE_ENV")
+    """Fail closed. Non-production only for an explicit dev/test environment, or (nothing set anywhere) hooks switched on.
+
+    An explicit `environment` argument, even an empty one, is never replaced by CHANGE_ENGINE_ENV; an empty or
+    unknown value is production."""
+    env = os.environ.get("CHANGE_ENGINE_ENV") if environment is None else environment
     if env is None:
         return not test_hooks
     return env.strip().lower() not in DEV_ENVIRONMENTS
 
 
 def assert_store_allowed(store: AdapterStore, production: bool) -> None:
-    if production and store.volatile:
+    if not production:
+        return
+    if store.volatile:
         raise StoreRefused(
             "in-memory adapter store refused in production: idempotency keys, journal and audit would be lost "
-            "on restart; configure a durable store (MariaDB on the tenant database, ADR-0041)"
+            "on restart; configure MariaDB on the tenant database (ADR-0041)"
+        )
+    if not getattr(store, "production_grade", False):
+        raise StoreRefused(
+            "this adapter store is for dev and tests only: production keeps adapter state in the tenant MariaDB "
+            "database, inside its backup and restore boundary (ADR-0041)"
         )

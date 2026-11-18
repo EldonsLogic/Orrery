@@ -7,12 +7,20 @@ a small connection shim and overrides the schema and every upsert with MariaDB S
 from __future__ import annotations
 
 import json
+import threading
+import time
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord, _safe_col_name, _safe_table_name
+from change_engine.adapter.storage import (
+    IdempotencyConflict,
+    SQLiteAdapterStore,
+    SiteRecord,
+    _safe_col_name,
+    _safe_table_name,
+)
 
-_T = "VARCHAR(64) NOT NULL"
+_T = "VARCHAR(128) NOT NULL"  # tenantId is up to 65 characters (common.schema.json); headroom for the platform id
 _SCHEMA = [
     f"CREATE TABLE IF NOT EXISTS adapter_sites (tenant_id {_T}, state VARCHAR(32) NOT NULL, site_class VARCHAR(32) NOT NULL,"
     " engine_target_json LONGTEXT NOT NULL, blueprint_id VARCHAR(128) NOT NULL, country_pack VARCHAR(64) NOT NULL,"
@@ -20,7 +28,9 @@ _SCHEMA = [
     " sync_version BIGINT NOT NULL, config_json LONGTEXT NOT NULL, retained_json LONGTEXT NOT NULL, PRIMARY KEY (tenant_id))",
     f"CREATE TABLE IF NOT EXISTS adapter_idempotency (tenant_id {_T}, operation VARCHAR(32) NOT NULL,"
     " idempotency_key VARCHAR(255) NOT NULL, input_hash VARCHAR(80) NOT NULL, outcome_json LONGTEXT NOT NULL,"
-    " created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (tenant_id, operation, idempotency_key))",
+    " status VARCHAR(16) NOT NULL DEFAULT 'done', operation_id VARCHAR(128), lease_expires_at BIGINT, meta_json LONGTEXT,"
+    " created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (tenant_id, operation, idempotency_key),"
+    " KEY ix_idem_lease (status, lease_expires_at), KEY ix_idem_created (created_at))",
     f"CREATE TABLE IF NOT EXISTS adapter_plan_tokens (tenant_id {_T}, token VARCHAR(128) NOT NULL,"
     " issued_at BIGINT NOT NULL, PRIMARY KEY (tenant_id, token))",
     f"CREATE TABLE IF NOT EXISTS adapter_plan_evidence (tenant_id {_T}, evidence_ref VARCHAR(128) NOT NULL,"
@@ -30,7 +40,7 @@ _SCHEMA = [
     f"CREATE TABLE IF NOT EXISTS adapter_execution_journal (seq_id BIGINT NOT NULL AUTO_INCREMENT, tenant_id {_T},"
     " artifact_id VARCHAR(128) NOT NULL, step_seq INT NOT NULL, phase VARCHAR(32) NOT NULL, PRIMARY KEY (seq_id))",
     "CREATE TABLE IF NOT EXISTS adapter_audit_log (seq_id BIGINT NOT NULL AUTO_INCREMENT, audit_id VARCHAR(64) NOT NULL,"
-    " operation VARCHAR(32) NOT NULL, request_id VARCHAR(128), correlation_id VARCHAR(128), tenant_id VARCHAR(64),"
+    " operation VARCHAR(32) NOT NULL, request_id VARCHAR(128), correlation_id VARCHAR(128), tenant_id VARCHAR(128),"
     " service VARCHAR(64), on_behalf_of_json LONGTEXT, input_hash VARCHAR(80), artifact_id VARCHAR(128), result VARCHAR(64),"
     " PRIMARY KEY (seq_id), UNIQUE KEY uq_audit_id (audit_id))",
     "CREATE TABLE IF NOT EXISTS adapter_events (seq_id BIGINT NOT NULL AUTO_INCREMENT, event_id VARCHAR(128) NOT NULL,"
@@ -44,31 +54,49 @@ _STATE_TABLES = ("adapter_sites", "adapter_idempotency", "adapter_plan_tokens", 
 
 
 class _Conn:
-    """sqlite3-shaped shim over a DB-API connection: `?` params, dict rows, commit or rollback on `with`, nestable."""
+    """sqlite3-shaped shim over a DB-API connection: `?` params, dict rows, commit or rollback on `with`.
+
+    Nested `with` blocks are SAVEPOINTs, so an inner failure the caller catches undoes only the inner work.
+    One connection serves one thread at a time (re-entrant lock held for the whole outer transaction)."""
 
     def __init__(self, raw: Any) -> None:
         self.raw = raw
         self.depth = 0
+        self._lock = threading.RLock()
 
     def execute(self, sql: str, params: tuple = ()) -> Any:
         import pymysql.cursors  # driver comes from the bench; imported lazily so the SQLite path needs none
 
-        cur = self.raw.cursor(pymysql.cursors.DictCursor)
-        cur.execute(sql.replace("?", "%s"), params or None)
-        if self.depth == 0:  # a standalone read must not hold a transaction (and its metadata lock) open
-            self.raw.commit()
-        return cur
+        with self._lock:
+            cur = self.raw.cursor(pymysql.cursors.DictCursor)
+            cur.execute(sql.replace("?", "%s"), params or None)
+            if self.depth == 0:  # a standalone read must not hold a transaction (and its metadata lock) open
+                self.raw.commit()
+            return cur
 
     def __enter__(self) -> "_Conn":
+        self._lock.acquire()
+        try:
+            if self.depth > 0:
+                self.raw.cursor().execute(f"SAVEPOINT sp{self.depth}")
+        except BaseException:
+            self._lock.release()
+            raise
         self.depth += 1
         return self
 
     def __exit__(self, exc_type: Any, *_: Any) -> None:
-        self.depth -= 1
-        if exc_type is not None:
-            self.raw.rollback()
-        elif self.depth == 0:
-            self.raw.commit()
+        try:
+            self.depth -= 1
+            if self.depth == 0:
+                self.raw.rollback() if exc_type is not None else self.raw.commit()
+            else:
+                cur = self.raw.cursor()
+                if exc_type is not None:
+                    cur.execute(f"ROLLBACK TO SAVEPOINT sp{self.depth}")
+                cur.execute(f"RELEASE SAVEPOINT sp{self.depth}")
+        finally:
+            self._lock.release()
 
     def close(self) -> None:
         self.raw.close()
@@ -78,34 +106,72 @@ class MariaDBAdapterStore(SQLiteAdapterStore):
     """Adapter state in the tenant database. Pass the tenant DB connection (pymysql DictCursor, autocommit off)."""
 
     volatile = False
+    production_grade = True
+    _FOR_UPDATE = " FOR UPDATE"
 
     def __init__(self, connection: Any) -> None:
+        get_autocommit = getattr(connection, "get_autocommit", None)
+        if callable(get_autocommit) and get_autocommit():
+            raise ValueError("MariaDBAdapterStore needs a connection with autocommit off: the store owns its transactions")
         self.conn = _Conn(connection)
-        self._sites_cache: dict[str, SiteRecord] = {}
+        self.clock = time.time
         self.dropped_data: list[str] = []
         self._init_schema()
-        self._load_sites()
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
-        """Group several store calls, or the caller's own effect on the same connection, into one commit."""
+        """Group several store calls, or the caller's own effect on the same connection, into one commit.
+
+        DDL (CREATE or ALTER TABLE) commits implicitly in MariaDB and is refused inside a transaction."""
         with self.conn:
             yield
 
-    def _init_schema(self) -> None:
-        with self.conn:
-            for ddl in _SCHEMA:
-                self.conn.execute(ddl + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4")
+    def _no_ddl_in_transaction(self) -> None:
+        if self.conn.depth > 0:
+            raise RuntimeError("DDL commits implicitly in MariaDB: not allowed inside store.transaction()")
 
-    def _upsert(self, table: str, row: dict[str, Any], keys: tuple[str, ...]) -> None:
+    def _init_schema(self) -> None:
+        for ddl in _SCHEMA:
+            self.conn.execute(ddl + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4")
+
+    def _insert_reservation(self, row: tuple) -> bool:
+        import pymysql
+
+        try:
+            self.conn.execute(
+                "INSERT INTO adapter_idempotency (tenant_id, operation, idempotency_key, input_hash, outcome_json, status, "
+                "operation_id, lease_expires_at, meta_json) VALUES (?, ?, ?, ?, ?, 'in_progress', ?, ?, ?)",
+                row,
+            )
+            return True
+        except pymysql.err.IntegrityError as exc:
+            if exc.args and exc.args[0] == 1062:  # the key already exists: another caller holds or finished it
+                return False
+            raise
+
+    def idem_put(self, tenant_id: str, operation: str, key: str, input_hash: str, outcome: dict[str, Any]) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO adapter_idempotency (tenant_id, operation, idempotency_key, input_hash, outcome_json) VALUES (?, ?, ?, ?, ?) "
+                "ON DUPLICATE KEY UPDATE outcome_json = IF(input_hash = VALUES(input_hash), VALUES(outcome_json), outcome_json), "
+                "status = IF(input_hash = VALUES(input_hash), 'done', status)",
+                (tenant_id, operation, key, input_hash, json.dumps(outcome)),
+            )
+            row = self.conn.execute(
+                "SELECT input_hash FROM adapter_idempotency WHERE tenant_id = ? AND operation = ? AND idempotency_key = ?",
+                (tenant_id, operation, key),
+            ).fetchone()
+            if row["input_hash"] != input_hash:
+                raise IdempotencyConflict(f"{operation}/{key} is bound to a different input")
+
+    def _upsert(self, table: str, row: dict[str, Any], keys: tuple[str, ...], keep: tuple[str, ...] = ()) -> None:
         cols = ", ".join(f"`{c}`" for c in row)
-        update = ", ".join(f"`{c}` = VALUES(`{c}`)" for c in row if c not in keys)
+        update = ", ".join(f"`{c}` = VALUES(`{c}`)" for c in row if c not in keys and c not in keep)
         sql = f"INSERT INTO `{table}` ({cols}) VALUES ({', '.join('?' * len(row))}) ON DUPLICATE KEY UPDATE {update}"
         with self.conn:
             self.conn.execute(sql, tuple(row.values()))
 
     def reset(self) -> None:
-        self._sites_cache.clear()
         self.dropped_data.clear()
         rows = self.conn.execute(
             "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'tstore\\_%'"
@@ -125,13 +191,7 @@ class MariaDBAdapterStore(SQLiteAdapterStore):
             "applied_ids_json": json.dumps(sorted(site.applied_ids)), "history_json": json.dumps(site.history),
             "lock_id": site.lock, "sync_version": site.sync_version, "config_json": json.dumps(site.config),
             "retained_json": json.dumps(site.retained),
-        }, ("tenant_id",))
-
-    def idem_put(self, tenant_id: str, operation: str, key: str, input_hash: str, outcome: dict[str, Any]) -> None:
-        self._upsert("adapter_idempotency", {
-            "tenant_id": tenant_id, "operation": operation, "idempotency_key": key,
-            "input_hash": input_hash, "outcome_json": json.dumps(outcome),
-        }, ("tenant_id", "operation", "idempotency_key"))
+        }, ("tenant_id",), keep=("sync_version",))  # sync_version moves only through set_sync_version
 
     def save_token(self, tenant_id: str, token: str, issued_at: int) -> None:
         self._upsert("adapter_plan_tokens", {"tenant_id": tenant_id, "token": token, "issued_at": issued_at}, ("tenant_id", "token"))
@@ -155,20 +215,21 @@ class MariaDBAdapterStore(SQLiteAdapterStore):
 
     # ------------------------------------------------ additive tenant field data (same shape as the SQLite store)
     def ensure_entity_table(self, tenant_id: str, entity_id: str) -> str:
+        self._no_ddl_in_transaction()
         tbl = _safe_table_name(tenant_id, entity_id)
-        with self.conn:
-            self.conn.execute(f"CREATE TABLE IF NOT EXISTS `{tbl}` (row_id VARCHAR(64) NOT NULL, PRIMARY KEY (row_id)) ENGINE=InnoDB")
+        self.conn.execute(
+            f"CREATE TABLE IF NOT EXISTS `{tbl}` (row_id VARCHAR(64) NOT NULL, PRIMARY KEY (row_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        )
         return tbl
 
     def ensure_field_column(self, tenant_id: str, entity_id: str, pointer: str) -> tuple[str, str]:
         tbl, col = self.ensure_entity_table(tenant_id, entity_id), _safe_col_name(pointer)
-        with self.conn:
-            self.conn.execute(f"ALTER TABLE `{tbl}` ADD COLUMN IF NOT EXISTS `{col}` LONGTEXT")
+        self.conn.execute(f"ALTER TABLE `{tbl}` ADD COLUMN IF NOT EXISTS `{col}` LONGTEXT")
         return tbl, col
 
     def write_field_data(self, tenant_id: str, entity_id: str, pointer: str, value: Any) -> Any:
         tbl, col = self.ensure_field_column(tenant_id, entity_id, pointer)
-        self._upsert(tbl, {"row_id": "default_row", col: json.dumps(value)}, ("row_id",))
+        self._upsert(tbl, {"row_id": "default_row", col: json.dumps(value, ensure_ascii=False)}, ("row_id",))
         return self.read_field_data(tenant_id, entity_id, pointer)
 
     def read_field_data(self, tenant_id: str, entity_id: str, pointer: str) -> Any:

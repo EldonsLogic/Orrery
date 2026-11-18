@@ -5,7 +5,10 @@ import copy
 import hashlib
 import json
 import sqlite3
-from typing import Any
+import threading
+import time
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 
 def _safe_table_name(tenant_id: str, entity_id: str) -> str:
@@ -16,6 +19,50 @@ def _safe_table_name(tenant_id: str, entity_id: str) -> str:
 def _safe_col_name(pointer: str) -> str:
     digest = hashlib.sha256(pointer.encode("utf-8")).hexdigest()[:24]
     return f"col_{digest}"
+
+
+class IdempotencyConflict(RuntimeError):
+    """A key is already bound to a different input hash; the binding is never rewritten."""
+
+
+class _Locked(Exception):
+    """Internal: the site lock was not free; rolls the key reservation back."""
+
+
+class _SqliteConn:
+    """sqlite3-shaped shim: autocommit outside `with`, BEGIN IMMEDIATE at depth 0, SAVEPOINTs when nested, thread-safe."""
+
+    def __init__(self, raw: sqlite3.Connection) -> None:
+        self.raw, self.depth, self._lock = raw, 0, threading.RLock()
+
+    def execute(self, sql: str, params: tuple = ()) -> Any:
+        with self._lock:
+            return self.raw.execute(sql, params)
+
+    def executescript(self, script: str) -> None:
+        with self._lock:
+            self.raw.executescript(script)
+
+    def __enter__(self) -> "_SqliteConn":
+        self._lock.acquire()
+        self.raw.execute("BEGIN IMMEDIATE" if self.depth == 0 else f"SAVEPOINT sp{self.depth}")
+        self.depth += 1
+        return self
+
+    def __exit__(self, exc_type: Any, *_: Any) -> None:
+        try:
+            self.depth -= 1
+            if self.depth == 0:
+                self.raw.execute("ROLLBACK" if exc_type is not None else "COMMIT")
+            else:
+                if exc_type is not None:
+                    self.raw.execute(f"ROLLBACK TO SAVEPOINT sp{self.depth}")
+                self.raw.execute(f"RELEASE SAVEPOINT sp{self.depth}")
+        finally:
+            self._lock.release()
+
+    def close(self) -> None:
+        self.raw.close()
 
 
 class SiteRecord:
@@ -59,46 +106,47 @@ class SiteRecord:
 class SQLiteAdapterStore:
     """Durable relational store backing sites, idempotency, plan evidence, journal, audit, events, members, and tenant field data."""
 
+    # A SQLite file is durable but sits outside the tenant database backup boundary (ADR-0041): dev and tests only.
+    production_grade = False
+    _FOR_UPDATE = ""
+
     def __init__(self, db_path: str = ":memory:") -> None:
         self.db_path = db_path
         self.volatile = db_path in (":memory:", "")  # lost on restart; refused in production (ERP-026)
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row
-        self._sites_cache: dict[str, SiteRecord] = {}
+        raw = sqlite3.connect(db_path, check_same_thread=False, isolation_level=None)
+        raw.row_factory = sqlite3.Row
+        self.conn = _SqliteConn(raw)
+        self.clock = time.time
         self.dropped_data: list[str] = []
         self._init_schema()
-        self._load_sites()
 
-    def _load_sites(self) -> None:
-        rows = self.conn.execute(
-            """
-            SELECT tenant_id, state, site_class, engine_target_json, blueprint_id,
-                   country_pack, applied_json, applied_ids_json, history_json,
-                   lock_id, sync_version, config_json, retained_json
-            FROM adapter_sites
-            """
-        ).fetchall()
-        for row in rows:
-            params = {
-                "siteClass": row["site_class"],
-                "engineTarget": json.loads(row["engine_target_json"]),
-                "blueprintId": row["blueprint_id"],
-                "countryPack": row["country_pack"],
-            }
-            site = SiteRecord(row["tenant_id"], params)
-            site.state = row["state"]
-            site.applied = json.loads(row["applied_json"]) if row["applied_json"] else None
-            site.applied_ids = set(json.loads(row["applied_ids_json"]))
-            site.history = json.loads(row["history_json"])
-            site.lock = row["lock_id"]
-            site.sync_version = int(row["sync_version"])
-            site.config = json.loads(row["config_json"])
-            site.retained = json.loads(row["retained_json"])
-            self._sites_cache[row["tenant_id"]] = site
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Group several store calls into one commit; an exception rolls all of them back."""
+        with self.conn:
+            yield
+
+    @staticmethod
+    def _site_from_row(row: Any) -> SiteRecord:
+        params = {
+            "siteClass": row["site_class"],
+            "engineTarget": json.loads(row["engine_target_json"]),
+            "blueprintId": row["blueprint_id"],
+            "countryPack": row["country_pack"],
+        }
+        site = SiteRecord(row["tenant_id"], params)
+        site.state = row["state"]
+        site.applied = json.loads(row["applied_json"]) if row["applied_json"] else None
+        site.applied_ids = set(json.loads(row["applied_ids_json"]))
+        site.history = json.loads(row["history_json"])
+        site.lock = row["lock_id"]
+        site.sync_version = int(row["sync_version"])
+        site.config = json.loads(row["config_json"])
+        site.retained = json.loads(row["retained_json"])
+        return site
 
     def _init_schema(self) -> None:
-        with self.conn:
-            self.conn.executescript(
+        self.conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS adapter_sites (
                     tenant_id TEXT PRIMARY KEY,
@@ -121,6 +169,10 @@ class SQLiteAdapterStore:
                     idempotency_key TEXT NOT NULL,
                     input_hash TEXT NOT NULL,
                     outcome_json TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'done',
+                    operation_id TEXT,
+                    lease_expires_at INTEGER,
+                    meta_json TEXT,
                     PRIMARY KEY (tenant_id, operation, idempotency_key)
                 );
                 CREATE TABLE IF NOT EXISTS adapter_plan_tokens (
@@ -182,7 +234,6 @@ class SQLiteAdapterStore:
             )
 
     def reset(self) -> None:
-        self._sites_cache.clear()
         self.dropped_data.clear()
         cur = self.conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'tstore_%'")
         dynamic_tables = [row["name"] for row in cur.fetchall()]
@@ -203,21 +254,27 @@ class SQLiteAdapterStore:
                 self.conn.execute(f"DELETE FROM {tbl}")
 
     # ------------------------------------------------------------------ sites
+    _SITE_COLS = (
+        "tenant_id, state, site_class, engine_target_json, blueprint_id, country_pack, applied_json, "
+        "applied_ids_json, history_json, lock_id, sync_version, config_json, retained_json"
+    )
+
     def get_site(self, tenant_id: str) -> SiteRecord | None:
-        return self._sites_cache.get(tenant_id)
+        """Always read from the database: another worker may have changed the row (no in-process cache)."""
+        row = self.conn.execute(f"SELECT {self._SITE_COLS} FROM adapter_sites WHERE tenant_id = ?", (tenant_id,)).fetchone()
+        return self._site_from_row(row) if row is not None else None
 
     def hydrate_site(self, site: SiteRecord) -> SiteRecord:
-        self._sites_cache[site.tenant_id] = site
         self.save_site(site)
         return site
 
     def create_site(self, tenant_id: str, params: dict[str, Any]) -> SiteRecord:
         site = SiteRecord(tenant_id, params)
-        self._sites_cache[tenant_id] = site
         self.save_site(site)
         return site
 
     def save_site(self, site: SiteRecord) -> None:
+        """Upsert the site. sync_version is only set on insert; it moves through set_sync_version (compare and set)."""
         with self.conn:
             self.conn.execute(
                 """
@@ -236,7 +293,6 @@ class SQLiteAdapterStore:
                     applied_ids_json = excluded.applied_ids_json,
                     history_json = excluded.history_json,
                     lock_id = excluded.lock_id,
-                    sync_version = excluded.sync_version,
                     config_json = excluded.config_json,
                     retained_json = excluded.retained_json
                 """,
@@ -257,7 +313,133 @@ class SQLiteAdapterStore:
                 ),
             )
 
-    # ------------------------------------------------------------------ idempotency
+    def set_sync_version(self, tenant_id: str, version: int) -> bool:
+        """Compare and set: only moves the version forward. False when another worker already holds a newer or equal one."""
+        with self.conn:
+            cur = self.conn.execute(
+                "UPDATE adapter_sites SET sync_version = ? WHERE tenant_id = ? AND sync_version < ?", (version, tenant_id, version)
+            )
+            return cur.rowcount == 1
+
+    # ------------------------------------------------------------------ idempotency (reserve, complete, recover)
+    def _insert_reservation(self, row: tuple) -> bool:
+        cur = self.conn.execute(
+            "INSERT OR IGNORE INTO adapter_idempotency (tenant_id, operation, idempotency_key, input_hash, outcome_json, "
+            "status, operation_id, lease_expires_at, meta_json) VALUES (?, ?, ?, ?, ?, 'in_progress', ?, ?, ?)",
+            row,
+        )
+        return cur.rowcount == 1
+
+    def acquire_operation(
+        self,
+        tenant_id: str,
+        operation: str,
+        key: str,
+        input_hash: str,
+        operation_id: str,
+        pending: dict[str, Any],
+        meta: dict[str, Any],
+        *,
+        lock: bool,
+        lease_seconds: int,
+    ) -> tuple[str, Any]:
+        """Atomically bind the key to its input and, when asked, take the site lock, in one committed transaction.
+
+        Returns ("acquired", None), ("replay", stored outcome), ("in_progress", {"outcome", "expired"}),
+        ("conflict", None) for the same key with other input, or ("locked", None) when the site lock is held.
+        Two workers racing on one key: the unique key lets exactly one INSERT succeed; no in-process state is consulted.
+        """
+        now = int(self.clock())
+        row = (tenant_id, operation, key, input_hash, json.dumps(pending), operation_id, now + int(lease_seconds), json.dumps(meta))
+        try:
+            with self.conn:
+                if self._insert_reservation(row):
+                    if lock:
+                        cur = self.conn.execute(
+                            "UPDATE adapter_sites SET lock_id = ?, state = CASE WHEN state = 'ready' THEN 'applying' ELSE state END "
+                            "WHERE tenant_id = ? AND lock_id IS NULL",
+                            (operation_id, tenant_id),
+                        )
+                        if cur.rowcount != 1:
+                            raise _Locked()
+                    return "acquired", None
+                found = self.conn.execute(
+                    "SELECT input_hash, status, outcome_json, lease_expires_at FROM adapter_idempotency "
+                    "WHERE tenant_id = ? AND operation = ? AND idempotency_key = ?" + self._FOR_UPDATE,
+                    (tenant_id, operation, key),
+                ).fetchone()
+        except _Locked:
+            return "locked", None
+        if found["input_hash"] != input_hash:
+            return "conflict", None
+        outcome = json.loads(found["outcome_json"])
+        if found["status"] == "done":
+            return "replay", outcome
+        expired = found["lease_expires_at"] is not None and int(found["lease_expires_at"]) < now
+        return "in_progress", {"outcome": outcome, "expired": expired}
+
+    def idem_complete(self, tenant_id: str, operation: str, key: str, operation_id: str, outcome: dict[str, Any]) -> bool:
+        """Store the final outcome; compare and set on the reservation, so a worker that lost its lease gets False."""
+        with self.conn:
+            cur = self.conn.execute(
+                "UPDATE adapter_idempotency SET outcome_json = ?, status = 'done', lease_expires_at = NULL "
+                "WHERE tenant_id = ? AND operation = ? AND idempotency_key = ? AND operation_id = ? AND status = 'in_progress'",
+                (json.dumps(outcome), tenant_id, operation, key, operation_id),
+            )
+            return cur.rowcount == 1
+
+    def idem_release(self, tenant_id: str, operation: str, key: str, operation_id: str) -> None:
+        """Drop an unfinished reservation (a refusal before the operation record exists stores nothing, contract 5.6.1)."""
+        with self.conn:
+            self.conn.execute(
+                "DELETE FROM adapter_idempotency WHERE tenant_id = ? AND operation = ? AND idempotency_key = ? "
+                "AND operation_id = ? AND status = 'in_progress'",
+                (tenant_id, operation, key, operation_id),
+            )
+
+    def expired_operations(self) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT tenant_id, operation, idempotency_key, operation_id, outcome_json, meta_json FROM adapter_idempotency "
+            "WHERE status = 'in_progress' AND lease_expires_at < ?",
+            (int(self.clock()),),
+        ).fetchall()
+        return [
+            {
+                "tenant": r["tenant_id"],
+                "operation": r["operation"],
+                "key": r["idempotency_key"],
+                "operationId": r["operation_id"],
+                "pending": json.loads(r["outcome_json"]),
+                "meta": json.loads(r["meta_json"] or "{}"),
+            }
+            for r in rows
+        ]
+
+    def recover_operation(self, rec: dict[str, Any], final: dict[str, Any] | None) -> bool:
+        """Close an expired operation exactly once. With `final`, store it as the outcome and put the site in
+        recovery_required (lock cleared); without, release the reservation. False when another worker got there first."""
+        with self.conn:
+            if final is None:
+                cur = self.conn.execute(
+                    "DELETE FROM adapter_idempotency WHERE tenant_id = ? AND operation = ? AND idempotency_key = ? "
+                    "AND operation_id = ? AND status = 'in_progress'",
+                    (rec["tenant"], rec["operation"], rec["key"], rec["operationId"]),
+                )
+            else:
+                cur = self.conn.execute(
+                    "UPDATE adapter_idempotency SET outcome_json = ?, status = 'done', lease_expires_at = NULL "
+                    "WHERE tenant_id = ? AND operation = ? AND idempotency_key = ? AND operation_id = ? AND status = 'in_progress'",
+                    (json.dumps(final), rec["tenant"], rec["operation"], rec["key"], rec["operationId"]),
+                )
+            if cur.rowcount != 1:
+                return False
+            if final is not None:
+                self.conn.execute(
+                    "UPDATE adapter_sites SET state = 'recovery_required', lock_id = NULL WHERE tenant_id = ? AND lock_id = ?",
+                    (rec["tenant"], rec["operationId"]),
+                )
+            return True
+
     def idem_get(self, tenant_id: str, operation: str, key: str) -> tuple[str, dict[str, Any]] | None:
         row = self.conn.execute(
             "SELECT input_hash, outcome_json FROM adapter_idempotency WHERE tenant_id = ? AND operation = ? AND idempotency_key = ?",
@@ -268,17 +450,20 @@ class SQLiteAdapterStore:
         return row["input_hash"], json.loads(row["outcome_json"])
 
     def idem_put(self, tenant_id: str, operation: str, key: str, input_hash: str, outcome: dict[str, Any]) -> None:
+        """Insert a finished key. The same key with the same input updates the outcome; other input raises, never rebinds."""
         with self.conn:
             self.conn.execute(
-                """
-                INSERT INTO adapter_idempotency (tenant_id, operation, idempotency_key, input_hash, outcome_json)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(tenant_id, operation, idempotency_key) DO UPDATE SET
-                    input_hash = excluded.input_hash,
-                    outcome_json = excluded.outcome_json
-                """,
+                "INSERT OR IGNORE INTO adapter_idempotency (tenant_id, operation, idempotency_key, input_hash, outcome_json) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (tenant_id, operation, key, input_hash, json.dumps(outcome)),
             )
+            cur = self.conn.execute(
+                "UPDATE adapter_idempotency SET outcome_json = ?, status = 'done' "
+                "WHERE tenant_id = ? AND operation = ? AND idempotency_key = ? AND input_hash = ?",
+                (json.dumps(outcome), tenant_id, operation, key, input_hash),
+            )
+            if cur.rowcount != 1:
+                raise IdempotencyConflict(f"{operation}/{key} is bound to a different input")
 
     # ------------------------------------------------------------------ tokens and evidence
     def save_token(self, tenant_id: str, token: str, issued_at: int) -> None:

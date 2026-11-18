@@ -101,7 +101,7 @@ def make_frappe_adapter(
     frappe_factory: Callable[[], Any] | None = None,
     auto_create_sites: bool = False,
     sites_path: str | None = None,
-    test_hooks: bool = True,
+    test_hooks: bool = False,
 ) -> ChangeEngineAdapter:
     """Create a ChangeEngineAdapter wired to FrappeRuntimeBackend (fails closed unless simulated=True or frappe_factory is set)."""
     if frappe_factory is None and simulated:
@@ -119,7 +119,7 @@ def make_frappe_adapter(
 
 def make_frappe_harness(*, simulated: bool = True, db_path: str = ":memory:") -> ChangeEngineHarness:
     """Factory referenced by ADAPTER_HARNESS=change_engine.adapter.harness:make_frappe_harness."""
-    return ChangeEngineHarness(adapter=make_frappe_adapter(simulated=simulated, db_path=db_path), db_path=db_path)
+    return ChangeEngineHarness(adapter=make_frappe_adapter(simulated=simulated, db_path=db_path, test_hooks=True), db_path=db_path)
 
 
 __all__ = [

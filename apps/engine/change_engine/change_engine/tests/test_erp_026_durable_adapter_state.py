@@ -16,9 +16,9 @@ from pathlib import Path
 
 from change_engine.adapter import ChangeEngineAdapter
 from change_engine.adapter.mariadb_store import MariaDBAdapterStore
-from change_engine.adapter.storage import SQLiteAdapterStore
+from change_engine.adapter.storage import IdempotencyConflict, SQLiteAdapterStore
 from change_engine.adapter.store_api import AdapterStore, StoreRefused
-from change_engine.tests.test_bpl_012_engine_adapter import _ctx
+from change_engine.tests.test_bpl_012_engine_adapter import _ctx, _make_initial_build
 
 try:
     import pymysql
@@ -40,6 +40,13 @@ AUDIT = {"auditId": "aud_1", "operation": "apply", "requestId": "r1", "correlati
          "artifactId": "art1", "result": "in_progress"}
 
 
+def _apply_input(adapter, key):
+    art = _make_initial_build()
+    plan = adapter.call("plan", _ctx(), {"artifact": art})
+    return {"idempotencyKey": key, "artifact": art, "planToken": plan["result"]["planToken"],
+            "approvals": {"changeApproved": "01J00000000000000000000002"}}
+
+
 class StoreConformance:
     """Contract every AdapterStore passes. Subclasses provide make_store() and reopen() (a new connection to the same data)."""
 
@@ -50,10 +57,12 @@ class StoreConformance:
         s = self.make_store()
         self.assertIsNone(s.idem_get("t", "apply", "k1"))
         s.idem_put("t", "apply", "k1", "a" * 64, {"status": "applied"})
-        s.idem_put("t", "apply", "k1", "b" * 64, {"status": "rejected"})
+        s.idem_put("t", "apply", "k1", "a" * 64, {"status": "rejected"})  # same input: the outcome may be updated
+        with self.assertRaises(IdempotencyConflict):  # other input: the binding is never rewritten
+            s.idem_put("t", "apply", "k1", "b" * 64, {"status": "other"})
         s.idem_put("u", "apply", "k1", "c" * 64, {"status": "other-tenant"})
         s = self.reopen(s)
-        self.assertEqual(s.idem_get("t", "apply", "k1"), ("b" * 64, {"status": "rejected"}))
+        self.assertEqual(s.idem_get("t", "apply", "k1"), ("a" * 64, {"status": "rejected"}))
         self.assertEqual(s.idem_get("u", "apply", "k1")[1], {"status": "other-tenant"})
         self.assertIsNone(s.idem_get("t", "rollback", "k1"))
 
@@ -85,9 +94,12 @@ class StoreConformance:
         s = self.make_store()
         site = s.create_site("t", {"siteClass": "production", "engineTarget": {"adapter": "frappe"},
                                    "blueprintId": "b", "countryPack": "sa"})
-        site.sync_version = 3
         site.applied_ids.add("art1")
         s.save_site(site)
+        self.assertTrue(s.set_sync_version("t", 3))  # sync_version moves only by compare and set
+        self.assertFalse(s.set_sync_version("t", 3))
+        self.assertFalse(s.set_sync_version("t", 2))
+        s.save_site(site)  # a stale copy (version 0) must not move it back
         self.assertEqual(s.write_field_data("t", "customer", "/f", {"v": 42}), {"v": 42})
         s = self.reopen(s)
         got = s.get_site("t")
@@ -142,18 +154,23 @@ class ProductionGuard(unittest.TestCase):
         ChangeEngineAdapter(test_hooks=False)
         ChangeEngineAdapter(test_hooks=True, environment="dev")
 
-    def test_production_accepts_durable_store(self):
+    def test_production_refuses_a_sqlite_file_even_though_it_is_durable(self):
+        # ADR-0041: adapter state lives in the tenant MariaDB; a local file is outside its backup boundary
         with tempfile.TemporaryDirectory() as d:
-            ChangeEngineAdapter(test_hooks=False, db_path=str(Path(d) / "s.sqlite"))
+            for kwargs in ({"test_hooks": False}, {"test_hooks": False, "environment": "production"}):
+                with self.assertRaises(StoreRefused, msg=str(kwargs)):
+                    ChangeEngineAdapter(db_path=str(Path(d) / "s.sqlite"), **kwargs)
+            ChangeEngineAdapter(test_hooks=True, environment="dev", db_path=str(Path(d) / "dev.sqlite"))
 
 
-@unittest.skipUnless(pymysql and CONF.count(":") == 3, MARIA_SKIP)
-class MariaDBConformance(StoreConformance, unittest.TestCase):
+class MariaDBBase(unittest.TestCase):
+    DB_CHARSET = "utf8mb4"
+
     def setUp(self):
         self.host, port, self.user, self.pw = CONF.split(":")
         self.port, self.db, self._open = int(port), "erp026_" + uuid.uuid4().hex[:10], []
         admin = self._connect(None, autocommit=True)
-        admin.cursor().execute(f"CREATE DATABASE {self.db} CHARACTER SET utf8mb4")
+        admin.cursor().execute(f"CREATE DATABASE {self.db} CHARACTER SET {self.DB_CHARSET}")
         self.addCleanup(self._drop)
         self._admin = admin
 
@@ -176,6 +193,9 @@ class MariaDBConformance(StoreConformance, unittest.TestCase):
         store.conn.close()
         return MariaDBAdapterStore(self._connect(self.db))
 
+
+@unittest.skipUnless(pymysql and CONF.count(":") == 3, MARIA_SKIP)
+class MariaDBConformance(MariaDBBase, StoreConformance):
     def test_transaction_rolls_back_effect_and_idempotency_record_together(self):
         s = self.make_store()
         with self.assertRaises(RuntimeError):
@@ -197,8 +217,10 @@ class MariaDBConformance(StoreConformance, unittest.TestCase):
         s.write_field_data("t_alpha", "customer", "/f", 42)
         dump = subprocess.run(["docker", "exec", CONTAINER, "mariadb-dump", f"-u{self.user}", f"-p{self.pw}", "--single-transaction",
                                self.db], capture_output=True, check=True).stdout
-        later = ChangeEngineAdapter(test_hooks=True, store=self.reopen(s))  # work after the dump is lost by the restore
-        later.store.idem_put("t_alpha", "apply", "after_dump", "d" * 64, {"status": "applied"})
+        later = ChangeEngineAdapter(test_hooks=True, store=self.reopen(s))  # real apply after the dump: lost by the restore
+        inp = _apply_input(later, "apply_after_dump_0001")
+        applied = later.call("apply", _ctx(), inp)
+        self.assertEqual(applied["result"]["status"], "applied", applied)
         later.store.write_field_data("t_alpha", "customer", "/f", 99)
         self._admin.cursor().execute(f"DROP DATABASE {self.db}")
         self._admin.cursor().execute(f"CREATE DATABASE {self.db} CHARACTER SET utf8mb4")
@@ -208,7 +230,11 @@ class MariaDBConformance(StoreConformance, unittest.TestCase):
         replay = restored.call("provision_site", _ctx(), PROVISION)
         self.assertTrue(replay["ok"] and replay["replayed"], replay)
         self.assertEqual(restored.store.read_field_data("t_alpha", "customer", "/f"), 42)
-        self.assertIsNone(restored.store.idem_get("t_alpha", "apply", "after_dump"))  # key and effect rolled back together
+        self.assertIsNone(restored.store.idem_get("t_alpha", "apply", "apply_after_dump_0001"))  # key and effect rolled back together
+        self.assertIsNone(restored.store.get_site("t_alpha").applied)
+        retry = restored.call("apply", _ctx(), _apply_input(restored, "apply_after_dump_0001"))  # a retry is a correct first run
+        self.assertTrue(retry["ok"] and not retry["replayed"] and retry["result"]["status"] == "applied", retry)
+        self.assertEqual(len([j for j in restored.execution_journal() if j["phase"] == "execute"]), 1)
 
 
 if __name__ == "__main__":

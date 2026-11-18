@@ -32,7 +32,8 @@ from change_engine.guarded_apply.ddl_plan_gate import (
     assess_applied_ddl,
     inspect_frappe_ddl_plan,
     SCHEMA_COLUMN_ATTRS,
-    is_ddl_statement,
+    requires_ddl_check,
+    ddl_batch_rejection,
     new_column_matches_plan,
 )
 from change_engine.guarded_apply.schema_reconciler import (
@@ -1070,17 +1071,28 @@ class FrappeDeploymentAdapter:
             "default": field_def.get("default"),
         }
         if not self.in_memory:
-            # Record every DDL statement Frappe really executes (still executed unchanged) so
-            # the after-snapshot can compare it with the approved plan (ERP-027). DDL sent
-            # through ``db.sql`` is recorded as well as ``db.sql_ddl``.
+            # Validate before dispatch: post-apply snapshots cannot undo a narrowing DDL
+            # statement whose implicit commit already truncated customer data.
             executed = self._executed_ddl.setdefault(deployment_id, [])
             db = self._frappe.db
             original_sql_ddl = getattr(db, "sql_ddl", None)
             original_sql = getattr(db, "sql", None)
             in_sql_ddl = [0]
 
+            def _record_approved_ddl(query):
+                """Check this batch prefix before admitting the next schema statement."""
+                statement = str(query)
+                reason = ddl_batch_rejection(
+                    doctype, fieldname, self._approved_ddl.get(deployment_id),
+                    [*executed, statement], self._before_schema.get((doctype, deployment_id)),
+                    complete=False,
+                )
+                if reason:
+                    raise ValueError("DDL rejected before execution: " + reason)
+                executed.append(statement)
+
             def _recording_sql_ddl(query, *a, **kw):
-                executed.append(str(query))
+                _record_approved_ddl(query)
                 in_sql_ddl[0] += 1
                 try:
                     return original_sql_ddl(query, *a, **kw)
@@ -1088,8 +1100,8 @@ class FrappeDeploymentAdapter:
                     in_sql_ddl[0] -= 1
 
             def _recording_sql(query, *a, **kw):
-                if not in_sql_ddl[0] and isinstance(query, str) and is_ddl_statement(query):
-                    executed.append(query)
+                if not in_sql_ddl[0] and requires_ddl_check(str(query)):
+                    _record_approved_ddl(query)
                 return original_sql(query, *a, **kw)
 
             if original_sql_ddl is not None:

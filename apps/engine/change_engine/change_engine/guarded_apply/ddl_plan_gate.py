@@ -48,9 +48,15 @@ class FrappeInspectionError(Exception):
         self.message = message
 
 
-# ADR-001 Rev 2.3 §6.1/§6.2 Approval Regex (comma permitted strictly inside decimal(w,p))
+# Frappe v15 emits a type, optional NOT NULL, and at most one literal default.
+# Keep the captured literal verbatim, including case, whitespace and escaped quotes.
+_TYPE = r"(?:decimal\(\d+,\s*\d+\)|(?:int|bigint|varchar|time|datetime)\(\d+\)|date|text|longtext|json)"
+_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+_STRING = r"'(?:[^'\\]|\\.|'')*'"
 APPROVED_DDL_REGEX = re.compile(
-    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` (?:decimal\(\d+,\d+\)|[A-Za-z0-9_() '.])+$"
+    r"ALTER TABLE (?P<table>`tab[A-Za-z0-9_ ]+`) ADD COLUMN `(?P<name>custom_[a-z0-9_]+)` "
+    rf"(?P<type>{_TYPE})(?P<required> not null)?(?: default (?P<default>{_NUMBER}|{_STRING}|NULL))?\Z",
+    re.ASCII | re.I,
 )
 
 # MariaDB v15 Type Mapping matching Frappe v15 mariadb/database.py
@@ -395,31 +401,25 @@ def validate_ddl_plan(statements: List[str]) -> Tuple[bool, Optional[str]]:
         return False, f"Expected exactly 1 DDL statement, but produced {len(statements)}: {statements}"
 
     stmt = statements[0]
-
-    # Explicit check for unapproved operation keywords
-    if "MODIFY" in stmt:
-        return False, f"Unapproved MODIFY COLUMN detected in updatedb() diff: '{stmt}'"
-    if "DROP INDEX" in stmt:
-        return False, f"Unapproved DROP INDEX detected in updatedb() diff: '{stmt}'"
-    if "ADD INDEX" in stmt:
-        return False, f"Unapproved ADD INDEX detected in updatedb() diff: '{stmt}'"
-    if "ADD UNIQUE" in stmt:
-        return False, f"Unapproved ADD UNIQUE detected in updatedb() diff: '{stmt}'"
-
-    # Strictly check approved single ADD COLUMN regex pattern
-    if not APPROVED_DDL_REGEX.match(stmt):
-        return False, f"DDL statement does not match approved additive ADD COLUMN pattern: '{stmt}'"
+    if not APPROVED_DDL_REGEX.fullmatch(stmt):
+        return False, f"Unapproved DDL (expected one ADD COLUMN with a literal definition): {stmt!r}"
 
     return True, None
 
 
-_DDL_KEYWORD_RE = re.compile(r"^\s*(?:ALTER|CREATE|DROP|RENAME|TRUNCATE)\b", re.I)
+def requires_ddl_check(query: str) -> bool:
+    """Only ordinary Frappe data access and transaction commands bypass DDL validation.
 
-
-def is_ddl_statement(statement: str) -> bool:
-    """True when the statement starts with a DDL keyword (used to record DDL sent through
-    ``db.sql`` as well as ``db.sql_ddl``)."""
-    return bool(_DDL_KEYWORD_RE.match(str(statement or "")))
+    Unknown verbs and leading comments are checked as DDL, hence rejected.
+    """
+    if not re.match(r"^\s*(START\s+TRANSACTION|SELECT|SHOW|DESCRIBE|INSERT|UPDATE|DELETE|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b",
+                    query, re.I):
+        return True
+    try:
+        _scan_top_level(query, split_commas=False)
+    except ValueError:
+        return True
+    return False
 
 
 def _scan_top_level(text: str, *, split_commas: bool) -> List[str]:
@@ -495,7 +495,9 @@ def _split_alter_clauses(statement: str) -> Tuple[str, List[str]]:
     if not m:
         return "", []
     clauses = _scan_top_level(m.group(2), split_commas=True)
-    return m.group(1), [c for c in clauses if c]
+    if not all(clauses):
+        raise ValueError("empty ALTER clause")
+    return m.group(1), clauses
 
 
 def _normalize_sql(text: str) -> str:
@@ -534,98 +536,129 @@ def _schema_is_complete(schema: Any) -> bool:
     )
 
 
-def _default_literal(default: Any) -> Optional[str]:
-    """information_schema COLUMN_DEFAULT as the SQL default literal Frappe would restate, or
-    None when the column has no default."""
-    if default is None:
+def _column_default(col: Dict[str, Any]) -> Optional[str]:
+    """Preserve quoted string defaults. Compare unquoted numeric defaults losslessly."""
+    raw = col["default"]
+    if raw is None or raw in ("NULL", "None"):
         return None
-    text = str(default).strip()
-    if text.upper() in ("NULL", "NONE", ""):
-        return None
-    bare = text.strip("'\"")
-    try:
-        value = Decimal(bare)
-    except InvalidOperation:
-        escaped = bare.replace("\\", "\\\\").replace("'", "\\'")
-        return f"'{escaped}'"
-    return "0" if value == 0 else bare
+    literal = str(raw)
+    if re.fullmatch(_NUMBER, literal):
+        return "0" if Decimal(literal).is_zero() else literal
+    return literal
 
 
-def _restated_definition(col: Dict[str, Any]) -> str:
-    """The column definition restated exactly as it is in the BEFORE snapshot, in the form
-    Frappe's ``get_definition`` emits: canonical type, ``not null`` and ``default``."""
-    parts = [_canonical_column_type(col["type"])]
-    if str(col["nullable"]).upper() == "NO":
-        parts.append("not null")
-    literal = _default_literal(col["default"])
-    if literal is not None:
-        parts.append(f"default {literal}")
-    return " ".join(parts)
+def _plain_column(col: Dict[str, Any], collation: Optional[str]) -> bool:
+    """Can Frappe omit column options without changing their values?"""
+    return (
+        col["extra"] == "" and col["comment"] == "" and col["generation"] in (None, "", "None")
+        and (None if col["collation"] == "None" else col["collation"]) == collation
+        and (None if col["charset"] == "None" else col["charset"]) == (
+            collation.split("_", 1)[0] if collation else None
+        )
+    )
 
 
 def noop_modify_allowlist(before_schema: Dict[str, Any]) -> Dict[str, Set[str]]:
-    """Known phantom no-op ``MODIFY`` clauses Frappe re-emits for unchanged columns,
-    regenerated deterministically from the BEFORE snapshot (ERP-027 re-review H1).
-
-    ``{column_lower: {normalised clause}}``. A column qualifies only when the gate itself
-    treats its drift as phantom:
-      * a ``NOT NULL`` decimal column with a zero default (``'0.000000000'`` vs a DocField
-        with no default), whose phantom is ``MODIFY `c` decimal(w,p) not null default 0``;
-      * a column whose type differs from the canonical spelling only in case/whitespace.
-    The clause restates the exact current definition: no charset, collation, FIRST/AFTER,
-    CHECK, AUTO_INCREMENT, ON UPDATE or COMMENT, so any of those makes it a non-member.
-    """
-    allowed: Dict[str, Set[str]] = {}
+    """Regenerate only supported Frappe restatements that preserve the BEFORE definition."""
+    allowed = {}
     for name, col in before_schema["columns"].items():
-        raw_type = str(col["type"])
+        if col["nullable"] not in ("YES", "NO"):
+            continue
+        raw_type = col["type"]
         canon = _canonical_column_type(raw_type)
-        zero_decimal = (
-            canon.startswith("decimal(")
-            and str(col["nullable"]).upper() == "NO"
-            and _default_literal(col["default"]) == "0"
-        )
+        if not re.fullmatch(_TYPE, canon):
+            continue
+        literal = _column_default(col)
+        zero_decimal = canon.startswith("decimal(") and col["nullable"] == "NO" and literal == "0"
         if not zero_decimal and canon == raw_type:
             continue
-        allowed[name.lower()] = {
-            _normalize_sql(f"MODIFY `{name}` {_restated_definition(col)}")
-        }
+        collation = before_schema["table"][1] if canon.startswith(("varchar", "text", "longtext")) else None
+        if not _plain_column(col, collation):
+            continue
+        if literal is not None and not re.fullmatch(f"{_NUMBER}|{_STRING}", literal):
+            continue
+        required = " not null" if col["nullable"] == "NO" else ""
+        default = f" default {literal}" if literal is not None else ""
+        allowed[name.lower()] = {_normalize_sql(f"MODIFY `{name}` {canon}{required}{default}")}
     return allowed
 
 
-def _approved_column_type(approved_statements: List[str], fieldname: str) -> Optional[Tuple[str, bool]]:
-    """``(type token, not_null)`` of the approved ADD COLUMN for ``fieldname`` or None."""
-    for stmt in approved_statements:
-        try:
-            _, clauses = _split_alter_clauses(stmt)
-        except ValueError:
-            return None
-        for c in clauses:
-            m = re.match(
-                r"^ADD COLUMN\s+`" + re.escape(fieldname) + r"`\s+([A-Za-z]+(?:\([\d,\s]+\))?)(.*)$",
-                c.strip(), re.S | re.I,
-            )
-            if m:
-                return _canonical_column_type(m.group(1)), "not null" in m.group(2).lower()
-    return None
+def _approved_column(approved: Optional[List[str]], fieldname: str):
+    """Return the exact single-field declaration, or None for an unsupported plan."""
+    if not approved or len(approved) != 1:
+        return None
+    match = APPROVED_DDL_REGEX.fullmatch(approved[0])
+    return match if match and match["name"] == fieldname else None
 
 
 def new_column_matches_plan(
     fieldname: str, approved_statements: Optional[List[str]], after_schema: Optional[Dict[str, Any]]
 ) -> bool:
-    """True when the column that now exists has the type (and NOT NULL) the approved plan
-    asked for. MariaDB reports ``json`` columns as ``longtext``. Unknown input is False."""
-    if approved_statements is None or not _schema_is_complete(after_schema):
+    """Read back type, nullability, literal default and inherited column properties."""
+    match = _approved_column(approved_statements, fieldname)
+    if not match or not _schema_is_complete(after_schema):
         return False
     col = after_schema["columns"].get(fieldname)
-    declared = _approved_column_type(approved_statements, fieldname)
-    if col is None or declared is None:
+    declared = _canonical_column_type(match["type"])
+    collation = None
+    if declared == "json":
+        declared, collation = "longtext", "utf8mb4_bin"
+    elif declared.startswith(("varchar", "text", "longtext")):
+        collation = after_schema["table"][1]
+    if (not col or _canonical_column_type(col["type"]) != declared
+            or col["nullable"] != ("NO" if match["required"] else "YES")
+            or not _plain_column(col, collation) or col["key"]):
         return False
-    declared_type, not_null = declared
-    if declared_type == "json":
-        declared_type = "longtext"
-    if _canonical_column_type(col["type"]) != declared_type:
-        return False
-    return (str(col["nullable"]).upper() == "NO") == not_null
+    expected = match["default"]
+    actual = _column_default(col)
+    if expected is None or expected.upper() == "NULL":
+        return actual is None
+    if re.fullmatch(_NUMBER, expected):
+        return actual is not None and bool(re.fullmatch(_NUMBER, actual)) and Decimal(actual) == Decimal(expected)
+    return actual == expected
+
+
+def ddl_batch_rejection(doctype, fieldname, approved_statements, executed_statements, before_schema, *, complete):
+    """Check a prefix before dispatch, or the complete batch when reconciling after apply."""
+    if not _schema_is_complete(before_schema):
+        return "before schema is unknown or incomplete"
+    table = f"`tab{doctype}`"
+    approved = _approved_column(approved_statements, fieldname)
+    if not approved or approved["table"] != table:
+        return "expected one approved ADD COLUMN on the target field and table"
+    _, adds = _split_alter_clauses(approved[0])
+    approved_adds = [_normalize_sql(adds[0])]
+    allowed = noop_modify_allowlist(before_schema)
+    executed_adds: List[str] = []
+    modified: Set[str] = set()
+    try:
+        for stmt in executed_statements:
+            t, clauses = _split_alter_clauses(stmt)
+            if not clauses or t != table:
+                return f"executed DDL is not an ALTER TABLE on {table}: {str(stmt)[:120]}"
+            for c in clauses:
+                norm = _normalize_sql(c)
+                if norm.startswith("add column "):
+                    executed_adds.append(norm)
+                    continue
+                m = re.match(r"^modify `((?:[^`]|``)+)`", norm)
+                if not m:
+                    return f"executed DDL contains an unapproved clause: {c[:120]}"
+                column = m.group(1).lower()
+                if norm not in allowed.get(column, set()):
+                    return (
+                        f"executed MODIFY on '{m.group(1)}' is not in the allow-list of "
+                        f"no-op clauses for the before-snapshot: {c[:120]}"
+                    )
+                if column in modified:
+                    return f"column '{m.group(1)}' was modified more than once"
+                modified.add(column)
+    except ValueError as exc:
+        return f"executed DDL cannot be parsed with certainty: {exc}"
+    if executed_adds != approved_adds and (complete or executed_adds):
+        return "executed ADD COLUMN clauses differ from the approved plan"
+
+    return None
 
 
 def assess_applied_ddl(
@@ -662,49 +695,10 @@ def assess_applied_ddl(
     if not executed_statements and before_schema == after_schema:
         return False, None  # nothing ran and nothing changed (clean failure)
 
-    table = f"`tab{doctype}`".lower()
-    approved_adds: List[str] = []
-    try:
-        for stmt in approved_statements:
-            t, clauses = _split_alter_clauses(stmt)
-            if t.lower() != table:
-                return True, f"approved plan statement does not target {table}"
-            for c in clauses:
-                if not re.match(r"^ADD COLUMN\b", c, re.I):
-                    return True, f"approved plan contains a non-additive clause: {c[:120]}"
-                approved_adds.append(_normalize_sql(c))
-    except ValueError as exc:
-        return True, f"approved plan cannot be parsed: {exc}"
-
-    allowed = noop_modify_allowlist(before_schema)
-    executed_adds: List[str] = []
-    modified: Set[str] = set()
-    try:
-        for stmt in executed_statements:
-            t, clauses = _split_alter_clauses(stmt)
-            if not clauses or t.lower() != table:
-                return True, f"executed DDL is not an ALTER TABLE on {table}: {str(stmt)[:120]}"
-            for c in clauses:
-                norm = _normalize_sql(c)
-                if norm.startswith("add column "):
-                    executed_adds.append(norm)
-                    continue
-                m = re.match(r"^modify `((?:[^`]|``)+)`", norm)
-                if not m:
-                    return True, f"executed DDL contains an unapproved clause: {c[:120]}"
-                column = m.group(1).lower()
-                if norm not in allowed.get(column, set()):
-                    return True, (
-                        f"executed MODIFY on '{m.group(1)}' is not in the allow-list of "
-                        f"no-op clauses for the before-snapshot: {c[:120]}"
-                    )
-                if column in modified:
-                    return True, f"column '{m.group(1)}' was modified more than once"
-                modified.add(column)
-    except ValueError as exc:
-        return True, f"executed DDL cannot be parsed with certainty: {exc}"
-    if sorted(executed_adds) != sorted(approved_adds):
-        return True, "executed ADD COLUMN clauses differ from the approved plan"
+    reason = ddl_batch_rejection(doctype, fieldname, approved_statements, executed_statements,
+                                 before_schema, complete=True)
+    if reason:
+        return True, reason
 
     before_cols, after_cols = before_schema["columns"], after_schema["columns"]
     if set(after_cols) - set(before_cols) != {fieldname} or set(before_cols) - set(after_cols):
@@ -714,15 +708,17 @@ def assess_applied_ddl(
         changed = [a for a in SCHEMA_COLUMN_ATTRS if definition.get(a) != now.get(a)]
         if changed:
             return True, f"existing column '{name}' changed during apply ({', '.join(changed)})"
-    if [c for c in after_schema["order"] if c != fieldname] != list(before_schema["order"]):
+    if list(after_schema["order"]) != [*before_schema["order"], fieldname]:
         return True, "column order changed during apply"
     new_checks = after_schema["checks"] - before_schema["checks"]
     new_constraints = after_schema["constraints"] - before_schema["constraints"]
-    declared = _approved_column_type(approved_statements, fieldname)
-    if declared is not None and declared[0] == "json":
-        # MariaDB implements JSON as LONGTEXT plus a CHECK named after the column.
-        new_checks = {c for c in new_checks if _normalize_sql(c[1]) != f"json_valid(`{fieldname}`)"}
-        new_constraints = {c for c in new_constraints if c != (fieldname, "CHECK")}
+    declared = _approved_column(approved_statements, fieldname)
+    if declared["type"].lower() == "json":
+        expected_check = (fieldname, f"json_valid(`{fieldname}`)")
+        normalized = {(name, _normalize_sql(expr)) for name, expr in new_checks}
+        if normalized != {expected_check} or new_constraints != {(fieldname, "CHECK")}:
+            return True, "table JSON CHECK constraints changed during apply"
+        new_checks, new_constraints = set(), set()
     for label, key, extra in (
         ("indexes", "indexes", None), ("constraints", "constraints", new_constraints),
         ("CHECK constraints", "checks", new_checks), ("triggers", "triggers", None),
@@ -733,11 +729,6 @@ def assess_applied_ddl(
             return True, f"table {label} changed during apply"
     if before_schema["table"] != after_schema["table"]:
         return True, "table engine, collation or row format changed during apply"
-    if modified:
-        logger.warning(
-            "DDL apply on %s re-emitted %d allow-listed no-op MODIFY clause(s) beyond the approved "
-            "plan", doctype, len(modified),
-        )
     return False, None
 
 

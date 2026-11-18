@@ -237,5 +237,67 @@
       "confirm": "Confirm",
       "back": "Go back"
     }
+  },
+  "shell": {
+    "skip": "Skip to main content",
+    "nav": {
+      "label": "Main navigation",
+      "toggle": "Menu",
+      "home": "Home",
+      "empty": "No screens are available for your role in this workspace.",
+      "sections": {
+        "workspace": "Workspace",
+        "records": "Records"
+      }
+    },
+    "workspace": {
+      "label": "Workspace",
+      "suspended": "{name} (suspended)",
+      "switching": "Switching workspace",
+      "failedTitle": "Could not switch workspace",
+      "failedBody": "You stay in the current workspace. Try again, or ask the workspace owner about your access.",
+      "dismiss": "Dismiss"
+    },
+    "user": {
+      "open": "Account: {name}",
+      "panel": "Account",
+      "mfaOn": "Two-step sign-in verified",
+      "mfaOff": "Two-step sign-in not verified",
+      "language": "Language",
+      "theme": "Theme",
+      "languageName": {
+        "ar": "Arabic",
+        "en": "English"
+      },
+      "themeName": {
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      },
+      "signOut": "Sign out"
+    },
+    "home": {
+      "title": "{workspace}",
+      "intro": "Choose what to open.",
+      "emptyTitle": "Nothing to open yet",
+      "emptyBody": "Your role in this workspace has no screens yet. Ask the workspace owner for access."
+    },
+    "state": {
+      "loading": "Loading your session",
+      "signedOut": {
+        "title": "You are signed out",
+        "body": "Sign in to continue.",
+        "action": "Go to sign in"
+      },
+      "error": {
+        "title": "Something went wrong",
+        "body": "The page could not be shown. Nothing was changed.",
+        "retry": "Try again"
+      },
+      "noWorkspace": {
+        "title": "No active workspace",
+        "body": "You do not belong to an active workspace. Ask the workspace owner to invite you."
+      }
+    }
   }
 }

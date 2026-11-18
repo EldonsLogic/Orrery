@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
-import { ImportWizard } from '../../../../components/records/ImportWizard';
-import { fixtureCaller, fixtureData } from '../../../../records/fixture/rows';
-import styles from '../../../../components/records/Records.module.css';
+import { ImportWizard } from '../../../../../components/records/ImportWizard';
+import { fixtureCaller, fixtureData } from '../../../../../records/fixture/rows';
+import styles from '../../../../../components/records/Records.module.css';
 
 // Static export (ADR-0022): one page per Blueprint entity from the fixture. Writes wait for the gateway (PLT-009).
 export const dynamicParams = false;
@@ -11,8 +11,8 @@ export default async function ImportPage({ params }: { params: Promise<{ entity:
   const { entity } = await params;
   if (!fixtureData.entities.some((e) => e.id === entity)) notFound();
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <ImportWizard data={fixtureData} entityId={entity} caller={fixtureCaller} />
-    </main>
+    </div>
   );
 }

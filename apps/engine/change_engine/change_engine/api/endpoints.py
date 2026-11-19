@@ -104,9 +104,10 @@ def _resolve_caller_roles(kwargs: Optional[Dict[str, Any]] = None) -> list:
 
     Inside Frappe the roles come ONLY from the authenticated session; any
     client-supplied `user_roles` / `caller_roles` is ignored (CE-SEC-001).
-    Outside Frappe (unit tests) explicit roles are honoured.
+    Outside Frappe (unit tests) explicit roles are honoured. A Frappe context without a
+    session user resolves to no roles, never to the caller's (CE-SEC-002).
     """
-    if frappe is not None and hasattr(frappe, "session") and getattr(frappe.session, "user", None):
+    if _in_frappe_request():
         return get_current_user_roles()
     kwargs = kwargs or {}
     explicit = kwargs.get("user_roles")

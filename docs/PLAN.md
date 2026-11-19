@@ -322,7 +322,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | eldon | done |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | partner | todo |
 | QA-017 | Smoke check that a preview URL loads and shows no engine markers (ADR-0016, ADR-0018) | Quality | G1 | INF-013 | eldon | todo |
-| GTM-017 | Egypt go-to-market assessment (phase-1 market; depends on verified regulations) | GTM | G2 | CMP-027 | eldon | todo |
+| GTM-017 | Egypt go-to-market assessment (phase-1 market; depends on verified regulations) | GTM | G2 | CMP-027 | eldon | done |
 | GTM-018 | Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use | Go-to-market | G1 | GTM-001 | partner | todo |
 | CMP-030 | Qatar market research: tax, e-invoicing, data protection and hosting, payroll, accounting standard, calendars, entity (all UNVERIFIED; docs/compliance/country-matrix.md section Qatar) | Compliance | G1 | CMP-001 | eldon | done |
 | CMP-031 | Qatar country pack | Compliance | G2 | CMP-030,CMP-021 | partner | todo |

@@ -1,6 +1,6 @@
 import pytest
 
-from identity import IdentityError, Realm, RoleInfo, StaffIdentity
+from identity import IdentityError, Membership, Realm, RoleInfo, StaffIdentity
 from identity.mfa import FactorStatus, totp
 from identity.policy import role_requires_mfa
 from mfa_helpers import Hooked, MfaWorld
@@ -82,12 +82,12 @@ def test_non_mfa_session_cannot_add_factor_once_enrolled(m):
 
 def test_factor_cap(m):
     customer_with_factor(m)
-    claims = m.w.claims("p-clerk", mfa=True)
     for _ in range(2):
+        claims = m.w.claims("p-clerk", mfa=True)
         s = m.svc.begin_totp_enrolment(claims)
         next_step(m.w)
-        claims = m.w.claims("p-clerk", mfa=True)
         m.svc.confirm_totp_enrolment(Realm.CUSTOMER, "p-clerk", s.factor_id, m.code(s.factor_id), claims=claims)
+    claims = m.w.claims("p-clerk", mfa=True)
     assert code(lambda: m.svc.begin_totp_enrolment(claims)) == "IDN-062"
 
 
@@ -102,7 +102,9 @@ def test_sign_in_password_then_factor_gives_mfa_token(m):
 
 def test_sign_in_needs_the_factor_when_enrolled(m):
     fid, _, pw = customer_with_factor(m)
-    assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, None, tenant_id="t-a")) == "IDN-013"
+    # M1: a missing code with the right password is the same IDN-060 as a wrong password
+    assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, None, tenant_id="t-a")) == "IDN-060"
+    assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-clerk", "nope", None, tenant_id="t-a")) == "IDN-060"
 
 
 def test_wrong_password_and_wrong_code_are_indistinguishable(m):
@@ -173,6 +175,25 @@ def test_wrong_password_counts_toward_lockout(m):
     assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, m.code(fid), tenant_id="t-a")) == "IDN-061"
 
 
+def test_wrong_passwords_from_one_source_do_not_lock_the_account(m):
+    # M2: guesses without the password lock only (subject, source), not the owner
+    fid, _, pw = customer_with_factor(m)
+    for _ in range(6):
+        code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-clerk", "bad", "000000", tenant_id="t-a",
+                                   source="attacker"))
+    assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, m.code(fid), tenant_id="t-a",
+                                      source="attacker")) == "IDN-061"
+    m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, m.code(fid), tenant_id="t-a", source="owner-device")
+
+
+def test_source_throttle_is_consulted(m):
+    fid, _, pw = customer_with_factor(m)
+    m.svc.sources = type("Deny", (), {"allow": lambda self, s, now: s != "blocked"})()
+    assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, m.code(fid), tenant_id="t-a",
+                                      source="blocked")) == "IDN-061"
+    m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, m.code(fid), tenant_id="t-a", source="ok")
+
+
 def test_store_failure_fails_closed(w):
     repo = Hooked()
     m = MfaWorld(w, repo)
@@ -183,8 +204,12 @@ def test_store_failure_fails_closed(w):
 
 def test_password_verifier_error_denies(m):
     fid, _, pw = customer_with_factor(m)
+    good = m.svc.passwords
     m.svc.passwords = type("Bad", (), {"verify": lambda *a: 1 / 0})()
-    assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, m.code(fid), tenant_id="t-a")) == "IDN-060"
+    for _ in range(8):  # L5: a provider outage is IDN-064 and is not counted as a guess
+        assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, m.code(fid), tenant_id="t-a")) == "IDN-064"
+    m.svc.passwords = good
+    m.svc.sign_in(Realm.CUSTOMER, "p-clerk", pw, m.code(fid), tenant_id="t-a")
 
 
 # -- recovery codes ----------------------------------------------------------
@@ -212,8 +237,9 @@ def test_recovery_use_is_audited_without_the_code(m):
 def test_recovery_consume_is_atomic(m):
     fid, codes, _ = customer_with_factor(m)
     rid = m.factors.recovery_for("customer", "p-clerk")[0].code_id
-    assert m.factors.consume_recovery(rid) is True
-    assert m.factors.consume_recovery(rid) is False
+    assert m.factors.consume_recovery("customer", "p-owner", rid) is False  # keyed by subject
+    assert m.factors.consume_recovery("customer", "p-clerk", rid) is True
+    assert m.factors.consume_recovery("customer", "p-clerk", rid) is False
 
 
 def test_regenerate_needs_step_up_and_kills_old_codes(m):
@@ -245,7 +271,8 @@ def test_removal_needs_step_up_and_clears_enrolment(m):
     assert m.factors.get_factor(fid) is None
     assert m.factors.recovery_for("customer", "p-clerk") == ()
     assert m.w.repo.get_person("p-clerk").mfa_enrolled is False
-    assert code(lambda: m.svc.remove_factor(fresh, fid)) == "IDN-063"
+    assert code(lambda: m.svc.remove_factor(fresh, fid)) == "IDN-009"  # M5: that session ended
+    assert code(lambda: m.svc.remove_factor(m.w.claims("p-clerk", mfa=True), fid)) == "IDN-063"
 
 
 def test_cannot_remove_someone_elses_factor(m):
@@ -255,11 +282,19 @@ def test_cannot_remove_someone_elses_factor(m):
 
 
 def test_last_factor_stays_when_tenant_demands_mfa(m):
+    # p-clerk's role (sales) does not demand MFA: only the tenant flag does (L10)
+    fid, _, _ = customer_with_factor(m)
     m.w.repo.put_tenant(type(m.w.repo.get_tenant("t-a"))("t-a", mfa_for_all=True))
-    claims = m.w.claims("p-owner")
-    s = m.svc.begin_totp_enrolment(claims)
-    m.svc.confirm_totp_enrolment(Realm.CUSTOMER, "p-owner", s.factor_id, m.code(s.factor_id), claims=claims)
-    assert code(lambda: m.svc.remove_factor(m.w.claims("p-owner"), s.factor_id)) == "IDN-062"
+    assert code(lambda: m.svc.remove_factor(m.w.claims("p-clerk"), fid)) == "IDN-062"
+    m.w.repo.put_tenant(type(m.w.repo.get_tenant("t-a"))("t-a", mfa_for_all=False))
+    m.svc.remove_factor(m.w.claims("p-clerk"), fid)
+
+
+def test_last_factor_stays_when_another_tenant_demands_mfa(m):
+    fid, _, _ = customer_with_factor(m)
+    m.w.repo.put_membership(Membership("p-clerk", "t-b"))
+    m.w.repo.put_tenant(type(m.w.repo.get_tenant("t-b"))("t-b", mfa_for_all=True))
+    assert code(lambda: m.svc.remove_factor(m.w.claims("p-clerk"), fid)) == "IDN-062"
 
 
 def test_step_up_returns_fresh_auth_time(m):
@@ -282,7 +317,7 @@ def test_owner_requires_mfa_by_policy_and_signs_in_with_factor(m):
     next_step(m.w)
     pw = m.passwords.set("customer", "p-owner")
     # password alone is not enough for an owner
-    assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-owner", pw, None, tenant_id="t-a")) == "IDN-013"
+    assert code(lambda: m.svc.sign_in(Realm.CUSTOMER, "p-owner", pw, None, tenant_id="t-a")) == "IDN-060"
     next_step(m.w)
     pair = m.svc.sign_in(Realm.CUSTOMER, "p-owner", pw, m.code(s.factor_id), tenant_id="t-a")
     assert m.w.idn.verify_customer_token(pair.access_token, "t-a").mfa_satisfied is True
@@ -311,15 +346,15 @@ def staff_enrol(m, sid="s-1"):
 
 def test_staff_bootstrap_needs_a_ticket_and_it_is_single_use(m):
     m.w.repo.put_staff(StaffIdentity("s-2", "S", mfa_enrolled=False))
-    assert code(lambda: m.svc.begin_staff_bootstrap("s-2", "guess")) == "IDN-013"
+    assert code(lambda: m.svc.begin_staff_bootstrap("s-2", "guess")) == "IDN-060"
     t = m.bootstrap.issue("s-2")
     m.svc.begin_staff_bootstrap("s-2", t)
-    assert code(lambda: m.svc.begin_staff_bootstrap("s-2", t)) == "IDN-013"
+    assert code(lambda: m.svc.begin_staff_bootstrap("s-2", t)) == "IDN-060"
 
 
 def test_staff_sign_in_always_needs_the_factor(m):
     fid, codes, pw = staff_enrol(m)
-    assert code(lambda: m.svc.sign_in(Realm.STAFF, "s-1", pw, None)) == "IDN-013"
+    assert code(lambda: m.svc.sign_in(Realm.STAFF, "s-1", pw, None)) == "IDN-060"
     pair = m.svc.sign_in(Realm.STAFF, "s-1", pw, m.code(fid))
     c = m.w.idn.verify_staff_token(pair.access_token)
     assert c.mfa_satisfied is True and c.tenant is None

@@ -10,18 +10,31 @@ from identity.mfa import totp
 
 
 class FakeBox:
-    """Stand-in for a KMS: keystream from a per-run key, bound to the context."""
+    """Stand-in for a KMS, tests only: a keystream per context plus an HMAC tag
+    over context and ciphertext, so `open` refuses another context (the AEAD
+    property the SecretBox contract requires). Not real encryption."""
+
+    TAG = 32
 
     def __init__(self):
         self.k = secrets.token_bytes(32)
+        self.t = secrets.token_bytes(32)
 
     def _stream(self, context, n):
         return hmac.new(self.k, context.encode(), hashlib.sha256).digest()[:n]
 
-    def seal(self, plaintext, context):
-        return bytes(a ^ b for a, b in zip(plaintext, self._stream(context, len(plaintext))))
+    def _tag(self, context, ct):
+        return hmac.new(self.t, context.encode() + b"|" + ct, hashlib.sha256).digest()
 
-    open = seal
+    def seal(self, plaintext, context):
+        ct = bytes(a ^ b for a, b in zip(plaintext, self._stream(context, len(plaintext))))
+        return ct + self._tag(context, ct)
+
+    def open(self, sealed, context):
+        ct, tag = sealed[:-self.TAG], sealed[-self.TAG:]
+        if not hmac.compare_digest(tag, self._tag(context, ct)):
+            raise ValueError("authentication failed")
+        return bytes(a ^ b for a, b in zip(ct, self._stream(context, len(ct))))
 
 
 class FakePasswords:
@@ -39,16 +52,18 @@ class FakePasswords:
 
 
 class FakeBootstrap:
-    def __init__(self):
+    def __init__(self, clock):
+        self.clock = clock
         self.tickets = {}
 
     def issue(self, staff_id):
         t = secrets.token_urlsafe(12)
-        self.tickets[staff_id] = t
+        self.tickets[staff_id] = (t, self.clock())
         return t
 
-    def consume(self, staff_id, ticket):
-        return self.tickets.pop(staff_id, None) == ticket
+    def consume(self, staff_id, ticket, now):
+        t, issued = self.tickets.pop(staff_id, (None, None))
+        return issued if t is not None and hmac.compare_digest(t, ticket) else None
 
 
 class Hooked(InMemoryFactorRepository):
@@ -74,13 +89,13 @@ class MfaWorld:
     def __init__(self, w, repo=None):
         self.w = w
         self.factors = repo or Hooked()
-        self.passwords, self.bootstrap, self.box = FakePasswords(), FakeBootstrap(), FakeBox()
+        self.passwords, self.bootstrap, self.box = FakePasswords(), FakeBootstrap(w.clock), FakeBox()
         self.svc = MfaService(idn=w.idn, factors=self.factors, box=self.box,
                               passwords=self.passwords, bootstrap=self.bootstrap, config=FAST)
 
     def key(self, factor_id):
         f = self.factors.get_factor(factor_id)
-        return self.box.open(f.sealed_secret, f.factor_id)
+        return self.box.open(f.sealed_secret, f"{f.realm}:{f.subject_id}:{f.factor_id}")
 
     def code(self, factor_id, offset=0):
         return totp.hotp(self.key(factor_id), totp.counter_at(self.w.clock()) + offset)

@@ -74,4 +74,4 @@ python3 -m infra.invisibility \
 
 ## Disabled-until-staging note
 
-Staging does not exist yet (INF-003 / ADR-0018). Staging hosts must not be invented or assumed. The crawler tool and its unit tests are fully implemented and verified locally, but plan row QA-016 remains open (`doing`) until real staging infrastructure is deployed and the test is executed against the live staging URL. This requirement is tracked in [docs/open-questions.md](../../docs/open-questions.md) as question Q-266.
+Staging does not exist yet (INF-003 / ADR-0018). Staging hosts must not be invented or assumed. The crawler tool and its unit tests are fully implemented and verified locally, but plan row QA-016 remains open (`doing`) until real staging infrastructure is deployed and the test is executed against the live staging URL. This requirement is tracked in [docs/open-questions.md](../../docs/open-questions.md) as question Q-290.

@@ -16,7 +16,7 @@ Hardened the remaining fail-open cases from the QA-016 review after checking the
 ## Verification
 - `python3 -m unittest discover -s infra/invisibility/tests -v`: 14 tests passed.
 - Required docs, hygiene, lane and secret checks passed; finish-session verification recorded after push.
-- Existing tests verify connection/bad target errors, regex validation, malformed cookies and redaction, redirect restriction, JS chunks, source maps and authenticated marker inspection. CI test step and Q-266 numbering already present at the old head.
+- Existing tests verify connection/bad target errors, regex validation, malformed cookies and redaction, redirect restriction, JS chunks, source maps and authenticated marker inspection. CI test step and Q-290 numbering already present at the old head.
 - Live staging crawl remains unverified; no infrastructure provisioned.
 
 ## Decisions

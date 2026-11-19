@@ -50,6 +50,8 @@ CODES = {
     "SIM-134": ("at_tolerance_limit", "warning"),
     "SIM-135": ("nothing_compared", "blocking"),
     "SIM-136": ("large_difference", "blocking"),
+    "SIM-137": ("unknown_currency", "blocking"),
+    "SIM-138": ("unknown_anomaly_code", "blocking"),
 }
 SEVERITIES = ("blocking", "warning", "info")
 

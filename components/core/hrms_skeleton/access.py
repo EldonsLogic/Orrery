@@ -8,7 +8,11 @@ the real adapters and `memory.py` the in-memory ones.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, ContextManager, Mapping, Protocol, Sequence
+
+
+class DuplicateKeyError(Exception):
+    """Raised by `Store.insert` when the backend itself finds the record already exists."""
 
 
 class Session(Protocol):
@@ -40,6 +44,13 @@ class Store(Protocol):
     def find(self, doctype: str, filters: Mapping[str, Any]) -> list[dict[str, Any]]:
         """Return up to two matching records, so a duplicate is detected rather than hidden."""
 
-    def insert(self, doctype: str, values: Mapping[str, Any]) -> dict[str, Any]: ...
+    def key_lock(self, doctype: str, scope: Sequence[str]) -> ContextManager[None]:
+        """Serialise every writer of one business key (`scope` is the company, or "", then the key
+        values) inside this tenant. Lookup and write both happen while it is held, and the write is
+        visible to the next holder when it is released. Fails (raises) rather than proceeding
+        unlocked."""
+
+    def insert(self, doctype: str, values: Mapping[str, Any]) -> dict[str, Any]:
+        """May raise `DuplicateKeyError` when the backend enforces uniqueness itself."""
 
     def update(self, doctype: str, name: str, values: Mapping[str, Any]) -> dict[str, Any]: ...

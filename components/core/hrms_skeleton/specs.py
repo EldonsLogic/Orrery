@@ -30,9 +30,16 @@ FORBIDDEN_PAYROLL_LOGIC_FIELDS = frozenset(
     }
 )
 
+# Standard document columns that are not DocFields: `meta.get_field("name")` returns None for them
+# (frappe v15 Meta), so they are checked at document level, not by field lookup.
+STANDARD_COLUMNS = frozenset({"name"})
+
 # Names a caller may never put in a payload: identity and scope come from the session.
 CALLER_IDENTITY_FIELDS = frozenset(
-    {"roles", "user_roles", "caller_roles", "user", "approver", "tenant", "site", "site_id", "owner"}
+    {
+        "roles", "user_roles", "caller_roles", "user", "approver", "tenant", "site", "site_id", "owner",
+        "applicant_user",
+    }
 )
 
 
@@ -95,11 +102,13 @@ SPECS: dict[str, DocSpec] = {
         "Employee", ("employee_number",),
         {
             "employee_number": STR, "first_name": STR, "last_name": STR, "company": STR,
+            "gender": STR, "date_of_birth": DATE,
             "department": STR, "designation": STR, "branch": STR, "date_of_joining": DATE,
             "status": enum("Active", "Inactive", "Suspended", "Left"), "user_id": STR,
             "leave_approver": STR, "holiday_list": STR,
         },
-        ("employee_number", "first_name", "date_of_joining"), HR_ADMIN_ROLES, company_scoped=True,
+        ("employee_number", "first_name", "gender", "date_of_birth", "date_of_joining"), HR_ADMIN_ROLES,
+        company_scoped=True,
     ),
     "Department": DocSpec(
         "Department", ("department_name",),

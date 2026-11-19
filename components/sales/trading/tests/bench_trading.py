@@ -1,7 +1,8 @@
-"""Rollback-only integration proof for a synthetic pinned bench.
+"""Integration fixture driver for a disposable synthetic pinned bench.
 
-The trusted bench runner calls run(engine) within a connected request. This never
-commits; it restores the previous user and rolls back fixture writes on every exit.
+The trusted bench runner calls run(engine) within a connected request. It restores
+the previous user and attempts savepoint rollback on every exit. Company/User hooks
+may commit implicitly: complete cleanup is UNVERIFIED, pending Tier 3 human review.
 """
 from trading import TradingPack
 

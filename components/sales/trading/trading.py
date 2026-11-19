@@ -12,6 +12,11 @@ from unicodedata import category
 class TradingError(ValueError):
     """Stable i18n key; the platform renders it using strings.json."""
 
+    def __init__(self, key, *, reason=None):
+        """Keep the renderable key separate from safe, non-customer diagnostic codes."""
+        super().__init__(key)
+        self.reason = reason
+
 
 def _text(value):
     """Accept bounded Arabic/English record names as data, excluding control characters."""
@@ -24,10 +29,10 @@ def _text(value):
 def _number(value, *, percent=False, zero=False):
     """Validate an explicit decimal without float conversion, rounding or money maths."""
     if not isinstance(value, str) or not re.fullmatch(r'[0-9]{1,12}(\.[0-9]{1,9})?', value):
-        raise TradingError('TRD-NUMBER')
+        raise TradingError('TRD-NUMBER', reason='expected_decimal_string')
     number = Decimal(value)
     if number < 0 or (number == 0 and not zero) or (percent and number > 100):
-        raise TradingError('TRD-NUMBER')
+        raise TradingError('TRD-NUMBER', reason='outside_allowed_range')
     return value
 
 
@@ -131,9 +136,21 @@ class TradingPack:
         """Upsert one company limit, retaining other companies and clearing the bypass.
 
         Zero is refused: native zero can mean unlimited rather than a credit hold.
+        An accounts-management session role is required in addition to native permissions.
+        Human approval binding remains a host activation gate (ERP-023 / ERP-008).
         Existing Accounts Settings.credit_controller exemptions remain untouched.
         Native submission hooks alone enforce exposure and receivable calculations.
         """
+        self._context()
+        try:
+            roles = self.engine.get_roles(self.user)
+        except Exception:
+            # Role-store failures must neither grant access nor leak engine details.
+            raise TradingError('TRD-ROLE') from None
+        self._context()
+        if (not isinstance(roles, (list, tuple, set, frozenset))
+                or not any(role in ('Accounts Manager', 'System Manager') for role in roles)):
+            raise TradingError('TRD-ROLE')
         limit = _number(limit)
         self._doc('Company', company)
         doc = self._doc('Customer', customer, 'write')

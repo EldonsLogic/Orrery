@@ -1,6 +1,10 @@
 {
+  "_meta": {
+    "arReview": "unreviewed",
+    "reviewGate": "ADR-0033: native Arabic review required before promotion"
+  },
   "TRD-CONTEXT": {
-    "ar": "يلزم سياق مستخدم وشركة صالح وثابت.",
+    "ar": "يلزم سياق مستخدم ومستأجر صالح وثابت.",
     "en": "A valid, unchanged user and tenant context is required."
   },
   "TRD-TEXT": {
@@ -38,5 +42,9 @@
   "TRD-FIELD": {
     "ar": "لا تملك صلاحية قراءة أو تعديل الحقل المطلوب.",
     "en": "You cannot read or change the required field."
+  },
+  "TRD-ROLE": {
+    "ar": "يلزم دور مدير حسابات أو مدير نظام لتغيير حد الائتمان.",
+    "en": "An Accounts Manager or System Manager role is required to change a credit limit."
   }
 }

@@ -61,6 +61,7 @@ class Engine:
         self.local = Context()
         self.session = Context()
         self.saved, self.denied, self.rows = [], set(), {}
+        self.roles = ['Accounts Manager']
         for dt, name, values in [
             ('Currency', 'QAR', {}), ('UOM', 'Unit', {}), ('Item', 'demo-item', {}),
             ('Company', 'demo-company', {'default_currency': 'QAR'}),
@@ -72,6 +73,11 @@ class Engine:
             ('Sales Order', 'demo-order', {'docstatus': 0, 'company': 'demo-company'}),
         ]:
             self.rows[dt, name] = dict(doctype=dt, name=name, **values)
+
+    def get_roles(self, user):
+        """Return roles for the authenticated test actor only."""
+        assert user == self.session.user
+        return self.roles
 
     def get_meta(self, doctype):
         return self
@@ -331,3 +337,65 @@ def test_hidden_default_price_list_setting_field_is_refused(action):
     with pytest.raises(TradingError, match='^TRD-FIELD$'):
         pack(e).create_price_list('Wholesale AR', 'QAR')
     assert not e.saved
+
+
+@pytest.mark.parametrize('roles', [[], ['Sales User'], ['Accounts User'], None, 'Accounts Manager'])
+def test_credit_rejects_unprivileged_or_invalid_session_roles_despite_customer_write(roles):
+    e = Engine()
+    e.roles = roles
+    e.get_doc('Customer', 'demo-customer').check_permission('write')
+    with pytest.raises(TradingError, match='^TRD-ROLE$'):
+        pack(e).set_credit_limit('demo-customer', 'demo-company', '250')
+    assert not e.saved
+
+
+@pytest.mark.parametrize('role', ['Accounts Manager', 'System Manager'])
+def test_credit_allows_explicit_credit_management_roles(role):
+    e = Engine()
+    e.roles = [role]
+    assert pack(e).set_credit_limit('demo-customer', 'demo-company', '250') == 'demo-customer'
+    assert len(e.saved) == 1
+
+
+def test_credit_role_lookup_failure_is_a_clean_domain_error():
+    e = Engine()
+
+    def unavailable(user):
+        raise RuntimeError('internal role service details')
+
+    e.get_roles = unavailable
+    with pytest.raises(TradingError, match='^TRD-ROLE$'):
+        pack(e).set_credit_limit('demo-customer', 'demo-company', '250')
+    assert not e.saved
+
+
+def test_credit_rechecks_roles_after_pack_construction():
+    e = Engine()
+    p = pack(e)
+    e.roles = ['Sales User']
+    with pytest.raises(TradingError, match='^TRD-ROLE$'):
+        p.set_credit_limit('demo-customer', 'demo-company', '250')
+    assert not e.saved
+
+
+@pytest.mark.parametrize('rate', ['not-a-number', None, 3.5])
+def test_non_numeric_master_commission_returns_number_key_and_safe_reason(rate):
+    e = Engine()
+    e.rows['Sales Person', 'demo-rep']['commission_rate'] = rate
+    with pytest.raises(TradingError, match='^TRD-NUMBER$') as error:
+        pack(e).set_sales_team('demo-order', [{'sales_person': 'demo-rep', 'allocated_percentage': '100'}])
+    assert getattr(error.value, 'reason', None) == 'expected_decimal_string'
+    assert not e.saved
+
+
+@pytest.mark.parametrize('discount,accepted', [('100', True), ('100.000000001', False), ('0', False)])
+def test_discount_cap_and_native_priority_and_validity_defaults(discount, accepted):
+    e = Engine()
+    if accepted:
+        pack(e).create_volume_discount('Bulk', 'demo-company', 'Wholesale', 'demo-item', '10', discount)
+        assert e.saved[0]['discount_percentage'] == discount
+        assert not {'priority', 'valid_from', 'valid_upto'} & e.saved[0].keys()
+    else:
+        with pytest.raises(TradingError, match='^TRD-NUMBER$'):
+            pack(e).create_volume_discount('Bulk', 'demo-company', 'Wholesale', 'demo-item', '10', discount)
+        assert not e.saved

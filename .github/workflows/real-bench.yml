@@ -1,0 +1,34 @@
+name: Real Bench Integration
+
+# GOV-049 cost control: stands up the real pinned Frappe bench only when engine,
+# component, or Docker bench files change, weekly, or when triggered manually.
+on:
+  pull_request:
+    paths:
+      - "apps/engine/**"
+      - "infra/dev/docker/**"
+      - "components/**"
+      - "scripts/provision_tenant_site.py"
+      - ".github/workflows/real-bench.yml"
+  schedule:
+    - cron: "30 2 * * 1"  # weekly full real-bench run, Monday UTC (CE-SEC-005)
+  workflow_dispatch:
+
+concurrency:
+  group: real-bench-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  real-bench-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - name: Stand up pinned bench and run CE-SEC-005 integration tests
+        run: python3 infra/dev/docker/run_real_bench_ci.py

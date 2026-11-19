@@ -29,6 +29,7 @@ from change_engine.adapter.mapping import (
     plan_statements_for_step,
 )
 from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord
+from change_engine.guarded_apply.action_policy_enforcer import ActionPolicyEnforcer, ActionRequest, AuthorizedAction
 
 ADAPTER_ID = "frappe"
 ADAPTER_VERSION = "0.1.0"
@@ -272,11 +273,16 @@ class ChangeEngineAdapter:
         test_hooks: bool = True,
         db_path: str = ":memory:",
         frappe_backend: Any | None = None,
+        *,
+        action_policy: ActionPolicyEnforcer | None = None,
+        action_handlers: dict[str, Callable[[Any, AuthorizedAction], Any]] | None = None,
     ) -> None:
         self.test_hooks = test_hooks
         self.db_path = db_path
         self.store = SQLiteAdapterStore(db_path=db_path)
         self.frappe_backend = frappe_backend
+        self._action_policy = action_policy
+        self._action_handlers = dict(action_handlers or {})
         self.now = 0
         self._seq = self._initial_seq()
         self._faults: list[dict[str, Any]] = []
@@ -304,7 +310,7 @@ class ChangeEngineAdapter:
         caller: dict[str, Any] | None,
         fn: Callable[[Any], Any],
     ) -> Any:
-        """Execute a tenant operation under caller's own Frappe User permissions (T36)."""
+        """Run a trusted internal callback under the caller's Frappe User permissions (T36)."""
         if self.frappe_backend is None:
             raise AdapterError("engine_unavailable", stage="execute")
         try:
@@ -316,6 +322,28 @@ class ChangeEngineAdapter:
             details = getattr(exc, "details", {})
             stage = getattr(exc, "stage", "execute")
             raise AdapterError(code, details, stage=stage) from None
+
+    def execute_action(self, session: str, request: ActionRequest) -> Any:
+        """Dispatch a business write to its server-registered handler after policy admission.
+
+        Handlers run with the resolved human's engine permissions. They must apply
+        the admitted snapshot and verify its target revisions in the effect transaction.
+        """
+        if self._action_policy is None:
+            raise AdapterError("permission_denied", stage="authorize")
+        action_id = request.action_id if type(request) is ActionRequest else None
+        handler = self._action_handlers.get(action_id) if type(action_id) is str else None
+        action = self._action_policy.authorize(
+            session, request, handler_available=callable(handler) and self.frappe_backend is not None,
+        )
+        if action is None or handler is None:
+            raise AdapterError("permission_denied", stage="authorize")
+        caller = {"service": "operate_gateway", "onBehalfOf": {"kind": "user", "id": action.submitter_id}}
+        try:
+            return self.execute_as_caller(action.request.tenant_id, caller, lambda engine: handler(engine, action))
+        except AdapterError as exc:
+            code = "permission_denied" if exc.code == "permission_denied" else "engine_unavailable"
+            raise AdapterError(code, stage="execute") from None
 
     def _initial_seq(self) -> int:
         existing = self.store.audit_log()

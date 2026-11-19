@@ -13,7 +13,7 @@ Addressed Eldon's 2026-11-19 PR #123 findings 1–4 and 6. PLT-024 remains doing
 - services/gateway/edge/errors.py: local audit_unavailable response (503, retryable).
 - services/gateway/tests/test_edge_gateway.py: six regression tests, including 1100 attempted mutations and concurrent admission at the high-water mark.
 - services/gateway/README.md: durable spool before HTTP binding; verified tenant, user and session on every audit record before any live route registration; size caps deferred to binding (review item 5).
-- docs/open-questions.md: Q-300 asks Eldon to add unauthenticated and ratify the local audit_unavailable code. Checked origin/main first: neither this question nor Q-300 existed.
+- docs/open-questions.md: Q-302 asks Eldon to add unauthenticated and ratify the local audit_unavailable code. Checked origin/main first: neither this question nor Q-302 existed.
 - docs/PLAN.md: record review-fix state on the existing partner-owned doing row.
 
 ## Verified

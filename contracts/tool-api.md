@@ -1,6 +1,6 @@
 # Tool API
 
-Version: 0.1.0
+Version: 0.3.1
 Status: draft
 Owner: eldon
 
@@ -29,6 +29,24 @@ limits: {rate_per_minute: 30, max_rows: 200, token_budget_class: small}
 effects: {ledger: false, tax: false, external_send: false}
 source: {blueprint_revision: 12, component: core.sales_order@0.1.3}
 ```
+
+### 1.1 Generated fields (0.3.0)
+The generator emits these fields in addition to the format above ([ADR-0037](../docs/decisions/ADR-0037-manifest-risk-class-and-transition-kind.md)). Clients that ignore them behave as before; the gateway and `check_tool_api` rely on them.
+
+| Field | On | Meaning |
+|---|---|---|
+| `risk_class` | every tool | `R0` to `R4` from the action policy table (section 11). A `read` tool is always `R0`. |
+| `agent_creatable` | every tool | Whether an agent (not a human) may propose this call. Always `false` for `R4`, for `approval.decide`, `blueprint.propose_change` and for approve and reject moves. On `transition` tools: true only if at least one transition is agent-creatable. |
+| `entity_class` | entity tools | `plain`, `stock` or `ledger` (section 11); a manifest `tax` class shows as `ledger` plus `effects.tax`. |
+| `requires.roles` | every tool | Sorted role ids that may call the tool (from the Blueprint permissions). |
+| `requires.scopes_by_role` | every tool | The Blueprint scope of each of those roles; the gateway applies it per caller (section 4, step 4). |
+| `requires_by_value` | `report.run`, `metric.query` | `{argument, roles: {value: [role ids]}}`: which roles may pass each enum value of `argument` (`report_id` or `metric`). |
+| `field_access` | entity tools | `{hidden_by_role: {role: [field ids]}, read_only_by_role: {role: [field ids]}}`, from `hiddenFields`, `readOnlyFields` and `visibleToRoles`. |
+| `approval.rules`, `approval.conditional`, `approval.approver_roles`, `approval.self_approval`, `approval.agent_required` | tools with `approval` | All matching rule ids, whether any has conditions, the approver roles of their steps, whether self-approval is allowed, and whether an agent caller always needs human approval. `approval.rule` stays the first rule id. `approval.per_transition` is `true` on `transition` tools: the per-transition `approval` decides. |
+| `transitions[]` | `<entity>.transition` | One entry per Blueprint transition: `id`, `from`, `to`, `kind` (`advance`, `approve`, `reject`, `cancel`, `reversal`, `cancel_draft`), `labels`, `risk_class`, `agent_creatable`, `allowed_roles`, `approval`, `guards`, and the inputs the checker recomputes from: `from_state_kind`, `to_state_kind`, `approval_step`, `declared_kind` (the Blueprint `transitions[].kind` or null). The tool's `risk_class` is the riskiest transition. |
+
+### 1.2 Definition set
+The stored set is `{toolApiVersion, blueprintRevision, registry, manifests, contentHash, tools}`. `toolApiVersion` is the set format, `0.2.0` since `manifests` was added. `registry` is `{source, sha256}` of the L0 registry or null; `manifests` is `{components: ["id@version"], sha256}` of the manifest risk-class declarations used, or null. The checker needs the same registry and manifests to recheck a set (`TAPI-REGISTRY-003`, `TAPI-MANIFEST-003`).
 
 ## 2. Naming
 - Pattern `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`: `<entity or domain>.<verb>`.
@@ -90,6 +108,8 @@ Executed by the tool API gateway in Part 4, before anything reaches the engine:
 
 The chat can never do anything the user could not do in the engine's own UI with the same role.
 
+**Department assistants are agent-class callers** ([ADR-0043](../docs/decisions/ADR-0043-department-assistants.md), since 0.3.1). A call made through a Blueprint `assistants[]` entry runs with the invoking user's roles and scope (steps 1 to 9) and is also treated as an agent call: the tool's and each transition's `agent_creatable` must be true, `approval.agent_required` and the agent-caller approval defaults of section 5 and section 11 (ledger, tax, export) apply, and approve and reject moves are refused even when the user could make them in person. The gateway also intersects the call with the assistant's tool list, its `transitions` allowlist and its limits. The user's own presence in the chat does not turn an assistant call into a human call.
+
 ## 5. Approval-required flag
 `approval.required` is computed at generation time from the Blueprint's approval rules and from platform policy: any tool with `effects.ledger`, `effects.tax` or `effects.external_send` is approval-required for agent callers by default. For human callers via chat, ledger/tax tools execute the same confirm step the UI would. The call returns `status: "pending_approval"` with the approval id; execution happens when an eligible approver decides. The approver cannot be the requester unless the rule allows self-approval.
 
@@ -119,6 +139,26 @@ The chat can never do anything the user could not do in the engine's own UI with
 
 `message_key` is an i18n key; the chat renders it in the user's language. Never put raw engine stack traces, SQL or other tenants' data in an error.
 
+### 7.1 Domain errors (optional `domain` block)
+A business failure may add a `domain` block. The top-level `code`, `message_key` and `retryable` stay as above (a client that ignores `domain` behaves exactly as before).
+```json
+{"status": "error", "error": {"code": "guard_failed", "message_key": "errors.guard_failed", "retryable": false, "details": {},
+  "domain": {"code": "insufficient_stock", "params": {"item": "ITEM-0001", "warehouse": "Main-Store", "shortfall_qty": "12.5"}}}, "audit_id": "aud_..."}
+```
+- `domain.code` is an id from the versioned catalog [tool-api-error-catalog.json](tool-api-error-catalog.json) ([schema](tool-api-error-catalog.schema.json)). Each entry fixes its top-level class, `retryable`, typed `params` slots (type, max length; free text only if marked `escaped`), `message_key` `errors.domain.<id>`, English and Arabic `messages` with `{slot}` placeholders, a `review` state and an `owner_action`.
+- **Messages come only from the catalog.** Engine text is never passed through. Params are validated against the slots, escaped and stripped of bidi controls when rendered; a locale without text falls back to English.
+- An unmapped engine failure stays `engine_error` with **no** `domain`. A catalog code or params that fail validation produce `internal_error` with only a correlation id in `details`.
+- The gateway maps engine failures to catalog ids (PLT-024); the catalog never names engine concepts.
+
+| `domain.code` | Top-level class |
+|---|---|
+| `insufficient_stock`, `fiscal_period_closed`, `credit_limit_exceeded`, `document_not_submittable`, `negative_valuation_blocked` | `guard_failed` |
+| `record_already_submitted`, `record_already_cancelled`, `linked_document_exists`, `stale_approval_state` | `conflict` |
+| `duplicate_tax_id`, `required_field_missing`, `tax_registration_invalid` | `invalid_arguments` |
+| `unbalanced_entry`, `currency_rate_missing` | `engine_error` |
+
+`stale_approval_state` ties to the action-policy record revision: the record changed after approval was requested, so the approval must be re-reviewed. Decision: [ADR-0036](../docs/decisions/ADR-0036-tool-api-domain-errors.md).
+
 ## 8. Audit fields (every call, success or failure)
 `audit_id`, `ts`, `tenant_id`, `user_id`, `role_ids`, `session_id`, `chat_turn_id`, `agent_id` (if any), `tool`, `tool_version`, `blueprint_revision`, `idempotency_key`, `arguments_hash` and redacted arguments, `status`, `error_code`, `approval_id`, `model_id` and `prompt_version` that proposed the call, `latency_ms`, `engine_refs` (ids of records touched). Written to the event stream as `tool.called` ([events.md](events.md)); immutable.
 
@@ -132,3 +172,22 @@ The chat can never do anything the user could not do in the engine's own UI with
 - Content read from customer tools or documents is untrusted. It reaches the model only as quoted data, and a tool call proposed while untrusted content is in context is flagged `tainted: true`; tainted write calls on ledger/tax/external-send tools always require human approval.
 - Arguments are validated by schema before the role check, and re-validated by the engine adapter.
 - No tool accepts SQL, code, formulas, URLs to fetch, API keys or role names from the caller.
+
+## 11. Generator risk rules (fail closed)
+These rules decide risk classes at generation time. Policy data lives in `services/operate/toolapi/policy.py`; the shared rules in `classify.py`. `check_tool_api` recomputes every entity tool from the same rules and refuses any difference.
+
+**Entity class.** Each non-child entity is `plain`, `stock` or `ledger`. Sources, highest wins: a reviewed table of known entity ids; an unlisted id containing a ledger token (invoice, bill, receipt, voucher, entry, payment, payroll, ledger, journal and others in the table) is `ledger`; the optional registry (below); and the `riskClass` that a resolved component manifest declares on an entity artifact (component manifest 0.2.0, [ADR-0037](../docs/decisions/ADR-0037-manifest-risk-class-and-transition-kind.md)). A manifest declaration may only raise: one below the table or token class is refused (`TAPI-MANIFEST-002`); a malformed one is `TAPI-MANIFEST-001`. Manifest `tax` is `ledger` plus `effects.tax` on every write; `permission` is refused like an identity entity (`TAPI-DOMAIN-001`). Only a manifest at certification level `reviewed`, `certified` or `regulated` may classify an entity no other source knows; a `draft` or `tested` manifest can only raise. An entity no source classifies is refused with `TAPI-CLASS-001`. Unknown never means plain. A child table may not carry an entity of a higher class than its parent (`TAPI-CLASS-003`). Entity ids in the identity and permission domain (starting with user, role, permission, grant or agent, or containing a role, permission or grant token) are refused (`TAPI-DOMAIN-001`).
+
+**Registry.** An optional registry is L0 configuration only. It must name its `source`; it may raise an entity class and add effects, never lower either (`TAPI-REGISTRY-002`). The definition set records `registry: {source, sha256}`, and the checker needs the same registry to recheck the set (`TAPI-REGISTRY-003`).
+
+**Transitions.** A transition may carry an explicit `kind` (`advance`, `approve`, `reject`, `cancel`, `reversal`; Blueprint `transitions[].kind` since Blueprint 0.2.0); an unknown kind is refused (`TAPI-TRANS-001`). A declared kind replaces only the structural rule below; it never removes a name-token restriction. A workflow has exactly one initial state (`TAPI-TRANS-002`). Name tokens in the transition id only add restriction: approval words (approve, approved, approval, authorise, sign off, accept, confirm, release and variants) make it an approval that no agent may create; reject words a rejection; cancel and reversal words (cancel, void, reverse, refund, write off, return, amend and variants) a cancel or reversal. On stock and ledger entities without an explicit kind, a transition with its own approval rule is an approval, and one that leaves a non-initial state or enters a final or cancel-named state is a reversal (R4, never agent-creatable). The one exception is discarding a record in the initial state into a cancel-named state (`cancel_draft`, R1): nothing in the initial state has posted. When several kinds apply the riskiest wins. A rule on `submit` also gates every move out of the initial state; a rule on `cancel` gates every cancel or reversal.
+
+**Sensitive fields.** A field or relation is sensitive by its id tokens, its type or its link target: bank or payment target (iban, swift, bank account, account number, payment account, beneficiary), contact or recipient (email and phone types, email, phone, mobile, webhook) and access (admin, privilege, access level, password, credential). Sensitive fields never enter the generic `create` or `update`; each class gets its own protected tool `<entity>.update_bank_details`, `<entity>.update_contact_details` or `<entity>.update_access`, risk R4 and never agent-creatable. A create that must carry a required sensitive field is R4 as a whole. Inside a child table a sensitive field has no write path.
+
+**Status fields.** On an entity with a workflow, a field with a status, state or workflow token is output only; `docstatus` and `workflow_state` are output only on every entity. The workflow is the only way to move a record.
+
+**Arguments.** An argument name is split into `_`, `-` and camelCase tokens. It is refused (`TAPI-ARG-001`) when any token names a caller, role, tenant, user, owner, approver, scope, permission, grant, actor, agent or behalf, or when it is an actor phrase such as `approved_by` or `assigned_to`. Exceptions only through the reviewed `ARG_NAME_ALLOW` list, each with its reason.
+
+**Reads and egress.** A `read` tool is always R0 (`TAPI-RISK-004`). `export` is egress: kind `write`, idempotency required, agent callers always need human approval. A field hidden from any role that may call `list` or `export` is not in the filter or order enum (`TAPI-HIDDEN-001`). `metric.query` `group_by` is an enum of the `groupBy` fields of visible reports.
+
+**Checker.** `check_tool_api(set, registry, manifests)` recomputes entity class, kind, risk class, effects and agent flags for every entity tool and transition, and platform tool risk from `PLATFORM_RISK` (`TAPI-CLASS-002`, `TAPI-RISK-003`). `contentHash` is mandatory (`TAPI-HASH-002`). A hash is not a signature: a stored set is protected by where it is kept. A report filter without a field id is refused (`TAPI-INPUT-003`).

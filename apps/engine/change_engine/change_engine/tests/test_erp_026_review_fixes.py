@@ -14,7 +14,7 @@ from change_engine.adapter.mariadb_store import MariaDBAdapterStore
 from change_engine.adapter.storage import SQLiteAdapterStore
 from change_engine.adapter.store_api import StoreRefused, is_production
 from change_engine.tests.test_bpl_012_engine_adapter import _ctx, _make_initial_build
-from change_engine.tests.test_erp_026_durable_adapter_state import CONF, MARIA_SKIP, PROVISION, MariaDBBase, pymysql
+from change_engine.tests.test_erp_026_durable_adapter_state import PROVISION, MariaDBBase, mariadb_only
 
 
 
@@ -89,7 +89,7 @@ def _apply_input(adapter, key="apply_race_key_0001", approvals=None):
             "approvals": approvals or {"changeApproved": "01J00000000000000000000002"}}
 
 
-@unittest.skipUnless(pymysql and CONF.count(":") == 3, MARIA_SKIP)
+@mariadb_only
 class MultiWorker(MariaDBBase):
     def worker(self, **kw):
         return ChangeEngineAdapter(test_hooks=True, environment="test", store=self.make_store(), **kw)
@@ -203,8 +203,11 @@ class MultiWorker(MariaDBBase):
 
         w1.on_lock_held(other_worker_recovers)
         res = w1.call("apply", _ctx(), inp)
-        self.assertFalse(res["ok"], res)
-        self.assertEqual(res["error"]["code"], "recovery_required")
+        # the operation record exists, so the stored recovery_required outcome comes back as ok: true (contract 5.6.1),
+        # and the worker that lost its lease stopped before running a single step
+        self.assertTrue(res["ok"] and res["replayed"], res)
+        self.assertEqual((res["result"]["status"], res["result"]["error"]["code"]), ("recovery_required", "recovery_required"))
+        self.assertEqual(self.executes(w2), [])
         st = w2.call("site_status", _ctx(), {})["result"]
         self.assertEqual((st["state"], st["applied"]), ("recovery_required", None))
 
@@ -275,7 +278,7 @@ class MultiWorker(MariaDBBase):
         self._used = True
 
 
-@unittest.skipUnless(pymysql and CONF.count(":") == 3, MARIA_SKIP)
+@mariadb_only
 class Latin1Database(MariaDBBase):
     DB_CHARSET = "latin1"
 

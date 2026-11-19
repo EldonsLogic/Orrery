@@ -43,8 +43,9 @@ _SCHEMA = [
     " operation VARCHAR(32) NOT NULL, request_id VARCHAR(128), correlation_id VARCHAR(128), tenant_id VARCHAR(128),"
     " service VARCHAR(64), on_behalf_of_json LONGTEXT, input_hash VARCHAR(80), artifact_id VARCHAR(128), result VARCHAR(64),"
     " PRIMARY KEY (seq_id), UNIQUE KEY uq_audit_id (audit_id))",
-    "CREATE TABLE IF NOT EXISTS adapter_events (seq_id BIGINT NOT NULL AUTO_INCREMENT, event_id VARCHAR(128) NOT NULL,"
-    " event_type VARCHAR(64) NOT NULL, data_json LONGTEXT NOT NULL, PRIMARY KEY (seq_id))",
+    "CREATE TABLE IF NOT EXISTS adapter_events (seq_id BIGINT NOT NULL AUTO_INCREMENT, tenant_id VARCHAR(128),"
+    " event_id VARCHAR(128) NOT NULL, event_type VARCHAR(64) NOT NULL, data_json LONGTEXT NOT NULL, PRIMARY KEY (seq_id),"
+    " KEY ix_events_tenant (tenant_id, seq_id))",
     f"CREATE TABLE IF NOT EXISTS adapter_members (tenant_id {_T}, member_ref VARCHAR(255) NOT NULL, status VARCHAR(32) NOT NULL,"
     " role_ids_json LONGTEXT NOT NULL, display_name VARCHAR(255), can_authenticate TINYINT NOT NULL DEFAULT 0,"
     " email_sent TINYINT NOT NULL DEFAULT 0, PRIMARY KEY (tenant_id, member_ref))",
@@ -103,13 +104,17 @@ class _Conn:
 
 
 class MariaDBAdapterStore(SQLiteAdapterStore):
-    """Adapter state in the tenant database. Pass the tenant DB connection (pymysql DictCursor, autocommit off)."""
+    """Adapter state in the tenant database. Pass the tenant DB connection (pymysql DictCursor, autocommit off).
+
+    Pass tenant_id to bind the store to that tenant: every other tenant is refused and events, audit and journal reads
+    return only that tenant's rows, so a misrouted connection cannot read or write across tenants (ADR-0041)."""
 
     volatile = False
     production_grade = True
     _FOR_UPDATE = " FOR UPDATE"
 
-    def __init__(self, connection: Any) -> None:
+    def __init__(self, connection: Any, tenant_id: str | None = None) -> None:
+        self.bound_tenant = tenant_id
         get_autocommit = getattr(connection, "get_autocommit", None)
         if callable(get_autocommit) and get_autocommit():
             raise ValueError("MariaDBAdapterStore needs a connection with autocommit off: the store owns its transactions")
@@ -150,6 +155,7 @@ class MariaDBAdapterStore(SQLiteAdapterStore):
             raise
 
     def idem_put(self, tenant_id: str, operation: str, key: str, input_hash: str, outcome: dict[str, Any]) -> None:
+        self._check_tenant(tenant_id)
         with self.conn:
             self.conn.execute(
                 "INSERT INTO adapter_idempotency (tenant_id, operation, idempotency_key, input_hash, outcome_json) VALUES (?, ?, ?, ?, ?) "
@@ -183,6 +189,7 @@ class MariaDBAdapterStore(SQLiteAdapterStore):
                 self.conn.execute(f"DELETE FROM `{tbl}`")
 
     def save_site(self, site: SiteRecord) -> None:
+        self._check_tenant(site.tenant_id)
         self._upsert("adapter_sites", {
             "tenant_id": site.tenant_id, "state": site.state, "site_class": site.site_class,
             "engine_target_json": json.dumps(site.engine_target), "blueprint_id": site.blueprint_id,
@@ -194,17 +201,21 @@ class MariaDBAdapterStore(SQLiteAdapterStore):
         }, ("tenant_id",), keep=("sync_version",))  # sync_version moves only through set_sync_version
 
     def save_token(self, tenant_id: str, token: str, issued_at: int) -> None:
+        self._check_tenant(tenant_id)
         self._upsert("adapter_plan_tokens", {"tenant_id": tenant_id, "token": token, "issued_at": issued_at}, ("tenant_id", "token"))
 
     def save_evidence(self, tenant_id: str, evidence_ref: str, statements: list[str]) -> None:
+        self._check_tenant(tenant_id)
         self._upsert("adapter_plan_evidence", {"tenant_id": tenant_id, "evidence_ref": evidence_ref,
                                                "statements_json": json.dumps(statements)}, ("tenant_id", "evidence_ref"))
 
     def save_prepare_intent(self, operation_id: str, tenant_id: str, artifact_id: str, payload: dict[str, Any]) -> None:
+        self._check_tenant(tenant_id)
         self._upsert("adapter_prepare_intents", {"operation_id": operation_id, "tenant_id": tenant_id, "artifact_id": artifact_id,
                                                  "payload_json": json.dumps(payload), "status": "PREPARED"}, ("operation_id",))
 
     def replace_members(self, tenant_id: str, members: dict[str, dict[str, Any]]) -> None:
+        self._check_tenant(tenant_id)
         with self.conn:
             for ref, rec in members.items():
                 self._upsert("adapter_members", {
@@ -215,6 +226,7 @@ class MariaDBAdapterStore(SQLiteAdapterStore):
 
     # ------------------------------------------------ additive tenant field data (same shape as the SQLite store)
     def ensure_entity_table(self, tenant_id: str, entity_id: str) -> str:
+        self._check_tenant(tenant_id)
         self._no_ddl_in_transaction()
         tbl = _safe_table_name(tenant_id, entity_id)
         self.conn.execute(
@@ -223,16 +235,19 @@ class MariaDBAdapterStore(SQLiteAdapterStore):
         return tbl
 
     def ensure_field_column(self, tenant_id: str, entity_id: str, pointer: str) -> tuple[str, str]:
+        self._check_tenant(tenant_id)
         tbl, col = self.ensure_entity_table(tenant_id, entity_id), _safe_col_name(pointer)
         self.conn.execute(f"ALTER TABLE `{tbl}` ADD COLUMN IF NOT EXISTS `{col}` LONGTEXT")
         return tbl, col
 
     def write_field_data(self, tenant_id: str, entity_id: str, pointer: str, value: Any) -> Any:
+        self._check_tenant(tenant_id)
         tbl, col = self.ensure_field_column(tenant_id, entity_id, pointer)
         self._upsert(tbl, {"row_id": "default_row", col: json.dumps(value, ensure_ascii=False)}, ("row_id",))
         return self.read_field_data(tenant_id, entity_id, pointer)
 
     def read_field_data(self, tenant_id: str, entity_id: str, pointer: str) -> Any:
+        self._check_tenant(tenant_id)
         tbl, col = _safe_table_name(tenant_id, entity_id), _safe_col_name(pointer)
         found = self.conn.execute(
             "SELECT 1 AS ok FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",

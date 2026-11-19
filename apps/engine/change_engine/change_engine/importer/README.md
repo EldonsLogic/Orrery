@@ -13,34 +13,46 @@ posting, financial conformance, or permission behavior on a deployed engine.
 ## Input and stages
 
 A batch contains `tenant_id`, `company`, `batch_id`, ISO `posting_date`, one
-three-letter `currency`, `datasets`, and a mandatory `prevalidation` report.
+supported ISO-4217 `currency` (`SAR`, `AED`, `EGP`, `QAR`, `USD`, `EUR`, `GBP`), `datasets`, and a mandatory `prevalidation` report.
 `currency_precision` defaults to 2 and accepts 0–6; production configuration must
 supply the approved currency precision. `datasets` maps an entity below to row
 dicts, or a DSC-019 `{"rows": [...], "sheet": ...}` wrapper. No unknown batch,
 entity, row or mapping field is accepted.
 
-1. **Validate:** no writes. Check schema, sizes, exact numbers, dates, currency,
-   stable keys, formulas, the complete upstream report and reconciliation.
+1. **Validate:** authenticate the backend human session and tenant/company scope
+   before processing data; no writes. Check schema, sizes, exact numbers, dates,
+   the explicit currency allowlist, stable keys, Unicode formula/control content,
+   the complete upstream report, server-side DSC-019 checks and reconciliation.
    A failure returns `ok: false` with an `IMP-*` bilingual catalog error, without
-   copying raw cells. Report blockers include safe counts. Arabic messages carry
+   copying raw cells. Validation stops at the first error (maximum one error);
+   `errors_truncated: true` means additional errors may remain unchecked. Report
+   blockers include safe counts. Arabic messages carry
    `ar_review: unreviewed_arabic` pending ADR-0033 native-speaker review.
 2. **Preview:** no writes. Return entity counts, exact totals as decimal strings,
-   and reconciliation results (`true` when checked, `null` when either side is
-   absent). SHA-256 covers version, tenant, company, batch identity, date,
-   currency, precision, canonical rows **and report**. Object keys are sorted;
+   reconciliation results (`true` for a checked control, `null` only when that
+   control and its details are absent), and `master_updates` (existing masters
+   whose values change). SHA-256 covers version, tenant, company, batch identity,
+   date, currency, precision, canonical rows, report, referenced master state and
+   before/after master snapshots. Object keys are sorted;
    row order is retained and approval changes if rows are reordered. No source
    spelling or financial number is corrected.
-3. **Apply:** validate again. Resolve the current human identity and roles from
-   the server-owned backend session. Require company and tenant membership,
-   `Accounts Manager` or `System Manager`, `confirmed_by` equal to that identity,
-   and the exact preview hash. Never accept request-supplied roles. Within one
-   transaction, check the tenant/batch journal, write masters before opening
-   details and journal the
-   hash and approver. Same hash returns `already_applied`; another hash, including
-   a different company under the same tenant/batch, returns `IMP-CONFLICT`.
+3. **Apply:** authenticate early using the server-owned backend session's
+   `opening_import` capability, tenant/company membership and human identity.
+   Require `confirmed_by` equal to that identity and the exact preview hash.
+   Request-supplied roles/capabilities are forbidden. Within one transaction,
+   recompute validation and master snapshots, claim the company opening, write
+   masters before details, and journal the hash, source digest, approver and
+   before/after snapshots. A changed master requires a new preview approval.
+   An identical committed batch returns `already_applied` using its original hash
+   and source digest; an altered batch returns `IMP-CONFLICT`. A different batch
+   with any opening rows for the same `(tenant, company)` returns
+   `IMP-OPENING-CONFLICT`, including legacy reference records without a claim.
+   There is no supersede/reversal path; master-only batches remain possible.
    Write/journal failure rolls back inserts **and prior-record updates** and
    records a sanitized failed attempt. Rollback or failure-log errors require
-   recovery (`IMP-RECOVERY`), never a blind successful retry.
+   recovery (`IMP-RECOVERY`), never a blind successful retry. Failure history is
+   capped at the most recent 256 sanitized attempts per tenant; auth/initial
+   validation refusals do not write a failure record.
 
 ## Entities and invariants
 
@@ -62,13 +74,20 @@ business key and requires prior owner resolution, never an automatic merge.
 Duplicate master keys within a batch are refused. Opening rows may additionally
 state `posting_date` and `currency`; both must equal the batch context.
 
-Every trial-balance row requires `account_type`: `Receivable`, `Payable`, `Stock`
-or `Other`. A single account cannot have inconsistent types. Mapping and control
-classification need accountant review; the offline store does not look up a live
-chart of accounts. Debit and credit are nonnegative and cannot both be positive
+Every detail reference must resolve by a stable master key in the batch or the
+existing backend records for the exact tenant/company: trial balance to Account,
+AR to Customer, AP to Supplier, stock to Item and Warehouse. Unknown or ambiguous
+references return `IMP-REFERENCE`. Every trial-balance row requires `account_type`:
+`Receivable`, `Payable`, `Stock` or `Other`, matching its resolved Account master.
+An existing Account cannot be reclassified by this importer. Mapping and new
+master classifications still need accountant review; the offline store does not
+look up a live chart of accounts. Debit and credit are nonnegative and cannot both be positive
 on one line. Total debit must equal total credit **exactly**, without tolerance.
-When both datasets are supplied, compare AR to receivable debit minus credit,
-AP to payable credit minus debit, and stock to stock debit minus credit.
+Every nonzero control line requires matching details, even when control lines
+net to zero. Details require their corresponding control in the trial balance,
+even if their amount is zero. Compare AR to receivable debit minus credit, AP to
+payable credit minus debit, and stock to stock debit minus credit; mismatches or
+missing reconciliation return `IMP-RECONCILE`.
 
 All amounts accept plain ASCII decimal strings, integers or finite `Decimal`;
 binary floats, booleans, exponent strings, separators, negative amounts, NaN and
@@ -80,9 +99,15 @@ independent bounded Decimal context (38 significant input digits, up to 18 place
 exchange conversion or ledger-entry generation is implemented here.
 
 Caps: 10,000 rows (server may lower), 1,024 characters per text cell, two million
-input string bytes including report, 200,000 nodes and 12 nesting levels. Text
-starting with `=`, `+`, `-`, `@`, tab or carriage return, including prefixes after
-whitespace, is rejected. Numeric fields follow their stricter decimal grammar.
+input string bytes including report, 200,000 nodes and 12 nesting levels. Because
+DSC-019 accumulates findings and compares names pairwise, each entity dataset is
+also capped at 250 rows and a conservative two-million-cell pairwise name
+comparison budget before its invocation (`IMP-LIMIT`); this conservative
+offline budget must be reassessed before live bulk import. Text starting with
+`=`, `+`, `-`, `@`, tab or carriage return is rejected after NFKC detection-only
+normalization and leading Unicode whitespace/format/control removal. Any `Cf`
+or `Cc` character anywhere in text is also rejected. Accepted source spelling is
+unchanged. Numeric fields follow their stricter decimal grammar.
 
 ## DSC-011 and DSC-019 integration
 
@@ -100,9 +125,14 @@ exactly. Quarantine, findings, owner-review pointers or name groups block the
 entire batch; none are dropped or adopted. Current v1 has no confirmed-duplicate
 contract and no informational finding codes. A caller cannot downgrade a finding
 or add `confirmed: true` to unlock apply: resolve upstream and regenerate a clean
-report. A supplied report is evidence, not signed authentication; the trusted
-intake must generate it from the source rather than accept an assertion from an
-untrusted client. Tests consume real CSV/XLSX outputs and real report producers.
+report. A supplied report alone grants no trust. Every stage directly reruns
+DSC-019 `prevalidate()` on each submitted dataset with server-owned mappings for
+party/item names and posting dates. Missing row date/currency inherits batch
+context. Import-required fields and exact control reconciliation are checked by
+the importer; transaction-document defaults (`type`/`date`) are inapplicable to
+these master/opening schemas. Any server-generated finding/quarantine/name group
+blocks the batch, even if the supplied report is forged and internally consistent.
+Tests consume real CSV/XLSX outputs and the unmodified DSC-019 producer.
 
 ## Runtime backend and Tier 3 review
 
@@ -114,17 +144,23 @@ business writes. Never combine independently committing adapter helpers, DDL,
 external effects, or a separate journal database with this atomic promise.
 Native stock/subledger posting must avoid duplicating control-account effects;
 the SQLite reference store makes no native GL changes. Live integration must
-prove that behavior before it is exposed to customer traffic.
+prove that behavior before it is exposed to customer traffic. [Q-290](../../../../../docs/open-questions.md)
+tracks the UNVERIFIED Opening Invoice Creation Tool / Journal Entry / Stock
+Reconciliation wiring and role mapping. The SQLite backend alone maps trusted
+`Accounts Manager` / `System Manager` sessions to `opening_import`; a live backend
+must supply a verified mapping. ADR-0039 is the requested role-mapping reference,
+but that record is absent from the checked `origin/main`; its existence and
+applicability must be resolved under Q-290 before production wiring.
 
 Before merge: a different model reviews the patch; Eldon records line-by-line
 human review (ADR-0031/0035); security reviews the session, tenant, hash and
 transaction boundaries; a native speaker reviews Arabic. Synthetic arithmetic
 regressions are not official vectors or certification evidence. Production
 posting and any applicable accountant/phase-exit acceptance remain separate
-review evidence, not implied by a done implementation row.
+review evidence. ERP-013 remains `doing` pending review and live posting (Q-290).
 
 Run from the repository root:
 
 ```bash
-PYTHONPATH=apps/engine/change_engine:. python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_opening_importer.py -q
+PYTHONPATH=apps/engine/change_engine:. python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_opening_importer.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_fixes.py -q
 ```

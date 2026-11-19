@@ -22,9 +22,6 @@ RUN if [ "${HRMS_COMMIT}" != "186900a6e3db4e6f927f1ee20df745bbb082638a" ]; then 
     fi && \
     pip install --no-cache-dir -e /home/frappe/frappe-bench/apps/hrms
 
-# Install runtime dependencies needed by change_engine (ERP-009 event stream validation)
-RUN pip install --no-cache-dir jsonschema==4.26.0
-
 # Compile the HRMS Arabic catalogue next to the base image's compiled catalogues
 # (assets/locale), reached through the sites/assets link the entrypoint creates.
 RUN cd /home/frappe/frappe-bench && \

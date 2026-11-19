@@ -224,13 +224,8 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertIn(("warehouse_keeper", "Delivery Note", "submit"), exp["permissions"])
 
 
-    def test_engine_failure_mid_apply_compensates_without_recovery_required(self) -> None:
-        """Defect fix: a failing engine call must not leave its in-memory change behind (it forced recovery_required)."""
-        adapter = make_frappe_adapter(simulated=True, test_hooks=False)
-        target = {"adapter": ADAPTER_ID, "versionSet": "set-example"}
-        res = adapter.call("provision_site", ctx(), {"idempotencyKey": "idemp_bpl027_off_prov", "engineTarget": target,
-                                                    "blueprintId": "bp-offline", "siteClass": "sandbox", "countryPack": "sa"})
-        self.assertTrue(res["ok"], res)
+    @staticmethod
+    def _two_warehouse_artifact(target: dict) -> dict:
         steps = [
             {"seq": i, "phase": 3, "kind": "location.upsert", "subject": {"kind": "location", "id": wid, "parents": []},
              "pointer": f"/locations/{wid}", "impact": "config", "ddlImpact": "none", "reversible": True,
@@ -240,23 +235,32 @@ class TestBpl027Offline(unittest.TestCase):
         ]
         counts = dict.fromkeys(("cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"), 0)
         counts["config"] = 2
-        art = seal({"artifactSchema": "0.1.0", "kind": "forward", "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
-                    "blueprint": {"id": "bp-offline", "base": None, "target": {"hash": "sha256:" + "1" * 64, "revision": 1},
-                                  "diffHash": None},
-                    "engineTarget": target, "components": [], "steps": steps, "skippedOps": [], "postConditions": [],
-                    "risk": {"counts": counts, "total": 2, "maxImpact": "config", "needsDdlPlanGate": False,
-                             "touchesCompliance": False, "touchesAccess": False, "touchesLedgerOrTax": False,
-                             "requiresTeamReview": False, "irreversibleSteps": 0},
-                    "inverse": None})
+        return seal({"artifactSchema": "0.1.0", "kind": "forward", "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
+                     "blueprint": {"id": "bp-offline", "base": None, "target": {"hash": "sha256:" + "1" * 64, "revision": 1},
+                                   "diffHash": None},
+                     "engineTarget": target, "components": [], "steps": steps, "skippedOps": [], "postConditions": [],
+                     "risk": {"counts": counts, "total": 2, "maxImpact": "config", "needsDdlPlanGate": False,
+                              "touchesCompliance": False, "touchesAccess": False, "touchesLedgerOrTax": False,
+                              "requiresTeamReview": False, "irreversibleSteps": 0},
+                     "inverse": None})
+
+    def test_engine_failure_mid_apply_compensates_when_proven_side_effect_free(self) -> None:
+        """A proven pre-write failure (side_effect_free=True) compensates prior steps cleanly without mutating or aliasing site.config."""
+        adapter = make_frappe_adapter(simulated=True, test_hooks=False)
+        target = {"adapter": ADAPTER_ID, "versionSet": "set-example"}
+        res = adapter.call("provision_site", ctx(), {"idempotencyKey": "idemp_bpl027_off_prov", "engineTarget": target,
+                                                    "blueprintId": "bp-offline", "siteClass": "sandbox", "countryPack": "sa"})
+        self.assertTrue(res["ok"], res)
+        art = self._two_warehouse_artifact(target)
         backend = adapter.frappe_backend
         real = backend.execute_step
 
-        def failing(tenant_id, step):
+        def failing_pre_write(tenant_id, step):
             if step["seq"] == 2 and step["kind"] == "location.upsert":
-                raise FrappeBackendError("engine_unavailable")
+                raise FrappeBackendError("site_not_ready", stage="execute", side_effect_free=True)
             return real(tenant_id, step)
 
-        backend.execute_step = failing
+        backend.execute_step = failing_pre_write
         plan = adapter.call("plan", ctx(), {"artifact": art})["result"]
         out = adapter.call("apply", ctx(), {"idempotencyKey": "idemp_bpl027_off_apply", "artifact": art,
                                             "planToken": plan["planToken"],
@@ -264,20 +268,110 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertEqual(out["status"], "compensated", out)
         self.assertEqual(out["site"]["state"], "ready", out)
 
-    def test_warehouse_lookup_uses_company_and_fails_closed_without_one(self) -> None:
-        """Defect fix: the engine requires a company on a warehouse and suffixes its name with the company abbr."""
+    def test_engine_failure_after_db_write_rolls_back_and_enters_recovery_required(self) -> None:
+        """Fail closed: if execute_step raises after a DB write, rollback runs and the site enters recovery_required."""
+        adapter = make_frappe_adapter(simulated=True, test_hooks=False)
+        target = {"adapter": ADAPTER_ID, "versionSet": "set-example"}
+        res = adapter.call("provision_site", ctx(), {"idempotencyKey": "idemp_bpl027_off_prov_rr", "engineTarget": target,
+                                                    "blueprintId": "bp-offline", "siteClass": "sandbox", "countryPack": "sa"})
+        self.assertTrue(res["ok"], res)
+        art = self._two_warehouse_artifact(target)
+        backend = adapter.frappe_backend
+        sim_frappe = backend._acquire_frappe()
+
+        rollbacks = []
+        orig_rollback = sim_frappe.db.rollback
+
+        def spy_rollback():
+            rollbacks.append(True)
+            return orig_rollback()
+
+        sim_frappe.db.rollback = spy_rollback
+
+        writes = []
+        orig_get_doc = sim_frappe.get_doc
+
+        def partial_write_then_fail(payload, *args, **kwargs):
+            doc = orig_get_doc(payload, *args, **kwargs)
+            if isinstance(payload, dict) and payload.get("doctype") == "Warehouse" and payload.get("warehouse_name") == "wh_b":
+                orig_insert = doc.insert
+
+                def insert_then_boom(*iargs, **ikwargs):
+                    orig_insert(*iargs, **ikwargs)
+                    writes.append(payload["warehouse_name"])
+                    raise RuntimeError("simulated crash after DB write")
+
+                object.__setattr__(doc, "insert", insert_then_boom)
+            return doc
+
+        sim_frappe.get_doc = partial_write_then_fail
+        plan = adapter.call("plan", ctx(), {"artifact": art})["result"]
+        out = adapter.call("apply", ctx(), {"idempotencyKey": "idemp_bpl027_off_apply_rr", "artifact": art,
+                                            "planToken": plan["planToken"],
+                                            "approvals": {"changeApproved": "01J00000000000000000000010"}})["result"]
+        self.assertEqual(writes, ["wh_b"], "test precondition: DB write must have happened before raising")
+        self.assertEqual(out["status"], "recovery_required", out)
+        self.assertEqual(out["site"]["state"], "recovery_required", out)
+        self.assertTrue(rollbacks, "execute_step must call f.db.rollback() when a step raises")
+
+    def test_warehouse_lookup_fails_closed_on_zero_or_multiple_companies_and_disable_noops_without_company(self) -> None:
+        """Fail closed on 0 or >1 companies unless named; location.disable is a documented no-op when 0 companies exist."""
         calls = []
         meta = SimpleNamespace(get_field=lambda name: SimpleNamespace(fieldname=name) if name == "company" else None)
 
-        def stub(companies, existing):
-            db = SimpleNamespace(get_value=lambda dt, flt, field: calls.append(flt) or existing)
-            return SimpleNamespace(get_meta=lambda dt: meta, get_all=lambda dt, **kw: list(companies),
-                                   defaults=SimpleNamespace(get_global_default=lambda key: None), db=db)
+        def stub(companies, existing, default_company=None):
+            db = SimpleNamespace(
+                get_value=lambda dt, flt, field: calls.append(flt) or existing,
+                set_value=lambda *a, **kw: calls.append(("set_value", a)),
+                commit=lambda: None,
+                rollback=lambda: None,
+                sql=lambda *a, **kw: [(1,)],
+            )
+            return SimpleNamespace(
+                get_meta=lambda dt: meta,
+                get_all=lambda dt, **kw: list(companies),
+                defaults=SimpleNamespace(get_global_default=lambda key: default_company),
+                db=db,
+            )
 
         backend = make_frappe_adapter(simulated=True).frappe_backend
+
+        # 0 companies: upsert fails closed (site_not_ready, side_effect_free=True)
         with self.assertRaises(FrappeBackendError) as err:
-            backend._find_warehouse(stub([], None), "wh_riyadh")
+            backend._find_warehouse(stub([], None), "wh_riyadh", require_company=True)
         self.assertEqual(err.exception.code, "site_not_ready")
+        self.assertTrue(err.exception.side_effect_free)
+
+        # 0 companies: location.disable is a safe no-op (no company-scoped warehouse can exist)
+        self.assertEqual(backend._find_warehouse(stub([], None), "wh_riyadh", require_company=False), (None, None))
+        zero_co_backend = make_frappe_adapter(simulated=True).frappe_backend
+        zero_co_backend._frappe_factory = lambda: stub([], None)
+        zero_co_backend.execute_step(
+            TENANT,
+            {"kind": "location.disable", "pointer": "/locations/wh_riyadh", "subject": {"kind": "location", "id": "wh_riyadh"}, "params": {}},
+        )
+
+        # >1 companies without explicit company: fails closed even if global default is set
+        with self.assertRaises(FrappeBackendError) as err_multi:
+            backend._find_warehouse(stub(["Alpha Co", "Beta Co"], None, default_company="Alpha Co"), "wh_riyadh", require_company=True)
+        self.assertEqual(err_multi.exception.code, "site_not_ready")
+        self.assertTrue(err_multi.exception.side_effect_free)
+
+        with self.assertRaises(FrappeBackendError) as err_multi_dis:
+            backend._find_warehouse(stub(["Alpha Co", "Beta Co"], None, default_company="Alpha Co"), "wh_riyadh", require_company=False)
+        self.assertEqual(err_multi_dis.exception.code, "site_not_ready")
+
+        # >1 companies WITH explicit company: selects the named company (or fails closed if unknown)
+        self.assertEqual(
+            backend._find_warehouse(stub(["Alpha Co", "Beta Co"], "wh_riyadh - BC"), "wh_riyadh", company_name="Beta Co"),
+            ("wh_riyadh - BC", "Beta Co"),
+        )
+        self.assertEqual(calls[-1], {"warehouse_name": "wh_riyadh", "company": "Beta Co"})
+        with self.assertRaises(FrappeBackendError) as err_unknown:
+            backend._find_warehouse(stub(["Alpha Co", "Beta Co"], None), "wh_riyadh", company_name="Gamma Co")
+        self.assertEqual(err_unknown.exception.code, "site_not_ready")
+
+        # Exactly 1 company: uses that sole company
         self.assertEqual(backend._find_warehouse(stub(["Synthetic Co"], "wh_riyadh - SC"), "wh_riyadh"),
                          ("wh_riyadh - SC", "Synthetic Co"))
         self.assertEqual(calls[-1], {"warehouse_name": "wh_riyadh", "company": "Synthetic Co"})

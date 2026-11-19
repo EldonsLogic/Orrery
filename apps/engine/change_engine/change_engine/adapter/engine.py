@@ -969,21 +969,11 @@ class ChangeEngineAdapter:
         kind, pointer, params = step["kind"], step["pointer"], step["params"]
         segs = _segs(pointer)
         if persist_storage and self.frappe_backend is not None:
-            # BPL-027: the engine call runs after the in-memory change; if it fails, undo the in-memory
-            # change too, or compensation sees a config that never reached the engine and escalates to
-            # recovery_required.
-            saved = (copy.deepcopy(site.config), copy.deepcopy(site.retained))
-            try:
-                self._exec(site, step, persist_storage=False)
-                self.frappe_backend.execute_step(site.tenant_id, step)
-            except Exception:
-                site.config, site.retained = saved
-                raise
-            if kind == "entity.add":
-                self.store.ensure_entity_table(site.tenant_id, str(segs[1] if len(segs) > 1 else "entity"))
-            elif kind == "field.add" and len(segs) >= 4 and segs[0] == "entities":
-                self.store.ensure_field_column(site.tenant_id, segs[1], pointer)
-            return
+            # Execute the engine backend BEFORE mutating site.config/site.retained so a failed
+            # step never mutates or aliases in-memory state. Partial engine effects are handled
+            # fail-closed in _execute_all (any exception not proven side_effect_free transitions
+            # the site to recovery_required rather than hiding engine-side writes).
+            self.frappe_backend.execute_step(site.tenant_id, step)
         cfg = site.config
         if kind == "settings.set":
             doc = cfg["settings"].setdefault(segs[0], {})
@@ -1266,7 +1256,10 @@ class ChangeEngineAdapter:
                     err_code = "engine_unavailable"
                     err_details = {}
                 failure = AdapterError(err_code, {"stepSeq": seq, **(err_details or {})}, stage="execute")
-                comp_fault = err_code == "recovery_required"
+                if self.frappe_backend is not None:
+                    comp_fault = err_code == "recovery_required" or not bool(getattr(exc, "side_effect_free", False))
+                else:
+                    comp_fault = err_code == "recovery_required"
                 break
             entry_j["executed"] = True
             entry["status"] = "applied"

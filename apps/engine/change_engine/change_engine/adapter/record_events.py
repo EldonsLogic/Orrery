@@ -35,7 +35,7 @@ RECORD_HOOKS = {
 }
 _TENANT_ID = re.compile(r"[A-Za-z0-9_]{1,64}")
 _ENGINE_NAME = re.compile(r"frappe|erpnext", re.IGNORECASE)
-_IGNORED_DIFF_FIELDS = frozenset({"modified", "modified_by", "creation", "owner", "idx", "docstatus", "prior"})
+_IGNORED_DIFF_FIELDS = frozenset({"modified", "modified_by", "creation", "owner", "idx", "docstatus"})
 _BATCH_SIZE = 100
 _MAX_ROWS_PER_TICK = 10_000
 _MAX_DELIVERY_ATTEMPTS = 5
@@ -109,50 +109,57 @@ def _opaque_id(tenant_id: str, namespace: str, value: str) -> str:
     return hashlib.sha256(identity).hexdigest()
 
 
-def _get_or_create_subject_id(db, entity: str, record_name: str, new_ulid) -> str:
-    """Return a stable, reversible surrogate ID (`rec_<ulid>`) for a site record."""
+def _live_subject_id(db, entity: str, record_name: str) -> str | None:
     rows = db.sql(
-        f"SELECT subject_id FROM `{SUBJECT_TABLE}` WHERE entity = %s AND record_name = %s",
+        f"SELECT subject_id FROM `{SUBJECT_TABLE}` WHERE entity = %s AND record_name = %s AND live = 1",
         (entity, record_name),
     )
-    if rows:
-        return rows[0][0]
+    return rows[0][0] if rows else None
+
+
+def _retire_subject(db, subject_id: str) -> None:
+    """Keep the reverse mapping of a gone record but free its name for a later record."""
+    db.sql(f"UPDATE `{SUBJECT_TABLE}` SET live = NULL WHERE subject_id = %s", (subject_id,))
+
+
+def _mint_subject_id(db, entity: str, record_name: str, new_ulid) -> str:
     subject_id = f"rec_{new_ulid()}"
     db.sql(
-        f"INSERT INTO `{SUBJECT_TABLE}` (subject_id, entity, record_name, deleted) VALUES (%s, %s, %s, 0)",
+        f"INSERT INTO `{SUBJECT_TABLE}` (subject_id, entity, record_name, live) VALUES (%s, %s, %s, 1)",
         (subject_id, entity, record_name),
     )
     return subject_id
 
 
+def _get_or_create_subject_id(db, entity: str, record_name: str, new_ulid) -> str:
+    """Return the stable, reversible surrogate ID (`rec_<ulid>`) of the live record with this name."""
+    return _live_subject_id(db, entity, record_name) or _mint_subject_id(db, entity, record_name, new_ulid)
+
+
+def _new_subject_id(db, entity: str, record_name: str, new_ulid) -> str:
+    """A newly inserted record never inherits the ID of an earlier record that had its name."""
+    stale = _live_subject_id(db, entity, record_name)
+    if stale:
+        _retire_subject(db, stale)
+    return _mint_subject_id(db, entity, record_name, new_ulid)
+
+
 def _rename_subject_id(db, entity: str, old_name: str, new_name: str, *, merge: bool, new_ulid) -> tuple[str, str | None]:
     """Preserve subject_id across renames; return (subject_id, merged_from_id)."""
-    old_rows = db.sql(
-        f"SELECT subject_id FROM `{SUBJECT_TABLE}` WHERE entity = %s AND record_name = %s",
-        (entity, old_name),
-    )
-    new_rows = db.sql(
-        f"SELECT subject_id FROM `{SUBJECT_TABLE}` WHERE entity = %s AND record_name = %s",
-        (entity, new_name),
-    )
-    if old_rows and new_rows and old_rows[0][0] != new_rows[0][0]:
-        old_id = old_rows[0][0]
-        new_id = new_rows[0][0]
+    old_id = _live_subject_id(db, entity, old_name)
+    new_id = _live_subject_id(db, entity, new_name)
+    if old_id and new_id and old_id != new_id:
         if merge:
-            db.sql(f"UPDATE `{SUBJECT_TABLE}` SET deleted = 1 WHERE subject_id = %s", (old_id,))
+            _retire_subject(db, old_id)
             return new_id, old_id
+        _retire_subject(db, new_id)  # A stale entry must not block the rename.
+        new_id = None
+    if old_id:
         db.sql(f"UPDATE `{SUBJECT_TABLE}` SET record_name = %s WHERE subject_id = %s", (new_name, old_id))
         return old_id, None
-    if old_rows:
-        subject_id = old_rows[0][0]
-        db.sql(
-            f"UPDATE `{SUBJECT_TABLE}` SET record_name = %s, deleted = 0 WHERE subject_id = %s",
-            (new_name, subject_id),
-        )
-        return subject_id, None
-    if new_rows:
-        return new_rows[0][0], None
-    return _get_or_create_subject_id(db, entity, new_name, new_ulid), None
+    if new_id:
+        return new_id, None
+    return _mint_subject_id(db, entity, new_name, new_ulid), None
 
 
 def resolve_subject_id(db, subject_id: str) -> tuple[str, str] | None:
@@ -166,13 +173,33 @@ def resolve_subject_id(db, subject_id: str) -> tuple[str, str] | None:
     return rows[0][0], rows[0][1]
 
 
+def _snapshot(doc) -> dict | None:
+    """Plain field mapping of a dict or an engine document (which is not a dict)."""
+    if isinstance(doc, dict):
+        return doc
+    as_dict = getattr(doc, "as_dict", None)
+    if callable(as_dict):
+        snapshot = as_dict()
+        return snapshot if isinstance(snapshot, dict) else None
+    return None
+
+
+def _comparable(value):
+    """Drop save-time bookkeeping, also inside child rows, before comparing."""
+    if isinstance(value, dict):
+        return {k: _comparable(v) for k, v in value.items() if k not in _IGNORED_DIFF_FIELDS}
+    if isinstance(value, (list, tuple)):
+        return [_comparable(v) for v in value]
+    return value
+
+
 def _changed_fields(previous, doc) -> list[str]:
     """Return safe, sorted field names whose values changed between saves (no values/PII)."""
-    if not isinstance(previous, dict) or not isinstance(doc, dict):
+    before, after = _snapshot(previous), _snapshot(doc)
+    if before is None or after is None:
         return []
-    keys = (set(previous.keys()) | set(doc.keys())) - _IGNORED_DIFF_FIELDS
-    changed = [key for key in sorted(keys) if previous.get(key) != doc.get(key)]
-    return changed
+    keys = (set(before) | set(after)) - _IGNORED_DIFF_FIELDS
+    return [key for key in sorted(keys) if _comparable(before.get(key)) != _comparable(after.get(key))]
 
 
 def record_document_event(doc, method: str, *args) -> None:
@@ -215,13 +242,16 @@ def record_document_event(doc, method: str, *args) -> None:
         if merged_from_id:
             data["merged_from_id"] = merged_from_id
     else:
-        subject_id = _get_or_create_subject_id(frappe.db, entity, doc.name, new_ulid)
+        if verb == "created":
+            subject_id = _new_subject_id(frappe.db, entity, doc.name, new_ulid)
+        else:
+            subject_id = _get_or_create_subject_id(frappe.db, entity, doc.name, new_ulid)
         data = {"id": subject_id}
         if verb in ("submitted", "cancelled"):
             data["changes"] = {"status": verb}
         elif verb == "deleted":
             data["deleted"] = True
-            frappe.db.sql(f"UPDATE `{SUBJECT_TABLE}` SET deleted = 1 WHERE subject_id = %s", (subject_id,))
+            _retire_subject(frappe.db, subject_id)
         elif verb == "updated":
             changed = _changed_fields(previous, doc)
             if changed:
@@ -256,8 +286,10 @@ def publish_pending(*, max_rows: int = _MAX_ROWS_PER_TICK, max_attempts: int = _
     """Relay committed outbox rows in bounded batches from the scheduler's site connection.
 
     The operator-configured sink implements EventStore.append and acknowledges durable
-    acceptance. Poison rows (corrupt payload or repeated failures reaching max_attempts) are
-    quarantined with dead_lettered_at so subsequent valid events keep draining.
+    acceptance. Poison rows are quarantined with dead_lettered_at so subsequent valid events
+    keep draining: a corrupt payload, or a sink that rejects the event itself (EventError)
+    max_attempts times. Any other failure (sink down, bad acknowledgment) is an outage, not a
+    property of the event: the row stays pending and is retried, never quarantined.
     """
     import frappe
 
@@ -270,6 +302,7 @@ def publish_pending(*, max_rows: int = _MAX_ROWS_PER_TICK, max_attempts: int = _
         return 0
 
     tenant_id = _site_tenant(frappe)
+    event_error = _import_evstream().EventError
     append = frappe.get_attr(sink_path)
     db = frappe.db
     # One drainer per site database. A DB lock does not lock the document writes.
@@ -316,7 +349,7 @@ def publish_pending(*, max_rows: int = _MAX_ROWS_PER_TICK, max_attempts: int = _
                         raise RuntimeError("Event sink returned an invalid acknowledgment")
                 except Exception as exc:
                     next_attempts = attempts + 1
-                    if next_attempts >= max_attempts:
+                    if isinstance(exc, event_error) and next_attempts >= max_attempts:
                         _dead_letter_row(db, event_id, next_attempts, str(exc))
                         continue
                     db.rollback()

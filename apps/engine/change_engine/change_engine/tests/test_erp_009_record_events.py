@@ -49,8 +49,8 @@ class Database:
                     subject_id TEXT PRIMARY KEY,
                     entity TEXT NOT NULL,
                     record_name TEXT NOT NULL,
-                    deleted INTEGER NOT NULL DEFAULT 0,
-                    UNIQUE(entity, record_name)
+                    live INTEGER NULL DEFAULT 1,
+                    UNIQUE(entity, record_name, live)
                 );
             """)
         with self._locks_guard:
@@ -86,8 +86,32 @@ class Document(dict):
     doctype = "Sales Order"
     name = "ERPNext-customer-private-key"
 
+    def __init__(self, *args, prior=None, **fields):
+        super().__init__(*args, **fields)
+        self._prior = prior
+
     def get_doc_before_save(self):
-        return self.get("prior")
+        return self._prior
+
+
+class FrappeLikeDocument:
+    """A real engine document is not a dict: it offers get() and as_dict() only."""
+
+    doctype = "Sales Order"
+
+    def __init__(self, name, prior=None, **fields):
+        self.name = name
+        self._prior = prior
+        self._fields = fields
+
+    def get(self, key, default=None):
+        return self._fields.get(key, default)
+
+    def as_dict(self):
+        return json.loads(json.dumps(self._fields))
+
+    def get_doc_before_save(self):
+        return self._prior
 
 
 def invoke_hook(doc, method, *args):
@@ -155,7 +179,7 @@ def test_lifecycle_hooks_deliver_contract_events_with_delete_and_rename(sites):
     draft = Document(docstatus=0, tenant_id="t_foreign", customer="t_foreign")
     invoke_hook(draft, "after_insert")
     invoke_hook(draft, "on_update")  # The insert also runs on_update.
-    invoke_hook(Document({**draft, "prior": draft, "grand_total": 150}), "on_update")
+    invoke_hook(Document({**draft, "grand_total": 150}, prior=draft), "on_update")
     submitted = Document(prior=draft, docstatus=1)
     invoke_hook(submitted, "on_update")  # The submit also runs on_update.
     invoke_hook(submitted, "on_submit")
@@ -348,10 +372,10 @@ def test_poison_row_quarantined_and_does_not_block_valid_events(sites):
     # then dead-letters on attempt 2 so good_doc delivers immediately.
     def flaky_append(ev):
         if "bad" in str(resolve_subject_id(db, ev["subject"]["id"])):
-            raise RuntimeError("sink rejected poison payload")
+            raise _evstream.EventError("EVS-ENV-002", "sink rejected poison payload")
         return store.append(ev)
 
-    with pytest.raises(RuntimeError, match="sink rejected"):
+    with pytest.raises(_evstream.EventError, match="sink rejected"):
         run_publisher(engine, flaky_append, max_attempts=2)
     assert run_publisher(engine, flaky_append, max_attempts=2) == 1
     assert len(store.read("t_alpha")) == 1
@@ -360,6 +384,115 @@ def test_poison_row_quarantined_and_does_not_block_valid_events(sites):
         "SELECT event_id, dead_lettered_at FROM `tabChange Engine Event Outbox` WHERE dead_lettered_at IS NOT NULL"
     )
     assert len(dead) == 2
+
+
+def test_changed_fields_work_on_real_non_dict_documents(sites):
+    engine, select = sites
+    db = select("t_alpha")
+    row = {"name": "r1", "item_code": "A", "qty": 1, "modified": "2026-01-01 09:00:00", "idx": 1}
+    before = FrappeLikeDocument(
+        "SO-1", docstatus=0, grand_total=100, modified="2026-01-01 09:00:00", items=[row],
+    )
+    invoke_hook(FrappeLikeDocument("SO-1", docstatus=0), "after_insert")
+    # Saving stamps every child row with a new modified time; that alone is not a change.
+    stamped = {**row, "modified": "2026-01-02 09:00:00"}
+    invoke_hook(FrappeLikeDocument(
+        "SO-1", prior=before, docstatus=0, grand_total=150, notes="x",
+        modified="2026-01-02 09:00:00", items=[stamped],
+    ), "on_update")
+    invoke_hook(FrappeLikeDocument(
+        "SO-1", prior=before, docstatus=0, grand_total=100, modified="2026-01-02 09:00:00",
+        items=[{**stamped, "qty": 2}],
+    ), "on_update")
+    db.commit()
+
+    select("t_alpha", worker=True)
+    store = MemoryStore()
+    assert run_publisher(engine, store.append) == 3
+    events = store.read("t_alpha")
+    assert events[1]["data"]["changed_fields"] == ["grand_total", "notes"]
+    assert events[2]["data"]["changed_fields"] == ["items"]
+
+
+def test_recreating_a_deleted_name_gets_a_new_subject_id(sites):
+    engine, select = sites
+    db = select("t_alpha")
+    doc = Document()
+    doc.name = "CUST-1"
+    invoke_hook(doc, "after_insert")
+    invoke_hook(doc, "on_trash")
+    invoke_hook(doc, "after_insert")  # The same name is created again later.
+    edited = Document(prior=Document(docstatus=0), docstatus=0, notes="x")
+    edited.name = "CUST-1"
+    invoke_hook(edited, "on_update")
+    db.commit()
+
+    select("t_alpha", worker=True)
+    store = MemoryStore()
+    assert run_publisher(engine, store.append) == 4
+    created, deleted, recreated, updated = store.read("t_alpha")
+    assert created["subject"]["id"] == deleted["subject"]["id"]
+    assert recreated["subject"]["id"] != deleted["subject"]["id"]
+    assert updated["subject"]["id"] == recreated["subject"]["id"]
+    assert resolve_subject_id(db, deleted["subject"]["id"]) == ("sales_order", "CUST-1")
+    assert resolve_subject_id(db, recreated["subject"]["id"]) == ("sales_order", "CUST-1")
+    live = db.sql("SELECT subject_id FROM `tabChange Engine Event Subject` WHERE live = 1")
+    assert live == [(recreated["subject"]["id"],)]
+
+
+def test_transient_sink_failures_never_dead_letter_an_event(sites):
+    engine, select = sites
+    db = select("t_alpha")
+    for name in ("first", "second"):
+        doc = Document()
+        doc.name = name
+        invoke_hook(doc, "after_insert")
+    db.commit()
+
+    select("t_alpha", worker=True)
+
+    def down(_event):
+        raise ConnectionError("sink unavailable")
+
+    for _ in range(4):  # Far past max_attempts: an outage must not lose events.
+        with pytest.raises(ConnectionError):
+            run_publisher(engine, down, max_attempts=2)
+    assert db.sql("SELECT COUNT(*) FROM `tabChange Engine Event Outbox` WHERE dead_lettered_at IS NOT NULL") == [(0,)]
+    assert db.sql("SELECT attempts, last_error FROM `tabChange Engine Event Outbox` ORDER BY position")[0] == (
+        4, "sink unavailable",
+    )
+
+    store = MemoryStore()
+    assert run_publisher(engine, store.append, max_attempts=2) == 2
+    names = [resolve_subject_id(db, e["subject"]["id"])[1] for e in store.read("t_alpha")]
+    assert names == ["first", "second"]
+
+
+def test_outbox_patch_does_not_swallow_ddl_errors():
+    patch = importlib.import_module("change_engine.patches.erp_009_create_event_outbox")
+    statements = []
+
+    class Db:
+        def sql_ddl(self, statement):
+            statements.append(statement)
+            if "ADD COLUMN" in statement:
+                raise RuntimeError("ddl failed")
+
+    sys.modules["frappe"] = SimpleNamespace(db=Db())
+    try:
+        with pytest.raises(RuntimeError, match="ddl failed"):
+            patch.execute()
+    finally:
+        del sys.modules["frappe"]
+
+    statements.clear()
+    Db.sql_ddl = lambda self, statement: statements.append(statement)
+    sys.modules["frappe"] = SimpleNamespace(db=Db())
+    try:
+        patch.execute()
+    finally:
+        del sys.modules["frappe"]
+    assert any("live TINYINT" in statement for statement in statements)
 
 
 def test_drains_more_than_100_rows_in_single_tick(sites):

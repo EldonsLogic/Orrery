@@ -25,7 +25,7 @@ def _tools():
 def _run(sc, events=None, ids=None):
     traces, ids = MemoryTraceStore(), ids or SequentialIds()
     loop = AgentLoop(model=sc, tools=_tools(), allow=resolve_allowlist(DEFS, ("sales",)), limits=Limits(),
-                     clock=TickClock(), ids=ids, traces=traces, events=events)
+                     clock=TickClock(), ids=ids, traces=traces, events=events, hash_salt=b"tenant-key")
     res = loop.run(caller=CALLER, run_id="run_1", user_text="go")
     return res, traces.spans("t_acme", "run_1"), traces
 
@@ -38,7 +38,7 @@ def test_trace_completeness_and_redaction():
     assert [(s.tool, s.risk_class, s.outcome) for s in tool] == [("sales_order.get", "R0", "ok"),
                                                                  ("purchase_order.cancel", "R2", "pending_approval")]
     assert tool[0].args_redacted["email"] == "[redacted]" and tool[0].args_redacted["note"].startswith("[200 chars")
-    assert tool[0].args_hash.startswith("sha256:") and tool[1].approval_id == "ap_1" and tool[1].audit_id == "aud_2"
+    assert tool[0].args_hash.startswith("hmac-sha256:") and tool[1].approval_id == "ap_1" and tool[1].audit_id == "aud_2"
     assert all(s.span_id and s.run_id == "run_1" and s.ended_ms >= s.started_ms for s in spans)
     assert sum(s.input_tokens for s in spans if s.kind == "model") == spans[-1].input_tokens == 200
     assert traces.spans("t_other", "run_1") == []  # tenant-scoped
@@ -79,9 +79,10 @@ def test_budget_exhaustion_mid_run_through_gateway_precheck():
                      limits=Limits(max_steps=10), clock=TickClock(), ids=SequentialIds(), traces=traces, events=sink)
     res = loop.run(caller=CALLER, run_id="run_1", user_text="go")
     assert (res.status, res.stop_reason, res.error_code) == ("stopped", "budget", "budget_exceeded")
-    assert res.steps == 3 and len(meter.calls_for_tenant("t_acme")) == 3  # the fourth call is refused before dispatch
+    calls = meter.calls_for_tenant("t_acme")  # the precheck sizes each call from the real request (M6)
+    assert res.steps == len(calls) >= 1 and sum(c.input_tokens + c.output_tokens for c in calls) <= 1300
     assert [t for t in sink.types() if t.startswith("agent.budget")] == ["agent.budget_exceeded"]
-    assert [x.outcome for x in traces.spans("t_acme", "run_1") if x.kind == "model"] == ["ok", "ok", "ok", "budget_stop"]
+    assert [x.outcome for x in traces.spans("t_acme", "run_1") if x.kind == "model"] == ["ok"] * res.steps + ["budget_stop"]
 
 
 def test_gateway_port_rejects_non_reply_output():

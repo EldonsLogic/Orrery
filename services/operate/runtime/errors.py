@@ -15,7 +15,8 @@ TOOL_API_CODES = frozenset({"invalid_arguments", "unknown_tool", "permission_den
                             "guard_failed", "not_found", "conflict", "idempotency_conflict", "rate_limited",
                             "budget_exceeded", "engine_error", "internal_error"})
 RETRYABLE = frozenset({"invalid_arguments", "conflict", "rate_limited"})
-RUN_CODES = frozenset({"budget_exceeded", "permission_denied", "invalid_arguments", "internal_error", "cancelled"})
+RUN_CODES = frozenset({"budget_exceeded", "permission_denied", "invalid_arguments", "internal_error", "cancelled",
+                       "needs_approval", "propose_unavailable"})
 _CATALOG = None
 
 

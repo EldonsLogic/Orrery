@@ -1,7 +1,7 @@
 """User-visible chat errors (ADR-0036). Customer text comes only from this closed table or the Tool API catalog.
 
 The chat codes below are chat-level (no record params). They are not in `contracts/tool-api-error-catalog.json` yet
-(Q-235). Arabic text is marked unreviewed (ADR-0033). Raw exception text never leaves; it is logged by type only."""
+(Q-259). Arabic text is marked unreviewed (ADR-0033). Raw exception text never leaves; it is logged by type only."""
 from __future__ import annotations
 
 import logging

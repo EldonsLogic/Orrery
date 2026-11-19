@@ -22,4 +22,4 @@ Plan row OPR-010. Code: `services/operate/chat/`. One chat with modes ([ADR-0004
 | Audit and logs | `chat.message_received`, `chat.message_sent` (hash and length, locale, mode, outcome) and the registered `chat.turn_completed`. No bodies in audit or logs. The hash is plain SHA-256: it proves equality, it does not hide short guessable messages. |
 
 ## Ports
-`ChatStore` (sessions, entries, message records, `begin_run` / `end_run`; `MemoryChatStore` fake with `dump` / `load` to test restart), `RouterPort` (OPR-002), runtime factory (`loop_runtime_factory` wraps the OPR-001 loop and adds history to the model request), audit sink (same shape as the runtime `EventSink`), `RetentionHook`. Open points: Q-235 to Q-238.
+`ChatStore` (sessions, entries, message records, `begin_run` / `end_run`; `MemoryChatStore` fake with `dump` / `load` to test restart), `RouterPort` (OPR-002), runtime factory (`loop_runtime_factory` wraps the OPR-001 loop and adds history to the model request), audit sink (same shape as the runtime `EventSink`), `RetentionHook`. Open points: Q-259 to Q-262.

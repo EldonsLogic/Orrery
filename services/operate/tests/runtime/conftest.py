@@ -26,8 +26,9 @@ DEFS = [
     tool("customer.update_bank_details", "R4", agent=False), tool("approval.decide", "R3", agent=False),
     tool("owner_only.get", roles=("owner",)),
     tool("sales_order.transition", "R2", transitions=[
-        {"id": "deliver", "kind": "advance", "risk_class": "R1", "agent_creatable": True},
-        {"id": "approve_large", "kind": "approve", "risk_class": "R2", "agent_creatable": False}]),
+        {"id": "deliver", "kind": "advance", "risk_class": "R1", "agent_creatable": True, "allowed_roles": ["sales"]},
+        {"id": "approve_large", "kind": "approve", "risk_class": "R2", "agent_creatable": False,
+         "allowed_roles": ["sales"]}]),
 ]
 
 
@@ -47,8 +48,8 @@ class Script:
 
 
 class FakeTools:
-    def __init__(self, responses=None):
-        self.responses, self.requests = responses or {}, []
+    def __init__(self, responses=None, supports_propose=True):
+        self.responses, self.requests, self.supports_propose = responses or {}, [], supports_propose
 
     def call(self, req):
         self.requests.append(req)
@@ -81,16 +82,18 @@ def env():
     e = E()
     e.clock, e.ids, e.traces, e.sink = TickClock(), SequentialIds(), MemoryTraceStore(), Sink()
 
-    def make(model, tools=None, limits=None, defs=DEFS, roles=("sales",), assistant=None, cancel=None, caller=None):
+    def make(model, tools=None, limits=None, defs=DEFS, roles=("sales",), assistant=None, cancel=None, caller=None,
+             salt=b"test-salt"):
         e.tools = tools or FakeTools()
         e.model = model
         allow = resolve_allowlist(defs, roles, assistant)
         e.loop = AgentLoop(model=model, tools=e.tools, allow=allow, limits=limits or Limits(), clock=e.clock,
-                           ids=e.ids, traces=e.traces, events=e.sink, cancel=cancel)
+                           ids=e.ids, traces=e.traces, events=e.sink, cancel=cancel, hash_salt=salt)
         return e.loop
 
-    def run(model, text="show order SO-1", **kw):
+    def run(model, text="show order SO-1", taint=None, **kw):
         loop = make(model, **{k: v for k, v in kw.items() if k != "caller"})
-        return loop.run(caller=kw.get("caller") or CALLER, run_id="run_1", user_text=text, instructions="SYS")
+        return loop.run(caller=kw.get("caller") or CALLER, run_id="run_1", user_text=text, instructions="SYS",
+                        taint=taint)
     e.make, e.run = make, run
     return e

@@ -27,7 +27,7 @@ for t in test_ai_control_plane test_api_deployment test_phase2_property_setter t
   PYTHONPATH=. python3 -m unittest change_engine.tests.$t
 done
 ```
-Needs Python 3.10+ and `pydantic>=2`. The live test (`test_live_mariadb_suite_b.py`) needs `pymysql` and the dev stack. None of this has run inside a real Frappe bench yet (CE-SEC-005).
+Needs Python 3.10+ and `pydantic>=2`. The live test (`test_live_mariadb_suite_b.py`) needs `pymysql` and the dev stack, and the full zero-mock Frappe bench integration suite (`test_ce_sec_005_real_bench.py`) runs inside the pinned Docker bench via `python3 infra/dev/docker/run_real_bench_ci.py` (`.github/workflows/real-bench.yml`).
 
 ## Business record outbox (ERP-009)
 
@@ -35,7 +35,7 @@ The allowlist in `change_engine/adapter/record_events.py` covers G1 trading reco
 
 Capture uses the active site's `tenant_id` and DB transaction, and skips cleanly during `in_install`/`in_migrate`/`in_patch` before `erp_009_create_event_outbox` creates the tables (failing closed outside migrations if tables are missing). The scheduler drains committed rows in batches (up to `max_rows=10000` per tick) guarded by an advisory DB lock, and quarantines poison rows (`dead_lettered_at` on corrupt payloads, or when the sink rejects the event itself with an `EventError` `max_attempts=5` times) so valid rows behind them continue draining. Any other sink failure is treated as an outage: the row stays pending and retries, so an outage never drops events. A record deleted and later re-created under the same name gets a new surrogate ID; the old ID still resolves to the name. The receiver assigns the tenant-wide stream sequence and de-duplicates by ULID; `publish_pending` deletes a row only after durable acknowledgment.
 
-For a tenant bench, `record_events` imports `evstream` directly, from `ORRERY_EVSTREAM_DIR`, or by discovering `services/blueprint/events` in the repository tree (no manual `PYTHONPATH` needed in-repo). Install the app's dependencies, including `jsonschema`, ensure `tenant_id` conforms to Contract 4, and run `bench --site "$SITE" migrate` before serving record writes. Set `record_event_sink` in trusted site configuration to an installed app's callable implementing BPL-011 `EventStore.append`. Pending rows remain in the site DB while the sink is unconfigured or unavailable. See the [BPL-011 reference](../../../services/blueprint/events/README.md) and [open questions](../../../docs/open-questions.md) (`Q-263`–`Q-267`).
+For a tenant bench, `record_events` imports `evstream` directly, from `ORRERY_EVSTREAM_DIR`, or by discovering `services/blueprint/events` in the repository tree (no manual `PYTHONPATH` needed in-repo). Install the app's dependencies, including `jsonschema`, ensure `tenant_id` conforms to Contract 4, and run `bench --site "$SITE" migrate` before serving record writes. Set `record_event_sink` in trusted site configuration to an installed app's callable implementing BPL-011 `EventStore.append`. Pending rows remain in the site DB while the sink is unconfigured or unavailable. See the [BPL-011 reference](../../../services/blueprint/events/README.md) and [open questions](../../../docs/open-questions.md) (`Q-284`–`Q-288`).
 
 Run the contract and outbox tests from the repository root:
 

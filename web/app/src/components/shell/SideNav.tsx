@@ -15,11 +15,12 @@ export function SideNav({ claims, onNavigate }: { claims: SessionClaims; onNavig
   const locale = useLocale();
   const pathname = usePathname() ?? '';
   const caller = callerOf(claims);
-  const sections = buildNav(fixtureData, caller, locale, { home: t('home') }).map((s) =>
-    s.id === 'workspace' && canViewBlueprint(fixtureBlueprint, caller)
-      ? { ...s, items: [...s.items, { id: 'blueprint', label: t('blueprint'), href: '/blueprint/' }] }
-      : s,
-  );
+  const sections = buildNav(fixtureData, caller, locale, { home: t('home') }).map((s) => {
+    if (s.id !== 'workspace') return s;
+    const extra = [{ id: 'chat', label: t('chat'), href: '/chat/' }];
+    if (canViewBlueprint(fixtureBlueprint, caller)) extra.push({ id: 'blueprint', label: t('blueprint'), href: '/blueprint/' });
+    return { ...s, items: [...s.items, ...extra] };
+  });
   const hasRecords = sections.some((s) => s.id === 'records');
   return (
     <nav aria-label={t('label')} className={styles.nav}>

@@ -332,7 +332,8 @@
         "workspace": "Workspace",
         "records": "Records"
       },
-      "blueprint": "Business blueprint"
+      "blueprint": "Business blueprint",
+      "chat": "Chat"
     },
     "workspace": {
       "label": "Workspace",
@@ -643,6 +644,116 @@
         "assistant": "assistant",
         "other": "item"
       }
+    }
+  },
+  "chat": {
+    "title": "Chat",
+    "empty": {
+      "intro": "Ask about your business or tell the assistant what to do. Try one of these.",
+      "suggestions": "Suggested prompts"
+    },
+    "suggestions": {
+      "owner": {
+        "cash": "How much cash do we have today?",
+        "approvals": "What is waiting for my approval?",
+        "sales": "How are sales this month?"
+      },
+      "accountant": {
+        "overdue": "Which customer invoices are overdue?",
+        "vat": "Show this quarter's VAT summary",
+        "draft": "Draft a journal entry for rent"
+      },
+      "sales": {
+        "open": "Which of my orders are still open?",
+        "quote": "Draft a quotation for a customer",
+        "customer": "Show the last orders of a customer"
+      },
+      "generic": {
+        "what": "What can you help me with?",
+        "help": "What am I allowed to do here?",
+        "recent": "Show what changed recently"
+      }
+    },
+    "roles": {
+      "log": "Conversation",
+      "user": "You",
+      "assistant": "Assistant",
+      "system": "System"
+    },
+    "mode": {
+      "label": "Mode",
+      "hint": "The mode only sets what you want to do. It never gives you access: the assistant follows your permissions.",
+      "discover": {
+        "name": "Discover",
+        "description": "Discover: explore what the platform and your data can do."
+      },
+      "ask": {
+        "name": "Ask",
+        "description": "Ask: questions and reports. Nothing is changed."
+      },
+      "act": {
+        "name": "Act",
+        "description": "Act: do a task for you. You confirm before anything is written."
+      },
+      "change": {
+        "name": "Change",
+        "description": "Change: propose a change to how the business is set up. You confirm first and some changes need approval."
+      }
+    },
+    "composer": {
+      "label": "Message",
+      "placeholder": "Write a message",
+      "hint": "Enter sends, Shift+Enter starts a new line.",
+      "send": "Send",
+      "cancel": "Stop",
+      "count": "{used} of {max}"
+    },
+    "stream": {
+      "working": "The assistant is working",
+      "cancelling": "Stopping"
+    },
+    "activity": {
+      "title": "What the assistant did",
+      "risk": "Risk class {risk}",
+      "outcome": {
+        "running": "Running",
+        "ok": "Done",
+        "pending_approval": "Sent for approval",
+        "denied": "Not allowed",
+        "error": "Failed"
+      }
+    },
+    "confirm": {
+      "title": "Confirm before it is written",
+      "intro": "The assistant wants to run {tool} (risk {risk}). Check what will change.",
+      "changes": "Changes",
+      "change": "{field}: {before} to {after}",
+      "empty": "empty",
+      "noChanges": "No field values change.",
+      "confirm": "Confirm",
+      "cancel": "Cancel"
+    },
+    "approval": {
+      "title": "Sent for approval",
+      "body": "{tool} (risk {risk}) needs an approver. Nothing has changed yet. It cannot be approved from the chat.",
+      "open": "Open the approval inbox"
+    },
+    "clarify": {
+      "title": "The assistant needs more detail",
+      "whichRecord": "Which record do you mean? Give a number or a name.",
+      "whichPeriod": "Which period do you mean?",
+      "whichAction": "What would you like to do with it?",
+      "generic": "I could not tell what you mean. Please say it in a different way."
+    },
+    "errors": {
+      "title": "The request did not complete",
+      "forbidden": "Your role does not allow this.",
+      "rate_limited": "Too many requests. Wait a moment and try again.",
+      "unavailable": "The assistant is not available right now. Try again later.",
+      "invalid_request": "The request could not be understood.",
+      "cancelled": "The request was stopped.",
+      "timeout": "The request took too long.",
+      "unknown": "Something went wrong. Try again."
     }
   }
 }

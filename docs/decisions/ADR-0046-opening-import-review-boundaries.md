@@ -41,7 +41,7 @@ Keep only the latest 256 sanitized failure attempts per tenant.
 The generic importer no longer knows engine role names. SQLite retains an
 explicit offline compatibility mapping for authenticated roles; the native
 mapping requested under ADR-0039 is UNVERIFIED (that record is absent from the
-checked main branch). [Q-290](../open-questions.md) tracks this and native Opening
+checked main branch). [Q-303](../open-questions.md) tracks this and native Opening
 Invoice Creation Tool / Journal Entry / Stock Reconciliation wiring. The supplied
 backend remains an offline reference, with no ledger-posting claim. ERP-013 stays
 doing. Live bulk-import limits and native transaction/link/role behavior require

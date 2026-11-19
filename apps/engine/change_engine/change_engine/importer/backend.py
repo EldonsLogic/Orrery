@@ -83,7 +83,7 @@ class SQLiteImportBackend:
             if not isinstance(session, dict):
                 return {}
             identity = dict(session)
-            # Offline compatibility mapping only. Live mapping needs Q-290 /
+            # Offline compatibility mapping only. Live mapping needs Q-303 /
             # ADR-0039 verification; no role/capability is accepted from payloads.
             roles = identity.get("roles", ())
             if "capabilities" not in identity:

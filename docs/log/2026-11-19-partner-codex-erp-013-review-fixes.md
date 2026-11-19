@@ -13,8 +13,8 @@ Addressed PR #202's HIGH-1, MED-1 through MED-4 and actionable LOW findings with
 - `apps/engine/change_engine/change_engine/tests/test_erp_013_review_fixes.py`: forged-clean Arabic duplicate attacks at all three stages; duplicate batch IDs and competing connections; prior-value audit and rollback; missing controls/details, dangling references and classification bypass; stale master approval; Unicode formulas, caps, authentication, failure retention, currencies and mapped capabilities.
 - Existing importer tests: valid fixtures include masters and controls; scope denials cover preview as well as apply. Financial precision and rollback coverage retained.
 - `.github/workflows/tests.yml`: include both importer test modules in the existing step; no other CI step changed.
-- `docs/PLAN.md`: ERP-013 doing, partner-owned, offline-ready and live-pending Q-290.
-- New Q-290, proposed ADR-0046 and its index entry, and this new log. Discovery source, other founders' paths and old logs/ADRs were read-only.
+- `docs/PLAN.md`: ERP-013 doing, partner-owned, offline-ready and live-pending Q-303.
+- New Q-303, proposed ADR-0046 and its index entry, and this new log. Discovery source, other founders' paths and old logs/ADRs were read-only.
 
 ## Decisions and review disposition
 - User explicitly assigned partner (`sayegh9`); `gh api user` confirmed the account. Fetched and checked out the requested branch; read the full Claude Sonnet 5.5 review at head `9a8426915e178284c60d7791fc80427671322de3`.
@@ -22,7 +22,7 @@ Addressed PR #202's HIGH-1, MED-1 through MED-4 and actionable LOW findings with
 - MED-1: one opening per tenant/company, independent of batch ID/date, serialized with writes and journal. Existing reference opening records also block a new claim. No supersede/reversal path is invented; master-only batches remain allowed.
 - MED-2: approval hashes cover prior/next master state and referenced masters; apply recomputes under the write transaction. The journal stores verbatim before/after values. Rollback removes claims, writes, journal and audit, restoring prior records. Exact committed retries use their original hash plus a normalized source digest.
 - MED-3: nonzero control lines require matching details, including offsetting lines with net zero. Details require a corresponding control and exact totals. Account/customer/supplier/item/warehouse links resolve against the batch or existing scoped masters; existing account types cannot be reclassified through this importer.
-- MED-4 / LOW-3: checked open questions on origin/main before adding reserved Q-290. Live Frappe Opening Invoice Creation Tool / Journal Entry / Stock Reconciliation wiring, control effects and roles remain UNVERIFIED. Requested ADR-0039 is absent from the checked main branch; Q-290 records that unresolved reference rather than inventing an accepted mapping.
+- MED-4 / LOW-3: checked open questions on origin/main before adding reserved Q-303. Live Frappe Opening Invoice Creation Tool / Journal Entry / Stock Reconciliation wiring, control effects and roles remain UNVERIFIED. Requested ADR-0039 is absent from the checked main branch; Q-303 records that unresolved reference rather than inventing an accepted mapping.
 - LOW-1: NFKC detection copy and leading Unicode whitespace/Cf/Cc handling catch fullwidth and invisible-prefix formulas; all text Cf/Cc controls are rejected without changing accepted spelling.
 - LOW-2: explicit supported ISO-4217 subset SAR/AED/EGP/QAR/USD/EUR/GBP; arbitrary three-letter codes fail closed. Currency precision remains an explicit reviewed configuration input.
 - LOW-4: authenticate before data traversal in every stage. Public errors stop at one, with an explicit possible-truncation flag. DSC-019's accumulating API is bounded to 250 rows per entity and a conservative two-million-cell pairwise name comparison budget. Sanitized failure history retains at most 256 rows per tenant; initial validation/auth refusals write none. Backend read failures are sanitized.
@@ -44,4 +44,4 @@ Addressed PR #202's HIGH-1, MED-1 through MED-4 and actionable LOW findings with
 Unknown.
 
 ## Next step
-Different-model re-review of the corrected head, Eldon's named/dated Tier 3 line-by-line human and security review, native Arabic review, and Q-290 live posting/role mapping evidence. ERP-013 stays doing. Do not merge under this brief.
+Different-model re-review of the corrected head, Eldon's named/dated Tier 3 line-by-line human and security review, native Arabic review, and Q-303 live posting/role mapping evidence. ERP-013 stays doing. Do not merge under this brief.

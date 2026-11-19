@@ -144,20 +144,20 @@ business writes. Never combine independently committing adapter helpers, DDL,
 external effects, or a separate journal database with this atomic promise.
 Native stock/subledger posting must avoid duplicating control-account effects;
 the SQLite reference store makes no native GL changes. Live integration must
-prove that behavior before it is exposed to customer traffic. [Q-290](../../../../../docs/open-questions.md)
+prove that behavior before it is exposed to customer traffic. [Q-303](../../../../../docs/open-questions.md)
 tracks the UNVERIFIED Opening Invoice Creation Tool / Journal Entry / Stock
 Reconciliation wiring and role mapping. The SQLite backend alone maps trusted
 `Accounts Manager` / `System Manager` sessions to `opening_import`; a live backend
 must supply a verified mapping. ADR-0039 is the requested role-mapping reference,
 but that record is absent from the checked `origin/main`; its existence and
-applicability must be resolved under Q-290 before production wiring.
+applicability must be resolved under Q-303 before production wiring.
 
 Before merge: a different model reviews the patch; Eldon records line-by-line
 human review (ADR-0031/0035); security reviews the session, tenant, hash and
 transaction boundaries; a native speaker reviews Arabic. Synthetic arithmetic
 regressions are not official vectors or certification evidence. Production
 posting and any applicable accountant/phase-exit acceptance remain separate
-review evidence. ERP-013 remains `doing` pending review and live posting (Q-290).
+review evidence. ERP-013 remains `doing` pending review and live posting (Q-303).
 
 Run from the repository root:
 

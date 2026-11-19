@@ -100,7 +100,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-006 | KSA chart of accounts template and tax codes | Compliance | G1 | ERP-001 | partner | todo |
 | CMP-007 | ZATCA onboarding automation per tenant (CSID, certificates, environments) | Compliance | G2 | CMP-004,PLT-003 | partner | todo |
 | CMP-008 | ZATCA regression suite run on every engine or component change | Compliance | G2 | CMP-004,QA-001 | partner | todo |
-| CMP-009 | UAE e-invoicing: choose accredited service provider | Compliance | G2 | CMP-001 | eldon | todo |
+| CMP-009 | UAE e-invoicing: choose accredited service provider | Compliance | G2 | CMP-001 | eldon | done |
 | CMP-010 | KSA VAT return report | Compliance | G2 | CMP-006 | partner | todo |
 | CMP-011 | UAE e-invoicing integration via the chosen provider | Compliance | G3 | CMP-009 | partner | todo |
 | CMP-012 | UAE VAT return report | Compliance | G3 | CMP-011 | partner | todo |

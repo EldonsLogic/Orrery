@@ -18,4 +18,4 @@ Chat service: tenant and user scoped sessions, history as data, language handlin
 Sonnet subagent, about 145k tokens.
 
 ## Next step
-Open PR after OPR-001 (#190) merges; Q-259..238.
+Open PR after OPR-001 (#190) merges; Q-261..238.

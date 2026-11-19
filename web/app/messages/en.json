@@ -331,7 +331,8 @@
       "sections": {
         "workspace": "Workspace",
         "records": "Records"
-      }
+      },
+      "blueprint": "Business blueprint"
     },
     "workspace": {
       "label": "Workspace",
@@ -380,6 +381,267 @@
       "noWorkspace": {
         "title": "No active workspace",
         "body": "You do not belong to an active workspace. Ask the workspace owner to invite you."
+      }
+    }
+  },
+  "blueprint": {
+    "title": "Business blueprint",
+    "revision": "Version {n}",
+    "intro": "This is how your business is set up on the platform, in plain words. You can read everything here but not change it on this page.",
+    "introDept": "This is the part of the business blueprint that covers your department. You can read it but not change it on this page.",
+    "toc": "On this page",
+    "badge": {
+      "draft": "Draft",
+      "unverified": "UNVERIFIED"
+    },
+    "noAccess": {
+      "title": "Nothing to show",
+      "body": "Your role does not open any part of the business blueprint. Ask the owner if you need access."
+    },
+    "scopeNote": {
+      "title": "Your department only",
+      "body": "You see your own roles, the records you work with and your assistants. The owner and the general manager see the whole blueprint."
+    },
+    "yes": "Yes",
+    "no": "No",
+    "sections": {
+      "profile": {
+        "title": "Company profile",
+        "hint": "Who the company is."
+      },
+      "places": {
+        "title": "Locations and departments",
+        "hint": "Where the company works and which departments it has."
+      },
+      "roles": {
+        "title": "Roles and who can do what",
+        "hint": "What each role may do. Anything not listed is not allowed."
+      },
+      "flows": {
+        "title": "Document flows",
+        "hint": "The steps a document goes through, who moves it on and which rules apply."
+      },
+      "items": {
+        "title": "Items and parties",
+        "hint": "The lists you keep, such as customers and products, and what is recorded about each."
+      },
+      "numbering": {
+        "title": "Numbering",
+        "hint": "How document numbers are built."
+      },
+      "settings": {
+        "title": "Tax and calendar settings",
+        "hint": "Tax, working week, hours and the financial year."
+      },
+      "assistants": {
+        "title": "Assistants",
+        "hint": "The chat assistant of each department. It can only do what the person using it may do."
+      },
+      "pending": {
+        "title": "Pending changes",
+        "hint": "Changes proposed but not yet approved, grouped by what they touch."
+      }
+    },
+    "profile": {
+      "name": "Company name",
+      "country": "Country",
+      "cr": "Commercial registration",
+      "vat": "Tax number",
+      "size": "Size",
+      "sizeValue": "{band} people",
+      "languages": "Languages"
+    },
+    "locationKind": {
+      "branch": "branch",
+      "warehouse": "warehouse",
+      "department": "department"
+    },
+    "places": {
+      "locations": "Locations",
+      "departments": "Departments"
+    },
+    "function": {
+      "owner": "Owner",
+      "general_manager": "General management",
+      "finance": "Finance",
+      "accounting": "Accounting",
+      "sales": "Sales",
+      "purchasing": "Purchasing",
+      "warehouse": "Warehouse",
+      "hr": "People and HR",
+      "operations": "Operations",
+      "support": "Support",
+      "read_only": "Read-only access",
+      "custom": "Custom"
+    },
+    "scope": {
+      "company": "Works across the whole company.",
+      "branch": "Works in: {places}.",
+      "warehouse": "Works in: {places}.",
+      "department": "Works in: {places}.",
+      "own_records": "Sees only the records they created.",
+      "assigned_records": "Sees only the records assigned to them."
+    },
+    "action": {
+      "read": "look at",
+      "create": "create",
+      "update": "change",
+      "delete": "delete",
+      "submit": "send on",
+      "cancel": "cancel",
+      "approve": "approve",
+      "export": "export"
+    },
+    "roles": {
+      "rule": "{entity}: can {actions}.",
+      "hidden": "Cannot see: {fields}.",
+      "readOnly": "Cannot change: {fields}."
+    },
+    "flows": {
+      "entity": "For: {entity}",
+      "diagram": "Diagram of the steps of {name}",
+      "list": "Steps of {name}",
+      "line": "{action}: {from} to {to}",
+      "by": "Done by: {who}",
+      "legend": "In the diagram the first step has an accent outline and a last step has a heavy outline. Numbers match the list."
+    },
+    "flow": {
+      "approval": "Needs approval ({name}) from: {approver}."
+    },
+    "guard": {
+      "eq": "Only when {field} is {value}.",
+      "neq": "Only when {field} is not {value}.",
+      "gt": "Only when {field} is more than {value}.",
+      "gte": "Only when {field} is {value} or more.",
+      "lt": "Only when {field} is less than {value}.",
+      "lte": "Only when {field} is {value} or less.",
+      "in": "Only when {field} is one of: {value}.",
+      "not_in": "Only when {field} is none of: {value}.",
+      "is_set": "Only when {field} is filled in.",
+      "is_not_set": "Only when {field} is empty."
+    },
+    "fieldType": {
+      "string": "short text",
+      "text": "long text",
+      "integer": "whole number",
+      "decimal": "number with decimals",
+      "money": "amount of money",
+      "percent": "percentage",
+      "boolean": "yes or no",
+      "date": "date",
+      "datetime": "date and time",
+      "select": "one choice from a list",
+      "link": "link to another record",
+      "attachment": "attached file",
+      "phone": "phone number",
+      "email": "email address"
+    },
+    "items": {
+      "required": "required"
+    },
+    "numbering": {
+      "line": "{entity}, for example",
+      "reset": "Starts again from 1 each financial year.",
+      "keep": "Keeps counting without a restart."
+    },
+    "settings": {
+      "currency": "Currency",
+      "vatRegistered": "Registered for VAT",
+      "vatRate": "Standard VAT rate",
+      "vatFiling": "VAT returns",
+      "vatInclusive": "Prices include VAT",
+      "einvoice": "Electronic invoicing",
+      "calendar": "Main calendar",
+      "calendarSecond": "Second date shown beside it",
+      "weekStart": "Week starts on",
+      "weekend": "Weekend",
+      "workDays": "Working days",
+      "workHours": "Working hours",
+      "reduced": "Hours: {name}",
+      "fiscalYear": "Financial year",
+      "fiscalFrom": "Starts on {date}",
+      "holidays": "Company holiday changes",
+      "holidaysValue": "{count, plural, one {# change} other {# changes}}",
+      "timezone": "Time zone",
+      "digits": "Digits shown"
+    },
+    "filing": {
+      "monthly": "Every month",
+      "quarterly": "Every quarter"
+    },
+    "einv": {
+      "none": "Not used",
+      "zatca_phase1": "Saudi e-invoicing, phase 1 ({stage})",
+      "zatca_phase2": "Saudi e-invoicing, phase 2 ({stage})",
+      "uae_e_invoicing": "UAE e-invoicing ({stage})",
+      "eg_e_invoice": "Egypt e-invoicing ({stage})"
+    },
+    "env": {
+      "sandbox": "test mode",
+      "simulation": "simulation",
+      "production": "live"
+    },
+    "calendar": {
+      "gregorian": "Gregorian",
+      "hijri_umm_al_qura": "Hijri (Umm al-Qura)",
+      "none": "None"
+    },
+    "digits": {
+      "western": "Western (0 1 2 3)",
+      "eastern_arabic": "Arabic-Indic"
+    },
+    "tool": {
+      "list": "Look up {entity}.",
+      "create": "Create {entity}.",
+      "update": "Change {entity}.",
+      "delete": "Delete {entity}.",
+      "transition": "Move {entity} on: {steps}.",
+      "other": "Another action: {name}."
+    },
+    "assistants": {
+      "roles": "Used by: {roles}.",
+      "can": "It can:",
+      "confirm": "(asks the person to confirm first)",
+      "limits": "Limits: up to {calls} actions and {rows} rows per request; {day} actions and {writes} changes per day."
+    },
+    "memory": {
+      "none": "Remembers nothing.",
+      "session": "Remembers only the current conversation.",
+      "department": "Keeps shared notes for the department."
+    },
+    "pending": {
+      "none": "No changes are waiting.",
+      "total": "{count, plural, one {# change is} other {# changes are}} waiting for approval.",
+      "cls": {
+        "money": "Money and tax",
+        "access": "Who can do what",
+        "process": "How work flows",
+        "cosmetic": "Looks only"
+      },
+      "op": {
+        "add": "Added {kind}: {name}",
+        "remove": "Removed {kind}: {name}",
+        "replace": "Changed {kind}: {name}",
+        "reorder": "Reordered {kind}: {name}"
+      },
+      "kind": {
+        "entity": "record type",
+        "field": "field",
+        "relation": "link",
+        "workflow": "document flow",
+        "state": "step",
+        "transition": "move between steps",
+        "role": "role",
+        "permission": "permission",
+        "approval": "approval rule",
+        "report": "report",
+        "integration": "data connection",
+        "location": "location",
+        "company": "company detail",
+        "compliance": "tax and compliance setting",
+        "branding": "branding",
+        "assistant": "assistant",
+        "other": "item"
       }
     }
   },

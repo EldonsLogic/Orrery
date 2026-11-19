@@ -382,5 +382,171 @@
         "body": "You do not belong to an active workspace. Ask the workspace owner to invite you."
       }
     }
+  },
+  "console": {
+    "title": "Team console",
+    "language": "Language",
+    "nav": {
+      "label": "Console",
+      "tenants": "Tenants",
+      "grants": "Support access",
+      "audit": "Audit trail"
+    },
+    "session": {
+      "mfa": "MFA verified",
+      "roles": "Roles",
+      "version": "Session version"
+    },
+    "roles": {
+      "support": "Support",
+      "tenant_admin_staff": "Tenant admin staff",
+      "security": "Security",
+      "owner": "Owner"
+    },
+    "denied": {
+      "title": "Console access denied",
+      "reason": {
+        "no_session": "There is no staff session. Sign in through the staff realm.",
+        "wrong_realm": "This session is not a staff session. Customer sign-ins cannot open the console.",
+        "mfa_required": "Multi-factor sign-in is required for staff and is not satisfied.",
+        "stale_session": "This session was revoked or is out of date. Sign in again.",
+        "no_role": "Your staff account has no console role."
+      }
+    },
+    "tenantStatus": {
+      "trial": "Trial",
+      "active": "Active",
+      "suspended": "Suspended",
+      "exported": "Exported",
+      "deleted": "Deleted"
+    },
+    "health": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "down": "Down",
+      "unknown": "Unknown"
+    },
+    "regions": {
+      "sa": "Saudi Arabia",
+      "ae": "United Arab Emirates",
+      "eg": "Egypt",
+      "qa": "Qatar"
+    },
+    "scope": {
+      "diagnostics": "Diagnostics",
+      "configuration": "Configuration",
+      "audit_log": "Audit log",
+      "records_read": "Read records"
+    },
+    "banner": {
+      "title": "You are inside {tenant} under a support grant",
+      "body": "Everything you do here is recorded and visible to the tenant.",
+      "scope": "Scope: {scope}.",
+      "timeLeft": "Time left:",
+      "low": "Less than ten minutes remain.",
+      "leave": "Leave tenant"
+    },
+    "tenants": {
+      "title": "Tenants",
+      "intro": "Metadata only: plan, status, region and health. Customer data stays hidden unless a support grant is approved.",
+      "search": "Search by name or id",
+      "status": "Status",
+      "region": "Region",
+      "health": "Health",
+      "any": "Any",
+      "caption": "Tenants",
+      "empty": "No tenants match.",
+      "col": {
+        "name": "Company",
+        "plan": "Plan",
+        "status": "Status",
+        "region": "Region",
+        "health": "Health",
+        "access": "Access"
+      },
+      "enter": "Enter under grant",
+      "noGrant": "No approved grant",
+      "refusedTitle": "Entry refused",
+      "refusedBody": "There is no live approved grant for you in this tenant."
+    },
+    "grants": {
+      "title": "Support access",
+      "intro": "Staff reach a tenant only through a grant that a tenant owner or admin approves, with a time limit. Requests, approvals and revocations here are handed to the identity service.",
+      "notSentTitle": "Not sent",
+      "notWired": "This action was not executed: the identity service is not connected yet.",
+      "newTitle": "Request access",
+      "form": {
+        "tenant": "Tenant",
+        "choose": "Choose a tenant",
+        "reason": "Reason",
+        "reasonHint": "Required, up to {max} characters.",
+        "scope": "Scope",
+        "duration": "Duration in minutes",
+        "durationHint": "Up to {max} minutes.",
+        "submit": "Request access"
+      },
+      "error": {
+        "tenant": "Choose an open tenant (trial or active).",
+        "reason": "Give a reason within the length limit.",
+        "scope": "Choose at least one scope item.",
+        "duration": "Enter a whole number of minutes within the limit.",
+        "cap": "Too many pending requests for this tenant.",
+        "forbidden": "Your role cannot request access."
+      },
+      "section": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "closed": "Revoked and expired"
+      },
+      "empty": "Nothing here.",
+      "col": {
+        "tenant": "Tenant",
+        "staff": "Staff member",
+        "scope": "Scope",
+        "reason": "Reason",
+        "timeLeft": "Time left",
+        "requested": "Requested",
+        "state": "State",
+        "actions": "Actions"
+      },
+      "state": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "revoked": "Revoked",
+        "expired": "Expired",
+        "lapsed": "Not approved in time"
+      },
+      "approve": "Approve",
+      "revoke": "Revoke"
+    },
+    "audit": {
+      "title": "Audit trail",
+      "intro": "Grant and access events. Read only. The tenant sees the same events.",
+      "tenant": "Tenant",
+      "actor": "Actor",
+      "action": "Action",
+      "any": "Any",
+      "caption": "Grant and access events",
+      "empty": "No events match.",
+      "col": {
+        "at": "Time",
+        "action": "Action",
+        "decision": "Decision",
+        "actor": "Actor",
+        "tenant": "Tenant",
+        "code": "Code"
+      },
+      "decision": {
+        "allow": "Allowed",
+        "deny": "Denied"
+      },
+      "actions": {
+        "support.request": "Access requested",
+        "support.approve": "Approval attempt",
+        "support.granted": "Access granted",
+        "support.revoke": "Access revoked",
+        "support.access": "Tenant access check"
+      }
+    }
   }
 }

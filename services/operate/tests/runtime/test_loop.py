@@ -166,8 +166,10 @@ def test_allowlist_from_principal_roles_and_assistant():
     cfg = AssistantConfig("a1", ("sales",), (("sales_order.get", False), ("purchase_order.cancel", False),
                                               ("sales_order.update", True)))
     assert sorted(resolve_allowlist(DEFS, ("sales",), cfg).menu) == ["sales_order.get", "sales_order.update"]
-    cfg2 = AssistantConfig("a1", ("sales",), (("purchase_order.cancel", True),))
-    assert list(resolve_allowlist(DEFS, ("sales",), cfg2).menu) == ["purchase_order.cancel"]
+    cfg2 = AssistantConfig("a1", ("sales",), (("purchase_order.cancel", True), ("sales_order.get", False)))
+    a2 = resolve_allowlist(DEFS, ("sales",), cfg2)
+    assert list(a2.menu) == ["sales_order.get"]  # ADR-0043: a cancel verb is never an assistant tool
+    assert a2.classify("purchase_order.cancel", {"id": "PO-1"}, False).reason == "assistant_forbidden"
     assert resolve_allowlist(DEFS, ("owner",), cfg2).menu == {}  # role not allowed to invoke the assistant
 
 

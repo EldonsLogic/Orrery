@@ -15,12 +15,13 @@ class Limits:
     max_total_tokens: int = 60_000
     max_cost_micro_usd: int = 150_000  # docs/architecture/ai-layer.md budget example
     max_wall_s: float = 120.0
-    max_repeat_calls: int = 2          # identical (tool, arguments) calls allowed; the next is blocked
-    max_refusals: int = 3              # refused or blocked calls before the run stops
+    max_repeat_calls: int = 2          # identical (tool, arguments) reads allowed; an identical write runs once only
+    max_refusals: int = 3              # refused or blocked calls before the run stops; also the needs-approval cap
     max_result_chars: int = 8_000      # per tool result shown to the model
     max_args_bytes: int = 16_384
     est_input_tokens: int = 2_000      # per-call estimate handed to the gateway precheck
     est_output_tokens: int = 1_000
+    est_call_cost_micro_usd: int = 0   # floor for the next call's projected cost (else the dearest call so far)
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,18 @@ class Usage:
     model_id: str = ""
     tier: str = ""
     metered: bool = False  # True when the gateway already wrote the meter event
+
+
+@dataclass(frozen=True)
+class TaintState:
+    """Session-level taint (M8). The chat service (OPR-010) stores it with the session and passes it to the next run,
+    so tool data summarised in earlier turns cannot come back untainted. Once tainted, a session stays tainted."""
+    tainted: bool = False
+    sources: tuple = ()                # provenance labels, e.g. "tool:sales_order.get" (at most 32 kept)
+
+    def add(self, source: str) -> "TaintState":
+        srcs = self.sources if source in self.sources else (self.sources + (str(source)[:128],))[-32:]
+        return TaintState(True, srcs)
 
 
 @dataclass(frozen=True)
@@ -155,7 +168,8 @@ class Span:
 class RunResult:
     status: str                     # completed | interrupted | stopped | cancelled | failed
     stop_reason: str                # none | interrupt | max_steps | max_tool_calls | max_tokens | max_cost |
-                                    # wall_clock | loop_guard | refusals | cancelled | budget | error
+                                    # wall_clock | loop_guard | refusals | needs_approval | propose_unavailable |
+                                    # cancelled | budget | error
     answer: str = ""
     error_code: str | None = None
     approval_ids: tuple = ()
@@ -164,6 +178,7 @@ class RunResult:
     tool_calls: int = 0
     tainted: bool = False
     usage: Usage = field(default_factory=Usage)
+    taint_state: TaintState = field(default_factory=TaintState)  # persist with the session (OPR-010)
 
 
 # Events yielded while a run is in flight (the adapter maps them to AG-UI events).

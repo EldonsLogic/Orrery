@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""SEC-004: Live two-tenant runtime isolation verifier for the pinned Compose bench.
+"""SEC-004: Lightweight live two-tenant smoke verifier for an already-running Compose bench.
+
+For the comprehensive 3-site attack suite (including workers, RQ Job prefix twin, files,
+Redis, change_engine endpoints, and backups), use `infra/dev/docker/isolation/run_isolation_suite.py`
+and `apps/engine/change_engine/change_engine/tests/live_sec_004_bench_attacks.py`.
 
 Verifies five runtime isolation boundaries between two synthetic `.localhost` sites:
-  1. Site config credential & key isolation (distinct `db_name`, `db_password`, Fernet `encryption_key`).
+  1. Site config credential & key isolation (distinct non-empty `db_name`, `db_password`, `encryption_key`).
   2. MariaDB credential isolation (symmetrical `errno 1142` denial across SELECT/COUNT/INSERT/UPDATE/DELETE).
   3. Frappe ORM isolation (canary ToDo written in site A is invisible in site B and vice versa).
   4. Redis cache prefix isolation (canary key written in site A is invisible in site B and vice versa).
-  5. HTTP Host / token swap isolation (site A token sent with `Host: <site_b>` is rejected HTTP 401/403).
+  5. HTTP Host / token swap isolation for Administrator AND a synthetic low-role principal (HTTP 401/403).
 
-All probe records and cache keys are synthetic and cleaned up automatically.
+All probe records, low-role users, and cache keys are synthetic and cleaned up automatically.
 Never logs or prints DB passwords, encryption keys, or API secrets.
 """
 from __future__ import annotations
@@ -116,7 +120,7 @@ def check_site_configs_and_mariadb(
         "config_checks = {\n"
         "    'distinct_db_name': bool(a.get('db_name')) and bool(b.get('db_name')) and a.get('db_name') != b.get('db_name'),\n"
         "    'distinct_db_password': bool(a.get('db_password')) and bool(b.get('db_password')) and a.get('db_password') != b.get('db_password'),\n"
-        "    'no_shared_encryption_key': (not common.get('encryption_key')) and ((not enc_a and not enc_b) or enc_a != enc_b),\n"
+        "    'no_shared_encryption_key': (not common.get('encryption_key')) and bool(enc_a) and bool(enc_b) and enc_a != enc_b,\n"
         "}\n"
         "def probe(src, dst):\n"
         "    db_host = src.get('db_host') or common.get('db_host') or 'mariadb'\n"
@@ -171,14 +175,15 @@ def probe_runtime_orm_cache_and_tokens(
     canary_a: str,
     canary_b: str,
 ) -> Tuple[Dict[str, Any], Dict[str, str]]:
-    """Create temporary canary ToDo + Redis keys + per-site tokens, verify runtime isolation, then report."""
+    """Create temporary canary ToDo + Redis keys + Admin and low-role tokens, verify runtime isolation."""
     py = (
-        "import json, os, sys, frappe\n"
+        "import json, os, secrets, sys, frappe\n"
         "from frappe.core.doctype.user.user import generate_keys\n"
         "site_a, site_b, canary_a, canary_b = sys.argv[1:5]\n"
         "os.chdir(os.path.expanduser('~/frappe-bench/sites'))\n"
         "created = {}\n"
         "tokens = {}\n"
+        "low_users = {}\n"
         "for site, canary in ((site_a, canary_a), (site_b, canary_b)):\n"
         "    frappe.init(site=site, sites_path='.')\n"
         "    frappe.connect()\n"
@@ -186,10 +191,17 @@ def probe_runtime_orm_cache_and_tokens(
         "        doc = frappe.get_doc({'doctype': 'ToDo', 'description': canary, 'status': 'Open'}).insert(ignore_permissions=True)\n"
         "        frappe.cache().set_value('sec004_canary_cache', canary, expires_in_sec=120)\n"
         "        res = generate_keys('Administrator')\n"
-        "        frappe.db.commit()\n"
         "        api_key = frappe.db.get_value('User', 'Administrator', 'api_key')\n"
-        "        created[site] = doc.name\n"
         "        tokens[site] = f\"{api_key}:{res['api_secret']}\"\n"
+        "        if site == site_a:\n"
+        "            low_email = f'sec004-low-{secrets.token_hex(4)}@example.invalid'\n"
+        "            frappe.get_doc({'doctype': 'User', 'email': low_email, 'first_name': 'Sec004 Low', 'enabled': 1, 'user_type': 'Website User', 'send_welcome_email': 0, 'new_password': f'Low!{secrets.token_urlsafe(12)}'}).insert(ignore_permissions=True)\n"
+        "            lres = generate_keys(low_email)\n"
+        "            lkey = frappe.db.get_value('User', low_email, 'api_key')\n"
+        "            tokens['low_a'] = f\"{lkey}:{lres['api_secret']}\"\n"
+        "            low_users[site] = low_email\n"
+        "        frappe.db.commit()\n"
+        "        created[site] = doc.name\n"
         "    finally:\n"
         "        frappe.destroy()\n"
         "cross = {}\n"
@@ -208,7 +220,7 @@ def probe_runtime_orm_cache_and_tokens(
         "        }\n"
         "    finally:\n"
         "        frappe.destroy()\n"
-        "print('__ISOLATION_RT__' + json.dumps({'created': created, 'cross': cross, 'tokens': tokens}))\n"
+        "print('__ISOLATION_RT__' + json.dumps({'created': created, 'low_users': low_users, 'cross': cross, 'tokens': tokens}))\n"
     )
     proc = compose_exec(project, compose_file, "engine", "env/bin/python", "-c", py, site_a, site_b, canary_a, canary_b)
     if proc.returncode != 0:
@@ -229,23 +241,38 @@ def cleanup_runtime_canaries(
     project: str,
     compose_file: Path,
     created: Dict[str, str],
+    low_users: Optional[Dict[str, str]] = None,
 ) -> None:
     py = (
         "import json, os, sys, frappe\n"
         "os.chdir(os.path.expanduser('~/frappe-bench/sites'))\n"
-        "created = json.loads(sys.stdin.read())\n"
+        "data = json.loads(sys.stdin.read())\n"
+        "created = data.get('created', {})\n"
+        "low_users = data.get('low_users', {})\n"
         "for site, name in created.items():\n"
         "    frappe.init(site=site, sites_path='.')\n"
         "    frappe.connect()\n"
         "    try:\n"
         "        if frappe.db.exists('ToDo', name):\n"
         "            frappe.delete_doc('ToDo', name, force=True, ignore_permissions=True)\n"
+        "        low_email = low_users.get(site)\n"
+        "        if low_email and frappe.db.exists('User', low_email):\n"
+        "            frappe.delete_doc('User', low_email, force=True, ignore_permissions=True)\n"
         "        frappe.cache().delete_value('sec004_canary_cache')\n"
         "        frappe.db.commit()\n"
         "    finally:\n"
         "        frappe.destroy()\n"
     )
-    compose_exec(project, compose_file, "engine", "env/bin/python", "-c", py, input_text=json.dumps(created), timeout=60)
+    compose_exec(
+        project,
+        compose_file,
+        "engine",
+        "env/bin/python",
+        "-c",
+        py,
+        input_text=json.dumps({"created": created, "low_users": low_users or {}}),
+        timeout=60,
+    )
 
 
 def verify_live_isolation(
@@ -269,6 +296,9 @@ def verify_live_isolation(
     rt_report, tokens = probe_runtime_orm_cache_and_tokens(
         project, compose_file, site_a, site_b, canary_a, canary_b
     )
+    low_users = rt_report.get("low_users") or {}
+    low_token = tokens.get("low_a", "")
+    low_email = low_users.get(site_a, "")
     try:
         doc_a = rt_report["created"][site_a]
         doc_b = rt_report["created"][site_b]
@@ -296,8 +326,18 @@ def verify_live_isolation(
             engine_port, site_b, f"/api/resource/ToDo/{doc_a}",
             headers={"Authorization": f"token {tokens[site_b]}"},
         )
+
+        # Low-role principal: authenticates on A, rejected on B's Host and B's canary ToDo.
+        st_low_a_ok, body_low_a_ok = host_http_get(
+            engine_port, site_a, "/api/method/frappe.auth.get_logged_user",
+            headers={"Authorization": f"token {low_token}"},
+        )
+        st_low_a_on_b, body_low_a_on_b = host_http_get(
+            engine_port, site_b, f"/api/resource/ToDo/{doc_b}",
+            headers={"Authorization": f"token {low_token}"},
+        )
     finally:
-        cleanup_runtime_canaries(project, compose_file, rt_report["created"])
+        cleanup_runtime_canaries(project, compose_file, rt_report["created"], low_users)
 
     http_checks = {
         "own_a_200": st_a_ok == 200 and canary_a in body_a_ok,
@@ -305,6 +345,8 @@ def verify_live_isolation(
         "token_a_rejected_on_host_b": st_a_on_b in (401, 403) and canary_b not in body_a_on_b,
         "token_b_rejected_on_host_a": st_b_on_a in (401, 403) and canary_a not in body_b_on_a,
         "host_b_cannot_fetch_doc_a": st_spoof_doc in (403, 404) and canary_a not in body_spoof_doc,
+        "low_role_a_200": st_low_a_ok == 200 and bool(low_email) and low_email in body_low_a_ok,
+        "low_role_a_rejected_on_host_b": st_low_a_on_b in (401, 403) and canary_b not in body_low_a_on_b,
     }
     http_report = {
         "passed": all(http_checks.values()),
@@ -315,6 +357,8 @@ def verify_live_isolation(
             "token_a_on_b": st_a_on_b,
             "token_b_on_a": st_b_on_a,
             "doc_a_on_host_b": st_spoof_doc,
+            "low_role_a": st_low_a_ok,
+            "low_role_a_on_b": st_low_a_on_b,
         },
     }
 

@@ -102,7 +102,7 @@ jobs:
           ADAPTER_HARNESS: change_engine.adapter.harness:make_frappe_harness
           PYTHONPATH: services/blueprint:apps/engine/change_engine
         run: python3 -m pytest services/blueprint/tests/adapter -q
-      - name: Cross-tenant isolation tests (SEC-004)
+      - name: Adapter-level cross-tenant isolation tests (mocked/simulated, SEC-004)
         if: ${{ !cancelled() }}
         env:
           PYTHONPATH: apps/engine/change_engine

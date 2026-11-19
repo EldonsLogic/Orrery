@@ -1,8 +1,16 @@
-"""SEC-004: Cross-tenant isolation regression tests for change_engine, adapter, and Frappe runtime."""
+"""SEC-004: Adapter-level (mocked/simulated runtime) cross-tenant isolation regression tests.
+
+Proves tenant keying, plan-token binding, idempotency scoping, member sync, collision-free
+site resolution, and SQL/in-memory PolicyStore site isolation in the adapter and change_engine
+layers. These tests run against SQLite and SimulatedFrappeRuntime; live Frappe/MariaDB/Redis
+isolation (including Host header routing) is tested separately by
+`live_sec_004_bench_attacks.py` via `infra/dev/docker/isolation/run_isolation_suite.py`.
+"""
 from __future__ import annotations
 
 import copy
 import json
+import sqlite3
 import sys
 import types
 import unittest
@@ -23,7 +31,7 @@ from change_engine.guarded_apply.policy_enforcer import (
     RuntimePolicy,
     policy_catalog,
 )
-from change_engine.guarded_apply.policy_store import get_current_site_id, policy_store
+from change_engine.guarded_apply.policy_store import PolicyStore, get_current_site_id, policy_store
 
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
@@ -181,7 +189,7 @@ def _fake_frappe(site: str, *, user: str = "admin@example.invalid", roles: tuple
 
 
 class TestAdapterCrossTenantIsolation(unittest.TestCase):
-    """Prove adapter state, idempotency, plan tokens, members, data, and audits stay isolated per tenant."""
+    """Adapter-level (mocked/simulated runtime) tenant isolation: state, idempotency, plan tokens, members, data, and audits."""
 
     def _run_suite_on_adapter(self, adapter: ChangeEngineAdapter) -> None:
         _provision(adapter, "t_alpha", key="prov_alpha_000001")
@@ -339,8 +347,72 @@ class TestAdapterCrossTenantIsolation(unittest.TestCase):
         self.assertNotIn("alpha_only_col", [f["id"] for f in b_cust["fields"]])
 
 
+class _SqlDbShim:
+    """Minimal SQLite shim implementing Frappe's db.sql(%s, params, as_dict=True) for PolicyStore SQL tests."""
+
+    def __init__(self) -> None:
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        self.executed_queries: list[str] = []
+        self.conn.execute(
+            """
+            CREATE TABLE `tabChange Engine Policy` (
+                name TEXT PRIMARY KEY,
+                policy_id TEXT NOT NULL,
+                site_id TEXT NOT NULL,
+                doctype TEXT NOT NULL,
+                policy_type TEXT NOT NULL,
+                target_field TEXT,
+                governance_tier INTEGER NOT NULL,
+                condition_expr TEXT NOT NULL,
+                required_role TEXT,
+                error_message TEXT,
+                stage TEXT,
+                active INTEGER NOT NULL,
+                revision INTEGER NOT NULL,
+                created_by TEXT,
+                created_at TEXT,
+                updated_by TEXT,
+                updated_at TEXT
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE `tabChange Engine Policy Audit` (
+                name TEXT PRIMARY KEY,
+                audit_id TEXT NOT NULL,
+                site_id TEXT NOT NULL,
+                policy_id TEXT NOT NULL,
+                doctype TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                action TEXT NOT NULL,
+                changed_by TEXT,
+                payload_before TEXT,
+                payload_after TEXT,
+                timestamp TEXT
+            )
+            """
+        )
+
+    def sql(self, query: str, values: tuple = (), as_dict: bool = False):
+        self.executed_queries.append(query)
+        sql_text = query.replace(" FOR UPDATE", "").replace("%s", "?")
+        cur = self.conn.execute(sql_text, values)
+        if as_dict:
+            return [dict(row) for row in cur.fetchall()]
+        return cur.fetchall()
+
+    def commit(self) -> None:
+        self.conn.commit()
+
+
 class TestSiteResolverAndPolicyStoreIsolation(unittest.TestCase):
-    """Prove site resolution rejects path traversal and CE-SEC-003 policy store enforces per-site isolation."""
+    """Adapter-level (mocked) site resolution and PolicyStore SQL/context site isolation tests.
+
+    NOTE: Real HTTP Host header -> frappe.local.site binding is proven only by the live bench
+    suite (`live_sec_004_bench_attacks.py`), not by these unit tests.
+    """
 
     def setUp(self) -> None:
         self._orig_frappe = endpoints.frappe
@@ -352,15 +424,41 @@ class TestSiteResolverAndPolicyStoreIsolation(unittest.TestCase):
         policy_catalog.reset()
         policy_store.reset_store()
 
-    def test_site_resolver_rejects_traversal_and_invalid_tenants(self) -> None:
+    def test_site_resolver_rejects_traversal_collisions_and_invalid_tenants(self) -> None:
         resolver = FrappeSiteResolver()
-        for bad in ("", "../etc/passwd", "tenant..a", "t/a", "t a", "tenant;id"):
+        for bad in (
+            "",
+            "platform",
+            "../etc/passwd",
+            "tenant..a",
+            "t/a",
+            "t a",
+            "tenant;id",
+            "acme-1",
+            "acme_1",
+            "t_a",
+            "t_acme.1",
+            "t_acme-1",
+            "T_acme_1",
+            "t_acme_1_",
+            "t__acme",
+            "t_acme_1\n",
+        ):
             with self.subTest(tenant_id=bad):
                 with self.assertRaises(FrappeBackendError):
                     resolver.resolve(bad)
 
-        self.assertEqual(resolver.resolve("acme-1"), "acme-1.localhost")
-        self.assertEqual(resolver.resolve("acme-2"), "acme-2.localhost")
+        resolved = {
+            tid: resolver.resolve(tid)
+            for tid in ("t_acme_1", "t_acme_2", "t_acme__1", "t_alpha", "t_beta")
+        }
+        self.assertEqual(resolved["t_acme_1"], "t-acme-1.localhost")
+        self.assertEqual(resolved["t_acme_2"], "t-acme-2.localhost")
+        self.assertEqual(resolved["t_acme__1"], "t-acme--1.localhost")
+        self.assertEqual(len(set(resolved.values())), len(resolved))
+
+        with self.assertRaises(FrappeBackendError):
+            FrappeSiteResolver(site_map={"t_alpha": "dup.localhost", "t_beta": "DUP.localhost."})
 
     def test_runtime_policy_store_isolates_sites_and_blocks_cross_site_addressing(self) -> None:
         pol = RuntimePolicy(
@@ -393,6 +491,57 @@ class TestSiteResolverAndPolicyStoreIsolation(unittest.TestCase):
         endpoints.frappe = _fake_frappe("alpha.localhost")
         alpha_policies = policy_store.get_policies(site_id="alpha.localhost")
         self.assertEqual(len(alpha_policies), 1)
+
+    def test_policy_store_sql_path_enforces_where_site_id_isolation(self) -> None:
+        """Exercise PolicyStore's live SQL code path (WHERE site_id = %s) across two sites in one table."""
+        db_shim = _SqlDbShim()
+        fake_frappe = _fake_frappe("alpha.localhost")
+        fake_frappe.db = db_shim
+        store = PolicyStore(frappe_module=fake_frappe)
+        self.assertTrue(store.is_live_frappe)
+
+        pol_a = RuntimePolicy(
+            policy_id="POL_SQL_ALPHA",
+            doctype="Sales Order",
+            policy_type=PolicyType.FIELD_CONSTRAINT,
+            target_field="discount_percentage",
+            condition_expr="discount_percentage > 5",
+            required_role="Finance Director",
+            error_message="Alpha SQL canary.",
+        )
+        pol_b = RuntimePolicy(
+            policy_id="POL_SQL_BETA",
+            doctype="Sales Order",
+            policy_type=PolicyType.FIELD_CONSTRAINT,
+            target_field="discount_percentage",
+            condition_expr="discount_percentage > 10",
+            required_role="Finance Director",
+            error_message="Beta SQL canary.",
+        )
+
+        endpoints.frappe = fake_frappe
+        store.save_policy(pol_a, actor="alpha_admin")
+
+        fake_frappe.local.site = "beta.localhost"
+        store.save_policy(pol_b, actor="beta_admin")
+
+        # Beta's SQL reads see only Beta's policy and audit rows, never Alpha's.
+        self.assertIsNone(store.get_policy("POL_SQL_ALPHA"))
+        self.assertEqual([p.policy_id for p in store.get_policies()], ["POL_SQL_BETA"])
+        self.assertEqual([a["policy_id"] for a in store.get_audit_trail()], ["POL_SQL_BETA"])
+        with self.assertRaises(PermissionError):
+            store.get_policies(site_id="alpha.localhost")
+
+        # Alpha's SQL reads see only Alpha's policy and audit rows, never Beta's.
+        fake_frappe.local.site = "alpha.localhost"
+        self.assertIsNone(store.get_policy("POL_SQL_BETA"))
+        self.assertEqual([p.policy_id for p in store.get_policies()], ["POL_SQL_ALPHA"])
+        self.assertEqual([a["policy_id"] for a in store.get_audit_trail()], ["POL_SQL_ALPHA"])
+        with self.assertRaises(PermissionError):
+            store.get_policy("POL_SQL_BETA", site_id="beta.localhost")
+
+        # Confirm the SQL WHERE site_id = %s queries actually executed against the DB shim.
+        self.assertTrue(any("WHERE site_id = %s" in q for q in db_shim.executed_queries))
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ Steps (each fails closed):
    only) with infra/dev/docker/provision_tenant.sh, each with its own random admin
    password; credentials go to 0600 files in a private temp directory.
 3. Write the context file and run
-   apps/engine/change_engine/change_engine/tests/test_sec_004_live_bench_attacks.py.
+   apps/engine/change_engine/change_engine/tests/live_sec_004_bench_attacks.py.
 4. `docker compose down -v` for this project only (skip with --keep).
 
 Synthetic data only; secrets never touch the repo or the host command line.
@@ -33,7 +33,7 @@ from pathlib import Path
 DOCKER_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = DOCKER_DIR.parents[2]
 COMPOSE_FILES = [DOCKER_DIR / "docker-compose.dev.yml", DOCKER_DIR / "isolation" / "docker-compose.isolation.yml"]
-SUITE = REPO_ROOT / "apps/engine/change_engine/change_engine/tests/test_sec_004_live_bench_attacks.py"
+SUITE = REPO_ROOT / "apps/engine/change_engine/change_engine/tests/live_sec_004_bench_attacks.py"
 PROJECT_RE = re.compile(r"^(?=[a-z0-9])[a-z0-9_-]*sec004[a-z0-9_-]*$")
 TENANTS = {
     "a": {"tenant_id": "sec004-tenant-a", "country": "SA", "site": None, "apps": None},
@@ -113,7 +113,7 @@ def main() -> int:
             fd = os.open(ctx_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump(ctx, fh)
-        suite_env = dict(os.environ, SEC004_CONTEXT=str(ctx_path))
+        suite_env = dict(os.environ, SEC004_CONTEXT=str(ctx_path), CI_REQUIRE_LIVE_SEC004="1")
         rc = subprocess.run([sys.executable, "-m", "unittest", "-v", str(SUITE.relative_to(REPO_ROOT))],
                             env=suite_env, cwd=REPO_ROOT).returncode
     finally:

@@ -112,3 +112,69 @@ def site_paths() -> dict:
         "private_files": os.path.realpath(frappe.get_site_path("private", "files")),
         "backups": os.path.realpath(frappe.get_site_path("private", "backups")),
     }
+
+
+def site_config_summary() -> dict:
+    """Return non-secret hashes of site_config/common_site_config encryption_key and db_name."""
+    import hashlib
+    import json
+    import os
+
+    site_dir = os.path.realpath(frappe.get_site_path())
+    sites_dir = os.path.dirname(site_dir)
+    common_path = os.path.join(sites_dir, "common_site_config.json")
+    site_cfg_path = os.path.join(site_dir, "site_config.json")
+    common = json.load(open(common_path, encoding="utf-8")) if os.path.exists(common_path) else {}
+    site_cfg = json.load(open(site_cfg_path, encoding="utf-8"))
+    enc = site_cfg.get("encryption_key") or ""
+    return {
+        "has_encryption_key": bool(enc),
+        "encryption_key_sha256": hashlib.sha256(enc.encode("utf-8")).hexdigest() if enc else "",
+        "common_has_encryption_key": bool(common.get("encryption_key")),
+        "db_name": site_cfg.get("db_name") or "",
+    }
+
+
+def create_low_role_user(email: str, password: str) -> dict:
+    """Create a synthetic low-privilege (non-System-Manager) user and API token on the current site."""
+    from frappe.core.doctype.user.user import generate_keys
+
+    if not frappe.db.exists("User", email):
+        doc = frappe.get_doc(
+            {
+                "doctype": "User",
+                "email": email,
+                "first_name": "Sec004 LowRole",
+                "enabled": 1,
+                "user_type": "Website User",
+                "send_welcome_email": 0,
+                "new_password": password,
+            }
+        )
+        doc.insert(ignore_permissions=True)
+    keys = generate_keys(email)
+    frappe.db.commit()
+    api_key = frappe.db.get_value("User", email, "api_key")
+    return {"email": email, "token": f"{api_key}:{keys['api_secret']}"}
+
+
+def register_canary_policy(policy_id: str, marker: str) -> dict:
+    """Register a Tier 1 runtime policy on the current site carrying a tenant marker."""
+    from change_engine.api import endpoints
+
+    frappe.set_user("Administrator")
+    res = endpoints.register_runtime_policy(
+        {
+            "policy_id": policy_id,
+            "doctype": "ToDo",
+            "policy_type": "field_constraint",
+            "target_field": "description",
+            "condition_expr": "description == '__never_match_sec004__'",
+            "required_role": "System Manager",
+            "error_message": f"Canary policy {marker}",
+            "active": True,
+            "stage": "validate",
+        }
+    )
+    frappe.db.commit()
+    return res

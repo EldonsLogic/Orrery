@@ -18,12 +18,17 @@ from datetime import time, timedelta
 from decimal import Decimal, InvalidOperation
 import html
 import json
+import logging
 import re
 from typing import Any, Mapping
 
-from change_engine.i18n.hijri import canonical_date, display_enabled, format_hijri, localise_digits, to_hijri
+from change_engine.i18n.hijri import (
+    HijriDateError, canonical_date, display_enabled, format_hijri, localise_digits, to_hijri,
+)
 
 from .qr_svg import render_qr_svg
+
+_log = logging.getLogger(__name__)
 
 DEFAULT_BRANDING_PRIMARY = "#2443D0"
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -520,18 +525,26 @@ def render_tax_invoice_html(
     resolved_profile = {} if compliance_profile is None else compliance_profile
     show_hijri = display_enabled(resolved_locale, resolved_profile, country_default=mode == "zatca_sa")
     number_system = resolved_locale.get("numberSystem", "western")
+    localise_digits("", number_system)  # explicit settings errors fail closed
+    # Mandatory legal Gregorian date: Western ASCII digits always; invalid input fails closed.
     issue_date = canonical_date(raw_dict["issue_date"])
-    issue_date_display = localise_digits(issue_date, number_system)
     hijri_html = ""
     if show_hijri:
-        ar_date = format_hijri(issue_date, language="ar", number_system=number_system)
-        en_date = format_hijri(issue_date, language="en", number_system=number_system)
-        hijri_html = (
-            _ltr(localise_digits(to_hijri(issue_date), number_system)) + '<br/>'
-            f'<bdi dir="rtl" lang="ar" data-review-status="{ar_date.review_status}" '
-            f'data-calendar-source="{ar_date.source}">{_esc(ar_date.text)}</bdi><br/>'
-            f'<bdi dir="ltr" lang="en">{_esc(en_date.text)}</bdi>'
-        )
+        # Secondary display only: the legal invoice must render without it.
+        try:
+            ar_date = format_hijri(issue_date, language="ar", number_system=number_system)
+            en_date = format_hijri(issue_date, language="en", number_system=number_system)
+            hijri_html = (
+                _ltr(localise_digits(to_hijri(issue_date), number_system)) + '<br/>'
+                f'<bdi dir="rtl" lang="ar" data-review-status="{ar_date.review_status}" '
+                f'data-calendar-source="{ar_date.source}">{_esc(ar_date.text)}</bdi><br/>'
+                f'<bdi dir="ltr" lang="en">{_esc(en_date.text)}</bdi>'
+            )
+        except HijriDateError as error:
+            if error.code not in ("calendar_unavailable", "calendar_range"):
+                raise
+            hijri_html = ""
+            _log.warning("Hijri date omitted from invoice print: %s", error.code)
     notes_text = str(raw_dict.get("notes") or "").strip()
 
     # Branding header elements (never displace mandatory legal layout or QR clear zone)
@@ -559,7 +572,7 @@ def render_tax_invoice_html(
     # Metadata grid rows
     meta_entries: list[tuple[tuple[str, str], str]] = [
         (BILINGUAL_LABELS["invoice_number"], _ltr(invoice_id)),
-        (BILINGUAL_LABELS["issue_date"], _ltr(issue_date_display)),
+        (BILINGUAL_LABELS["issue_date"], _ltr(issue_date)),
     ]
     if issue_time:
         meta_entries.append((BILINGUAL_LABELS["issue_time"], _ltr(issue_time)))

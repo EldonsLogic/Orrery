@@ -5,7 +5,16 @@ Consumers can derive on render without persisting companions. Gregorian source
 fields remain authoritative; companions are read-only Data, never Date columns.
 """
 
+import logging
+
+try:
+    import frappe
+except ImportError:
+    frappe = None
+
 from .hijri import HijriDateError, MESSAGES, to_hijri
+
+_log = logging.getLogger(__name__)
 
 TRADING_DATES = {
     "Sales Invoice": ("posting_date", "due_date"),
@@ -34,11 +43,29 @@ def _get(doc, key):
     return doc.get(key) if isinstance(doc, dict) else getattr(doc, key, None)
 
 
+def _companion_value(doctype: str, source: str, value) -> str:
+    """Hijri display for one source date, empty when there is nothing safe to show.
+
+    Far-future sentinels (2099-12-31) and legacy dates outside the calendar tables are
+    normal business data: leave the display empty and log the field, never the value.
+    Malformed values, a missing converter and other failures still propagate.
+    """
+    if value in (None, ""):
+        return ""
+    try:
+        return to_hijri(value)
+    except HijriDateError as error:
+        if error.code != "calendar_range":
+            raise
+        _log.warning("Hijri companion left empty: %s.%s outside Umm al-Qura range", doctype, source)
+        return ""
+
+
 def derive_companions(doc) -> dict[str, str]:
     """Derive display values from canonical sources for render, without mutating doc."""
-    return {f"custom_{source}_hijri": to_hijri(value) if value not in (None, "") else ""
-            for source in TRADING_DATES.get(_get(doc, "doctype"), ())
-            for value in [_get(doc, source)]}
+    doctype = _get(doc, "doctype")
+    return {f"custom_{source}_hijri": _companion_value(doctype, source, _get(doc, source))
+            for source in TRADING_DATES.get(doctype, ())}
 
 
 def sync_companions(doc, method=None) -> None:
@@ -49,9 +76,18 @@ def sync_companions(doc, method=None) -> None:
     commits, and does not install fields or alter canonical date sources.
     """
     meta = getattr(doc, "meta", None)
-    sources = [source for source in TRADING_DATES.get(_get(doc, "doctype"), ())
+    doc_type = _get(doc, "doctype")
+    sources = [source for source in TRADING_DATES.get(doc_type, ())
                if meta is not None and meta.has_field(f"custom_{source}_hijri")]
-    values = {f"custom_{source}_hijri": to_hijri(value) if value not in (None, "") else ""
-              for source in sources for value in [_get(doc, source)]}
+    try:
+        values = {f"custom_{source}_hijri": _companion_value(doc_type, source, _get(doc, source))
+                  for source in sources}
+    except HijriDateError as error:
+        if frappe is None:
+            raise
+        # Engine saves get a translated Frappe ValidationError, not a raw ValueError.
+        lang = str(getattr(getattr(frappe, "local", None), "lang", "en") or "en")
+        frappe.throw(error.message("ar" if lang.startswith("ar") else "en"))
+        raise
     for field, value in values.items():
         setattr(doc, field, value)

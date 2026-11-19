@@ -47,7 +47,7 @@ Merge semantics:
 In [blueprint.schema.json](../../contracts/blueprint.schema.json) (`0.2.0`), `company.country` (`SA`, `AE`, `EG`, `QA`) names the country, `compliance.countryPack` (`{ id, version }`) pins the pack, and `company.locale` carries per-company overrides. Because `contracts/` is owned by `eldon`, the loader in `components/compliance/country_pack/` takes explicit input parameters (`country_code`, optional `pack_id`, `version`, `company_overrides`) rather than reading or mutating `contracts/`.
 
 ### Proposed Blueprint schema updates (pending `contracts/` review)
-Raised in [open-questions.md](../open-questions.md) (`Q-214`, owner `eldon`):
+Raised in [open-questions.md](../open-questions.md) (`Q-260`, owner `eldon`):
 1. Optional `company.countryPackSelector` (`{ packId, versionRange }`) or keeping `compliance.countryPack` as canonical with `versionRange` support for discovery-stage pack selection.
 2. Delegate `company.crNumber` and `company.vatNumber` format validation from KSA-only regex (`^[0-9]{10}$`) to the selected pack's `tax.crNumberPattern` / `tax.vatNumberPattern`.
 3. Enforce pack locking on `company.locale.currency` and `company.locale.holidays.calendarRef` during Blueprint validation unless unlocked by `overridesPolicy`.

@@ -39,6 +39,8 @@ _ROWS: list[tuple[str, tuple[str, ...], str]] = [
     ("integrations", ("id",), "integration"),
     ("integrations/*/mappings", ("target",), "mapping"),
     ("i18n/glossary", ("term",), "glossary_term"),
+    ("assistants", ("id",), "assistant"),
+    ("assistants/*/tools", ("tool",), "assistant_tool"),
     ("company/locale/workingTime/reducedPeriods", ("id",), "reduced_period"),
     ("company/locale/holidays/overrides", ("date", "action"), "holiday_override"),
 ]

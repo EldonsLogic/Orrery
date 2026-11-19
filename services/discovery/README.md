@@ -90,3 +90,31 @@ Tests: `tests/connectors/tabular/`. Not covered: .xls and other formats are refu
 - Data tables in `connectors/odoo/mapping.py`: `DEFAULT_MODELS` (trading business) and `MAPPING` (source model/field to neutral name and type; the Blueprint mapping is DSC-013). Fields without a mapping are reported (`unmapped_field`, `unmapped_model`), never dropped.
 
 Tests: `tests/connectors/odoo/` (FakeTransport, synthetic data). Not covered: any real Odoo version quirk beyond the generic shapes, domain filters, incremental sync, and the transport itself (vault-side).
+
+## Pre-validation and quarantine (DSC-019)
+
+`prevalidate/` runs BEFORE any replay or import of an owner's historical rows (already parsed by the tabular connector, the extractor or intake). Pure functions, stdlib only, no I/O, no model calls, deterministic. It flags dirty rows and quarantines them; it never corrects, rounds into place or adopts a stated figure.
+
+- `normalise_arabic(text)`: comparison key for matching only (display spelling is kept): NFKC, bidi and zero-width removed, tatweel and diacritics dropped, alef forms unified, ta marbuta to ha, alef maqsura to ya, Arabic-Indic and Eastern digits to ASCII, lower-case Latin, punctuation to spaces, business words (data list `BUSINESS_WORDS`) stripped at the edges, never to empty. Hamza on waw or ya is not unified.
+- `group_duplicates(names, threshold=1)`: groups by equal key, same token set, or edit distance up to the threshold (and at most a quarter of the shorter key; digit sequences must match). Connected components; canonical = most frequent display form, tie by first seen. Suggestions for owner confirmation, never merged.
+- `prevalidate(dataset, config)` returns a report: findings (`PRE-` code, severity `blocking`, `needs_owner` or `info`, i18n `reason_key`, row pointers as sheet and row ids, `quarantined`), `accepted`, `quarantine` (intact copy plus SHA-256), `owner_review`, counts per code, name groups. Codes: 101 negative stock, 201 to 204 dates (unparseable, future, outside period, Hijri detected not converted), 301 to 303 line and document totals and unparseable amounts, 401 to 403 duplicates, 501 missing required, 601 to 603 quantity and price signs, 701 currency mismatch, 801 and 802 duplicate party and item names. Malformed input is refused with `PRE-E01` to `PRE-E05`.
+- Defaults: line total = round(qty x price) minus discount plus VAT, ROUND_HALF_UP to 2 places, tolerance 0, compared with the stated total unrounded. Stock: receipts before issues on the same date, per item and warehouse, first negative balance only. Future-date check runs only when `today` is given in the config (no clock).
+- CLI: `cd services/discovery && python3 -m prevalidate <dataset.json> --config <config.json>` (exit 0 clean, 1 quarantined rows, 2 refusal).
+
+Tests: `tests/prevalidate/` (synthetic data only). Not covered: Hijri conversion, currency conversion, tax-rate correctness (only arithmetic), returns and credit notes as signed stock, stock moves between warehouses, fuzzy matching of phonetic or transliterated names.
+
+## Odoo to Blueprint mapping (DSC-013)
+
+`blueprintmap/` turns the Odoo extractor's raw extract (neutral intermediate records) into a mapping report and a draft Blueprint fragment. Pure, offline, stdlib only, deterministic; `python3 -m blueprintmap <extract.json>` prints `{report, fragment}` (exit 0 clean, 1 needs_human or conflicts, 2 coded refusal `BMP-E01..E04`).
+
+- Data, not code: `table.py` holds the model dispositions, the neutral-name to Blueprint-target table (this fixes the vocabulary of Q-114), record checks and type compatibility. Entity and field ids come only from the trading-distribution template (`template.py`; the table is checked against it at start, fail closed); nothing is invented.
+- Report lists: `mapped`, `unmapped_field`, `unmapped_model`, `needs_human`, `conflicts`, each entry with a reason code and an i18n `reason_key` (`bmp.reason.*`). A field that cannot be placed is reported, never dropped; two sources for one target and type mismatches are `conflicts` (first in table order wins).
+- Fragment: `entities` (template fields trimmed to the mapped ones, provenance `imported`; each validates against `#/$defs/entity`), `locations` (warehouses), partial `company` (legal name, VAT number, base currency; only when valid), and `reference_data` (currencies, units, item groups, taxes, accounts, journals: ids and labels only).
+- Rigid zone (ADR-0027): tax rates and types, account kinds, debit and credit, journals, stock quantities and posted entries are never interpreted; they are unmapped with a `*_semantics` or `posted_entries` code and listed in `needs_human` with record counts.
+- Untrusted input: source text only selects nothing; names must match a strict pattern, text copied into labels is cleaned (control and bidi characters removed) and capped, limits on models, fields and records.
+
+Tests: `tests/blueprintmap/`. Not covered: record-level value translation (select options, currencies by amount), partner role split by rank, and a combined Blueprint with workflows, roles and components (the fragment is a starting point for the owner review).
+
+## Date tests (QA-015)
+
+`tests/dates/test_date_properties.py`: deterministic property tests (seeded loops, no model calls, stdlib plus `hijridate` and `zoneinfo`; needs `tzdata`). Covers Hijri to Gregorian to Hijri round trip over the whole 1343 to 1500 AH table, month and year lengths, monotonic and contiguous months, refusal of out-of-range years and days, Gregorian leap years and month ends, ambiguous day/month flags, Arabic-Indic and Persian digits equal to Latin digits, weekend overrides, Hijri and Gregorian fiscal-year boundaries, and Asia/Riyadh, Asia/Dubai, Asia/Qatar and Africa/Cairo offsets and local date at midnight. Weekend, week-start and fiscal rules are not in production code yet, so the file tests the doc's rule through a small reference helper. Rules the doc marks UNVERIFIED (weekend defaults, Egypt daylight saving) are `xfail`; week start per market is undefined in the doc and is an `xfail` placeholder. Not covered: announced and company overrides, due dates, working-day functions, Ramadan hours (no code yet).

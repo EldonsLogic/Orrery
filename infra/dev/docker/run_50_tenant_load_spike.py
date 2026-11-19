@@ -9,7 +9,14 @@ bench (`infra/dev/docker/docker-compose.dev.yml`):
   3. Idle & warm resource footprint across 50 live sites (MariaDB tables/disk, Redis keys/RAM,
      Gunicorn worker RSS)
   4. Concurrent HTTP + authenticated REST read/write load across all 50 tenants at
-     escalating concurrency levels (e.g. 10, 25, 50, 100) with canary isolation assertions
+     escalating concurrency levels (e.g. 10, 25, 50, 100)
+
+Isolation evidence: the in-wave response checks only prove the request succeeded and the
+response is well-formed (they cannot detect wrong-site routing: ping is unauthenticated,
+get_logged_user is "Administrator" on every site, and the ToDo POST echoes the request body).
+The real cross-tenant check is `verify_tag_isolation`, run once after all waves: it reads every
+site's ToDo rows back with that site's own token and asserts each tag written for a site exists
+in that site and in no other. The SEC-004 live suite remains the authoritative isolation proof.
 
 All data created is synthetic (`load-001.localhost` .. `load-050.localhost`).
 Never logs or writes DB passwords, admin passwords, or API secrets.
@@ -31,7 +38,9 @@ import re
 import secrets
 import subprocess
 import sys
+import threading
 import time
+import urllib.parse
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
@@ -590,8 +599,15 @@ def _run_concurrent_wave(
     concurrency: int,
     total_requests: int,
     seed: int = 20261118,
+    written_tags: Optional[Dict[str, List[str]]] = None,
 ) -> Dict[str, Any]:
-    """Run an authenticated mixed workload across all sites at a given concurrency."""
+    """Run an authenticated mixed workload across all sites at a given concurrency.
+
+    `response_check_failures` counts malformed or failed responses only; it is NOT an isolation
+    signal. Tags of successful ToDo writes are appended to `written_tags` (site -> tags) so
+    `verify_tag_isolation` can check them against every site after the run.
+    """
+    tags_lock = threading.Lock()
     rng = random.Random(seed + concurrency)
     plan: List[Tuple[str, str]] = []
     for i in range(total_requests):
@@ -608,7 +624,7 @@ def _run_concurrent_wave(
     latencies_by_op: Dict[str, List[float]] = {"ping": [], "read_user": [], "write_todo": []}
     all_latencies: List[float] = []
     status_counts: Dict[str, int] = {}
-    isolation_mismatches = 0
+    response_check_failures = 0
     errors_sample: List[str] = []
 
     def execute_one(item: Tuple[str, str]) -> Tuple[str, int, float, bool, Optional[str]]:
@@ -617,16 +633,16 @@ def _run_concurrent_wave(
         auth_headers = {"Authorization": f"token {tok}", "Accept": "application/json"}
         if op == "ping":
             st, body, ms = _host_http_request(engine_port, site, "GET", "/api/method/ping")
-            ok_iso = True
-            return op, st, ms, ok_iso, None if st == 200 else f"{site} ping -> {st}: {body[:120]}"
+            return op, st, ms, True, None if st == 200 else f"{site} ping -> {st}: {body[:120]}"
         if op == "read_user":
             st, body, ms = _host_http_request(
                 engine_port, site, "GET", "/api/method/frappe.auth.get_logged_user", headers=auth_headers
             )
-            ok_iso = st == 200 and "Administrator" in body
-            err = None if ok_iso else f"{site} read_user -> {st}: {body[:120]}"
-            return op, st, ms, ok_iso or st != 200, err
-        # write_todo: write tenant-tagged ToDo, assert returned payload references same tenant marker
+            ok_resp = st == 200 and "Administrator" in body
+            err = None if ok_resp else f"{site} read_user -> {st}: {body[:120]}"
+            return op, st, ms, ok_resp or st != 200, err
+        # write_todo: write a tenant-tagged ToDo; the echoed tag only proves the response is
+        # well-formed. Cross-tenant placement is checked after the run (verify_tag_isolation).
         tag = f"erp002-{site}-{secrets.token_hex(4)}"
         payload = json.dumps({"description": tag, "status": "Open"})
         headers = {**auth_headers, "Content-Type": "application/json"}
@@ -636,6 +652,9 @@ def _run_concurrent_wave(
         ok_iso = True
         if st == 200:
             ok_iso = tag in body
+            if written_tags is not None:
+                with tags_lock:
+                    written_tags.setdefault(site, []).append(tag)
         err = None if (st == 200 and ok_iso) else f"{site} write_todo -> {st}: {body[:120]}"
         return op, st, ms, ok_iso, err
 
@@ -649,7 +668,7 @@ def _run_concurrent_wave(
             key = str(st)
             status_counts[key] = status_counts.get(key, 0) + 1
             if not ok_iso:
-                isolation_mismatches += 1
+                response_check_failures += 1
             if err and len(errors_sample) < 5:
                 errors_sample.append(err)
     wall_s = time.perf_counter() - t0
@@ -663,11 +682,98 @@ def _run_concurrent_wave(
         "http_200": ok_200,
         "success_rate_pct": round((ok_200 / total_requests) * 100.0, 2),
         "status_counts": status_counts,
-        "isolation_mismatches": isolation_mismatches,
+        "response_check_failures": response_check_failures,
         "overall_latency": compute_latency_stats(all_latencies),
         "op_latency": {op: compute_latency_stats(vals) for op, vals in latencies_by_op.items()},
         "errors_sample": errors_sample,
     }
+
+
+def verify_tag_isolation(
+    engine_port: int,
+    sites: List[str],
+    tokens: Dict[str, str],
+    written_tags: Dict[str, List[str]],
+) -> Dict[str, Any]:
+    """Post-run cross-tenant check: each written tag exists in its own site and in no other.
+
+    Reads `GET /api/resource/ToDo` per site with that site's own token. A site passes when
+    (a) every tag written to it is present (none missing) and (b) it holds no tag that was
+    written to a different site (none foreign). Any non-200 read fails closed.
+    """
+    owner: Dict[str, str] = {t: site for site, tags in written_tags.items() for t in tags}
+    qs = urllib.parse.urlencode(
+        {
+            "fields": json.dumps(["description"]),
+            "filters": json.dumps([["description", "like", "erp002-%"]]),
+            "limit_page_length": 0,
+        }
+    )
+    missing_total = 0
+    foreign_total = 0
+    read_failures: List[str] = []
+    per_site_issues: List[Dict[str, Any]] = []
+    for site in sites:
+        st, body, _ms = _host_http_request(
+            engine_port,
+            site,
+            "GET",
+            f"/api/resource/ToDo?{qs}",
+            headers={"Authorization": f"token {tokens[site]}", "Accept": "application/json"},
+        )
+        if st != 200:
+            read_failures.append(f"{site} -> {st}")
+            continue
+        try:
+            rows = json.loads(body).get("data", [])
+            found = {r.get("description") for r in rows}
+        except (ValueError, AttributeError):
+            read_failures.append(f"{site} -> unparseable body")
+            continue
+        expected = set(written_tags.get(site, []))
+        missing = expected - found
+        foreign = {t for t in found if owner.get(t, site) != site}
+        missing_total += len(missing)
+        foreign_total += len(foreign)
+        if missing or foreign:
+            per_site_issues.append({"site": site, "missing": len(missing), "foreign": len(foreign)})
+    tags_checked = sum(len(v) for v in written_tags.values())
+    return {
+        "sites_checked": len(sites),
+        "tags_written": tags_checked,
+        "missing_tags": missing_total,
+        "foreign_tags": foreign_total,
+        "read_failures": read_failures,
+        "sites_with_issues": per_site_issues[:10],
+        "passed": tags_checked > 0 and not read_failures and missing_total == 0 and foreign_total == 0,
+    }
+
+
+def _collect_host_info() -> Dict[str, Any]:
+    """Record the host/Docker limits the numbers were measured on (never invented)."""
+    info: Dict[str, Any] = {"host_cpu_count": os.cpu_count()}
+    try:
+        res = subprocess.run(
+            ["docker", "info", "--format", "{{.NCPU}}|{{.MemTotal}}|{{.OperatingSystem}}|{{.ServerVersion}}"],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        parts = res.stdout.strip().split("|") if res.returncode == 0 else []
+        if len(parts) == 4:
+            info["docker_ncpu"] = int(parts[0]) if parts[0].isdigit() else parts[0]
+            info["docker_mem_total_mib"] = round(int(parts[1]) / (1024.0 * 1024.0), 1) if parts[1].isdigit() else parts[1]
+            info["docker_os"] = parts[2]
+            info["docker_server_version"] = parts[3]
+    except (OSError, subprocess.SubprocessError, ValueError):
+        pass
+    try:
+        with open("/proc/cpuinfo", encoding="utf-8") as fh:
+            for ln in fh:
+                if ln.startswith("model name"):
+                    info["host_cpu_model"] = ln.split(":", 1)[1].strip()
+                    break
+    except OSError:
+        pass
+    return info
 
 
 def _verify_cross_tenant_db_isolation(
@@ -736,6 +842,7 @@ def run_spike(
         "bulk_import_trx_commit_2": bulk_import_trx_commit_2,
     }
 
+    report["host"] = _collect_host_info()
     report["baseline_before_provision"] = _collect_snapshots(project, compose_file, db_root_password)
 
     # Phase 1: Provisioning (1 cold + N-1 parallel clones, optionally sliced via site_start..site_end)
@@ -842,6 +949,7 @@ def run_spike(
 
     # Phase 3: Concurrent load waves across all N tenants
     waves: List[Dict[str, Any]] = []
+    written_tags: Dict[str, List[str]] = {}
     for conc in concurrency_levels:
         print(f"[ERP-002] Running load wave concurrency={conc} ({requests_per_level} reqs)...", file=sys.stderr, flush=True)
         wave = _run_concurrent_wave(
@@ -850,10 +958,12 @@ def run_spike(
             tokens=tokens,
             concurrency=conc,
             total_requests=requests_per_level,
+            written_tags=written_tags,
         )
         wave["post_wave_snapshot"] = _collect_snapshots(project, compose_file, db_root_password)
         waves.append(wave)
     report["load_waves"] = waves
+    report["tag_isolation_check"] = verify_tag_isolation(engine_port, sites, tokens, written_tags)
 
     if cleanup_sites:
         for s in sites:

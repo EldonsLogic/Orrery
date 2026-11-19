@@ -35,9 +35,16 @@ class BlueprintPort(Protocol):
     def validation_context(self, tenant_id: str) -> object:
         """A validator.ValidationContext (registry, tool set) or None."""
 
-    def submit_change(self, tenant_id: str, diff: dict, proposal_digest: str, idempotency_key: str) -> dict:
+    def submit_change(self, tenant_id: str, diff: dict, proposal_digest: str, idempotency_key: str, *, actor: dict,
+                      risk: str) -> dict:
         """Hand the diff to the Blueprint apply path (preview digest, DDL plan gate, guarded apply: BPL-007). That path
-        re-checks the base hash and its own gates. Raise on refusal; return a small result dict."""
+        re-checks the base hash and its own gates, runs under `actor` (tenant, subject, roles, session: the caller's own
+        permissions, never a service identity) and re-classifies the risk itself (`risk` is ours, a floor only).
+        Raise `ApplyRefused` only when it refused before any write; any other exception means the outcome is unknown.
+        Return a small result dict."""
+
+    def change_status(self, tenant_id: str, idempotency_key: str) -> str:
+        """"applied", "not_applied" or "unknown" for a change submitted with this idempotency key."""
 
 
 @dataclass(frozen=True)
@@ -89,3 +96,8 @@ class ProposalStore(Protocol):
         """Atomically mark this proposal used. True only for the first caller."""
     def used(self, digest: str) -> bool: ...
     def drop(self, tenant_id: str, user_id: str, session_id: str) -> None: ...
+
+
+class ApplyRefused(Exception):
+    """Raised by `BlueprintPort.submit_change` only when the Blueprint path refused BEFORE any write (nothing changed).
+    Any other exception means the outcome is unknown."""

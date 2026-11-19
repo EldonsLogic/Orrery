@@ -19,8 +19,9 @@ def blueprint():
 
 class FakeBlueprints:
     """Stands for the existing Blueprint path. Records submitted diffs; never touches an engine."""
-    def __init__(self, bp=None, fail=False):
-        self.bp, self.fail, self.submitted = bp or blueprint(), fail, []
+    def __init__(self, bp=None, fail=None):
+        self.bp, self.fail, self.submitted, self.calls = bp or blueprint(), fail, [], []
+        self.status, self.status_queries = "unknown", []
 
     def current(self, tenant_id):
         return copy.deepcopy(self.bp)
@@ -28,11 +29,17 @@ class FakeBlueprints:
     def validation_context(self, tenant_id):
         return None
 
-    def submit_change(self, tenant_id, diff, proposal_digest, idempotency_key):
+    def submit_change(self, tenant_id, diff, proposal_digest, idempotency_key, *, actor, risk):
+        self.calls.append({"tenant": tenant_id, "diff": diff, "proposal_digest": proposal_digest,
+                           "idempotency_key": idempotency_key, "actor": actor, "risk": risk})
         if self.fail:
-            raise RuntimeError("engine down")
+            raise self.fail if isinstance(self.fail, BaseException) else RuntimeError("engine down")
         self.submitted.append((tenant_id, diff, proposal_digest))
         return {"ok": True}
+
+    def change_status(self, tenant_id, idempotency_key):
+        self.status_queries.append((tenant_id, idempotency_key))
+        return self.status
 
 
 class ScriptedDrafter:
@@ -79,7 +86,7 @@ class ChangePending:
 
 def make(out=LABEL, bp=None, clock=None, **kw):
     clock = clock or Clock()
-    blueprints = FakeBlueprints(bp, kw.pop("fail", False))
+    blueprints = FakeBlueprints(bp, kw.pop("fail", None))
     drafter = ScriptedDrafter(out)
     audit = []
     svc = ChangeService(blueprints=blueprints, drafter=drafter, clock=clock, allowed_roles={"owner"},

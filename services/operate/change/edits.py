@@ -2,7 +2,7 @@
 
 The model never writes the Blueprint. It names pointers and values; this module checks the shape, refuses
 forbidden areas (permissions, approvals, compliance, computed or ledger logic) and applies the edits to a deep copy.
-Whatever the result is, the validator and the diff decide afterwards."""
+This check is only an early exit: the binding decision is `policy.check_diff` on the resulting diff, after the validator."""
 from __future__ import annotations
 
 import copy
@@ -21,7 +21,9 @@ OPS = ("set", "add", "remove")
 ALLOWED_ROOTS = frozenset({"entities", "workflows", "reports", "locations", "i18n", "branding"})
 # Any path segment or value key with one of these names is logic or authority, never a chat edit.
 FORBIDDEN_KEYS = frozenset({"computed", "guards", "approval", "approvals", "visibleToRoles", "allowedRoles",
-                            "hiddenFields", "readOnlyFields", "permissions", "provenance"})
+                            "hiddenFields", "readOnlyFields", "permissions", "provenance", "readOnly", "locksEditing"})
+# A `set` this shallow replaces a whole section or element (every entity, one whole workflow...): never from chat.
+WHOLE_SECTIONS = frozenset({"entities", "workflows", "reports", "locations"})
 
 
 @dataclass(frozen=True)
@@ -89,7 +91,9 @@ def decode_draft(raw) -> tuple:
 
 def check_allowed(edits: tuple) -> None:
     for e in edits:
-        if e.pointer[0] not in ALLOWED_ROOTS:
+        if e.pointer[0] not in ALLOWED_ROOTS or len(e.pointer) == 1:
+            raise ChangeRefused("change_forbidden_path")
+        if e.op == "set" and e.pointer[0] in WHOLE_SECTIONS and len(e.pointer) <= 2:
             raise ChangeRefused("change_forbidden_path")
         if FORBIDDEN_KEYS & set(e.pointer) or (e.value is not None and FORBIDDEN_KEYS & set(_deep_keys(e.value))):
             raise ChangeRefused("change_forbidden_path")

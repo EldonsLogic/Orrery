@@ -234,7 +234,8 @@ def test_tampered_diff_refused():
 
 
 def test_apply_failure_is_coded_and_proposal_is_consumed():
-    svc, bps, _, clock, _ = make(fail=True)
+    from change.models import ApplyRefused
+    svc, bps, _, clock, _ = make(fail=ApplyRefused())
     pv = svc.propose(OWNER, SESSION, "x", change_decision())
     dec = confirm_decision("yes", pv, clock)
     refused("change_apply_failed", svc.confirm, OWNER, SESSION, dec)

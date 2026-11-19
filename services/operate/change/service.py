@@ -3,14 +3,18 @@ the confirmation bound to that exact proposal, through the existing Blueprint pa
 
 Invariants (tested):
 - The model only drafts typed edits (`edits.py`). Code applies them to a copy, the validator and the schema decide
-  validity, `bpdiff` computes the diff, risk comes from the diff's impact classes, the entity class table and the
-  router's hint (never lowered). No ledger, tax, permission, approval or computed-field edit is ever drafted into
-  a proposal; changes above R2 are refused here and go through Studio review (ADR-0027).
+  validity, `bpdiff` computes the diff, and `policy.check_diff` decides on EVERY changed path of that diff (default
+  deny, explicit low-risk allow-list; owning entity of entity, workflow, report and label-override ops; tax and money
+  fields). Risk comes from the diff's impact classes, the entity class and the router's hint (never lowered). Changes
+  above R2 are refused here and go through Studio review (ADR-0027).
 - A proposal digest binds tenant, user, session, base hash, target hash, diff hash, risk and expiry. The host sets the
   router's `Pending` from `pending_for(proposal)`; a confirming decision must carry the same action id and digest
   (Q-265). On confirm the service re-derives the target from the stored edits and the live Blueprint and re-checks
-  everything; any difference refuses. A proposal is used once (consumed before the apply call), expires, and a newer
-  proposal in the same session supersedes the older one. Untrusted data (L3) is never read.
+  everything; any difference refuses. A proposal is used once (compare-and-delete before the apply call), expires, and
+  a newer proposal in the same session supersedes the older one, even mid-confirm. Untrusted data (L3) is never read.
+- The port runs the apply under the caller's identity (`actor`). Only a typed `ApplyRefused` means "nothing changed";
+  any other failure is resolved by idempotency key or reported as `change_outcome_unknown`. Confirm refusals are
+  audited.
 - The only write is `BlueprintPort.submit_change`; the engine is never touched here. Every failure fails closed with a
   code from `errors.py`; nothing from the model or an exception reaches the customer."""
 from __future__ import annotations
@@ -19,20 +23,21 @@ import copy
 import hashlib
 import json
 import logging
+import math
 from typing import Callable, Optional
 
 from router.models import RISK_ORDER, MODE_RISK_FLOOR, Pending, RouteDecision, max_risk
 
 from . import edits as ed
+from . import policy
 from ._deps import bpdiff, blueprint_hash, validate
 from .errors import ChangeRefused
-from .models import (ACTION_ID, DEFAULT_TTL_S, IMPACT_RISK, MAX_CHAT_RISK, BlueprintPort, ChangeDrafterPort, DraftRequest,
-                     Outcome, Preview, Proposal)
+from .models import (ACTION_ID, DEFAULT_TTL_S, IMPACT_RISK, MAX_CHAT_RISK, ApplyRefused, BlueprintPort,
+                     ChangeDrafterPort, DraftRequest, Outcome, Preview, Proposal)
 from .store import InMemoryProposalStore
 
 log = logging.getLogger("change")
 _RANK = {r: i for i, r in enumerate(RISK_ORDER)}
-_STOCK_RISK = "R3"
 
 
 def _canon(v) -> bytes:
@@ -60,29 +65,16 @@ def _outline(bp: dict) -> dict:
             "locales": list((bp.get("meta") or {}).get("locales") or [])}
 
 
-def _entity_risk(edit_list, current) -> str:
-    """Ledger-class entities are refused; stock-class raise the risk. Unknown ids stay plain (the validator and the
-    Blueprint path decide the rest)."""
-    from toolapi.classify import default_entity_class
-    risk = "R0"
-    for e in edit_list:
-        if e.pointer[0] != "entities":
-            continue
-        eid = e.pointer[1] if len(e.pointer) > 1 else (e.value.get("id") if isinstance(e.value, dict) else None)
-        if not isinstance(eid, str):
-            continue
-        cls, _ = default_entity_class(eid)
-        if cls == "ledger":
-            raise ChangeRefused("change_ledger_tax")
-        if cls == "stock":
-            risk = max_risk(risk, _STOCK_RISK)
-    return risk
+def _clock_ok(now) -> bool:
+    return type(now) in (int, float) and math.isfinite(now)
 
 
 class ChangeService:
     def __init__(self, *, blueprints: BlueprintPort, drafter: ChangeDrafterPort, clock: Callable[[], float],
                  allowed_roles, store=None, audit: Optional[Callable[[dict], None]] = None,
                  ttl_s: float = DEFAULT_TTL_S):
+        if type(ttl_s) not in (int, float) or not math.isfinite(ttl_s) or ttl_s <= 0:
+            raise ChangeRefused("change_unavailable")
         self.bp, self.drafter, self.clock = blueprints, drafter, clock
         self.allowed_roles = frozenset(allowed_roles)  # required: no default role may change the configuration
         self.store = store or InMemoryProposalStore()
@@ -93,7 +85,8 @@ class ChangeService:
         if self.audit is None:
             return
         try:  # hashes and codes only; never the turn, the edits' values or the model output
-            self.audit({"kind": kind, "tenant": p.tenant_id, "user": p.subject, **extra})
+            self.audit({"kind": kind, "tenant": getattr(p, "tenant_id", None), "user": getattr(p, "subject", None),
+                        **extra})
         except Exception:  # noqa: BLE001  an audit failure must not turn into a write
             log.warning("change audit failed")
 
@@ -114,8 +107,7 @@ class ChangeService:
 
     def _derive(self, tenant_id, edit_list, current, ctx, hint_risk):
         """Deterministic part, shared by propose and confirm. Returns (target, diff, risk)."""
-        ed.check_allowed(edit_list)
-        floor = _entity_risk(edit_list, current)
+        ed.check_allowed(edit_list)  # early exit only; the binding check is on the diff below
         target = ed.apply_edits(current, edit_list)
         if blueprint_hash(target) == blueprint_hash(current):
             raise ChangeRefused("change_no_effect")
@@ -126,6 +118,7 @@ class ChangeService:
             raise ChangeRefused("change_invalid_blueprint") from None
         if d["base"]["hash"] != blueprint_hash(current) or d["target"]["hash"] != blueprint_hash(target) or not d["ops"]:
             raise ChangeRefused("change_invalid_blueprint")
+        floor = policy.check_diff(d, current, target)  # every changed path, default deny
         impact_risk = max_risk(*[IMPACT_RISK.get(op["impact"], "R4") for op in d["ops"]])  # unknown impact -> R4
         risk = max_risk(MODE_RISK_FLOOR["change"], impact_risk, floor, hint_risk)
         if _RANK[risk] > _RANK[MAX_CHAT_RISK]:
@@ -155,6 +148,8 @@ class ChangeService:
         edit_list = ed.decode_draft(raw)
         target, d, risk = self._derive(tenant, edit_list, current, ctx, decision.risk_hint)
         now = self.clock()
+        if not _clock_ok(now):
+            raise ChangeRefused("change_unavailable")
         expires = now + self.ttl_s
         digest = digest_of(tenant, user, session_id, d["base"]["hash"], d["target"]["hash"], _sha(d), risk, expires)
         prop = Proposal(tenant, user, session_id, edit_list, d["base"]["hash"], d["target"]["hash"], _sha(d), d, risk,
@@ -175,7 +170,17 @@ class ChangeService:
 
     # ---- confirm -------------------------------------------------------------------------------------------
     def confirm(self, principal, session_id: str, decision: RouteDecision, locale: str = "en") -> Outcome:
-        """Apply the active proposal if, and only if, `decision` is a confirmation bound to exactly that proposal."""
+        """Apply the active proposal if, and only if, `decision` is a confirmation bound to exactly that proposal.
+        Every refusal is audited (`change.refused`, code and digest prefix only)."""
+        try:
+            return self._confirm(principal, session_id, decision, locale)
+        except ChangeRefused as e:
+            ah = getattr(decision, "confirms_args_hash", None)
+            self._emit("change.refused", principal, code=e.code, session=session_id,
+                       digest=ah[:23] if isinstance(ah, str) else None)
+            raise
+
+    def _confirm(self, principal, session_id, decision, locale) -> Outcome:
         self._check_caller(principal)
         tenant, user = principal.tenant_id, principal.subject
         aid, ah = getattr(decision, "confirms_action_id", None), getattr(decision, "confirms_args_hash", None)
@@ -189,7 +194,9 @@ class ChangeService:
         if (prop.tenant_id, prop.user_id, prop.session_id) != (tenant, user, session_id):
             raise ChangeRefused("change_confirmation_mismatch")
         now = self.clock()
-        if not isinstance(now, (int, float)) or not now < prop.expires_at:
+        if not _clock_ok(now):
+            raise ChangeRefused("change_unavailable")
+        if not now < prop.expires_at:
             self.store.drop(tenant, user, session_id)
             raise ChangeRefused("change_expired")
         if digest_of(tenant, user, session_id, prop.base_hash, prop.target_hash, prop.diff_hash, prop.risk,
@@ -210,11 +217,28 @@ class ChangeService:
             raise ChangeRefused("change_tampered")
         if not self.store.consume(prop):  # used once, before the write: a failed apply needs a new proposal
             raise ChangeRefused("change_replayed")
+        actor = {"tenant": tenant, "subject": user, "roles": sorted(principal.role_ids), "session": session_id}
         try:
-            res = self.bp.submit_change(tenant, copy.deepcopy(d), prop.digest, prop.digest)
-        except Exception:  # noqa: BLE001
+            res = self.bp.submit_change(tenant, copy.deepcopy(d), prop.digest, prop.digest, actor=actor, risk=prop.risk)
+        except ApplyRefused:  # the Blueprint path refused before any write: nothing changed
             self._emit("change.apply_failed", principal, digest=prop.digest)
             raise ChangeRefused("change_apply_failed") from None
+        except Exception:  # noqa: BLE001  timeout, crash: the write may or may not have happened
+            res = self._resolve_unknown(principal, tenant, prop)
         self._emit("change.applied", principal, digest=prop.digest, risk=prop.risk)
         from .preview import applied_text
         return Outcome("applied", prop.digest, res if isinstance(res, dict) else {}, applied_text(len(d["ops"]), locale))
+
+    def _resolve_unknown(self, principal, tenant, prop) -> dict:
+        """Ask the Blueprint path by idempotency key; never claim "nothing changed" unless it says so."""
+        try:
+            status = self.bp.change_status(tenant, prop.digest)
+        except Exception:  # noqa: BLE001
+            status = "unknown"
+        if status == "applied":
+            return {}
+        if status == "not_applied":
+            self._emit("change.apply_failed", principal, digest=prop.digest)
+            raise ChangeRefused("change_apply_failed")
+        self._emit("change.outcome_unknown", principal, digest=prop.digest)
+        raise ChangeRefused("change_outcome_unknown")

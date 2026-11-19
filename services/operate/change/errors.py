@@ -31,6 +31,9 @@ TABLE = {
                         "لم يعد التغيير المجهز مطابقا لمعاينته، لذلك لم يتم تطبيقه."),
     "change_apply_failed": ("The change could not be applied. Nothing was changed.",
                             "تعذر تطبيق التغيير. لم يتم تغيير أي شيء."),
+    "change_outcome_unknown": ("I could not confirm whether the change was applied. Check the change history before "
+                               "asking again.",
+                               "لم أتمكن من التأكد مما إذا كان التغيير قد طُبق. راجع سجل التغييرات قبل أن تطلب مرة أخرى."),
     "change_unavailable": ("Changes from chat are unavailable right now.", "التغييرات من المحادثة غير متاحة الآن."),
 }
 

@@ -26,13 +26,15 @@ class InMemoryProposalStore:
             return self._active.get(self._key(tenant_id, user_id, session_id))
 
     def consume(self, p: Proposal) -> bool:
+        """Compare-and-delete: True only if `p` (by digest) is still the active proposal of its session and unused.
+        A proposal superseded while its confirm was in flight is refused."""
         with self._lock:
-            if p.digest in self._used:
-                return False
-            self._used.add(p.digest)
             k = self._key(p.tenant_id, p.user_id, p.session_id)
-            if self._active.get(k) is p or (self._active.get(k) and self._active[k].digest == p.digest):
-                del self._active[k]
+            cur = self._active.get(k)
+            if p.digest in self._used or cur is None or cur.digest != p.digest:
+                return False
+            del self._active[k]
+            self._used.add(p.digest)
             return True
 
     def used(self, digest: str) -> bool:

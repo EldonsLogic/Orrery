@@ -1,5 +1,7 @@
 """Native document boundary tests; the engine double enforces document permissions."""
 from copy import deepcopy
+import json
+from pathlib import Path
 
 import pytest
 
@@ -60,6 +62,7 @@ class Engine:
     def __init__(self):
         self.local = Context()
         self.session = Context()
+        self.roles = ['Credit Controller']
         self.saved, self.denied, self.rows = [], set(), {}
         for dt, name, values in [
             ('Currency', 'QAR', {}), ('UOM', 'Unit', {}), ('Item', 'demo-item', {}),
@@ -72,6 +75,9 @@ class Engine:
             ('Sales Order', 'demo-order', {'docstatus': 0, 'company': 'demo-company'}),
         ]:
             self.rows[dt, name] = dict(doctype=dt, name=name, **values)
+
+    def get_roles(self):
+        return list(self.roles)
 
     def get_meta(self, doctype):
         return self
@@ -248,11 +254,14 @@ def test_company_currency_mismatch_is_refused():
     assert not e.saved
 
 
-@pytest.mark.parametrize('field,value', [('enabled', 0), ('is_group', 1), ('commission_rate', '101')])
+@pytest.mark.parametrize('field,value', [
+    ('enabled', 0), ('is_group', 1), ('commission_rate', '101'),
+    ('commission_rate', ''), ('commission_rate', None), ('commission_rate', 'abc'),
+])
 def test_ineligible_rep_and_invalid_master_rate_are_refused(field, value):
     e = Engine()
     e.rows['Sales Person', 'demo-rep'][field] = value
-    with pytest.raises(TradingError):
+    with pytest.raises(TradingError, match='^TRD-REP$'):
         pack(e).set_sales_team('demo-order', [{'sales_person': 'demo-rep', 'allocated_percentage': '100'}])
     assert not e.saved
 
@@ -331,3 +340,47 @@ def test_hidden_default_price_list_setting_field_is_refused(action):
     with pytest.raises(TradingError, match='^TRD-FIELD$'):
         pack(e).create_price_list('Wholesale AR', 'QAR')
     assert not e.saved
+
+
+@pytest.mark.parametrize('roles', [[], ['Sales User'], ['Sales Manager'], ['Guest']])
+def test_credit_limit_rejects_non_credit_roles(roles):
+    e = Engine()
+    e.roles = roles
+    with pytest.raises(TradingError, match='^TRD-ROLE$'):
+        pack(e).set_credit_limit('demo-customer', 'demo-company', '250')
+    assert not e.saved
+
+
+@pytest.mark.parametrize('role', ['Credit Controller', 'Accounts Manager', 'System Manager'])
+def test_credit_limit_allows_credit_roles(role):
+    e = Engine()
+    e.roles = [role]
+    assert pack(e).set_credit_limit('demo-customer', 'demo-company', '250') == 'demo-customer'
+    assert len(e.saved) == 1
+
+
+@pytest.mark.parametrize('discount', ['100', '100.00'])
+def test_volume_discount_rejects_full_free_item_discount(discount):
+    e = Engine()
+    with pytest.raises(TradingError, match='^TRD-NUMBER$'):
+        pack(e).create_volume_discount('Bulk', 'demo-company', 'Wholesale', 'demo-item', '10', discount)
+    assert not e.saved
+
+
+def test_volume_discount_allows_below_100_percent():
+    e = Engine()
+    pack(e).create_volume_discount('Bulk', 'demo-company', 'Wholesale', 'demo-item', '10', '99.99')
+    assert e.saved[0]['discount_percentage'] == '99.99'
+
+
+def test_strings_catalog_has_review_status_and_expected_keys():
+    strings = json.loads((Path(__file__).parent.parent / 'strings.json').read_text(encoding='utf-8'))
+    expected = {
+        'TRD-CONTEXT', 'TRD-TEXT', 'TRD-NUMBER', 'TRD-PRICE', 'TRD-CURRENCY',
+        'TRD-CREDIT', 'TRD-REP', 'TRD-DRAFT', 'TRD-TEAM', 'TRD-FIELD', 'TRD-ROLE',
+    }
+    assert set(strings) == expected
+    for key, entry in strings.items():
+        assert entry['ar'] and entry['en'], key
+        assert entry['review'] == 'unreviewed', key
+    assert 'مستأجر' in strings['TRD-CONTEXT']['ar']

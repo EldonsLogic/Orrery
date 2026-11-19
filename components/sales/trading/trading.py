@@ -31,6 +31,9 @@ def _number(value, *, percent=False, zero=False):
     return value
 
 
+_CREDIT_ROLES = frozenset({'Credit Controller', 'Accounts Manager', 'System Manager'})
+
+
 class TradingPack:
     """Bind to a trusted engine request; all reads and writes retain caller permissions.
 
@@ -49,6 +52,11 @@ class TradingPack:
         if (not self.site or not self.user or self.user == 'Guest'
                 or self.engine.local.site != self.site or self.engine.session.user != self.user):
             raise TradingError('TRD-CONTEXT')
+
+    def _require_credit_role(self):
+        self._context()
+        if not (_CREDIT_ROLES & set(self.engine.get_roles() or ())):
+            raise TradingError('TRD-ROLE')
 
     def _doc(self, doctype, name, action='read'):
         self._context()
@@ -115,6 +123,8 @@ class TradingPack:
     def create_volume_discount(self, title, company, price_list, item, min_qty, discount):
         """Create a company/item/list scoped quantity discount with no executable condition."""
         min_qty, discount = _number(min_qty), _number(discount, percent=True)
+        if Decimal(discount) >= 100:
+            raise TradingError('TRD-NUMBER')
         company_doc = self._doc('Company', company)
         price = self._price_list(price_list)
         self._doc('Item', item)
@@ -131,9 +141,11 @@ class TradingPack:
         """Upsert one company limit, retaining other companies and clearing the bypass.
 
         Zero is refused: native zero can mean unlimited rather than a credit hold.
+        Requires a credit-authorising session role (ADR-0027) in addition to Customer write.
         Existing Accounts Settings.credit_controller exemptions remain untouched.
         Native submission hooks alone enforce exposure and receivable calculations.
         """
+        self._require_credit_role()
         limit = _number(limit)
         self._doc('Company', company)
         doc = self._doc('Customer', customer, 'write')
@@ -189,7 +201,10 @@ class TradingPack:
                 raise TradingError('TRD-TEAM')
             seen.add(name)
             rep = self._rep(name)
-            rate = _number(rep.get('commission_rate'), percent=True, zero=True)
+            try:
+                rate = _number(rep.get('commission_rate'), percent=True, zero=True)
+            except TradingError:
+                raise TradingError('TRD-REP') from None
             team.append(dict(sales_person=name, allocated_percentage=share, commission_rate=rate))
             total += Decimal(share)  # Share validation only; the engine calculates every amount.
         if total != 100:

@@ -3,11 +3,11 @@
 The trusted bench runner calls run(engine) within a connected request. This never
 commits; it restores the previous user and rolls back fixture writes on every exit.
 """
-from trading import TradingPack
+from trading import TradingError, TradingPack
 
 
 def run(engine):
-    """Exercise native hooks and a real permission denial; return completed proof names."""
+    """Exercise native hooks and real permission/role denials; return completed proof names."""
     original_user = engine.session.user
     proofs = []
     engine.db.savepoint('erp011')
@@ -68,6 +68,9 @@ def run(engine):
         proofs.append('native commission attribution with no GL posting')
         user = engine.get_doc(dict(doctype='User', email='erp011@example.invalid',
                                    first_name='ERP011 Synthetic', send_welcome_email=0)).insert()
+        sales_user = engine.get_doc(dict(
+            doctype='User', email='erp011-sales@example.invalid', first_name='ERP011 Sales',
+            send_welcome_email=0, roles=[dict(role='Sales User')])).insert()
         engine.set_user(user.name)
         denied = False
         try:
@@ -76,6 +79,17 @@ def run(engine):
             denied = True
         assert denied, 'An authenticated user without master write permission must be denied'
         proofs.append('real engine permission denial')
+        engine.set_user(sales_user.name)
+        assert engine.has_permission('Customer', 'write', doc=customer)
+        role_denied = False
+        try:
+            TradingPack(engine).set_credit_limit(customer.name, company, '999999')
+        except TradingError as exc:
+            role_denied = str(exc) == 'TRD-ROLE'
+        assert role_denied, 'A stock Sales User must be denied credit-limit changes with TRD-ROLE'
+        engine.set_user('Administrator')
+        assert engine.get_doc('Customer', customer.name).credit_limits[0].credit_limit == 300
+        proofs.append('real sales-user credit-limit role denial')
         return proofs
     finally:
         engine.set_user(original_user)

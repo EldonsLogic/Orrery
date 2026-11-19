@@ -113,3 +113,8 @@ jobs:
           REQUIRE_EVSTREAM_TESTS: "1"
           PYTHONPATH: services:services/blueprint/events
         run: python3 -m unittest discover -s services/gateway/tests -v
+      - name: Trading and distribution pack unit and factory sandbox checks (ERP-011)
+        if: ${{ !cancelled() }}
+        run: |
+          PYTHONPATH=components/sales/trading python3 -m pytest components/sales/trading/tests -q
+          PYTHONPATH=services/blueprint python3 -m factory check components/sales/trading --run-tests --trusted-source --out /tmp/erp011-factory.json

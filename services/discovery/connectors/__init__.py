@@ -5,7 +5,7 @@ contracts/connector-interface.md and docs/security/prompt-injection-defence.md.
 """
 from .model import (Budget, BudgetExceeded, ConnectorRefusal, Limits, Registry, RunContext,
                     check_connector, ALLOWED_CAPABILITIES, TIERS)
-from .runner import iter_envelopes, run_connector
+from .runner import RecordingSink, iter_envelopes, run_connector
 
 __all__ = ["Budget", "BudgetExceeded", "ConnectorRefusal", "Limits", "Registry", "RunContext",
-           "check_connector", "run_connector", "iter_envelopes", "ALLOWED_CAPABILITIES", "TIERS"]
+           "check_connector", "run_connector", "iter_envelopes", "RecordingSink", "ALLOWED_CAPABILITIES", "TIERS"]

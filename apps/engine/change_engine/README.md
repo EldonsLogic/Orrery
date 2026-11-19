@@ -26,7 +26,7 @@ for t in test_ai_control_plane test_api_deployment test_phase2_property_setter t
   PYTHONPATH=. python3 -m unittest change_engine.tests.$t
 done
 ```
-Needs Python 3.10+ and `pydantic>=2`. The live test (`test_live_mariadb_suite_b.py`) needs `pymysql` and the dev stack. None of this has run inside a real Frappe bench yet (CE-SEC-005).
+Needs Python 3.10+ and `pydantic>=2`. The live test (`test_live_mariadb_suite_b.py`) needs `pymysql` and the dev stack, and the full zero-mock Frappe bench integration suite (`test_ce_sec_005_real_bench.py`) runs inside the pinned Docker bench via `python3 infra/dev/docker/run_real_bench_ci.py` (`.github/workflows/real-bench.yml`).
 
 ## BPL-027 integration test (needs a bench)
 `change_engine/tests/test_bpl_027_fixture_real_adapter.py` compiles the trading fixture with the BPL-004 compiler, plans, previews, checks the DDL plan gate, applies it through `ChangeEngineAdapter` + `FrappeRuntimeBackend` on a real site, reads the site back against the Blueprint, re-applies (must be a no-op) and rolls back an incremental change (BPL-008). Without a bench the bench class skips with the reason; two offline tests always run. Use a fresh, disposable site: the test provisions it and leaves configuration behind.

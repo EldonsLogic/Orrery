@@ -44,6 +44,6 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0035-risk-tiered-review.md](ADR-0035-risk-tiered-review.md) | Risk-tiered review and fewer rounds | Accepted |
 | [ADR-0036-tool-api-domain-errors.md](ADR-0036-tool-api-domain-errors.md) | Tool API domain error codes and catalog | Proposed |
 | [ADR-0037-manifest-risk-class-and-transition-kind.md](ADR-0037-manifest-risk-class-and-transition-kind.md) | Manifest-declared entity risk class and explicit transition kind | Proposed |
-| [ADR-0043-department-assistants.md](ADR-0043-department-assistants.md) | Department-scoped assistants in the Blueprint (Blueprint 0.3.0) | Proposed |
+| [ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md](ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md) | ZATCA Phase 2: vendor the ERPGulf pure core, rebuild state | Proposed |
 | [ADR-0043-department-assistants.md](ADR-0043-department-assistants.md) | Department-scoped assistants in the Blueprint (Blueprint 0.4.0) | Proposed |
 | [ADR-0044-ag-ui-agent-to-screen-transport.md](ADR-0044-ag-ui-agent-to-screen-transport.md) | AG-UI as the agent-to-screen transport, not an authority | Proposed |

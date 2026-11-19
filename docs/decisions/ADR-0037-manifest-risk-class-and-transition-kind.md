@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon and partner (sayegh9, 2026-11-19; cross-model review via Gemini 4 Neon high; follow-up in Q-281)
+Approved by: Eldon and partner (sayegh9, 2026-11-19; cross-model review via Gemini 4 Neon high; follow-up in Q-299)
 
 ## Context
 The Tool API generator (OPR-003) decides each entity's risk class from a hard-coded reviewed table in `services/operate/toolapi/policy.py` plus ledger name tokens, and refuses anything else. That table cannot grow with the component library without a code change per entity. Q-138 also found that the generator accepts an explicit transition `kind` but the Blueprint schema has no field for it, so a valid Blueprint cannot carry it. And `contracts/tool-api.md` section 1 does not list fields the generator already emits (`risk_class`, `agent_creatable`, `requires_by_value`, `field_access`, `transitions`). Eldon decided all three in a walkthrough.

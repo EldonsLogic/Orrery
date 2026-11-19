@@ -21,6 +21,11 @@ The tool consists of:
   4. Max-pages constraint test: verifies that crawling halts at `--max-pages`.
   5. CLI test: verifies `--json` format and non-zero exit code on failure.
 
+A pass requires inspection of every queued target. Missing linked assets, page or
+queue limit exhaustion, empty explicit API paths, and HTTP 401/403 responses when
+credentials were supplied fail the crawl. Anonymous 401/403 responses are still
+inspected for leaks. Increase `--max-pages` when coverage is incomplete.
+
 ## How to run
 
 ### Unit tests (local stub servers)

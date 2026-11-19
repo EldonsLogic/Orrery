@@ -485,7 +485,6 @@ class InvisibilityCrawler:
     def crawl(self) -> list[Finding]:
         """Execute the crawl across base URL, API paths, and linked bundles."""
         queue: deque[str] = deque()
-        seed_urls: set[str] = {self.base_url}
         queue.append(self.base_url)
 
         for api_path in self.api_paths:
@@ -502,7 +501,6 @@ class InvisibilityCrawler:
                     )
                 )
                 continue
-            seed_urls.add(path_url)
             if path_url not in queue:
                 queue.append(path_url)
 
@@ -535,7 +533,9 @@ class InvisibilityCrawler:
                 except Exception:
                     body_bytes = b""
                 self._log(f"HTTPError {status_code} on {url}")
-                if status_code >= 500 or (url in seed_urls and status_code >= 400 and status_code not in (401, 403)):
+                if status_code >= 400 and (
+                    status_code not in (401, 403) or self.auth_headers or self.cookies
+                ):
                     self.errors.append(
                         CrawlError(url=url, error=f"HTTP {status_code} response on crawl target")
                     )
@@ -561,6 +561,14 @@ class InvisibilityCrawler:
                 if link not in self.visited and link not in queue:
                     if len(self.visited) + len(queue) < self.max_pages * 2:
                         queue.append(link)
+                    elif not any(e.error == "Discovery queue limit reached" for e in self.errors):
+                        self.errors.append(CrawlError(url=url, error="Discovery queue limit reached"))
+
+        if queue:
+            self.errors.append(CrawlError(
+                url=self.base_url,
+                error="Page limit reached before all discovered targets were inspected",
+            ))
 
         if self._successful_fetches == 0 and not self.errors:
             self.errors.append(
@@ -725,8 +733,8 @@ def main() -> int:
     args = parser.parse_args()
 
     api_paths: list[str] = []
-    if args.api_paths:
-        api_paths.extend([p.strip() for p in args.api_paths.split(",") if p.strip()])
+    if args.api_paths is not None:
+        api_paths.extend(p.strip() for p in args.api_paths.split(","))
     if args.api_paths_file:
         try:
             with open(args.api_paths_file, "r", encoding="utf-8") as f:

@@ -6,8 +6,6 @@ from typing import Any
 
 from change_engine.guarded_apply.ddl_plan_gate import (
     APPROVED_DDL_REGEX,
-    ColumnDesc,
-    STANDARD_COLUMNS,
     inspect_frappe_ddl_plan,
 )
 from change_engine.guarded_apply.safety_guardrails import (
@@ -119,17 +117,10 @@ def inspect_field_ddl(entity_id: str, field_def: dict[str, Any]) -> tuple[bool, 
         "precision": field_def.get("precision"),
         "length": field_def.get("maxLength"),
     }
-    existing_cols = [
-        ColumnDesc(
-            name=col,
-            type="datetime(6)" if col in ("creation", "modified") else "varchar(140)",
-        )
-        for col in STANDARD_COLUMNS
-    ]
     inspection = inspect_frappe_ddl_plan(
         doctype=doctype,
         field_def=frappe_field_def,
-        existing_columns_desc=existing_cols,
+        existing_columns_desc=None,
     )
     statements = list(inspection.statements)
     if field_def.get("unique") or field_def.get("indexed"):

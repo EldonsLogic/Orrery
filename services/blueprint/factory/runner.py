@@ -16,6 +16,7 @@ from registry.admission import admit
 from registry.store import RawManifest
 
 from . import commands, errors as E
+from .analysis import analyse_component
 from .errors import Finding
 from .scan import Limits, check_relpath, copy_component
 
@@ -34,6 +35,7 @@ class Report:
     files: int = 0
     findings: list = field(default_factory=list)
     tests: list = field(default_factory=list)
+    analysis: dict | None = None
 
     @property
     def ok(self) -> bool:
@@ -43,7 +45,7 @@ class Report:
         return {"component": self.component, "declaredLevel": self.declared_level, "levelReached": self.level_reached,
                 "maxGrantable": MAX_LEVEL, "trustedSource": self.trusted_source, "testsRun": self.tests_run,
                 "files": self.files, "ok": self.ok, "tests": self.tests,
-                "findings": [f.as_dict() for f in self.findings]}
+                "analysis": self.analysis, "findings": [f.as_dict() for f in self.findings]}
 
 
 def _read_manifest(workdir: Path) -> dict:
@@ -70,6 +72,15 @@ def _static(rep: Report, manifest: dict) -> bool:
     _, issues = admit([RawManifest("manifest.json", manifest)])
     rep.findings.extend(Finding(i.code, i.severity, i.message) for i in issues)
     return not any(i.is_error for i in issues)
+
+
+def _analyse(rep: Report, manifest: dict, workdir: Path) -> bool:
+    """Static analysis (SEC-010) of every file. Returns False when a high finding blocks the component."""
+    res = analyse_component(workdir, manifest)
+    rep.analysis = res.as_dict()
+    for i in res.issues:
+        rep.findings.append(Finding(i.code, E.ERROR if i.severity == "high" else E.WARNING, f"{i.path}:{i.line} {i.message}"))
+    return not res.blocked
 
 
 def _run_tests(rep: Report, manifest: dict, workdir: Path, home: Path, timeout: float, allowed: dict | None) -> None:
@@ -120,13 +131,18 @@ def check(candidate: str | os.PathLike, run_tests: bool = False, trusted_source:
             if not _static(rep, manifest):
                 return rep
             rep.level_reached = "draft"
-            if run_tests and not trusted_source:
+            clean = _analyse(rep, manifest, work)
+            if not clean:  # candidate code is never run when analysis found a high-severity issue
+                if run_tests:
+                    rep.findings.append(Finding(E.ANALYSIS_BLOCK, E.ERROR, "tests not run: static analysis found "
+                                                "high-severity findings; the component cannot reach 'tested'"))
+            elif run_tests and not trusted_source:
                 rep.findings.append(Finding(E.UNTRUSTED, E.ERROR, "tests not run: candidate commands need --trusted-source. "
                                             "This is a logical sandbox; an OS-level sandbox (INF-014) is required for "
                                             "third-party or customer-influenced code"))
             elif run_tests:
                 _run_tests(rep, manifest, work, home, timeout, allowed)
-                if rep.tests_run and not any(f.is_error for f in rep.findings):
+                if clean and rep.tests_run and not any(f.is_error for f in rep.findings):
                     rep.level_reached = MAX_LEVEL
     except E.FacError as exc:
         rep.level_reached = "none"

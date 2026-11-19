@@ -20,8 +20,8 @@ jobs:
   python-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.12"
       - name: Install test dependencies
@@ -70,11 +70,21 @@ jobs:
         env:
           PYTHONPATH: apps/engine/change_engine:.
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_007_bilingual_tax_invoice.py -v
+      - name: Change engine security mock tests, fast (CE-SEC-001..004; real-bench run is real-bench.yml)
+        if: ${{ !cancelled() }}
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_caller_roles.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_security.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_policy_persistence.py apps/engine/change_engine/change_engine/tests/test_api_deployment.py -q
       - name: Apply with preview and DDL plan gate tests (BPL-007)
         if: ${{ !cancelled() }}
         env:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_007_apply_preview_gate.py -q
+      - name: DDL plan gate decimal drift and fail-closed tests (ERP-027)
+        if: ${{ !cancelled() }}
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_027_decimal_drift.py apps/engine/change_engine/change_engine/tests/test_erp_027_review_fixes.py apps/engine/change_engine/change_engine/tests/test_ai_control_plane.py -q
       - name: Blueprint rollback tests (BPL-008)
         if: ${{ !cancelled() }}
         env:
@@ -100,6 +110,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           ADAPTER_HARNESS: change_engine.adapter.harness:make_frappe_harness
+          CHANGE_ENGINE_ENV: test
           PYTHONPATH: services/blueprint:apps/engine/change_engine
         run: python3 -m pytest services/blueprint/tests/adapter -q
       - name: Gateway token and cost metering tests (PLT-025)

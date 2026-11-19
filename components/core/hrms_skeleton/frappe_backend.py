@@ -15,7 +15,7 @@ from typing import Any, Iterator, Mapping, Sequence
 
 from .access import DuplicateKeyError
 from .errors import HrmsError
-from .specs import STANDARD_COLUMNS
+from .specs import APPLICANT_IDENTITY_FIELD, PLATFORM_CUSTOM_FIELDS, STANDARD_COLUMNS
 
 
 class FrappeSession:
@@ -85,8 +85,16 @@ class FrappeStore:
     @contextmanager
     def key_lock(self, doctype: str, scope: Sequence[str]) -> Iterator[None]:
         """One writer per (tenant, company, doctype, key): a process lock plus a database advisory
-        lock, held until the write is committed so the next writer's lookup sees it. UNVERIFIED on
-        the pinned bench (Q-280). Failing to take the lock refuses the write; it never runs unlocked."""
+        lock around the lookup and the write. UNVERIFIED on the pinned bench (Q-280).
+
+        It never commits, rolls back or resets the caller's transaction: commit and rollback belong
+        to the caller, even when this component writes nothing. So the advisory lock alone does not
+        make the next writer see this writer's row. Two things do: the lookup is a locking current
+        read (`find_current`, `SELECT ... FOR UPDATE`), which under MariaDB's default REPEATABLE-READ
+        reads the latest committed row instead of the transaction's old snapshot and waits behind
+        another writer's uncommitted row locks; and the database's own unique index on the key turns
+        a lost race into `DuplicateEntryError`, which the service retries once. Failing to take the
+        lock refuses the write; it never runs unlocked."""
         digest = hashlib.sha256(json.dumps([self.tenant, doctype, *scope]).encode()).hexdigest()[:48]
         name = f"hrms:{digest}"  # short enough for a MariaDB lock name (64 characters)
         db_type = getattr(getattr(self._f, "conf", None), "db_type", None) or "mariadb"
@@ -107,7 +115,6 @@ class FrappeStore:
                 raise HrmsError("operation_failed")
             try:
                 yield
-                self._f.db.commit()
             finally:
                 self._f.db.sql(*drop)
         finally:
@@ -118,10 +125,20 @@ class FrappeStore:
         return str(self._f.local.site)
 
     def find(self, doctype: str, filters: Mapping[str, Any]) -> list[dict[str, Any]]:
-        names = self._f.get_list(doctype, filters=dict(filters), pluck="name", limit_page_length=2)
+        return self._read(doctype, filters, current=False)
+
+    def find_current(self, doctype: str, filters: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """A locking current read (`for_update`), used inside `key_lock`. A plain read here could
+        return the caller's stale REPEATABLE-READ snapshot and miss a row another writer just
+        wrote. Parameterised by the engine; no SQL is built here. UNVERIFIED on the bench (Q-280)."""
+        return self._read(doctype, filters, current=True)
+
+    def _read(self, doctype: str, filters: Mapping[str, Any], current: bool) -> list[dict[str, Any]]:
+        extra = {"for_update": True} if current else {}
+        names = self._f.get_list(doctype, filters=dict(filters), pluck="name", limit_page_length=2, **extra)
         out = []
         for name in names:
-            doc = self._f.get_doc(doctype, name)
+            doc = self._f.get_doc(doctype, name, **extra)
             doc.check_permission("read")
             out.append(doc.as_dict())
         return out
@@ -138,7 +155,33 @@ class FrappeStore:
         return doc.as_dict()
 
     def update(self, doctype: str, name: str, values: Mapping[str, Any]) -> dict[str, Any]:
-        doc = self._f.get_doc(doctype, name)
+        doc = self._f.get_doc(doctype, name, for_update=True)
         doc.update(dict(values))
         doc.save()
         return doc.as_dict()
+
+    # -- applicant identity: a protected custom field, written only here ---------------------
+    def _identity_field(self, doctype: str) -> str:
+        """The declared protected field, or a refusal. A missing or unprotected field never falls
+        back to an ordinary column: the engine drops unknown columns, and an editable one could be
+        rewritten by the applicant."""
+        declared = {f["fieldname"] for f in PLATFORM_CUSTOM_FIELDS.get(doctype, ())}
+        if APPLICANT_IDENTITY_FIELD not in declared:
+            raise HrmsError("operation_failed")
+        df = self._f.get_meta(doctype).get_field(APPLICANT_IDENTITY_FIELD)
+        if df is None or not getattr(df, "read_only", 0) or int(getattr(df, "permlevel", 0) or 0) < 1:
+            raise HrmsError("operation_failed")
+        return APPLICANT_IDENTITY_FIELD
+
+    def record_applicant_identity(self, doctype: str, name: str, principal: str) -> None:
+        """Write the applicant principal once, with a direct column write (the document API would
+        clear a permission-level field for a caller without access to it). Part of the caller's
+        transaction; nothing is committed here."""
+        field = self._identity_field(doctype)
+        if self._f.db.get_value(doctype, name, field, for_update=True) not in (None, ""):
+            raise HrmsError("identity_binding_protected", doctype=doctype)
+        self._f.db.set_value(doctype, name, field, principal, update_modified=False)
+
+    def get_applicant_identity(self, doctype: str, name: str) -> Any:
+        field = self._identity_field(doctype)
+        return self._f.db.get_value(doctype, name, field, for_update=True)

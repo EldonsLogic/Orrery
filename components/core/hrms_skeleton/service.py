@@ -146,10 +146,14 @@ class HrmsService:
         return {k: values[k] for k in spec.key_fields}
 
     def _lookup(self, spec: DocSpec, values: Mapping[str, Any]) -> dict[str, Any] | None:
+        """Find the record by its key with a current read; only called while the key lock is held."""
         filters = self._key(spec, values)
         if spec.company_scoped:
             filters["company"] = self.company
-        return self._find_one(spec.doctype, filters)
+        rows = _guard(self._store.find_current, spec.doctype, filters)
+        if len(rows) > 1:
+            raise HrmsError("ambiguous_key", doctype=spec.doctype)
+        return rows[0] if rows else None
 
     @contextlib.contextmanager
     def _locked(self, spec: DocSpec, values: Mapping[str, Any]) -> Iterator[None]:
@@ -231,13 +235,15 @@ class HrmsService:
                         if _identity(principal) is None:
                             raise HrmsError("applicant_identity_unresolved", doctype=doctype)
                         row["status"] = "Open"
-                        row["applicant_user"] = principal.strip()
                     try:
                         created = self._insert(doctype, row)
                     except DuplicateKeyError:
                         if attempt == 0:
                             continue  # another writer won the race: take the update path instead
                         raise HrmsError("ambiguous_key", doctype=doctype) from None
+                    if doctype == "Leave Application":
+                        # Recorded once, in the protected store, never through the document payload.
+                        _guard(self._store.record_applicant_identity, doctype, created["name"], principal.strip())
                     return ApplyResult(doctype, key, created["name"], "created", tuple(values))
                 return self._update_existing(spec, values, existing, key, user)
         raise HrmsError("operation_failed")  # pragma: no cover - the loop always returns or raises
@@ -291,7 +297,8 @@ class HrmsService:
             if application is None:
                 raise HrmsError("record_not_found", doctype=doctype)
             applicant = self._employee(application.get("employee"))
-            self._require_separate_applicant(user, application, applicant)
+            filed = _guard(self._store.get_applicant_identity, doctype, application["name"])
+            self._require_separate_applicant(user, filed, applicant)
             if not roles & HR_ADMIN_ROLES:
                 # A Leave Approver who is not an administrator must be the named approver.
                 designated = _identity(application.get("leave_approver"))
@@ -311,13 +318,13 @@ class HrmsService:
             )
 
     @staticmethod
-    def _require_separate_applicant(user: str, application: Mapping[str, Any], applicant: Mapping[str, Any]) -> None:
+    def _require_separate_applicant(user: str, filed_principal: Any, applicant: Mapping[str, Any]) -> None:
         """The caller must not be the applicant, and the applicant's identity must be resolved.
 
         Two identities are compared: the principal captured when the application was filed, and the
         employee record's current link. The caller may match neither. Both must be present, non-empty
         text and still agree; anything else (missing, changed, wrong type) fails closed."""
-        filed = _identity(application.get("applicant_user"))
+        filed = _identity(filed_principal)
         current = _identity(applicant.get("user_id"))
         me = user.strip().casefold()
         if me in (filed, current):

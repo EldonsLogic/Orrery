@@ -54,6 +54,9 @@ class InMemoryStore:
         self.tenant = tenant
         self.rows: dict[str, dict[str, dict[str, Any]]] = {}
         self.writes = 0
+        # Protected store for captured applicant principals, kept apart from `rows` so no payload
+        # or ordinary update can reach it (the engine adapter uses a protected custom field).
+        self.applicant_identities: dict[tuple[str, str], Any] = {}
         self._mutex = threading.RLock()  # guards `rows`; `key_lock` serialises one business key
         self._key_locks: dict[tuple[str, ...], threading.Lock] = {}
 
@@ -69,6 +72,19 @@ class InMemoryStore:
             rows = list(self.rows.get(doctype, {}).values())
             hits = [r for r in rows if all(r.get(k) == v for k, v in filters.items())]
             return [copy.deepcopy(r) for r in hits[:2]]
+
+    def find_current(self, doctype: str, filters: Mapping[str, Any]) -> list[dict[str, Any]]:
+        return self.find(doctype, filters)  # one consistent copy: every read is already current
+
+    def record_applicant_identity(self, doctype: str, name: str, principal: str) -> None:
+        with self._mutex:
+            if self.applicant_identities.get((doctype, name)) not in (None, ""):
+                raise ValueError("applicant identity already recorded")
+            self.applicant_identities[(doctype, name)] = principal
+
+    def get_applicant_identity(self, doctype: str, name: str) -> Any:
+        with self._mutex:
+            return self.applicant_identities.get((doctype, name))
 
     def insert(self, doctype: str, values: Mapping[str, Any]) -> dict[str, Any]:
         with self._mutex:

@@ -10,8 +10,8 @@ Plan ID: ERP-008. Detail for ADR-0039. Nothing here is built. This is internal d
 | Input | Source | Trust |
 |---|---|---|
 | Roles, entities, fields, locations, workflows | Applied Blueprint revision, via the compiled artifact (contract section 9) | Verified by hash and schema; values are data, never code (T24, T26) |
-| Entity, field, location and transition names in the engine | Engine mapping (contracts/engine-mapping.md, `roleMapping` and entity maps) plus entity manifest `transitionKind` (ADR-0037) | Reviewed, versioned |
-| Who holds which role | Single authoritative assignment store **outside the engine site** (control-plane or identity, refining [ADR-0007](../decisions/ADR-0007-identity.md) item 9), delivered by `sync_members` (follow-up `sync_principals` / extended `sync_members` contract ADR for agents & support) | Authenticated service channel only |
+| Entity, field, location and transition names in the engine | Engine mapping (contracts/engine-mapping.md, `roleMapping` and entity maps) plus entity reviewed mapping of engine draft capability and Blueprint `workflows[].transitions[].kind` (ADR-0037) | Reviewed, versioned |
+| Who holds which role | Single authoritative assignment store **outside the engine site** (regional provisioning assignment store, proposed replacement of [ADR-0007](../decisions/ADR-0007-identity.md) item 9 location wording; Q-210 blocks implementation pending founder acceptance), delivered by `sync_members` (follow-up `sync_principals` / extended `sync_members` contract ADR for agents & support) | Authenticated service channel only |
 | Baseline grants | Component manifests or engine mapping (D-5); validated strictly read-only, non-C3/C4, never `All`/`Guest` | Reviewed, versioned, structurally linted |
 
 | Output (per site, all adapter-managed) | Engine object |
@@ -29,7 +29,7 @@ Plan ID: ERP-008. Detail for ADR-0039. Nothing here is built. This is internal d
 | read | read | always |
 | read | report, print | Only after `DENY-21`, `DENY-22` and `DENY-23` pass on the bench. Off until then |
 | create | create | needs read on the same entity in the Blueprint, else the plan rejects; masked-entity create gated on `DENY-23` |
-| update | write | needs read; masked-entity write gated on `DENY-23`; for agents, restricted to `docstatus == 0` drafts on entities whose manifest `transitionKind` (ADR-0037) permits drafts, and stripped on non-submittable master/settings entities (`DENY-36`) |
+| update | write | needs read; masked-entity write gated on `DENY-23`; for agents, restricted to `docstatus == 0` drafts on entities whose reviewed mapping of engine draft capability and Blueprint `workflows[].transitions[].kind` (ADR-0037) permits drafts, and stripped on non-submittable master/settings entities (`DENY-36`) |
 | delete | delete | needs read; never for agent roles |
 | submit | submit | needs read; never for agent roles |
 | cancel | cancel | needs read; never for agent roles |
@@ -68,11 +68,11 @@ The layout is a pure function of (previous layout, target roles, target fields).
 - all custom permission rules on mapped document types, plus all permissions held by built-in/automatic roles (`All`, `Guest`, `Desk User`, `Website Manager`) across mapped AND unmapped business, audit, system, file and ledger types (`Version`, `Comment`, `Communication`, `Activity Log`, `Notification Log`, `File`, `ToDo`, `User`, `Prepared Report`, `Data Import`, `GL Entry`, `Stock Ledger Entry`) outside an explicit reviewed allowlist;
 - the level of every mapped field;
 - transition allowed roles on mapped workflows;
-- the complete set of enabled engine users (shadow, agent, support, unmanaged) and **every** role assigned to each (managed AND built-in/automatic), plus user permission rows;
+- the complete user inventory, enabled flags and **every** role on every user (shadow, agent, support, unmanaged, including disabled users) (managed AND built-in/automatic), plus user permission rows;
 - reviewed baseline grants (structurally checked: read-only only, no C3/C4 fields, never `All`/`Guest`).
 
 The expected value is computed from the applied Blueprint, the mapping, the baseline grants and the external assignment store at `syncVersion`. It is compared:
-- as a post-condition of every `sync_members` and of every role-touching `apply` (which clears affected user caches, triggers `sync_members` at current `syncVersion`, and checks the full fingerprint before reporting `applied`);
+- as a post-condition of every `sync_members` and of every role-touching `apply` (which clears affected user caches, invokes `sync_members` with a new store-issued monotonic `syncVersion`, and checks the full fingerprint before reporting `applied`);
 - on a schedule (D-1);
 - on demand from the team console.
 
@@ -93,14 +93,14 @@ On mismatch the adapter records the diff internally, alerts, strips any non-mana
 | RM-010 | The engine permission cache is cleared for affected users before the apply reports success |
 | RM-011 | Drift strips non-managed roles/unmanaged enabled users and removes extra grants before restoring approved layout; repeated drift sets `recovery_required` |
 | RM-012 | `recovery_required` makes the gateway refuse tenant calls except platform status reads |
-| RM-013 | Agent engine users have no password, API key or email, cannot sign in, carry one managed role per grant, receive `create`/`write` only on `docstatus == 0` drafts of draft-capable entities (non-submittable master/settings writes stripped), disable synchronously on revoke/expire/kill (`ALP-022`), fail closed when kill flag is unreachable (`ALP-036`), and use principal-kind-bound `S09` credentials |
+| RM-013 | Agent engine users have no password, API key or email, cannot sign in, carry one managed role per grant, receive `create`/`write` only on `docstatus == 0` drafts of draft-capable entities (non-submittable master/settings create and write stripped), disable synchronously on revoke/expire/kill (`ALP-022`), fail closed when kill flag is unreachable (`ALP-036`), and use principal-kind-bound `S09` credentials |
 | RM-014 | No agent call runs as a human shadow user; engine bounds the grant only while the gateway enforces on-behalf-of intersection (residual risk documented) |
 | RM-015 | Multiple roles on one member with different scopes on a shared entity (`own_records` + `branch`, `branch-A` + `branch-B`) are forbidden and rejected at assignment store & `sync_members` (`scope_conflict`) |
 | RM-016 | `isAdmin` produces no engine permission |
 | RM-017 | Share, import, set user permissions and email are never granted |
 | RM-018 | Report, print, and masked-entity `create`/`write` stay gated until `DENY-21`, `DENY-22`, `DENY-23`, and `DENY-38` pass on the bench |
 | RM-019 | A role with `branch`, `warehouse` or `department` scope rejects at plan if any granted non-baseline entity lacks a mapped link field for that location type (`DENY-35`) |
-| RM-020 | A role-touching `apply` never reports `applied` until permission cache clear, full `sync_members` at `syncVersion`, and full drift fingerprint post-condition succeed; failure compensates or enters `recovery_required` (`DENY-43`) |
+| RM-020 | A role-touching `apply` never reports `applied` until permission cache clear, full `sync_members` at a newly allocated store-issued `syncVersion`, and full drift fingerprint post-condition succeed; failure compensates or enters `recovery_required` (`DENY-43`) |
 | RM-021 | Baseline reference-data grants must pass structural validation: `read`-only, no C3/C4 fields, never `All`/`Guest` (`DENY-45`) |
 | RM-022 | Gateway error mapping (`PLT-024`) strips managed engine role names so engine identifiers never surface to callers (`ADR-0016`, `DENY-46`) |
 
@@ -144,7 +144,7 @@ Each runs against the fake adapter and the real adapter on a bench. "Denied" mea
 | DENY-33 | Agent call attempts to run as its owner's shadow user or use human-bound `S09` credential | Refused by the adapter |
 | DENY-34 | Member assigned conflicting scopes on a shared entity (`own_records` + `branch`, or `branch-A` + `branch-B`); vs non-conflicting roles on disjoint entities (branch-A sales + company-wide read-only on separate DocType) | Shared-entity mixed scope rejected (`scope_conflict`); disjoint scopes enforced per entity without widening |
 | DENY-35 | Branch-scoped role grants a non-baseline entity with no mapped `branch` field | Rejected at plan (`RM-019`) |
-| DENY-36 | Agent attempts direct `write` on non-submittable master or settings entity (Supplier bank details, Customer, Item, price list) | Denied (only `docstatus == 0` drafts on draft-capable entities allowed) |
+| DENY-36 | Agent attempts direct `create` or `write` on non-submittable master or settings entity (Supplier bank details, Customer, Item, price list) | Denied (only `docstatus == 0` drafts on draft-capable entities allowed) |
 | DENY-37 | Normal shadow user or automatic role probes unmapped audit/system/file/ledger DocTypes (`Version`, `Comment`, `File`, `Communication`, `Prepared Report`, `User`, `GL Entry`) | Denied; automatic permissions stripped before `ready` and by drift (`RM-005`) |
 | DENY-38 | Caller injects `hiddenFields` or `readOnlyFields` (including child-table fields and `reqd` hidden fields) via `insert` or REST `PUT` | Rejected or stripped; field unaltered on stored record (gates RM-018) |
 | DENY-39 | `branch-A` user invokes autocomplete (`search_link` / `validate_link`) targeting `branch-B` `Customer` or `Employee` | Out-of-scope records absent; existence not leaked |
@@ -154,6 +154,8 @@ Each runs against the fake adapter and the real adapter on a bench. "Denied" mea
 | DENY-43 | Fault in `sync_members` immediately after a role-touching `apply` narrows role scope | `apply` compensates back to pre-apply layout (or `recovery_required`); never reports `applied` (`RM-020`) |
 | DENY-44 | Unmanaged enabled engine user created directly in site, or extra built-in role attached | Caught by drift fingerprint; unmanaged user disabled and role stripped first (`RM-011`) |
 | DENY-45 | Baseline grant proposal with `write`/`create`/`export`, C3/C4 field, or `All`/`Guest` role | Rejected by structural lint/validation (`RM-021`) |
+| DENY-47 | Agent attempts create or write on submitted/cancelled document, or create Supplier, Item or price list directly | Denied; no live master or document mutation; pending-change draft only |
+| DENY-48 | Member with canUseChatActions false invokes a chat action; repeat human-scope/agent-grant TC-13 mismatch | Gateway refuses; engine alone bounds agent grant only, residual dependency recorded |
 | DENY-46 | Engine permission error mentioning a managed engine role name passes through gateway (`PLT-024`) | Managed role name stripped from customer-visible error (`RM-022`, `ADR-0016`) |
 
 Allowed-case controls (so denies are not vacuous): the owner role can do every action the Blueprint lists; a sales role can create an order in its branch; an accountant sees `credit_limit`.
@@ -169,3 +171,5 @@ Allowed-case controls (so denies are not vacuous): the owner role can do every a
 1. *(Resolved for Eldon's review)* `agent-least-privilege.md` §3.1, `ALP-001`, and `OQ-2` are updated in this PR to state that an agent never uses a human shadow engine user and gets a separate draft-only agent engine user carrying one grant-intersected managed role per agent grant (`ADR-0039`).
 2. Per-member scope values (a sales rep for branch A, another for branch B, same role) are not in Blueprint schema v0; today that needs two roles. A schema change is Eldon's lane.
 3. Follow-up contract ADR (Eldon's lane): extend `sync_members` or add `sync_principals` to carry agent (`ag_*`) and JIT support (`PLT-019`) principals with grant-intersected capability sets and expiry (`S17`), plus `engine.permission_drift` on `contracts/events.md`.
+
+Implementation gates: Q-210 must be resolved before moving assignments outside the engine site. Agent draft capability is reviewed mapping metadata, not a nonexistent manifest `transitionKind` field: ADR-0037 defines Blueprint transition `kind`, which alone does not establish a safe engine draft state. Missing capability proof denies agent writes. Hold a tenant reconciliation fence over apply, full sync and fingerprint verification, blocking tenant business calls; retain it on any failed or unverified compensation.

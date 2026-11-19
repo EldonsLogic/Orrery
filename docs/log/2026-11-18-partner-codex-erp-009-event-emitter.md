@@ -14,7 +14,7 @@ Registered G1 trading document lifecycle hooks and added a per-site transactiona
 - `apps/engine/change_engine/change_engine/tests/test_erp_009_record_events.py`: schema, event order, lifecycle, rollback, retry, tenant scoping, invalid acknowledgement and engine disclosure checks.
 - `apps/engine/change_engine/README.md` and `pyproject.toml`: deployment instructions and shared schema validation dependency.
 - `docs/PLAN.md`: claimed ERP-009 for the partner and left it `doing` for review.
-- `docs/open-questions.md`: Q-284 to Q-288.
+- `docs/open-questions.md`: Q-308 to Q-312.
 
 ## Decisions
 - Use [ADR-0006](../decisions/ADR-0006-tenancy-site-per-tenant.md) for site isolation and [ADR-0016](../decisions/ADR-0016-engine-invisibility.md) for the event envelope. The scheduler drains committed rows per site. The receiver assigns the stream sequence and de-duplicates on the stored ULID.

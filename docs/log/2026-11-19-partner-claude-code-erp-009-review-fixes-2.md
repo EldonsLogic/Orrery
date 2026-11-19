@@ -17,7 +17,7 @@ Re-checked every MED item of the cross-model review of PR #162 against the code 
 ## Decisions
 - Review finding "one poison row blocks the queue" stays fixed, but quarantine is limited to rejections of the event itself. A sink outage must not silently drop audit events after five scheduler ticks (the previous behaviour).
 - Dev sites that already ran an earlier head of this PR have the old subject table (`deleted` column) and will not re-run the patch: drop `tabChange Engine Event Subject` and `tabChange Engine Event Outbox` and migrate again. Nothing is deployed.
-- Not checked: other open PRs for `Q-217` to `Q-221` collisions (main ended at Q-209 then; renumbered to Q-284 to Q-288 after merging origin/main).
+- Not checked: other open PRs for `Q-217` to `Q-221` collisions (main ended at Q-209 then; renumbered to Q-308 to Q-312 after merging origin/main).
 
 ## Verification
 - Before the fixes the new tests failed (19 failed with the new fixture schema, including the three new defect tests). After: `PYTHONPATH=apps/engine/change_engine python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_009_record_events.py -q`: 22 passed.

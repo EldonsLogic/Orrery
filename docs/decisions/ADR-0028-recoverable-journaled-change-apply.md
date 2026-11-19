@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon and partner (sayegh9, 2026-11-19; cross-model review via GPT-6.1 Sol; MariaDB implicit-commit and pinned Frappe v15.126.0 sources recorded in GOV-054 session log; ERP-026 and Phase 0 Stage 6 audit-status gap tracked)
+Approved by: partner (sayegh9, 2026-11-19; cross-model review via GPT-6.1 Sol; MariaDB implicit-commit and pinned Frappe v15.126.0 sources recorded in GOV-054 session log; ERP-026 and Phase 0 Stage 6 audit-status gap tracked); Eldon recorded review on PR #183
 
 ## Context
 Database structure changes and application metadata cannot share one atomic transaction, and posted financial documents and external sends cannot be undone by a rollback. The draft engine-adapter and compiled-artifact contracts currently promise atomic apply and an inverse for every change set. The partner and the independent review asked for honest wording. Contracts changes need an ADR ([../RULES.md](../RULES.md) rule 19).

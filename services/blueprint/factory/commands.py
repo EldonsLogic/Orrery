@@ -16,8 +16,12 @@ from pathlib import Path
 from . import errors as E
 
 # name -> argv template; "{path}" is replaced by the validated relative test path.
+# pytest is isolated from anything the component ships (SEC-010 review H8): an empty config file (-c devnull) so
+# pytest.ini, tox.ini, setup.cfg and pyproject.toml are never read, no addopts, no conftest.py, no doctest
+# collection of text files, no cache, and no plugin auto-loading (see scrubbed_env).
 ALLOWED = {
-    "pytest": [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--rootdir", ".", "{path}"],
+    "pytest": [sys.executable, "-m", "pytest", "-q", "-c", os.devnull, "--rootdir", ".", "--noconftest",
+               "-o", "addopts=", "-p", "no:cacheprovider", "-p", "no:doctest", "{path}"],
 }
 OUTPUT_TAIL = 2000
 MAX_WRITE_BYTES = 10_000_000
@@ -41,6 +45,7 @@ def scrubbed_env(home: Path, workdir: Path) -> dict:
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTHONNOUSERSITE": "1",
         "PYTHONPATH": str(workdir),
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
     }
 
 

@@ -1,0 +1,211 @@
+{
+  "version": "0.1.0",
+  "reviewStatus": "proposed_for_native_speaker_review",
+  "note": "Arabic is unreviewed machine-assisted draft text. A native speaker must review it before it reaches customers (ADR-0033). Reviewer, date: pending.",
+  "errors": {
+    "doctype_not_allowed": {
+      "en": "This record type is not available.",
+      "ar": "نوع السجل هذا غير متاح."
+    },
+    "session_invalid": {
+      "en": "Your session is not valid. Sign in again.",
+      "ar": "جلسة الدخول غير صالحة. سجّل الدخول من جديد."
+    },
+    "tenant_mismatch": {
+      "en": "The workspace does not match this request.",
+      "ar": "مساحة العمل لا تطابق هذا الطلب."
+    },
+    "company_missing": {
+      "en": "A company is required.",
+      "ar": "يجب تحديد الشركة."
+    },
+    "company_not_permitted": {
+      "en": "You do not have access to this company.",
+      "ar": "ليس لديك صلاحية الوصول إلى هذه الشركة."
+    },
+    "company_mismatch": {
+      "en": "The company in the request does not match your current company.",
+      "ar": "الشركة في الطلب لا تطابق شركتك الحالية."
+    },
+    "caller_identity_not_accepted": {
+      "en": "Roles, users and workspaces cannot be set in a request.",
+      "ar": "لا يمكن تحديد الأدوار أو المستخدمين أو مساحة العمل داخل الطلب."
+    },
+    "role_not_permitted": {
+      "en": "Your role does not allow this action.",
+      "ar": "دورك لا يسمح بهذا الإجراء."
+    },
+    "permission_denied": {
+      "en": "You do not have permission for this action.",
+      "ar": "ليس لديك صلاحية لهذا الإجراء."
+    },
+    "field_permission_denied": {
+      "en": "You do not have permission to change one of these fields.",
+      "ar": "ليس لديك صلاحية لتعديل أحد هذه الحقول."
+    },
+    "payload_invalid": {
+      "en": "The request is not in the expected format.",
+      "ar": "صيغة الطلب غير متوقعة."
+    },
+    "field_not_allowed": {
+      "en": "This field is not accepted.",
+      "ar": "هذا الحقل غير مقبول."
+    },
+    "payroll_logic_not_allowed": {
+      "en": "Pay formulas and rules cannot be set here. Enter fixed amounts only.",
+      "ar": "لا يمكن إدخال معادلات الرواتب أو قواعدها هنا. أدخل مبالغ ثابتة فقط."
+    },
+    "field_required": {
+      "en": "A required field is missing.",
+      "ar": "هناك حقل مطلوب غير مُدخل."
+    },
+    "invalid_text": {
+      "en": "The text is empty, too long or contains invalid characters.",
+      "ar": "النص فارغ أو طويل جدًا أو يحتوي على رموز غير صالحة."
+    },
+    "invalid_decimal": {
+      "en": "Enter a valid number using digits only.",
+      "ar": "أدخل رقمًا صحيحًا باستخدام الأرقام فقط."
+    },
+    "decimal_out_of_range": {
+      "en": "The number is outside the allowed range.",
+      "ar": "الرقم خارج النطاق المسموح."
+    },
+    "decimal_precision_exceeded": {
+      "en": "The number has too many decimal places.",
+      "ar": "الرقم يحتوي على عدد كبير من المنازل العشرية."
+    },
+    "invalid_date": {
+      "en": "Enter a valid date as year-month-day.",
+      "ar": "أدخل تاريخًا صحيحًا بصيغة سنة-شهر-يوم."
+    },
+    "date_range_invalid": {
+      "en": "The end date cannot be before the start date.",
+      "ar": "لا يمكن أن يسبق تاريخ النهاية تاريخ البداية."
+    },
+    "invalid_choice": {
+      "en": "The value is not one of the allowed choices.",
+      "ar": "القيمة ليست من الخيارات المسموحة."
+    },
+    "invalid_boolean": {
+      "en": "The value must be yes or no.",
+      "ar": "يجب أن تكون القيمة نعم أو لا."
+    },
+    "invalid_list": {
+      "en": "The list of rows is not valid.",
+      "ar": "قائمة الصفوف غير صالحة."
+    },
+    "duplicate_row": {
+      "en": "The same record appears more than once.",
+      "ar": "السجل نفسه مكرر أكثر من مرة."
+    },
+    "employee_not_found": {
+      "en": "The employee was not found in this company.",
+      "ar": "لم يُعثر على الموظف في هذه الشركة."
+    },
+    "record_not_found": {
+      "en": "The record was not found.",
+      "ar": "لم يُعثر على السجل."
+    },
+    "ambiguous_key": {
+      "en": "More than one record matches. Contact support.",
+      "ar": "هناك أكثر من سجل مطابق. تواصل مع الدعم."
+    },
+    "decision_invalid": {
+      "en": "The decision must be approve or reject.",
+      "ar": "يجب أن يكون القرار قبولًا أو رفضًا."
+    },
+    "self_approval_forbidden": {
+      "en": "You cannot approve or reject your own leave request.",
+      "ar": "لا يمكنك قبول أو رفض طلب إجازتك بنفسك."
+    },
+    "not_designated_approver": {
+      "en": "You are not the approver assigned to this request.",
+      "ar": "لست المعتمِد المعيَّن لهذا الطلب."
+    },
+    "leave_application_not_open": {
+      "en": "This leave request is no longer open for changes.",
+      "ar": "طلب الإجازة لم يعد مفتوحًا للتعديل."
+    },
+    "leave_application_already_decided": {
+      "en": "A decision has already been made on this leave request.",
+      "ar": "سبق اتخاذ قرار بشأن طلب الإجازة هذا."
+    },
+    "operation_failed": {
+      "en": "The action could not be completed. Try again; repeating it is safe.",
+      "ar": "تعذّر إكمال الإجراء. حاول مرة أخرى، فالتكرار آمن."
+    }
+  },
+  "doctypeLabels": {
+    "Employee": {
+      "en": "Employee",
+      "ar": "موظف"
+    },
+    "Department": {
+      "en": "Department",
+      "ar": "القسم"
+    },
+    "Designation": {
+      "en": "Designation",
+      "ar": "المسمى الوظيفي"
+    },
+    "Branch": {
+      "en": "Branch",
+      "ar": "الفرع"
+    },
+    "Leave Type": {
+      "en": "Leave type",
+      "ar": "نوع الإجازة"
+    },
+    "Leave Period": {
+      "en": "Leave period",
+      "ar": "فترة الإجازات"
+    },
+    "Leave Policy": {
+      "en": "Leave policy",
+      "ar": "سياسة الإجازات"
+    },
+    "Leave Allocation": {
+      "en": "Leave allocation",
+      "ar": "رصيد الإجازات المخصص"
+    },
+    "Leave Application": {
+      "en": "Leave request",
+      "ar": "طلب إجازة"
+    },
+    "Salary Component": {
+      "en": "Salary component",
+      "ar": "مكوّن الراتب"
+    },
+    "Salary Structure": {
+      "en": "Salary structure",
+      "ar": "هيكل الراتب"
+    },
+    "Salary Structure Assignment": {
+      "en": "Salary structure assignment",
+      "ar": "تعيين هيكل الراتب"
+    }
+  },
+  "actionLabels": {
+    "created": {
+      "en": "Created",
+      "ar": "تم الإنشاء"
+    },
+    "updated": {
+      "en": "Updated",
+      "ar": "تم التحديث"
+    },
+    "unchanged": {
+      "en": "No change",
+      "ar": "لا تغيير"
+    },
+    "approved": {
+      "en": "Approved",
+      "ar": "تمت الموافقة"
+    },
+    "rejected": {
+      "en": "Rejected",
+      "ar": "تم الرفض"
+    }
+  }
+}

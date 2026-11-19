@@ -47,3 +47,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0043-department-assistants.md](ADR-0043-department-assistants.md) | Department-scoped assistants in the Blueprint (Blueprint 0.3.0) | Proposed |
 | [ADR-0043-department-assistants.md](ADR-0043-department-assistants.md) | Department-scoped assistants in the Blueprint (Blueprint 0.4.0) | Proposed |
 | [ADR-0044-ag-ui-agent-to-screen-transport.md](ADR-0044-ag-ui-agent-to-screen-transport.md) | AG-UI as the agent-to-screen transport, not an authority | Proposed |
+| [ADR-0045-opening-import-transaction-boundary.md](ADR-0045-opening-import-transaction-boundary.md) | Opening import identity and transaction boundary | Proposed |

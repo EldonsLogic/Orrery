@@ -4,6 +4,10 @@
 Used by `.github/workflows/real-bench.yml` and local developers to verify the
 change engine against real Frappe v15 / ERPNext / HRMS / MariaDB 11.4 / Redis
 services instead of mocks. Never prints database or admin passwords.
+
+Startup, provisioning and tests each have a five-minute limit. The normal CI
+path's phase limits total 22.5 minutes, including diagnostics and teardown,
+leaving headroom for readiness polling and setup within the 25-minute CI job.
 """
 from __future__ import annotations
 
@@ -89,7 +93,7 @@ def _wait_for_engine_ready(
     project: str,
     compose_file: Path,
     env: dict[str, str],
-    timeout_seconds: int = 180,
+    timeout_seconds: int = 120,
 ) -> None:
     deadline = time.monotonic() + timeout_seconds
     last_err = ""
@@ -156,7 +160,7 @@ def _provision_site(
         "ce_sec_005_provision",
         site_name,
         db_name,
-        timeout=900,
+        timeout=300,
     )
     if res.returncode != 0:
         raise RuntimeError(f"Failed provisioning site {site_name} (exit {res.returncode}).")
@@ -257,7 +261,7 @@ def run_real_bench_ci(
             if build:
                 up_args.append("--build")
             print(f"Starting pinned Frappe bench stack ({project_name}, port {port})...")
-            up = _run_compose(project_name, compose_file, env, *up_args, timeout=1200, stream=True)
+            up = _run_compose(project_name, compose_file, env, *up_args, timeout=300, stream=True)
             if up.returncode != 0:
                 print(f"Failed starting Compose stack {project_name}.", file=sys.stderr)
                 return up.returncode
@@ -273,7 +277,7 @@ def run_real_bench_ci(
             [sys.executable, str(DOCKER_DIR / "verify_dev_bench.py")],
             cwd=str(DOCKER_DIR),
             env={**env, "COMPOSE_PROJECT_NAME": project_name, "SITE_NAME": site, "ENGINE_PORT": str(port)},
-            timeout=180,
+            timeout=120,
             check=False,
         )
         if verify_res.returncode != 0:
@@ -302,7 +306,7 @@ def run_real_bench_ci(
             "change_engine.tests.test_ce_sec_005_real_bench",
             "change_engine.tests.test_ce_sec_005_live_http",
             "-v",
-            timeout=600,
+            timeout=300,
             stream=True,
         )
         succeeded = test_res.returncode == 0
@@ -323,7 +327,7 @@ def run_real_bench_ci(
                     "down",
                     "-v",
                     "--remove-orphans",
-                    timeout=180,
+                    timeout=120,
                 )
                 if cleanup.returncode:
                     raise RuntimeError(f"Compose teardown failed (exit {cleanup.returncode}).")

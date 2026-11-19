@@ -11,7 +11,7 @@ Added the simulation review layer (derived anomaly rules SIM-132 to SIM-136, bil
 ## Files touched
 - services/blueprint/simulator/review.py, signoff.py, labels.json, codes.py, __init__.py: review and sign-off
 - services/blueprint/tests/simulator/test_sim_signoff.py: tests
-- docs/architecture/simulator.md, docs/PLAN.md, docs/open-questions.md (Q-265 to Q-267)
+- docs/architecture/simulator.md, docs/PLAN.md, docs/open-questions.md (Q-271 to Q-273)
 
 ## Decisions
 - None, or link to ADR / strategy decision.
@@ -20,4 +20,4 @@ Added the simulation review layer (derived anomaly rules SIM-132 to SIM-136, bil
 Unknown or approximate, if known.
 
 ## Next step
-BPL-020 consumes `gate_evidence`; a web row for the sign-off screen (Q-266); QA-011.
+BPL-020 consumes `gate_evidence`; a web row for the sign-off screen (Q-272); QA-011.

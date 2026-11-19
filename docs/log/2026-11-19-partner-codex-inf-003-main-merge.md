@@ -6,12 +6,12 @@ Tool and model: codex / gpt-6.1-sol
 Plan IDs: INF-003
 
 ## Summary
-Merged origin/main f444b67 into PR #163, preserved every main validation command, integrated CE-SEC-002 and QA-007 into filtered CI, and renumbered the staging prerequisites question from Q-222 to Q-268. INF-003 remains doing pending staging.
+Merged origin/main f444b67 into PR #163, preserved every main validation command, integrated CE-SEC-002 and QA-007 into filtered CI, and renumbered the staging prerequisites question from Q-222 to Q-273. INF-003 remains doing pending staging.
 
 ## Files touched
 - `.github/workflows/tests.yml`: retain main CE-SEC mock tests under the engine filter; run QA-007 brand tests with tools/token triggers and mapped-test recognition; preserve SEC-010 under the Blueprint suite and all prior fail-closed diff fixes.
 - `scripts/tests/test_services_ci_filter.py`: regression coverage for newly merged suite paths and brand inputs.
-- `docs/open-questions.md` and two PR-only logs: Q-268 references; main logs unchanged.
+- `docs/open-questions.md` and two PR-only logs: Q-273 references; main logs unchanged.
 - `docs/PLAN.md`: preserve main statuses and INF-003 doing.
 
 ## Verification
@@ -23,7 +23,7 @@ Merged origin/main f444b67 into PR #163, preserved every main validation command
 - Full local workflow replay and required repository checks recorded below.
 
 ## Decisions
-- No architecture change. Q-268 remains the staging blocker; no deployment enabled.
+- No architecture change. Q-273 remains the staging blocker; no deployment enabled.
 
 ## Tokens or cost
 Unknown.

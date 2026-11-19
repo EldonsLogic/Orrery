@@ -19,7 +19,7 @@ Main advanced to 9ec57d8 (DSC-007) during validation. Merged that follow-up into
 - Imported web changes were not modified or independently retested in this integration-only update.
 
 ## Decisions
-- No new decisions; Q-268 remains the staging blocker.
+- No new decisions; Q-273 remains the staging blocker.
 
 ## Tokens or cost
 Unknown.

@@ -70,7 +70,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-002 | Secrets management design (store, rotate, never in repo) | Security | G1 | SEC-001 | partner | todo |
 | SEC-003 | Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data | Security | G1 | SEC-001 | eldon | done |
 | SEC-004 | Cross-tenant isolation test suite | Security | G1 | ERP-003 | partner | todo |
-| SEC-005 | MFA for owners, staff and support access | Security | G2 | PLT-005 | eldon | todo |
+| SEC-005 | MFA for owners, staff and support access | Security | G2 | PLT-005 | eldon | done |
 | SEC-006 | Brand asset upload enforcement in storage: PNG/JPG/SVG only, size limits, SVG sanitiser, malware scan, per-tenant storage (rules from SEC-018) | Security | G2 | PLT-017,SEC-018 | partner | todo |
 | SEC-007 | Dependency and SBOM scanning for Python and Node (beyond dependabot actions) | Security | G2 | GOV-006 | eldon | done |
 | SEC-008 | Audit log integrity: append-only, hash-chained, exported off-box | Security | G2 | PLT-015 | eldon | todo |
@@ -100,7 +100,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-006 | KSA chart of accounts template and tax codes | Compliance | G1 | ERP-001 | partner | todo |
 | CMP-007 | ZATCA onboarding automation per tenant (CSID, certificates, environments) | Compliance | G2 | CMP-004,PLT-003 | partner | todo |
 | CMP-008 | ZATCA regression suite run on every engine or component change | Compliance | G2 | CMP-004,QA-001 | partner | todo |
-| CMP-009 | UAE e-invoicing: choose accredited service provider | Compliance | G2 | CMP-001 | eldon | todo |
+| CMP-009 | UAE e-invoicing: choose accredited service provider | Compliance | G2 | CMP-001 | eldon | done |
 | CMP-010 | KSA VAT return report | Compliance | G2 | CMP-006 | partner | todo |
 | CMP-011 | UAE e-invoicing integration via the chosen provider | Compliance | G3 | CMP-009 | partner | todo |
 | CMP-012 | UAE VAT return report | Compliance | G3 | CMP-011 | partner | todo |
@@ -142,7 +142,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-004 | Template-first discovery flow: show draft, owner corrects | Discovery | G2 | DSC-002,OPR-010 | eldon | todo |
 | DSC-005 | Interview agent in Arabic and English | Discovery | G2 | DSC-001,OPR-010 | eldon | todo |
 | DSC-006 | Gap analysis: Blueprint versus library | Discovery | G2 | BPL-010,DSC-004 | eldon | todo |
-| DSC-007 | Owner-readable visual Blueprint viewer | Discovery | G2 | BPL-003,WEB-003 | eldon | todo |
+| DSC-007 | Owner-readable visual Blueprint viewer | Discovery | G2 | BPL-003,WEB-003 | eldon | done |
 | DSC-008 | Quote generator from Blueprint and gap analysis | Discovery | G2 | DSC-006 | eldon | todo |
 | DSC-009 | Owner approval flow (draft to owner_approved) | Discovery | G2 | DSC-007,BPL-020 | eldon | todo |
 | DSC-010 | Connector framework: tiers, sandboxing, audit, untrusted-content handling | Discovery | G2 | DSC-003,SEC-003 | eldon | done |
@@ -231,7 +231,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BRD-003 | Identity decision: final name, logo direction, Arabic spelling | Brand | G1 | LEG-008 | eldon | todo |
 | BRD-004 | Token layering: base, product theme, tenant overrides, user preference | Brand | G1 | BRD-002 | eldon | done |
 | BRD-005 | Theme engine: light, dark, system, per-user persistence | Brand | G2 | BRD-004 | eldon | done |
-| BRD-006 | Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject | Brand | G1 | BRD-004 | eldon | doing |
+| BRD-006 | Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject | Brand | G1 | BRD-004 | eldon | done |
 | BRD-007 | Brand asset pipeline: logo variants, auto-derived dark variant, size generation | Brand | G2 | BRD-004,SEC-018 | eldon | doing |
 | BRD-008 | Favicon generation from the tenant logo | Brand | G2 | BRD-007 | eldon | todo |
 | BRD-009 | Design system rollout: generate all logo files, sizes, favicons, social sizes, the product design system and brand guidelines | Brand | G2 | BRD-003,LEG-008 | eldon | todo |
@@ -241,7 +241,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | WEB-001 | Marketing website v1, bilingual | Web | G2 | BRD-009 | eldon | todo |
 | WEB-002 | Contact and waitlist form with PDPL consent | Web | G2 | WEB-001,LEG-012 | eldon | todo |
 | WEB-003 | App shell: sign-in, workspace switcher, navigation | Web | G2 | PLT-005,BRD-010 | eldon | done |
-| WEB-004 | Chat screen with modes | Web | G2 | WEB-003,OPR-010 | eldon | todo |
+| WEB-004 | Chat screen with modes | Web | G2 | WEB-003,OPR-010 | eldon | done |
 | WEB-005 | Approval inbox screen | Web | G2 | WEB-003,OPR-007 | eldon | todo |
 | WEB-006 | Reports and dashboard screens | Web | G2 | WEB-003,OPR-008 | eldon | todo |
 | WEB-007 | Settings: Branding screen with live preview and contrast feedback | Web | G2 | WEB-003,BRD-006,BRD-007 | eldon | todo |
@@ -259,7 +259,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-004 | Compiler snapshot tests on Blueprint fixtures | Quality | G1 | BPL-004 | eldon | done |
 | QA-005 | Agent behaviour evals (tool choice, refusal, confirm-before-write) | Quality | G2 | OPR-002,QA-001 | eldon | todo |
 | QA-006 | Prompt-injection eval suite | Quality | G2 | SEC-003,QA-001 | eldon | done |
-| QA-007 | Contrast tests for tenant themes in light and dark | Quality | G2 | BRD-006 | eldon | todo |
+| QA-007 | Contrast tests for tenant themes in light and dark | Quality | G2 | BRD-006 | eldon | done |
 | QA-008 | RTL visual regression tests, including tenant-branded screens and documents | Quality | G2 | BRD-010 | eldon | done |
 | QA-009 | End-to-end rehearsal: discovery to simulated Blueprint to live on synthetic data | Quality | G2 | BPL-020,DSC-009,OPR-010 | eldon | todo |
 | QA-010 | Eval thresholds enforced in CI as release gate | Quality | G2 | QA-005,QA-002 | eldon | todo |
@@ -323,7 +323,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | partner | todo |
 | QA-017 | Smoke check that a preview URL loads and shows no engine markers (ADR-0016, ADR-0018) | Quality | G1 | INF-013 | eldon | todo |
 | GTM-017 | Egypt go-to-market assessment (phase-1 market; depends on verified regulations) | GTM | G2 | CMP-027 | eldon | done |
-| GTM-018 | Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use | Go-to-market | G1 | GTM-001 | partner | todo |
+| GTM-018 | Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use | Go-to-market | G1 | GTM-001 | partner | done |
 | CMP-030 | Qatar market research: tax, e-invoicing, data protection and hosting, payroll, accounting standard, calendars, entity (all UNVERIFIED; docs/compliance/country-matrix.md section Qatar) | Compliance | G1 | CMP-001 | eldon | done |
 | CMP-031 | Qatar country pack | Compliance | G2 | CMP-030,CMP-021 | partner | todo |
 | GTM-019 | Qatar leads: discovery calls with the two leads, niche fit, which template they need, what a first Qatar pilot requires | GTM | G1 | GTM-001 | eldon | todo |

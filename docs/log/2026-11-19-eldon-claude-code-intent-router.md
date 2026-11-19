@@ -18,4 +18,4 @@ Intent router: bilingual rules plus injected classifier port, safety combiner th
 Sonnet subagent, about 150k tokens.
 
 ## Next step
-Open PR after OPR-001 (#190); Q-252, Q-253; real classifier later.
+Open PR after OPR-001 (#190); Q-259, Q-260; real classifier later.

@@ -17,11 +17,19 @@ class BudgetStop(Exception):
 
 
 class ModelPort(Protocol):
+    """Optional `tenant_id` attribute: a port bound to one tenant (the gateway port). The loop fails closed when it
+    differs from the caller's tenant, so one tenant's budget and meter are never used for another's run."""
+
     def complete(self, request: ModelRequest) -> ModelReply:
         """One model call. Raise `BudgetStop` when over budget. Any other exception fails the run closed."""
 
 
 class ToolPort(Protocol):
+    """`supports_propose = True` only when the port parks a `propose=True` request as a pending approval and executes
+    nothing. Without it the loop refuses to send any R2 or tainted R1 call (fail closed, `propose_unavailable`). The
+    Tool API must refuse agent-class R2 and tainted R1 execution itself as well (Q-232, OPR-004 dependency)."""
+    supports_propose: bool
+
     def call(self, request: ToolRequest) -> ToolResponse:
         """Execute through the Tool API gateway (roles, scope, approvals, idempotency, audit all live there)."""
 

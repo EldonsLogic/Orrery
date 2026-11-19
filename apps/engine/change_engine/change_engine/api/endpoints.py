@@ -39,6 +39,7 @@ from change_engine.guarded_apply.ddl_plan_gate import (
 from change_engine.guarded_apply.schema_reconciler import (
     ExhaustiveSnapshot,
     IdempotencyConflictError,
+    RevisionHashError,  # defined in schema_reconciler (shared with property_setter_engine); re-exported here
     Rev23DeploymentAdapter,
     compute_canonical_payload_hash,
     execute_single_field_deployment,
@@ -436,10 +437,6 @@ if frappe and hasattr(frappe, "whitelist"):
 
 
 _LOCK_SENTINEL = object()
-
-
-class RevisionHashError(RuntimeError):
-    """The live DocType revision hash could not be read; callers must fail closed."""
 
 
 class FrappeDeploymentAdapter:

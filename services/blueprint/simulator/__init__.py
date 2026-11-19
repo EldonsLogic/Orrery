@@ -4,9 +4,10 @@ Design: docs/architecture/simulator.md. Entry point: `simulate(...)` in report.p
 """
 from .codes import CODES, Anomaly
 from .plan import SimulatorError, plan_replay
+from . import review, signoff
 from .report import simulate, validate_report
 from .runner import EnginePort, ToolCall, run_plan
 from .simulated_port import SimulatedPort
 
-__all__ = ["CODES", "Anomaly", "EnginePort", "SimulatedPort", "SimulatorError", "ToolCall", "plan_replay",
+__all__ = ["CODES", "Anomaly", "EnginePort", "SimulatedPort", "SimulatorError", "ToolCall", "plan_replay", "review", "signoff",
            "run_plan", "simulate", "validate_report"]

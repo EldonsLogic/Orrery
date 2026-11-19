@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { auditThenAllow, mayEnterTenant } from './guard';
 import { can } from './access';
 import { buildAuditView } from './audit';
 import { buildGrantBanner } from './banner';
 import { fixtureData, FIXTURE_NOW as NOW } from './fixture';
 import { buildGrantsScreen, formatClock, grantState, validateRequest } from './grants';
-import { placeholderPort } from './port';
+import { placeholderPort, type SupportGrantPort } from './port';
 import { buildStaffSessionView } from './staffSession';
 import { buildTenantList } from './tenants';
 import type { StaffClaims, TenantMeta } from './types';
@@ -14,24 +15,28 @@ const data = fixtureData(NOW);
 
 describe('staff session view', () => {
   it('is ready only for a staff realm token with MFA, a live version and a known role', () => {
-    expect(buildStaffSessionView(claims()).status).toBe('ready');
-    expect(buildStaffSessionView(null)).toEqual({ status: 'denied', reason: 'no_session' });
-    expect(buildStaffSessionView(claims({ realm: 'customer' }))).toEqual({ status: 'denied', reason: 'wrong_realm' });
-    expect(buildStaffSessionView(claims({ mfaSatisfied: false }))).toEqual({ status: 'denied', reason: 'mfa_required' });
+    expect(buildStaffSessionView(claims(), 1).status).toBe('ready');
+    expect(buildStaffSessionView(null, 1)).toEqual({ status: 'denied', reason: 'no_session' });
+    expect(buildStaffSessionView(claims({ realm: 'customer' }), 1)).toEqual({ status: 'denied', reason: 'wrong_realm' });
+    expect(buildStaffSessionView(claims({ mfaSatisfied: false }), 1)).toEqual({ status: 'denied', reason: 'mfa_required' });
     expect(buildStaffSessionView(claims(), 2)).toEqual({ status: 'denied', reason: 'stale_session' });
-    expect(buildStaffSessionView(claims({ roles: ['admin', 'sales_rep'] }))).toEqual({ status: 'denied', reason: 'no_role' });
-    expect(buildStaffSessionView(claims({ roles: 'support' as never }))).toEqual({ status: 'denied', reason: 'no_role' });
+    // Fail closed: no current version known means stale.
+    expect(buildStaffSessionView(claims(), undefined)).toEqual({ status: 'denied', reason: 'stale_session' });
+    expect(buildStaffSessionView(claims({ roles: ['admin', 'sales_rep'] }), 1)).toEqual({ status: 'denied', reason: 'no_role' });
+    expect(buildStaffSessionView(claims({ roles: 'support' as never }), 1)).toEqual({ status: 'denied', reason: 'no_role' });
   });
 });
 
 describe('role checks deny by default', () => {
   it('denies unknown roles, empty and malformed lists', () => {
     for (const r of [[], ['root'], null, undefined, 'owner']) expect(can(r as never, 'tenants.view')).toBe(false);
-    expect(can(['support'], 'grants.approve')).toBe(false);
+    // Staff never approve or revoke: identity takes that only from a customer-realm tenant owner or admin.
+    for (const role of ['support', 'tenant_admin_staff', 'security', 'owner']) {
+      expect(can([role], 'grants.approve' as never)).toBe(false);
+      expect(can([role], 'grants.revoke' as never)).toBe(false);
+    }
     expect(can(['support'], 'audit.view.all')).toBe(false);
     expect(can(['security'], 'grants.request')).toBe(false);
-    expect(can(['security'], 'grants.revoke')).toBe(true);
-    expect(can(['support', 'security'], 'grants.revoke')).toBe(true);
   });
 });
 
@@ -59,15 +64,15 @@ describe('grants', () => {
     expect(grantState(revoked, NOW)).toBe('revoked');
     expect(formatClock(3725)).toBe('01:02:05');
   });
-  it('groups and offers actions by role; nobody approves their own request', () => {
+  it('groups grants by state and offers no actions to staff', () => {
     const owner = buildGrantsScreen(data.grants, ['owner'], 's-other', NOW);
-    expect(owner.pending[0].actions).toEqual(['approve', 'revoke']);
+    expect(owner.pending).toHaveLength(1);
     expect(owner.approved).toHaveLength(1);
     expect(owner.closed).toHaveLength(1);
-    expect(buildGrantsScreen(data.grants, ['owner'], 'staff-fixture-2', NOW).pending[0].actions).toEqual(['revoke']);
+    for (const row of [...owner.pending, ...owner.approved, ...owner.closed]) expect(row).not.toHaveProperty('actions');
     const support = buildGrantsScreen(data.grants, ['support'], 'staff-fixture-1', NOW);
     expect(support.pending).toEqual([]);
-    expect(support.approved[0].actions).toEqual([]);
+    expect(support.approved).toHaveLength(1);
     expect(buildGrantsScreen(data.grants, [], 'staff-fixture-1', NOW)).toEqual({ pending: [], approved: [], closed: [] });
   });
   it('validates a request like identity does', () => {
@@ -83,8 +88,49 @@ describe('grants', () => {
   });
   it('the placeholder port never executes anything', async () => {
     const draft = { tenantId: 'tenant-fixture-a', reason: 'r', scope: ['diagnostics'], durationMinutes: 5 };
-    for (const r of [await placeholderPort.request(draft), await placeholderPort.approve('g'), await placeholderPort.revoke('g')])
-      expect(r).toEqual({ ok: false, reason: 'not_wired' });
+    expect(await placeholderPort.request(draft)).toEqual({ ok: false, reason: 'not_wired' });
+    expect(placeholderPort).not.toHaveProperty('approve');
+    expect(placeholderPort).not.toHaveProperty('revoke');
+  });
+});
+
+describe('view audit gate', () => {
+  const spy = (audit: SupportGrantPort['auditView']) => {
+    const calls: Array<[string, string | undefined]> = [];
+    const port: SupportGrantPort = {
+      request: async () => ({ ok: false, reason: 'not_wired' }),
+      auditView: (screen, tenantId) => {
+        calls.push([screen, tenantId]);
+        return audit(screen, tenantId);
+      },
+    };
+    return { port, calls };
+  };
+  const ready = buildStaffSessionView(claims({ staffId: 'staff-fixture-1' }), 1);
+  it('allows only after the audit resolved, and passes the tenant id', async () => {
+    let release: () => void = () => undefined;
+    const { port, calls } = spy(() => new Promise<void>((r) => { release = r; }));
+    let result: boolean | undefined;
+    const p = mayEnterTenant(port, ready, data.grants, 'tenant-fixture-a', NOW).then((v) => (result = v));
+    await Promise.resolve();
+    expect(calls).toEqual([['tenant_banner', 'tenant-fixture-a']]);
+    expect(result).toBeUndefined(); // not allowed while the audit is still pending
+    release();
+    await p;
+    expect(result).toBe(true);
+  });
+  it('refuses when the audit rejects', async () => {
+    const { port } = spy(async () => { throw new Error('audit down'); });
+    expect(await mayEnterTenant(port, ready, data.grants, 'tenant-fixture-a', NOW)).toBe(false);
+    expect(await auditThenAllow(port, 'tenants')).toBe(false);
+  });
+  it('never calls the audit for a denied session or a tenant without a live grant', async () => {
+    const { port, calls } = spy(async () => undefined);
+    const denied = buildStaffSessionView(claims(), undefined);
+    expect(await mayEnterTenant(port, denied, data.grants, 'tenant-fixture-a', NOW)).toBe(false);
+    expect(await mayEnterTenant(port, ready, data.grants, 'tenant-fixture-b', NOW)).toBe(false);
+    expect(await mayEnterTenant(port, ready, data.grants, 'tenant-fixture-a', NOW + 2100)).toBe(false);
+    expect(calls).toEqual([]);
   });
 });
 
@@ -109,5 +155,8 @@ describe('grant banner', () => {
     expect(buildGrantBanner(data.grants, data.tenants, 'staff-fixture-1', null, NOW)).toBeNull();
     expect(buildGrantBanner(data.grants, data.tenants, 'staff-fixture-1', 'tenant-fixture-b', NOW)).toBeNull();
     expect(buildGrantBanner(data.grants, data.tenants, 'staff-fixture-2', 'tenant-fixture-a', NOW)).toBeNull();
+    // grant-fixture-3 is revoked: no banner
+    expect(buildGrantBanner(data.grants, data.tenants, 'staff-fixture-1', 'tenant-fixture-d', NOW)).toBeNull();
+    expect(buildGrantBanner(data.grants, data.tenants, 'staff-fixture-1', 'tenant-fixture-a', NOW + 2050)).toMatchObject({ low: true, critical: true });
   });
 });

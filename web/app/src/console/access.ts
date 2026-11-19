@@ -6,21 +6,23 @@ export type Permission =
   | 'grants.view.own'
   | 'grants.view.all'
   | 'grants.request'
-  | 'grants.approve'
-  | 'grants.revoke'
   | 'audit.view.own'
   | 'audit.view.all';
 
+/**
+ * UI-ONLY PROPOSAL, not an authorization design. Identity has no staff role claim yet (Q-225 b), so
+ * these four roles and this table need an ADR and a security review before the console is accepted.
+ * Staff cannot approve or revoke a grant: identity allows that only for a customer-realm tenant
+ * owner or admin with step-up (ADR-0007 point 7), so no staff role here carries those permissions.
+ */
 const TABLE: Readonly<Record<StaffRole, ReadonlyArray<Permission>>> = {
   support: ['tenants.view', 'grants.view.own', 'grants.request', 'audit.view.own'],
   tenant_admin_staff: ['tenants.view', 'grants.view.all', 'grants.request', 'audit.view.all'],
-  security: ['tenants.view', 'grants.view.all', 'grants.approve', 'grants.revoke', 'audit.view.all'],
+  security: ['tenants.view', 'grants.view.all', 'audit.view.all'],
   owner: [
     'tenants.view',
     'grants.view.all',
     'grants.request',
-    'grants.approve',
-    'grants.revoke',
     'audit.view.all',
   ],
 };

@@ -7,6 +7,7 @@ import { liveGrantFor } from '../../console/grants';
 import { buildTenantList, regionsOf } from '../../console/tenants';
 import type { TenantHealth, TenantMeta, TenantStatus } from '../../console/types';
 import { useConsole } from './ConsoleProvider';
+import { AuditGate } from './AuditGate';
 import { useViewAudit } from './useViewAudit';
 import styles from './Console.module.css';
 
@@ -24,8 +25,10 @@ export function TenantList() {
   const [region, setRegion] = useState('');
   const [health, setHealth] = useState<TenantHealth | ''>('');
   const [refused, setRefused] = useState(false);
-  useViewAudit('tenants');
+  const audit = useViewAudit('tenants');
   if (session.status !== 'ready') return null;
+  if (audit !== 'ok') return <AuditGate state={audit} />;
+  const label = (ns: 'regions' | 'plan', v: string) => (tc.has(`${ns}.${v}`) ? tc(`${ns}.${v}`) : v);
 
   const rows = buildTenantList(data.tenants, session.roles, { query, status, region, health });
   return (
@@ -46,7 +49,7 @@ export function TenantList() {
           <option value="">{t('any')}</option>
           {regionsOf(data.tenants).map((r) => (
             <option key={r} value={r}>
-              {tc(`regions.${r}`)}
+              {label('regions', r)}
             </option>
           ))}
         </Select>
@@ -72,9 +75,9 @@ export function TenantList() {
           empty={t('empty')}
           columns={[
             { key: 'name', header: t('col.name'), rowHeader: true },
-            { key: 'plan', header: t('col.plan'), render: (r) => r.plan },
+            { key: 'plan', header: t('col.plan'), render: (r) => label('plan', r.plan) },
             { key: 'status', header: t('col.status'), render: (r) => tc(`tenantStatus.${r.status}`) },
-            { key: 'region', header: t('col.region'), render: (r) => tc(`regions.${r.region}`) },
+            { key: 'region', header: t('col.region'), render: (r) => label('regions', r.region) },
             { key: 'health', header: t('col.health'), render: (r) => <Badge tone={healthTone(r.health)}>{tc(`health.${r.health}`)}</Badge> },
             {
               key: 'access',
@@ -85,7 +88,7 @@ export function TenantList() {
                     size="sm"
                     variant="secondary"
                     disabled={activeTenantId === r.tenantId}
-                    onClick={() => setRefused(!enterTenant(r.tenantId))}
+                    onClick={() => void enterTenant(r.tenantId).then((ok) => setRefused(!ok))}
                   >
                     {t('enter')}
                   </Button>

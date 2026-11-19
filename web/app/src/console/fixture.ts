@@ -3,6 +3,9 @@ import type { ConsoleData, StaffClaims, TenantMeta } from './types';
 /** Synthetic data only: invented tenants and staff, fixed ids, no real person or company. */
 export const FIXTURE_NOW = 1_800_000_000;
 
+/** What the placeholder identity service reports as the current session version. */
+export const FIXTURE_SESSION_VERSION = 3;
+
 export const fixtureStaffClaims: StaffClaims = {
   realm: 'staff',
   staffId: 'staff-fixture-1',

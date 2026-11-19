@@ -444,7 +444,8 @@
       "scope": "Scope: {scope}.",
       "timeLeft": "Time left:",
       "low": "Less than ten minutes remain.",
-      "leave": "Leave tenant"
+      "leave": "Leave tenant",
+      "critical": "Less than one minute remains."
     },
     "tenants": {
       "title": "Tenants",
@@ -471,7 +472,7 @@
     },
     "grants": {
       "title": "Support access",
-      "intro": "Staff reach a tenant only through a grant that a tenant owner or admin approves, with a time limit. Requests, approvals and revocations here are handed to the identity service.",
+      "intro": "Staff reach a tenant only through a grant that the tenant's owner or admin approves, with a time limit. You can request access here and see its state; staff cannot approve or revoke.",
       "notSentTitle": "Not sent",
       "notWired": "This action was not executed: the identity service is not connected yet.",
       "newTitle": "Request access",
@@ -506,8 +507,7 @@
         "reason": "Reason",
         "timeLeft": "Time left",
         "requested": "Requested",
-        "state": "State",
-        "actions": "Actions"
+        "state": "State"
       },
       "state": {
         "pending": "Pending",
@@ -516,8 +516,7 @@
         "expired": "Expired",
         "lapsed": "Not approved in time"
       },
-      "approve": "Approve",
-      "revoke": "Revoke"
+      "awaitingApproval": "Awaiting tenant approval"
     },
     "audit": {
       "title": "Audit trail",
@@ -547,6 +546,20 @@
         "support.revoke": "Access revoked",
         "support.access": "Tenant access check"
       }
+    },
+    "viewAudit": {
+      "pending": "Recording this view before showing data.",
+      "failedTitle": "This view could not be recorded",
+      "failedBody": "No data is shown unless the view is recorded. Try again later."
+    },
+    "languageName": {
+      "en": "English",
+      "ar": "Arabic"
+    },
+    "plan": {
+      "starter": "Starter",
+      "growth": "Growth",
+      "scale": "Scale"
     }
   }
 }

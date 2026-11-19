@@ -26,6 +26,7 @@ export type TenantMeta = {
   name: string;
   plan: string;
   status: TenantStatus;
+  /** Known markets are translated; anything else shows its raw code. */
   region: string;
   health: TenantHealth;
 };

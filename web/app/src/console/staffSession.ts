@@ -16,18 +16,19 @@ export type StaffSessionView =
  * View-model of the staff session. Deny by default, in this order: no claims, not the staff realm,
  * MFA not satisfied (always mandatory for staff), session version older than the current one
  * (revoked), no known staff role. `currentSessionVersion` comes from the identity service once
- * wired; when missing, a stale check cannot run and the real service still rechecks every call.
+ * wired. It is required: when it is missing the check cannot run, so the session is stale (fail closed).
  */
 export function buildStaffSessionView(
   claims: StaffClaims | null | undefined,
-  currentSessionVersion?: number,
+  currentSessionVersion: number | undefined,
 ): StaffSessionView {
   if (!claims || typeof claims !== 'object') return { status: 'denied', reason: 'no_session' };
   if (claims.realm !== 'staff') return { status: 'denied', reason: 'wrong_realm' };
   if (claims.mfaSatisfied !== true) return { status: 'denied', reason: 'mfa_required' };
   if (
     typeof claims.sessionVersion !== 'number' ||
-    (currentSessionVersion !== undefined && claims.sessionVersion !== currentSessionVersion)
+    typeof currentSessionVersion !== 'number' ||
+    claims.sessionVersion !== currentSessionVersion
   )
     return { status: 'denied', reason: 'stale_session' };
   const roles = Array.isArray(claims.roles) ? claims.roles.filter(isStaffRole) : [];

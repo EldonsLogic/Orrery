@@ -7,6 +7,7 @@ import { buildAuditView, distinct } from '../../console/audit';
 import { formatUtc } from '../../console/grants';
 import type { AuditEntry } from '../../console/types';
 import { useConsole } from './ConsoleProvider';
+import { AuditGate } from './AuditGate';
 import { useViewAudit } from './useViewAudit';
 import styles from './Console.module.css';
 
@@ -17,8 +18,9 @@ export function AuditViewer() {
   const [tenant, setTenant] = useState('');
   const [actor, setActor] = useState('');
   const [action, setAction] = useState('');
-  useViewAudit('audit');
+  const gate = useViewAudit('audit');
   if (session.status !== 'ready') return null;
+  if (gate !== 'ok') return <AuditGate state={gate} />;
 
   const visible = buildAuditView(data.audit, session.roles, session.staffId);
   const rows = buildAuditView(data.audit, session.roles, session.staffId, { tenant, actor, action });

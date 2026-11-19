@@ -20,9 +20,11 @@ export function GrantBanner() {
       <p>
         {t('body')} {t('scope', { scope: b.scope.map((s) => ts(s)).join(', ') })}
       </p>
-      <p className={styles.countdown}>
+      {/* The live region announces the title and scope once, then only when a threshold is crossed
+          (low, critical). The ticking clock is a timer with aria-live off, so it is never announced. */}
+      {b.low ? <p>{b.critical ? t('critical') : t('low')}</p> : null}
+      <p className={styles.countdown} role="timer" aria-live="off">
         {t('timeLeft')} <bdi dir="ltr">{formatClock(b.remaining)}</bdi>
-        {b.low ? ` ${t('low')}` : ''}
       </p>
       <Button variant="secondary" onClick={leaveTenant}>
         {t('leave')}

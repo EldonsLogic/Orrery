@@ -2,6 +2,7 @@ import { liveGrantFor } from './grants';
 import type { GrantRecord, TenantMeta } from './types';
 
 export const LOW_TIME_SECONDS = 10 * 60;
+export const CRITICAL_TIME_SECONDS = 60;
 
 export type GrantBanner = {
   tenantId: string;
@@ -10,6 +11,7 @@ export type GrantBanner = {
   scope: ReadonlyArray<string>;
   remaining: number;
   low: boolean;
+  critical: boolean;
 };
 
 /** Shown only while the staff member is in a tenant AND a live approved grant for them covers it. An expired or revoked grant removes it, and with it the right to be in the tenant. */
@@ -31,5 +33,6 @@ export function buildGrantBanner(
     scope: g.scope,
     remaining,
     low: remaining <= LOW_TIME_SECONDS,
+    critical: remaining <= CRITICAL_TIME_SECONDS,
   };
 }

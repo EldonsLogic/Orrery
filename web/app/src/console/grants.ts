@@ -31,15 +31,13 @@ export function formatUtc(at: number): string {
   return `${new Date(at * 1000).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
-export type GrantAction = 'approve' | 'revoke';
-export type GrantRow = { grant: GrantRecord; state: GrantState; remaining: number; actions: GrantAction[] };
+export type GrantRow = { grant: GrantRecord; state: GrantState; remaining: number };
 export type GrantsScreen = { pending: GrantRow[]; approved: GrantRow[]; closed: GrantRow[] };
 
 /**
- * Group grants for the screen. `support` sees only its own. Actions are offered by role and state:
- * nobody approves their own request, approve needs a pending request, revoke a pending or approved
- * one. The identity service stays the authority (a tenant owner or admin with fresh MFA); these
- * flags only hide buttons.
+ * Group grants for the screen. `support` sees only its own. There are no approve or revoke actions:
+ * only a customer-realm tenant owner or admin with step-up can do either (identity, ADR-0007 point 7),
+ * so a pending row just reads "Awaiting tenant approval".
  */
 export function buildGrantsScreen(
   grants: ReadonlyArray<GrantRecord>,
@@ -53,10 +51,7 @@ export function buildGrantsScreen(
     .filter((g) => all || (own && g.staffId === staffId))
     .map((grant): GrantRow => {
       const state = grantState(grant, now);
-      const actions: GrantAction[] = [];
-      if (state === 'pending' && grant.staffId !== staffId && can(roles, 'grants.approve')) actions.push('approve');
-      if ((state === 'pending' || state === 'approved') && can(roles, 'grants.revoke')) actions.push('revoke');
-      return { grant, state, remaining: remainingSeconds(grant, now), actions };
+      return { grant, state, remaining: remainingSeconds(grant, now) };
     })
     .sort((a, b) => b.grant.requestedAt - a.grant.requestedAt);
   return {

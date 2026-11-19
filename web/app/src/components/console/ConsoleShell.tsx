@@ -48,8 +48,8 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         <label className={styles.lang}>
           <span>{t('language')}</span>
           <select value={locale} onChange={(e) => setLocale(e.target.value === 'ar' ? 'ar' : 'en')}>
-            <option value="en">English</option>
-            <option value="ar">العربية</option>
+            <option value="en">{t('languageName.en')}</option>
+            <option value="ar">{t('languageName.ar')}</option>
           </select>
         </label>
       </header>

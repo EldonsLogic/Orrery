@@ -75,11 +75,14 @@ def test_before_go_live():
     assert R.route("/act", PRE).abstain
 
 
+PA = Pending("act", "a1", "h1", "R1", 1000.0)
+
+
 def test_confirmation_only_against_a_host_pending():
-    ctx = RouteContext(pending=Pending("act"))
+    ctx = RouteContext(pending=PA, now=10.0)
     d = R.route("yes", ctx)
     assert d.mode == "act" and d.extra["confirms_pending"] and not d.requires_confirmation
-    assert R.route("نعم", RouteContext(pending=Pending("change"))).mode == "change"
+    assert R.route("نعم", RouteContext(pending=Pending("change", "a1", "h1", "R2", 1000.0), now=10.0)).mode == "change"
     assert R.route("no", ctx).mode == "ask"
     assert R.route("yes", LIVE).abstain
     # a pending of a non-privileged mode, or text that only contains "yes", does not confirm

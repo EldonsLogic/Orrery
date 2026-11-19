@@ -47,8 +47,8 @@ def test_classifier_cannot_elevate_without_rules():
     assert d.mode == "ask" and d.abstain and "privileged_needs_rules" in d.reasons
     d = route("hmm", {"label": "act", "confidence": 1.0})
     assert d.mode == "ask" and d.abstain
-    d = route("hmm", {"label": "discover", "confidence": 0.9})
-    assert d.mode == "discover" and not d.abstain and "classifier_rescue" in d.reasons and d.confidence == "medium"
+    d = route("hmm", {"label": "ask", "confidence": 0.9})
+    assert d.mode == "ask" and not d.abstain and "classifier_rescue" in d.reasons and d.confidence == "medium"
     d = route("hmm", "ask")
     assert d.mode == "ask" and not d.abstain and d.confidence == "medium"
 

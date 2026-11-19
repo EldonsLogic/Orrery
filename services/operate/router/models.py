@@ -8,7 +8,7 @@ PRIVILEGED = frozenset({"act", "change"})  # modes that lead to writes; they nee
 SAFE_MODE = "ask"                           # the least privileged mode: uncertainty and disagreement land here
 RISK_ORDER = ("R0", "R1", "R2", "R3", "R4")  # same order as toolapi.policy.RISK_ORDER (tested equal)
 _RANK = {r: i for i, r in enumerate(RISK_ORDER)}
-MODE_RISK_FLOOR = {"discover": "R0", "ask": "R0", "act": "R1", "change": "R2"}  # placeholder, see Q-252
+MODE_RISK_FLOOR = {"discover": "R0", "ask": "R0", "act": "R1", "change": "R2"}  # placeholder, see Q-259
 CONFIDENCE = ("low", "medium", "high")
 ABSTAIN = "abstain"
 CLASSIFIER_LABELS = MODES + (ABSTAIN,)
@@ -20,7 +20,7 @@ REASONS = frozenset({
     "no_signal", "meta_instruction", "data_ignored", "classifier_agree", "classifier_disagree", "classifier_abstain",
     "classifier_invalid", "classifier_error", "classifier_none", "classifier_rescue", "privileged_needs_rules",
     "act_unavailable", "pre_live_change_is_discovery", "needs_confirmation", "hint_raised_risk", "hint_invalid",
-    "empty_input", "ambiguous_reference", "confirmation_without_pending",
+    "empty_input", "ambiguous_reference", "confirmation_without_pending", "input_truncated", "pending_expired",
 })
 
 
@@ -33,7 +33,17 @@ def max_risk(*risks) -> str:
 @dataclass(frozen=True)
 class Pending:
     """A confirmation the host is waiting for (set by trusted host state, never by message text)."""
-    mode: str  # act | change
+    mode: str                    # act | change
+    action_id: str = ""          # the one proposed action this confirmation is for
+    args_hash: str = ""          # hash of that action's arguments as shown to the user
+    risk: str = "R0"             # the pending action's own risk class
+    expires_at: float | None = None  # host clock seconds; a confirmation after this is void
+
+    def __post_init__(self):
+        if self.mode in PRIVILEGED and (not self.action_id or not self.args_hash or self.risk not in _RANK
+                                        or not isinstance(self.expires_at, (int, float))
+                                        or isinstance(self.expires_at, bool)):
+            raise ValueError("a privileged Pending needs action_id, args_hash, a valid risk and expires_at")
 
 
 @dataclass(frozen=True)
@@ -43,6 +53,7 @@ class RouteContext:
     entity_names: tuple = ()
     pending: Pending | None = None
     locale: str = "en"
+    now: float | None = None  # trusted host clock (seconds); without it no pending can be confirmed
 
 
 @dataclass(frozen=True)
@@ -59,8 +70,12 @@ class RouteDecision:
     classifier_label: str | None = None
     data_items_ignored: int = 0
     intent_hint: str | None = None    # optional label from a metrics-side resolver; never used for authority
+    confirms_action_id: str | None = None   # set only on a confirmation: the host's pending action this binds to
+    confirms_args_hash: str | None = None
     extra: dict = field(default_factory=dict, compare=False)
 
     def __post_init__(self):
-        assert self.mode in MODES and self.confidence in CONFIDENCE
-        assert set(self.reasons) <= REASONS
+        if self.mode not in MODES or self.confidence not in CONFIDENCE:
+            raise ValueError("invalid mode or confidence")
+        if not set(self.reasons) <= REASONS:
+            raise ValueError("unknown reason code")

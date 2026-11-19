@@ -47,14 +47,14 @@ _THEN_ACT = re.compile(rf"(?: and | then | ثم | و ?|, ?|; ?){_ACT_VERB}(?: |$
 _THEN_READ = re.compile(r"(?: and | then | ثم | و ?|, ?|; ?)(?:show|list|display|find|check|اعرض|اظهر|ابحث)(?: |$)")
 _CONFIG_NOUN = re.compile(
     r"\b(?:custom )?fields?\b|\bworkflows?\b|\broles?\b|\bpermissions?\b|\btemplates?\b|\bsettings?\b|"
-    r"\bconfig(?:uration)?\b|\bblueprint\b|\bapproval (?:rules?|limits?|thresholds?|polic(?:y|ies)|chains?|levels?)\b|"
+    r"\bconfig(?:uration)?\b|\bblueprint\b|\bapproval (?:steps?|stages?|workflows?|rules?|limits?|thresholds?|polic(?:y|ies)|chains?|levels?)\b|"
     r"\bnaming series\b|\bnumbering\b|\bnotification rules?\b|\bprint formats?\b|\bmodules?\b|"
     r"حقل|حقول|سير العمل|مسار العمل|صلاحي|ادوار|قالب|اعدادات|تهيئه|المخطط|بلوبرنت|حد الموافقه|قواعد? الموافقه")
 _CONFIG_VERB = re.compile(r"^(?:enable|disable|turn (?:on|off)|switch (?:on|off)|configure|rename|require|فعل|عطل|وقف)(?: |$)")
 _BUSINESS = re.compile(
     r"invoice|credit note|debit note|quot(?:e|ation)|\border\b|\bpo\b|purchase|customer|supplier|vendor|payment|voucher|"
     r"receipt|journal|asset|\breturn|opening balance|custody|iban|bank|\bitem\b|stock|expense|\bbill\b|payroll|"
-    r"delivery|shipment|فاتوره|اشعار|عرض سعر|امر |عميل|مورد|دفع|سند|قيد|اصل|مرتجع|ايبان|عهده|صنف|مصروف|رصيد")
+    r"delivery|shipment|فاتوره|فواتير|اشعار|عرض سعر|امر |عميل|عملاء|مورد|دفع|سند|قيد|اصل|مرتجع|ايبان|عهده|صنف|مصروف|رصيد")
 _DISCOVERY = re.compile(
     r"\b(?:we are an? |we're an? |i run |i own |my company|our company|my business|our business|we sell |we operate|"
     r"we have \d+ (?:staff|employees|people)|set up my|build (?:my|the|our) (?:erp|system|blueprint)|"
@@ -68,7 +68,9 @@ _TIER = (("R4", re.compile(r"iban|ايبان|bank details|بيانات البن�
                            r"disburse|فاتوره|اشعار|قيد|سند|رصيد افتتاحي|عهده|دفع|صرف|قبض")),
          ("R2", re.compile(r"customer|\breturn|asset|مرتجع|ارجع|عميل|اصل ثابت|supplier|مورد")),
          ("R1", re.compile(r"quot|order|\bpo\b|purchase|عرض سعر|امر ")))
-_CONFIG_RISK = re.compile(r"role|permission|approval|صلاحي|ادوار|الموافقه")
+_CONFIG_RISK = re.compile(r"role|permission|approval|admin|صلاحي|ادوار|الموافقه")
+_ROLE_GRANT = re.compile(r"^(?:give|make|grant|set) .{0,40}\b(?:roles?|admins?|administrators?|owner|permissions?)\b")
+_BULK = re.compile(r"\b(?:all|every|each)\b|(?<!\w)كل(?!\w)|جميع")
 
 
 @dataclass(frozen=True)
@@ -93,7 +95,10 @@ def rule_risk(t: str, mode: str) -> str:
         return "R0"
     if mode == "change":
         return "R3" if _CONFIG_RISK.search(t) else "R2"
-    return max_risk("R1", *(r for r, p in _TIER if p.search(t)))
+    risks = [r for r, p in _TIER if p.search(t)]
+    if _BULK.search(t):
+        risks.append("R3")  # bulk wording never stays below R3
+    return max_risk("R1", *risks)
 
 
 def run_rules(turn, entity_names=(), blueprint_live: bool = True) -> RuleResult:
@@ -123,6 +128,8 @@ def run_rules(turn, entity_names=(), blueprint_live: bool = True) -> RuleResult:
         return done(None, "low", {"polite_request"}, polite=True)
     if _QUESTION.match(t) or "?" in t:
         return done("ask", "high", {"interrogative"})
+    if _ROLE_GRANT.match(t):
+        return done("change", "high", {"imperative_action", "config_object"}, True)
     if _READ.match(t):
         if _THEN_ACT.search(t):
             return done(None, "low", {"mixed_intent"})
@@ -135,7 +142,7 @@ def run_rules(turn, entity_names=(), blueprint_live: bool = True) -> RuleResult:
         if config:
             return done("change", "high", {"imperative_action", "config_object"}, True)
         desire = re.match(rf"^{_DESIRE} ", t) is not None
-        if business and not re.search(r"\d", t) and _BARE_REF.search(t) and not entity:
+        if business and not re.search(r"\d", t) and _BARE_REF.search(t):  # a type name is not a record reference
             return done("act", "medium", {"imperative_action", "business_object", "ambiguous_reference"}, True)
         if business:
             return done("act", "high", {"desire_action" if desire else "imperative_action", "business_object"}, True)

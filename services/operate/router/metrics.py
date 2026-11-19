@@ -19,7 +19,7 @@ class RouterMetrics:
         self.by_intent: dict = {}
 
     def record(self, case_id: str, decision: RouteDecision, intent=None, intent_mode=None, latency_ms=None) -> dict:
-        keep = intent is not None and not decision.abstain and (intent_mode is None or intent_mode == decision.mode)
+        keep = intent is not None and not decision.abstain and (intent_mode is not None and intent_mode == decision.mode)
         row = {"id": case_id, "intent": intent if keep else None,
                "risk_class": decision.risk_hint if keep else None, "cost_usd": 0.0}
         if latency_ms is not None:

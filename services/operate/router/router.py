@@ -18,11 +18,11 @@ from .models import (ABSTAIN, MODE_RISK_FLOOR, PRIVILEGED, RISK_ORDER, SAFE_MODE
                      max_risk)
 from .ports import ClassifierRequest, ModelClassifierPort, bucket, decode_label
 from .rules import RuleResult, run_rules
-from .text import normalise
+from .text import MAX_CHARS, normalise
 
 CLARIFY_MODE = "router.clarify.mode"          # "Do you want to look something up, or make a change?"
 CLARIFY_CONFIRM = "router.clarify.confirm"    # "Should I go ahead and do this? Say yes to confirm."
-_YES = re.compile(r"^(?:yes|yep|yeah|confirm|confirmed|go ahead|proceed|do it|ok|okay|sure|نعم|ايوه|اي|تمام|اكد|اكيد|موافق|نفذ)$")
+_YES = re.compile(r"^(?:yes|yep|yeah|confirm|confirmed|go ahead|proceed|do it|ok|okay|sure|نعم|ايوه|تمام|اكد|اكيد|موافق|نفذ)$")
 _NO = re.compile(r"^(?:no|nope|cancel|stop|never mind|لا|الغاء|وقف|لا شكرا)$")
 
 
@@ -38,6 +38,11 @@ class IntentRouter:
         if hint is not None and hint not in RISK_ORDER:
             codes.add("hint_invalid")
             hint = "R4"  # an unreadable hint fails closed to the highest class
+        if isinstance(turn, str) and len(turn) > MAX_CHARS:
+            # never route a prefix of a longer turn: the model would later see the rest
+            codes.add("input_truncated")
+            return RouteDecision(SAFE_MODE, "low", tuple(sorted(codes)), True, CLARIFY_MODE, False,
+                                 max_risk(hint), data_items_ignored=len(data))
         pending = self._pending(turn, ctx, codes, hint, len(data))
         if pending is not None:
             return pending
@@ -66,10 +71,18 @@ class IntentRouter:
                 return RouteDecision(SAFE_MODE, "low", tuple(sorted(codes)), True, CLARIFY_MODE,
                                      risk_hint=max_risk(hint), data_items_ignored=n_data)
             return None
+        pend = ctx.pending
+        if yes and not (ctx.now is not None and ctx.now < pend.expires_at):
+            codes.add("pending_expired")  # no clock or past expiry: the confirmation is void, ask again
+            return RouteDecision(SAFE_MODE, "low", tuple(sorted(codes)), True, CLARIFY_CONFIRM, False,
+                                 max_risk(hint), data_items_ignored=n_data)
         codes.add("confirmation_of_pending")
-        mode = ctx.pending.mode if yes else SAFE_MODE
-        return RouteDecision(mode, "high", tuple(sorted(codes)), False, None, False,
-                             max_risk(hint, MODE_RISK_FLOOR[mode]), False, None, None, n_data,
+        mode = pend.mode if yes else SAFE_MODE
+        # the confirming decision carries the pending action's own risk and ids; it is advisory (see the doc)
+        risk = max_risk(hint, MODE_RISK_FLOOR[mode], pend.risk if yes else None)
+        return RouteDecision(mode, "high", tuple(sorted(codes)), False, None, False, risk, False, None, None,
+                             n_data, confirms_action_id=pend.action_id if yes else None,
+                             confirms_args_hash=pend.args_hash if yes else None,
                              extra={"confirms_pending": yes})
 
     def _classify(self, turn, ctx, codes):
@@ -97,6 +110,8 @@ class IntentRouter:
         mode = rr.mode
         if rr.meta and (mode in PRIVILEGED or mode is None):
             return safe()
+        if "ambiguous_reference" in rr.reasons:
+            return safe()  # which record? Always ask, whatever the classifier says
         if mode in PRIVILEGED and rr.command:
             return self._availability(mode, "high", ctx, codes) or safe()
         if mode is None:
@@ -105,7 +120,8 @@ class IntentRouter:
             if "mixed_intent" in rr.reasons:
                 return safe()
             label, conf = self._classify(turn, ctx, codes)
-            if label in ("ask", "discover") and "classifier_none" not in codes:
+            rescue_ok = ("ask",) if ctx.blueprint_live else ("ask", "discover")  # live: never discover by model alone
+            if label in rescue_ok and conf >= 0.5 and "classifier_none" not in codes:
                 codes.add("classifier_rescue")
                 return label, min(bucket(conf), "medium", key=("low", "medium", "high").index), False, None, label
             if label in PRIVILEGED:
@@ -116,7 +132,7 @@ class IntentRouter:
             return mode, "high", False, None, None
         label, conf = self._classify(turn, ctx, codes)
         if mode in PRIVILEGED:
-            if label == mode and (rr.confidence == "high" or conf >= 0.8):
+            if label == mode and conf >= 0.5 and (rr.confidence == "high" or conf >= 0.8):
                 codes.add("classifier_agree")
                 return self._availability(mode, "high", ctx, codes) or safe(label=label)
             if self._clf is None and rr.confidence == "high":

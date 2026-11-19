@@ -106,6 +106,7 @@ def _setup(fr):
 
 
 def _invoice(fr, c, case, lines):
+    pct = case.get("discount_percent") or 0
     rows = []
     for ln in lines:
         rows.append({"item_code": SERVICE_ITEMS[ln["category"]], "qty": float(ln["qty"]), "rate": float(ln["rate"]),
@@ -114,7 +115,8 @@ def _invoice(fr, c, case, lines):
     return fr.get_doc({
         "doctype": "Sales Invoice", "company": case["company"], "customer": c["customer"], "currency": c["currency"],
         "selling_price_list": c["price_list"], "posting_date": "2026-02-10", "set_posting_time": 1,
-        "ignore_pricing_rule": 1, "update_stock": 0, "items": rows,
+        "posting_time": "10:00:00", "ignore_pricing_rule": 1, "update_stock": 0, "items": rows,
+        **({"apply_discount_on": "Net Total", "additional_discount_percentage": pct} if pct else {}),
         "taxes": [{"charge_type": "On Net Total", "account_head": c["vat_account"], "rate": c["vat"],
                    "description": f"VAT {c['vat']}%"}],
     })
@@ -133,19 +135,22 @@ def _run_cases(fr, ctx, cases):
         perm.insert(ignore_permissions=True)  # draft only: totals are computed on insert
         rec = {
             "case_id": case["case_id"], "voucher_no": si.name, "company": case["company"], "vat": c["vat"],
-            "lines": [{"net_amount": str(r.net_amount), "category": case["lines"][i]["category"]}
-                      for i, r in enumerate(si.items)],
+            "lines": [{"net_amount": r["n"], "category": case["lines"][i]["category"]}
+                      for i, r in enumerate(_sql_rows(fr, "select cast(net_amount as char) n from `tabSales Invoice Item` "
+                                                          "where parent=%s order by idx", (si.name,)))],
             "tax_amount": _sql_rows(fr, "select cast(tax_amount as char) t from `tabSales Taxes and Charges` "
                                         "where parent=%s", (si.name,))[0]["t"],
             "totals": _sql_rows(fr, "select cast(net_total as char) net_total, cast(total_taxes_and_charges as char) "
                                     "taxes, cast(grand_total as char) grand_total from `tabSales Invoice` where name=%s",
                                 (si.name,))[0],
-            "permuted": {"net_total": str(perm.net_total), "taxes": str(perm.total_taxes_and_charges),
-                         "grand_total": str(perm.grand_total)},
+            "permuted": _sql_rows(fr, "select cast(net_total as char) net_total, cast(total_taxes_and_charges as char) "
+                                      "taxes, cast(grand_total as char) grand_total from `tabSales Invoice` "
+                                      "where name=%s", (perm.name,))[0],
         }
         if case["action"] == "return":
             ret = make_return_doc("Sales Invoice", si.name)
             ret.posting_date = "2026-02-11"
+            ret.posting_time = "10:00:00"
             ret.set_posting_time = 1
             ret.insert(ignore_permissions=True)
             ret.submit()
@@ -166,14 +171,15 @@ def _run_stock(fr, ctx, moves):
     """Golden path opening (100 at 10.00) then seeded receipts/issues on ITEM-001 in the KSA company."""
     c = ctx[KSA["company"]]
     docs = []
-    for mv in [{"type": "Material Receipt", "qty": "100", "rate": "10.00"}] + moves:
+    for idx, mv in enumerate([{"type": "Material Receipt", "qty": "100", "rate": "10.00"}] + moves):
         row = {"item_code": STOCK_ITEM, "qty": float(mv["qty"]), "expense_account": c["opening_account"]}
         if mv["type"] == "Material Receipt":
             row.update({"t_warehouse": c["warehouse"], "basic_rate": float(mv["rate"])})
         else:
             row.update({"s_warehouse": c["warehouse"]})
         se = fr.get_doc({"doctype": "Stock Entry", "stock_entry_type": mv["type"], "company": KSA["company"],
-                         "posting_date": "2026-01-05", "set_posting_time": 1, "items": [row]})
+                         "posting_date": "2026-01-05", "set_posting_time": 1,
+                         "posting_time": f"09:{idx // 60:02d}:{idx % 60:02d}", "items": [row]})
         se.insert(ignore_permissions=True)
         se.submit()
         docs.append(se.name)

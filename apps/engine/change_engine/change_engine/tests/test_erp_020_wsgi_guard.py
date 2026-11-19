@@ -251,11 +251,14 @@ class WsgiGuardTests(unittest.TestCase):
         self.assertPlain404(call(self.app, "GET", "/api/method/ping"))
         self.engine_status = "200 OK"
         self.engine_headers = [("Content-Type", "application/json"), ("Set-Cookie", "sid=Guest"),
-                               ("Set-Cookie", "user_id=Guest")]
+                               ("Set-Cookie", "user_id=Guest"), ("X-Frappe-Cmd-Id", "1"), ("Server", "frappe")]
         status, headers, body, _ = call(self.app, "GET", "/api/method/ping")
         self.assertTrue(status.startswith("200"))
         self.assertEqual(json.loads(body), {"message": "pong"})
         self.assertNotIn("set-cookie", {k.lower() for k, _ in headers})
+        visible = (repr(headers) + body.decode()).lower()
+        for marker in ("frappe", "erpnext"):
+            self.assertNotIn(marker, visible)
 
 
 class ApplicationEntryTests(unittest.TestCase):
@@ -291,6 +294,17 @@ class ApplicationEntryTests(unittest.TestCase):
     def test_application_reaches_the_engine_for_allowed_requests(self):
         self.assertTrue(call(wsgi.application, "GET", "/api/method/ping")[0].startswith("200"))
         self.assertEqual(self.reached, ["/api/method/ping"])
+
+    def test_any_engine_import_error_fails_closed(self):
+        class Broken(types.ModuleType):
+            def __getattr__(self, name):
+                raise RuntimeError("engine import side effect")
+
+        with mock.patch.dict(sys.modules, {"frappe.app": Broken("frappe.app")}):
+            with mock.patch.object(wsgi, "_inner", None):
+                status, _, body, _ = call(wsgi.application, "GET", "/api/method/ping")
+        self.assertTrue(status.startswith("404"))
+        self.assertEqual(body, b"Not Found")
 
     def test_engine_import_failure_fails_closed(self):
         with mock.patch.dict(sys.modules, {"frappe.app": None}):

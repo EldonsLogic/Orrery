@@ -90,7 +90,7 @@ def application(environ, start_response):
     if _inner is None:
         try:
             from frappe.app import application as engine_application
-        except ImportError:
+        except Exception:  # Any import-time failure must answer like every other denial, never a bare 500.
             return _not_found(start_response)
         _inner = guard(engine_application)
     return _inner(environ, start_response)

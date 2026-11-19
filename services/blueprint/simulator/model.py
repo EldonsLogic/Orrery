@@ -11,10 +11,12 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 
 from .codes import Anomaly
+from .safe import clean_text
 from .money import MoneyError, exponent, parse_decimal
 
 KINDS = ("stock_in", "purchase_invoice", "payment_out", "stock_out", "sales_invoice", "payment_in", "payroll_run")
@@ -98,7 +100,7 @@ def _blank(v) -> bool:
 def _date(v):
     if isinstance(v, dt.date) and not isinstance(v, dt.datetime):
         return v
-    if isinstance(v, str) and len(v.strip()) == 10:
+    if isinstance(v, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", v.strip()):
         try:
             return dt.date.fromisoformat(v.strip())
         except ValueError:
@@ -107,8 +109,9 @@ def _date(v):
 
 
 def _text(v):
-    if isinstance(v, str) and v.strip():
-        return v.strip()
+    t = clean_text(v.strip(), 128) if isinstance(v, str) else None
+    if t:
+        return t
     if isinstance(v, int) and not isinstance(v, bool):
         return str(v)
     raise MoneyError("text")
@@ -151,18 +154,18 @@ def normalise(rows, *, connector_id: str, kind_aliases=None, findings=None) -> N
     flags = {}
     for f in findings or []:
         for p in f.get("rows", []):
-            flags.setdefault((str(p.get("sheet")), str(p.get("row"))), set()).add(f.get("code"))
+            flags.setdefault((clean_text(str(p.get("sheet")), 64), clean_text(str(p.get("row")), 32)), set()).add(f.get("code"))
     out = Normalised()
     groups, order = {}, []
     for idx, row in enumerate(rows):
-        ptr = (str(row.get("sheet")), str(row.get("row", idx + 1)))
+        ptr = (clean_text(str(row.get("sheet")), 64), clean_text(str(row.get("row", idx + 1)), 32))
         rtype = row.get("type")
         kind = aliases.get(rtype.strip().casefold()) if isinstance(rtype, str) else None
         if kind is None:
             out.anomalies.append(Anomaly("SIM-116", (f"{connector_id}:{ptr[0]}:{ptr[1]}",), {"type": str(rtype)[:64]}))
             continue
         number = row.get("number")
-        number = f"row-{ptr[0]}-{ptr[1]}" if _blank(number) else str(number).strip()
+        number = f"row-{ptr[0]}-{ptr[1]}" if _blank(number) else clean_text(str(number).strip(), 128)
         key = (kind, number)
         if key not in groups:
             groups[key] = []
@@ -182,10 +185,16 @@ def normalise(rows, *, connector_id: str, kind_aliases=None, findings=None) -> N
         except MoneyError as e:
             out.anomalies.append(Anomaly("SIM-114", (sid,), {"reason": str(e)}))
             continue
-        if any(h != heads[0] for h in heads[1:]):
+        core = [(x["date"], x["currency"], x["party"], x["against"]) for x in heads]
+        conflict = any(c != core[0] for c in core[1:])
+        h = dict(heads[0])
+        for k in ("due_date", "doc_total"):  # a sheet often fills these on one line only: take the single value
+            vals = {x[k] for x in heads if x[k] is not None}
+            conflict = conflict or len(vals) > 1
+            h[k] = next(iter(vals)) if len(vals) == 1 else None
+        if conflict:
             out.anomalies.append(Anomaly("SIM-115", (sid,), {}))
             continue
-        h = heads[0]
         prov = tuple({"connector": connector_id, "sheet": p[0], "row": p[1], "rowSha256": row_sha256(r)}
                      for p, r in members)
         qf = sorted(set().union(*(flags.get(p, set()) for p, _ in members)) - {None})

@@ -12,7 +12,7 @@ def test_port_failure_aborts_and_stops(mode):
     outcomes = [s["outcome"] for s in report["steps"]]
     first_err = next(i for i, s in enumerate(report["steps"]) if s["tool"] == "sales_invoice.create")
     assert all(o == "not_run" for o in outcomes[first_err + 1:])
-    assert outcomes[first_err] == ("not_run" if mode == "raise" else "error")
+    assert outcomes[first_err] == ("in_doubt" if mode == "raise" else "error")
     if mode == "error":
         assert report["steps"][first_err]["errorCode"] == "engine_error"
     assert all(r["status"] == "not_compared" and r["reason"] == "run_aborted" for r in report["comparison"])

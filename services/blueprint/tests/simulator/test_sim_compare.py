@@ -74,8 +74,8 @@ def test_blocked_unreported_aborted_unknown():
     assert row["status"] == "not_compared" and row["reason"] == "not_reported"
     row, codes = _one(_exp(10000), None, aborted=True)
     assert row["status"] == "not_compared" and row["reason"] == "run_aborted" and codes == []
-    row, _ = _one({}, {"bonus_points": {"SAR": "1.00"}})
-    assert row["status"] == "not_compared" and row["reason"] == "unknown_metric"
+    rows, found = compare({}, {"bonus_points": {"SAR": "1.00"}}, blocked=set(), rules={}, aborted=False)
+    assert rows == [] and [a.code for a in found] == ["SIM-122"]  # unknown names never reach the report
 
 
 def test_unexpected_reported_currency_is_compared_against_zero():

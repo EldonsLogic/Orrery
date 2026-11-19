@@ -3,18 +3,21 @@ minor units only; deterministic code, never model output (principles 3 and 6).
 
 Expected values are computed per document and rounded half up to the currency exponent per document, then
 summed. Stock value uses moving average per (item, warehouse) in replay order, rounded once at the end.
-Tolerance per metric: allowed = abs_minor + per_document_minor x documents (integers, default 0).
+Tolerance per metric (or family, or `default`; the first rule present wins): allowed = abs_minor +
+per_document_minor x documents + per_line_minor x lines (integers, capped, default 0 when no rule is given).
+Tax and net are rounded per document here and, in the engine, probably per line (Q-242): use per_line_minor.
 """
 from __future__ import annotations
 
 import datetime as dt
 from decimal import Decimal
+from fractions import Fraction
 
 from .codes import Anomaly
+from .aging import BUCKETS, aging_bucket
 from .model import PAYMENT_KINDS
-from .money import MoneyError, exact_minor, parse_decimal, to_minor
-
-BUCKETS = ("not_due", "0_30", "31_60", "61_90", "over_90")
+from .money import EXPONENT, MoneyError, exact_minor, in_context, parse_decimal, to_minor
+from .valuation import StockBook
 # Which steps a metric needs. A metric is not compared while any such step is held for approval.
 DEPENDS = {
     "sales_net": (("sales_invoice", "create"),), "vat_output": (("sales_invoice", "create"),),
@@ -25,7 +28,10 @@ DEPENDS = {
     "payroll_gross": (("payroll_run", "create"),), "payroll_deductions": (("payroll_run", "create"),),
     "payroll_net": (("payroll_run", "create"),),
 }
-TOLERANCE_KEYS = {"abs_minor", "per_document_minor"}
+KNOWN_METRICS = frozenset(set(DEPENDS) - {"receivables", "payables"}
+                          | {f"{f}_{b}" for f in ("receivables", "payables") for b in BUCKETS})
+TOLERANCE_KEYS = {"abs_minor", "per_document_minor", "per_line_minor"}
+TOLERANCE_CAP = 1_000_000
 
 
 class ToleranceError(ValueError):
@@ -36,23 +42,16 @@ def metric_family(metric: str) -> str:
     return metric.split("_")[0] if metric.startswith(("receivables_", "payables_")) else metric
 
 
-def _add(acc, metric, ccy, minor, sid):
-    slot = acc.setdefault((metric, ccy), {"minor": 0, "sourceIds": set()})
+def _add(acc, metric, ccy, minor, sid, lines=1):
+    slot = acc.setdefault((metric, ccy), {"minor": 0, "sourceIds": set(), "lines": 0})
     slot["minor"] += minor
     slot["sourceIds"].add(sid)
+    slot["lines"] += lines
 
 
-def _bucket(age_days: int) -> str:
-    if age_days < 0:
-        return "not_due"
-    for limit, name in ((30, "0_30"), (60, "31_60"), (90, "61_90")):
-        if age_days <= limit:
-            return name
-    return "over_90"
-
-
+@in_context
 def expected_totals(records, period_end: dt.date) -> dict:
-    """{(metric, currency): {"minor": int, "sourceIds": set}} over records already in replay order."""
+    """{(metric, currency): {"minor", "sourceIds", "lines", optional "invalid"}} over records in replay order."""
     acc = {}
     paid = {}
     for r in records:
@@ -60,40 +59,41 @@ def expected_totals(records, period_end: dt.date) -> dict:
             target = "sales_invoice" if r.kind == "payment_in" else "purchase_invoice"
             key = (target, r.against, r.currency)
             paid[key] = paid.get(key, 0) + to_minor(r.amount, r.currency)
-    stock = {}
+    book, stock_ids = StockBook(), {}
     for r in records:
-        c = r.currency
+        c, n = r.currency, len(r.lines)
         if r.kind in ("sales_invoice", "purchase_invoice"):
             sales = r.kind == "sales_invoice"
-            _add(acc, "sales_net" if sales else "purchases_net", c, to_minor(r.net, c), r.source_id)
-            _add(acc, "vat_output" if sales else "vat_input", c, to_minor(r.tax, c), r.source_id)
+            _add(acc, "sales_net" if sales else "purchases_net", c, to_minor(r.net, c), r.source_id, n)
+            _add(acc, "vat_output" if sales else "vat_input", c, to_minor(r.tax, c), r.source_id, n)
             open_minor = to_minor(r.amount, c) - paid.get((r.kind, r.number, c), 0)
             if open_minor:
                 age = (period_end - (r.due_date or r.posting_date)).days
-                _add(acc, f"{'receivables' if sales else 'payables'}_{_bucket(age)}", c, open_minor, r.source_id)
+                _add(acc, f"{'receivables' if sales else 'payables'}_{aging_bucket(age)}", c, open_minor,
+                     r.source_id, n)
         elif r.kind == "payroll_run":
             gross = sum((ln.gross for ln in r.lines), Decimal(0))
             ded = sum((ln.deductions for ln in r.lines), Decimal(0))
-            _add(acc, "payroll_gross", c, to_minor(gross, c), r.source_id)
-            _add(acc, "payroll_deductions", c, to_minor(ded, c), r.source_id)
-            _add(acc, "payroll_net", c, to_minor(gross - ded, c), r.source_id)
+            _add(acc, "payroll_gross", c, to_minor(gross, c), r.source_id, n)
+            _add(acc, "payroll_deductions", c, to_minor(ded, c), r.source_id, n)
+            _add(acc, "payroll_net", c, to_minor(gross - ded, c), r.source_id, n)
         elif r.kind in ("stock_in", "stock_out"):
             for ln in r.lines:
                 key = (ln.item, ln.warehouse, c)
-                qty, value, ids = stock.get(key, (Decimal(0), Decimal(0), set()))
                 if r.kind == "stock_in":
-                    qty, value = qty + ln.qty, value + ln.qty * ln.unit_price
+                    book.receive(key, ln.qty, ln.unit_price)
                 else:
-                    avg = value / qty if qty > 0 else Decimal(0)
-                    qty, value = qty - ln.qty, value - ln.qty * avg
-                stock[key] = (qty, value, ids | {r.source_id})
-    for (_, _, c), (_, value, ids) in sorted(stock.items(), key=lambda kv: tuple(map(str, kv[0]))):
-        slot = acc.setdefault(("stock_value", c), {"minor": 0, "sourceIds": set(), "exact": Decimal(0)})
-        slot["exact"] += value
-        slot["sourceIds"] |= ids
-    for (metric, c), slot in acc.items():
-        if metric == "stock_value":
-            slot["minor"] = to_minor(slot.pop("exact"), c)
+                    book.issue(key, ln.qty)
+            ids, cnt = stock_ids.setdefault(c, (set(), [0]))
+            ids.add(r.source_id)
+            cnt[0] += n
+    totals, bad = book.totals(), book.invalid_currencies()
+    for c, (ids, cnt) in sorted(stock_ids.items()):
+        slot = {"minor": to_minor(totals.get(c, 0) if c in totals else Fraction(0), c), "sourceIds": ids,
+                "lines": cnt[0]}
+        if c in bad:
+            slot["invalid"] = True
+        acc[("stock_value", c)] = slot
     return acc
 
 
@@ -101,18 +101,23 @@ def check_tolerances(rules) -> dict:
     rules = {} if rules is None else rules
     if not isinstance(rules, dict):
         raise ToleranceError("rules")
-    for name, rule in rules.items():
-        if not isinstance(name, str) or not isinstance(rule, dict) or set(rule) - TOLERANCE_KEYS:
+    for name, rule in rules.items():  # an explicit empty rule is an error, not "zero" and not "use the default"
+        if not isinstance(name, str) or not isinstance(rule, dict) or not rule or set(rule) - TOLERANCE_KEYS:
             raise ToleranceError(str(name))
         for v in rule.values():
-            if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+            if isinstance(v, bool) or not isinstance(v, int) or v < 0 or v > TOLERANCE_CAP:
                 raise ToleranceError(str(name))
     return rules
 
 
-def allowed_minor(rules: dict, metric: str, documents: int) -> int:
-    rule = rules.get(metric) or rules.get(metric_family(metric)) or rules.get("default") or {}
-    return rule.get("abs_minor", 0) + rule.get("per_document_minor", 0) * documents
+def allowed_minor(rules: dict, metric: str, documents: int, lines: int = 0) -> int:
+    rule = {}
+    for k in (metric, metric_family(metric), "default"):
+        if k in rules:
+            rule = rules[k]
+            break
+    return (rule.get("abs_minor", 0) + rule.get("per_document_minor", 0) * documents
+            + rule.get("per_line_minor", 0) * lines)
 
 
 def blocked_metrics(plan_steps) -> set:
@@ -128,18 +133,36 @@ def _nonzero(raw) -> bool:
         return True
 
 
+def _known_only(actual):
+    """Keep only metrics in KNOWN_METRICS and currencies in EXPONENT. Returns (clean, [], dropped_any)."""
+    clean, dropped = {}, False
+    for m, v in (actual or {}).items():
+        if m not in KNOWN_METRICS:
+            dropped = True
+            continue
+        clean.setdefault(m, {})
+        for c, a in v.items():
+            if c in EXPONENT:
+                clean[m][c] = a
+            else:
+                dropped = True
+    return clean, [], dropped
+
+
 def compare(expected: dict, actual, *, blocked: set, rules: dict, aborted: bool):
     """Return (rows, anomalies). `actual` is the port's {metric: {currency: "decimal string"}} or None."""
-    actual = actual or {}
+    actual, found, dropped = _known_only(actual)
     # A reported zero with nothing expected is not a row; any other reported value is compared against zero.
     keys = set(expected) | {(m, c) for m, v in actual.items() for c, a in v.items() if _nonzero(a)}
-    rows, found = [], []
+    rows = []
+    if dropped:  # untrusted metric or currency keys never reach the report: one fixed-token anomaly instead
+        found.append(Anomaly("SIM-122", (), {"reason": "unknown_metric_or_currency"}))
     for metric, ccy in sorted(keys):
-        exp = expected.get((metric, ccy), {"minor": 0, "sourceIds": set()})
-        docs = len(exp["sourceIds"])
+        exp = expected.get((metric, ccy), {"minor": 0, "sourceIds": set(), "lines": 0})
+        docs, nlines = len(exp["sourceIds"]), exp.get("lines", 0)
         row = {"metric": metric, "currency": ccy, "expectedMinor": exp["minor"], "actualMinor": None,
-               "differenceMinor": None, "toleranceMinor": allowed_minor(rules, metric, docs), "documents": docs,
-               "status": "not_compared", "reason": None}
+               "differenceMinor": None, "toleranceMinor": allowed_minor(rules, metric, docs, nlines),
+               "documents": docs, "lines": nlines, "status": "not_compared", "reason": None}
         ids = tuple(sorted(exp["sourceIds"]))
         reported = actual.get(metric)
         raw = None if reported is None else reported.get(ccy, "0")  # a reported metric without the currency is zero
@@ -147,6 +170,8 @@ def compare(expected: dict, actual, *, blocked: set, rules: dict, aborted: bool)
             row["reason"] = "run_aborted"
         elif metric_family(metric) in blocked:
             row["status"], row["reason"] = "blocked_by_approval", "needs_approval"
+        elif exp.get("invalid"):  # oversold or negative stock: the expected value is not defined
+            row["reason"] = "negative_stock"
         elif metric_family(metric) not in DEPENDS:
             row["reason"] = "unknown_metric"
         elif raw is None:

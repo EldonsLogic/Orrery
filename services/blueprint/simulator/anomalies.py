@@ -36,6 +36,8 @@ def check_records(records, *, period_start: dt.date, period_end: dt.date, tax_co
     found += _possible_duplicates(kept)
     found += _negative_stock(kept)
     found += _unallocated(kept)
+    found += _amounts(kept)
+    found += _payment_links(kept)
     return kept, found
 
 
@@ -60,8 +62,9 @@ def _rounding(records):
         if r.doc_total is None or r.kind in PAYMENT_KINDS or r.kind == "payroll_run":
             continue
         diff = to_minor(r.doc_total, r.currency) - to_minor(r.amount, r.currency)
-        if diff:
-            out.append(Anomaly("SIM-102", (r.source_id,), {"differenceMinor": diff, "where": "document_total"}))
+        if diff:  # rounding only within one minor unit per line; a bigger gap is a mismatch to look at
+            code = "SIM-102" if abs(diff) <= len(r.lines) else "SIM-131"
+            out.append(Anomaly(code, (r.source_id,), {"differenceMinor": diff, "where": "document_total"}))
     return out
 
 
@@ -88,7 +91,7 @@ def _negative_stock(records):
             if bal[key] < 0 and key not in flagged:
                 flagged.add(key)
                 out.append(Anomaly("SIM-104", (r.source_id,), {"item": ln.item, "warehouse": ln.warehouse,
-                                                               "balance": str(bal[key])}))
+                                                               "balance": format(bal[key], "f")}))
     return out
 
 
@@ -102,4 +105,44 @@ def _unallocated(records):
             target = "sales_invoice" if r.kind == "payment_in" else "purchase_invoice"
             if r.against is None or (target, r.against) not in numbers:
                 out.append(Anomaly("SIM-113", (r.source_id,), {"against": r.against}))
+    return out
+
+
+_NONNEG = ("qty", "unit_price", "vat", "total", "gross", "deductions")
+
+
+def _amounts(records):
+    """Negative amounts (credit notes are not modelled) and zero payments."""
+    out = []
+    for r in records:
+        bad = sorted({f for ln in r.lines for f in _NONNEG if getattr(ln, f) is not None and getattr(ln, f) < 0})
+        if r.kind in PAYMENT_KINDS and r.amount == 0:
+            bad.append("total")
+        if bad:
+            out.append(Anomaly("SIM-124", (r.source_id,), {"fields": sorted(set(bad))}))
+    return out
+
+
+def _payment_links(records):
+    """Payments that name an invoice of the month: currency, date and amount against that invoice."""
+    inv = {(r.kind, r.number): r for r in records if r.kind in INVOICE_KINDS}
+    paid, out = {}, []
+    for r in records:
+        if r.kind not in PAYMENT_KINDS or r.against is None:
+            continue
+        target = inv.get(("sales_invoice" if r.kind == "payment_in" else "purchase_invoice", r.against))
+        if target is None:
+            continue
+        if r.currency != target.currency:
+            out.append(Anomaly("SIM-125", (r.source_id, target.source_id), {}))
+            continue
+        if r.posting_date < target.posting_date:
+            out.append(Anomaly("SIM-127", (r.source_id, target.source_id), {}))
+        slot = paid.setdefault(target.source_id, [0, [target.source_id]])
+        slot[0] += to_minor(r.amount, r.currency)
+        slot[1].append(r.source_id)
+    for sid, (total, ids) in sorted(paid.items()):
+        target = next(r for r in inv.values() if r.source_id == sid)
+        if total > to_minor(target.amount, target.currency):
+            out.append(Anomaly("SIM-126", tuple(ids), {}))
     return out

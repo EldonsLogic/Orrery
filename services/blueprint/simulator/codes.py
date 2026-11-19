@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .safe import clean_obj, clean_text
+
 CODES = {
     # Source data (found before any call).
     "SIM-101": ("unmapped_account", "warning"),
@@ -33,6 +35,15 @@ CODES = {
     "SIM-121": ("total_mismatch", "blocking"),
     "SIM-122": ("metric_not_compared", "warning"),
     "SIM-123": ("invalid_reported_amount", "blocking"),
+    # Added after review (SIM-119 stays unused).
+    "SIM-124": ("negative_amount", "warning"),
+    "SIM-125": ("payment_currency_mismatch", "warning"),
+    "SIM-126": ("overpayment", "warning"),
+    "SIM-127": ("payment_before_invoice", "warning"),
+    "SIM-128": ("in_doubt", "blocking"),
+    "SIM-129": ("tenant_not_empty", "blocking"),
+    "SIM-130": ("tenant_not_empty_allowed", "warning"),
+    "SIM-131": ("document_total_mismatch", "warning"),
 }
 SEVERITIES = ("blocking", "warning", "info")
 
@@ -54,7 +65,8 @@ class Anomaly:
     def to_dict(self) -> dict:
         name, sev = CODES[self.code]
         return {"code": self.code, "severity": sev, "messageKey": f"sim.{name}",
-                "sourceIds": sorted(self.source_ids), "params": dict(sorted(self.params.items()))}
+                "sourceIds": sorted(clean_text(i, 200) for i in self.source_ids),
+                "params": dict(sorted(clean_obj(self.params).items()))}
 
 
 def sort_anomalies(items) -> list:

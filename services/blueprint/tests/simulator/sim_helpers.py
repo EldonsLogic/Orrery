@@ -106,7 +106,7 @@ def run(rows=None, ts=None, p=None, **kw):
 
     ts = ts or tool_set()
     p = p or port(ts)
-    kw.setdefault("tolerances", {"default": {"per_document_minor": 1}})
+    kw.setdefault("tolerances", {"default": {"per_line_minor": 1}})
     report = simulate(rows if rows is not None else month_rows(), tenant_id=TENANT, period=PERIOD, tool_set=ts,
                       mapping=copy.deepcopy(MAPPING), caller=dict(CALLER), port=p, **kw)
     return report, p

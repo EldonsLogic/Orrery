@@ -60,7 +60,7 @@ def test_rerun_converges_without_second_effect():
     port = h.port()
     first, _ = h.run(p=port)
     docs = dict(port.docs)
-    second, _ = h.run(p=port)
+    second, _ = h.run(p=port, on_existing="resume")
     assert port.docs == docs  # no new documents
     assert first["summary"]["executed"] > 0 and second["summary"]["executed"] == 0
     assert second["summary"]["replayed"] == first["summary"]["executed"]
@@ -73,7 +73,7 @@ def test_changed_source_under_same_key_fails_closed():
     h.run(p=port)
     rows = h.month_rows()
     rows[0]["qty"] = "11"  # the owner edited the source after a run: same key, other arguments
-    report, _ = h.run(rows=rows, p=port)
+    report, _ = h.run(rows=rows, p=port, on_existing="resume")
     assert report["status"] == "aborted"
     assert "SIM-120" in h.codes(report)
     assert next(s for s in report["steps"] if s["outcome"] == "error")["errorCode"] == "idempotency_conflict"

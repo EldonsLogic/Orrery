@@ -10,12 +10,13 @@ gateway-backed port runs against a real tenant). Fault hooks let the tests prove
 from __future__ import annotations
 
 import datetime as dt
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
-from .compare import BUCKETS, _bucket
-from .money import MoneyError, minor_to_str, parse_decimal, to_minor
-from .plan import AUTO_RUN, RISKS, MONEY_FIELDS, sha256
+from .aging import BUCKETS, aging_bucket
+from .money import MoneyError, in_context, minor_to_str, parse_decimal, round_half_up, to_minor
+from .plan import AUTO_RUN, MONEY_FIELDS, RISKS, sha256
 from .runner import ToolCall
+from .valuation import StockBook
 
 
 def _err(code: str) -> dict:
@@ -81,8 +82,12 @@ class SimulatedPort:
             if "qty" in ln and "unit_price" in ln:
                 net = to_minor(ln["qty"] * ln["unit_price"], currency)
                 ln["net_minor"] = net  # line tax rounded per line, in minor units
-                ln["tax_minor"] = int((Decimal(net) * rate).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+                ln["tax_minor"] = round_half_up(Decimal(net) * rate)
             lines.append(ln)
+        if kind in ("payment_in", "payment_out") and head.get("against") is not None:
+            ref = self.docs.get(head["against"]) if isinstance(head["against"], str) else None
+            if ref is None or ref["kind"] != ("sales_invoice" if kind == "payment_in" else "purchase_invoice"):
+                return _err("unknown_reference")  # like the gateway: a link must be an engine record id
         doc_id = f"SIM-{kind.upper()}-{len(self.docs) + 1:05d}"
         self.docs[doc_id] = {"id": doc_id, "kind": kind, "status": "draft", "currency": currency, "lines": lines,
                              "number": head.get("number"), "against": head.get("against"),
@@ -112,6 +117,7 @@ class SimulatedPort:
         return _err("engine_error") if f["mode"] == "error" else {"status": "ok", "result": {}}
 
     # ---- EnginePort ---------------------------------------------------------------------------------------------
+    @in_context
     def execute(self, call: ToolCall) -> dict:
         tool = self.tools.get(call.tool)
         risk, roles = self._risk_roles(tool, call.arguments) if tool else (None, [])
@@ -146,6 +152,7 @@ class SimulatedPort:
             self._idem[key] = (h, resp)
         return resp
 
+    @in_context
     def report_totals(self, tenant_id: str, caller: dict, period: tuple) -> dict:
         if self.fail_totals == "raise":
             raise RuntimeError("simulated totals failure")
@@ -168,7 +175,8 @@ class SimulatedPort:
             if d["kind"] in ("payment_in", "payment_out") and d["status"] == "posted":
                 target = "sales_invoice" if d["kind"] == "payment_in" else "purchase_invoice"
                 amt = sum(to_minor(ln.get("total", Decimal(0)), d["currency"]) for ln in d["lines"])
-                paid[(target, d["against"])] = paid.get((target, d["against"]), 0) + amt
+                k2 = (target, d["against"], d["currency"])  # engine record id of the invoice
+                paid[k2] = paid.get(k2, 0) + amt
         for d in docs:
             c, k = d["currency"], d["kind"]
             if k in ("sales_invoice", "purchase_invoice"):
@@ -178,33 +186,27 @@ class SimulatedPort:
                 add("sales_net" if sales else "purchases_net", c, net)
                 add("vat_output" if sales else "vat_input", c, tax)
                 if d["status"] == "posted":
-                    open_minor = net + tax - paid.get((k, d["number"]), 0)
+                    open_minor = net + tax - paid.get((k, d["id"], c), 0)
                     if open_minor:
                         age = (end - (d["due"] or d["date"])).days
-                        add(f"{'receivables' if sales else 'payables'}_{_bucket(age)}", c, open_minor)
+                        add(f"{'receivables' if sales else 'payables'}_{aging_bucket(age)}", c, open_minor)
             elif k == "payroll_run":
                 gross = sum((ln.get("gross", Decimal(0)) for ln in d["lines"]), Decimal(0))
                 ded = sum((ln.get("deductions", Decimal(0)) for ln in d["lines"]), Decimal(0))
                 add("payroll_gross", c, to_minor(gross, c))
                 add("payroll_deductions", c, to_minor(ded, c))
                 add("payroll_net", c, to_minor(gross - ded, c))
-        stock = {}
+        book = StockBook()
         for doc_id in self.post_order:
             d = self.docs[doc_id]
             if d["kind"] not in ("stock_in", "stock_out"):
                 continue
             for ln in d["lines"]:
                 key = (ln.get("item"), ln.get("warehouse"), d["currency"])
-                qty, value = stock.get(key, (Decimal(0), Decimal(0)))
                 if d["kind"] == "stock_in":
-                    qty, value = qty + ln["qty"], value + ln["qty"] * ln["unit_price"]
+                    book.receive(key, ln["qty"], ln["unit_price"])
                 else:
-                    avg = value / qty if qty > 0 else Decimal(0)
-                    qty, value = qty - ln["qty"], value - ln["qty"] * avg
-                stock[key] = (qty, value)
-        per_ccy = {}
-        for (_, _, c), (_, value) in stock.items():
-            per_ccy[c] = per_ccy.get(c, Decimal(0)) + value
-        for c, value in per_ccy.items():
+                    book.issue(key, ln["qty"])
+        for c, value in book.totals().items():
             add("stock_value", c, to_minor(value, c))
         return {m: {c: minor_to_str(v, c) for c, v in sorted(by.items())} for m, by in sorted(acc.items())}

@@ -8,6 +8,10 @@
 - Idempotency key per (tenant, period, run epoch, source record, stage): a rerun sends the same keys, so the
   gateway returns stored results and the tenant converges. Changed arguments under the same key are refused
   by the gateway (`idempotency_conflict`), which aborts the run (fail closed).
+- A payment names its invoice by the engine record id: `against` is a `$ref` to the invoice's create step (the
+  runner swaps in the id the engine returned), never the source document number. No ref is sent when the
+  invoice is not in the plan before the payment (SIM-113, SIM-127); the payment is `blocked` when the invoice
+  step is not executed.
 """
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ from dataclasses import dataclass, field
 
 from .codes import Anomaly
 from .model import KINDS
+from .money import fmt
 
 RISKS = ("R0", "R1", "R2", "R3", "R4")
 AUTO_RUN = frozenset({"R0", "R1", "R2"})
@@ -104,19 +109,19 @@ def _value(src: str, value, currency: str, money_style: str):
     if value is None:
         return None
     if src in MONEY_FIELDS:
-        return {"currency": currency, "value": str(value)} if money_style == "object" else str(value)
+        return {"currency": currency, "value": fmt(value)} if money_style == "object" else fmt(value)
     if src in DECIMAL_FIELDS:
-        return str(value)
+        return fmt(value)
     if src in ("date", "due_date"):
         return value.isoformat()
     return value
 
 
-def build_arguments(record, m: dict) -> dict:
+def build_arguments(record, m: dict, against_ref=None) -> dict:
     style = m.get("money", "object")
     args = dict(m.get("constants") or {})
     head = {"party": record.party, "date": record.posting_date, "due_date": record.due_date,
-            "against": record.against, "number": record.number}
+            "against": against_ref, "number": record.number}
     for src, target in sorted((m.get("header") or {}).items()):
         v = _value(src, head[src], record.currency, style)
         if target and v is not None:
@@ -165,7 +170,21 @@ def _schema_ok(schema, args) -> bool:
 
     if not isinstance(schema, dict):
         return False
-    return jsonschema.Draft202012Validator(schema).is_valid(args)
+    try:
+        return jsonschema.Draft202012Validator(schema).is_valid(_placeholders(args))
+    except jsonschema.SchemaError:
+        return False
+
+
+def _placeholders(v):
+    """A `$ref` stands for an engine record id (a string) when the arguments are checked against the schema."""
+    if isinstance(v, dict) and set(v) == {"$ref"}:
+        return "ref"
+    if isinstance(v, dict):
+        return {k: _placeholders(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_placeholders(x) for x in v]
+    return v
 
 
 def idempotency_key(tenant_id: str, period: tuple, epoch: int, source_id: str, stage: str) -> str:
@@ -186,15 +205,18 @@ def plan_replay(records, *, tenant_id: str, period: tuple, tool_set: dict, mappi
     roles = set(caller["role_ids"])
     plan = Plan(tenant_id, tuple(period), {"user_id": caller["user_id"], "role_ids": sorted(roles)},
                 tool_set.get("contentHash") or sha256(tool_set["tools"]))
+    creates = {}  # (kind, number) -> create step, for payments to reference by engine record id
     for r in records:
         m = mapping.get(r.kind)
+        target = {"payment_in": "sales_invoice", "payment_out": "purchase_invoice"}.get(r.kind)
+        ref = creates.get((target, r.against)) if target and r.against is not None else None
         stages = [("create", None)] + ([("post", m["post"])] if m and m.get("post") else [])
         prev = None
         for stage, post in stages:
             step_id = f"{r.source_id}#{stage}"
             res = _resolve(tools, m["entity"], post) if m else None
             if stage == "create":
-                args = build_arguments(r, m) if m else {}
+                args = build_arguments(r, m, {"$ref": ref.step_id} if ref else None) if m else {}
             else:
                 args = {"id": {"$ref": prev.step_id}}
                 if res and res[1]:
@@ -203,6 +225,9 @@ def plan_replay(records, *, tenant_id: str, period: tuple, tool_set: dict, mappi
             if prev is not None and prev.action != "execute":
                 action = "blocked"
                 plan.anomalies.append(Anomaly("SIM-117", (r.source_id,), {"stage": stage, "dependsOn": prev.action}))
+            elif stage == "create" and ref is not None and ref.action != "execute":
+                action = "blocked"
+                plan.anomalies.append(Anomaly("SIM-117", (r.source_id,), {"stage": stage, "dependsOn": ref.action}))
             elif res is None:
                 action = "unmapped"
                 plan.anomalies.append(Anomaly("SIM-108", (r.source_id,), {"stage": stage}))
@@ -222,5 +247,7 @@ def plan_replay(records, *, tenant_id: str, period: tuple, tool_set: dict, mappi
                         idempotency_key(tenant_id, plan.period, run_epoch, r.source_id, stage), args,
                         sha256(args), prev.step_id if prev else None)
             plan.steps.append(step)
+            if stage == "create":
+                creates[(r.kind, r.number)] = step
             prev = step
     return plan

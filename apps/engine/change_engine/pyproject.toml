@@ -7,7 +7,6 @@ dynamic = ["version"]
 dependencies = [
     # frappe and erpnext come from the pinned bench, not from here
     "pydantic>=2",
-    "jsonschema==4.26.0",  # shared event stream schema validation
 ]
 
 [build-system]

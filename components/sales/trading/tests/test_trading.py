@@ -303,3 +303,31 @@ def test_hidden_credit_child_fields_are_refused(field, action):
     with pytest.raises(TradingError, match='^TRD-FIELD$'):
         pack(e).set_credit_limit('demo-customer', 'demo-company', '250')
     assert not e.saved
+
+
+@pytest.mark.parametrize('field', ['sales_person', 'allocated_percentage', 'commission_rate'])
+@pytest.mark.parametrize('action', ['read', 'write'])
+def test_hidden_sales_team_child_fields_are_refused(field, action):
+    e = Engine()
+    e.denied.add(('Sales Order', 'demo-order', action + ':' + field))
+    with pytest.raises(TradingError, match='^TRD-FIELD$'):
+        pack(e).set_sales_team('demo-order', [{'sales_person': 'demo-rep', 'allocated_percentage': '100'}])
+    assert not e.saved
+
+
+@pytest.mark.parametrize('action', ['read', 'write'])
+def test_hidden_pricing_rule_item_child_field_is_refused(action):
+    e = Engine()
+    e.denied.add(('Pricing Rule', 'new-record', action + ':item_code'))
+    with pytest.raises(TradingError, match='^TRD-FIELD$'):
+        pack(e).create_volume_discount('Bulk', 'demo-company', 'Wholesale', 'demo-item', '10', '5')
+    assert not e.saved
+
+
+@pytest.mark.parametrize('action', ['read', 'write'])
+def test_hidden_default_price_list_setting_field_is_refused(action):
+    e = Engine()
+    e.denied.add(('Selling Settings', 'Selling Settings', action + ':selling_price_list'))
+    with pytest.raises(TradingError, match='^TRD-FIELD$'):
+        pack(e).create_price_list('Wholesale AR', 'QAR')
+    assert not e.saved

@@ -71,9 +71,11 @@ class TradingPack:
         saved = doc.insert() if create else doc.save()
         return saved.name
 
-    def _create(self, doctype, values):
+    def _create(self, doctype, values, *, children=()):
         doc = self.engine.new_doc(doctype)
         self._fields(doc, values)
+        for child_doctype, child_fields in children:
+            self._fields(doc, child_fields, doctype=child_doctype)
         doc.update(values)
         return self._save(doc, create=True)
 
@@ -96,7 +98,8 @@ class TradingPack:
         """Create a selling-only list; duplicate handling remains engine-owned."""
         self._doc('Currency', currency)
         # Native creation can set the default list; require permission for that setting too.
-        self._doc('Selling Settings', 'Selling Settings', 'write')
+        settings = self._doc('Selling Settings', 'Selling Settings', 'write')
+        self._fields(settings, ['selling_price_list'])
         return self._create('Price List', dict(price_list_name=_text(name), currency=currency,
                                                selling=1, buying=0, enabled=1))
 
@@ -121,7 +124,8 @@ class TradingPack:
             title=_text(title), company=company, currency=price.get('currency'),
             for_price_list=price_list, apply_on='Item Code', items=[{'item_code': item}],
             selling=1, buying=0, price_or_product_discount='Price',
-            rate_or_discount='Discount Percentage', min_qty=min_qty, discount_percentage=discount))
+            rate_or_discount='Discount Percentage', min_qty=min_qty, discount_percentage=discount),
+            children=(('Pricing Rule Item Code', ('item_code',)),))
 
     def set_credit_limit(self, customer, company, limit):
         """Upsert one company limit, retaining other companies and clearing the bypass.
@@ -168,6 +172,8 @@ class TradingPack:
         """
         doc = self._doc('Sales Order', order, 'write')
         self._fields(doc, ['sales_team'])
+        self._fields(doc, ['sales_person', 'allocated_percentage', 'commission_rate'],
+                     doctype='Sales Team')
         if doc.get('docstatus') != 0:
             raise TradingError('TRD-DRAFT')
         self._doc('Company', doc.get('company'))

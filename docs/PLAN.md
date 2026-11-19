@@ -95,7 +95,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-001 | Re-verify UNVERIFIED regulation rows in research/03 against official sources | Compliance | G0 | LEG-003 | eldon | todo |
 | CMP-002 | Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance | Compliance | G1 | ERP-001 | partner | done |
 | CMP-003 | ZATCA Phase 1 invoice generation (QR, mandatory fields) | Compliance | G1 | CMP-002 | partner | done |
-| CMP-004 | ZATCA Phase 2 invoice passes ZATCA sandbox (signing, hash chain, clearance and reporting) | Compliance | G1 | CMP-003,CMP-033 | partner | todo |
+| CMP-004 | ZATCA Phase 2 invoice passes ZATCA sandbox (signing, hash chain, clearance and reporting) | Compliance | G1 | CMP-003,CMP-033,SEC-002 | partner | todo |
 | CMP-005 | Hijri date support in fields, display and print | Compliance | G1 | ERP-001 | partner | todo |
 | CMP-006 | KSA chart of accounts template and tax codes | Compliance | G1 | ERP-001 | partner | todo |
 | CMP-007 | ZATCA onboarding automation per tenant (CSID, certificates, environments) | Compliance | G2 | CMP-004,PLT-003 | partner | todo |
@@ -130,7 +130,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-016 | Component request pipeline: gap to AI-drafted request with spec and tests | Blueprint | G2 | BPL-014,DSC-006 | eldon | todo |
 | BPL-017 | Factory: AI drafts component code and tests from a request | Blueprint | G2 | BPL-015,PLT-009 | eldon | todo |
 | BPL-018 | Simulator: replay a month of the owner's data on the compiled tenant | Blueprint | G2 | BPL-007,DSC-010 | eldon | done |
-| BPL-019 | Simulation report: expected versus actual, anomalies, owner sign-off view | Blueprint | G2 | BPL-018 | eldon | todo |
+| BPL-019 | Simulation report: expected versus actual, anomalies, owner sign-off view | Blueprint | G2 | BPL-018 | eldon | done |
 | BPL-020 | Build state machine draft to live, with the human gate | Blueprint | G2 | BPL-007,PLT-013 | eldon | todo |
 | BPL-021 | Blueprint versioning and schema migration | Blueprint | G2 | BPL-006 | eldon | done |
 | BPL-022 | Reuse metrics and Platform Autonomy Rate computation | Blueprint | G2 | BPL-010,GOV-016 | eldon | done |
@@ -139,8 +139,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-001 | Interview protocol v0, Arabic and English | Discovery | G1 | GTM-002 | eldon | done |
 | DSC-002 | Template Blueprint: trading and distribution | Discovery | G1 | BPL-005 | eldon | done |
 | DSC-003 | Connector interface spec and tier definitions | Discovery | G1 | GOV-015 | eldon | done |
-| DSC-004 | Template-first discovery flow: show draft, owner corrects | Discovery | G2 | DSC-002,OPR-010 | eldon | todo |
-| DSC-005 | Interview agent in Arabic and English | Discovery | G2 | DSC-001,OPR-010 | eldon | todo |
+| DSC-004 | Template-first discovery flow: show draft, owner corrects | Discovery | G2 | DSC-002,OPR-010 | eldon | done |
+| DSC-005 | Interview agent in Arabic and English | Discovery | G2 | DSC-001,OPR-010 | eldon | done |
 | DSC-006 | Gap analysis: Blueprint versus library | Discovery | G2 | BPL-010,DSC-004 | eldon | todo |
 | DSC-007 | Owner-readable visual Blueprint viewer | Discovery | G2 | BPL-003,WEB-003 | eldon | done |
 | DSC-008 | Quote generator from Blueprint and gap analysis | Discovery | G2 | DSC-006 | eldon | todo |
@@ -168,20 +168,20 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-011 | Component pack v1 for trading and distribution (price lists, credit limits, rep commission) | Runtime | G2 | BPL-014,ERP-005 | partner | doing |
 | ERP-012 | Frappe implementation of the engine adapter | Runtime | G1 | BPL-012,ERP-001 | partner | done |
 | ERP-013 | Opening balances and master data importer | Runtime | G2 | DSC-011 | partner | todo |
-| ERP-014 | Accounting correctness property tests (ledger balances, tax, rounding) | Runtime | G1 | ERP-005,QA-001 | partner | todo |
+| ERP-014 | Accounting correctness property tests (ledger balances, tax, rounding) | Runtime | G1 | ERP-005,QA-001 | partner | done |
 | ERP-015 | Inventory valuation correctness tests | Runtime | G2 | ERP-014 | partner | todo |
 | ERP-016 | Tenant-branded document templates: tax invoice, quote, PO, with compliance layout locked | Runtime | G2 | BRD-006,CMP-003,ERP-007 | partner | todo |
 | ERP-017 | Branded email templates | Runtime | G3 | ERP-016 | partner | todo |
 | ERP-018 | Component pack for a second vertical | Runtime | G4 | DSC-018 | partner | todo |
 | OPR-001 | Agent runtime: loop, tool calls, traces, budgets | Operate | G2 | PLT-025 | eldon | done |
-| OPR-002 | Intent router: discover, ask, act, change | Operate | G2 | OPR-001 | eldon | todo |
+| OPR-002 | Intent router: discover, ask, act, change | Operate | G2 | OPR-001 | eldon | done |
 | OPR-003 | Tool API generator: typed actions per tenant from the Blueprint | Operate | G2 | BPL-003 | eldon | done |
 | OPR-004 | Tool permission enforcement with the caller's own role and scope | Operate | G2 | OPR-003,ERP-008 | eldon | todo |
 | OPR-005 | Confirm-before-write previews for chat actions | Operate | G2 | OPR-004 | eldon | todo |
 | OPR-006 | Semantic layer for metrics | Operate | G2 | BPL-003,ERP-009 | eldon | todo |
 | OPR-007 | Approval inbox backend | Operate | G2 | OPR-004 | eldon | todo |
 | OPR-008 | Report builder | Operate | G2 | OPR-006 | eldon | todo |
-| OPR-009 | Change-by-chat through the Blueprint path | Operate | G2 | OPR-002,BPL-007 | eldon | todo |
+| OPR-009 | Change-by-chat through the Blueprint path | Operate | G2 | OPR-002,BPL-007 | eldon | done |
 | OPR-010 | Chat service: sessions, streaming, Arabic and English | Operate | G2 | OPR-001 | eldon | done |
 | OPR-011 | Role-based view generation (screens and tools per role) | Operate | G2 | OPR-003,WEB-011 | eldon | todo |
 | OPR-012 | Chat transcript audit and retention | Operate | G2 | SEC-008,DAT-001 | eldon | todo |
@@ -311,14 +311,14 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | WEB-023 | Generic record list and form screens driven by the Blueprint and the Tool API: filters, search, create, edit, amend, submit, cancel, linked records, per document type and master data; role scope, risk class, confirm-before-write and audit (docs/product/app-screens.md) | Web | G2 | WEB-003,OPR-003,OPR-004 | eldon | done |
 | WEB-024 | Bulk import and export per document type in the UI: CSV and Excel, mapping, validation preview, error report, nothing written until confirmed; reuses the DSC-011 tabular connector | Web | G2 | WEB-023,DSC-011 | eldon | done |
 | WEB-025 | Department home screens: sales, purchasing, inventory and warehouse, accounting and finance (HR later), built from the record screens and the metrics layer | Web | G2 | WEB-023,WEB-006 | eldon | todo |
-| WEB-026 | Chat stream client in web/app per ADR-0044: pinned @ag-ui/client, SSE only, allow-listed events rendered by our token-themed RTL components, model text as plain text, unknown events dropped, approvals decided through the approval endpoint not the resume, Arabic streaming checks | Web | G2 | WEB-004,OPR-020 | eldon | todo |
+| WEB-026 | Chat stream client in web/app per ADR-0044: pinned @ag-ui/client, SSE only, allow-listed events rendered by our token-themed RTL components, model text as plain text, unknown events dropped, approvals decided through the approval endpoint not the resume, Arabic streaming checks | Web | G2 | WEB-004,OPR-020 | eldon | done |
 | OPR-017 | Department-scoped assistants: per-department instructions, allowed tools, limits and memory scope configured in the Blueprint (contract change recorded as a short ADR per AGENTS.md), acting only with the user's own role and scope | Operate | G2 | OPR-004,OPR-011 | eldon | done |
 | OPR-018 | Domain error codes in the Tool API contract (insufficient stock, closed period, duplicate tax id, missing field, stale approval) with parameter slots and bilingual messages, replacing the single engine_error; the gateway mapping is PLT-024 | Operate | G2 | OPR-003 | eldon | done |
 | OPR-019 | Manifest-declared entity risk class, Blueprint transition kind and Tool API field amendments (ADR-0037, contracts 0.2.0 / 0.3.0); Tier 3 | Operate | G2 | OPR-003 | eldon | done |
 | OPR-020 | Agent stream endpoint in services/operate per ADR-0044: POST RunAgentInput plus SSE with a pinned ag-ui-protocol, per-tenant session auth (ADR-0007), allow-listed events and Custom names, client state untrusted, interrupts display Tool API pending approvals only, error firewall to bilingual codes before RunError, audit and metering to the Event stream, engine-marker test | Operate | G2 | OPR-010,OPR-004,PLT-005 | eldon | done |
 | ERP-025 | Print and PDF output beyond tax invoices: delivery notes, statements, purchase orders, receipts and others, bilingual and tenant-branded, compliance layout locked where required | Runtime | G2 | ERP-016 | partner | todo |
 | ERP-026 | Durable adapter state on the tenant database: a short ADR on where idempotency keys, plans, journal and audit records live, then a MariaDB-backed store beside the tenant data; production refuses an in-memory store; restart and restore tests | Runtime | G1 | ERP-012 | partner | todo |
-| ERP-027 | Fix false MODIFY COLUMN drift on decimal(21,9) columns in the DDL plan gate (Phase 0 finding) so customer-added fields on Customer, Sales Order, Sales Invoice and Item can apply | Runtime | G1 | ERP-021,BPL-007 | partner | todo |
+| ERP-027 | Fix false MODIFY COLUMN drift on decimal(21,9) columns in the DDL plan gate (Phase 0 finding) so customer-added fields on Customer, Sales Order, Sales Invoice and Item can apply | Runtime | G1 | ERP-021,BPL-007 | partner | doing |
 | ERP-028 | Wire component enable/configure/disable into the real runtime with fail-closed unsupported operations, permission-preserving trading pack calls, fixture ID migration, CI coverage, tenant-scoped keyed upserts for create_* operations, durable operation identities and journal/reconciliation with interruption/retry/recovery tests (ADR-0028), plus native activation tests; ERP-011 alone does not activate tenants | Runtime | G2 | ERP-011,ERP-012 | partner | todo |
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | eldon | done |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | partner | todo |
@@ -350,6 +350,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-047 | Stop committing docs/STATUS.md (it conflicted on almost every merge): print it with scripts/build_status.py, show it in the CI run summary, drop the freshness checks (ADR-0035 follow-up) | Governance | G0 | GOV-046 | eldon | done |
 | GOV-048 | Accept ADR-0035 (risk-tiered review) | Governance | G0 | GOV-047 | eldon | done |
 | GOV-049 | CI cost control for a private repo on a free plan: four cheap required checks, one Python test job, web and audit workflows that run only when relevant, cancel superseded runs | Governance | G0 | GOV-006 | eldon | done |
+| GOV-050 | Clarify AGENTS.md: application code is allowed for any plan row at any gate; the current gate decides only what counts as passed | Governance | G0 | GOV-006 | eldon | done |
 | GOV-042 | Efficient review workflow for authors, the partner and agents: detailed in agents/team-protocol.md section 14, linked from AGENTS.md and CLAUDE.md; no change to gates, lanes, security or rigid-zone review or the phase exit check | Governance | G0 | GOV-034 | eldon | done |
 | GOV-051 | AG-UI as the agent-to-screen transport, not an authority (ADR-0044, Proposed): transport only, interrupts never approve, static typed payloads to certified components, Event stream stays the durable log, error firewall, pinned SDKs with a fallback, SSE first, tenant session auth | Governance | G0 | WEB-022 | eldon | done |
 | BPL-028 | Golden path specification (docs/specs/golden-path-trading-sale.md): one company, one item, one warehouse, one sale and invoice; roles, opening state, expected postings, stock effect, permissions, failure and duplicate cases; checked independently by the other founder with a different model; accountant review before Phase 2 | Blueprint | G0 | GOV-036 | eldon | doing |
@@ -366,7 +367,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-020 | Agent least-privilege role spec: grant, scope, tools, expiry, revocation, owner change, audit identity, cost cap, kill switch | Security | G1 | SEC-019 | eldon | done |
 | LEG-019 | Real-data entry checklist and live-posting checklist per market, and the manual accountant sign-off route for the pilot | Legal | G2 | CMP-001 | eldon | todo |
 | CMP-032 | Market-pack release checklist template: legal and accounting scope, e-invoicing, data processing, evidence, accountant review, operational controls | Compliance | G1 | CMP-001 | partner | todo |
-| CMP-033 | Decision and ADR: wrap, fork (with PROVENANCE) or rebuild the ERPGulf ZATCA app for Phase 2, using docs/compliance/zatca-erpgulf-evaluation.md (stub tests, non-transactional hash-chain writes, desk coupling); sets the constraints for CMP-004: one chain per invoicing unit, rejected invoices stay in the chain, outbox for clearance and the 24-hour reporting window, rigid-zone Tier 3 review | Compliance | G1 | CMP-002 | partner | todo |
+| CMP-033 | Decision and ADR: wrap, fork (with PROVENANCE) or rebuild the ERPGulf ZATCA app for Phase 2, using docs/compliance/zatca-erpgulf-evaluation.md (stub tests, non-transactional hash-chain writes, desk coupling); sets the constraints for CMP-004: one chain per invoicing unit, rejected invoices stay in the chain, outbox for clearance and the 24-hour reporting window, rigid-zone Tier 3 review | Compliance | G1 | CMP-002 | partner | doing |
 | OPR-016 | First pilot agent (optional, draft-only), chosen with the lead; role, tools, caps and kill switch per SEC-020 | Operate | G2 | SEC-020,OPR-001 | eldon | todo |
 | PLT-025 | Gateway token metering from the start: count tokens and cost per tenant and per call in services/gateway, so builder session cost is measured | Platform | G1 | - | partner | done |
 | GOV-041 | Contracts check script: every contract schema valid, examples validate, refs resolve; CI job | Governance | G0 | GOV-032 | eldon | done |

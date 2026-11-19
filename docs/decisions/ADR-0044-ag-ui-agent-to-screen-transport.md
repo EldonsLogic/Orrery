@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon and partner (sayegh9, 2026-11-19; cross-model security review via Gemini 4 Neon high; follow-ups in Q-176, Q-218)
+Approved by: Eldon and partner (sayegh9, 2026-11-19; cross-model security review via Gemini 4 Neon high; follow-ups in Q-176, Q-258)
 
 ## Context
 The chat screen (WEB-004) and the agent servers (OPR-001, OPR-010) are not built, and nothing defines the live stream between them. The Event stream contract ([events.md](../../contracts/events.md)) is the durable, append-only record of what happened in a tenant; it is not a live UI protocol. The partner proposed adopting the AG-UI protocol for this link; the WEB-022 paper spike ([web-022-ag-ui-spike.md](../research/web-022-ag-ui-spike.md)) mapped our chat needs to AG-UI events and recommended adopting the vocabulary by a short ADR. This is that ADR.

@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: eldon (walkthrough answer, 2026-11-18) and partner (sayegh9, 2026-11-19; cross-model review via GPT-6.1 Sol; follow-up in Q-210)
+Approved by: eldon (walkthrough answer, 2026-11-18) and partner (sayegh9, 2026-11-19; cross-model review via GPT-6.1 Sol; follow-up in Q-250)
 
 ## Context
 The founders and an independent review agreed that the product should be proven in steps, not built as described in one go. The partner's responses asked for a smaller first proof, real-engine integration, pilot safeguards and a gate map. The repository has gates G0 to G5 ([../GATES.md](../GATES.md)) and ADR-0024 (four phase-1 markets, no fixed launch order). The first leads are in Qatar. The full plan is in [../architecture/phased-delivery-and-lanes.md](../architecture/phased-delivery-and-lanes.md).

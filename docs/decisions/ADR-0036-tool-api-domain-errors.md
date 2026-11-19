@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon and partner (sayegh9, 2026-11-19; cross-model review via Gemini 4 Neon high; follow-up in Q-215)
+Approved by: Eldon and partner (sayegh9, 2026-11-19; cross-model review via Gemini 4 Neon high; follow-up in Q-255)
 
 ## Context
 Tool API section 7 had one catch-all `engine_error`, so a user who ships more stock than exists saw a generic failure. Owners need a specific, translated reason and a next step. Engine invisibility (ADR-0016) forbids passing engine text through, and Arabic is first-class (ADR-0015).

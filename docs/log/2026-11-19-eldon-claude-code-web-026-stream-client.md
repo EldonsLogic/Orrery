@@ -6,7 +6,7 @@ Tool and model: claude-code / sonnet
 Plan IDs: WEB-026
 
 ## Summary
-AG-UI stream client for the chat screen: own SSE parser, allow-list event mapper, ChatPort with abort, idle timeout and bounded retry, hostile-input tests. Not yet wired into ChatView (no token, Q-259).
+AG-UI stream client for the chat screen: own SSE parser, allow-list event mapper, ChatPort with abort, idle timeout and bounded retry, hostile-input tests. Not yet wired into ChatView (no token, Q-270).
 
 ## Files touched
 - see the PR file list

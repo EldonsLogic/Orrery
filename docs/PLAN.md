@@ -371,3 +371,4 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-041 | Contracts check script: every contract schema valid, examples validate, refs resolve; CI job | Governance | G0 | GOV-032 | eldon | done |
 | GOV-052 | Plan status hygiene: mark rows done whose work has merged (PLT-005, QA-008, WEB-017, OPR-019) | Governance | G0 | GOV-006 | eldon | done |
 | GOV-053 | Runbook: shipping plan rows with parallel subagents (worktrees, tiers, reviews, collisions) | Governance | G0 | GOV-006 | eldon | done |
+| GOV-054 | Partner sign-off batch on Proposed ADRs (accept ADR-0026, 0028, 0034, 0036, 0037, 0044 with follow-ups; hold ADR-0027, 0029, 0030, 0043 with Q-210 to Q-219; deduplicate ADR-0043 in INDEX.md) | Governance | G0 | GOV-036 | partner | done |

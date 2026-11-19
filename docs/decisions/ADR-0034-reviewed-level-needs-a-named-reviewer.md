@@ -1,8 +1,8 @@
 # ADR-0034: a "reviewed" component names its reviewer
 
-Status: Proposed
+Status: Accepted
 Owner: eldon
-Approved by: pending (the partner's recorded review on the PR, ADR-0032; needs a security review because it changes a contract)
+Approved by: Eldon and partner (sayegh9, 2026-11-19; cross-model security review via Gemini 4 Neon high; follow-up in Q-214)
 
 ## Context
 Q-19 (answered by the founder on PR #48, 2026-11-14): a manifest must never say "reviewed" when nobody reviewed it. Today `contracts/component.manifest.schema.json` requires `reviewedBy` only from `certified`, and forces any component with `touchesLedgerOrTax: true` to be at least `reviewed`. A tax component waiting for its first review (the ZATCA Phase 1 component in #43) can therefore only be written as "reviewed" with an empty `reviewedBy`. ADR-0031 condition 2 needs a named human who read rigid-zone code line by line; the manifest should record that person.

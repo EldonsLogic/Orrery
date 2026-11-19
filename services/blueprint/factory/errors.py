@@ -17,6 +17,7 @@ LEVEL_CAPPED = "FAC-011"   # declared level above 'tested'; the sandbox never gr
 UNTRUSTED = "FAC-012"      # tests not run: --trusted-source not given
 REPORT_PATH = "FAC-013"    # report path inside the component or unwritable
 COMMAND = "FAC-014"        # command not in the allow-list, or could not start
+ANALYSIS_BLOCK = "FAC-015"  # tests not run and level held at draft: static analysis found a high-severity issue (SEC-010)
 
 ERROR, WARNING = "error", "warning"
 

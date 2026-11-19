@@ -1,0 +1,489 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform:blueprint:simulator:report",
+  "version": "0.1.0",
+  "title": "Simulation report (BPL-018); rendered by BPL-019",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "simulationId",
+    "tenantId",
+    "period",
+    "toolSetHash",
+    "status",
+    "summary",
+    "excluded",
+    "steps",
+    "comparison",
+    "anomalies",
+    "signOff",
+    "verdict",
+    "inDoubt"
+  ],
+  "$defs": {
+    "minor": {
+      "type": "integer"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "signer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userId",
+        "decision",
+        "decidedAt",
+        "note"
+      ],
+      "properties": {
+        "userId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decision": {
+          "enum": [
+            null,
+            "accepted",
+            "rejected"
+          ]
+        },
+        "decidedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": {
+      "const": "0.1.0"
+    },
+    "simulationId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "tenantId": {
+      "$ref": "#/$defs/id"
+    },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/date"
+        },
+        "end": {
+          "$ref": "#/$defs/date"
+        }
+      }
+    },
+    "blueprintRevision": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "toolSetHash": {
+      "type": "string"
+    },
+    "runEpoch": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "aborted"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "records",
+        "excluded",
+        "steps",
+        "executed",
+        "replayed",
+        "held",
+        "parked",
+        "notRun",
+        "errors",
+        "metrics",
+        "matched",
+        "withinTolerance",
+        "mismatched",
+        "notCompared",
+        "blocking",
+        "warnings",
+        "inDoubt"
+      ],
+      "properties": {
+        "records": {
+          "type": "integer"
+        },
+        "excluded": {
+          "type": "integer"
+        },
+        "steps": {
+          "type": "integer"
+        },
+        "executed": {
+          "type": "integer"
+        },
+        "replayed": {
+          "type": "integer"
+        },
+        "held": {
+          "type": "integer"
+        },
+        "parked": {
+          "type": "integer"
+        },
+        "notRun": {
+          "type": "integer"
+        },
+        "errors": {
+          "type": "integer"
+        },
+        "metrics": {
+          "type": "integer"
+        },
+        "matched": {
+          "type": "integer"
+        },
+        "withinTolerance": {
+          "type": "integer"
+        },
+        "mismatched": {
+          "type": "integer"
+        },
+        "notCompared": {
+          "type": "integer"
+        },
+        "blocking": {
+          "type": "integer"
+        },
+        "warnings": {
+          "type": "integer"
+        },
+        "inDoubt": {
+          "type": "integer"
+        }
+      }
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "seq",
+          "stepId",
+          "sourceId",
+          "kind",
+          "stage",
+          "tool",
+          "transitionId",
+          "riskClass",
+          "action",
+          "outcome",
+          "idempotencyKey",
+          "argsHash",
+          "recordId",
+          "errorCode",
+          "provenance"
+        ],
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "stepId": {
+            "$ref": "#/$defs/id"
+          },
+          "sourceId": {
+            "$ref": "#/$defs/id"
+          },
+          "kind": {
+            "enum": [
+              "stock_in",
+              "purchase_invoice",
+              "payment_out",
+              "stock_out",
+              "sales_invoice",
+              "payment_in",
+              "payroll_run"
+            ]
+          },
+          "stage": {
+            "enum": [
+              "create",
+              "post"
+            ]
+          },
+          "tool": {
+            "type": "string"
+          },
+          "transitionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "riskClass": {
+            "enum": [
+              "R0",
+              "R1",
+              "R2",
+              "R3",
+              "R4"
+            ]
+          },
+          "action": {
+            "enum": [
+              "execute",
+              "needs_approval",
+              "unmapped",
+              "denied",
+              "invalid_arguments",
+              "blocked"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "ok",
+              "replayed",
+              "held",
+              "parked",
+              "not_run",
+              "error",
+              "in_doubt"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "argsHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "recordId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_.:/\\-]{1,140}$"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "provenance": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "connector",
+                "sheet",
+                "row",
+                "rowSha256"
+              ],
+              "properties": {
+                "connector": {
+                  "type": "string"
+                },
+                "sheet": {
+                  "type": "string"
+                },
+                "row": {
+                  "type": "string"
+                },
+                "rowSha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "comparison": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric",
+          "currency",
+          "expectedMinor",
+          "actualMinor",
+          "differenceMinor",
+          "toleranceMinor",
+          "documents",
+          "status",
+          "reason",
+          "lines"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "expectedMinor": {
+            "$ref": "#/$defs/minor"
+          },
+          "actualMinor": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "differenceMinor": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "toleranceMinor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "documents": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "enum": [
+              "match",
+              "within_tolerance",
+              "mismatch",
+              "not_compared",
+              "blocked_by_approval",
+              "invalid_actual"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lines": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "anomalies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "severity",
+          "messageKey",
+          "sourceIds",
+          "params"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^SIM-[0-9]{3}$"
+          },
+          "severity": {
+            "enum": [
+              "blocking",
+              "warning",
+              "info"
+            ]
+          },
+          "messageKey": {
+            "type": "string",
+            "pattern": "^sim\\.[a-z_]+$"
+          },
+          "sourceIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "params": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "signOff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "accountant"
+      ],
+      "properties": {
+        "owner": {
+          "$ref": "#/$defs/signer"
+        },
+        "accountant": {
+          "$ref": "#/$defs/signer"
+        }
+      }
+    },
+    "verdict": {
+      "enum": [
+        "pass",
+        "pass_with_warnings",
+        "blocked",
+        "aborted"
+      ]
+    },
+    "inDoubt": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id"
+      }
+    }
+  }
+}

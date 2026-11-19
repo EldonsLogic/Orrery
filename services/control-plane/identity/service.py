@@ -172,6 +172,16 @@ class IdentityService:
                 raise IdentityError("IDN-009")
             self._bump(m)
 
+    def end_person_sessions(self, person_id, reason: str = "mfa_change") -> None:
+        """Every session of the person in every tenant ends: refresh families are
+        tombstoned and each membership's session version is bumped (SEC-005: a
+        factor was added or removed, so earlier sessions no longer match)."""
+        with self.decision("session.revoke_all", Realm.CUSTOMER, person_id, None, reason):
+            for m in self.repo.memberships_for_person(person_id):
+                for family_id in self.repo.families_for(person_id, m.tenant_id):
+                    self.repo.revoke_family(family_id)
+                self._bump(m)
+
     def suspend_membership(self, person_id, tenant_id) -> None:
         with self.decision("membership.suspend", Realm.CUSTOMER, person_id, tenant_id):
             m = self.repo.get_membership(person_id, tenant_id)

@@ -68,7 +68,7 @@ _SVG_ATTRIBUTES = frozenset({
 # "@" and ";" are excluded, which on its own removes "javascript:", "data:", "http://" and
 # "@import"; "url(" is additionally limited to same-document fragments below.
 _SAFE_VALUE_RE = re.compile(r"^[\w\s.,+\-%#()]*$")
-_URL_FRAGMENT_RE = re.compile(r"url\(\s*#[A-Za-z_][\w.\-]*\s*\)")
+_URL_FRAGMENT_RE = re.compile(r"url\(\s*#[A-Za-z_][\w.\-]*\s*\)", re.IGNORECASE)
 _ID_RE = re.compile(r"^[A-Za-z_][\w.\-]{0,63}$")
 _BANNED_VALUE_PARTS = ("expression(", "javascript", "vbscript")
 _DOCTYPE_RE = re.compile(r"<!\s*(doctype|entity|element|attlist|notation)", re.IGNORECASE)
@@ -421,7 +421,7 @@ def _attribute_safe(name: str, value: str) -> bool:
     if "url(" in folded:
         if name not in ("fill", "stroke", "clip-path", "mask"):
             return False
-        if _URL_FRAGMENT_RE.sub("", value).count("url("):
+        if "url(" in re.sub(r"\s+", "", _URL_FRAGMENT_RE.sub("", value).lower()):
             return False
     if name == "id":
         return bool(_ID_RE.fullmatch(value))

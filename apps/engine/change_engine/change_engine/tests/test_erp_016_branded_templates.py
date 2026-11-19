@@ -400,11 +400,13 @@ class TestBrandAssets(unittest.TestCase):
             f'<svg {SVG_NS} viewBox="0 0 10 10">'
             '<rect width="1" height="1" fill="  JaVaScRiPt:alert(1)"/>'
             '<rect width="1" height="1" fill="url(&#x68;ttps://evil.example/a)"/>'
+            '<rect width="1" height="1" fill="URL(relative.svg#grad)"/>'
+            '<rect width="1" height="1" fill="url (relative.svg#grad)"/>'
             '<rect width="1" height="1" stroke="data:text/html,x"/>'
             '<circle r="3" cx="3" cy="3" fill="#112233"/></svg>'
         )
         svg = base64.b64decode(sanitize_brand_logo(svg_in).data_uri.split(",", 1)[1]).decode()
-        for needle in ("javascript", "evil.example", "data:", "url("):
+        for needle in ("javascript", "evil.example", "relative.svg", "data:", "url(", "url ("):
             self.assertNotIn(needle, svg.lower())
         self.assertIn("<circle", svg)
 

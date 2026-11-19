@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import time, timedelta
 from decimal import Decimal, InvalidOperation
 import html
 import json
 import re
 from typing import Any, Mapping
+
+from change_engine.i18n.hijri import canonical_date, display_enabled, format_hijri, localise_digits, to_hijri
 
 from .qr_svg import render_qr_svg
 
@@ -453,6 +455,8 @@ def render_tax_invoice_html(
     *,
     mode: str = "zatca_sa",
     branding: InvoiceBranding | Mapping[str, Any] | None = None,
+    locale: dict[str, Any] | None = None,
+    compliance_profile: dict[str, Any] | None = None,
 ) -> str:
     """Render a bilingual Arabic/English RTL print-ready HTML tax invoice.
 
@@ -460,6 +464,8 @@ def render_tax_invoice_html(
         invoice_data: Invoice payload matching ZATCA Phase 1 schema (or neutral schema in ``neutral`` mode).
         mode: ``"zatca_sa"`` (ZATCA Phase 1 validation + mandatory TLV QR) or ``"neutral"``.
         branding: Optional tenant branding validated against WCAG AA 4.5:1 on white and logo rules.
+        locale: Resolved company.locale settings; Gregorian issue date stays mandatory.
+        compliance_profile: Resolved profile; hijriDisplay.enabled takes precedence.
     """
     if mode not in ("zatca_sa", "neutral"):
         raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
@@ -509,7 +515,23 @@ def render_tax_invoice_html(
 
     seller_map = raw_dict.get("seller") or {}
     buyer_map = raw_dict.get("buyer")
-    hijri_date = str(raw_dict.get("hijri_date") or "").strip()
+    # Companions and legacy hijri_date payloads are untrusted caches, never sources.
+    resolved_locale = {} if locale is None else locale
+    resolved_profile = {} if compliance_profile is None else compliance_profile
+    show_hijri = display_enabled(resolved_locale, resolved_profile, country_default=mode == "zatca_sa")
+    number_system = resolved_locale.get("numberSystem", "western")
+    issue_date = canonical_date(raw_dict["issue_date"])
+    issue_date_display = localise_digits(issue_date, number_system)
+    hijri_html = ""
+    if show_hijri:
+        ar_date = format_hijri(issue_date, language="ar", number_system=number_system)
+        en_date = format_hijri(issue_date, language="en", number_system=number_system)
+        hijri_html = (
+            _ltr(localise_digits(to_hijri(issue_date), number_system)) + '<br/>'
+            f'<bdi dir="rtl" lang="ar" data-review-status="{ar_date.review_status}" '
+            f'data-calendar-source="{ar_date.source}">{_esc(ar_date.text)}</bdi><br/>'
+            f'<bdi dir="ltr" lang="en">{_esc(en_date.text)}</bdi>'
+        )
     notes_text = str(raw_dict.get("notes") or "").strip()
 
     # Branding header elements (never displace mandatory legal layout or QR clear zone)
@@ -537,12 +559,12 @@ def render_tax_invoice_html(
     # Metadata grid rows
     meta_entries: list[tuple[tuple[str, str], str]] = [
         (BILINGUAL_LABELS["invoice_number"], _ltr(invoice_id)),
-        (BILINGUAL_LABELS["issue_date"], _ltr(issue_date)),
+        (BILINGUAL_LABELS["issue_date"], _ltr(issue_date_display)),
     ]
     if issue_time:
         meta_entries.append((BILINGUAL_LABELS["issue_time"], _ltr(issue_time)))
-    if hijri_date:
-        meta_entries.append((BILINGUAL_LABELS["hijri_date"], _ltr(hijri_date)))
+    if hijri_html:
+        meta_entries.append((BILINGUAL_LABELS["hijri_date"], hijri_html))
     meta_entries.append((BILINGUAL_LABELS["currency"], _ltr(currency)))
 
     meta_rows_html = "".join(
@@ -765,6 +787,9 @@ def render_tax_invoice_html(
   bdi {{
     unicode-bidi: isolate;
     direction: ltr;
+  }}
+  bdi[dir="rtl"] {{
+    direction: rtl;
   }}
   .invoice-page {{
     width: 100%;
@@ -1193,12 +1218,15 @@ def render_tax_invoice_pdf(
     mode: str = "zatca_sa",
     branding: InvoiceBranding | Mapping[str, Any] | None = None,
     backend: str = "auto",
+    locale: dict[str, Any] | None = None,
+    compliance_profile: dict[str, Any] | None = None,
 ) -> bytes:
     """Render the bilingual tax invoice directly to PDF bytes using WeasyPrint or wkhtmltopdf."""
     if backend not in ("auto", "weasyprint", "wkhtmltopdf"):
         raise ValueError(f"Unsupported PDF backend '{backend}'")
 
-    html_str = render_tax_invoice_html(invoice_data, mode=mode, branding=branding)
+    html_str = render_tax_invoice_html(invoice_data, mode=mode, branding=branding,
+                                      locale=locale, compliance_profile=compliance_profile)
 
     if backend in ("auto", "weasyprint"):
         try:
@@ -1250,11 +1278,8 @@ def _get_attr_or_key(obj: Any, key: str, default: Any = None) -> Any:
 
 
 def _format_issue_date(val: Any) -> str:
-    if isinstance(val, datetime):
-        return val.strftime("%Y-%m-%d")
-    if isinstance(val, date):
-        return val.isoformat()
-    return str(val or "").strip()
+    """Require a canonical date; timestamp truncation can silently change the day."""
+    return canonical_date(val)
 
 
 def _format_issue_time(val: Any) -> str:
@@ -1601,7 +1626,6 @@ def sales_invoice_to_zatca_dict(
             or _get_attr_or_key(doc, "reason_for_issuance")
             or _get_attr_or_key(doc, "remarks")
         ),
-        "hijri_date": _get_attr_or_key(doc, "custom_hijri_date") or _get_attr_or_key(doc, "hijri_date"),
     }
     return invoice_dict, resolved_mode
 
@@ -1612,6 +1636,8 @@ def render_frappe_sales_invoice_html(
     mode: str = "auto",
     branding: InvoiceBranding | Mapping[str, Any] | None = None,
     frappe_module: Any = None,
+    locale: dict[str, Any] | None = None,
+    compliance_profile: dict[str, Any] | None = None,
 ) -> str:
     """Jinja-callable entrypoint: convert an ERPNext Sales Invoice and render bilingual HTML."""
     invoice_dict, resolved_mode = sales_invoice_to_zatca_dict(
@@ -1619,7 +1645,8 @@ def render_frappe_sales_invoice_html(
         frappe_module=frappe_module,
         mode=mode,
     )
-    return render_tax_invoice_html(invoice_dict, mode=resolved_mode, branding=branding)
+    return render_tax_invoice_html(invoice_dict, mode=resolved_mode, branding=branding,
+                                   locale=locale, compliance_profile=compliance_profile)
 
 
 def install_bilingual_tax_invoice_print_format(

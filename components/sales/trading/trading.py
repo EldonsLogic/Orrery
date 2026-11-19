@@ -36,6 +36,9 @@ def _number(value, *, percent=False, zero=False):
     return value
 
 
+_CREDIT_ROLES = frozenset({'Credit Controller', 'Accounts Manager', 'System Manager'})
+
+
 class TradingPack:
     """Bind to a trusted engine request; all reads and writes retain caller permissions.
 
@@ -54,6 +57,19 @@ class TradingPack:
         if (not self.site or not self.user or self.user == 'Guest'
                 or self.engine.local.site != self.site or self.engine.session.user != self.user):
             raise TradingError('TRD-CONTEXT')
+
+    def _require_credit_role(self):
+        """Require a current credit-management role; fail closed on role-store errors."""
+        self._context()
+        try:
+            roles = self.engine.get_roles(self.user)
+        except Exception:
+            # Role-store failures must neither grant access nor leak engine details.
+            raise TradingError('TRD-ROLE') from None
+        self._context()
+        if (not isinstance(roles, (list, tuple, set, frozenset))
+                or not any(isinstance(role, str) and role in _CREDIT_ROLES for role in roles)):
+            raise TradingError('TRD-ROLE')
 
     def _doc(self, doctype, name, action='read'):
         self._context()
@@ -120,6 +136,8 @@ class TradingPack:
     def create_volume_discount(self, title, company, price_list, item, min_qty, discount):
         """Create a company/item/list scoped quantity discount with no executable condition."""
         min_qty, discount = _number(min_qty), _number(discount, percent=True)
+        if Decimal(discount) >= 100:
+            raise TradingError('TRD-NUMBER', reason='outside_allowed_range')
         company_doc = self._doc('Company', company)
         price = self._price_list(price_list)
         self._doc('Item', item)
@@ -136,21 +154,12 @@ class TradingPack:
         """Upsert one company limit, retaining other companies and clearing the bypass.
 
         Zero is refused: native zero can mean unlimited rather than a credit hold.
-        An accounts-management session role is required in addition to native permissions.
+        A credit-management session role is required in addition to native permissions.
         Human approval binding remains a host activation gate (ERP-023 / ERP-008).
         Existing Accounts Settings.credit_controller exemptions remain untouched.
         Native submission hooks alone enforce exposure and receivable calculations.
         """
-        self._context()
-        try:
-            roles = self.engine.get_roles(self.user)
-        except Exception:
-            # Role-store failures must neither grant access nor leak engine details.
-            raise TradingError('TRD-ROLE') from None
-        self._context()
-        if (not isinstance(roles, (list, tuple, set, frozenset))
-                or not any(role in ('Accounts Manager', 'System Manager') for role in roles)):
-            raise TradingError('TRD-ROLE')
+        self._require_credit_role()
         limit = _number(limit)
         self._doc('Company', company)
         doc = self._doc('Customer', customer, 'write')

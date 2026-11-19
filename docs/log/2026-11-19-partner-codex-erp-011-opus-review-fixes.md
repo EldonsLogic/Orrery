@@ -6,7 +6,7 @@ Tool and model: codex / gpt-6.1-sol (GPT-6.1 Sol)
 Plan IDs: ERP-011, ERP-028
 
 ## Summary
-Addressed Eldon's Opus MED and LOW findings on Tier 3 PR #192: explicit credit-management roles, repeatability gates, CI invocation, numeric reasons, pricing boundaries and Arabic review markers. ERP-011 stays doing, owned by partner; human review remains outstanding.
+Addressed Eldon's Opus MED and LOW findings on Tier 3 PR #192: explicit credit-management roles, repeatability gates, CI invocation, numeric reasons, pricing boundaries and Arabic review markers. Reconciled the concurrent Antigravity fix commit without discarding either history; final component suite has 96 cases. ERP-011 stays doing, owned by partner; human review remains outstanding.
 
 ## Scoped implementation plan
 1. Merge current main cleanly and inspect role conventions and existing activation gates. Proof: merge succeeds, PLAN retains ERP-011 doing / partner. Complete.
@@ -18,12 +18,12 @@ Out of scope: runtime activation, approval implementation, pricing-policy redesi
 
 ## Changes and completed checkpoints
 - Steps 1 to 3 complete: merged current main cleanly (latest incorporated main `32a86f4`); all origin/main workflow steps preserved. ERP-011 stays doing / partner; ERP-028 remains todo with keyed upsert, durable identity and journal/recovery requirements.
-- `trading.py`: credit writes require current session Accounts Manager or System Manager plus all existing native checks. Missing/malformed roles and lookup errors fail closed with TRD-ROLE. Numeric validation retains TRD-NUMBER and adds a safe reason code without echoing input. No financial arithmetic added.
+- `trading.py`: credit writes require current session Credit Controller, Accounts Manager or System Manager plus all existing native checks. Missing/malformed roles and lookup errors fail closed with TRD-ROLE. Numeric validation retains TRD-NUMBER and adds a safe reason code without echoing input. No financial arithmetic added.
 - `tests/test_trading.py`: 15 new cases cover privileged roles, Sales User with Customer write rejected, role lookup failure, role revocation, malformed roles, non-numeric master commission and discount boundaries/native priority and date defaults.
-- README: ERP-023 / ERP-008 human approval and role mapping are explicit pre-activation gates; ERP-028 requires keyed upserts, journal/reconciliation and interrupted-retry/recovery proofs under ADR-0028. The 100 percent discount allowance is input range only; approved caps, priority/date policy and native tests remain activation gates.
+- README: ERP-023 / ERP-008 human approval and role mapping are explicit pre-activation gates; ERP-028 requires keyed upserts, journal/reconciliation and interrupted-retry/recovery proofs under ADR-0028. After reconciliation, full discounts are rejected (0 < discount < 100); approved caps, priority/date policy and native tests remain activation gates.
 - strings.json: unreviewed Arabic marker (ADR-0033), tenant wording and bilingual TRD-ROLE. Native Arabic review remains outstanding.
 - tests/bench_trading.py: documentation only, replacing the unconditional rollback claim with the implicit-commit caveat. Company/User hook behaviour and cleanup remain UNVERIFIED; driver not rerun.
-- `.github/workflows/tests.yml`: append component pytest invocation, preserving all 23 prior steps verbatim. No workflow permission or existing trigger change.
+- `.github/workflows/tests.yml`: append component pytest and factory sandbox invocation, preserving all 23 prior steps verbatim. No workflow permission or existing trigger change.
 - Step 4: commit/push and PR evidence/reply follow these checks; finish_session is run after push. No PR merge, CI polling, fake cross-lane waiver, old log edit or manifest change.
 
 ## Verification
@@ -57,6 +57,14 @@ Tests used an external temporary virtual environment with the existing workflow 
 - Required gates: `python3 scripts/check_docs.py` -> 0 errors, 0 warnings; `check_repo_hygiene.py` -> OK; `check_lanes.py --base origin/main` -> partner, no foreign edits; `scan_secrets.py` -> 0 hits; `check_plan_independence.py` -> OK; `git diff --check` -> clean.
 - Intermediate failures were resolved without bypassing checks: a stale-main lane comparison passed after merging updated main; a merge commit hook caught synthetic secret-pattern test names in generated pytest cache, so the cache was removed and the hook passed. Subsequent pytest runs disabled cache generation.
 - Manifest unchanged: certification.level tested; reviewedBy remains []. No named review or CI certificate invented. Native bench, accountant treatment and Arabic/RTL verification remain deliberately unverified here.
+
+## Concurrent branch reconciliation and final checks
+The first push was rejected without altering the remote: Antigravity had independently pushed `3960c84` for the same review. Merged that commit into this history and preserved its new log unchanged. Resolved overlapping hunks using both implementations and the explicit task requirements:
+- Kept the remote dedicated Credit Controller role, stricter full-discount refusal, per-entry Arabic review markers, factory CI invocation and sixth native Sales User proof. Retained this pass's role-store failure sanitization, malformed-role denial, revocation tests, approval-binding details and explicit native-hook cleanup caveat.
+- The remote mapped invalid master commission to TRD-REP. The task explicitly requires TRD-NUMBER with a reason, so the merged implementation preserves TRD-NUMBER and safe reason codes; the remote test coverage remains with the required numeric-error expectation. Eligibility failures still return TRD-REP.
+- Preserved both sets of compatible regression tests. Final component and factory count is **96 passed**. Final coverage is **145 statements, 0 missed; 42 branches, 0 partial; 100 percent**. A reconciliation regression first reproduced an unhashable malformed role leaking TypeError (1 failed, 95 passed); requiring role names to be strings restored clean TRD-ROLE denial.
+- Re-ran registry/factory integration suites: **196 passed**. The full workflow's unchanged suites retain the results above; its changed final step is rerun exactly (component plus factory) after reconciliation. Both native proof reports remain historical/other-pass evidence, not a fresh native run by this session.
+- The initial finish_session attempt correctly returned NOT FINISHED because the rejected push left the branch unpushed. It will be rerun after the reconciled push. No force push, history rewrite, PR merge or hook bypass.
 
 ## Human review still required (ADR-0031)
 Eldon must inspect `_fields` / `_create` / `_save`, the new credit role guard and existing parent/child permlevel checks against real Customer Credit Limit, Sales Team and Pricing Rule metadata, Company/User implicit commits inside the bench driver's savepoint, the README accountant caveat (formerly cited as line 23), and refusal of zero as a credit limit. Prior Opus review does not substitute for this human line-by-line review. The full pack exceeds the small-PR guide; this pass keeps changes scoped and retains the security regression coverage.

@@ -70,6 +70,11 @@ jobs:
         env:
           PYTHONPATH: apps/engine/change_engine:.
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_007_bilingual_tax_invoice.py -v
+      - name: Tenant-branded document templates tests (ERP-016)
+        if: ${{ !cancelled() }}
+        env:
+          PYTHONPATH: apps/engine/change_engine:.
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_016_branded_templates.py -v
       - name: Change engine security mock tests, fast (CE-SEC-001..004; real-bench run is real-bench.yml)
         if: ${{ !cancelled() }}
         env:

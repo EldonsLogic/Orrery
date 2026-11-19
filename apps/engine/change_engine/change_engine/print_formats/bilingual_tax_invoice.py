@@ -448,23 +448,30 @@ def _render_party_card(
     )
 
 
-def render_tax_invoice_html(
-    invoice_data: Mapping[str, Any],
-    *,
-    mode: str = "zatca_sa",
-    branding: InvoiceBranding | Mapping[str, Any] | None = None,
-) -> str:
-    """Render a bilingual Arabic/English RTL print-ready HTML tax invoice.
+@dataclass(frozen=True)
+class TaxInvoiceView:
+    """Rendered, escaped fragments of a tax invoice shared by every layout (ERP-007, ERP-016)."""
 
-    Args:
-        invoice_data: Invoice payload matching ZATCA Phase 1 schema (or neutral schema in ``neutral`` mode).
-        mode: ``"zatca_sa"`` (ZATCA Phase 1 validation + mandatory TLV QR) or ``"neutral"``.
-        branding: Optional tenant branding validated against WCAG AA 4.5:1 on white and logo rules.
-    """
-    if mode not in ("zatca_sa", "neutral"):
-        raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
+    mode: str
+    invoice_id: str
+    title_ar: str
+    title_en: str
+    badge_ar: str
+    badge_en: str
+    currency: str
+    meta_rows_html: str
+    adjustment_html: str
+    line_rows_html: list[str]
+    qr_html: str
+    totals_html: str
+    notes_html: str
+    seller_card: str
+    buyer_card: str
+    thead_cells: str
 
-    resolved_branding = resolve_invoice_branding(branding)
+
+def prepare_tax_invoice_view(invoice_data: Mapping[str, Any], mode: str) -> TaxInvoiceView:
+    """Validate the invoice (fail closed) and build the escaped HTML fragments both layouts use."""
     raw_dict = dict(invoice_data)
     qr_tlv: str | None = None
 
@@ -511,28 +518,6 @@ def render_tax_invoice_html(
     buyer_map = raw_dict.get("buyer")
     hijri_date = str(raw_dict.get("hijri_date") or "").strip()
     notes_text = str(raw_dict.get("notes") or "").strip()
-
-    # Branding header elements (never displace mandatory legal layout or QR clear zone)
-    logo_html = ""
-    if resolved_branding.logo_data_uri:
-        mono_cls = " logo-mono" if resolved_branding.mono_logo else ""
-        logo_html = (
-            f'<div class="brand-logo-wrap">'
-            f'<img class="brand-logo{mono_cls}" src="{_esc(resolved_branding.logo_data_uri)}" '
-            f'alt="Tenant Logo"/>'
-            f"</div>"
-        )
-
-    tenant_banner = ""
-    if resolved_branding.display_name_ar or resolved_branding.display_name_en:
-        dn_ar = resolved_branding.display_name_ar or resolved_branding.display_name_en or ""
-        dn_en = resolved_branding.display_name_en or resolved_branding.display_name_ar or ""
-        tenant_banner = (
-            '<div class="brand-name bi-row">'
-            f'<span class="bi-ar">{_esc(dn_ar)}</span>'
-            f'<span class="bi-en">{_esc(dn_en)}</span>'
-            "</div>"
-        )
 
     # Metadata grid rows
     meta_entries: list[tuple[tuple[str, str], str]] = [
@@ -703,16 +688,6 @@ def render_tax_invoice_html(
             "</div>"
         )
 
-    footer_powered = (
-        ""
-        if resolved_branding.remove_powered_by
-        else (
-            '<span class="powered-by">'
-            f'مدعوم من {_ltr("Orrery")} &nbsp;|&nbsp; Powered by {_ltr("Orrery")}'
-            "</span>"
-        )
-    )
-
     seller_card = _render_party_card(*BILINGUAL_LABELS["seller"], seller_map)
     buyer_card = _render_party_card(*BILINGUAL_LABELS["customer"], buyer_map)
 
@@ -733,6 +708,92 @@ def render_tax_invoice_html(
         + (f'<div class="th-en">{_esc(h[1])}</div>' if h[1] != h[0] else "")
         + "</th>"
         for h in headers
+    )
+
+    return TaxInvoiceView(
+        mode=mode,
+        invoice_id=invoice_id,
+        title_ar=title_ar,
+        title_en=title_en,
+        badge_ar=badge_ar,
+        badge_en=badge_en,
+        currency=currency,
+        meta_rows_html=meta_rows_html,
+        adjustment_html=adjustment_html,
+        line_rows_html=line_rows_html,
+        qr_html=qr_html,
+        totals_html=totals_html,
+        notes_html=notes_html,
+        seller_card=seller_card,
+        buyer_card=buyer_card,
+        thead_cells=thead_cells,
+    )
+
+
+def render_tax_invoice_html(
+    invoice_data: Mapping[str, Any],
+    *,
+    mode: str = "zatca_sa",
+    branding: InvoiceBranding | Mapping[str, Any] | None = None,
+) -> str:
+    """Render a bilingual Arabic/English RTL print-ready HTML tax invoice.
+
+    Args:
+        invoice_data: Invoice payload matching ZATCA Phase 1 schema (or neutral schema in ``neutral`` mode).
+        mode: ``"zatca_sa"`` (ZATCA Phase 1 validation + mandatory TLV QR) or ``"neutral"``.
+        branding: Optional tenant branding validated against WCAG AA 4.5:1 on white and logo rules.
+    """
+    if mode not in ("zatca_sa", "neutral"):
+        raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
+
+    resolved_branding = resolve_invoice_branding(branding)
+    view = prepare_tax_invoice_view(invoice_data, mode)
+    mode = view.mode
+    invoice_id = view.invoice_id
+    title_ar = view.title_ar
+    title_en = view.title_en
+    badge_ar = view.badge_ar
+    badge_en = view.badge_en
+    currency = view.currency
+    meta_rows_html = view.meta_rows_html
+    adjustment_html = view.adjustment_html
+    line_rows_html = view.line_rows_html
+    qr_html = view.qr_html
+    totals_html = view.totals_html
+    notes_html = view.notes_html
+    seller_card = view.seller_card
+    buyer_card = view.buyer_card
+    thead_cells = view.thead_cells
+    # Branding header elements (never displace mandatory legal layout or QR clear zone)
+    logo_html = ""
+    if resolved_branding.logo_data_uri:
+        mono_cls = " logo-mono" if resolved_branding.mono_logo else ""
+        logo_html = (
+            f'<div class="brand-logo-wrap">'
+            f'<img class="brand-logo{mono_cls}" src="{_esc(resolved_branding.logo_data_uri)}" '
+            f'alt="Tenant Logo"/>'
+            f"</div>"
+        )
+
+    tenant_banner = ""
+    if resolved_branding.display_name_ar or resolved_branding.display_name_en:
+        dn_ar = resolved_branding.display_name_ar or resolved_branding.display_name_en or ""
+        dn_en = resolved_branding.display_name_en or resolved_branding.display_name_ar or ""
+        tenant_banner = (
+            '<div class="brand-name bi-row">'
+            f'<span class="bi-ar">{_esc(dn_ar)}</span>'
+            f'<span class="bi-en">{_esc(dn_en)}</span>'
+            "</div>"
+        )
+
+    footer_powered = (
+        ""
+        if resolved_branding.remove_powered_by
+        else (
+            '<span class="powered-by">'
+            f'مدعوم من {_ltr("Orrery")} &nbsp;|&nbsp; Powered by {_ltr("Orrery")}'
+            "</span>"
+        )
     )
 
     primary_hex = resolved_branding.primary_color

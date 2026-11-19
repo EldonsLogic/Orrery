@@ -130,7 +130,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-016 | Component request pipeline: gap to AI-drafted request with spec and tests | Blueprint | G2 | BPL-014,DSC-006 | eldon | todo |
 | BPL-017 | Factory: AI drafts component code and tests from a request | Blueprint | G2 | BPL-015,PLT-009 | eldon | todo |
 | BPL-018 | Simulator: replay a month of the owner's data on the compiled tenant | Blueprint | G2 | BPL-007,DSC-010 | eldon | done |
-| BPL-019 | Simulation report: expected versus actual, anomalies, owner sign-off view | Blueprint | G2 | BPL-018 | eldon | todo |
+| BPL-019 | Simulation report: expected versus actual, anomalies, owner sign-off view | Blueprint | G2 | BPL-018 | eldon | done |
 | BPL-020 | Build state machine draft to live, with the human gate | Blueprint | G2 | BPL-007,PLT-013 | eldon | todo |
 | BPL-021 | Blueprint versioning and schema migration | Blueprint | G2 | BPL-006 | eldon | done |
 | BPL-022 | Reuse metrics and Platform Autonomy Rate computation | Blueprint | G2 | BPL-010,GOV-016 | eldon | done |
@@ -174,7 +174,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-017 | Branded email templates | Runtime | G3 | ERP-016 | partner | todo |
 | ERP-018 | Component pack for a second vertical | Runtime | G4 | DSC-018 | partner | todo |
 | OPR-001 | Agent runtime: loop, tool calls, traces, budgets | Operate | G2 | PLT-025 | eldon | done |
-| OPR-002 | Intent router: discover, ask, act, change | Operate | G2 | OPR-001 | eldon | todo |
+| OPR-002 | Intent router: discover, ask, act, change | Operate | G2 | OPR-001 | eldon | done |
 | OPR-003 | Tool API generator: typed actions per tenant from the Blueprint | Operate | G2 | BPL-003 | eldon | done |
 | OPR-004 | Tool permission enforcement with the caller's own role and scope | Operate | G2 | OPR-003,ERP-008 | eldon | todo |
 | OPR-005 | Confirm-before-write previews for chat actions | Operate | G2 | OPR-004 | eldon | todo |

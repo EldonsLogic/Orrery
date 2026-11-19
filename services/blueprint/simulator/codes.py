@@ -44,6 +44,12 @@ CODES = {
     "SIM-129": ("tenant_not_empty", "blocking"),
     "SIM-130": ("tenant_not_empty_allowed", "warning"),
     "SIM-131": ("document_total_mismatch", "warning"),
+    # Review rules over a finished report (BPL-019, review.py); they never change the BPL-018 report itself.
+    "SIM-132": ("sign_flipped", "blocking"),
+    "SIM-133": ("actual_zero", "blocking"),
+    "SIM-134": ("at_tolerance_limit", "warning"),
+    "SIM-135": ("nothing_compared", "blocking"),
+    "SIM-136": ("large_difference", "blocking"),
 }
 SEVERITIES = ("blocking", "warning", "info")
 

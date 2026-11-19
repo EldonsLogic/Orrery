@@ -74,19 +74,37 @@ jobs:
             ALL=1
           fi
 
-          # Trigger full suite on shared contracts, workflows, or any unmapped non-doc file
+          # Refuse changed Python tests outside the suites wired below. Selecting
+          # ALL alone cannot run a new suite that has no test command yet.
+          while IFS= read -r path; do
+            case "$path" in
+              */test_*.py|*/tests.py|*/tests/*_test.py)
+                case "$path" in
+                  services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*) continue ;;
+                esac
+                if ! grep -Fq -- "$path" .github/workflows/tests.yml; then
+                  echo "::error::Unmapped test: $path; wire its suite into this workflow"
+                  exit 1
+                fi
+                ;;
+            esac
+          done <<< "$CHANGED"
+
+          # Trigger full suite on shared contracts, workflows, scripts, or any unmapped non-doc file
           if [ "$ALL" = "0" ]; then
-            if echo "$CHANGED" | grep -qE '^(contracts/|\.github/)'; then
+            if grep -qE '^(contracts/|\.github/|scripts/)' <<< "$CHANGED"; then
               ALL=1
-            elif echo "$CHANGED" | grep -qvE '^(services/(blueprint|control-plane|datasets|discovery|gateway|operate|studio)/|apps/engine/|evals/|scripts/|infra/|components/|docs/|web/|\.github/)|\.md$'; then
+            elif grep -qvE '^(services/(blueprint|control-plane|datasets|discovery|gateway|operate|studio)/|apps/engine/|evals/|scripts/|infra/|components/|docs/|web/|\.github/)|\.md$' <<< "$CHANGED"; then
               echo "::warning::Unmapped path changed; failing closed by running all suites"
               ALL=1
             fi
           fi
 
+          # Here-strings have no upstream producer that grep -q can SIGPIPE;
+          # echo | grep -q under pipefail can turn a real match into false.
           check_path() {
             local pattern="$1"
-            if [ "$ALL" = "1" ] || echo "$CHANGED" | grep -qE "$pattern"; then
+            if [ "$ALL" = "1" ] || grep -qE "$pattern" <<< "$CHANGED"; then
               echo "true"
             else
               echo "false"

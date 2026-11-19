@@ -95,7 +95,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-001 | Re-verify UNVERIFIED regulation rows in research/03 against official sources | Compliance | G0 | LEG-003 | eldon | todo |
 | CMP-002 | Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance | Compliance | G1 | ERP-001 | partner | done |
 | CMP-003 | ZATCA Phase 1 invoice generation (QR, mandatory fields) | Compliance | G1 | CMP-002 | partner | done |
-| CMP-004 | ZATCA Phase 2 invoice passes ZATCA sandbox (signing, hash chain, clearance and reporting) | Compliance | G1 | CMP-003,CMP-033 | partner | todo |
+| CMP-004 | ZATCA Phase 2 invoice passes ZATCA sandbox (signing, hash chain, clearance and reporting) | Compliance | G1 | CMP-003,CMP-033,SEC-002 | partner | todo |
 | CMP-005 | Hijri date support in fields, display and print | Compliance | G1 | ERP-001 | partner | todo |
 | CMP-006 | KSA chart of accounts template and tax codes | Compliance | G1 | ERP-001 | partner | todo |
 | CMP-007 | ZATCA onboarding automation per tenant (CSID, certificates, environments) | Compliance | G2 | CMP-004,PLT-003 | partner | todo |
@@ -139,7 +139,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-001 | Interview protocol v0, Arabic and English | Discovery | G1 | GTM-002 | eldon | done |
 | DSC-002 | Template Blueprint: trading and distribution | Discovery | G1 | BPL-005 | eldon | done |
 | DSC-003 | Connector interface spec and tier definitions | Discovery | G1 | GOV-015 | eldon | done |
-| DSC-004 | Template-first discovery flow: show draft, owner corrects | Discovery | G2 | DSC-002,OPR-010 | eldon | todo |
+| DSC-004 | Template-first discovery flow: show draft, owner corrects | Discovery | G2 | DSC-002,OPR-010 | eldon | done |
 | DSC-005 | Interview agent in Arabic and English | Discovery | G2 | DSC-001,OPR-010 | eldon | done |
 | DSC-006 | Gap analysis: Blueprint versus library | Discovery | G2 | BPL-010,DSC-004 | eldon | todo |
 | DSC-007 | Owner-readable visual Blueprint viewer | Discovery | G2 | BPL-003,WEB-003 | eldon | done |
@@ -168,7 +168,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-011 | Component pack v1 for trading and distribution (price lists, credit limits, rep commission) | Runtime | G2 | BPL-014,ERP-005 | partner | todo |
 | ERP-012 | Frappe implementation of the engine adapter | Runtime | G1 | BPL-012,ERP-001 | partner | done |
 | ERP-013 | Opening balances and master data importer | Runtime | G2 | DSC-011 | partner | todo |
-| ERP-014 | Accounting correctness property tests (ledger balances, tax, rounding) | Runtime | G1 | ERP-005,QA-001 | partner | todo |
+| ERP-014 | Accounting correctness property tests (ledger balances, tax, rounding) | Runtime | G1 | ERP-005,QA-001 | partner | done |
 | ERP-015 | Inventory valuation correctness tests | Runtime | G2 | ERP-014 | partner | todo |
 | ERP-016 | Tenant-branded document templates: tax invoice, quote, PO, with compliance layout locked | Runtime | G2 | BRD-006,CMP-003,ERP-007 | partner | todo |
 | ERP-017 | Branded email templates | Runtime | G3 | ERP-016 | partner | todo |
@@ -181,7 +181,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-006 | Semantic layer for metrics | Operate | G2 | BPL-003,ERP-009 | eldon | todo |
 | OPR-007 | Approval inbox backend | Operate | G2 | OPR-004 | eldon | todo |
 | OPR-008 | Report builder | Operate | G2 | OPR-006 | eldon | todo |
-| OPR-009 | Change-by-chat through the Blueprint path | Operate | G2 | OPR-002,BPL-007 | eldon | todo |
+| OPR-009 | Change-by-chat through the Blueprint path | Operate | G2 | OPR-002,BPL-007 | eldon | done |
 | OPR-010 | Chat service: sessions, streaming, Arabic and English | Operate | G2 | OPR-001 | eldon | done |
 | OPR-011 | Role-based view generation (screens and tools per role) | Operate | G2 | OPR-003,WEB-011 | eldon | todo |
 | OPR-012 | Chat transcript audit and retention | Operate | G2 | SEC-008,DAT-001 | eldon | todo |
@@ -318,7 +318,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-020 | Agent stream endpoint in services/operate per ADR-0044: POST RunAgentInput plus SSE with a pinned ag-ui-protocol, per-tenant session auth (ADR-0007), allow-listed events and Custom names, client state untrusted, interrupts display Tool API pending approvals only, error firewall to bilingual codes before RunError, audit and metering to the Event stream, engine-marker test | Operate | G2 | OPR-010,OPR-004,PLT-005 | eldon | done |
 | ERP-025 | Print and PDF output beyond tax invoices: delivery notes, statements, purchase orders, receipts and others, bilingual and tenant-branded, compliance layout locked where required | Runtime | G2 | ERP-016 | partner | todo |
 | ERP-026 | Durable adapter state on the tenant database: a short ADR on where idempotency keys, plans, journal and audit records live, then a MariaDB-backed store beside the tenant data; production refuses an in-memory store; restart and restore tests | Runtime | G1 | ERP-012 | partner | done |
-| ERP-027 | Fix false MODIFY COLUMN drift on decimal(21,9) columns in the DDL plan gate (Phase 0 finding) so customer-added fields on Customer, Sales Order, Sales Invoice and Item can apply | Runtime | G1 | ERP-021,BPL-007 | partner | todo |
+| ERP-027 | Fix false MODIFY COLUMN drift on decimal(21,9) columns in the DDL plan gate (Phase 0 finding) so customer-added fields on Customer, Sales Order, Sales Invoice and Item can apply | Runtime | G1 | ERP-021,BPL-007 | partner | doing |
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | eldon | done |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | partner | todo |
 | QA-017 | Smoke check that a preview URL loads and shows no engine markers (ADR-0016, ADR-0018) | Quality | G1 | INF-013 | eldon | todo |
@@ -366,7 +366,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-020 | Agent least-privilege role spec: grant, scope, tools, expiry, revocation, owner change, audit identity, cost cap, kill switch | Security | G1 | SEC-019 | eldon | done |
 | LEG-019 | Real-data entry checklist and live-posting checklist per market, and the manual accountant sign-off route for the pilot | Legal | G2 | CMP-001 | eldon | todo |
 | CMP-032 | Market-pack release checklist template: legal and accounting scope, e-invoicing, data processing, evidence, accountant review, operational controls | Compliance | G1 | CMP-001 | partner | todo |
-| CMP-033 | Decision and ADR: wrap, fork (with PROVENANCE) or rebuild the ERPGulf ZATCA app for Phase 2, using docs/compliance/zatca-erpgulf-evaluation.md (stub tests, non-transactional hash-chain writes, desk coupling); sets the constraints for CMP-004: one chain per invoicing unit, rejected invoices stay in the chain, outbox for clearance and the 24-hour reporting window, rigid-zone Tier 3 review | Compliance | G1 | CMP-002 | partner | todo |
+| CMP-033 | Decision and ADR: wrap, fork (with PROVENANCE) or rebuild the ERPGulf ZATCA app for Phase 2, using docs/compliance/zatca-erpgulf-evaluation.md (stub tests, non-transactional hash-chain writes, desk coupling); sets the constraints for CMP-004: one chain per invoicing unit, rejected invoices stay in the chain, outbox for clearance and the 24-hour reporting window, rigid-zone Tier 3 review | Compliance | G1 | CMP-002 | partner | doing |
 | OPR-016 | First pilot agent (optional, draft-only), chosen with the lead; role, tools, caps and kill switch per SEC-020 | Operate | G2 | SEC-020,OPR-001 | eldon | todo |
 | PLT-025 | Gateway token metering from the start: count tokens and cost per tenant and per call in services/gateway, so builder session cost is measured | Platform | G1 | - | partner | done |
 | GOV-041 | Contracts check script: every contract schema valid, examples validate, refs resolve; CI job | Governance | G0 | GOV-032 | eldon | done |

@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from change_engine.adapter import (
@@ -166,6 +168,17 @@ def _provision_and_build(adapter: ChangeEngineAdapter, tenant: str = "t_alpha", 
     return init_art
 
 
+_ENV_PATCH = mock.patch.dict(os.environ, {"CHANGE_ENGINE_ENV": "test"})
+
+
+def setUpModule():
+    _ENV_PATCH.start()  # ERP-027: the offline DDL simulator is refused unless CHANGE_ENGINE_ENV is dev or test
+
+
+def tearDownModule():
+    _ENV_PATCH.stop()
+
+
 class TestErp012FrappeAdapter(unittest.TestCase):
     def test_fail_closed_when_real_frappe_absent(self):
         adapter = make_frappe_adapter(simulated=False, test_hooks=True)
@@ -197,7 +210,7 @@ class TestErp012FrappeAdapter(unittest.TestCase):
 
     def test_provision_defaults_valuation_rounding_immutable_ledger_and_item_permlevel(self):
         sim = SimulatedFrappeRuntime()
-        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True)
+        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True, offline_ddl_simulator=True)
         adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
         _provision_and_build(adapter, "t_alpha", "sa")
 
@@ -222,7 +235,7 @@ class TestErp012FrappeAdapter(unittest.TestCase):
 
     def test_guarded_field_add_quarantine_preserve_data_and_restore(self):
         sim = SimulatedFrappeRuntime()
-        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True)
+        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True, offline_ddl_simulator=True)
         adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
         _provision_and_build(adapter, "t_alpha")
 
@@ -299,7 +312,7 @@ class TestErp012FrappeAdapter(unittest.TestCase):
 
     def test_decimal_field_add_and_workflow_and_report_deployment(self):
         sim = SimulatedFrappeRuntime()
-        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True)
+        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True, offline_ddl_simulator=True)
         adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
         init_art = _provision_and_build(adapter, "t_alpha")
 
@@ -483,7 +496,7 @@ class TestErp012FrappeAdapter(unittest.TestCase):
 
     def test_sync_members_shadow_users_and_t36_impersonation(self):
         sim = SimulatedFrappeRuntime()
-        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True)
+        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True, offline_ddl_simulator=True)
         adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
         _provision_and_build(adapter, "t_alpha")
 
@@ -557,7 +570,9 @@ class TestErp012FrappeAdapter(unittest.TestCase):
     def test_multi_tenant_isolation_and_stale_prepared_health(self):
         sim = SimulatedFrappeRuntime()
         resolver = FrappeSiteResolver(site_map={"t_alpha": "alpha.localhost", "t_beta": "beta.localhost"})
-        backend = FrappeRuntimeBackend(site_resolver=resolver, frappe_factory=lambda: sim, auto_create_sites=True)
+        backend = FrappeRuntimeBackend(
+            site_resolver=resolver, frappe_factory=lambda: sim, auto_create_sites=True, offline_ddl_simulator=True
+        )
         adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
 
         _provision_and_build(adapter, "t_alpha", "sa")

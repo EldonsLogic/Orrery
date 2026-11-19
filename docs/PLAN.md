@@ -182,7 +182,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-007 | Approval inbox backend | Operate | G2 | OPR-004 | eldon | todo |
 | OPR-008 | Report builder | Operate | G2 | OPR-006 | eldon | todo |
 | OPR-009 | Change-by-chat through the Blueprint path | Operate | G2 | OPR-002,BPL-007 | eldon | todo |
-| OPR-010 | Chat service: sessions, streaming, Arabic and English | Operate | G2 | OPR-001 | eldon | todo |
+| OPR-010 | Chat service: sessions, streaming, Arabic and English | Operate | G2 | OPR-001 | eldon | done |
 | OPR-011 | Role-based view generation (screens and tools per role) | Operate | G2 | OPR-003,WEB-011 | eldon | todo |
 | OPR-012 | Chat transcript audit and retention | Operate | G2 | SEC-008,DAT-001 | eldon | todo |
 | OPR-013 | Scheduled agents with budgets | Operate | G3 | OPR-001,PLT-021 | eldon | todo |
@@ -199,7 +199,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-009 | AI model gateway: routing, budgets, caching, logs | Platform | G2 | QA-003 | eldon | todo |
 | PLT-010 | Gateway regional routing and provider fallback | Platform | G3 | PLT-009,CMP-019 | eldon | todo |
 | PLT-011 | Per-tenant AI cost attribution and caps | Platform | G2 | PLT-009,PLT-007 | eldon | todo |
-| PLT-012 | Internal team console | Platform | G2 | PLT-005 | eldon | todo |
+| PLT-012 | Internal team console | Platform | G2 | PLT-005 | eldon | done |
 | PLT-013 | Human review queue (team_reviewed gate) | Platform | G2 | PLT-012 | eldon | todo |
 | PLT-014 | Component factory review screens | Platform | G2 | PLT-012,BPL-016 | eldon | todo |
 | PLT-015 | Observability: logs, metrics, traces, alerts | Platform | G1 | INF-004 | partner | todo |

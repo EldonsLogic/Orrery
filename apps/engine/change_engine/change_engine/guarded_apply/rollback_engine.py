@@ -52,15 +52,16 @@ def execute_rollback(
     """
     start_time = time.perf_counter()
 
-    # Step 1: Strictly verifies role authorization (§5, §10)
+    # Step 1: Strictly verifies role authorization (§5, §10).
+    # Fails closed (CE-SEC-002): a missing session user or a failed lookup means no roles.
     if caller_roles is None:
+        caller_roles = []
         try:
-            if frappe and hasattr(frappe, "get_roles") and hasattr(frappe, "session") and hasattr(frappe.session, "user"):
-                caller_roles = frappe.get_roles(frappe.session.user)
+            user = getattr(getattr(frappe, "session", None), "user", None) if frappe else None
+            if user:
+                caller_roles = list(frappe.get_roles(user))
         except Exception:
-            pass
-        if caller_roles is None:
-            caller_roles = ["System Manager"]
+            caller_roles = []
 
     caller_role_set = set(caller_roles)
     if not caller_role_set.intersection(AUTHORIZED_ROLLBACK_ROLES):

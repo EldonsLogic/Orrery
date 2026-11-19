@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 KEYS = {'blueprint', 'control_plane', 'datasets', 'discovery', 'gateway',
-        'operate', 'studio', 'engine', 'evals', 'scripts', 'infra', 'components'}
+        'operate', 'studio', 'engine', 'evals', 'scripts', 'infra', 'components', 'brand'}
 
 
 def filter_script():
@@ -88,3 +88,25 @@ class ServiceFilterTests(unittest.TestCase):
             for consumer in consumers:
                 with self.subTest(path=path, consumer=consumer):
                     self.assertEqual(selected[consumer], 'true')
+
+    def test_new_main_suites_are_mapped_and_selected(self):
+        """Merged security and contrast tests must reach their configured suites."""
+        paths = (
+            ('services/blueprint/tests/factory/test_analysis.py', 'blueprint'),
+            ('services/blueprint/tests/factory/test_analysis_evasions.py', 'blueprint'),
+            ('apps/engine/change_engine/change_engine/tests/test_caller_roles.py', 'engine'),
+            ('apps/engine/change_engine/change_engine/tests/test_ce_sec_003_security.py', 'engine'),
+            ('apps/engine/change_engine/change_engine/tests/test_ce_sec_003_policy_persistence.py', 'engine'),
+            ('apps/engine/change_engine/change_engine/tests/test_api_deployment.py', 'engine'),
+            ('docs/brand/tools/test_tenant_contrast.py', 'brand'),
+        )
+        for path, suite in paths:
+            with self.subTest(path=path):
+                self.assertEqual(self.select(path + '\n')[suite], 'true')
+
+    def test_brand_inputs_select_contrast_suite(self):
+        """Both theme implementation and token edits affect contrast results."""
+        for path in ('docs/brand/tools/derive_tenant_theme.py',
+                     'docs/brand/tokens/base.json'):
+            with self.subTest(path=path):
+                self.assertEqual(self.select(path + '\n')['brand'], 'true')

@@ -17,7 +17,7 @@ Closed remaining INF-003 filter defects after verifying the existing fixes at 97
 - `python3 -m unittest discover -s scripts/tests -p test_services_ci_filter.py -v`: 8 tests passed.
 - Required docs, hygiene, lane and secret checks passed.
 - Executed the configured workflow commands in a clean virtual environment with all suites selected; results below. YAML parsed successfully; all compileall steps passed.
-- Existing changes at the old head already handle merge-base/diff failures, main trigger, cross-service dependencies, gateway jsonschema dependency, disabled deploy guard and Q-222 renumbering.
+- Existing changes at the old head already handle merge-base/diff failures, main trigger, cross-service dependencies, gateway jsonschema dependency, disabled deploy guard and Q-268 renumbering.
 
 ## Decisions
 - No architecture change; hosting and secret schema remain deferred to INF-001. No staging deployment enabled.

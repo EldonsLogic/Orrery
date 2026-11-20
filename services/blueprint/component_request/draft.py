@@ -149,7 +149,7 @@ def validate_draft(raw: Any, request_id: str, fixed_manifest: dict, library: Any
                                               and all(isinstance(o, str) and _SNAKE.match(o) for o in opts))) \
                 or (tgt is not None and (not isinstance(tgt, str) or not _SNAKE.match(tgt))):
             raise RequestError(codes.MALFORMED_DRAFT, "select needs a closed options list and link needs a target, nothing else")
-        if policy.field_verdict(entities, f)[0] == "refuse":
+        if policy.field_verdict(entities, f, library)[0] == "refuse":
             raise RequestError(codes.FORBIDDEN_SCOPE, "a field reaches sensitive data, money movement or a restricted scope")
     for p in _list(s["permissions"], "spec.permissions", 1, 40):
         _closed(p, {"role", "action"}, "permission")
@@ -203,7 +203,7 @@ def _artifacts(m: dict) -> None:
                     a["riskClass"] = "plain"
 
 
-def classify_draft(d: dict) -> dict:
+def classify_draft(d: dict, library: Any = None) -> dict:
     """Structural class of a validated draft: proven plain, or the reasons a human must classify it."""
     reasons: set[str] = set()
     money = False
@@ -213,7 +213,7 @@ def classify_draft(d: dict) -> dict:
             if policy.classify(a["type"], a["ref"].split("/")[-1])[0] != "plain":
                 reasons.add("artifact_name")
     for f in d["spec"]["fields"]:
-        v, why = policy.field_verdict(entities, f)
+        v, why = policy.field_verdict(entities, f, library)
         money = money or why == "money_field"
         if v != "plain":
             reasons.add(why)

@@ -77,13 +77,8 @@ class FakeLibrary:
 from dataclasses import dataclass  # noqa: E402
 
 
-@dataclass(frozen=True)
-class Prin:
-    """Principal-like (services/operate/agui/ports.py): what the identity service hands the host."""
-    tenant_id: str
-    subject: str
-    role_ids: tuple = ()
-    session_id: str = ""
+import component_request.policy  # noqa: E402,F401  (puts the operate and events paths on sys.path)
+from agui.ports import Principal as Prin  # noqa: E402  (the real verified-caller type)
 
 
 def ask(s, g, now, tenant=TEN, subject="discovery-agent", session=None):
@@ -106,4 +101,5 @@ def build(result=None, exc=None, library=(), **kw):
     d = FakeDrafter(result, exc)
     kw.setdefault("min_tenants", 1)
     kw.setdefault("integrity_key", b"test-integrity-key")
+    kw.setdefault("host_now", lambda: "2026-11-20T12:30:00Z")
     return ComponentRequests(d, FakeLibrary(library), owner_github="example-owner", **kw), d

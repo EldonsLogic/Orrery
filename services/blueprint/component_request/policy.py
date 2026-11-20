@@ -14,14 +14,16 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_OPERATE = str(Path(__file__).resolve().parents[2] / "operate")
-if _OPERATE not in sys.path:
-    sys.path.insert(0, _OPERATE)
+# Appended, never inserted first, so these paths cannot shadow a module of the caller (Q-432). agui needs evstream.
+for _p in (Path(__file__).resolve().parents[2] / "operate", Path(__file__).resolve().parents[1] / "events"):
+    if str(_p) not in sys.path:
+        sys.path.append(str(_p))
 
 from toolapi import classify as _C  # noqa: E402
 from toolapi import policy as _P  # noqa: E402
+from agui.ports import Principal  # noqa: E402,F401  (the real verified-caller type, R4)
 
-from .text import scope_hits, sensitive_hits, stems, tokens  # noqa: E402
+from .text import _AR_FOLD, scope_hits, sensitive_hits, stems, tokens  # noqa: E402
 
 # Artifact kinds an AI draft may provide. role_template, function, notification, event, workflow, metric, tool and
 # scheduled_job are code, permission, approval or external-send surfaces (ADR-0048 items 4, 7, 12): human-built only.
@@ -47,7 +49,18 @@ MONEYISH_TOKENS = frozenset({
     "invoice", "bill", "payment", "cash", "credit", "debit", "gl", "user", "sar", "aed", "egp", "qar",
 })
 RESTRICTED_TOKENS = frozenset(_P.LEDGER_NAME_TOKENS) | frozenset(_P.IDENTITY_ENTITY_TOKENS) | MONEYISH_TOKENS
-_PLAIN_VOCAB = BENIGN_TOKENS | NEUTRAL_TOKENS | frozenset(t for e in _P.KNOWN_PLAIN for t in tokens(e))
+# Only benign and neutral words build a plain name. Words of the reviewed table (account, bank, warehouse ...) are not
+# borrowed: the table proves an exact reviewed name, never a new compound (R3).
+NEUTRAL_TOKENS = NEUTRAL_TOKENS | {"customer", "supplier", "sales"}
+_PLAIN_VOCAB = BENIGN_TOKENS | NEUTRAL_TOKENS
+# Money and financial state hidden in an allowed type (select options, checkbox or text names): secondary signal that
+# parks the draft and bars a human from attesting plain.
+FINANCIAL_TOKENS = frozenset({"point", "points", "balance", "credit", "wallet", "paid", "unpaid", "pay", "refunded", "refund",
+                              "settled", "settle", "billed", "owed", "due", "overdue", "redeem", "redeemed", "voucher", "coupon",
+                              "tip", "discount", "price", "cost", "fee", "deposit", "cashback", "reward", "installment", "interest",
+                              "payable", "receivable", "charged", "invoiced", "price", "tax"})
+_FIN_AR = tuple(x.translate(_AR_FOLD) for x in ("رصيد", "نقاط", "مدفوع", "مسترد", "خصم", "سعر", "رسوم", "محفظه", "قسيمه", "عمولة",
+                                                 "مبلغ", "سداد", "تسوية", "فائدة", "مستحق", "دفع", "ائتمان"))
 # Tenant role templates only: never the platform's own roles (the reviewer roles, admins, services, agents).
 PLATFORM_ROLE_TOKENS = frozenset({"platform", "admin", "administrator", "reviewer", "superuser", "system", "root", "owner",
                                   "service", "agent", "assistant", "component", "factory", "approver", "auditor"})
@@ -60,6 +73,26 @@ def _stemmed(name: str) -> set[str]:
 def identifier_hits(name: str) -> list[str]:
     """Restricted words in an identifier (capability, artifact ref, field, test id, i18n key): the secondary deny list."""
     return sorted(_stemmed(name) & RESTRICTED_TOKENS) + scope_hits(name) + sensitive_hits(name)
+
+
+def financial_hit(text: str) -> bool:
+    toks = tokens(text)
+    return bool(_stemmed(text) & FINANCIAL_TOKENS) or any(a in "".join(toks) for a in _FIN_AR)
+
+
+def library_class(library, ref: str) -> str | None:
+    """Worst risk class a library manifest declares for an entity artifact named `ref`, or the identity domain."""
+    worst = None
+    for cid in library.list_components() if library is not None else []:
+        for v in library.versions(cid):
+            m = library.get(cid, v)
+            for p in m.get("provides", []) if isinstance(m, dict) and isinstance(m.get("provides"), list) else []:
+                for a in p.get("artifacts", []) if isinstance(p, dict) and isinstance(p.get("artifacts"), list) else []:
+                    if isinstance(a, dict) and a.get("type") == "entity" and str(a.get("ref")).split("/")[-1] == ref:
+                        rc = a.get("riskClass")
+                        if rc in ("stock", "ledger", "tax", "permission"):
+                            worst = rc
+    return worst
 
 
 def classify(kind: str, ref: str) -> tuple[str, str]:
@@ -88,17 +121,20 @@ def derive_class(kind: str, ref: str) -> tuple[str | None, str]:
     return ("plain" if v == "plain" else None), why
 
 
-def field_verdict(entity_targets: set[str], f: dict) -> tuple[str, str]:
+def field_verdict(entity_targets: set[str], f: dict, library=None) -> tuple[str, str]:
     """Verdict for one drafted field: name, type, options and link target all count."""
     if sensitive_hits(f["name"]) or _C.sensitivity(f["name"], f["type"]) or identifier_hits(f["name"]):
         return "refuse", "field_name"
-    if f["type"] in MONEY_FIELD_TYPES:
+    if f["type"] in MONEY_FIELD_TYPES or financial_hit(f["name"]) or any(
+            isinstance(o, str) and financial_hit(o) for o in (f.get("options") or [])):
         return "unproven", "money_field"
     if f["type"] not in PLAIN_FIELD_TYPES:
         return "unproven", "field_type"
     if f["type"] == "link":
         tgt = f.get("target")
         if tgt not in entity_targets:
+            if isinstance(tgt, str) and library_class(library, tgt):
+                return "refuse", "link_target"
             v, _ = classify("entity", tgt) if isinstance(tgt, str) else ("unproven", "link_target")
             if v != "plain":
                 return v, "link_target"

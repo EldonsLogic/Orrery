@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import codes, policy
+from .policy import Principal
 from .codes import RequestError
 from .draft import DraftingPort, classify_draft, digest, validate_draft
 from .text import clean, injection, per_client, personal_data, scope_hits
@@ -63,7 +64,7 @@ SHAPE = {"manifest": ["id", "version", "kind (configurable)", "name {ar,en}", "d
          "generalisation": ["rationale", "tenant_specific (false)"]}
 _RECORD_KEYS = {"schema", "id", "request_key", "status", "need", "requirement_ids", "tenants", "flags", "requested_by", "created_at",
                 "draft", "draft_digest", "draft_attempts", "drafted_by", "submitted_by", "generalisation", "classification",
-                "refusal", "decision", "history", "seal"}
+                "refusal", "decision", "history", "key_id", "draft_key_id", "seal"}
 _MODEL_KEYS = {"id", "version", "kind", "name", "description", "provides", "requires", "parameters", "tests",
                "engineCompatibility", "i18n", "dataHandling"}
 
@@ -107,7 +108,7 @@ def _check_actor(a: Any) -> Actor:
 def _principal(p: Any) -> tuple[str, str, str]:
     """(subject, session_id, tenant_id) of a Principal-like object (services/operate/agui/ports.py Principal)."""
     vals = [getattr(p, k, None) for k in ("subject", "session_id", "tenant_id")]
-    if not all(isinstance(v, str) for v in vals) or not _ACTOR_ID.match(vals[0]) or not vals[1] or len(vals[1]) > 120 \
+    if not isinstance(p, Principal) or not all(isinstance(v, str) for v in vals) or not _ACTOR_ID.match(vals[0]) or not vals[1] or len(vals[1]) > 120 \
             or not _TENANT.match(vals[2]):
         raise RequestError(codes.MALFORMED_INTAKE, "intake needs a verified principal with subject, session and tenant")
     return vals[0], vals[1], vals[2]
@@ -137,11 +138,16 @@ class ComponentRequests:
     def __init__(self, drafter: DraftingPort, library: Any, *, owner_github: str, reviewer_roles=DEFAULT_REVIEWER_ROLES,
                  licence_spdx: str = "LicenseRef-Proprietary", engine: dict | None = None,
                  min_tenants: int = DEFAULT_MIN_TENANTS, integrity_key: bytes | None = None,
-                 host_now: Callable[[], str] | None = None):
+                 integrity_keys: dict | None = None, key_id: str | None = None, host_now: Callable[[], str] | None = None):
         self._drafter, self._library = drafter, library
         self._roles = frozenset(reviewer_roles)
         self._fixed = {"owner": {"github": owner_github}, "licence": {"spdx": licence_spdx}}
-        self._engine, self._min_tenants, self._key, self._host_now = engine, min_tenants, integrity_key, host_now
+        self._engine, self._min_tenants, self._host_now = engine, min_tenants, host_now
+        # master keys by id, for rotation: the seal, the draft digest and the tenant hash each use their own derived key (R5)
+        self._keys = {**({"k1": integrity_key} if integrity_key else {}), **(integrity_keys or {})}
+        self._active = key_id or (list(self._keys)[-1] if self._keys else None)
+        if self._keys and self._active not in self._keys:
+            raise ValueError("key_id is not among the integrity keys")
         self._records: dict[str, dict] = {}
         self._sessions: dict[tuple[str, str], str] = {}
         self._high: datetime | None = None
@@ -172,13 +178,23 @@ class ComponentRequests:
                 bad.append((k, e.code))
         return bad
 
+    def _derived(self, kid: Any, purpose: bytes) -> bytes | None:
+        master = self._keys.get(kid) if isinstance(kid, str) else None
+        return hmac.new(master, purpose, hashlib.sha256).digest() if master else None
+
     def _mac(self, rec: dict) -> str:
         body = {k: v for k, v in rec.items() if k != "seal"}
-        return hmac.new(self._key, json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+        key = self._derived(rec["key_id"], b"record-seal") or b""
+        return hmac.new(key, json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
                         hashlib.sha256).hexdigest()
 
     def _seal(self, rec: dict) -> None:
-        rec["seal"] = self._mac(rec) if self._key else None
+        """Seal under the active key id (a record is resealed under the new key on its next change after a rotation)."""
+        rec["key_id"] = self._active
+        rec["seal"] = self._mac(rec) if self._keys else None
+
+    def _draft_digest(self, rec: dict, draft: dict) -> str:
+        return digest(draft, self._derived(rec["draft_key_id"], b"draft-digest"))
 
     def _load(self, request_id: Any) -> dict:
         r = self._records.get(request_id) if isinstance(request_id, str) else None
@@ -199,12 +215,12 @@ class ComponentRequests:
             bad = True
         if bad:
             raise RequestError(codes.RECORD_INVALID, "stored record is malformed or inconsistent")
-        if self._key:
-            if not isinstance(r["seal"], str) or not hmac.compare_digest(r["seal"], self._mac(r)):
+        if self._keys:
+            if r["key_id"] not in self._keys or not isinstance(r["seal"], str) or not hmac.compare_digest(r["seal"], self._mac(r)):
                 raise RequestError(codes.INTEGRITY, "record seal is wrong")
         elif r["status"] == codes.APPROVED:
             raise RequestError(codes.INTEGRITY, "no integrity key: a stored approval is not trusted")
-        if r["draft"] is not None and digest(r["draft"], self._key) != r["draft_digest"]:
+        if r["draft"] is not None and (r["draft_key_id"] not in (self._keys or {None: 1}) or self._draft_digest(r, r["draft"]) != r["draft_digest"]):
             raise RequestError(codes.DRAFT_TAMPERED, "stored draft does not match its digest")
         return r
 
@@ -232,8 +248,9 @@ class ComponentRequests:
         """
         subject, session, tenant_id = _principal(principal)
         by = _check_actor(Actor("agent", subject))
-        tenant = hashlib.sha256(("tenant:" + tenant_id).encode("utf-8")).hexdigest()[:24] if not self._key else \
-            hmac.new(self._key, tenant_id.encode("utf-8"), hashlib.sha256).hexdigest()[:24]
+        tkey = self._derived(self._active, b"tenant-ref")
+        tenant = hmac.new(tkey, tenant_id.encode("utf-8"), hashlib.sha256).hexdigest()[:24] if tkey else \
+            hashlib.sha256(("tenant:" + tenant_id).encode("utf-8")).hexdigest()[:24]
         if self._sessions.get((subject, session), tenant) != tenant:
             raise RequestError(codes.TENANT_MISMATCH, "this session already acted for another tenant")
         g = self._shape(gap_request)
@@ -260,7 +277,7 @@ class ComponentRequests:
                "generalisation": {"attested_by": None, "attested_at": None},
                "classification": {"need_attested_by": None, "need_attested_at": None, "draft": None,
                                   "draft_attested_by": None, "draft_attested_at": None, "draft_attested_digest": None},
-               "refusal": None, "decision": None, "history": [], "seal": None}
+               "refusal": None, "decision": None, "history": [], "key_id": None, "draft_key_id": None, "seal": None}
         self._records[rid] = rec
         self._add_evidence(rec, tenant, g["evidence"])
         self._event(rec, now, by, "requested", detail={"tenant": tenant})
@@ -377,8 +394,9 @@ class ComponentRequests:
             return self._draft_failed(rec, now, by, e)
         except Exception:                                       # a port may raise anything; none of it is trusted or shown
             return self._draft_failed(rec, now, by, RequestError(codes.DRAFTER_FAILED, "the drafting port failed"))
-        rec["draft"], rec["draft_digest"], rec["drafted_by"] = clean_draft, digest(clean_draft, self._key), by.id
-        rec["classification"]["draft"] = classify_draft(clean_draft)
+        rec["draft_key_id"] = self._active
+        rec["draft"], rec["draft_digest"], rec["drafted_by"] = clean_draft, self._draft_digest(rec, clean_draft), by.id
+        rec["classification"]["draft"] = classify_draft(clean_draft, self._library)
         if rec["classification"]["draft"]["proven"]:
             self._move(rec, codes.DRAFTED, now, by, "drafted")
         else:
@@ -458,11 +476,13 @@ class ComponentRequests:
     @_sealed
     def approve(self, request_id: str, reviewer: Actor, now: str) -> dict:
         """Record a human approval. Never automatic; re-checks the need and re-validates the stored draft first. Builds nothing."""
-        if not self._key:
+        if not self._keys:
             raise RequestError(codes.INTEGRITY, "no integrity key configured: an approval cannot be trusted")
+        if self._host_now is None:
+            raise RequestError(codes.BAD_CLOCK, "approval needs a host clock to bound the time")
         rec = self._load(request_id)
         self._tick(now, rec)
-        self._human(rec, reviewer)
+        self._human(rec, reviewer, approving=True)
         self._need(rec, codes.IN_REVIEW, codes.APPROVED)
         self._verify(rec)
         self._move(rec, codes.APPROVED, now, reviewer, "approved")
@@ -500,12 +520,16 @@ class ComponentRequests:
                                    "draft_attested_by": None, "draft_attested_at": None, "draft_attested_digest": None})
         return self._out(rec)
 
-    def _human(self, rec: dict, reviewer: Any, barred: bool = True) -> None:
+    def _human(self, rec: dict, reviewer: Any, barred: bool = True, approving: bool = False) -> None:
         r = _check_actor(reviewer)
         if r.kind != "human" or r.verified is not True or not self._roles & set(r.roles):
             raise RequestError(codes.NOT_HUMAN, "only a verified human with a reviewer role may decide")
-        if barred and r.id.lower() in {x.lower() for x in (rec["requested_by"], rec.get("drafted_by"), rec.get("submitted_by")) if x}:
-            raise RequestError(codes.SELF_APPROVAL, "the requester, drafter or submitter may not decide")
+        who = [rec["requested_by"], rec.get("drafted_by"), rec.get("submitted_by")]
+        if approving:      # separation of duties: whoever attested the need, the draft or generalisation may not approve (R1)
+            c = rec["classification"]
+            who += [c.get("need_attested_by"), c.get("draft_attested_by"), rec["generalisation"].get("attested_by")]
+        if barred and r.id.lower() in {x.lower() for x in who if x}:
+            raise RequestError(codes.SELF_APPROVAL, "the requester, drafter, submitter or an attester may not decide")
 
     def _verify(self, rec: dict, final: bool = True) -> None:
         """Re-judge the need, re-validate the draft, check the human attestations. Fails closed."""
@@ -516,16 +540,16 @@ class ComponentRequests:
         if code and code != "unproven":
             raise RequestError(codes.DRAFT_TAMPERED, "stored need no longer passes the scope policy")
         d = rec["draft"]
-        if not d or digest(d, self._key) != rec["draft_digest"]:
+        if not d or self._draft_digest(rec, d) != rec["draft_digest"]:
             raise RequestError(codes.DRAFT_TAMPERED, "stored draft does not match its digest")
         model = {**d, "manifest": {k: v for k, v in d["manifest"].items() if k in _MODEL_KEYS}}
         try:
             again = validate_draft(model, rec["id"], self._fixed | self._engine_part(), self._library)
         except RequestError:
             raise RequestError(codes.DRAFT_TAMPERED, "stored draft no longer validates") from None
-        if digest(again, self._key) != rec["draft_digest"]:
+        if self._draft_digest(rec, again) != rec["draft_digest"]:
             raise RequestError(codes.DRAFT_TAMPERED, "stored draft changed on re-validation")
-        cls = classify_draft(again)
+        cls = classify_draft(again, self._library)
         if not cls["proven"]:
             if cls["has_money_field"] or c["draft_attested_digest"] != rec["draft_digest"]:
                 raise RequestError(codes.MONEY_FIELD if cls["has_money_field"] else codes.NOT_ATTESTED,

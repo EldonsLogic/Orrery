@@ -385,7 +385,7 @@ def test_tampered_stored_draft_blocks_review_and_approval(system):
 
     def swap(rec):
         rec["draft"]["manifest"]["provides"][0]["artifacts"][0]["riskClass"] = "ledger"
-        rec["draft_digest"] = digest(rec["draft"], b"test-integrity-key")   # attacker holds the key: re-validation still fails closed
+        rec["draft_digest"] = s2._draft_digest(rec, rec["draft"])   # attacker holds the key: re-validation still fails closed
     forge(s2, r["id"], swap, reseal=True)
     with pytest.raises(RequestError) as e:
         s2.approve(r["id"], REVIEWER, T3)

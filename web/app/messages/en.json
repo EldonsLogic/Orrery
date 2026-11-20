@@ -987,5 +987,10 @@
         ]
       }
     }
+  },
+  "pwa": {
+    "name": "The platform",
+    "shortName": "Platform",
+    "description": "Run your business from one chat."
   }
 }

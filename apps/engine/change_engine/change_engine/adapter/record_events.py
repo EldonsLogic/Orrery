@@ -6,6 +6,7 @@ import copy
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -16,6 +17,8 @@ import time
 
 from change_engine.adapter.mapping import entity_to_doctype
 from change_engine.guarded_apply.schema_reconciler import make_bounded_lock_key
+
+_LOGGER = logging.getLogger(__name__)
 
 OUTBOX_TABLE = "tabChange Engine Event Outbox"
 SUBJECT_TABLE = "tabChange Engine Event Subject"
@@ -486,12 +489,31 @@ def record_document_event(doc, method: str, *args) -> None:
     )
 
 
+def outbox_metrics(db=None) -> dict[str, int]:
+    """Return pending and dead-lettered row counts for the current site outbox."""
+    if db is None:
+        import frappe
+        db = frappe.db
+    if not _tables_exist(db):
+        return {"pending": 0, "dead_lettered": 0}
+    pending = int(db.sql(f"SELECT COUNT(*) FROM `{OUTBOX_TABLE}` WHERE dead_lettered_at IS NULL")[0][0])
+    dead_lettered = int(db.sql(f"SELECT COUNT(*) FROM `{OUTBOX_TABLE}` WHERE dead_lettered_at IS NOT NULL")[0][0])
+    return {"pending": pending, "dead_lettered": dead_lettered}
+
+
 def _dead_letter_row(db, event_id: str, attempts: int, error: str) -> None:
     db.sql(
         f"UPDATE `{OUTBOX_TABLE}` SET attempts = %s, last_error = %s, dead_lettered_at = %s WHERE event_id = %s",
         (attempts, error[:1000], _utc_now(), event_id),
     )
     db.commit()
+    dead_total = int(db.sql(f"SELECT COUNT(*) FROM `{OUTBOX_TABLE}` WHERE dead_lettered_at IS NOT NULL")[0][0])
+    _LOGGER.warning(
+        "Event %s dead-lettered after %d attempt(s) (dead_lettered_total=%d)",
+        event_id,
+        attempts,
+        dead_total,
+    )
 
 
 def publish_pending(*, max_rows: int = _MAX_ROWS_PER_TICK, max_attempts: int = _MAX_DELIVERY_ATTEMPTS) -> int:
@@ -507,10 +529,17 @@ def publish_pending(*, max_rows: int = _MAX_ROWS_PER_TICK, max_attempts: int = _
 
     if getattr(frappe.local, "request", None) is not None:
         raise RuntimeError("Event publishing requires a background job")
+    if not _tables_exist(frappe.db):
+        return 0
     sink_path = frappe.conf.get("record_event_sink")
     if not sink_path:
-        return 0
-    if not _tables_exist(frappe.db):
+        pending = int(frappe.db.sql(f"SELECT COUNT(*) FROM `{OUTBOX_TABLE}` WHERE dead_lettered_at IS NULL")[0][0])
+        frappe.db.rollback()  # End the read snapshot.
+        if pending:
+            _LOGGER.warning(
+                "record_event_sink is unset; %d record event(s) remain pending in outbox",
+                pending,
+            )
         return 0
 
     tenant_id = _site_tenant(frappe)

@@ -2,6 +2,7 @@
 
 import importlib
 import json
+import logging
 import os
 from pathlib import Path
 import sqlite3
@@ -17,6 +18,7 @@ from change_engine.adapter.record_events import (
     RECORD_ENTITIES,
     RECORD_HOOKS,
     _import_evstream,
+    outbox_metrics,
     resolve_subject_id,
 )
 
@@ -728,3 +730,38 @@ print(json.dumps(delivered[0]))
     emitted = json.loads(proc.stdout.strip().splitlines()[-1])
     res = validate_event({**emitted, "sequence": 1})
     assert res.ok, res.as_dict()
+
+
+def test_dead_letter_and_unset_sink_emit_operator_warnings_and_metrics(sites, caplog):
+    """Quarantined rows and unconfigured-sink backlogs expose counts and warning logs."""
+    engine, select = sites
+    unmigrated = select("t_empty", create_tables=False)
+    assert outbox_metrics(unmigrated) == {"pending": 0, "dead_lettered": 0}
+
+    db = select("t_ops")
+    doc = Document()
+    doc.name = "CUST-BACKLOG-1"
+    invoke_hook(doc, "after_insert")
+    db.commit()
+    assert outbox_metrics(db) == {"pending": 1, "dead_lettered": 0}
+
+    # Publishing with record_event_sink unset must warn instead of returning 0 silently.
+    from change_engine.adapter import record_events
+    with caplog.at_level(logging.WARNING, logger="change_engine.adapter.record_events"):
+        assert record_events.publish_pending() == 0
+    assert any("record_event_sink is unset; 1 record event(s) remain pending" in r.message for r in caplog.records)
+
+    # Dead-lettering a corrupt payload must log a warning and increment dead_lettered count.
+    db.sql(
+        "INSERT INTO `tabChange Engine Event Outbox` (event_id, payload) VALUES (%s, %s)",
+        ("01J8ZK30000000000000000099", "{corrupt"),
+    )
+    db.commit()
+    caplog.clear()
+    select("t_ops", worker=True)
+    store = MemoryStore()
+    with caplog.at_level(logging.WARNING, logger="change_engine.adapter.record_events"):
+        assert run_publisher(engine, store.append) == 1
+    assert outbox_metrics() == {"pending": 0, "dead_lettered": 1}
+    assert any("01J8ZK30000000000000000099 dead-lettered" in r.message for r in caplog.records)
+    assert not any("CUST-BACKLOG-1" in r.message for r in caplog.records)

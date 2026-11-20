@@ -122,5 +122,5 @@ jobs:
       - name: Engine record event outbox tests (ERP-009)
         if: ${{ !cancelled() }}
         env:
-          PYTHONPATH: apps/engine/change_engine
+          PYTHONPATH: apps/engine/change_engine:services/blueprint/events
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_009_record_events.py -q

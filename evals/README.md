@@ -82,3 +82,11 @@ python3 -m evals.harness.agent_behaviour run [--arm scripted|silent] [--out repo
 python3 -m pytest evals/tests/test_agent_behaviour.py -q
 ```
 Needs `evals/requirements.txt` plus `pydantic>=2` and `hijridate` (the service code imports them). A full run takes about 6 seconds. Report: totals, pass rate per category and per locale, failures with the names of the failed checks. Gate: `thresholds.json` sets a floor per category (100 percent: any failure is a regression), a minimum case count per category, and `max_regression` against a baseline report. Exit 1 when the gate fails. The `silent` arm (a model that only talks) must fail every run case; mutation tests break a control and require the matching cases to turn red. A real-model arm is not built (Q-350).
+## Simulator accuracy (QA-011)
+`harness/sim_accuracy.py` replays four fictional months (SAR, 3-decimal KWD, mixed, a source warning; Arabic names and descriptions) through the month simulator with the fake engine adapter. Expected totals are hand-computed integer minor units; rows, anomaly codes (SIM-102 to SIM-138) and verdict must match exactly. 14 seeded faults tamper the fake engine after the replay (drift of 1 minor unit, missing or duplicated invoices, payments and stock receipts, VAT half-down rounding, flipped sign, excess precision, misplaced aging bucket) and each must be flagged with its exact codes. The scorer reports detection (target 1000 permille) and false positives on clean months (target 0) as integers.
+
+```
+python3 -m evals.harness.sim_accuracy       # JSON score, exit 1 unless the gate passes
+python3 -m pytest evals/tests/test_sim_accuracy.py -q
+```
+Needs `jsonschema` and `pydantic>=2` only through the simulator import. The fake engine is no evidence about the real one (Q-242, Q-362).

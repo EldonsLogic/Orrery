@@ -141,7 +141,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-003 | Connector interface spec and tier definitions | Discovery | G1 | GOV-015 | eldon | done |
 | DSC-004 | Template-first discovery flow: show draft, owner corrects | Discovery | G2 | DSC-002,OPR-010 | eldon | done |
 | DSC-005 | Interview agent in Arabic and English | Discovery | G2 | DSC-001,OPR-010 | eldon | done |
-| DSC-006 | Gap analysis: Blueprint versus library | Discovery | G2 | BPL-010,DSC-004 | eldon | todo |
+| DSC-006 | Gap analysis: Blueprint versus library | Discovery | G2 | BPL-010,DSC-004 | eldon | done |
 | DSC-007 | Owner-readable visual Blueprint viewer | Discovery | G2 | BPL-003,WEB-003 | eldon | done |
 | DSC-008 | Quote generator from Blueprint and gap analysis | Discovery | G2 | DSC-006 | eldon | todo |
 | DSC-009 | Owner approval flow (draft to owner_approved) | Discovery | G2 | DSC-007,BPL-020 | eldon | todo |

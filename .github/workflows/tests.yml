@@ -39,6 +39,9 @@ jobs:
         run: |
           python3 -m pytest evals/tests -q
           python3 -m evals.harness check
+      - name: Eval release gate (QA-010)
+        if: ${{ !cancelled() }}
+        run: python3 -m evals.gate
       - name: Discovery and connector tests
         if: ${{ !cancelled() }}
         run: python3 -m pytest services/discovery/tests -q

@@ -25,7 +25,7 @@ def req(kind, ref, status, comp=None, ver="1.0.0"):
     return r
 
 
-def gap(reqs=(), bid="t-1", rev=3, hints=None):
+def gap(reqs=(), bid="t-1", rev=3, hints=None, env="sandbox", malformed=0, rejected=0):
     reqs = list(reqs)
     reqs_out = []
     requests = []
@@ -35,8 +35,8 @@ def gap(reqs=(), bid="t-1", rev=3, hints=None):
             requests.append({"request_key": f"key-{r['id']}", "requirement_id": r["id"], "kind": r["kind"], "ref": r["ref"],
                              "kind_hint": (hints or {}).get(r["id"], "rigid" if r["kind"] == "compliance" else "configurable")})
     c = {k: sum(1 for r in reqs if r["status"] == k) for k in ("covered", "partial", "uncovered")}
-    return {"schema": "1", "environment": "sandbox", "blueprint": {"id": bid, "revision": rev},
-            "summary": {"total": len(reqs), **c}, "requirements": reqs_out, "component_requests": requests}
+    return {"schema": "1", "environment": env, "blueprint": {"id": bid, "revision": rev},
+            "summary": {"total": len(reqs), **c, "malformed_blueprint_items": malformed, "library_entries_rejected": rejected}, "requirements": reqs_out, "component_requests": requests}
 
 
 def pb(**over):
@@ -467,3 +467,145 @@ def test_no_model_or_network_imports():
     src = "".join(p.read_text(encoding="utf-8") for p in (ROOT / "services/discovery/quote").glob("*.py"))
     for banned in ("anthropic", "openai", "import requests", "urllib", "socket", "import random", "time.time", "datetime.now", "utcnow", "float("):
         assert banned not in src, banned
+
+
+# ---- PR #215 review regressions ---------------------------------------------------------------------------
+
+def _g_with_requests(reqs, extra):
+    g = gap(reqs)
+    g["component_requests"] += extra
+    return g
+
+
+def _gen(g, **kw):
+    return generate_quote(blueprint(), g, default_price_book(), now=NOW, **kw)
+
+
+def _rq(rid, key, kind="entity", ref="x", hint="rigid"):
+    return {"request_key": key, "requirement_id": rid, "kind": kind, "ref": ref, "kind_hint": hint}
+
+
+def test_m1_request_for_covered_unknown_or_duplicate_requirement_adds_no_charge():
+    covered = [req("entity", "x", "covered", "m.x")]
+    for g in (_g_with_requests(covered, [_rq("entity:x", "k1")]),                      # covered requirement
+              _g_with_requests(covered, [_rq("entity:ghost", "k1")]),                  # unknown requirement
+              _g_with_requests([req("entity", "y", "uncovered")], [_rq("entity:y", "k2")]),   # second request, same requirement
+              _g_with_requests([req("component", "c", "uncovered")], [_rq("component:c", "k1")])):  # component kind: no requests
+        with pytest.raises(QuoteError) as e:
+            _gen(g)
+        assert e.value.code == "QTE-GAP-003"
+
+
+def test_m1_uncovered_without_request_is_unpriced():
+    g = gap([req("entity", "y", "uncovered")])
+    g["component_requests"] = []
+    r = _gen(g)
+    assert r["lines"]["one_off"] == [] and len(r["unpriced"]) == 1 and r["complete"] is False
+
+
+def test_m3_dropped_input_makes_quote_incomplete():
+    for kw, reason in (({"malformed": 7}, "malformed_blueprint_items"), ({"rejected": 2}, "library_entries_rejected")):
+        r = _gen(gap(**kw))
+        assert r["complete"] is False and reason in r["incomplete_reasons"]
+        assert "quote.warning.malformed_inputs" in [w["key"] for w in r["warnings"]]
+    assert _gen(gap())["complete"] is True
+    g = gap()
+    g["summary"]["malformed_blueprint_items"] = -1
+    with pytest.raises(QuoteError):
+        _gen(g)
+
+
+def test_m2_content_digest_binding_and_strict_revision():
+    b = blueprint()
+    g = gap()
+    g["blueprint"]["digest"] = digest(b)
+    r = generate_quote(b, g, default_price_book(), now=NOW)
+    assert r["inputs"]["gap_bound_by"] == "content_digest"
+    assert "quote.warning.gap_not_content_bound" not in [w["key"] for w in r["warnings"]]
+    b2 = {**b, "company": {"country": "SA", "x": 1}}
+    with pytest.raises(QuoteError) as e:
+        generate_quote(b2, g, default_price_book(), now=NOW)
+    assert e.value.code == "QTE-GAP-002"
+    assert _gen(gap())["inputs"]["gap_bound_by"] == "id_and_revision"
+    assert "quote.warning.gap_not_content_bound" in [w["key"] for w in _gen(gap())["warnings"]]
+    for brev, grev in ((1, True), (True, 1), (1.0, 1), (1, 1.0)):
+        with pytest.raises(QuoteError):
+            generate_quote({"meta": {"id": "t-1", "revision": brev}, "company": {"country": "SA"}}, gap(rev=grev), default_price_book(), now=NOW)
+
+
+def test_m4_environment_and_production_eligibility():
+    assert _gen(gap())["production_eligible"] is False
+    assert "quote.warning.not_production_eligible" in [w["key"] for w in _gen(gap())["warnings"]]
+    ok = req("entity", "e", "covered", "m.e")
+    ok["match"]["production_eligible"] = True
+    r = _gen(gap([ok], env="production"))
+    assert r["production_eligible"] is True and "quote.warning.not_production_eligible" not in [w["key"] for w in r["warnings"]]
+    bad = req("entity", "f", "covered", "m.f")           # production run but a match not flagged eligible
+    assert _gen(gap([ok, bad], env="production"))["production_eligible"] is False
+
+
+def test_low_price_book_unhashable_values_coded():
+    for fn in (lambda b: b["markets"]["SA"].update(currency=["SAR"]), lambda b: b.update(status=["placeholder"]),
+               lambda b: b.update(currencies=[]), lambda b: b["markets"].update(SA=[1])):
+        with pytest.raises(QuoteError) as e:
+            q(book=mutate(fn))
+        assert e.value.code == "QTE-PB-001"
+
+
+def test_low_non_json_content_coded():
+    for bad in (float("nan"), {1, 2}, {"a": {1: "x"}}):
+        b = {"meta": {"id": "t-1", "revision": 3}, "company": {"country": "SA"}, "x": bad}
+        with pytest.raises(QuoteError) as e:
+            generate_quote(b, gap(), default_price_book(), now=NOW)
+        assert e.value.code == "QTE-JSON-001"
+    assert digest({"1": "a"}) != digest({"1": "b"})
+    with pytest.raises(QuoteError):
+        digest({1: "a"})
+    deep = cur = {}
+    for _ in range(5000):
+        cur["a"] = {}
+        cur = cur["a"]
+    assert verify_quote({"digest": "x", "deep": deep}) is False
+
+
+def test_low_semver_ordering_of_module_version():
+    r = q([req("entity", "a", "covered", "m.a", "9.0.0"), req("entity", "b", "covered", "m.a", "10.0.0"),
+           req("entity", "c", "covered", "m.a", "10.0.0-rc.1")])
+    assert r["lines"]["recurring"][1]["params"]["version"] == "10.0.0"
+    with pytest.raises(QuoteError):
+        q([req("entity", "a", "covered", "m.a", "banana")])
+
+
+def test_low_unsafe_ids_refused_and_line_ids_unique():
+    for r in (req("entity", "x", "covered", "m.x‮\x00x"), {**req("entity", "x", "covered", "m.x"), "id": "ent ity\n"}):
+        with pytest.raises(QuoteError):
+            q([r])
+    g = gap([req("entity", "a", "uncovered"), req("entity", "b", "uncovered")])
+    for x in g["component_requests"]:
+        x["request_key"] = "k" * 40 + x["ref"]      # long keys differing late: no truncation collision
+    ids = [x["id"] for x in _gen(g)["lines"]["one_off"]]
+    assert len(ids) == len(set(ids)) == 2
+
+
+def test_low_market_currency_mismatch_needs_explicit_override():
+    book = mutate(lambda b: b["markets"]["SA"].update(currency="AED"))
+    with pytest.raises(QuoteError) as e:
+        q(book=book)
+    assert e.value.code == "QTE-PB-001"
+    book["markets"]["SA"]["currency_override"] = True
+    assert q(book=book)["currency"] == "AED"
+    book["markets"]["SA"]["currency_override"] = "yes"
+    with pytest.raises(QuoteError):
+        q(book=book)
+
+
+def test_low_qatar_zero_rate_label_says_no_vat_and_refs_keep_spaces():
+    r = q(country="QA")
+    assert "No VAT" in r["totals"]["recurring"]["tax"]["labels"]["en"]
+    r = q([{**req("entity", "x", "uncovered"), "ref": "Sales order"}])
+    assert r["lines"]["one_off"][0]["params"]["ref"] == "Sales order"
+
+
+def test_input_order_digest_with_sorted_requests():
+    reqs = [req("entity", "a", "uncovered"), req("entity", "b", "covered", "m.b")]
+    assert q(reqs)["digest"] == q(reqs)["digest"]

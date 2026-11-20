@@ -18,13 +18,18 @@
   "quote.tax": "الضريبة",
   "quote.allowance.ai_actions": "إجراءات الذكاء الاصطناعي المشمولة شهريا",
   "quote.allowance.overage_pack": "باقة إضافية: {size} إجراء",
-  "quote.unpriced.component": "لم يُسعَّر: {ref} (مكوّن غير موجود في المكتبة، يلزم تسعير يدوي)",
   "quote.warning.placeholder_prices": "الأسعار قيم مؤقتة غير معتمدة ولا تصلح للعرض على عميل",
   "quote.warning.unpriced_items": "العرض غير مكتمل: توجد بنود تحتاج تسعيرا يدويا",
   "quote.warning.draft_not_binding": "مسودة غير ملزمة ولا تُرسل قبل اعتماد بشري",
   "quote.state.valid": "ساري",
   "quote.state.expired": "منتهي الصلاحية",
-  "quote.state.not_yet_valid": "لم يبدأ سريانه"
+  "quote.state.not_yet_valid": "لم يبدأ سريانه",
+  "quote.tax.recurring_none": "لا تُطبَّق ضريبة قيمة مضافة على الاشتراك الشهري (النسبة 0%)",
+  "quote.tax.one_off_none": "لا تُطبَّق ضريبة قيمة مضافة على الرسوم لمرة واحدة (النسبة 0%)",
+  "quote.unpriced.requirement": "لم يُسعَّر: {ref} (لا يوجد طلب مكوّن في تحليل الفجوات، يلزم تسعير يدوي)",
+  "quote.warning.malformed_inputs": "العرض غير مكتمل: تجاهل تحليل الفجوات بنودا غير صالحة من المخطط أو مكوّنات مرفوضة من المكتبة",
+  "quote.warning.not_production_eligible": "العرض مبني على تحليل غير إنتاجي: قد تكون مكوّنات مسعّرة غير مؤهلة للتشغيل الفعلي",
+  "quote.warning.gap_not_content_bound": "تحليل الفجوات غير مرتبط بمحتوى المخطط (رقم الإصدار فقط)"
  },
  "en": {
   "quote.title": "Quote (draft)",
@@ -45,12 +50,17 @@
   "quote.tax": "Tax",
   "quote.allowance.ai_actions": "AI actions included per month",
   "quote.allowance.overage_pack": "Extra pack: {size} actions",
-  "quote.unpriced.component": "Not priced: {ref} (component not in the library, price by hand)",
   "quote.warning.placeholder_prices": "Prices are unverified placeholders and must not be shown to a customer",
   "quote.warning.unpriced_items": "Quote is incomplete: some items need manual pricing",
   "quote.warning.draft_not_binding": "Draft, not binding, not to be sent before human approval",
   "quote.state.valid": "Valid",
   "quote.state.expired": "Expired",
-  "quote.state.not_yet_valid": "Not yet valid"
+  "quote.state.not_yet_valid": "Not yet valid",
+  "quote.tax.recurring_none": "No VAT applies on the monthly subscription (rate 0%)",
+  "quote.tax.one_off_none": "No VAT applies on one-off charges (rate 0%)",
+  "quote.unpriced.requirement": "Not priced: {ref} (no component request in the gap analysis, price by hand)",
+  "quote.warning.malformed_inputs": "Quote is incomplete: the gap analysis skipped malformed Blueprint items or rejected library entries",
+  "quote.warning.not_production_eligible": "Quote is based on a non-production analysis: priced components may not be eligible for live use",
+  "quote.warning.gap_not_content_bound": "The gap analysis is bound to the Blueprint by id and revision only, not by content"
  }
 }

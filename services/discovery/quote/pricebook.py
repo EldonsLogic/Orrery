@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from pathlib import Path
 
@@ -25,8 +26,39 @@ CUR = {"base_platform_monthly", "module_default_monthly", "configuration_one_off
 ALLOW = {"ai_actions_monthly", "overage_pack_size", "overage_pack_price"}
 
 
+MARKET_CURRENCY = {"SA": "SAR", "AE": "AED", "EG": "EGP", "QA": "QAR"}  # phase-1 markets; a mismatch needs `currency_override`
+_MAX_DEPTH = 64
+
+
+def _strict(obj, depth=0):
+    """Only JSON types, string keys, finite numbers, bounded depth: otherwise two different objects could share a digest."""
+    if depth > _MAX_DEPTH:
+        raise ValueError("depth")
+    if obj is None or isinstance(obj, (bool, str)) or (isinstance(obj, int)):
+        return
+    if isinstance(obj, float):
+        if not math.isfinite(obj):
+            raise ValueError("non-finite")
+        return
+    if isinstance(obj, list):
+        for x in obj:
+            _strict(x, depth + 1)
+        return
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if not isinstance(k, str):
+                raise ValueError("key")
+            _strict(v, depth + 1)
+        return
+    raise ValueError("type")
+
+
 def canonical(obj) -> bytes:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("ascii")
+    try:
+        _strict(obj)
+        return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("ascii")
+    except (TypeError, ValueError, RecursionError):
+        raise QuoteError("QTE-JSON-001", "not plain JSON (string keys, finite numbers, bounded depth)") from None
 
 
 def digest(obj) -> str:
@@ -84,7 +116,7 @@ def validate_price_book(pb) -> dict:
         _bad("schema")
     if not isinstance(pb["id"], str) or not _ID.fullmatch(pb["id"]):
         _bad("id")
-    if pb["status"] not in ("placeholder", "approved"):
+    if not isinstance(pb["status"], str) or pb["status"] not in ("placeholder", "approved"):
         _bad("status")
     _num(pb["validity_days"], "validity_days", 1, MAX_VALIDITY_DAYS)
     if not isinstance(pb["markets"], dict) or not 0 < len(pb["markets"]) <= 50:
@@ -94,9 +126,15 @@ def validate_price_book(pb) -> dict:
     for cc, m in pb["markets"].items():
         if not isinstance(cc, str) or not _CC.fullmatch(cc):
             _bad("market key")
-        _keys(m, {"currency", "tax"}, f"market {cc}")
-        if m["currency"] not in pb["currencies"] or m["currency"] not in EXPONENT:
+        if isinstance(m, dict) and set(m) == {"currency", "tax", "currency_override"}:
+            if m["currency_override"] is not True:
+                _bad(f"market {cc}: currency_override")
+        else:
+            _keys(m, {"currency", "tax"}, f"market {cc}")
+        if not isinstance(m["currency"], str) or m["currency"] not in pb["currencies"] or m["currency"] not in EXPONENT:
             _bad(f"market {cc}: currency")
+        if cc in MARKET_CURRENCY and m["currency"] != MARKET_CURRENCY[cc] and "currency_override" not in m:
+            _bad(f"market {cc}: currency must be {MARKET_CURRENCY[cc]} unless currency_override is true")
         _keys(m["tax"], {"rate_bp"}, f"market {cc} tax")
         _num(m["tax"]["rate_bp"], f"market {cc} tax rate_bp", 0, 10000)
     for cur, c in pb["currencies"].items():

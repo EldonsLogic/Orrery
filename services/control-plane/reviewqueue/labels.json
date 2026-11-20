@@ -48,7 +48,8 @@
   "review.error.RQ-011": "A stored record failed its integrity check.",
   "review.error.RQ-012": "The integrity key is missing or too weak.",
   "review.error.RQ-013": "An open review already exists for this subject.",
-  "review.error.RQ-014": "The note is not valid."
+  "review.error.RQ-014": "The note is not valid.",
+  "review.state.invalid": "Integrity check failed"
  },
  "ar": {
   "review.title": "قائمة المراجعة",
@@ -99,6 +100,7 @@
   "review.error.RQ-011": "فشل سجل مخزن في فحص السلامة.",
   "review.error.RQ-012": "مفتاح السلامة مفقود أو ضعيف.",
   "review.error.RQ-013": "توجد مراجعة مفتوحة لهذا الموضوع.",
-  "review.error.RQ-014": "الملاحظة غير صالحة."
+  "review.error.RQ-014": "الملاحظة غير صالحة.",
+  "review.state.invalid": "فشل فحص السلامة"
  }
 }

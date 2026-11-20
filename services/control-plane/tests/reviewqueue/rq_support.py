@@ -55,21 +55,24 @@ class World:
         self.q = ReviewQueue(self.idn, self.roles, integrity_key=KEY, **kw)
 
     def claims(self, sid, auth_age=0):
-        tok = self.idn.issue_staff_token(sid, mfa_satisfied=True, auth_time=self.clock.t - auth_age)
+        self._n = (getattr(self, "_n", 0) + 1) % 100  # a distinct MFA event per call (a step-up is spent by a decision)
+        tok = self.idn.issue_staff_token(sid, mfa_satisfied=True, auth_time=self.clock.t - auth_age - self._n)
         return self.idn.verify_staff_token(tok.access_token)
 
-    def submit(self, kind="blueprint_draft", content=BP, tenant="t-a", ref="bp-1", author="agent-1", involved=(), **kw):
+    def submit(self, kind="blueprint_draft", content=BP, tenant="t-a", ref="bp-1", author="agent-1", involved=None, linked_staff=(), **kw):
+        if involved is None:
+            involved = ('req-1',) if kind != 'blueprint_draft' else ()
         return self.q.submit(tenant_id=tenant, kind=kind, subject_ref=ref, content=content, author=author, involved=involved,
-                             now=self.clock.t, **kw)
+                             linked_staff=linked_staff, **kw)
 
     def claim(self, iid, sid="s-rev1", tenant="t-a"):
-        return self.q.claim(self.claims(sid), tenant_id=tenant, item_id=iid, now=self.clock.t)
+        return self.q.claim(self.claims(sid), tenant_id=tenant, item_id=iid)
 
-    def decide(self, iid, sid="s-rev1", decision="approved", tenant="t-a", content=BP, kind="blueprint_draft", note="ok", checklist=None, now=None):
+    def decide(self, iid, sid="s-rev1", decision="approved", tenant="t-a", content=BP, kind="blueprint_draft", note="ok", checklist=None):
         from reviewqueue import checklist_ids
         cl = checklist if checklist is not None else {i: "pass" for i in checklist_ids(kind)}
         return self.q.decide(self.claims(sid), tenant_id=tenant, item_id=iid, decision=decision, checklist=cl, note=note,
-                             current_content=content, now=now if now is not None else self.clock.t)
+                             current_content=content)
 
 
 def code(fn):

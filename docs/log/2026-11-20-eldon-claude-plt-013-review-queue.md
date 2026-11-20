@@ -21,3 +21,6 @@ Unknown.
 
 ## Next step
 BPL-020 reads `gate_evidence` and re-reads stored content itself; DSC-009 follows. Console screens for the queue (PLT-014 or a follow-up row). Open: Q-440 to Q-446.
+
+## Review follow-up (PR 219)
+Fixed the Opus review: H1 (non-empty involved for request and sign-off kinds, union on resubmit, required `linked_staff`), H2 (sealed per-item head and queue manifest, tail cut, rollback, deletion and rehash fail closed), M1 (sealed submission number orders items), M2 (host clock only), M3 (a step-up decides once), M4 (`hold_item`), M5, and the LOWs (random ids, surrogates, claims on reads, size cap, invalid rows, RQ-002 on regression). 93 tests; mutations of the head check, the union, the step-up spend, the ordering and the involved rule each fail tests. New Q-480 to Q-486.

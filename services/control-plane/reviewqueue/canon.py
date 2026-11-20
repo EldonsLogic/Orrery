@@ -9,10 +9,21 @@ import re
 
 from .errors import ReviewError
 
-MAX_DEPTH, MAX_NODES, MAX_STR = 12, 20000, 20000
+MAX_DEPTH, MAX_NODES, MAX_STR, MAX_TOTAL = 12, 20000, 20000, 1_000_000  # MAX_TOTAL: characters over all strings and keys
 ID_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,80}$")
 TENANT_RE = re.compile(r"^[A-Za-z0-9_\-]{1,64}$")
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _text(s, budget):
+    budget[1] -= len(s)
+    try:
+        s.encode("utf-8")  # a lone surrogate is a coded refusal, not a crash
+    except UnicodeEncodeError:
+        raise ReviewError("RQ-001", "content_text") from None
+    if budget[1] < 0:
+        raise ReviewError("RQ-001", "content_size")
+    return s
 
 
 def _walk(v, depth, budget):
@@ -27,7 +38,7 @@ def _walk(v, depth, budget):
     if t is str:
         if len(v) > MAX_STR:
             raise ReviewError("RQ-001", "content_size")
-        return v
+        return _text(v, budget)
     if t in (list, tuple):
         return [_walk(x, depth + 1, budget) for x in v]
     if t is dict:
@@ -35,7 +46,7 @@ def _walk(v, depth, budget):
         for k, x in v.items():
             if type(k) is not str:
                 raise ReviewError("RQ-001", "content_key")
-            out[k] = _walk(x, depth + 1, budget)
+            out[_text(k, budget)] = _walk(x, depth + 1, budget)
         return out
     raise ReviewError("RQ-001", "content_type")
 
@@ -44,7 +55,7 @@ def content_digest(content) -> str:
     """sha256 over a domain tag and the canonical JSON. A content digest, not an integrity seal (the seal is HMAC)."""
     if type(content) not in (dict, list, tuple):
         raise ReviewError("RQ-001", "content_type")
-    body = json.dumps(_walk(content, 0, [MAX_NODES]), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    body = json.dumps(_walk(content, 0, [MAX_NODES, MAX_TOTAL]), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(b"orrery.review.content.v1\n" + body.encode("utf-8")).hexdigest()
 
 
@@ -74,6 +85,10 @@ def note_text(v) -> str:
     if type(v) is not str:
         raise ReviewError("RQ-014", "type")
     s = v.strip()
+    try:
+        s.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ReviewError("RQ-014", "chars") from None
     if len(s) > 2000 or any(ord(c) < 32 and c not in "\n\t" or 0x7F <= ord(c) < 0xA0 or c in "‪‫‬‭‮⁦⁧⁨⁩​‎‏" for c in s):
         raise ReviewError("RQ-014", "chars")
     return s

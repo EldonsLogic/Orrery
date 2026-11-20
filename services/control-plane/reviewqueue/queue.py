@@ -10,20 +10,28 @@ How it stays honest.
 - Each item is an append-only log of events. State is never stored: it is folded from the log on every read, so a
   stored verdict, status or claim is never trusted. Every event carries a whole-record HMAC (a key derived per purpose,
   its key id inside the seal) chained to the previous seal, so editing, dropping, reordering or moving an event to
-  another item or tenant fails closed (RQ-011). No key, no queue (RQ-012): there is no unsealed or sha256 fallback.
+  another item or tenant fails closed (RQ-011). Tail cuts and deleted items are caught by two sealed anchors kept
+  outside the logs and written in the same step as every append: a per-item head (seq and head seal) and a queue
+  manifest (every item id with tenant, seq and head, plus a global counter). Every read checks both: a shorter log, a
+  missing item or a rolled-back log is RQ-011 (no approval, no evidence). Rolling back logs, heads and manifest
+  together needs an external anchor (Q-481). No key, no queue (RQ-012): there is no unsealed or sha256 fallback.
 - Reviewers are verified staff-realm claims from the identity service (live token, active staff identity, current
   session version, MFA, a fresh MFA step-up to claim and decide) with the role `team_reviewer` from an injected
-  resolver. Anything unexpected denies. The reviewer must not be the author or anyone listed in `involved` (requester,
-  attester, signer), nor a staff member linked to one of them.
+  resolver. Anything unexpected denies. A step-up is consumed by one decision. The reviewer must not be the author or
+  anyone in `involved` (requester, attester, signer, and the staff accounts the host says are linked to the author),
+  nor a staff member linked to a customer person in it. `involved` only grows (resubmission unions); component
+  requests and sign-offs need it non-empty; `linked_staff` is a required host input.
 - A decision binds the item's content digest. The host passes the content it loaded from its own store, never the
   caller's; if it no longer matches, the decision is refused and an old approval reads as stale.
-- Time is the caller's but bounded: whole seconds, inside a fixed window and within MAX_SKEW of the identity clock;
-  an event may not be older than the one before it. Claims expire. Checklists are data (checklists.json).
+- Time is the identity (host) clock only, never the caller's: whole seconds inside a fixed window; an act older than
+  the item's last event is refused (RQ-002). Claims expire. Checklists are data (checklists.json).
 - Items hold ids, digests and flags only, never the content. Audit lines carry the note's hash and length, never text.
-- `hold` (quarantine) is sealed into the item and bars approval; only a resubmission with new content lifts it.
+- `hold` (quarantine) can be set at submit or later by the host (`hold_item`, any state); it bars approval and makes
+  evidence ineligible; only a resubmission with new content lifts it.
 
-Trust assumptions (Q-440 to Q-446): the host vouches for `submit` and `resubmit` (it is not a reviewer act), the
-integrity key custody, and a real store must enforce a unique key on (item_id, seq) so a race cannot store two events.
+Trust assumptions (Q-440 to Q-446, Q-480 to Q-486): the host vouches for `submit`, `resubmit` and `hold_item` (not reviewer
+acts), the integrity key custody, and a real store must write the event, the head and the manifest in ONE atomic
+transaction with a unique key on (item_id, seq) (Q-441); this in-memory store does it by assigning all three together.
 """
 from __future__ import annotations
 
@@ -31,6 +39,7 @@ import copy
 import hashlib
 import hmac
 import json
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,8 +53,9 @@ from identity.tokens import check_live
 KINDS = ("blueprint_draft", "component_request", "simulation_signoff")
 DECISIONS = ("approved", "changes_requested", "rejected")
 STATES = ("pending", "claimed", "approved", "changes_requested", "rejected")
+HOLD_REASONS = ("injection", "scan", "compliance", "other")
+NEEDS_INVOLVED = ("component_request", "simulation_signoff")
 REVIEWER_ROLE = "team_reviewer"
-MAX_SKEW = 300
 EARLIEST, LATEST = 1_577_836_800, 4_102_444_800  # 2020-01-01 .. 2100-01-01
 MIN_CLAIM, MAX_CLAIM, DEFAULT_CLAIM = 60, 86_400, 1_800
 _HERE = Path(__file__).parent
@@ -53,7 +63,8 @@ _CHECKLISTS = json.loads((_HERE / "checklists.json").read_text(encoding="utf-8")
 _LABELS = json.loads((_HERE / "labels.json").read_text(encoding="utf-8"))
 _EVENT_KEYS = {"schema", "item_id", "tenant_id", "seq", "prev", "type", "at", "actor", "data", "key_id", "seal"}
 _DATA_KEYS = {
-    "submitted": {"kind", "subject_ref", "revision", "content_digest", "hold", "involved", "author", "checklist_version"},
+    "submitted": {"kind", "subject_ref", "revision", "content_digest", "hold", "involved", "author", "checklist_version", "seq_no"},
+    "held": {"reason"},
     "claimed": {"expires_at"}, "released": set(),
     "decided": {"revision", "content_digest", "decision", "checklist", "note", "note_sha256", "note_len"},
     "resubmitted": {"revision", "content_digest", "hold", "involved"},
@@ -73,7 +84,7 @@ def label_keys() -> set:
     keys = {f"review.kind.{k}" for k in KINDS} | {f"review.state.{s}" for s in STATES} | {f"review.decision.{d}" for d in DECISIONS}
     keys |= {f"review.item.{i}" for k in KINDS for i in checklist_ids(k)}
     return keys | {"review.title", "review.action.claim", "review.action.release", "review.check.pass", "review.check.fail",
-                   "review.note", "review.stale_notice", "review.hold_notice", "review.evidence_notice"}
+                   "review.state.invalid", "review.note", "review.stale_notice", "review.hold_notice", "review.evidence_notice"}
 
 
 @dataclass
@@ -91,7 +102,9 @@ class _Item:
     claim: tuple | None    # (holder, expires_at)
     decisions: list
     last_at: int
-    created: int
+    created: int          # the sealed global submission number (never caller time)
+    head_seq: int = 0
+    head_seal: str = ""
 
 
 class ReviewQueue:
@@ -105,32 +118,88 @@ class ReviewQueue:
             raise ReviewError("RQ-012")
         self._keys, self._idn, self._roles, self._ttl = keys, identity, roles, claim_ttl
         self._logs: dict[str, list] = {}
-        self._order = 0  # only names new item ids; never trusted for state
+        self._heads: dict[str, dict] = {}   # sealed per-item head: (seq, head seal), outside the log
+        self._used_stepups: dict = {}       # (subject, auth_time) -> item id; a step-up decides once (volatile, Q-483)
+        self._manifest = self._seal({"schema": "1", "n": 0, "items": []}, b"review-manifest-seal")
 
     # ----- sealing -------------------------------------------------------------------------------------------
-    def _key(self, kid) -> bytes | None:
+    def _key(self, kid, purpose) -> bytes | None:
         master = self._keys.get(kid) if type(kid) is str else None
-        return hmac.new(master, b"review-event-seal", hashlib.sha256).digest() if master else None
+        return hmac.new(master, purpose, hashlib.sha256).digest() if master else None
 
-    def _mac(self, ev: dict) -> str:
-        key = self._key(ev.get("key_id"))
+    def _mac(self, rec: dict, purpose=b"review-event-seal") -> str:
+        key = self._key(rec.get("key_id"), purpose)
         if key is None:
             raise ReviewError("RQ-011", "key")
-        body = json.dumps({k: v for k, v in ev.items() if k != "seal"}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        body = json.dumps({k: v for k, v in rec.items() if k != "seal"}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return hmac.new(key, body.encode("utf-8"), hashlib.sha256).hexdigest()
 
+    def _seal(self, rec: dict, purpose) -> dict:
+        rec = {**rec, "key_id": self._active}
+        rec["seal"] = self._mac(rec, purpose)
+        return rec
+
+    def _manifest_map(self) -> dict:
+        """item_id -> (tenant, seq, head seal), from the sealed manifest; anything wrong is RQ-011."""
+        m = self._manifest
+        try:
+            if type(m) is not dict or set(m) != {"schema", "n", "items", "key_id", "seal"} or m["schema"] != "1" \
+                    or type(m["n"]) is not int or type(m["seal"]) is not str \
+                    or not hmac.compare_digest(m["seal"], self._mac(m, b"review-manifest-seal")):
+                raise ReviewError("RQ-011", "manifest")
+            out = {}
+            for row in m["items"]:
+                iid, ten, seq, hd = row
+                if iid in out or type(seq) is not int:
+                    raise ReviewError("RQ-011", "manifest")
+                out[iid] = (ten, seq, hd)
+            return out
+        except ReviewError:
+            raise
+        except Exception:
+            raise ReviewError("RQ-011", "manifest") from None
+
     def _append(self, item_id, tenant_id, typ, at, actor, data) -> None:
-        log = self._logs.setdefault(item_id, [])
+        """Event, head and manifest are built first and then assigned together (a real store: one transaction)."""
+        mf = self._manifest_map()
+        log = self._logs.get(item_id, [])
+        if (item_id in mf) != bool(log):
+            raise ReviewError("RQ-011", "anchor")
         ev = {"schema": "1", "item_id": item_id, "tenant_id": tenant_id, "seq": len(log) + 1,
               "prev": log[-1]["seal"] if log else "", "type": typ, "at": at, "actor": actor, "data": data, "key_id": self._active}
         ev["seal"] = self._mac(ev)
-        log.append(ev)
+        mf[item_id] = (tenant_id, ev["seq"], ev["seal"])
+        head = self._seal({"item_id": item_id, "tenant_id": tenant_id, "seq": ev["seq"], "head": ev["seal"]}, b"review-head-seal")
+        manifest = self._seal({"schema": "1", "n": self._manifest["n"] + 1,
+                               "items": [[k, *mf[k]] for k in sorted(mf)]}, b"review-manifest-seal")
+        self._logs[item_id] = log + [ev]
+        self._heads[item_id] = head
+        self._manifest = manifest
 
-    # ----- reading: every read folds the log and re-validates it ----------------------------------------------
+    # ----- reading: every read folds the log and re-validates it and its anchors ------------------------------
     def _fold(self, item_id, tenant_id=None) -> _Item:
-        log = self._logs.get(item_id) if type(item_id) is str else None
-        if not log:
+        mf = self._manifest_map()
+        entry = mf.get(item_id) if type(item_id) is str else None
+        if entry is None:
+            if type(item_id) is str and self._logs.get(item_id):
+                raise ReviewError("RQ-011", "unanchored")  # a log the manifest never saw
             raise ReviewError("RQ-004")
+        if tenant_id is not None and entry[0] != tenant_id:
+            raise ReviewError("RQ-004")  # another tenant's item is indistinguishable from a missing one
+        log = self._logs.get(item_id)
+        if not log:
+            raise ReviewError("RQ-011", "deleted")
+        head = self._heads.get(item_id)
+        try:
+            if type(head) is not dict or set(head) != {"item_id", "tenant_id", "seq", "head", "key_id", "seal"} \
+                    or not hmac.compare_digest(str(head["seal"]), self._mac(head, b"review-head-seal")) \
+                    or head["item_id"] != item_id or head["seq"] != len(log) or head["head"] != log[-1].get("seal") \
+                    or entry != (head["tenant_id"], len(log), log[-1].get("seal")):
+                raise ReviewError("RQ-011", "head")
+        except ReviewError:
+            raise
+        except Exception:
+            raise ReviewError("RQ-011", "head") from None
         it, prev, last = None, "", 0
         try:
             for i, ev in enumerate(log, 1):
@@ -149,9 +218,7 @@ class ReviewQueue:
             raise ReviewError("RQ-011", e.detail or e.code) from None
         except (KeyError, TypeError, ValueError, AttributeError):
             raise ReviewError("RQ-011", "shape") from None
-        it.last_at = last
-        if tenant_id is not None and it.tenant != tenant_id:
-            raise ReviewError("RQ-004")  # another tenant's item is indistinguishable from a missing one
+        it.last_at, it.head_seq, it.head_seal = last, len(log), prev
         return it
 
     def _apply(self, it, ev, item_id) -> _Item:
@@ -159,20 +226,27 @@ class ReviewQueue:
         bad = ReviewError("RQ-011", typ)
         if typ == "submitted":
             if it is not None or d["kind"] not in KINDS or d["revision"] != 1 or d["checklist_version"] != _CHECKLISTS["version"] \
-                    or type(d["hold"]) is not bool or not DIGEST_RE.fullmatch(str(d["content_digest"])):
+                    or type(d["hold"]) is not bool or not DIGEST_RE.fullmatch(str(d["content_digest"])) \
+                    or type(d["seq_no"]) is not int or d["seq_no"] < 1:
                 raise bad
             _tenant_id(ev["tenant_id"]); ident(d["subject_ref"]); ident(d["author"])
             involved = id_list(list(d["involved"]), "involved")
-            if actor != d["author"]:
+            if actor != d["author"] or (d["kind"] in NEEDS_INVOLVED and not involved):
                 raise bad
             return _Item(item_id, ev["tenant_id"], d["kind"], d["subject_ref"], d["author"], involved, 1, d["content_digest"],
-                         d["hold"], "pending", None, [], at, at)
+                         d["hold"], "pending", None, [], at, d["seq_no"])
         if it is None:
             raise bad
         live = it.status == "claimed" and it.claim is not None and it.claim[1] > at
-        if typ == "claimed":
+        if typ == "held":
+            if d["reason"] not in HOLD_REASONS or it.hold:
+                raise bad
             ident(actor)
-            if it.status not in ("pending", "claimed") or live or type(d["expires_at"]) is not int or not MIN_CLAIM <= d["expires_at"] - at <= MAX_CLAIM or self._conflict(it, actor):
+            it.hold = True
+        elif typ == "claimed":
+            ident(actor)
+            if it.status not in ("pending", "claimed") or live or type(d["expires_at"]) is not int \
+                    or not MIN_CLAIM <= d["expires_at"] - at <= MAX_CLAIM or self._conflict(it, actor):
                 raise bad
             it.status, it.claim = "claimed", (actor, d["expires_at"])
         elif typ == "released":
@@ -197,10 +271,14 @@ class ReviewQueue:
                                  "noteSha256": d["note_sha256"], "noteLength": d["note_len"]})
             it.status, it.claim = d["decision"], None
         elif typ == "resubmitted":
-            if it.status != "changes_requested" or actor != it.author or d["revision"] != it.revision + 1 \
+            if not (it.status == "changes_requested" or (it.hold and it.status in ("pending", "claimed", "approved"))) \
+                    or actor != it.author or d["revision"] != it.revision + 1 \
                     or d["content_digest"] == it.digest or type(d["hold"]) is not bool or not DIGEST_RE.fullmatch(str(d["content_digest"])):
                 raise bad
-            it.involved = id_list(list(d["involved"]), "involved")
+            added = id_list(list(d["involved"]), "involved")
+            if not set(it.involved) <= set(added):  # the stored list is already the union: it may only grow
+                raise bad
+            it.involved = added
             it.revision, it.digest, it.hold, it.status, it.claim = d["revision"], d["content_digest"], d["hold"], "pending", None
         return it
 
@@ -216,22 +294,23 @@ class ReviewQueue:
     def _view(self, it, now) -> dict:
         state = self._state(it, now)
         return {"itemId": it.id, "tenantId": it.tenant, "kind": it.kind, "subjectRef": it.subject_ref, "revision": it.revision,
-                "contentDigest": it.digest, "state": state, "hold": it.hold,
+                "contentDigest": it.digest, "state": state, "hold": it.hold, "seq": it.head_seq, "headSeal": it.head_seal,
                 "claim": ({"by": it.claim[0], "expiresAt": it.claim[1]} if state == "claimed" else None),
                 "checklist": [{"id": i, "labelKey": f"review.item.{i}"} for i in checklist_ids(it.kind)],
                 "decisions": copy.deepcopy(it.decisions), "labelKeys": {"kind": f"review.kind.{it.kind}", "state": f"review.state.{state}"}}
 
     # ----- caller checks --------------------------------------------------------------------------------------
-    def _now(self, now) -> int:
+    def _now(self) -> int:
+        """The identity (host) clock; a bad reading fails this call closed."""
         try:
             host = self._idn.now()
-        except IdentityError:
+        except Exception:
             raise ReviewError("RQ-002", "host_clock") from None
-        if type(now) is not int or not EARLIEST <= now <= LATEST or abs(now - host) > MAX_SKEW:
+        if type(host) is not int or not EARLIEST <= host <= LATEST:
             raise ReviewError("RQ-002")
-        return now
+        return host
 
-    def _reviewer(self, claims, now, step_up):
+    def _reviewer(self, claims, step_up):
         """-> (subject, linked person ids). Fails closed on anything unexpected."""
         try:
             check_live(claims, self._idn.now())
@@ -243,6 +322,7 @@ class ReviewQueue:
             if step_up:
                 self._idn.require_step_up(claims)
             roles = self._roles.roles_for(claims.subject)
+            linked = frozenset(staff.linked_person_ids) | {claims.subject}
         except IdentityError as e:
             raise ReviewError("RQ-003", e.code) from None
         except ReviewError:
@@ -251,7 +331,7 @@ class ReviewQueue:
             raise ReviewError("RQ-003", "resolver") from None
         if type(roles) not in (tuple, list, frozenset) or REVIEWER_ROLE not in roles or not all(type(r) is str for r in roles):
             raise ReviewError("RQ-003", "role")
-        return ident(claims.subject), frozenset(staff.linked_person_ids) | {claims.subject}
+        return ident(claims.subject), linked
 
     def _audit(self, action, code, subject, tenant_id, detail):
         try:
@@ -269,70 +349,103 @@ class ReviewQueue:
             self._audit(f"review.{action}", e.code, subject, tenant_id if isinstance(tenant_id, str) else None,
                         f"item={item_id if isinstance(item_id, str) else '-'} why={e.detail}"[:200])
             raise
+        except Exception:  # never let a raw error escape unaudited and untyped
+            self._audit(f"review.{action}", "RQ-001", subject, tenant_id if isinstance(tenant_id, str) else None,
+                        f"item={item_id if isinstance(item_id, str) else '-'} why=unexpected"[:200])
+            raise ReviewError("RQ-001", "unexpected") from None
         self._audit(f"review.{action}", "OK", subject, tenant_id, f"item={item_id} {extra}"[:200])
         return out
 
     # ----- host-side intake (not a reviewer act) --------------------------------------------------------------
-    def submit(self, *, tenant_id, kind, subject_ref, content, author, involved, now, hold=False) -> str:
-        """Open a review. `author` and `involved` (requester, attesters, signers) are ids the host vouches for; the
-        content is digested, not stored. One open item per (tenant, kind, subject_ref)."""
+    def submit(self, *, tenant_id, kind, subject_ref, content, author, involved, linked_staff, hold=False) -> str:
+        """Open a review. `author`, `involved` (requester, attesters, signers) and `linked_staff` (staff accounts of
+        the same human as the author; required, an empty list means the host asserts none) are ids the host vouches
+        for. Component requests and sign-offs need a non-empty `involved`. The content is digested, not stored."""
         def go():
-            t, at = _tenant_id(tenant_id), self._now(now)
+            t, at = _tenant_id(tenant_id), self._now()
             if kind not in KINDS or type(hold) is not bool:
                 raise ReviewError("RQ-001", "kind")
-            ref, who, inv = ident(subject_ref), ident(author, "author"), id_list(involved, "involved")
+            ref, who = ident(subject_ref), ident(author, "author")
+            inv = id_list([*self._seq(involved, "involved"), *self._seq(linked_staff, "linked_staff")], "involved")
+            if kind in NEEDS_INVOLVED and not id_list(self._seq(involved, "involved"), "involved"):
+                raise ReviewError("RQ-001", "involved_required")
             digest = content_digest(content)
             tenant_state = self._idn.repo.get_tenant(t)
             if tenant_state is None or tenant_state.status.value not in ("trial", "active"):
                 raise ReviewError("RQ-001", "tenant")
-            if self._open(t, kind, ref, at) is not None:
+            if self._open(t, kind, ref) is not None:
                 raise ReviewError("RQ-013")
-            self._order += 1
-            iid = f"rq-{self._order:06d}-{hashlib.sha256(f'{t}|{kind}|{ref}|{self._order}'.encode()).hexdigest()[:10]}"
+            mf = self._manifest_map()
+            iid = "rq-" + secrets.token_hex(16)
+            if iid in mf or iid in self._logs:
+                raise ReviewError("RQ-011", "id_collision")
             self._append(iid, t, "submitted", at, who, {"kind": kind, "subject_ref": ref, "revision": 1, "content_digest": digest,
                                                          "hold": hold, "involved": list(inv), "author": who,
-                                                         "checklist_version": _CHECKLISTS["version"]})
+                                                         "checklist_version": _CHECKLISTS["version"],
+                                                         "seq_no": self._manifest["n"] + 1})
             return iid, f"rev=1 digest={digest[:12]}"
         return self._run("submit", tenant_id, None, None, go)
 
-    def resubmit(self, *, tenant_id, item_id, content, author, involved, now, hold=False) -> int:
-        """The author answers `changes_requested` with new content (a new revision, back to pending, hold re-stated)."""
+    @staticmethod
+    def _seq(v, what):
+        if type(v) not in (list, tuple):  # None (absent), a generator, a set or a string all fail closed
+            raise ReviewError("RQ-001", what)
+        return v
+
+    def resubmit(self, *, tenant_id, item_id, content, author, involved, linked_staff, hold=False) -> int:
+        """The author answers `changes_requested` (or a hold) with new content: a new revision, back to pending. The
+        ids in `involved` and `linked_staff` are ADDED to the stored list; nobody is ever removed."""
         def go():
-            t, at = _tenant_id(tenant_id), self._now(now)
+            t, at = _tenant_id(tenant_id), self._now()
             it = self._fold(item_id, t)
-            if it.status != "changes_requested" or type(hold) is not bool:
+            if not (it.status == "changes_requested" or (it.hold and it.status in ("pending", "claimed", "approved"))) \
+                    or type(hold) is not bool:
                 raise ReviewError("RQ-005")
             if ident(author, "author") != it.author:
                 raise ReviewError("RQ-003", "author")
-            inv, digest = id_list(involved, "involved"), content_digest(content)
-            if digest == it.digest or at < it.last_at:
+            union = tuple(sorted(set(it.involved) | set(id_list(self._seq(involved, "involved"), "involved"))
+                                 | set(id_list(self._seq(linked_staff, "linked_staff"), "linked_staff"))))
+            digest = content_digest(content)
+            if at < it.last_at:
+                raise ReviewError("RQ-002", "regression")
+            if digest == it.digest:
                 raise ReviewError("RQ-001", "unchanged")
             self._append(item_id, t, "resubmitted", at, it.author, {"revision": it.revision + 1, "content_digest": digest,
-                                                                     "hold": hold, "involved": list(inv)})
+                                                                     "hold": hold, "involved": list(union)})
             return it.revision + 1, f"rev={it.revision + 1} digest={digest[:12]}"
         return self._run("resubmit", tenant_id, item_id, None, go)
 
-    def _items(self, t):
-        """Folded items of one tenant. A broken log that claims this tenant raises (fail closed); others are skipped."""
-        for iid in sorted(self._logs):
-            try:
-                yield self._fold(iid, t)
-            except ReviewError as e:
-                first = self._logs[iid][0] if self._logs[iid] and type(self._logs[iid][0]) is dict else {}
-                if e.code == "RQ-011" and first.get("tenant_id") == t:
-                    raise
+    def hold_item(self, *, tenant_id, item_id, reason, by="host") -> None:
+        """Host quarantine at any time (an injection or scan finding after submit or approval): bars approval and makes
+        evidence ineligible until the author resubmits new content with the hold lifted."""
+        def go():
+            t, at = _tenant_id(tenant_id), self._now()
+            it = self._fold(item_id, t)
+            if reason not in HOLD_REASONS or it.hold:
+                raise ReviewError("RQ-005" if reason in HOLD_REASONS else "RQ-001")
+            if at < it.last_at:
+                raise ReviewError("RQ-002", "regression")
+            self._append(item_id, t, "held", at, ident(by), {"reason": reason})
+            return None, f"reason={reason}"
+        return self._run("hold", tenant_id, item_id, None, go)
 
-    def _open(self, t, kind, ref, now):
+    def _items(self, t):
+        """Folded items of one tenant, from the sealed manifest (a deleted log raises RQ-011: fail closed)."""
+        for iid, (ten, _, _) in sorted(self._manifest_map().items()):
+            if ten == t:
+                yield self._fold(iid, t)
+
+    def _open(self, t, kind, ref):
         for it in self._items(t):
             if it.kind == kind and it.subject_ref == ref and it.status not in ("approved", "rejected"):
                 return it
         return None
 
     # ----- reviewer acts --------------------------------------------------------------------------------------
-    def claim(self, claims, *, tenant_id, item_id, now) -> dict:
+    def claim(self, claims, *, tenant_id, item_id) -> dict:
         def go():
-            t, at = _tenant_id(tenant_id), self._now(now)
-            who, linked = self._reviewer(claims, at, step_up=True)
+            t, at = _tenant_id(tenant_id), self._now()
+            who, linked = self._reviewer(claims, step_up=True)
             it = self._fold(item_id, t)
             if at < it.last_at:
                 raise ReviewError("RQ-002", "regression")
@@ -344,10 +457,10 @@ class ReviewQueue:
             return self._view(self._fold(item_id, t), at), f"until={at + self._ttl}"
         return self._run("claim", tenant_id, item_id, claims, go)
 
-    def release(self, claims, *, tenant_id, item_id, now) -> dict:
+    def release(self, claims, *, tenant_id, item_id) -> dict:
         def go():
-            t, at = _tenant_id(tenant_id), self._now(now)
-            who, _ = self._reviewer(claims, at, step_up=False)
+            t, at = _tenant_id(tenant_id), self._now()
+            who, _ = self._reviewer(claims, step_up=False)
             it = self._fold(item_id, t)
             if at < it.last_at:
                 raise ReviewError("RQ-002", "regression")
@@ -357,11 +470,12 @@ class ReviewQueue:
             return self._view(self._fold(item_id, t), at), ""
         return self._run("release", tenant_id, item_id, claims, go)
 
-    def decide(self, claims, *, tenant_id, item_id, decision, checklist, note, current_content, now) -> dict:
-        """Record one decision on the claimed item. `current_content` is what the host loaded from its own store."""
+    def decide(self, claims, *, tenant_id, item_id, decision, checklist, note, current_content) -> dict:
+        """Record one decision on the claimed item. `current_content` is what the host loaded from its own store. The
+        reviewer's step-up is spent by this decision: the next one needs a new MFA sign-in."""
         def go():
-            t, at = _tenant_id(tenant_id), self._now(now)
-            who, linked = self._reviewer(claims, at, step_up=True)
+            t, at = _tenant_id(tenant_id), self._now()
+            who, linked = self._reviewer(claims, step_up=True)
             it = self._fold(item_id, t)
             if at < it.last_at:
                 raise ReviewError("RQ-002", "regression")
@@ -369,12 +483,12 @@ class ReviewQueue:
                 raise ReviewError("RQ-007")
             if self._state(it, at) != "claimed" or it.claim[0] != who:
                 raise ReviewError("RQ-006")
-            if decision not in DECISIONS or type(decision) is not str:
+            if type(decision) is not str or decision not in DECISIONS:
                 raise ReviewError("RQ-001", "decision")
             if content_digest(current_content) != it.digest:
                 raise ReviewError("RQ-008")
             ids = checklist_ids(it.kind)
-            if type(checklist) is not dict or set(checklist) != set(ids) or any(v not in ("pass", "fail") or type(v) is not str for v in checklist.values()):
+            if type(checklist) is not dict or set(checklist) != set(ids) or any(type(v) is not str or v not in ("pass", "fail") for v in checklist.values()):
                 raise ReviewError("RQ-009", "shape")
             text = note_text(note)
             if decision == "approved":
@@ -384,41 +498,55 @@ class ReviewQueue:
                     raise ReviewError("RQ-009", "failed_check")
             elif not text:
                 raise ReviewError("RQ-014", "required")
+            spent = (who, claims.auth_time)
+            if spent in self._used_stepups:
+                raise ReviewError("RQ-003", "stepup_used")
             nh = hashlib.sha256(text.encode("utf-8")).hexdigest()
             self._append(item_id, t, "decided", at, who, {"revision": it.revision, "content_digest": it.digest, "decision": decision,
                                                            "checklist": {k: checklist[k] for k in sorted(checklist)}, "note": text,
                                                            "note_sha256": nh, "note_len": len(text)})
+            self._used_stepups[spent] = item_id
             return self._view(self._fold(item_id, t), at), f"{decision} rev={it.revision} note_sha256={nh[:16]} note_len={len(text)}"
         return self._run("decide", tenant_id, item_id, claims, go)
 
-    # ----- reads ----------------------------------------------------------------------------------------------
-    def get(self, *, tenant_id, item_id, now) -> dict:
-        t, at = _tenant_id(tenant_id), self._now(now)
-        return self._view(self._fold(item_id, t), at)
+    # ----- reads (verified staff only; items hold ids, digests and reviewer notes, never content) ---------------
+    def get(self, claims, *, tenant_id, item_id) -> dict:
+        def go():
+            t, at = _tenant_id(tenant_id), self._now()
+            self._reviewer(claims, step_up=False)
+            return self._view(self._fold(item_id, t), at), ""
+        return self._run("get", tenant_id, item_id, claims, go)
 
-    def list_items(self, claims, *, now, tenant_id=None, state=None) -> list:
-        """Metadata of valid items for a verified reviewer (no content exists here). Broken logs are skipped and
-        reported by `invalid()`; a state filter keeps lapsed claims under `pending`."""
-        at = self._now(now)
-        self._reviewer(claims, at, step_up=False)
-        if tenant_id is not None:
-            _tenant_id(tenant_id)
-        if state is not None and state not in STATES:
-            raise ReviewError("RQ-001", "state")
-        out = []
-        for iid in sorted(self._logs):
-            try:
-                it = self._fold(iid, tenant_id)
-            except ReviewError:
-                continue
-            v = self._view(it, at)
-            if state in (None, v["state"]):
-                out.append(v)
-        return out
+    def list_items(self, claims, *, tenant_id=None, state=None) -> list:
+        """Items for a verified reviewer. A log that fails its checks is listed with state `invalid` (never hidden);
+        a state filter keeps lapsed claims under `pending`."""
+        def go():
+            at = self._now()
+            self._reviewer(claims, step_up=False)
+            if tenant_id is not None:
+                _tenant_id(tenant_id)
+            if state is not None and state not in STATES + ("invalid",):
+                raise ReviewError("RQ-001", "state")
+            out = []
+            for iid, (ten, _, _) in sorted(self._manifest_map().items()):
+                if tenant_id is not None and ten != tenant_id:
+                    continue
+                try:
+                    v = self._view(self._fold(iid, ten), at)
+                except ReviewError as e:
+                    v = {"itemId": iid, "tenantId": ten, "state": "invalid", "code": e.code, "labelKeys": {"state": "review.state.invalid"}}
+                if state in (None, v["state"]):
+                    out.append(v)
+            return out, ""
+        return self._run("list", tenant_id, None, claims, go)
 
     def invalid(self) -> list:
+        try:
+            ids = set(self._manifest_map()) | set(self._logs)
+        except ReviewError as e:
+            return [("*", e.code)]
         bad = []
-        for iid in sorted(self._logs):
+        for iid in sorted(ids):
             try:
                 self._fold(iid)
             except ReviewError as e:
@@ -426,38 +554,48 @@ class ReviewQueue:
         return bad
 
     # ----- the gate output: evidence only ---------------------------------------------------------------------
-    def gate_evidence(self, *, tenant_id, item_id, current_content, now) -> dict:
-        """What BPL-020 may read for one item. Recomputed from the sealed log and the host's current content; fresh
-        means the approved digest equals the digest of that content. Never an instruction to promote."""
-        t, at = _tenant_id(tenant_id), self._now(now)
-        it = self._fold(item_id, t)
-        fresh = content_digest(current_content) == it.digest
-        approved = it.status == "approved" and not it.hold
-        last = it.decisions[-1] if it.decisions else None
-        return {"gate": "team_reviewed", "consumer": "BPL-020", "evidenceOnly": True, "tenantId": it.tenant, "itemId": it.id,
-                "kind": it.kind, "subjectRef": it.subject_ref, "revision": it.revision, "contentDigest": it.digest,
-                "state": self._state(it, at), "stale": not fresh, "eligible": bool(approved and fresh),
-                "approvedBy": last["reviewer"] if approved and last else None,
-                "decidedAt": last["decidedAt"] if approved and last else None,
-                "checklist": last["checklist"] if approved and last else None}
+    def gate_evidence(self, claims, *, tenant_id, item_id, current_content) -> dict:
+        """What BPL-020 may read for one item. Recomputed from the sealed log, its anchors and the host's current
+        content; fresh means the approved digest equals the digest of that content. `seq` and `headSeal` let BPL-020
+        pin what it read. Never an instruction to promote."""
+        def go():
+            t, at = _tenant_id(tenant_id), self._now()
+            self._reviewer(claims, step_up=False)
+            it = self._fold(item_id, t)
+            fresh = content_digest(current_content) == it.digest
+            approved = it.status == "approved" and not it.hold
+            last = it.decisions[-1] if it.decisions else None
+            return {"gate": "team_reviewed", "consumer": "BPL-020", "evidenceOnly": True, "tenantId": it.tenant, "itemId": it.id,
+                    "kind": it.kind, "subjectRef": it.subject_ref, "revision": it.revision, "contentDigest": it.digest,
+                    "seq": it.head_seq, "headSeal": it.head_seal, "hold": it.hold,
+                    "state": self._state(it, at), "stale": not fresh, "eligible": bool(approved and fresh),
+                    "approvedBy": last["reviewer"] if approved and last else None,
+                    "decidedAt": last["decidedAt"] if approved and last else None,
+                    "checklist": last["checklist"] if approved and last else None}, f"eligible={approved and fresh}"
+        return self._run("evidence", tenant_id, item_id, claims, go)
 
-    def team_reviewed_evidence(self, *, tenant_id, subject_ref, required: dict, now) -> dict:
+    def team_reviewed_evidence(self, claims, *, tenant_id, subject_ref, required: dict) -> dict:
         """Evidence for one subject across kinds: `required` maps kind -> the host's current content. The Blueprint
-        draft is always required. The newest item per kind counts; a missing, open, rejected or stale item blocks."""
-        t, at = _tenant_id(tenant_id), self._now(now)
-        ref = ident(subject_ref)
-        if type(required) is not dict or "blueprint_draft" not in required or any(k not in KINDS for k in required):
-            raise ReviewError("RQ-001", "required")
-        parts, missing = {}, []
-        mine = [it for it in self._items(t) if it.subject_ref == ref]
-        for kind in sorted(required):
-            digest = content_digest(required[kind])
-            best = max((it for it in mine if it.kind == kind), key=lambda it: (it.created, it.id), default=None)
-            if best is None:
-                missing.append(kind)
-                continue
-            parts[kind] = {"itemId": best.id, "state": self._state(best, at), "stale": digest != best.digest,
-                           "eligible": best.status == "approved" and not best.hold and digest == best.digest}
-        return {"gate": "team_reviewed", "consumer": "BPL-020", "evidenceOnly": True, "tenantId": t, "subjectRef": ref,
-                "items": parts, "missing": missing,
-                "eligible": not missing and all(p["eligible"] for p in parts.values())}
+        draft is always required. The newest item per kind (by the sealed submission number, not by time) counts; a
+        missing, open, rejected, held or stale item, or any broken log of the tenant, blocks."""
+        def go():
+            t, at = _tenant_id(tenant_id), self._now()
+            self._reviewer(claims, step_up=False)
+            ref = ident(subject_ref)
+            if type(required) is not dict or "blueprint_draft" not in required or any(k not in KINDS for k in required):
+                raise ReviewError("RQ-001", "required")
+            parts, missing = {}, []
+            mine = [it for it in self._items(t) if it.subject_ref == ref]
+            for kind in sorted(required):
+                digest = content_digest(required[kind])
+                best = max((it for it in mine if it.kind == kind), key=lambda it: it.created, default=None)
+                if best is None:
+                    missing.append(kind)
+                    continue
+                parts[kind] = {"itemId": best.id, "state": self._state(best, at), "stale": digest != best.digest, "seq": best.head_seq,
+                               "headSeal": best.head_seal,
+                               "eligible": best.status == "approved" and not best.hold and digest == best.digest}
+            ok = not missing and all(p["eligible"] for p in parts.values())
+            return {"gate": "team_reviewed", "consumer": "BPL-020", "evidenceOnly": True, "tenantId": t, "subjectRef": ref,
+                    "items": parts, "missing": missing, "eligible": ok}, f"eligible={ok}"
+        return self._run("evidence", tenant_id, None, claims, go)

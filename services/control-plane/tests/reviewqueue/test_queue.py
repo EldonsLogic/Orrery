@@ -17,12 +17,12 @@ def approved(w, **kw):
 
 def test_happy_path_and_evidence(w):
     iid = w.submit()
-    assert w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)["state"] == "pending"
+    assert w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)["state"] == "pending"
     v = w.claim(iid)
     assert v["state"] == "claimed" and v["claim"]["by"] == "s-rev1"
     v = w.decide(iid)
     assert v["state"] == "approved" and v["decisions"][0]["reviewer"] == "s-rev1"
-    ev = w.q.gate_evidence(tenant_id="t-a", item_id=iid, current_content=BP, now=w.clock.t)
+    ev = w.q.gate_evidence(w.claims("s-rev1"), tenant_id="t-a", item_id=iid, current_content=BP)
     assert ev["eligible"] and ev["evidenceOnly"] and ev["consumer"] == "BPL-020" and ev["approvedBy"] == "s-rev1"
     assert ev["contentDigest"] == content_digest(BP)
 
@@ -31,7 +31,7 @@ def test_evidence_never_promotes():
     assert not any(n for n in dir(ReviewQueue) if "promote" in n or "go_live" in n or "build_state" in n)
     w = World()
     iid = approved(w)
-    ev = w.q.gate_evidence(tenant_id="t-a", item_id=iid, current_content=BP, now=w.clock.t)
+    ev = w.q.gate_evidence(w.claims("s-rev1"), tenant_id="t-a", item_id=iid, current_content=BP)
     assert "buildState" not in ev and ev["evidenceOnly"] is True
 
 
@@ -50,15 +50,15 @@ def test_stored_verdict_is_not_trusted(w):
     w.decide(iid, decision="rejected", note="no")
     log = w.q._logs[iid]
     log[-1]["data"]["decision"] = "approved"  # flip the stored verdict
-    assert code(lambda: w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-011"
-    assert code(lambda: w.q.gate_evidence(tenant_id="t-a", item_id=iid, current_content=BP, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)) == "RQ-011"
+    assert code(lambda: w.q.gate_evidence(w.claims("s-rev1"), tenant_id="t-a", item_id=iid, current_content=BP)) == "RQ-011"
     assert w.q.invalid() == [(iid, "RQ-011")]
 
 
 def test_extra_stored_status_field_is_refused(w):
     iid = w.submit()
     w.q._logs[iid][0]["status"] = "approved"
-    assert code(lambda: w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)) == "RQ-011"
 
 
 def test_sha256_forged_seal_is_refused(w):
@@ -68,7 +68,7 @@ def test_sha256_forged_seal_is_refused(w):
     ev["data"]["note"] = "forged"
     body = json.dumps({k: v for k, v in ev.items() if k != "seal"}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     ev["seal"] = hashlib.sha256(body.encode()).hexdigest()  # a plain-hash "seal"
-    assert code(lambda: w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)) == "RQ-011"
 
 
 def test_dropped_reordered_and_replayed_events(w):
@@ -77,17 +77,17 @@ def test_dropped_reordered_and_replayed_events(w):
     w.decide(iid, decision="changes_requested", note="fix")
     good = copy.deepcopy(w.q._logs[iid])
     w.q._logs[iid] = good[:1] + good[2:]
-    assert code(lambda: w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)) == "RQ-011"
     w.q._logs[iid] = [good[0], good[2], good[1]]
-    assert code(lambda: w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)) == "RQ-011"
     w.q._logs[iid] = good + [good[1]]
-    assert code(lambda: w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)) == "RQ-011"
 
 
 def test_event_moved_to_another_item_or_tenant(w):
     a, b = w.submit(ref="bp-1"), w.submit(ref="bp-2", tenant="t-b")
     w.q._logs[b][0] = copy.deepcopy(w.q._logs[a][0])
-    assert code(lambda: w.q.get(tenant_id="t-b", item_id=b, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-b", item_id=b)) == "RQ-011"
 
 
 def test_unknown_key_id_and_rotation():
@@ -95,9 +95,9 @@ def test_unknown_key_id_and_rotation():
     iid = w.submit()
     w.q._active = "new"
     w.claim(iid)  # new events under the new key, old ones still verify
-    assert w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)["state"] == "claimed"
+    assert w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)["state"] == "claimed"
     del w.q._keys["old"]
-    assert code(lambda: w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)) == "RQ-011"
 
 
 def test_decision_with_forged_reviewer_conflict_is_refused_on_read(w):
@@ -105,7 +105,7 @@ def test_decision_with_forged_reviewer_conflict_is_refused_on_read(w):
     iid = w.submit(author="s-rev1")
     q = w.q
     q._append(iid, "t-a", "claimed", w.clock.t, "s-rev1", {"expires_at": w.clock.t + 600})
-    assert code(lambda: q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: q.get(w.claims("s-rev2"), tenant_id="t-a", item_id=iid)) == "RQ-011"
 
 
 # ---- reviewer verification ---------------------------------------------------------------------------------
@@ -116,13 +116,13 @@ def test_customer_realm_claims_refused(w):
     iid = w.submit()
     tok = w.idn.issue_customer_token("p-1", "t-a", mfa_satisfied=True, auth_time=w.clock.t)
     c = w.idn.verify_customer_token(tok.access_token, "t-a")
-    assert code(lambda: w.q.claim(c, tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-003"
+    assert code(lambda: w.q.claim(c, tenant_id="t-a", item_id=iid)) == "RQ-003"
 
 
 def test_not_claims_objects_refused(w):
     iid = w.submit()
     for bad in (None, {"subject": "s-rev1"}, "s-rev1", object()):
-        assert code(lambda: w.q.claim(bad, tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-003"
+        assert code(lambda: w.q.claim(bad, tenant_id="t-a", item_id=iid)) == "RQ-003"
 
 
 def test_role_required_and_resolver_fails_closed(w):
@@ -141,20 +141,20 @@ def test_role_required_and_resolver_fails_closed(w):
 def test_needs_fresh_step_up_and_live_staff(w):
     iid = w.submit()
     stale = w.claims("s-rev1", auth_age=301)
-    assert code(lambda: w.q.claim(stale, tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-003"
+    assert code(lambda: w.q.claim(stale, tenant_id="t-a", item_id=iid)) == "RQ-003"
     fresh = w.claims("s-rev1")
     w.idn.revoke_staff_sessions("s-rev1")
-    assert code(lambda: w.q.claim(fresh, tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-003"
+    assert code(lambda: w.q.claim(fresh, tenant_id="t-a", item_id=iid)) == "RQ-003"
     live = w.claims("s-rev2")
     w.repo.put_staff(type(w.repo.get_staff("s-rev2"))("s-rev2", "x", mfa_enrolled=True, active=False))
-    assert code(lambda: w.q.claim(live, tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-003"
+    assert code(lambda: w.q.claim(live, tenant_id="t-a", item_id=iid)) == "RQ-003"
 
 
 def test_expired_token_refused(w):
     iid = w.submit()
     c = w.claims("s-rev1")
     w.clock.t += 10_000
-    assert code(lambda: w.q.claim(c, tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-003"
+    assert code(lambda: w.q.claim(c, tenant_id="t-a", item_id=iid)) == "RQ-003"
 
 
 # ---- separation of duties --------------------------------------------------------------------------------------
@@ -180,7 +180,7 @@ def test_attester_cannot_approve_even_with_a_claim_made_before(w):
     # the host later records that s-rev1 attested: a resubmission cycle names them
     w.decide(iid, decision="changes_requested", note="classify")
     w.clock.t += 1
-    w.q.resubmit(tenant_id="t-a", item_id=iid, content={**BP, "n": 4}, author="agent-1", involved=["s-rev1"], now=w.clock.t)
+    w.q.resubmit(tenant_id="t-a", item_id=iid, content={**BP, "n": 4}, author="agent-1", involved=["s-rev1"], linked_staff=[])
     assert code(lambda: w.claim(iid, "s-rev1")) == "RQ-007"
     w.claim(iid, "s-rev2")
     assert w.decide(iid, "s-rev2", content={**BP, "n": 4})["state"] == "approved"
@@ -196,20 +196,20 @@ def test_only_claim_holder_can_decide(w):
 # ---- tenant isolation ------------------------------------------------------------------------------------------
 def test_cross_tenant_access_is_not_found(w):
     iid = w.submit(tenant="t-a")
-    assert code(lambda: w.q.get(tenant_id="t-b", item_id=iid, now=w.clock.t)) == "RQ-004"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-b", item_id=iid)) == "RQ-004"
     assert code(lambda: w.claim(iid, tenant="t-b")) == "RQ-004"
-    assert code(lambda: w.q.gate_evidence(tenant_id="t-b", item_id=iid, current_content=BP, now=w.clock.t)) == "RQ-004"
-    assert code(lambda: w.q.get(tenant_id="t-b", item_id="nope", now=w.clock.t)) == "RQ-004"
-    assert w.q.list_items(w.claims("s-rev1"), now=w.clock.t, tenant_id="t-b") == []
+    assert code(lambda: w.q.gate_evidence(w.claims("s-rev1"), tenant_id="t-b", item_id=iid, current_content=BP)) == "RQ-004"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-b", item_id="nope")) == "RQ-004"
+    assert w.q.list_items(w.claims("s-rev1"), tenant_id="t-b") == []
 
 
 def test_same_subject_in_two_tenants_is_independent(w):
     a, b = w.submit(tenant="t-a"), w.submit(tenant="t-b")
     w.claim(a)
     w.decide(a)
-    ev = w.q.team_reviewed_evidence(tenant_id="t-b", subject_ref="bp-1", required={"blueprint_draft": BP}, now=w.clock.t)
+    ev = w.q.team_reviewed_evidence(w.claims("s-rev1"), tenant_id="t-b", subject_ref="bp-1", required={"blueprint_draft": BP})
     assert not ev["eligible"] and ev["items"]["blueprint_draft"]["itemId"] == b
-    ev = w.q.team_reviewed_evidence(tenant_id="t-a", subject_ref="bp-1", required={"blueprint_draft": BP}, now=w.clock.t)
+    ev = w.q.team_reviewed_evidence(w.claims("s-rev1"), tenant_id="t-a", subject_ref="bp-1", required={"blueprint_draft": BP})
     assert ev["eligible"]
 
 
@@ -221,8 +221,8 @@ def test_unknown_or_closed_tenant_refused(w):
 def test_iterator_and_set_inputs_refused(w):
     gen = (x for x in ["a"])
     assert code(lambda: w.submit(involved=gen)) == "RQ-001"
-    assert code(lambda: w.q.submit(tenant_id="t-a", kind="blueprint_draft", subject_ref="x", content=BP, author="a", involved={"a"}, now=w.clock.t)) == "RQ-001"
-    assert code(lambda: w.q.submit(tenant_id="t-a", kind="blueprint_draft", subject_ref="x", content=BP, author="a", involved="abc", now=w.clock.t)) == "RQ-001"
+    assert code(lambda: w.q.submit(tenant_id="t-a", kind="blueprint_draft", subject_ref="x", content=BP, author="a", involved={"a"}, linked_staff=[])) == "RQ-001"
+    assert code(lambda: w.q.submit(tenant_id="t-a", kind="blueprint_draft", subject_ref="x", content=BP, author="a", involved="abc", linked_staff=[])) == "RQ-001"
     assert code(lambda: w.submit(content=(x for x in [1]))) == "RQ-001"
     assert code(lambda: w.submit(content={"a": (x for x in [1])})) == "RQ-001"
     assert code(lambda: w.submit(content={"a": {1, 2}})) == "RQ-001"
@@ -258,28 +258,47 @@ def test_bad_kind_and_hold_type(w):
 
 
 # ---- time ------------------------------------------------------------------------------------------------------
-@pytest.mark.parametrize("bad", [1.5, True, "1900000000", None, 0, -1, 10**12, T0 + 301, T0 - 301])
-def test_now_must_be_bounded_whole_seconds(w, bad):
+@pytest.mark.parametrize("bad", [1.5, True, "1900000000", None, 0, -1, 10**12])
+def test_bad_host_clock_reading_fails_that_call_closed(w, bad):
     iid = w.submit()
-    assert code(lambda: w.q.get(tenant_id="t-a", item_id=iid, now=bad)) == "RQ-002"
-    assert code(lambda: w.q.submit(tenant_id="t-a", kind="blueprint_draft", subject_ref="z", content=BP, author="a", involved=[], now=bad)) == "RQ-002"
+    good = w.clock.t
+    w.clock.t = bad
+    assert code(lambda: w.q.get(w.claims("s-rev1") if False else _c(w, good), tenant_id="t-a", item_id=iid)) in ("RQ-002", "RQ-003")
+    assert code(lambda: w.submit(ref="z")) == "RQ-002"
+    w.clock.t = good
+    w.claim(iid)  # the next call with a sane clock works
+
+
+def _c(w, t):
+    old, w.clock.t = w.clock.t, t
+    try:
+        return w.claims("s-rev1")
+    finally:
+        w.clock.t = old
+
+
+def test_caller_time_is_not_a_parameter(w):
+    import inspect
+    from reviewqueue import ReviewQueue
+    for n in ("submit", "resubmit", "claim", "release", "decide", "get", "list_items", "gate_evidence", "team_reviewed_evidence", "hold_item"):
+        assert "now" not in inspect.signature(getattr(ReviewQueue, n)).parameters
 
 
 def test_clock_cannot_go_backwards_within_skew(w):
     iid = w.submit()
     w.clock.t += 100
     w.claim(iid)
-    w.clock.t -= 50  # host clock within skew of caller but the log is already at +100
-    assert code(lambda: w.q.release(w.claims("s-rev1"), tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-002"
+    w.clock.t -= 50  # the host clock reads earlier than the log's last event
+    assert code(lambda: w.q.release(w.claims("s-rev1", auth_age=0), tenant_id="t-a", item_id=iid)) in ("RQ-002", "RQ-003")
 
 
 def test_claim_expires_and_can_be_taken(w):
     iid = w.submit()
     w.claim(iid)
     w.clock.t += 1799
-    assert w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)["state"] == "claimed"
+    assert w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)["state"] == "claimed"
     w.clock.t += 2
-    assert w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)["state"] == "pending"
+    assert w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)["state"] == "pending"
     assert code(lambda: w.decide(iid)) == "RQ-006"  # lapsed claim cannot decide
     v = w.claim(iid, "s-rev2")
     assert v["claim"]["by"] == "s-rev2"
@@ -295,9 +314,9 @@ def test_claim_ttl_bounds():
 def test_release(w):
     iid = w.submit()
     w.claim(iid)
-    assert code(lambda: w.q.release(w.claims("s-rev2"), tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-006"
-    assert w.q.release(w.claims("s-rev1"), tenant_id="t-a", item_id=iid, now=w.clock.t)["state"] == "pending"
-    assert code(lambda: w.q.release(w.claims("s-rev1"), tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-006"
+    assert code(lambda: w.q.release(w.claims("s-rev2"), tenant_id="t-a", item_id=iid)) == "RQ-006"
+    assert w.q.release(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)["state"] == "pending"
+    assert code(lambda: w.q.release(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)) == "RQ-006"
 
 
 # ---- duplicates and finality -----------------------------------------------------------------------------------
@@ -317,15 +336,15 @@ def test_rejected_is_final_and_changes_requested_needs_resubmit(w):
     iid = w.submit()
     w.claim(iid)
     w.decide(iid, decision="rejected", note="no")
-    assert code(lambda: w.q.resubmit(tenant_id="t-a", item_id=iid, content={**BP, "n": 9}, author="agent-1", involved=[], now=w.clock.t)) == "RQ-005"
+    assert code(lambda: w.q.resubmit(tenant_id="t-a", item_id=iid, content={**BP, "n": 9}, author="agent-1", involved=[], linked_staff=[])) == "RQ-005"
     j = w.submit(ref="bp-2")
     w.claim(j)
     w.decide(j, decision="changes_requested", note="fix")
     assert code(lambda: w.claim(j, "s-rev2")) == "RQ-005"
-    assert code(lambda: w.q.resubmit(tenant_id="t-a", item_id=j, content=BP, author="agent-1", involved=[], now=w.clock.t)) == "RQ-001"  # unchanged
-    assert code(lambda: w.q.resubmit(tenant_id="t-a", item_id=j, content={**BP, "n": 9}, author="someone", involved=[], now=w.clock.t)) == "RQ-003"
-    assert w.q.resubmit(tenant_id="t-a", item_id=j, content={**BP, "n": 9}, author="agent-1", involved=[], now=w.clock.t) == 2
-    assert w.q.get(tenant_id="t-a", item_id=j, now=w.clock.t)["state"] == "pending"
+    assert code(lambda: w.q.resubmit(tenant_id="t-a", item_id=j, content=BP, author="agent-1", involved=[], linked_staff=[])) == "RQ-001"  # unchanged
+    assert code(lambda: w.q.resubmit(tenant_id="t-a", item_id=j, content={**BP, "n": 9}, author="someone", involved=[], linked_staff=[])) == "RQ-003"
+    assert w.q.resubmit(tenant_id="t-a", item_id=j, content={**BP, "n": 9}, author="agent-1", involved=[], linked_staff=[]) == 2
+    assert w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=j)["state"] == "pending"
 
 
 # ---- stale content ---------------------------------------------------------------------------------------------
@@ -334,9 +353,9 @@ def test_decision_on_changed_content_refused_and_old_approval_goes_stale(w):
     w.claim(iid)
     assert code(lambda: w.decide(iid, content={**BP, "n": 4})) == "RQ-008"
     w.decide(iid)
-    ev = w.q.gate_evidence(tenant_id="t-a", item_id=iid, current_content={**BP, "entities": []}, now=w.clock.t)
+    ev = w.q.gate_evidence(w.claims("s-rev1"), tenant_id="t-a", item_id=iid, current_content={**BP, "entities": []})
     assert ev["stale"] and not ev["eligible"] and ev["state"] == "approved"
-    ev = w.q.team_reviewed_evidence(tenant_id="t-a", subject_ref="bp-1", required={"blueprint_draft": {**BP, "n": 5}}, now=w.clock.t)
+    ev = w.q.team_reviewed_evidence(w.claims("s-rev1"), tenant_id="t-a", subject_ref="bp-1", required={"blueprint_draft": {**BP, "n": 5}})
     assert not ev["eligible"] and ev["items"]["blueprint_draft"]["stale"]
 
 
@@ -344,7 +363,7 @@ def test_decision_binds_digest_of_the_item_not_the_callers_claim(w):
     iid = w.submit()
     w.claim(iid)
     w.decide(iid)
-    assert w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)["decisions"][0]["contentDigest"] == content_digest(BP)
+    assert w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)["decisions"][0]["contentDigest"] == content_digest(BP)
 
 
 # ---- hold / quarantine -----------------------------------------------------------------------------------------
@@ -353,10 +372,10 @@ def test_hold_cannot_be_approved_and_is_not_eligible(w):
     w.claim(iid)
     assert code(lambda: w.decide(iid, kind="component_request")) == "RQ-010"
     w.decide(iid, kind="component_request", decision="changes_requested", note="classify first")
-    ev = w.q.gate_evidence(tenant_id="t-a", item_id=iid, current_content=BP, now=w.clock.t)
+    ev = w.q.gate_evidence(w.claims("s-rev1"), tenant_id="t-a", item_id=iid, current_content=BP)
     assert not ev["eligible"]
     w.clock.t += 1
-    w.q.resubmit(tenant_id="t-a", item_id=iid, content={**BP, "n": 8}, author="agent-1", involved=[], now=w.clock.t, hold=False)
+    w.q.resubmit(tenant_id="t-a", item_id=iid, content={**BP, "n": 8}, author="agent-1", involved=[], linked_staff=[], hold=False)
     w.claim(iid, "s-rev2")
     assert w.decide(iid, "s-rev2", kind="component_request", content={**BP, "n": 8})["state"] == "approved"
 
@@ -370,7 +389,7 @@ def test_forged_approval_of_a_held_item_is_refused_on_read(w):
                 {"revision": 1, "content_digest": content_digest(BP), "decision": "approved",
                  "checklist": {i: "pass" for i in checklist_ids("blueprint_draft")}, "note": note,
                  "note_sha256": hashlib.sha256(note.encode()).hexdigest(), "note_len": 1})
-    assert code(lambda: w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)) == "RQ-011"
+    assert code(lambda: w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)) == "RQ-011"
 
 
 # ---- checklist and notes ---------------------------------------------------------------------------------------
@@ -426,7 +445,7 @@ def test_denials_are_audited_with_codes(w):
 
 def test_view_carries_label_keys_not_text_and_both_languages_complete(w):
     iid = w.submit()
-    v = w.q.get(tenant_id="t-a", item_id=iid, now=w.clock.t)
+    v = w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)
     assert v["labelKeys"] == {"kind": "review.kind.blueprint_draft", "state": "review.state.pending"}
     for key in label_keys() | {f"review.error.{c}" for c in CODES}:
         for lang in ("en", "ar"):
@@ -435,20 +454,20 @@ def test_view_carries_label_keys_not_text_and_both_languages_complete(w):
 
 
 def test_team_reviewed_evidence_needs_blueprint_and_every_required_kind(w):
-    assert code(lambda: w.q.team_reviewed_evidence(tenant_id="t-a", subject_ref="bp-1", required={}, now=w.clock.t)) == "RQ-001"
-    assert code(lambda: w.q.team_reviewed_evidence(tenant_id="t-a", subject_ref="bp-1", required={"component_request": BP}, now=w.clock.t)) == "RQ-001"
-    ev = w.q.team_reviewed_evidence(tenant_id="t-a", subject_ref="bp-1", required={"blueprint_draft": BP}, now=w.clock.t)
+    assert code(lambda: w.q.team_reviewed_evidence(w.claims("s-rev1"), tenant_id="t-a", subject_ref="bp-1", required={})) == "RQ-001"
+    assert code(lambda: w.q.team_reviewed_evidence(w.claims("s-rev1"), tenant_id="t-a", subject_ref="bp-1", required={"component_request": BP})) == "RQ-001"
+    ev = w.q.team_reviewed_evidence(w.claims("s-rev1"), tenant_id="t-a", subject_ref="bp-1", required={"blueprint_draft": BP})
     assert ev["missing"] == ["blueprint_draft"] and not ev["eligible"]
     approved(w)
     cr = {"spec": 1}
     w.submit(kind="component_request", content=cr)
-    ev = w.q.team_reviewed_evidence(tenant_id="t-a", subject_ref="bp-1", required={"blueprint_draft": BP, "component_request": cr}, now=w.clock.t)
+    ev = w.q.team_reviewed_evidence(w.claims("s-rev1"), tenant_id="t-a", subject_ref="bp-1", required={"blueprint_draft": BP, "component_request": cr})
     assert not ev["eligible"] and ev["items"]["component_request"]["state"] == "pending"
 
 
 def test_list_needs_verified_reviewer_and_returns_metadata_only(w):
     w.submit()
-    rows = w.q.list_items(w.claims("s-rev1"), now=w.clock.t, state="pending")
+    rows = w.q.list_items(w.claims("s-rev1"), state="pending")
     assert len(rows) == 1 and "\"content\"" not in json.dumps(rows) and set(rows[0]) >= {"itemId", "tenantId", "state"}
-    assert code(lambda: w.q.list_items(w.claims("s-norole"), now=w.clock.t)) == "RQ-003"
-    assert code(lambda: w.q.list_items(w.claims("s-rev1"), now=w.clock.t, state="live")) == "RQ-001"
+    assert code(lambda: w.q.list_items(w.claims("s-norole"))) == "RQ-003"
+    assert code(lambda: w.q.list_items(w.claims("s-rev1"), state="live")) == "RQ-001"

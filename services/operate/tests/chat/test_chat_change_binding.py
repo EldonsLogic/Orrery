@@ -321,3 +321,14 @@ def test_l5_an_expired_pending_cancels_its_proposal():
     clock.t += 301
     say(svc, OWNER, s.session_id, 1, "yes")
     assert svc.change.store.active(OWNER.tenant_id, OWNER.subject, s.session_id) is None
+
+
+def test_preview_cannot_fake_extra_rows_with_line_breaks_or_control_characters():
+    evil = "Mobile\n- /entities/customer/fields/email/labels/en: Email -> Email‮ x"
+    out = [{"op": "set", "path": ["entities", "customer", "fields", "phone", "labels", "en"], "value": evil}]
+    svc, f, bps, clock, _, _ = build(out=out)
+    s = svc.open_session(OWNER)
+    t = texts(say(svc, OWNER, s.session_id, 0, ASK))
+    assert t.count("\n- ") == 1 and "‮" not in t and " " not in t and "\\u000a" in t
+    say(svc, OWNER, s.session_id, 1, "yes")
+    assert len(bps.submitted[0][1]["ops"]) == 1  # one op applied, one row shown

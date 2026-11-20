@@ -91,3 +91,15 @@ def test_more_ops_than_the_preview_cap_needs_review():
            {"op": "set", "path": ["entities", "customer", "fields", "city", "labels", "en"], "value": "B"}]
     svc, *_ = make(two, max_ops=1)
     refused("change_needs_review", svc.propose, OWNER, SESSION, "x", change_decision())
+
+
+def test_benign_ids_that_contain_a_tax_token_inside_a_word_are_allowed():
+    for fid in ("private_notes", "reservation_note", "innovation_idea"):
+        svc, *_ = make(_add(fid))
+        assert svc.propose(OWNER, SESSION, "add a field", change_decision()).risk == "R2"
+
+
+def test_real_tax_ids_next_to_benign_words_are_still_refused():
+    for fid in ("private_vat", "reservationvatrate"):
+        svc, *_ = make(_add(fid))
+        refused("change_ledger_tax", svc.propose, OWNER, SESSION, "add a field", change_decision())

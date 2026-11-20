@@ -56,6 +56,10 @@ def _tokens(s) -> set:
 _NOT_TAX = frozenset({"syntax", "taxi", "taxis", "taxonomy", "august"})  # known false positives of the substring match
 
 
+_BENIGN_WORDS = ("private", "privately", "reservation", "reservations", "innovation", "activation", "motivation",
+                 "elevation", "derivation", "cultivation", "observation", "conservation", "renovation", "salvation")
+
+
 def _tax_like(s) -> bool:
     """Token match, plus the flattened id (`vatrate`, `zatcaflag`, `salesvatamt`): a tax token anywhere in it."""
     if not isinstance(s, str):
@@ -65,6 +69,8 @@ def _tax_like(s) -> bool:
     flat = "".join(ch for ch in s.casefold() if ch.isalnum())
     if flat in _NOT_TAX:
         return False
+    for w in _BENIGN_WORDS:  # ordinary words that only contain a token ("private", "reservation")
+        flat = flat.replace(w, "")
     return any(t in flat for t in TAX_TOKENS)  # fails closed: a token anywhere in the joined id
 
 

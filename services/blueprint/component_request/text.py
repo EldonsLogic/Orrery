@@ -7,7 +7,7 @@ import unicodedata
 from exceptions.errors import ExceptionsError  # noqa: E402  (services/blueprint is on the path)
 from exceptions.sanitize import clean, scan  # noqa: E402
 
-__all__ = ["clean", "slug", "injection", "scope_hits", "per_client", "personal_data", "fold", "tokens", "foreign_letters"]
+__all__ = ["clean", "slug", "injection", "scope_hits", "per_client", "personal_data", "fold", "tokens", "stems", "foreign_letters", "sensitive_hits"]
 
 _INJECTION = re.compile(
     r"(?i)(ignore (all |any |the )?(previous|prior|above)|disregard|system prompt|you are (now )?an? |new instructions?|"
@@ -60,14 +60,20 @@ _CAMEL = re.compile(r"([a-z0-9])([A-Z])")
 _CAMEL2 = re.compile(r"([A-Z]+)([A-Z][a-z])")
 _SPLIT = re.compile(r"[^a-z0-9ء-ي]+")
 _EN_TOKEN = re.compile(
-    r"^(ledgers?|gl|journals?|tax(es|able|ation|ed|code|codes|rate|rates|id|ids)?|vat|zakat|zatca|fatoora|einvoic\w*|payrolls?|"
+    r"^(ledgers?|gls?|journals?|tax(es|able|ation|ed|code|codes|rate|rates|id|ids)?|vats?|zakat|zakah|zakaah|zatca|fatoora|einvoic\w*|payrolls?|"
     r"payslips?|wages?|remunerations?|salary|salaries|gratuity|eosb|wps|gosi|audit\w*|bookkeep\w*|withholding|excise|accounting|"
     r"accountants?|accruals?|reconcil\w*)$")
 _EN_CONCAT = ("payroll", "payslip", "ledger", "zatca", "fatoora", "einvoic", "electronicinvoic", "bookkeep", "remuneration", "gratuity",
               "endofservice", "chartofaccounts", "trialbalance", "grosspay", "netpay", "salestax", "taxcode", "taxrate", "taxid",
-              "auditlog", "audittrail", "withholdingtax", "wagesheet")
-_AR_STEMS = ("ضريب", "زكا", "دفتر", "قيد", "قيود", "رواتب", "راتب", "مسير", "تدقيق", "محاسب", "فوتر", "فاتور", "اجور", "تاميني")
+              "auditlog", "audittrail", "withholdingtax", "wagesheet", "salary", "salaries", "journal", "zakah", "zakat")
+_AR_STEMS = ("ضريب", "ضرائب", "زكا", "دفتر", "قيد", "قيود", "رواتب", "راتب", "مرتب", "مسير", "تدقيق", "محاسب", "فوتر", "فاتور", "اجور",
+            "تاميني", "ترحيل", "ذمم")
+_AR_EXACT = {"اجر", "اجره", "اجرة"}
 _AR_CONCAT = ("دفترالاستاذ", "نهايهالخدمه", "فاتورهالكترونيه", "قيديوميه", "مراجعهحسابات")
+
+_AR_STEMS = tuple(x.translate(_AR_FOLD) for x in _AR_STEMS)
+_AR_EXACT = {x.translate(_AR_FOLD) for x in _AR_EXACT}
+_AR_CONCAT = tuple(x.translate(_AR_FOLD) for x in _AR_CONCAT)
 
 
 def fold(text: str) -> str:
@@ -84,7 +90,32 @@ def _split_words(text: str) -> str:
 
 
 def tokens(text: str) -> list[str]:
-    return [w for w in _split_words(text).split(" ") if w]
+    """Words after folding. Runs of single letters ("t a x", "v.a.t") are joined into one word."""
+    out: list[str] = []
+    run = ""
+    for w in (w for w in _split_words(text).split(" ") if w):
+        if len(w) == 1 and w.isascii():
+            run += w
+            continue
+        if run:
+            out.append(run)
+            run = ""
+        out.append(w)
+    if run:
+        out.append(run)
+    return out
+
+
+def stems(tok: str) -> set[str]:
+    """The word and its crude singular forms (refunds, entries, taxes), so a plural never slips past a singular list."""
+    out = {tok}
+    if tok.endswith("ies") and len(tok) > 4:
+        out.add(tok[:-3] + "y")
+    if tok.endswith("es") and len(tok) > 3:
+        out.add(tok[:-2])
+    if tok.endswith("s") and len(tok) > 3:
+        out.add(tok[:-1])
+    return out
 
 
 def foreign_letters(text: str) -> bool:
@@ -100,7 +131,7 @@ def scope_hits(*texts: str) -> list[str]:
     """Words for ledger, tax, e-invoicing, payroll maths or audit, after normalising. A backstop: a miss proves nothing."""
     found: set[str] = set()
     for t in texts:
-        for variant in (t, t.translate(_LEET)):
+        for variant in (t, t.translate(_LEET), t.replace("I", "l")):
             toks = tokens(variant)
             toks_ar = [w[2:] if w.startswith("ال") and len(w) > 4 else (w[1:] if w.startswith("لل") else w) for w in toks]
             concat = "".join(toks)
@@ -108,5 +139,26 @@ def scope_hits(*texts: str) -> list[str]:
             found.update(c for c in _EN_CONCAT if c in concat)
             for w in toks_ar:
                 found.update(a for a in _AR_STEMS if w.startswith(a))
+                found.update(w for _ in (0,) if w in _AR_EXACT)
             found.update(a for a in _AR_CONCAT if a in "".join(toks_ar))
     return sorted(found)
+
+
+# ---- sensitive data in field names (iban, national id, password, passport, salary, card, secret) ----------------------
+_SENS_TOKEN = {"iban", "swift", "passport", "password", "passwd", "pwd", "secret", "card", "cvv", "pin", "ssn", "dob", "token",
+               "salary", "iqama", "birthday", "health", "medical", "religion", "biometric", "fingerprint"}
+_SENS_CONCAT = ("iban", "nationalid", "passport", "password", "secret", "cardnumber", "cvv", "ssn", "dateofbirth", "apikey",
+                "accesstoken", "bankaccount", "healthcondition", "residentid", "idnumber", "taxid")
+_SENS_AR = ("هويه", "جواز", "كلمهالسر", "كلمهالمرور", "بطاقه", "ايبان", "الحسابالبنكي", "حساببنكي", "تاريخالميلاد", "سري")
+
+_SENS_AR = tuple(x.translate(_AR_FOLD) for x in _SENS_AR)
+
+
+def sensitive_hits(name: str) -> list[str]:
+    """Sensitive personal or secret data named in a field or entity (refused in an AI draft)."""
+    toks = tokens(name)
+    concat = "".join(toks)
+    hits = {w for t in toks for w in stems(t) if w in _SENS_TOKEN}
+    hits.update(c for c in _SENS_CONCAT if c in concat)
+    hits.update(a for a in _SENS_AR if a in concat)
+    return sorted(hits)

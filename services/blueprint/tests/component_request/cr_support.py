@@ -45,7 +45,7 @@ def good_draft():
         "spec": {
             "capabilities": [{"id": "sales.visit_checklist.manage", "summary": "Create and edit visit checklists linked to a customer"}],
             "fields": [{"entity": "visit_checklist", "name": "result", "type": "text", "required": True},
-                       {"entity": "visit_checklist", "name": "customer", "type": "link", "required": True}],
+                       {"entity": "visit_checklist", "name": "customer", "type": "link", "required": True, "target": "customer"}],
             "permissions": [{"role": "sales_clerk", "action": "create"}, {"role": "sales_manager", "action": "read"}],
             "i18n_keys": ["sales.visit_checklist.title", "sales.visit_checklist.reason"],
             "test_plan": [{"id": "unit_core", "kind": "unit", "covers": ["sales.visit_checklist.manage"], "blocking": True},
@@ -74,6 +74,29 @@ class FakeLibrary:
     def get(self, cid, v): return self.m.get(cid, {}).get(v)
 
 
+from dataclasses import dataclass  # noqa: E402
+
+
+@dataclass(frozen=True)
+class Prin:
+    """Principal-like (services/operate/agui/ports.py): what the identity service hands the host."""
+    tenant_id: str
+    subject: str
+    role_ids: tuple = ()
+    session_id: str = ""
+
+
+def ask(s, g, now, tenant=TEN, subject="discovery-agent", session=None):
+    return s.intake(g, Prin(tenant, subject, (), session or "sess-" + tenant), now)
+
+
+def forge(s, rid, fn, reseal=False):
+    """Simulate a store writer; with reseal=True, one who also holds the integrity key."""
+    fn(s._records[rid])
+    if reseal:
+        s._seal(s._records[rid])
+
+
 AGENT = Actor("agent", "discovery-agent")
 CLERK = Actor("human", "founder-a", ("component_reviewer",), True)
 REVIEWER = Actor("human", "founder-b", ("component_reviewer",), True)
@@ -82,4 +105,5 @@ REVIEWER = Actor("human", "founder-b", ("component_reviewer",), True)
 def build(result=None, exc=None, library=(), **kw):
     d = FakeDrafter(result, exc)
     kw.setdefault("min_tenants", 1)
+    kw.setdefault("integrity_key", b"test-integrity-key")
     return ComponentRequests(d, FakeLibrary(library), owner_github="example-owner", **kw), d

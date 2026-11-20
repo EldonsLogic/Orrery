@@ -16,6 +16,9 @@ Built the component request pipeline: a gap analysis request becomes a Component
 ## Review fixes (Opus review of PR 216)
 Risk class now derived by policy.py from the Tool API tables (default deny, allow-list of artifact kinds and benign scopes); normalised scope scan as backstop; request key bound to the need; evidence per tenant with deterministic generalisation (tenant count or human attestation); stored records validated on read, optional HMAC digest; drafting_failed park and human reopen; clock bound; drafter cannot approve. Q-425 to Q-429 added.
 
+## Re-review fixes (design change)
+Plain is now proven structurally (allow-listed field types, benign vocabulary, reviewed tables), anything else parks as needs_human_classification for a verified human who can never attest plain over a money field; sensitive-field refusal; tenant taken from the verified Principal (one session, one tenant; tenant counts only with evidence); HMAC over the whole record, no trust without a key; attestations cleared on reopen; tighter clock; list() survives a bad record. Q-430 to Q-432.
+
 ## Decisions
 - No new ADR. Follows ADR-0048 (propose, not act). AI drafts exclude stock, ledger, tax and permission risk classes (Q-421).
 

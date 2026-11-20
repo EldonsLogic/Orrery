@@ -1,10 +1,11 @@
 """Stable reason codes and statuses for the component request pipeline (BPL-016). Never renumber; add at the end."""
 # statuses
 REQUESTED, DRAFTED, IN_REVIEW, APPROVED, REJECTED, REFUSED = "requested", "drafted", "in_review", "approved", "rejected", "refused"
+NEEDS_CLASSIFICATION = "needs_human_classification"   # not provably plain: a verified human attests the class
 DRAFTING_FAILED = "drafting_failed"   # parked for a human after repeated drafter failures; a human may reopen it
-STATUSES = (REQUESTED, DRAFTED, IN_REVIEW, APPROVED, REJECTED, REFUSED, DRAFTING_FAILED)
+STATUSES = (REQUESTED, DRAFTED, IN_REVIEW, APPROVED, REJECTED, REFUSED, DRAFTING_FAILED, NEEDS_CLASSIFICATION)
 TERMINAL = {APPROVED, REJECTED, REFUSED}   # DRAFTING_FAILED is parked, not terminal
-TRANSITIONS = {REQUESTED: {DRAFTED, REFUSED, DRAFTING_FAILED}, DRAFTED: {IN_REVIEW}, IN_REVIEW: {APPROVED, REJECTED},
+TRANSITIONS = {REQUESTED: {DRAFTED, REFUSED, DRAFTING_FAILED, NEEDS_CLASSIFICATION}, NEEDS_CLASSIFICATION: {REQUESTED, DRAFTED, REFUSED}, DRAFTED: {IN_REVIEW}, IN_REVIEW: {APPROVED, REJECTED},
                DRAFTING_FAILED: {REQUESTED}, REJECTED: {REQUESTED}}   # the last two only through a human `reopen`
 
 # reasons (each has ar and en labels in labels.json under "reason.<code>")
@@ -30,6 +31,12 @@ UNTRUSTED_TEXT = "CRQ-017"        # warning only: untrusted text was flagged and
 UNCLASSIFIED = "CRQ-018"          # no reviewed plain class for the need: default deny, a human classifies or builds it
 RECORD_INVALID = "CRQ-019"        # a stored record is malformed or inconsistent (read from the store, never trusted)
 NO_GENERALISATION = "CRQ-020"     # not shown to be generalisable: too few distinct tenants and no human attestation
+
+
+TENANT_MISMATCH = "CRQ-021"       # the same caller session supplied two different tenants
+INTEGRITY = "CRQ-022"             # record seal missing or wrong, or no integrity key configured to trust an approval
+MONEY_FIELD = "CRQ-023"           # a human may not attest `plain` for a draft with a money-typed field
+NOT_ATTESTED = "CRQ-024"          # approval needs a human risk-class attestation first
 
 
 class RequestError(Exception):

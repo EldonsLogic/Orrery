@@ -26,7 +26,12 @@
   "reason.CRQ-018": "لا يوجد تصنيف معتمد لهذه الحاجة، فتُحال إلى مهندس ليصنّفها أو يبنيها يدويًا",
   "reason.CRQ-019": "سجل الطلب المخزّن تالف أو غير متسق",
   "reason.CRQ-020": "لم يثبت أن الحاجة عامة: عدد العملاء المستقلين قليل ولا يوجد إقرار بشري",
-  "status.drafting_failed": "تعذّرت الصياغة، بانتظار مراجعة بشرية"
+  "status.drafting_failed": "تعذّرت الصياغة، بانتظار مراجعة بشرية",
+  "reason.CRQ-021": "قدّمت الجلسة نفسها أكثر من عميل واحد",
+  "reason.CRQ-022": "ختم السجل غير صالح أو لا يوجد مفتاح سلامة لاعتماد الاعتماد",
+  "reason.CRQ-023": "لا يجوز لمراجع بشري أن يصنّف مسودة فيها حقل مالي على أنها عادية",
+  "reason.CRQ-024": "يلزم تصنيف المخاطر من مراجع بشري قبل الاعتماد",
+  "status.needs_human_classification": "بانتظار تصنيف المخاطر من مراجع بشري"
  },
  "en": {
   "reason.CRQ-001": "This request touches the ledger, tax, e-invoicing, payroll maths or audit. Only an engineer builds it, by hand",
@@ -55,6 +60,11 @@
   "reason.CRQ-018": "No reviewed class for this need. An engineer classifies or builds it by hand",
   "reason.CRQ-019": "The stored request record is malformed or inconsistent",
   "reason.CRQ-020": "Not shown to be generalisable: too few distinct tenants and no human attestation",
-  "status.drafting_failed": "Drafting failed, parked for a human"
+  "status.drafting_failed": "Drafting failed, parked for a human",
+  "reason.CRQ-021": "The same session supplied more than one tenant",
+  "reason.CRQ-022": "The record seal is wrong, or no integrity key is configured to trust an approval",
+  "reason.CRQ-023": "A human may not attest plain for a draft with a money field",
+  "reason.CRQ-024": "A human risk-class attestation is needed before approval",
+  "status.needs_human_classification": "Waiting for a human risk classification"
  }
 }

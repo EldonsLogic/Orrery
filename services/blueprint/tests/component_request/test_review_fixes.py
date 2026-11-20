@@ -2,9 +2,10 @@
 import copy
 
 import pytest
-from cr_support import AGENT, CLERK, REVIEWER, T0, T1, T2, T3, TEN, TEN2, FakeLibrary, build, gap, good_draft
+from cr_support import ask, forge, AGENT, CLERK, REVIEWER, T0, T1, T2, T3, TEN, TEN2, FakeLibrary, build, gap, good_draft
 
 from component_request import Actor, RequestError, codes, policy, validate_draft
+from component_request.draft import classify_draft
 from component_request.text import scope_hits
 
 FIX = {"owner": {"github": "example-owner"}, "licence": {"spdx": "LicenseRef-Proprietary"}}
@@ -25,7 +26,7 @@ def code_of(d, library=None):
 
 # H1: the class is derived, never taken from the model
 @pytest.mark.parametrize("ent", ["credit_note", "payment_entry", "sales_invoice", "stock_entry", "bank_transaction", "user_role_grant",
-                                 "debit_note", "expense_claim", "unknown_thing"])
+                                 "debit_note", "expense_claim"])
 @pytest.mark.parametrize("risk", [None, "plain"])
 def test_non_plain_or_unknown_entities_refused_whatever_the_model_claims(ent, risk):
     extra = {"riskClass": risk} if risk else {}
@@ -35,7 +36,7 @@ def test_non_plain_or_unknown_entities_refused_whatever_the_model_claims(ent, ri
 @pytest.mark.parametrize("ent", ["credit_note", "payment_entry", "sales_invoice", "stock_entry", "bank_transaction", "user_role_grant"])
 def test_these_needs_are_refused_at_intake_before_the_model_is_called(system, ent):
     s, d = system()
-    r = s.intake(gap(ref=ent), AGENT, T0, TEN)["request"]
+    r = ask(s, gap(ref=ent), T0, TEN)["request"]
     assert r["status"] == "refused" and r["refusal"]["code"] == codes.FORBIDDEN_SCOPE and d.briefs == []
 
 
@@ -51,7 +52,7 @@ def test_derive_class_unit():
     assert policy.derive_class("entity", "visit_checklist")[0] == "plain"
     assert policy.derive_class("entity", "sales_quote") == ("plain", "reviewed_table")
     assert policy.derive_class("entity", "credit_note")[0] is None and policy.derive_class("entity", "stock_entry")[0] is None
-    assert policy.derive_class("entity", "zzz_thing") == (None, "unclassified")
+    assert policy.classify("entity", "zzz_thing") == ("unproven", "not_all_benign")
     assert policy.derive_class("entity", "user_role_grant")[1] == "identity_domain"
 
 
@@ -119,7 +120,8 @@ def test_look_alike_letters_in_a_draft_are_hostile():
 
 def test_an_unlisted_synonym_is_still_refused_by_structure():
     # no word list knows "stipend"; the entity has no benign scope word, so default deny decides
-    assert code_of(draft_for("stipend_run")) == codes.DRAFT_RISK
+    d = draft_for("zzz_run")                       # accepted by the draft check, but not provably plain: a human must classify
+    assert validate_draft(d, "CR-1", FIX) and not classify_draft(validate_draft(d, "CR-1", FIX))["proven"]
 
 
 # M1
@@ -128,47 +130,47 @@ def test_key_bound_to_need_so_a_refused_need_cannot_poison_another(system):
     poisoned = gap(ref="payroll_run")
     poisoned["request_key"] = gap()["request_key"]
     with pytest.raises(RequestError) as e:
-        s.intake(poisoned, AGENT, T0, TEN)
+        ask(s, poisoned, T0, TEN)
     assert e.value.code == codes.MALFORMED_INTAKE
-    assert s.intake(gap(), AGENT, T0, TEN)["outcome"] == "created"
+    assert ask(s, gap(), T0, TEN)["outcome"] == "created"
 
 
 # M2
 def test_closed_records_are_not_touched_by_a_duplicate(system):
     s, _ = system()
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
     s.draft(rid, T1, AGENT)
     s.submit_for_review(rid, T2, CLERK)
     s.approve(rid, REVIEWER, T3)
     before = s.get(rid)
-    out = s.intake(gap(evidence=[{"kind": "blueprint", "id": "/x/1"}]), AGENT, "2026-11-20T11:00:00Z", TEN2)
+    out = ask(s, gap(evidence=[{"kind": "blueprint", "id": "/x/1"}]), "2026-11-20T11:00:00Z", TEN2)
     assert out["outcome"] == "duplicate" and out["request"] == before
 
 
 def test_duplicate_with_other_need_under_same_id_is_refused(system):
     s, _ = system()
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
-    s._records[rid]["need"]["ref"] = "something_else"
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
+    forge(s, rid, lambda x: x["need"].update(ref="something_else"), reseal=True)
     with pytest.raises(RequestError):
-        s.intake(gap(), AGENT, T1, TEN2)
+        ask(s, gap(), T1, TEN2)
 
 
 # M4 / M5
 def test_generalisation_is_deterministic_not_the_models_word(system):
     s, _ = system(min_tenants=2)
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
     s.draft(rid, T1, AGENT)
     s.submit_for_review(rid, T2, CLERK)
     with pytest.raises(RequestError) as e:                       # one tenant, model says tenant_specific false: not enough
         s.approve(rid, REVIEWER, T3)
     assert e.value.code == codes.NO_GENERALISATION
-    s.intake(gap(), AGENT, T3, TEN2)                             # a second tenant raises the same gap
+    ask(s, gap(), T3, TEN2)                             # a second tenant raises the same gap
     assert s.approve(rid, REVIEWER, "2026-11-20T10:20:00Z")["status"] == "approved"
 
 
 def test_human_attestation_replaces_tenant_count(system):
     s, _ = system(min_tenants=3)
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
     s.draft(rid, T1, AGENT)
     with pytest.raises(RequestError):
         s.attest_generalisable(rid, Actor("human", "h", ("component_reviewer",), False), T2)
@@ -187,7 +189,7 @@ def test_exclusive_for_one_client_rationale_is_caught():
 # M6
 def test_stored_record_is_validated_on_read(system):
     s, _ = system()
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
     pristine = s.get(rid)
     for mutate in (lambda r: r.update(status="approved"), lambda r: r.update(status="bogus"), lambda r: r["history"].pop(),
                    lambda r: r.pop("tenants"), lambda r: r.update(requested_by=5)):
@@ -199,25 +201,27 @@ def test_stored_record_is_validated_on_read(system):
 
 
 def test_keyed_digest_stops_a_store_writer_who_swaps_in_a_valid_draft(system):
-    s, _ = system(integrity_key=b"host-secret-key")
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
+    s, _ = system()
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
     s.draft(rid, T1, AGENT)
-    rec = s._records[rid]
-    other = copy.deepcopy(rec["draft"])
-    other["spec"]["permissions"].append({"role": "sales_rep", "action": "read"})
     from component_request import digest
-    rec["draft"], rec["draft_digest"] = other, digest(other)         # attacker recomputes the unkeyed digest
+
+    def swap(rec):
+        other = copy.deepcopy(rec["draft"])
+        other["spec"]["permissions"].append({"role": "sales_rep", "action": "read"})
+        rec["draft"], rec["draft_digest"] = other, digest(other)         # attacker recomputes the unkeyed digest
+    forge(s, rid, swap)
     with pytest.raises(RequestError) as e:
         s.submit_for_review(rid, T2, CLERK)
-    assert e.value.code == codes.DRAFT_TAMPERED
+    assert e.value.code in (codes.INTEGRITY, codes.DRAFT_TAMPERED)
 
 
 def test_approve_rechecks_the_need(system):
     s, _ = system()
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
     s.draft(rid, T1, AGENT)
     s.submit_for_review(rid, T2, CLERK)
-    s._records[rid]["need"]["ref"] = "payroll_run"
+    forge(s, rid, lambda x: x["need"].update(ref="payroll_run"), reseal=True)
     with pytest.raises(RequestError) as e:
         s.approve(rid, REVIEWER, T3)
     assert e.value.code == codes.DRAFT_TAMPERED
@@ -226,12 +230,12 @@ def test_approve_rechecks_the_need(system):
 # M7
 def test_quality_rejection_can_be_reopened_scope_refusal_cannot(system):
     s, _ = system()
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
     s.draft(rid, T1, AGENT)
     s.submit_for_review(rid, T2, CLERK)
     s.reject(rid, REVIEWER, T3, "quality")
     assert s.reopen(rid, REVIEWER, "2026-11-20T10:20:00Z")["status"] == "requested"
-    refused = s.intake(gap(ref="payroll_run"), AGENT, T0, TEN)["request"]["id"]
+    refused = ask(s, gap(ref="payroll_run"), T0, TEN)["request"]["id"]
     with pytest.raises(RequestError):
         s.reopen(refused, REVIEWER, T3)
 
@@ -239,10 +243,10 @@ def test_quality_rejection_can_be_reopened_scope_refusal_cannot(system):
 # L1
 def test_clock_far_future_cannot_lock_a_record(system):
     s, _ = system()
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
     for bad in ("9999-12-31T23:59:59Z", "2030-01-01T00:00:00Z"):
         with pytest.raises(RequestError) as e:
-            s.intake(gap(), AGENT, bad, TEN2)
+            ask(s, gap(), bad, TEN2)
         assert e.value.code == codes.BAD_CLOCK
     assert s.draft(rid, T1, AGENT)["status"] == "drafted"
 
@@ -250,7 +254,7 @@ def test_clock_far_future_cannot_lock_a_record(system):
 # L2
 def test_the_human_who_ran_the_draft_may_not_approve_and_ids_are_case_insensitive(system):
     s, _ = system()
-    rid = s.intake(gap(), AGENT, T0, TEN)["request"]["id"]
+    rid = ask(s, gap(), T0, TEN)["request"]["id"]
     drafter = Actor("human", "Founder-B", ("component_reviewer",), True)
     s.draft(rid, T1, drafter)
     s.submit_for_review(rid, T2, CLERK)
@@ -276,7 +280,7 @@ def test_library_dedupe_ignores_draft_level_and_factory_manifests_and_odd_shapes
                 "provides": provides or [{"capability": "x.y", "artifacts": [{"type": "entity", "ref": "visit_checklist"}]}]}
     for lib in ([m("draft")], [m("certified", {"source": "component_factory"})], [m("certified", provides=[{"artifacts": [5]}])]):
         s, _ = system(library=lib)
-        assert s.intake(gap(), AGENT, T0, TEN)["outcome"] == "created"
+        assert ask(s, gap(), T0, TEN)["outcome"] == "created"
 
 
 # L5, L6

@@ -26,7 +26,6 @@ MAX_DRAFT_BYTES = 60_000
 MAX_DEPTH = 8
 MODEL_MANIFEST_KEYS = {"id", "version", "kind", "name", "description", "provides", "requires", "parameters", "tests",
                        "engineCompatibility", "i18n", "dataHandling"}
-FIELD_TYPES = {"text", "integer", "decimal", "percent", "money", "date", "boolean", "select", "link"}
 PERMISSION_ACTIONS = {"read", "list", "create", "update", "export"}   # ADR-0048 item 4: no approve, submit, cancel, amend, delete
 _ID = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,4}$")
 _SNAKE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
@@ -139,10 +138,19 @@ def validate_draft(raw: Any, request_id: str, fixed_manifest: dict, library: Any
     if {c["id"] for c in scaps} != caps or len(scaps) != len(caps) or not all(_ID.match(c["id"]) for c in scaps):
         raise RequestError(codes.MALFORMED_DRAFT, "spec capabilities must equal the manifest provides")
     for f in _list(s["fields"], "spec.fields", 0, 100):
-        _closed(f, {"entity", "name", "type", "required"}, "field")
+        if not isinstance(f, dict) or not {"entity", "name", "type", "required"} <= set(f) <= {"entity", "name", "type", "required", "options", "target"}:
+            raise RequestError(codes.MALFORMED_DRAFT, "field has missing or unexpected keys")
         if f["entity"] not in entities or not isinstance(f["name"], str) or not _SNAKE.match(f["name"]) \
-                or f["type"] not in FIELD_TYPES or not isinstance(f["required"], bool):
+                or f["type"] not in policy.SHAPE_FIELD_TYPES or not isinstance(f["required"], bool):
             raise RequestError(codes.MALFORMED_DRAFT, "field refers to an unknown entity or has a bad name or type")
+        opts, tgt = f.get("options"), f.get("target")
+        if ("options" in f) != (f["type"] == "select") or ("target" in f) != (f["type"] == "link") \
+                or (opts is not None and not (isinstance(opts, list) and 1 <= len(opts) <= 30 and len(set(opts)) == len(opts)
+                                              and all(isinstance(o, str) and _SNAKE.match(o) for o in opts))) \
+                or (tgt is not None and (not isinstance(tgt, str) or not _SNAKE.match(tgt))):
+            raise RequestError(codes.MALFORMED_DRAFT, "select needs a closed options list and link needs a target, nothing else")
+        if policy.field_verdict(entities, f)[0] == "refuse":
+            raise RequestError(codes.FORBIDDEN_SCOPE, "a field reaches sensitive data, money movement or a restricted scope")
     for p in _list(s["permissions"], "spec.permissions", 1, 40):
         _closed(p, {"role", "action"}, "permission")
         if not isinstance(p["role"], str) or not _SNAKE.match(p["role"]):
@@ -174,8 +182,9 @@ def validate_draft(raw: Any, request_id: str, fixed_manifest: dict, library: Any
 
 
 def _artifacts(m: dict) -> None:
-    """Allow-list of artifact kinds; the risk class is derived by policy, never taken from the model. After this runs,
-    every entity artifact carries the derived class "plain" (a differing or non-plain claim is refused)."""
+    """Allow-list of artifact kinds. Scope comes from policy.classify, never from the model: a firm no is refused here,
+    an unproven artifact is left for the human classification step (classify_draft), and a model risk class other than
+    `plain` is refused. A proven entity is stamped `plain` by us."""
     for p in m["provides"] if isinstance(m["provides"], list) else []:
         for a in p.get("artifacts", []) if isinstance(p, dict) and isinstance(p.get("artifacts"), list) else []:
             if not isinstance(a, dict) or a.get("type") not in policy.ALLOWED_ARTIFACTS:
@@ -183,14 +192,32 @@ def _artifacts(m: dict) -> None:
             ref = a.get("ref")
             if not isinstance(ref, str):
                 raise RequestError(codes.MALFORMED_DRAFT, "artifact ref must be text")
-            cls, why = policy.derive_class(a["type"], ref.split("/")[-1])
-            if cls != "plain":
-                code = codes.FORBIDDEN_SCOPE if why in ("reviewed_ledger", "reviewed_stock", "restricted_word") else codes.DRAFT_RISK
-                raise RequestError(code, "artifact scope is not plain by the reviewed policy")
+            verdict, _ = policy.classify(a["type"], ref.split("/")[-1])
+            if verdict == "refuse":
+                raise RequestError(codes.FORBIDDEN_SCOPE, "artifact scope is refused by the reviewed policy")
             if a["type"] == "entity":
                 if a.get("riskClass", "plain") != "plain":
                     raise RequestError(codes.DRAFT_RISK, "declared risk class differs from the derived class")
-                a["riskClass"] = "plain"
+                a.pop("riskClass", None)
+                if verdict == "plain":
+                    a["riskClass"] = "plain"
+
+
+def classify_draft(d: dict) -> dict:
+    """Structural class of a validated draft: proven plain, or the reasons a human must classify it."""
+    reasons: set[str] = set()
+    money = False
+    entities = {a["ref"] for p in d["manifest"]["provides"] for a in p["artifacts"] if a["type"] == "entity"}
+    for p in d["manifest"]["provides"]:
+        for a in p["artifacts"]:
+            if policy.classify(a["type"], a["ref"].split("/")[-1])[0] != "plain":
+                reasons.add("artifact_name")
+    for f in d["spec"]["fields"]:
+        v, why = policy.field_verdict(entities, f)
+        money = money or why == "money_field"
+        if v != "plain":
+            reasons.add(why)
+    return {"proven": not reasons, "reasons": sorted(reasons), "has_money_field": money}
 
 
 def _test_path(p: Any) -> None:

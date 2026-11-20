@@ -934,5 +934,58 @@
       "timeout": "The request took too long.",
       "unknown": "Something went wrong. Try again."
     }
+  },
+  "onboarding": {
+    "progress": "Step {current} of {total}",
+    "next": "Next",
+    "back": "Back",
+    "skip": "Skip and go to the chat",
+    "start": "Start the chat",
+    "steps": {
+      "welcome": {
+        "title": "Welcome",
+        "body": "This platform sets up your business system by talking with you, in Arabic or English.",
+        "points": [
+          "You answer questions about how your company works.",
+          "We draft a plan for your system and show it to you.",
+          "Nothing goes live until you approve it."
+        ]
+      },
+      "interview": {
+        "title": "A short conversation",
+        "body": "The chat asks about your products, customers, stock, sales and who does what.",
+        "points": [
+          "Answer in your own words; you can change an answer later.",
+          "You can pause and come back at any time.",
+          "Say so when you are unsure; the assistant will not guess."
+        ]
+      },
+      "documents": {
+        "title": "Bring what you already have",
+        "body": "Spreadsheets, price lists and invoices help the chat understand your business faster.",
+        "points": [
+          "Upload files in the chat when it asks for them.",
+          "Text inside a file is treated as information, never as instructions.",
+          "Remove anything you do not want to share first."
+        ]
+      },
+      "review": {
+        "title": "You review before anything changes",
+        "body": "You and your accountant see the draft plan, the money postings and the taxes before it is applied.",
+        "points": [
+          "Every change is listed and can be rolled back.",
+          "Money, tax and invoice calculations are done by fixed rules, not by the assistant.",
+          "Only people with the right role can approve."
+        ]
+      },
+      "ready": {
+        "title": "Ready to start",
+        "body": "The chat will begin with a few simple questions about your company.",
+        "points": [
+          "It takes about one sitting for the first draft.",
+          "You can return to this guide from the help menu."
+        ]
+      }
+    }
   }
 }

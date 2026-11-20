@@ -249,7 +249,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | WEB-009 | Settings: document templates for tenant-branded invoices | Web | G3 | WEB-007,ERP-016 | eldon | todo |
 | WEB-010 | Settings: users, roles and scopes | Web | G2 | WEB-003,ERP-008 | eldon | todo |
 | WEB-011 | Role-based navigation and views | Web | G2 | WEB-003,ERP-008 | eldon | todo |
-| WEB-012 | First-run onboarding screens | Web | G2 | WEB-004 | eldon | todo |
+| WEB-012 | First-run onboarding screens | Web | G2 | WEB-004 | eldon | done |
 | WEB-013 | Mobile responsive layout and installable web app | Web | G3 | WEB-004 | eldon | todo |
 | WEB-014 | Pricing page | Web | G3 | GTM-008,WEB-001 | eldon | todo |
 | WEB-015 | Bilingual help centre | Web | G3 | WEB-001 | eldon | todo |

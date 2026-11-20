@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import jsonschema
@@ -23,19 +24,43 @@ VIEW_VERSION = "0.1.0"
 _validator = None
 
 
+# Control-plane mirrors that change at every state transition and are not the accountant's content.
+# Everything else, including meta.revision and meta.id, is bound.
+DIGEST_EXCLUDED = (("meta", "buildState"),)
+
+
+def canonical(bp: dict) -> bytes:
+    """The bytes the digest covers: the Blueprint without `DIGEST_EXCLUDED`, JSON with sorted keys, compact
+    separators (`,` `:`), non-ASCII kept, no NaN or Infinity, UTF-8. `50000` and `"50000"` differ (fail-safe)."""
+    body = copy.deepcopy(bp)
+    for parent, key in DIGEST_EXCLUDED:
+        if isinstance(body.get(parent), dict):
+            body[parent].pop(key, None)
+    try:
+        raw = json.dumps(body, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        return raw.encode("utf-8")
+    except (ValueError, TypeError, RecursionError):
+        raise AccountantViewError("ACV-BP-002", "blueprint cannot be canonicalised")
+
+
 def blueprint_digest(bp: dict) -> str:
-    """SHA-256 of the canonical Blueprint. A decision is bound to this digest; any change makes it stale."""
-    raw = json.dumps(bp, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    """SHA-256 of `canonical(bp)`. A decision is bound to this digest; a content change makes it stale, a
+    build-state change does not."""
+    return hashlib.sha256(canonical(bp)).hexdigest()
 
 
 def check_blueprint(bp) -> dict:
     global _validator
     if not isinstance(bp, dict):
         raise AccountantViewError("ACV-BP-001", "blueprint")
-    if _validator is None:
-        _validator = jsonschema.Draft202012Validator(json.loads(SCHEMA.read_text(encoding="utf-8")))
-    if next(iter(_validator.iter_errors(bp)), None) is not None:
+    try:
+        if _validator is None:
+            _validator = jsonschema.Draft202012Validator(json.loads(SCHEMA.read_text(encoding="utf-8")))
+        bad = next(_validator.iter_errors(bp), None) is not None
+        canonical(bp)  # NaN, lone surrogates, absurd nesting: refused with a stable code
+    except RecursionError:
+        raise AccountantViewError("ACV-BP-002", "blueprint too deeply nested")
+    if bad:
         raise AccountantViewError("ACV-BP-002", "blueprint does not match the schema")
     return bp
 
@@ -69,25 +94,54 @@ def _einv(bp):
     return items
 
 
-def _field_types(bp):
-    return {(e["id"], f["id"]): f["type"] for e in bp["entities"] for f in e["fields"]}
+COUNTRY_CURRENCY = {"SA": "SAR", "AE": "AED", "EG": "EGP", "QA": "QAR", "BH": "BHD", "KW": "KWD", "OM": "OMR"}
+_SCALARS = (str, int, bool)
+
+
+def _field_type(bp, entity, path):
+    """Type of `field` or `relation.field` on `entity`; None when it cannot be resolved."""
+    ents = {e["id"]: e for e in bp["entities"]}
+    parts = path.split(".")
+    e = ents.get(entity)
+    if len(parts) == 2 and e is not None:
+        rel = next((r for r in e.get("relations", []) if r["id"] == parts[0]), None)
+        e = ents.get(rel["target"]) if rel else None
+        parts = parts[1:]
+    if e is None:
+        return None
+    return next((f["type"] for f in e["fields"] if f["id"] == parts[0]), None)
+
+
+def _cond_value(ftype, v, currency):
+    """(kind, value) for one guard value. Money and percent are converted by code; a float never reaches the view
+    unless it is a percent (basis points); an amount whose unit cannot be determined is `unknown_unit`."""
+    if isinstance(v, list):
+        if len(v) > 50:
+            raise AccountantViewError("ACV-BP-004", "condition list too long")
+        parts = [_cond_value(ftype, x, currency) for x in v]
+        return "list", [{"kind": k, "value": x} for k, x in parts]
+    if ftype == "money":
+        return "money", money(to_minor(v, currency), currency)
+    if ftype == "percent":
+        return "percent_bp", percent_basis_points(v)
+    if isinstance(v, float) or not isinstance(v, _SCALARS):
+        raise AccountantViewError("ACV-BP-004", "condition value")
+    if ftype is None and isinstance(v, (int, str)) and not isinstance(v, bool) and re.fullmatch(r"-?[0-9]+(\.[0-9]+)?", str(v)):
+        return "unknown_unit", v
+    return "value", v
 
 
 def _thresholds(bp, currency):
-    types = _field_types(bp)
     out = []
     for rule in bp.get("approvals", []):
         ent = rule["appliesTo"]["entity"]
         conds = []
         for c in rule.get("conditions", []):
-            v = c.get("value")
-            if types.get((ent, c["field"])) == "money" and "value" in c and c["op"] in ("gt", "gte", "lt", "lte", "eq", "neq"):
-                v = money(to_minor(v, currency), currency)
-                kind = "money"
-            else:
-                kind = "value"
-            conds.append({"field": c["field"], "op": c["op"], "kind": kind, "value": copy.deepcopy(v)})
-        out.append({"id": rule["id"], "labels": copy.deepcopy(rule["labels"]), "untrustedText": True,
+            kind, v = (_cond_value(_field_type(bp, ent, c["field"]), c["value"], currency)
+                       if "value" in c else ("none", None))
+            conds.append({"field": c["field"], "op": c["op"], "kind": kind, "value": v})
+        out.append({"id": rule["id"], "labels": copy.deepcopy(rule["labels"]),
+                    "untrustedFields": ["id", "labels", "conditions"],
                     "entity": ent, "action": rule["appliesTo"]["action"], "conditions": conds,
                     "steps": [{"order": s["order"], "approverRole": s["approverRole"], "mode": s["mode"],
                                "timeoutHours": s.get("timeoutHours"), "escalateToRole": s.get("escalateToRole")}
@@ -102,7 +156,7 @@ def _numbering(bp):
         if e.get("kind", "master") != "document" and "numbering" not in e:
             continue
         n = e.get("numbering")
-        row = {"entity": e["id"], "labels": copy.deepcopy(e["labels"]), "untrustedText": True, "configured": n is not None}
+        row = {"entity": e["id"], "labels": copy.deepcopy(e["labels"]), "untrustedFields": ["labels", "prefix", "example"], "configured": n is not None}
         if n is not None:
             prefix, pad = n.get("prefix", ""), n.get("padding", 1)
             row.update({"prefix": prefix, "padding": pad, "resetPerFiscalYear": bool(n.get("resetPerFiscalYear", False)),
@@ -118,7 +172,7 @@ def _posting(bp):
 
 def build_sections(bp: dict) -> list:
     """The six read-only sections, without sign-off state (see `review.build_review`)."""
-    currency = bp["company"].get("locale", {}).get("currency")
+    currency = bp["company"].get("locale", {}).get("currency") or COUNTRY_CURRENCY.get(bp["compliance"]["country"])
     pack = bp["compliance"]["countryPack"]
     thresholds = _thresholds(bp, currency)
     numbering, posting = _numbering(bp), _posting(bp)
@@ -126,7 +180,7 @@ def build_sections(bp: dict) -> list:
         "chart_of_accounts": {"status": "not_in_blueprint", "source": {"countryPack": copy.deepcopy(pack)}},
         "tax_vat": {"status": "present", "items": _tax(bp)},
         "e_invoicing": {"status": "present", "items": _einv(bp)},
-        "approval_thresholds": {"status": "present" if thresholds else "empty", "currency": currency, "rules": thresholds},
+        "approval_thresholds": {"status": "present" if thresholds else "empty", "currency": currency, "currencySource": "company" if bp["company"].get("locale", {}).get("currency") else "country_default", "rules": thresholds},
         "posting_rules": {"status": "not_in_blueprint", "implementedBy": posting},
         "numbering": {"status": "present" if numbering else "empty", "entities": numbering},
     }

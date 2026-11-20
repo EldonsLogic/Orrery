@@ -70,7 +70,9 @@
   "acv.action_type.chat_action": "Chat action",
   "acv.mode.any_one": "Any one approver",
   "acv.mode.all": "All approvers",
-  "acv.state.approved_overall": "All sections approved"
+  "acv.state.approved_signable_only": "Approved, except sections not yet in the Blueprint",
+  "acv.state.open_change_request": "Open change request from an earlier version",
+  "acv.unknown_unit": "Unit not defined in the Blueprint"
  },
  "ar": {
   "acv.title": "مراجعة المحاسب",
@@ -143,6 +145,8 @@
   "acv.action_type.chat_action": "إجراء من المحادثة",
   "acv.mode.any_one": "أي موافق واحد",
   "acv.mode.all": "جميع الموافقين",
-  "acv.state.approved_overall": "كل الأقسام معتمدة"
+  "acv.state.approved_signable_only": "معتمد، باستثناء الأقسام غير الموجودة بعد في المخطط",
+  "acv.state.open_change_request": "طلب تعديل مفتوح من نسخة سابقة",
+  "acv.unknown_unit": "الوحدة غير محددة في المخطط"
  }
 }

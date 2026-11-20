@@ -98,10 +98,38 @@ def test_invalid_blueprint_refused():
     assert code(build_review, [], tenant_id=T) == "ACV-BP-001"
 
 
-def test_money_condition_needs_currency():
+def test_missing_currency_uses_country_default():  # LOW
     b = bp()
     del b["company"]["locale"]["currency"]
-    assert code(build_review, b, tenant_id=T) == "ACV-MONEY-001"
+    r = sec(build_review(b, tenant_id=T), "approval_thresholds")
+    assert r["currency"] == "SAR" and r["currencySource"] == "country_default"
+    assert r["rules"][0]["conditions"][0]["value"]["minor"] == 5_000_000
+
+
+def _with_cond(field, op, value, entity="sales_order"):
+    b = bp()
+    b["approvals"][0]["appliesTo"]["entity"] = entity
+    b["approvals"][0]["conditions"] = [{"field": field, "op": op, "value": value}]
+    return b
+
+
+def cond(b):
+    return sec(build_review(b, tenant_id=T), "approval_thresholds")["rules"][0]["conditions"][0]
+
+
+def test_threshold_units_lists_relations_percent_unknown():  # M3
+    c = cond(_with_cond("total_amount", "in", [50000, "100000.50"]))
+    assert c["kind"] == "list" and [x["value"]["minor"] for x in c["value"]] == [5_000_000, 10_000_050]
+    b = _with_cond("customer.credit_limit", "gte", 50000)
+    b["entities"][2].setdefault("relations", []).append({"id": "customer", "target": "customer", "cardinality": "one"})
+    assert cond(b)["kind"] == "money" and cond(b)["value"]["minor"] == 5_000_000
+    b = _with_cond("discount", "gt", 10)
+    b["entities"][2]["fields"].append({"id": "discount", "type": "percent", "labels": {"ar": "خ", "en": "Discount"}})
+    assert cond(b) == {"field": "discount", "op": "gt", "kind": "percent_bp", "value": 1000}
+    assert cond(_with_cond("ghost.amount", "gt", 10))["kind"] == "unknown_unit"
+    assert code(build_review, _with_cond("total_amount", "gte", 1.5), tenant_id=T).startswith("ACV-MONEY")
+    assert code(build_review, _with_cond("ghost.name", "eq", 1.1), tenant_id=T) == "ACV-BP-004"
+    assert cond(_with_cond("status", "is_set", None) if False else _with_cond("ghost.name", "eq", "x"))["kind"] == "value"
 
 
 def test_float_threshold_refused():
@@ -126,7 +154,9 @@ def test_decision_recorded_and_overall():
     for s in ("tax_vat", "e_invoicing", "approval_thresholds", "numbering"):
         recs = dec(recs, section=s)
     v = build_review(BP, recs, tenant_id=T)
-    assert v["overall"] == {"state": "approved", "labelKey": "acv.state.approved", "evidenceOnly": True, "staleRecords": 0}
+    o = v["overall"]  # chart of accounts and posting rules were never reviewed: not a plain "approved" (M1)
+    assert o["state"] == "approved_signable_only" and o["evidenceOnly"] is True
+    assert o["notReviewed"] == ["chart_of_accounts", "posting_rules"] and o["staleRecords"] == 0 and o["quarantined"] == 0
     d = sec(v, "tax_vat")["signOff"]["decision"]
     assert d["userId"] == "acc-1" and d["decidedAt"] == "2026-11-20T10:00:00.000Z"
 
@@ -145,9 +175,18 @@ def test_changes_requested_needs_note():
 
 def test_append_only_and_final():
     recs = dec()
-    assert code(dec, recs, decision="changes_requested", note="n") == "ACV-SO-007"
+    assert code(dec, recs) == "ACV-SO-007"  # a second approval is refused
     assert dec(recs, section="numbering")[: len(recs)] == recs  # old records kept as they were
-    assert code(dec, recs) == "ACV-SO-007"
+    rej = dec(recs, decision="changes_requested", note="n")
+    assert rej[: len(recs)] == recs
+    assert code(dec, rej) == "ACV-SO-007" and code(dec, rej, decision="changes_requested", note="m") == "ACV-SO-007"
+
+
+def test_later_rejection_beats_earlier_approval():  # M4
+    recs = dec(decision="approved")
+    recs = dec(recs, decision="changes_requested", note="Rate is wrong", actor=Signer(T, "acc-2", ("accountant",), "human"))
+    v = build_review(BP, recs, tenant_id=T)
+    assert sec(v, "tax_vat")["signOff"]["state"] == "changes_requested" and v["overall"]["state"] == "changes_requested"
 
 
 def test_human_only_tenant_bound_role():
@@ -155,6 +194,8 @@ def test_human_only_tenant_bound_role():
     assert code(dec, actor=Signer(T, "svc", ("accountant",), "service")) == "ACV-SO-002"
     assert code(dec, actor=Signer("tenant-b", "acc-1", ("accountant",), "human")) == "ACV-SO-003"
     assert code(dec, actor=Signer(T, "own-1", ("owner",), "human")) == "ACV-SO-004"
+    assert code(dec, actor=Signer(T, "own-1", ("owner", "accountant"), "human")) == "ACV-SO-010"  # M5
+    assert code(com, actor=Signer(T, "own-1", ("owner", "accountant"), "human")) == "ACV-SO-010"
     assert code(dec, actor=Signer(T, "acc-1", ["accountant"], "human")) == "ACV-SO-004"
     assert code(dec, actor="acc-1") == "ACV-SO-002"
     assert code(dec, actor=Signer(T, "a b", ("accountant",), "human")) == "ACV-SO-002"
@@ -182,16 +223,113 @@ def test_decision_goes_stale_when_blueprint_changes():
     assert dec(recs, blueprint=changed)  # may decide again on the new version
 
 
-def test_stored_records_validated_fail_closed():
-    good = dec()[0]
-    forged = [Decision("tenant-b", good.blueprint_digest, "tax_vat", "x1", "approved", good.decided_at, "")]
+def _good():
+    return dec()[0]
+
+
+def test_foreign_tenant_record_refused_whole():
+    g = _good()
+    forged = [Decision("tenant-b", g.blueprint_digest, "tax_vat", "x1", "approved", g.decided_at, "")]
     assert code(build_review, BP, forged, tenant_id=T) == "ACV-REC-001"
-    for bad in ("nope", None, {"a": 1}, [object()],
-                [Decision(T, "zz", "tax_vat", "x1", "approved", good.decided_at, "")],
-                [Decision(T, good.blueprint_digest, "tax_vat", "x1", "auto", good.decided_at, "")],
-                [Decision(T, good.blueprint_digest, "tax_vat", "x1", "changes_requested", good.decided_at, "")]):
+    for bad in ("nope", None, {"a": 1}, 5):
         assert code(build_review, BP, bad, tenant_id=T) == "ACV-REC-001"
-    assert code(build_review, BP, [good, good], tenant_id=T) == "ACV-REC-002"
+
+
+def _mut(g, **kw):
+    d = dict(tenant_id=g.tenant_id, blueprint_digest=g.blueprint_digest, section=g.section, user_id=g.user_id,
+             decision=g.decision, decided_at=g.decided_at, note=g.note)
+    d.update(kw)
+    return Decision(**d)
+
+
+def test_bad_stored_records_are_quarantined_not_fatal():  # M2 and the "bricked view" LOW
+    g = _good()
+    bad = [_mut(g, note="ok\u202egnp.exe\u0007", decision="approved"),
+           _mut(g, decided_at="2026-99-99T99:99:99.000Z"),
+           _mut(g, decided_at=5), _mut(g, user_id=None), _mut(g, decision="auto"), _mut(g, blueprint_digest="zz"),
+           _mut(g, decision="changes_requested", note=""), _mut(g, section="chart_of_accounts"),  # not signable
+           _mut(g, decided_at="2100-01-01T00:00:00.000Z"), object(),
+           Comment(T, g.blueprint_digest, "tax_vat", 7, "u1", g.decided_at, "x"),
+           Comment(T, g.blueprint_digest, "tax_vat", "c1", "u1", g.decided_at, "a\u202eb"),
+           Comment(T, g.blueprint_digest, "tax_vat", "c1", "u1", g.decided_at, "")]
+    for b in bad:
+        v = build_review(BP, [b, g], tenant_id=T)
+        assert v["overall"]["quarantined"] == 1, b
+        assert sec(v, "tax_vat")["signOff"]["state"] == "approved"
+        assert sec(v, "tax_vat")["signOff"]["decision"]["userId"] == g.user_id == "acc-1"
+        assert sec(v, "tax_vat")["signOff"]["decision"]["note"] == "" and sec(v, "tax_vat")["signOff"]["decision"]["decidedAt"] == g.decided_at
+        assert all("\u202e" not in json.dumps(c, ensure_ascii=False) for c in sec(v, "tax_vat")["comments"])
+    assert sec(build_review(BP, [bad[7], g], tenant_id=T), "chart_of_accounts")["signOff"]["decision"] is None
+
+
+def test_duplicate_and_out_of_order_stored_records_quarantined():
+    g = _good()
+    v = build_review(BP, [g, g], tenant_id=T)
+    assert v["overall"]["quarantined"] == 1 and sec(v, "tax_vat")["signOff"]["state"] == "approved"
+    rej = _mut(g, decision="changes_requested", note="n")
+    v = build_review(BP, [rej, g], tenant_id=T)  # approval after a rejection never happened
+    assert sec(v, "tax_vat")["signOff"]["state"] == "changes_requested" and v["overall"]["quarantined"] == 1
+    c = Comment(T, g.blueprint_digest, "tax_vat", "c000001", "u1", g.decided_at, "hi")
+    assert build_review(BP, [c, c], tenant_id=T)["overall"]["quarantined"] == 1
+    # writes still work on top of a store holding a bad row
+    assert dec([g, g], section="numbering")
+
+
+def test_writer_never_persists_what_reader_refuses():
+    late = dt.datetime(2100, 6, 1, tzinfo=dt.timezone.utc)
+    assert code(record_decision, BP, (), tenant_id=T, actor=ACC, section="tax_vat", decision="approved",
+                decided_at=late, now=late, note="") == "ACV-SO-001"
+
+
+# ---- digest, staleness, history -------------------------------------------------------------------------------
+def test_digest_ignores_build_state_but_not_content():  # H1
+    recs = dec()
+    moved = bp()
+    moved["meta"]["buildState"] = "owner_approved"
+    assert blueprint_digest(moved) == blueprint_digest(BP)
+    v = build_review(moved, recs, tenant_id=T)
+    assert sec(v, "tax_vat")["signOff"]["state"] == "approved" and v["overall"]["staleRecords"] == 0
+    for path in (("meta", "revision"), ("company", "crNumber")):
+        c = bp()
+        c[path[0]][path[1]] = 99 if path[1] == "revision" else "1010000001"
+        assert blueprint_digest(c) != blueprint_digest(BP)
+
+
+def test_canonical_form_is_documented_and_stable():
+    from accountant_view.view import canonical
+    assert canonical({"b": "ع", "a": [1, True], "meta": {"buildState": "x", "k": 1}}) == \
+        '{"a":[1,true],"b":"ع","meta":{"k":1}}'.encode("utf-8")
+
+
+def test_open_change_request_survives_a_trivial_edit():  # M6
+    recs = dec(decision="changes_requested", note="VAT rate wrong")
+    recs = com(recs, text="see note")
+    edited = bp()
+    edited["company"]["legalName"]["en"] += " "
+    v = build_review(edited, recs, tenant_id=T)
+    s = sec(v, "tax_vat")["signOff"]
+    assert s["state"] == "awaiting" and s["openChangeRequest"]["note"] == "VAT rate wrong"
+    assert s["openChangeRequest"]["stale"] is True
+    assert v["overall"]["openChangeRequests"] == ["tax_vat"] and v["overall"]["staleRecords"] == 2
+    assert [c["text"] for c in v["history"]["comments"]] == ["see note"] and v["history"]["comments"][0]["stale"]
+    # a fresh decision on the new version replaces the open request
+    recs2 = dec(recs, blueprint=edited, decision="approved")
+    assert sec(build_review(edited, recs2, tenant_id=T), "tax_vat")["signOff"]["openChangeRequest"] is None
+
+
+def test_hostile_blueprints_get_stable_codes():  # LOW
+    nan = bp()
+    nan["compliance"]["vat"]["defaultRatePercent"] = float("nan")
+    sur = bp()
+    sur["company"]["legalName"]["en"] = "a\ud800b"
+    deep = bp()
+    deep["approvals"][0]["conditions"][0]["value"] = cur = []
+    for _ in range(5000):
+        nxt = []
+        cur.append(nxt)
+        cur = nxt
+    for b in (nan, sur, deep):
+        assert code(build_review, b, tenant_id=T) in ("ACV-BP-002", "ACV-BP-004")
 
 
 # ---- comments --------------------------------------------------------------------------------------------------
@@ -206,7 +344,10 @@ def test_comments_append_only_and_ids_in_order():
     v = build_review(BP, r, tenant_id=T)
     assert [c["text"] for c in sec(v, "tax_vat")["comments"]] == ["Check the VAT rate", "Second"]
     assert sec(v, "numbering")["comments"] == []
-    assert com(r, section="chart_of_accounts")  # comments are allowed on sections that cannot be signed off
+    assert com(r, section="chart_of_accounts")
+    other = add_comment(BP, (), tenant_id="tenant-b", actor=Signer("tenant-b", "a9", ("accountant",), "human"),
+                        section="tax_vat", text="x", created_at=NOW, now=NOW)
+    assert other[0].comment_id == "c000001"  # ids are per tenant  # comments are allowed on sections that cannot be signed off
 
 
 def test_comment_rules():

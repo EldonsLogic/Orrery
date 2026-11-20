@@ -10,6 +10,7 @@ IMPACT_RISK = {"cosmetic": "R1", "branding": "R1", "config": "R2", "data_shape":
 MAX_CHAT_RISK = "R2"          # a chat change above this is refused: it needs the full Studio review (Q-280)
 ACTION_ID = "blueprint.apply_change"
 DEFAULT_TTL_S = 300.0
+MAX_PREVIEW_OPS = 50          # a preview lists every op it confirms; a larger change needs the Studio review
 
 
 @dataclass(frozen=True)

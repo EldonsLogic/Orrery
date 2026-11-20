@@ -119,3 +119,6 @@ jobs:
           REQUIRE_EVSTREAM_TESTS: "1"
           PYTHONPATH: services:services/blueprint/events
         run: python3 -m unittest discover -s services/gateway/tests -v
+      - name: Country pack framework tests (CMP-021)
+        if: ${{ !cancelled() }}
+        run: python3 -m unittest discover -s components/compliance/country_pack/tests -t . -v

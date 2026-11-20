@@ -151,7 +151,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | DSC-013 | Odoo to Blueprint field-mapping library | Discovery | G2 | DSC-012 | eldon | done |
 | DSC-014 | Document intake with Arabic OCR (invoices, receipts, photos) | Discovery | G2 | DSC-010,QA-002 | eldon | done |
 | DSC-015 | Email and WhatsApp forwarding intake | Discovery | G3 | DSC-014 | eldon | done |
-| DSC-016 | Accountant review view in discovery | Discovery | G3 | DSC-007 | eldon | todo |
+| DSC-016 | Accountant review view in discovery | Discovery | G3 | DSC-007 | eldon | done |
 | DSC-017 | Owner-driven isolated read-only browser session (no stored credentials) | Discovery | G4 | DSC-010,SEC-015,INF-009 | eldon | todo |
 | DSC-018 | Second vertical template chosen from pilot evidence | Discovery | G3 | GTM-005 | eldon | todo |
 | DSC-019 | Messy-data pre-validation and quarantine before any replay or import: Arabic name normalisation and duplicate grouping for owner confirmation (display spelling kept), date and stock-order checks, line and total reconciliation (flag, never correct), quarantine report; feeds BPL-018 and the opening-balance importer | Discovery | G2 | DSC-011,DSC-014 | eldon | done |

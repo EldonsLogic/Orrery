@@ -27,6 +27,8 @@ TABLE = {
     "change_replayed": ("This change was already confirmed once.", "تم تأكيد هذا التغيير من قبل."),
     "change_superseded": ("A newer change replaced this one. Check the latest preview.",
                           "حل تغيير أحدث محل هذا التغيير. راجع أحدث معاينة."),
+    "change_preview_failed": ("The preview could not be shown, so nothing was prepared. Please rephrase the request.",
+                              "تعذر عرض المعاينة، لذلك لم يتم تجهيز أي شيء. يرجى إعادة صياغة الطلب."),
     "change_stale": ("The configuration changed since the preview. Ask for the change again.",
                      "تغيرت الإعدادات منذ المعاينة. اطلب التغيير مرة أخرى."),
     "change_tampered": ("The prepared change no longer matches its preview, so it was not applied.",

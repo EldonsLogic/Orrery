@@ -61,7 +61,7 @@ class IntentRouter:
 
     # -- internals ----------------------------------------------------------------------------------------------
     def _pending(self, turn, ctx, codes, hint, n_data):
-        t = normalise(turn)
+        t = normalise(turn).rstrip(".!,;:… ،؛")  # "Yes." and "نعم،" confirm; "yes?" is a question and does not
         yes, no = bool(_YES.match(t)), bool(_NO.match(t))
         if not (yes or no):
             return None

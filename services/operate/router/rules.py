@@ -73,8 +73,9 @@ _CONFIG_RISK = re.compile(r"role|permission|approval|admin|صلاحي|ادوار
 # invoice 5" changes a record, not a role.
 _ROLE_GRANT = re.compile(
     r"^(?:(?:give|make|grant) (?!(?:me |us )?(?:a |an |the )?(?:list|report|summary|overview|count|total)\b).{0,40}"
-    r"\b(?:roles?|admins?|administrators?|owner|permissions?)|set .{0,40}\b(?:roles?|permissions?))\b|"
-    r"^(?:اعط|امنح|اجعل|خلي) (?!ني |نا ).{0,40}(?:صلاحي|دور|ادمن|مدير|مالك)")
+    r"\b(?:roles?|admins?|administrators?|owner|permissions?)|set .{0,40}\b(?:roles?|permissions?)|"
+    r"set .{0,40}\bas (?:an? |the )?(?:admin|administrator|owner))\b|"
+    r"^(?:اعط|امنح|اجعل|خلي)\w* (?!(?:ال)?(?:قائمه|لائحه|تقرير|ملخص|عدد|اجمالي)).{0,40}(?:صلاحي|دور|ادمن|مدير|مالك)")
 _BULK = re.compile(r"\b(?:all|every|each)\b|(?<!\w)كل(?!\w)|جميع")
 
 

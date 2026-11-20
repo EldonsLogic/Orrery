@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import json
 
-from .models import Preview, Proposal
+from .models import MAX_PREVIEW_OPS, Preview, Proposal
 
-_MAX_OPS = 50
 
 
 def _ar(locale) -> bool:
@@ -20,7 +19,7 @@ def _clip(v, n=200):
 def build_preview(p: Proposal, locale: str = "en") -> Preview:
     ops = tuple({"code": o["code"], "impact": o["impact"], "subject": o["subject"], "property": o["property"],
                  "pointer": o["pointer"], "op": o["op"], "before": _clip(o.get("before")),
-                 "after": _clip(o.get("after")), "labels": o.get("labels")} for o in p.diff["ops"][:_MAX_OPS])
+                 "after": _clip(o.get("after")), "labels": o.get("labels")} for o in p.diff["ops"][:MAX_PREVIEW_OPS])
     risk = p.diff["risk"]
     n = len(p.diff["ops"])
     if _ar(locale):

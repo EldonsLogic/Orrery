@@ -23,3 +23,6 @@ Unknown.
 
 ## Next step
 Q-320 (act confirmation through the Tool API), Q-321 (shared pending store). Cross-model review of this Tier 3 PR.
+
+## Review round (PR #205)
+Fixed H1 (pending only if the preview passed the output gate, else `change_preview_failed`), M1 (any turn that does not answer the pending clears it and cancels the proposal), M2 (proposal capped at the previewed op count, preview lists every op), L1 to L5 (joined tax ids, maxLength add, Arabic grant forms, punctuated yes, expired cancels).

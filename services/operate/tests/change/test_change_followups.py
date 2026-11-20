@@ -71,3 +71,23 @@ def test_lowering_max_length_needs_review():
     refused("change_needs_review", svc.propose, OWNER, SESSION, "shorten", change_decision())
     svc, *_ = make(_maxlen(cur["maxLength"] + 10))
     assert svc.propose(OWNER, SESSION, "lengthen", change_decision()).risk == "R2"
+
+
+# ---- PR #205 review: L1, L2 -----------------------------------------------------------------------------------
+@pytest.mark.parametrize("fid", ["salesvatrate", "netvatamt", "itemzatcacode"])
+def test_tax_token_inside_a_joined_id_is_refused(fid):
+    svc, *_ = make(_add(fid))
+    refused("change_ledger_tax", svc.propose, OWNER, SESSION, "add a field", change_decision())
+
+
+def test_maxlength_added_to_an_unbounded_field_needs_review():
+    op = [{"op": "add", "path": ["entities", "customer", "fields", "phone", "maxLength"], "value": 5}]
+    svc, *_ = make(op)
+    refused("change_needs_review", svc.propose, OWNER, SESSION, "bound it", change_decision())
+
+
+def test_more_ops_than_the_preview_cap_needs_review():
+    two = [{"op": "set", "path": ["entities", "customer", "fields", "phone", "labels", "en"], "value": "A"},
+           {"op": "set", "path": ["entities", "customer", "fields", "city", "labels", "en"], "value": "B"}]
+    svc, *_ = make(two, max_ops=1)
+    refused("change_needs_review", svc.propose, OWNER, SESSION, "x", change_decision())

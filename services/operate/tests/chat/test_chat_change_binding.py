@@ -255,3 +255,69 @@ def test_the_adapter_passes_pending_and_clock_to_the_router_context():
     assert res.confirms_args_hash is None and res.resolves_pending == "expired"
     res = router.route(RouteRequest("t", "u", ("r",), "s", "no", "en", pending=pb, now=1000.0))
     assert res.confirms_args_hash is None and res.resolves_pending == "declined"
+
+
+# ---- PR #205 review: H1, M1, M2, L4, L5 ----------------------------------------------------------------------
+def test_h1_preview_dropped_by_the_output_gate_sets_no_pending_and_says_so():
+    out = [{"op": "set", "path": ["entities", "customer", "fields", "phone", "labels", "en"], "value": "SQL phone"}]
+    svc, f, bps, clock, _, _ = build(out=out)
+    s = svc.open_session(OWNER)
+    ev = say(svc, OWNER, s.session_id, 0, ASK)
+    assert "could not be shown" in texts(ev)
+    assert pending_of(svc, OWNER, s.session_id) is None
+    ev2 = say(svc, OWNER, s.session_id, 1, "yes")
+    assert bps.submitted == [] and not texts(ev2).startswith("Applied")
+
+
+def test_m1_an_intervening_turn_voids_the_pending_and_cancels_the_proposal():
+    svc, f, bps, clock, _, _ = build()
+    s = svc.open_session(OWNER)
+    say(svc, OWNER, s.session_id, 0, ASK)
+    say(svc, OWNER, s.session_id, 1, "/act approve invoice 5")
+    assert pending_of(svc, OWNER, s.session_id) is None
+    assert svc.change.store.active(OWNER.tenant_id, OWNER.subject, s.session_id) is None
+    say(svc, OWNER, s.session_id, 2, "yes")
+    assert bps.submitted == []
+
+
+def test_m1_an_ordinary_question_also_voids_the_pending():
+    svc, f, bps, clock, _, _ = build()
+    s = svc.open_session(OWNER)
+    say(svc, OWNER, s.session_id, 0, ASK)
+    say(svc, OWNER, s.session_id, 1, "what is the balance of customer 5?")
+    assert pending_of(svc, OWNER, s.session_id) is None
+    say(svc, OWNER, s.session_id, 2, "yes")
+    assert bps.submitted == []
+
+
+def test_m2_every_applied_op_is_in_the_preview_and_the_proposal_is_capped():
+    two = [{"op": "set", "path": ["entities", "customer", "fields", "phone", "labels", "en"], "value": "A"},
+           {"op": "set", "path": ["entities", "customer", "fields", "city", "labels", "en"], "value": "B"}]
+    svc, f, bps, clock, _, _ = build(out=two)
+    s = svc.open_session(OWNER)
+    t = texts(say(svc, OWNER, s.session_id, 0, ASK))
+    assert t.count("\n- ") == 2
+    say(svc, OWNER, s.session_id, 1, "yes")
+    assert len(bps.submitted[0][1]["ops"]) == 2
+    svc, f, bps, clock, _, _ = build(out=two, max_ops=1)  # more ops than the preview may list: refused, no pending
+    s = svc.open_session(OWNER)
+    t = texts(say(svc, OWNER, s.session_id, 0, ASK))
+    assert "full review" in t and pending_of(svc, OWNER, s.session_id) is None
+
+
+@pytest.mark.parametrize("yes", ["Yes.", "yes!", "نعم.", "YES"])
+def test_l4_punctuated_yes_confirms(yes):
+    svc, f, bps, clock, _, _ = build()
+    s = svc.open_session(OWNER)
+    say(svc, OWNER, s.session_id, 0, ASK)
+    say(svc, OWNER, s.session_id, 1, yes)
+    assert len(bps.submitted) == 1
+
+
+def test_l5_an_expired_pending_cancels_its_proposal():
+    svc, f, bps, clock, _, _ = build()
+    s = svc.open_session(OWNER)
+    say(svc, OWNER, s.session_id, 0, ASK)
+    clock.t += 301
+    say(svc, OWNER, s.session_id, 1, "yes")
+    assert svc.change.store.active(OWNER.tenant_id, OWNER.subject, s.session_id) is None

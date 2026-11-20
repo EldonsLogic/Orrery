@@ -69,3 +69,20 @@ def test_slash_commands_keep_the_ambiguous_reference_check(text):
 def test_slash_command_with_a_reference_still_works():
     d = route("/act cancel invoice INV-0399")
     assert d.mode == "act" and d.explicit_command
+
+
+# ---- PR #205 review: L3, L4 -----------------------------------------------------------------------------------
+@pytest.mark.parametrize("text", ["اعطني صلاحية المدير", "امنحه دور المدير", "Set Ahmed as admin"])
+def test_attached_pronoun_and_as_admin_grants_are_r3_change(text):
+    d = route(text)
+    assert d.mode == "change" and d.risk_hint == "R3"
+
+
+def test_asking_for_a_list_of_roles_in_arabic_is_not_a_grant():
+    assert route("اعطني قائمة الادوار").mode != "change"
+
+
+@pytest.mark.parametrize("yes", ["Yes.", "yes!", "نعم.", "نعم،"])
+def test_punctuated_yes_confirms_a_pending(yes):
+    d = route(yes, RouteContext(pending=_pending(), now=1000.0))
+    assert d.confirms_args_hash == "sha256:abc"

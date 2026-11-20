@@ -53,14 +53,19 @@ def _tokens(s) -> set:
     return set(tokens(s))
 
 
+_NOT_TAX = frozenset({"syntax", "taxi", "taxis", "taxonomy", "august"})  # known false positives of the substring match
+
+
 def _tax_like(s) -> bool:
-    """Token match, plus the flattened id (`vatrate`, `zatcaflag`, `ratevat`): a tax token at its start or end."""
+    """Token match, plus the flattened id (`vatrate`, `zatcaflag`, `salesvatamt`): a tax token anywhere in it."""
     if not isinstance(s, str):
         return False
     if _tokens(s) & TAX_TOKENS:
         return True
     flat = "".join(ch for ch in s.casefold() if ch.isalnum())
-    return any(flat.startswith(t) or flat.endswith(t) for t in TAX_TOKENS)
+    if flat in _NOT_TAX:
+        return False
+    return any(t in flat for t in TAX_TOKENS)  # fails closed: a token anywhere in the joined id
 
 
 def _schema_path(op) -> tuple:
@@ -161,7 +166,11 @@ def _check_locked_field(path, current, target) -> None:
 
 def _check_max_length(sp, op) -> None:
     """Raising a limit is harmless; lowering (or a non-number) can conflict with stored data: Studio review."""
-    if sp[-1:] != ("maxLength",) or op.get("op") != "replace":
+    if sp[-1:] != ("maxLength",):
+        return
+    if op.get("op") == "add":  # unbounded -> bounded is a lowering too
+        raise ChangeRefused("change_needs_review")
+    if op.get("op") != "replace":
         return
     b, a = op.get("before"), op.get("after")
     ok = all(isinstance(x, int) and not isinstance(x, bool) for x in (a, b))

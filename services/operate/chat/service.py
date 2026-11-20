@@ -16,6 +16,7 @@ from agui.ports import Principal, RuntimeContext
 from runtime import CancelToken
 
 from . import errors, language
+from change import ChangeRefused
 from .errors import ChatFailure
 from .history import build_window, default_frame
 from .models import ChatLimits, Entry, MessageRecord, PendingBinding, RouteRequest, RunSetup, Session
@@ -239,12 +240,14 @@ class ChatService:
         res = routed.resolves_pending
         if res in ("declined", "expired"):
             self.pending.clear(*key)
-            if res == "declined":
-                self._cancel_quietly(p, session.session_id)
+            self._cancel_quietly(p, session.session_id)
             return None  # an ordinary turn follows (the router already abstained or answered ask)
         if res == "confirmed" or (routed.confirms_action_id and routed.confirms_args_hash):
             self.pending.clear(*key)  # one shot, whatever happens next
             return self._confirm_events(p, session, lang, routed, pend)
+        if pend is not None:  # any turn that does not answer the pending voids it: a later yes must not apply it
+            self.pending.clear(*key)
+            self._cancel_quietly(p, session.session_id)
         if routed.mode == "change" and routed.requires_confirmation and routed.decision is not None:
             self.pending.clear(*key)  # a new request voids the old pending before its own preview exists
             return self._propose_events(p, session, text, lang, routed)
@@ -263,7 +266,6 @@ class ChatService:
                 {"type": "TEXT_MESSAGE_END", "messageId": mid}]
 
     def _refusal_text(self, exc: Exception, locale: str) -> str:
-        from change import ChangeRefused
         return (exc if isinstance(exc, ChangeRefused) else ChangeRefused("change_unavailable")).text(locale)
 
     def _confirm_events(self, p, session, lang, routed, pend):
@@ -272,7 +274,6 @@ class ChatService:
             bound = (pend is not None and routed.decision is not None and routed.mode == pend.mode
                      and routed.confirms_action_id == pend.action_id and routed.confirms_args_hash == pend.args_hash)
             if not bound:  # the chat's own pending is the only thing a yes can confirm
-                from change import ChangeRefused
                 raise ChangeRefused("change_confirmation_mismatch")
             out = self.change.confirm(p, sid, routed.decision, locale)
             reply = out.text
@@ -288,8 +289,14 @@ class ChatService:
         except Exception as exc:  # noqa: BLE001
             yield from self._text(self._refusal_text(exc, locale))
             return
-        lines = [pv.text] + [f"- {o['pointer']}: {o['before']} -> {o['after']}" for o in pv.ops[:10]]
-        yield from self._text("\n".join(lines))
+        lines = [pv.text] + [f"- {o['pointer']}: {o['before']} -> {o['after']}" for o in pv.ops]
+        events = self._text("\n".join(lines))
+        # the output gate may drop the preview (engine markers in tenant-typed values): then it was not shown
+        if any(self._scrub(e) != e for e in events):
+            self._cancel_quietly(p, sid)
+            yield from self._text(self._refusal_text(ChangeRefused("change_preview_failed"), locale))
+            return
+        yield from events
         # reached only when the consumer asked for more after the last preview event: the user was shown the preview
         self.pending.set(p.tenant_id, p.subject, sid, binding)
 

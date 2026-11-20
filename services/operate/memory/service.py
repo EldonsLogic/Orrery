@@ -27,15 +27,17 @@ DAY = 86400.0
 MAX_EPOCH = 4102444800.0  # year 2100: a larger clock reading is a fault, not a time
 _RULE = re.compile(
     r"(?i)\b(?:always|never|whenever|must|auto[- ]?approve|approve|approving|without\s+(?:asking|confirm\w*|approval)|"
-    r"do\s+not\s+ask|don'?t\s+ask|transfer|pay|payments?|send\s+(?:it\s+|them\s+)?to|forward\s+to|wire|grant|allow)\b"
-    r"|دائما|ابدا|وافق|موافقه|اعتمد|حول|ادفع|دفع|ارسل\s+الى|بدون\s+(?:سوال|تاكيد|موافقه)|تلقائي|اسمح")
+    r"do\s+not\s+ask|don'?t\s+ask|transfer|pay|payments?|send\s+(?:it\s+|them\s+)?to|forward\s+to|wire|grant|allow|skip\s+(?:the\s+)?confirm\w*|release\s+(?:the\s+)?funds?|settle\w*)\b"
+    r"|دائما|ابدا|وافق|موافقه|اعتمد|حول|ادفع|دفع|ارسل\s+الى|سدد|لا\s+تس[اأ]ل|بدون\s+(?:سوال|تاكيد|موافقه)|تلقائي|اسمح")
 
 
 @dataclasses.dataclass(frozen=True)
 class MemoryConfig:
     max_chars: int = 500
     max_entries_per_user: int = 200          # verified entries
-    max_unverified_per_user: int = 20        # oldest unverified evicted first; never evicts verified
+    max_unverified_per_user: int = 20        # separate quota: a full pending list refuses new tainted writes
+    max_unverified_per_tenant: int = 200
+    purge_gap_s: float = 60.0                # an entry must be seen expired at two readings this far apart
     unverified_ttl_s: float = 7 * DAY
     max_entries_per_tenant: int = 5000
     default_ttl_s: float = 90 * DAY
@@ -58,6 +60,7 @@ class MemoryService:
         self._store, self._clock, self._ids, self._sink = store, clock, ids, sink
         self._cfg, self._salt = config or MemoryConfig(), salt  # salt: bytes, or a callable tenant_id -> bytes|None
         self._lock = threading.RLock()
+        self._pending: dict = {}  # tenant -> {entry_id: first reading at which it was seen expired}
 
     # ---- helpers -------------------------------------------------------------------------------------------
     def _now(self) -> float:
@@ -91,8 +94,21 @@ class MemoryService:
         except Exception:
             raise MemoryRefused("store_failed") from None
 
+    def _purge(self, tenant_id, now):
+        """Two-step expiry: an expired entry is hidden at once but hard-deleted only when it was also seen expired at
+        an earlier reading at least `purge_gap_s` before. One far-future reading therefore marks entries and a normal
+        reading clears the mark; it cannot wipe a tenant. No stored high-water mark, so nothing can lock the service."""
+        exp = self._store_call(self._store.expired_ids, tenant_id, now)
+        pend = {i: t for i, t in self._pending.get(tenant_id, {}).items() if i in exp}
+        ready = {i for i, t in pend.items() if now - t >= self._cfg.purge_gap_s}
+        if ready:
+            self._store_call(self._store.delete_expired, tenant_id, now, ready)
+        for i in exp - set(pend):
+            pend[i] = now
+        self._pending[tenant_id] = {i: t for i, t in pend.items() if i not in ready}
+
     def _live(self, scope, now):
-        self._store_call(self._store.delete_expired, scope.tenant_id, now)  # retention is real deletion
+        self._purge(scope.tenant_id, now)  # retention is real deletion
         return [e for e in self._store_call(self._store.list, scope) if e.expires_at > now]
 
     def _h(self, scope, text):
@@ -100,9 +116,12 @@ class MemoryService:
         return args_hash(text, salt)
 
     def sweep(self, tenant_id: str) -> int:
-        """Host sweeper: hard-delete a tenant's expired memories. Needs a sane clock, like a write."""
+        """Host sweeper (call it periodically): hard-deletes entries seen expired at two readings `purge_gap_s` apart.
+        Returns the number of rows still waiting for their second reading."""
         with self._lock:
-            return self._store_call(self._store.delete_expired, check_id(tenant_id), self._now())
+            tid = check_id(tenant_id)
+            self._purge(tid, self._now())
+            return len(self._pending.get(tid, {}))
 
     def _after_delete(self, scope, type_, **data) -> Erasure:
         """The data is already gone: an audit fault is reported beside the success, never as a failure."""
@@ -153,18 +172,16 @@ class MemoryService:
             live = self._live(scope, now)
             for e in live:
                 if e.content_hash == digest and e.kind == kind:
-                    if e.status == VERIFIED or status == UNVERIFIED:
-                        return e  # duplicate: no second row, no extension of its life
-                    self._store_call(self._store.delete, scope, e.entry_id)  # the user's own words replace a pending copy
-                    live = [x for x in live if x.entry_id != e.entry_id]
+                    return e  # duplicate: returned as it is; a pending entry is promoted only by the owner's confirm
             if status == UNVERIFIED:
-                pending = sorted((x for x in live if x.status == UNVERIFIED), key=lambda x: x.created_at)
-                for old in pending[:max(0, len(pending) - self._cfg.max_unverified_per_user + 1)]:
-                    self._store_call(self._store.delete, scope, old.entry_id)  # oldest unverified out; never verified
                 ttl = min(ttl, self._cfg.unverified_ttl_s)
-            elif sum(x.status == VERIFIED for x in live) >= self._cfg.max_entries_per_user:
-                raise MemoryRefused("quota_exceeded")
-            if self._store_call(self._store.count_tenant, scope.tenant_id, now) >= self._cfg.max_entries_per_tenant:
+                if sum(x.status == UNVERIFIED for x in live) >= self._cfg.max_unverified_per_user or \
+                        self._store_call(self._store.count_tenant, scope.tenant_id, now, UNVERIFIED) \
+                        >= self._cfg.max_unverified_per_tenant:
+                    raise MemoryRefused("quota_exceeded")  # never evicts the owner's pending entries
+            elif sum(x.status == VERIFIED for x in live) >= self._cfg.max_entries_per_user or \
+                    self._store_call(self._store.count_tenant, scope.tenant_id, now, VERIFIED) \
+                    >= self._cfg.max_entries_per_tenant:
                 raise MemoryRefused("quota_exceeded")
             entry = MemoryEntry(
                 entry_id=self._ids.new_id("mem"), tenant_id=scope.tenant_id, user_id=scope.user_id, kind=kind,
@@ -237,7 +254,9 @@ class MemoryService:
                 raise MemoryRefused("not_unverified")
             if e.content_hash != expected_hash:
                 raise MemoryRefused("invalid_input")
-            if sum(x.status == VERIFIED for x in self._live(scope, now)) >= self._cfg.max_entries_per_user:
+            if sum(x.status == VERIFIED for x in self._live(scope, now)) >= self._cfg.max_entries_per_user or \
+                    self._store_call(self._store.count_tenant, scope.tenant_id, now, VERIFIED) \
+                    >= self._cfg.max_entries_per_tenant:
                 raise MemoryRefused("quota_exceeded")
             new = dataclasses.replace(e, status=VERIFIED, confirmed_by=actor_user_id, confirmed_at=now,
                                       expires_at=now + self._cfg.default_ttl_s)

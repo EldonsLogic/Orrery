@@ -9,8 +9,9 @@ import unicodedata
 from .errors import MemoryRefused
 
 MARK = "[redacted]"
-_KEY = (r"passw(?:or)?d|pwd|passphrase|secret|api[_ -]?key|token|كلمة\s*(?:ال)?(?:سر|مرور)|الرمز\s*السري")
-_SHORT = r"\b(?:pass|passcode|pin|otp|cvv|cvc)\b\s*(?:is|=|:|-|are)|\bpw\b\s*(?:is|=|:|-)?\s*\S+"
+_KEY = (r"p[a@4]ssw[o0]rd|pwd|passphrase|secret|api[_ -]?key|token|كلم[ةه]\s*(?:ال)?(?:سر|مرور)|الرمز\s*السري|"
+        r"(?:ال)?باسورد")
+_SHORT = r"\b(?:pass|passcode|pin|otp|cvv|cvc)\b\s*(?:is|=|:|-|are)|\b(?:pin|otp|cvv|cvc)\b\s*\d|\bpw\b\s*(?:is|=|:|-)?\s*\S+"
 _SECRET = re.compile(
     rf"(?i)(?:{_KEY})\s*(?:is|=|:|-|هي|هو)?\s*\S+|{_SHORT}"
     r"|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}"
@@ -20,8 +21,9 @@ _SECRET = re.compile(
     r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
     r"|\b[A-Za-z0-9+/_-]{32,}={0,2}"
     r"|\b(?=[A-Za-z0-9+/]*\d)[A-Za-z0-9+/]{10,}(?:\s+[A-Za-z0-9+/]{10,})+")
-_ID = re.compile(r"[^\s@]+\s*@\s*[^\s@]+\.[^\s@]+|\S+\s+at\s+\S+\s+dot\s+\w+|\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b|"
+_ID = re.compile(r"[^\s@]+\s*@\s*[^\s@]+\.[^\s@]+|\S+\s*[(\[]\s*at\s*[)\]]\s*\S+\.\w+|\S+\s*(?:\s(?:at)\s|[(\[]\s*at\s*[)\]])\s*\S+\s*(?:\s(?:dot)\s|[(\[]\s*dot\s*[)\]])\s*\w+|\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b|"
                  r"\+?\d[\d\s().\-/]{4,}\d")
+_SPLIT_CARD = re.compile(r"\d{4}[^\d\n]{1,3}\d{4}[^\d\n]{1,3}\d{4}[^\d\n]{1,3}\d{1,4}")
 _DATE = re.compile(r"(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?:[T ][\d:.]+(?:Z|[+-]\d{2}:\d{2})?)?")
 
 
@@ -46,7 +48,7 @@ def redact(text: str) -> tuple:
             flags.add("id_redacted")
         out.append(text[pos:])
         rest = _digits("".join(out))
-        if sum(c.isdigit() for c in rest.replace(MARK, "")) >= 9 and not _DATE.search(rest):
+        if _SPLIT_CARD.search(rest):
             raise MemoryRefused("secret_detected")  # digits split by letters: a card or account in disguise
         return "".join(out), tuple(sorted(flags))
     except MemoryRefused:

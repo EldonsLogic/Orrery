@@ -12,8 +12,9 @@ class MemoryStore(Protocol):
     def put(self, entry: MemoryEntry) -> None: ...
     def get(self, scope: Scope, entry_id: str): ...
     def list(self, scope: Scope) -> list: ...
-    def count_tenant(self, tenant_id: str, now: float) -> int: ...
-    def delete_expired(self, tenant_id: str, now: float) -> int: ...
+    def count_tenant(self, tenant_id: str, now: float, status: str) -> int: ...
+    def expired_ids(self, tenant_id: str, now: float) -> set: ...
+    def delete_expired(self, tenant_id: str, now: float, only_ids) -> int: ...
     def replace(self, entry: MemoryEntry) -> None: ...
     def delete(self, scope: Scope, entry_id: str) -> bool: ...
     def delete_scope(self, scope: Scope) -> int: ...
@@ -41,19 +42,24 @@ class InMemoryStore:
             rows = list(self._rows.get((scope.tenant_id, scope.user_id), {}).values())
         return [e for e in rows if (e.tenant_id, e.user_id) == (scope.tenant_id, scope.user_id)]
 
-    def count_tenant(self, tenant_id, now):
-        """Live (unexpired) rows only: expired data never counts against a cap."""
+    def count_tenant(self, tenant_id, now, status):
+        """Live (unexpired) rows of one status only: expired data and the other status never count."""
         with self._lock:
             return sum(1 for (t, _), v in self._rows.items() if t == tenant_id
-                       for e in v.values() if e.expires_at > now)
+                       for e in v.values() if e.expires_at > now and e.status == status)
 
-    def delete_expired(self, tenant_id, now):
-        """Hard-delete expired rows of one tenant (retention is real deletion, not a read filter)."""
+    def expired_ids(self, tenant_id, now):
+        with self._lock:
+            return {k for (t, _), v in self._rows.items() if t == tenant_id
+                    for k, e in v.items() if e.expires_at <= now}
+
+    def delete_expired(self, tenant_id, now, only_ids):
+        """Hard-delete rows of one tenant that are expired at `now` and named in `only_ids`."""
         n = 0
         with self._lock:
             for (t, _), v in self._rows.items():
                 if t == tenant_id:
-                    for k in [k for k, e in v.items() if e.expires_at <= now]:
+                    for k in [k for k, e in v.items() if e.expires_at <= now and k in only_ids]:
                         del v[k]
                         n += 1
         return n

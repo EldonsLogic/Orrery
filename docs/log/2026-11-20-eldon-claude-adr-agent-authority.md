@@ -6,14 +6,14 @@ Tool and model: claude
 Plan IDs: OPR-001
 
 ## Summary
-Drafted ADR-0047 (Proposed): agent authority (propose vs act, allow-list, R1-R4, taint, caps, validator split, audit, kill switch, forbidden list). Closes the ADR owed by Q-258; docs only.
+Drafted ADR-0048 (Proposed): agent authority (propose vs act, allow-list, R1-R4, taint, caps, validator split, audit, kill switch, forbidden list). Closes the ADR owed by Q-258; docs only.
 
 ## Files touched
-- docs/decisions/ADR-0047-agent-authority-propose-not-act.md: new, Proposed
+- docs/decisions/ADR-0048-agent-authority-propose-not-act.md: new, Proposed
 - docs/decisions/INDEX.md: index row
 
 ## Decisions
-- ADR-0047 (Proposed, Tier 3). Number taken after highest seen (0046); MFA ADR on another branch may collide.
+- ADR-0048 (Proposed, Tier 3). Renumbered from 0047 because the MFA ADR (PR #206) took 0047.
 
 ## Tokens or cost
 Unknown.

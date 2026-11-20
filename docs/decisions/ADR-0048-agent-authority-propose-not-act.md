@@ -1,4 +1,4 @@
-# ADR-0047: Agent authority: agents propose, humans and deterministic code decide
+# ADR-0048: Agent authority: agents propose, humans and deterministic code decide
 
 Status: Proposed
 Owner: eldon
@@ -47,7 +47,7 @@ The agent runtime (OPR-001, [agent-runtime.md](../architecture/agent-runtime.md)
 - Harder: agents cannot finish R2 or tainted-R1 work alone; each needs a human step, so UX for pending approvals matters. Fail-closed taint makes many R1 writes proposals until Q-231 allows a deterministic-computation list.
 - Must be done: OPR-004 and ERP-023 enforce item 9 at the Tool API and engine boundary (Q-320 for confirmation echo `confirms_action_id` and `confirms_args_hash`); OPR-010 persists taint per session (Q-257); i18n keys of item 13; update agent-runtime.md to Accepted and cite this ADR; OPR-016 (pilot agent) and OPR-013 (scheduled agents) must conform; QA-019 adversarial tests for items 3, 4, 5 and 9.
 - Review: Tier 3 under ADR-0035. Different-model security review and the other founder before acceptance.
-- Collision risk: ADR numbers are assigned by branch, not centrally. Highest seen was 0046 (open PR #); another agent is drafting the MFA ADR on a separate branch and may take 0047; whoever merges second renumbers (file name, title, INDEX row and links).
+- Collision risk: ADR numbers are assigned by branch, not centrally. Numbers are assigned by branch. This ADR was renumbered from 0047 to 0048 because the MFA ADR (PR #206) took 0047.
 
 ## Open items
 - Q-156 caps, Q-231 taint-exempt list, Q-257 taint reset, Q-320 act confirmation owner: unresolved.

@@ -7,6 +7,7 @@ import { SideNav } from './SideNav';
 import { UserMenu } from './UserMenu';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useSession } from './SessionProvider';
+import { usesDrawer } from '../../lib/viewport';
 import styles from './Shell.module.css';
 
 /** Top bar, side navigation (a drawer on narrow screens), skip link and the single main landmark. Pages inside render no <main>. */
@@ -27,6 +28,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [drawer]);
+
+  // Leaving the narrow layout (rotate, resize) closes the drawer so it cannot reopen stale.
+  useEffect(() => {
+    const onResize = () => {
+      if (!usesDrawer(window.innerWidth)) setDrawer(false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const skip = (
     <a href="#main" className={styles.skip}>

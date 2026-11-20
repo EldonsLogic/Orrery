@@ -47,3 +47,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md](ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md) | ZATCA Phase 2: vendor the ERPGulf pure core, rebuild state | Proposed |
 | [ADR-0043-department-assistants.md](ADR-0043-department-assistants.md) | Department-scoped assistants in the Blueprint (Blueprint 0.4.0) | Proposed |
 | [ADR-0044-ag-ui-agent-to-screen-transport.md](ADR-0044-ag-ui-agent-to-screen-transport.md) | AG-UI as the agent-to-screen transport, not an authority | Proposed |
+| [ADR-0047-mfa-design.md](ADR-0047-mfa-design.md) | MFA design: TOTP now, step-up, recovery, throttling, session binding | Proposed |

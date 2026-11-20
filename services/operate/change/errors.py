@@ -25,6 +25,8 @@ TABLE = {
     "change_expired": ("The confirmation expired. Ask for the change again.",
                        "انتهت صلاحية التأكيد. اطلب التغيير مرة أخرى."),
     "change_replayed": ("This change was already confirmed once.", "تم تأكيد هذا التغيير من قبل."),
+    "change_superseded": ("A newer change replaced this one. Check the latest preview.",
+                          "حل تغيير أحدث محل هذا التغيير. راجع أحدث معاينة."),
     "change_stale": ("The configuration changed since the preview. Ask for the change again.",
                      "تغيرت الإعدادات منذ المعاينة. اطلب التغيير مرة أخرى."),
     "change_tampered": ("The prepared change no longer matches its preview, so it was not applied.",

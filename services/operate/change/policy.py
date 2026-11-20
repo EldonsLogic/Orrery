@@ -1,7 +1,7 @@
 """What a chat change may touch, decided on the RESULTING DIFF (every changed path), never on the drafted edit.
 
 Default deny: an op is allowed only if its schema path is on the explicit low-risk allow-list below (labels, option
-labels, an added optional plain field or select option, a plain maxLength, non-assistant label overrides, branding
+labels, an added optional plain field or select option, a plain maxLength (lowering one needs review), non-assistant label overrides, branding
 display name and colours). Before that, every op is checked for:
 - the owning entity of the op (entity, workflow.entity, report.entity, the entity named by a label-override key, a link
   target), in the current and the target Blueprint: ledger class or a ledger/tax name -> `change_ledger_tax`, stock
@@ -16,7 +16,8 @@ from .edits import FORBIDDEN_KEYS, _deep_keys
 from .errors import ChangeRefused
 
 STOCK_RISK = "R3"
-TAX_TOKENS = frozenset({"tax", "vat", "zakat", "excise", "withholding", "wht", "gst", "duty", "duties", "customs"})
+TAX_TOKENS = frozenset({"tax", "vat", "zakat", "excise", "withholding", "wht", "gst", "duty", "duties", "customs",
+                        "zatca", "fatoora"})
 LOC = "<locale>"   # one localized-text key, or the whole localized object when the pattern ends here
 # (schema path pattern, allowed op kinds). "*" is a list element id or map key.
 ALLOW = (
@@ -50,6 +51,16 @@ EXTRA_FORBIDDEN = frozenset({"readOnly", "locksEditing", "workflow", "from", "to
 def _tokens(s) -> set:
     from toolapi.classify import tokens
     return set(tokens(s))
+
+
+def _tax_like(s) -> bool:
+    """Token match, plus the flattened id (`vatrate`, `zatcaflag`, `ratevat`): a tax token at its start or end."""
+    if not isinstance(s, str):
+        return False
+    if _tokens(s) & TAX_TOKENS:
+        return True
+    flat = "".join(ch for ch in s.casefold() if ch.isalnum())
+    return any(flat.startswith(t) or flat.endswith(t) for t in TAX_TOKENS)
 
 
 def _schema_path(op) -> tuple:
@@ -103,7 +114,7 @@ def _check_entities(path, current, target) -> str:
     risk = "R0"
     for eid in _owning_entities(path, current, target):
         cls, _ = default_entity_class(eid)
-        if cls == "ledger" or _tokens(eid) & TAX_TOKENS:
+        if cls == "ledger" or _tax_like(eid):
             raise ChangeRefused("change_ledger_tax")
         if cls == "stock":
             risk = STOCK_RISK
@@ -117,7 +128,7 @@ def _check_tax(path, op, current, target) -> None:
     for v in (op.get("before"), op.get("after")):
         if isinstance(v, dict):
             ids.append(v.get("id", ""))
-    if any(_tokens(s) & TAX_TOKENS for s in ids):
+    if any(_tax_like(s) for s in ids):
         raise ChangeRefused("change_ledger_tax")
     if path[:1] == ("entities",) and len(path) > 3 and path[2] == "fields" and "labels" not in path:
         for doc in (current, target):
@@ -146,6 +157,16 @@ def _check_locked_field(path, current, target) -> None:
         f = _field(doc, path[1], path[3])
         if isinstance(f, dict) and (f.get("computed") or f.get("readOnly")):
             raise ChangeRefused("change_forbidden_path")
+
+
+def _check_max_length(sp, op) -> None:
+    """Raising a limit is harmless; lowering (or a non-number) can conflict with stored data: Studio review."""
+    if sp[-1:] != ("maxLength",) or op.get("op") != "replace":
+        return
+    b, a = op.get("before"), op.get("after")
+    ok = all(isinstance(x, int) and not isinstance(x, bool) for x in (a, b))
+    if not ok or a < b:
+        raise ChangeRefused("change_needs_review")
 
 
 def _check_new_field(sp, op) -> None:
@@ -182,4 +203,5 @@ def check_diff(diff: dict, current: dict, target: dict) -> str:
         _check_keys(path, op)
         _check_locked_field(path, current, target)
         _check_new_field(sp, op)
+        _check_max_length(sp, op)
     return risk

@@ -216,7 +216,8 @@ class ChangeService:
         if _sha(d) != prop.diff_hash or d["target"]["hash"] != prop.target_hash or _RANK[risk] > _RANK[prop.risk]:
             raise ChangeRefused("change_tampered")
         if not self.store.consume(prop):  # used once, before the write: a failed apply needs a new proposal
-            raise ChangeRefused("change_replayed")
+            # really used -> replayed; otherwise a newer proposal took its place mid-confirm
+            raise ChangeRefused("change_replayed" if self.store.used(prop.digest) else "change_superseded")
         actor = {"tenant": tenant, "subject": user, "roles": sorted(principal.role_ids), "session": session_id}
         try:
             res = self.bp.submit_change(tenant, copy.deepcopy(d), prop.digest, prop.digest, actor=actor, risk=prop.risk)

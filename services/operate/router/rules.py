@@ -69,7 +69,12 @@ _TIER = (("R4", re.compile(r"iban|ايبان|bank details|بيانات البن�
          ("R2", re.compile(r"customer|\breturn|asset|مرتجع|ارجع|عميل|اصل ثابت|supplier|مورد")),
          ("R1", re.compile(r"quot|order|\bpo\b|purchase|عرض سعر|امر ")))
 _CONFIG_RISK = re.compile(r"role|permission|approval|admin|صلاحي|ادوار|الموافقه")
-_ROLE_GRANT = re.compile(r"^(?:give|make|grant|set) .{0,40}\b(?:roles?|admins?|administrators?|owner|permissions?)\b")
+# A grant, not a read: "give me the list of roles" and "make a report of every admin" are reads; "set the owner of
+# invoice 5" changes a record, not a role.
+_ROLE_GRANT = re.compile(
+    r"^(?:(?:give|make|grant) (?!(?:me |us )?(?:a |an |the )?(?:list|report|summary|overview|count|total)\b).{0,40}"
+    r"\b(?:roles?|admins?|administrators?|owner|permissions?)|set .{0,40}\b(?:roles?|permissions?))\b|"
+    r"^(?:اعط|امنح|اجعل|خلي) (?!ني |نا ).{0,40}(?:صلاحي|دور|ادمن|مدير|مالك)")
 _BULK = re.compile(r"\b(?:all|every|each)\b|(?<!\w)كل(?!\w)|جميع")
 
 
@@ -85,6 +90,15 @@ class RuleResult:
     polite: bool = False
 
 
+_ACT_BARE = re.compile(rf"^{_ACT_VERB}(?: |$)")
+
+
+def _is_bare_ref(body: str, entity_names=()) -> bool:
+    body = _FILLER.sub("", body)
+    ent = any(e and re.search(rf"(?<!\w){re.escape(e)}(?!\w)", body) for e in (normalise(x) for x in entity_names))
+    return (bool(_BUSINESS.search(body)) or ent) and not re.search(r"\d", body) and bool(_BARE_REF.search(body))
+
+
 def strip_meta(t: str) -> tuple:
     clean = META.sub(" ", t)
     return re.sub(r"\s+", " ", clean).strip(), clean != t
@@ -94,7 +108,7 @@ def rule_risk(t: str, mode: str) -> str:
     if mode not in ("act", "change"):
         return "R0"
     if mode == "change":
-        return "R3" if _CONFIG_RISK.search(t) else "R2"
+        return "R3" if _CONFIG_RISK.search(t) or _ROLE_GRANT.match(SLASH.sub("", t, count=1)) else "R2"
     risks = [r for r, p in _TIER if p.search(t)]
     if _BULK.search(t):
         risks.append("R3")  # bulk wording never stays below R3
@@ -110,7 +124,11 @@ def run_rules(turn, entity_names=(), blueprint_live: bool = True) -> RuleResult:
     m = SLASH.match(t0)
     if m:
         mode = _SLASH_MODE[m.group(1)]
-        return RuleResult(mode, "high", frozenset(reasons | {"slash_command"}), True, rule_risk(t, mode), meta, True)
+        extra = {"slash_command"}
+        body = SLASH.sub("", t, count=1)
+        if mode in ("act", "change") and _ACT_BARE.match(body) and _is_bare_ref(body, entity_names):
+            extra.add("ambiguous_reference")  # an explicit command still has to say which record
+        return RuleResult(mode, "high", frozenset(reasons | extra), True, rule_risk(t, mode), meta, True)
     t = _FILLER.sub("", t)
     if not t:
         return RuleResult(None, reasons=frozenset(reasons | {"no_signal"}), meta=meta)

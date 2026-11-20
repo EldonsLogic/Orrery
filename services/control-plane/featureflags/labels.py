@@ -18,9 +18,9 @@ def missing(registry, catalogues: dict) -> list:
 
 
 def label(registry, catalogues: dict, key: str, lang: str) -> str:
-    """Admin label, or the key itself when the string is missing (never raises)."""
+    """Admin label, the i18n key when the string is missing, or empty for an unknown flag (never raises)."""
     d = registry.get(key)
     if d is None or lang not in LANGS:
-        return str(key)[:64]
+        return ""  # never echo a hostile or unknown key
     v = catalogues.get(lang, {}).get(d.label_key)
     return v if isinstance(v, str) and v.strip() else d.label_key

@@ -17,7 +17,6 @@ def on_everywhere(w):
     w.admin.set_tenant(s, K, "t-a", True, "tenant on")
     w.admin.set_user(s, K, "t-a", "u-1", True, "user on")
     w.admin.set_percent(s, K, 10000, "everyone")
-    w.clock.advance(100)
     assert w.ev.is_enabled(w.ctx(), K)
     return s
 
@@ -31,13 +30,20 @@ def test_kill_overrides_every_rule_at_once(w, level, kw, reason):
     s = on_everywhere(w)
     w.ev.is_enabled(w.ctx(), K)  # warm the cache with ON
     w.admin.engage_kill(s, level, "incident", **kw)
-    d = w.ev.evaluate(w.ctx(), K)  # no ttl wait: kill is never cached
+    d = w.ev.evaluate(w.ctx(), K)
     assert d.enabled is False and d.reason == reason
 
 
 def test_kill_overrides_default_true_flag(w):
     w.admin.engage_kill(w.staff(), "platform", "incident")
     assert w.ev.is_enabled(w.ctx(), "ui.dark_default") is False
+
+
+def test_kill_overrides_a_restricted_flag_enabled_by_two_people(w):
+    w.enable("agents.draft_inbox")
+    assert w.ev.is_enabled(w.ctx(), "agents.draft_inbox")
+    w.admin.engage_kill(w.staff(), "flag", "incident", key="agents.draft_inbox")
+    assert not w.ev.is_enabled(w.ctx(), "agents.draft_inbox")
 
 
 def test_tenant_kill_leaves_other_tenants(w):
@@ -47,31 +53,50 @@ def test_tenant_kill_leaves_other_tenants(w):
     assert not w.ev.is_enabled(w.ctx("u-b", "t-b"), K)
 
 
-def test_engage_needs_staff_but_no_step_up(w):
+def test_engage_needs_staff_but_no_step_up_or_role(w):
     w.clock.advance(1000)
-    old = w.staff(auth_time=w.clock() - 900)
+    old = w.staff("s-3", auth_time=w.clock() - 900)
     assert w.admin.engage_kill(old, "platform", "incident").new is True
 
 
-def test_release_needs_step_up(w):
+def test_release_needs_a_fresh_step_up_spent_once(w):
     s = w.staff()
     w.admin.engage_kill(s, "flag", "incident", key=K)
+    w.admin.engage_kill(s, "tenant", "incident", tenant_id="t-a")
     w.clock.advance(1000)
     old = w.staff(auth_time=w.clock() - 900)
     assert code(lambda: w.admin.release_kill(old, "flag", "all clear", key=K)) == "FLG-011"
-    assert w.admin.release_kill(w.staff(), "flag", "all clear", key=K).new is False
+    fresh = w.fresh()
+    assert w.admin.release_kill(fresh, "flag", "all clear", key=K).new is False
+    assert code(lambda: w.admin.release_kill(fresh, "tenant", "clear", tenant_id="t-a")) == "FLG-011"
 
 
-def test_platform_release_needs_second_distinct_staff(w):
+def test_platform_release_is_propose_approve_bound_and_single_use(w):
     w.admin.engage_kill(w.staff(), "platform", "incident")
-    a, b = w.staff("s-1"), w.staff("s-2")
-    assert code(lambda: w.admin.release_kill(a, "platform", "clear")) == "FLG-012"
-    assert code(lambda: w.admin.release_kill(a, "platform", "clear", second=a)) == "FLG-012"
-    assert code(lambda: w.admin.release_kill(a, "platform", "clear", second="s-2")) == "FLG-010"
-    assert code(lambda: w.admin.release_kill(a, "platform", "clear", second=w.customer())) == "FLG-010"
+    assert code(lambda: w.admin.release_kill(w.fresh(), "platform", "clear")) == "FLG-014"
     assert w.store.kill_state().platform is True
-    w.admin.release_kill(a, "platform", "reviewed", second=b)
+    p = w.admin.propose(w.fresh("s-1"), "release_platform_kill", "reviewed, clear")
+    assert code(lambda: w.admin.approve(w.fresh("s-1"), p.proposal_id)) == "FLG-015"  # self
+    rec = w.admin.approve(w.fresh("s-2"), p.proposal_id)
+    assert (rec.staff_id, rec.approved_by, rec.new) == ("s-1", "s-2", False)
     assert w.store.kill_state().platform is False
+    # the approval does not carry over to the next incident
+    w.admin.engage_kill(w.staff(), "platform", "incident again")
+    assert code(lambda: w.admin.approve(w.fresh("s-2"), p.proposal_id)) == "FLG-015"
+    assert w.store.kill_state().platform is True
+    # one approver session cannot release three times
+    s2 = w.fresh("s-2")
+    p2 = w.admin.propose(w.fresh("s-1"), "release_platform_kill", "second clear")
+    w.admin.approve(s2, p2.proposal_id)
+    w.admin.engage_kill(w.staff(), "platform", "incident 3")
+    p3 = w.admin.propose(w.fresh("s-1"), "release_platform_kill", "third clear")
+    assert code(lambda: w.admin.approve(s2, p3.proposal_id)) == "FLG-011"
+
+
+def test_platform_release_needs_the_role_and_nothing_to_release_is_refused(w):
+    assert code(lambda: w.admin.propose(w.fresh("s-1"), "release_platform_kill", "clear")) == "FLG-003"
+    w.admin.engage_kill(w.staff(), "platform", "incident")
+    assert code(lambda: w.admin.propose(w.fresh("s-3"), "release_platform_kill", "clear")) == "FLG-013"
 
 
 def test_kill_audited_and_idempotent(w):

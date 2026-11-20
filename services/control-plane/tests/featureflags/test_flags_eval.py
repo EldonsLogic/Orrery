@@ -32,9 +32,9 @@ def test_context_only_from_verified_claims(w):
         with pytest.raises(FlagError):
             EvalContext.from_claims(bad, w.clock())
     with pytest.raises(FlagError):  # direct construction
-        EvalContext(w.customer(), "t-a", "u-1")
-    with pytest.raises(FlagError):  # forged tenant on a real claims object
-        EvalContext(w.customer(), "t-b", "u-1")
+        EvalContext(w.customer())
+    with pytest.raises(Exception):  # forged tenant and user on a real claims object
+        EvalContext(w.customer(), "t-b", "u-b")
     # evaluating with a non-context is OFF, not an error
     for bad in (None, "t-a", {"tenant_id": "t-a"}, object()):
         assert w.ev.evaluate(bad, K).reason == "error.context"
@@ -152,14 +152,86 @@ def test_cache_ttl_bounded_and_size_bounded(w):
     assert len(ev._cache) == 2
 
 
-def test_cache_staleness_is_bounded_by_ttl(w):
+def test_cache_never_serves_a_state_older_than_the_last_write(w):
     c = w.ctx()
     assert not w.ev.is_enabled(c, K)  # caches OFF
     w.admin.set_global(w.staff(), K, True, "roll out")
-    w.clock.advance(14)
-    assert not w.ev.is_enabled(w.ctx(), K)  # still inside the ttl
-    w.clock.advance(2)
-    assert w.ev.is_enabled(w.ctx(), K)
+    assert w.ev.is_enabled(c, K)  # next call, no ttl wait
+    w.admin.set_global(w.staff(), K, False, "roll back")
+    assert not w.ev.is_enabled(c, K)
+
+
+def test_slow_reader_cannot_poison_the_cache(w):
+    c = w.ctx()
+    v0, stale = w.store.version(), w.store.get_flag(K)
+    w.admin.set_global(w.staff(), K, True, "roll out")
+    assert w.ev.is_enabled(c, K)  # a fresh reader caches the new state
+    orig_v, orig_g = w.store.version, w.store.get_flag
+    w.store.version, w.store.get_flag = (lambda: v0), (lambda k: stale)  # a reader that began earlier
+    w.ev.evaluate(c, K)
+    w.store.version, w.store.get_flag = orig_v, orig_g
+    assert w.ev.is_enabled(c, K)
+
+
+def test_mutated_or_forged_context_cannot_change_tenant_or_user(w):
+    w.admin.set_tenant(w.staff(), K, "t-b", True, "rollout b")
+    c = w.ctx("u-1", "t-a")
+    assert not w.ev.is_enabled(c, K)
+    for name in ("tenant_id", "user_id", "claims"):
+        with pytest.raises(Exception):
+            setattr(c, name, "t-b")
+        with pytest.raises(AttributeError):
+            object.__setattr__(c, "tenant_id", "t-b")
+    # even by force: the tenant used is the claims' own, never a stored field
+    object.__setattr__(c, "claims", w.customer("u-b", "t-b"))
+    assert w.ev.is_enabled(c, K) and c.tenant_id == "t-b"
+    assert not hasattr(c, "__dict__")
+
+
+def test_no_mint_backdoor_context_var():
+    import featureflags.context as m
+    assert not hasattr(m, "_MINT")
+
+
+def test_far_future_clock_reading_does_not_brick_the_evaluator(w):
+    w.admin.set_global(w.staff(), K, True, "on now")
+    c = w.ctx()
+    assert w.ev.is_enabled(c, K)
+    t = w.clock.t
+    w.clock.t = t + 10**9
+    assert w.ev.evaluate(c, K).reason == "error.clock"
+    w.clock.t = t + 5
+    assert w.ev.is_enabled(c, K)
+
+
+def test_far_future_reading_before_any_good_reading(w):
+    w.admin.set_global(w.staff(), K, True, "on now")
+    c = w.ctx()
+    t = w.clock.t
+    w.clock.t = t + 10**9  # first reading ever is a glitch: claims are expired, OFF, mark unmoved
+    assert not w.ev.is_enabled(c, K)
+    w.clock.t = t + 5
+    assert w.ev.is_enabled(c, K)
+
+
+def test_a_real_long_jump_is_believed_when_seen_twice(w):
+    c = w.ctx()
+    assert w.ev.is_enabled(c, "ui.dark_default")
+    w.clock.t += 3 * 86400
+    assert w.ev.evaluate(c, K).reason == "error.clock"
+    assert w.ev.evaluate(c, K).reason != "error.clock"  # second agreeing reading (claims now expired: context)
+
+
+def test_revocation_port(w):
+    w.admin.set_global(w.staff(), K, True, "on now")
+    c = w.ctx()
+    state = {"revoked": False}
+    ev = FlagEvaluator(w.registry, w.store, w.clock, revoked=lambda cl: state["revoked"])
+    assert ev.is_enabled(c, K)
+    state["revoked"] = True
+    assert ev.evaluate(c, K).reason == "error.revoked"
+    for bad in (lambda cl: 1 / 0, lambda cl: None, lambda cl: "no"):
+        assert FlagEvaluator(w.registry, w.store, w.clock, revoked=bad).evaluate(c, K).enabled is False
 
 
 def test_registry_rules():
@@ -181,4 +253,4 @@ def test_bilingual_labels():
     assert missing(reg, {}) and len(missing(reg, {})) == 4
     assert label(reg, {"en": en, "ar": ar}, "ui.a", "ar") == "العارض الجديد"
     assert label(reg, {"en": en}, "ui.a", "ar") == "flags.ui.a.label"
-    assert label(reg, {"en": en}, "nope", "en") == "nope"
+    assert label(reg, {"en": en}, "nope\u202e", "en") == ""  # never echo a hostile key

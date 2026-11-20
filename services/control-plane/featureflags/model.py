@@ -1,10 +1,9 @@
-"""Typed flag definitions and state. Flags are boolean and gate the rollout of a
-code path only. A flag never carries a value, role, permission, rate, rule or
-text, so there is nothing in it that can be a secret or change tax or ledger
-behaviour (PLT-016 rule; see README)."""
+"""Typed flag definitions and state. Flags are boolean and decide whether a code
+path is reached; they carry no value, role, permission, rate or text, so there is
+nothing in one that can be a secret. The checks behind the path still run."""
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from .errors import FlagError
@@ -35,8 +34,8 @@ class FlagDef:
 
     @property
     def restricted(self) -> bool:
-        """Agent authority, money and compliance flags: only a verified staff human
-        with a fresh MFA step-up can enable them, never an agent (ADR-0027, ADR-0048)."""
+        """Agent authority, money and compliance flags gate paths that act on those
+        things: enabling needs two staff humans (ADR-0027, ADR-0047, ADR-0048)."""
         return self.category in RESTRICTED_CATEGORIES
 
     @property
@@ -93,12 +92,38 @@ class AuditRecord:
     seq: int
     at: int
     staff_id: str
+    approved_by: Optional[str]  # second staff human for approved changes
     action: str
     flag_key: Optional[str]
     tenant_id: Optional[str]
     user_id: Optional[str]
-    old: object  # bool or int
+    old: object  # bool, int or None
     new: object
     reason: str
-    prev_hash: str
-    hash: str
+    key_id: str
+    prev_seal: str
+    seal: str  # HMAC over the record and prev_seal (keyed, see store.AuditSealer)
+
+
+@dataclass(frozen=True)
+class TenantAuditView:
+    """What a tenant may see of a change scoped to it: no staff ids, no free text."""
+    seq: int
+    at: int
+    action: str
+    flag_key: Optional[str]
+    old: object
+    new: object
+
+
+@dataclass(frozen=True)
+class Proposal:
+    proposal_id: str
+    kind: str  # global | tenant | user | percent | release_platform_kill
+    flag_key: Optional[str]
+    tenant_id: Optional[str]
+    user_id: Optional[str]
+    value: object
+    reason: str
+    proposer: str
+    expires_at: int

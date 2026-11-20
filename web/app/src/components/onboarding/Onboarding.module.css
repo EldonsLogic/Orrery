@@ -33,7 +33,7 @@
 .start {
   display: inline-flex;
   align-items: center;
-  min-block-size: var(--button-height);
+  min-block-size: max(var(--button-height), var(--touch-target));
   box-sizing: border-box;
   padding-inline: calc(var(--space-unit) * 2);
   border-radius: var(--radius-control);

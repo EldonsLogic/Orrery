@@ -13,6 +13,9 @@ Built the component request pipeline: a gap analysis request becomes a Component
 - services/blueprint/tests/component_request/: tests (hostile drafts, injection, duplicates, forbidden scopes, Arabic, tampering)
 - docs/PLAN.md (BPL-016 done), docs/open-questions.md (Q-420 to Q-424)
 
+## Review fixes (Opus review of PR 216)
+Risk class now derived by policy.py from the Tool API tables (default deny, allow-list of artifact kinds and benign scopes); normalised scope scan as backstop; request key bound to the need; evidence per tenant with deterministic generalisation (tenant count or human attestation); stored records validated on read, optional HMAC digest; drafting_failed park and human reopen; clock bound; drafter cannot approve. Q-425 to Q-429 added.
+
 ## Decisions
 - No new ADR. Follows ADR-0048 (propose, not act). AI drafts exclude stock, ledger, tax and permission risk classes (Q-421).
 

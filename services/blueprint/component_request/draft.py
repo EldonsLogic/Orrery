@@ -8,15 +8,19 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import hmac
 import json
 import re
 from typing import Any, Protocol
 
 from registry import Registry
 
-from . import codes
+from factory.errors import FacError
+from factory.scan import check_relpath
+
+from . import codes, policy
 from .codes import RequestError
-from .text import clean, injection, per_client, personal_data, scope_hits
+from .text import clean, foreign_letters, injection, per_client, personal_data, scope_hits
 
 MAX_DRAFT_BYTES = 60_000
 MAX_DEPTH = 8
@@ -24,7 +28,6 @@ MODEL_MANIFEST_KEYS = {"id", "version", "kind", "name", "description", "provides
                        "engineCompatibility", "i18n", "dataHandling"}
 FIELD_TYPES = {"text", "integer", "decimal", "percent", "money", "date", "boolean", "select", "link"}
 PERMISSION_ACTIONS = {"read", "list", "create", "update", "export"}   # ADR-0048 item 4: no approve, submit, cancel, amend, delete
-SAFE_RISK = {None, "plain"}
 _ID = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,4}$")
 _SNAKE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 _KEY = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+){1,5}$")
@@ -36,8 +39,11 @@ class DraftingPort(Protocol):
     def draft(self, brief: dict) -> Any: ...
 
 
-def digest(draft: dict) -> str:
-    return hashlib.sha256(json.dumps(draft, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
+def digest(draft: dict, key: bytes | None = None) -> str:
+    """sha256 of the canonical draft, or HMAC-SHA256 with a host key. An unkeyed digest detects accidents only: whoever
+    can write the store can recompute it (PR 216 M6), so a deployment passes `integrity_key`."""
+    blob = json.dumps(draft, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hmac.new(key, blob, hashlib.sha256).hexdigest() if key else hashlib.sha256(blob).hexdigest()
 
 
 def _strings(node: Any, depth: int = 0, keys: bool = True):
@@ -77,7 +83,7 @@ def _text(v: Any, what: str, lo: int, hi: int) -> str:
     return v
 
 
-def validate_draft(raw: Any, request_id: str, fixed_manifest: dict) -> dict:
+def validate_draft(raw: Any, request_id: str, fixed_manifest: dict, library: Any = None) -> dict:
     """Return a clean draft with the fixed manifest fields added, or raise RequestError. `raw` is never mutated."""
     try:
         blob = json.dumps(raw, ensure_ascii=False, sort_keys=True)
@@ -89,11 +95,11 @@ def validate_draft(raw: Any, request_id: str, fixed_manifest: dict) -> dict:
     _closed(d, {"manifest", "spec", "generalisation"}, "draft")
     strings = list(_strings(d))
     for s in strings:                                           # hostile text first: nothing else is evaluated on it
-        if clean(s) != s or injection(s) or personal_data(s):
-            raise RequestError(codes.HOSTILE_DRAFT, "control or bidi characters, an instruction, personal data or a secret in the draft")
+        if clean(s) != s or injection(s) or personal_data(s) or foreign_letters(s):
+            raise RequestError(codes.HOSTILE_DRAFT, "control or bidi characters, look-alike letters, an instruction, personal data or a secret in the draft")
     hits = scope_hits(*strings)
     if hits:
-        raise RequestError(codes.FORBIDDEN_SCOPE, f"draft reaches ledger, tax, e-invoicing, payroll or audit scope: {', '.join(hits)}")
+        raise RequestError(codes.FORBIDDEN_SCOPE, "draft reaches ledger, tax, e-invoicing, payroll or audit scope")
     gen = _closed(d["generalisation"], {"rationale", "tenant_specific"}, "generalisation")
     if gen["tenant_specific"] is not False:
         raise RequestError(codes.NOT_GENERALISABLE, "draft says the component is tenant specific")
@@ -106,23 +112,17 @@ def validate_draft(raw: Any, request_id: str, fixed_manifest: dict) -> dict:
         raise RequestError(codes.MALFORMED_DRAFT, "manifest has missing or unexpected top-level keys")
     if m.get("kind") != "configurable":
         raise RequestError(codes.DRAFT_RISK, "an AI draft must be a configurable component")
-    for a in (x for p in m["provides"] if isinstance(p, dict) for x in (p.get("artifacts") or []) if isinstance(x, dict)):
-        if a.get("riskClass") not in SAFE_RISK:
-            raise RequestError(codes.DRAFT_RISK, f"artifact risk class '{a.get('riskClass')}' needs a human-built path")
-        if a.get("type") in ("scheduled_job", "tool"):
-            raise RequestError(codes.DRAFT_RISK, f"artifact type '{a.get('type')}' needs a human-built path")
+    _artifacts(m)
     if (m.get("dataHandling") or {}).get("sendsDataToModels") is True:
         raise RequestError(codes.DRAFT_RISK, "draft sends tenant data to models")
     for t in m["tests"] if isinstance(m["tests"], list) else []:
-        p = t.get("path") if isinstance(t, dict) else None
-        if not isinstance(p, str) or p.startswith("/") or "\\" in p or ".." in p.split("/") or ":" in p:
-            raise RequestError(codes.MALFORMED_DRAFT, "test path must be relative and stay inside the component")
+        _test_path(t.get("path") if isinstance(t, dict) else None)
+    _requires(m.get("requires"), library)
     full = {**m, **fixed_manifest, "origin": {"source": "component_factory", "requestId": request_id},
             "certification": {"level": "draft", "touchesLedgerOrTax": False}}
     reg = Registry.from_manifests([full])
     if reg.errors or not reg.list_components():
-        raise RequestError(codes.MALFORMED_DRAFT, "manifest fails the component manifest contract: "
-                           + "; ".join(i.message for i in reg.errors[:3]))
+        raise RequestError(codes.MALFORMED_DRAFT, "manifest fails the component manifest contract")
     m = full
     locales = (m.get("i18n") or {}).get("locales") or []
     if not {"ar", "en"} <= set(locales):
@@ -147,8 +147,10 @@ def validate_draft(raw: Any, request_id: str, fixed_manifest: dict) -> dict:
         _closed(p, {"role", "action"}, "permission")
         if not isinstance(p["role"], str) or not _SNAKE.match(p["role"]):
             raise RequestError(codes.MALFORMED_DRAFT, "permission role must be a snake_case role id")
+        if policy.platform_role(p["role"]):
+            raise RequestError(codes.DRAFT_RISK, "permission role is a platform or restricted role")
         if p["action"] not in PERMISSION_ACTIONS:
-            raise RequestError(codes.DRAFT_RISK, f"permission action '{p['action']}' is not allowed in an AI draft")
+            raise RequestError(codes.DRAFT_RISK, "permission action is not allowed in an AI draft")
     keys = _list(s["i18n_keys"], "spec.i18n_keys", 1, 200)
     if len(set(keys)) != len(keys) or not all(isinstance(k, str) and _KEY.match(k) and k.startswith(m["id"] + ".") for k in keys):
         raise RequestError(codes.MALFORMED_DRAFT, "i18n keys must be unique and start with the component id")
@@ -165,4 +167,56 @@ def validate_draft(raw: Any, request_id: str, fixed_manifest: dict) -> dict:
         raise RequestError(codes.MALFORMED_DRAFT, "test plan needs a blocking unit test and an rtl or arabic_text test, and must list every manifest test")
     if set().union(*(set(t["covers"]) for t in plan)) != caps:
         raise RequestError(codes.MALFORMED_DRAFT, "every capability needs a test")
+    for ident in [*caps, *entities, *keys, *test_ids, *(f["name"] for f in s["fields"]), *(x["id"] for x in m.get("parameters", []))]:
+        if policy.identifier_hits(ident):
+            raise RequestError(codes.FORBIDDEN_SCOPE, "an identifier reaches ledger, tax, e-invoicing, payroll, audit or identity scope")
     return {"manifest": m, "spec": s, "generalisation": gen}
+
+
+def _artifacts(m: dict) -> None:
+    """Allow-list of artifact kinds; the risk class is derived by policy, never taken from the model. After this runs,
+    every entity artifact carries the derived class "plain" (a differing or non-plain claim is refused)."""
+    for p in m["provides"] if isinstance(m["provides"], list) else []:
+        for a in p.get("artifacts", []) if isinstance(p, dict) and isinstance(p.get("artifacts"), list) else []:
+            if not isinstance(a, dict) or a.get("type") not in policy.ALLOWED_ARTIFACTS:
+                raise RequestError(codes.DRAFT_RISK, "artifact kind is not on the allow-list for an AI draft")
+            ref = a.get("ref")
+            if not isinstance(ref, str):
+                raise RequestError(codes.MALFORMED_DRAFT, "artifact ref must be text")
+            cls, why = policy.derive_class(a["type"], ref.split("/")[-1])
+            if cls != "plain":
+                code = codes.FORBIDDEN_SCOPE if why in ("reviewed_ledger", "reviewed_stock", "restricted_word") else codes.DRAFT_RISK
+                raise RequestError(code, "artifact scope is not plain by the reviewed policy")
+            if a["type"] == "entity":
+                if a.get("riskClass", "plain") != "plain":
+                    raise RequestError(codes.DRAFT_RISK, "declared risk class differs from the derived class")
+                a["riskClass"] = "plain"
+
+
+def _test_path(p: Any) -> None:
+    try:
+        check_relpath(p)
+    except FacError:
+        raise RequestError(codes.MALFORMED_DRAFT, "test path must be relative and stay inside the component") from None
+    segs = p.split("/")
+    if segs[0] != "tests" or len(segs) < 2 or any(x.startswith(".") for x in segs):
+        raise RequestError(codes.MALFORMED_DRAFT, "test path must sit under tests/ with no hidden or dot segments")
+
+
+def _requires(req: Any, library: Any) -> None:
+    """A `requires` is allowed only on an admitted library manifest whose artifacts all derive as plain."""
+    if req in (None, []):
+        return
+    if not isinstance(req, list) or library is None:
+        raise RequestError(codes.DRAFT_RISK, "requires needs a library to check against")
+    for r in req:
+        cid, cap = (r.get("component"), r.get("capability")) if isinstance(r, dict) else (None, None)
+        found = []
+        for c in library.list_components():
+            for v in library.versions(c):
+                m = library.get(c, v)
+                if isinstance(m, dict) and (c == cid or (cap and any(isinstance(p, dict) and p.get("capability") == cap
+                                                                     for p in m.get("provides", [])))):
+                    found.append(m)
+        if not found or not all(policy.manifest_all_plain(m) for m in found):
+            raise RequestError(codes.DRAFT_RISK, "requires an unknown component or one with a non-plain scope")

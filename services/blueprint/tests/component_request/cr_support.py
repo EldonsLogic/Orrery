@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import sys
 from pathlib import Path
 
@@ -13,8 +14,16 @@ T2 = "2026-11-20T10:10:00Z"
 T3 = "2026-11-20T10:15:00Z"
 
 
-def gap(ref="credit_note", kind="entity", key="07141fae2b676cce", hint="configurable", rid=None, evidence=None):
-    return {"request_key": key, "requirement_id": rid or f"{kind}:{ref}", "kind": kind, "ref": ref, "kind_hint": hint,
+TEN = "tenant-aaa1"
+TEN2 = "tenant-bbb2"
+KEY = hashlib.sha256(b"entity:visit_checklist").hexdigest()[:16]
+RID = "CR-" + KEY
+
+
+def gap(ref="visit_checklist", kind="entity", key=None, hint="configurable", rid=None, evidence=None):
+    rid = rid or f"{kind}:{ref}"
+    key = key or hashlib.sha256(rid.encode("utf-8")).hexdigest()[:16]
+    return {"request_key": key, "requirement_id": rid, "kind": kind, "ref": ref, "kind_hint": hint,
             "reason_codes": ["no_provider"],
             "evidence": evidence if evidence is not None else [{"kind": "blueprint", "id": "/entities/13"}, {"kind": "provenance", "id": "interview:turn-013"}]}
 
@@ -22,11 +31,11 @@ def gap(ref="credit_note", kind="entity", key="07141fae2b676cce", hint="configur
 def good_draft():
     return {
         "manifest": {
-            "id": "sales.credit_note", "version": "0.1.0", "kind": "configurable",
-            "name": {"ar": "إشعار دائن", "en": "Credit note"},
-            "description": "Credit note document linked to a sales invoice, with a reason and a status.",
-            "provides": [{"capability": "sales.credit_note.manage", "artifacts": [
-                {"type": "entity", "ref": "credit_note", "riskClass": "plain"}, {"type": "screen", "ref": "screens/credit_note"}]}],
+            "id": "sales.visit_checklist", "version": "0.1.0", "kind": "configurable",
+            "name": {"ar": "قائمة فحص الزيارة", "en": "Visit checklist"},
+            "description": "Visit checklist document linked to a sales invoice, with a reason and a status.",
+            "provides": [{"capability": "sales.visit_checklist.manage", "artifacts": [
+                {"type": "entity", "ref": "visit_checklist", "riskClass": "plain"}, {"type": "screen", "ref": "screens/visit_checklist"}]}],
             "requires": [], "parameters": [],
             "tests": [{"id": "unit_core", "kind": "unit", "path": "tests/test_core.py", "blocking": True},
                       {"id": "arabic_labels", "kind": "arabic_text", "path": "tests/test_arabic.py", "blocking": True}],
@@ -34,14 +43,14 @@ def good_draft():
             "i18n": {"locales": ["ar", "en"], "rtlVerified": False},
             "dataHandling": {"storesPersonalData": False, "sendsDataToModels": False, "promotableToLibrary": False}},
         "spec": {
-            "capabilities": [{"id": "sales.credit_note.manage", "summary": "Create and edit credit notes linked to an invoice"}],
-            "fields": [{"entity": "credit_note", "name": "reason", "type": "text", "required": True},
-                       {"entity": "credit_note", "name": "invoice", "type": "link", "required": True}],
+            "capabilities": [{"id": "sales.visit_checklist.manage", "summary": "Create and edit visit checklists linked to a customer"}],
+            "fields": [{"entity": "visit_checklist", "name": "result", "type": "text", "required": True},
+                       {"entity": "visit_checklist", "name": "customer", "type": "link", "required": True}],
             "permissions": [{"role": "sales_clerk", "action": "create"}, {"role": "sales_manager", "action": "read"}],
-            "i18n_keys": ["sales.credit_note.title", "sales.credit_note.reason"],
-            "test_plan": [{"id": "unit_core", "kind": "unit", "covers": ["sales.credit_note.manage"], "blocking": True},
-                          {"id": "arabic_labels", "kind": "arabic_text", "covers": ["sales.credit_note.manage"], "blocking": True}]},
-        "generalisation": {"rationale": "Any trading company issues credit notes against invoices, so one component serves all.",
+            "i18n_keys": ["sales.visit_checklist.title", "sales.visit_checklist.reason"],
+            "test_plan": [{"id": "unit_core", "kind": "unit", "covers": ["sales.visit_checklist.manage"], "blocking": True},
+                          {"id": "arabic_labels", "kind": "arabic_text", "covers": ["sales.visit_checklist.manage"], "blocking": True}]},
+        "generalisation": {"rationale": "Any field sales team records checklists during customer visits, so one component serves all.",
                            "tenant_specific": False}}
 
 
@@ -70,6 +79,7 @@ CLERK = Actor("human", "founder-a", ("component_reviewer",), True)
 REVIEWER = Actor("human", "founder-b", ("component_reviewer",), True)
 
 
-def build(result=None, exc=None, library=()):
+def build(result=None, exc=None, library=(), **kw):
     d = FakeDrafter(result, exc)
-    return ComponentRequests(d, FakeLibrary(library), owner_github="example-owner"), d
+    kw.setdefault("min_tenants", 1)
+    return ComponentRequests(d, FakeLibrary(library), owner_github="example-owner", **kw), d

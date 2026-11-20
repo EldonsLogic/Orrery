@@ -1,9 +1,11 @@
 """Stable reason codes and statuses for the component request pipeline (BPL-016). Never renumber; add at the end."""
 # statuses
 REQUESTED, DRAFTED, IN_REVIEW, APPROVED, REJECTED, REFUSED = "requested", "drafted", "in_review", "approved", "rejected", "refused"
-STATUSES = (REQUESTED, DRAFTED, IN_REVIEW, APPROVED, REJECTED, REFUSED)
-TERMINAL = {APPROVED, REJECTED, REFUSED}
-TRANSITIONS = {REQUESTED: {DRAFTED, REFUSED}, DRAFTED: {IN_REVIEW}, IN_REVIEW: {APPROVED, REJECTED}}
+DRAFTING_FAILED = "drafting_failed"   # parked for a human after repeated drafter failures; a human may reopen it
+STATUSES = (REQUESTED, DRAFTED, IN_REVIEW, APPROVED, REJECTED, REFUSED, DRAFTING_FAILED)
+TERMINAL = {APPROVED, REJECTED, REFUSED}   # DRAFTING_FAILED is parked, not terminal
+TRANSITIONS = {REQUESTED: {DRAFTED, REFUSED, DRAFTING_FAILED}, DRAFTED: {IN_REVIEW}, IN_REVIEW: {APPROVED, REJECTED},
+               DRAFTING_FAILED: {REQUESTED}, REJECTED: {REQUESTED}}   # the last two only through a human `reopen`
 
 # reasons (each has ar and en labels in labels.json under "reason.<code>")
 FORBIDDEN_SCOPE = "CRQ-001"       # ledger, tax, e-invoicing, payroll maths or audit: human-built path only
@@ -23,6 +25,11 @@ BAD_CLOCK = "CRQ-014"             # timestamp is not a UTC ISO-8601 string
 NOT_FOUND = "CRQ-015"
 DRAFTER_FAILED = "CRQ-016"        # the drafting port raised or returned nothing
 UNTRUSTED_TEXT = "CRQ-017"        # warning only: untrusted text was flagged and replaced by a slug
+
+
+UNCLASSIFIED = "CRQ-018"          # no reviewed plain class for the need: default deny, a human classifies or builds it
+RECORD_INVALID = "CRQ-019"        # a stored record is malformed or inconsistent (read from the store, never trusted)
+NO_GENERALISATION = "CRQ-020"     # not shown to be generalisable: too few distinct tenants and no human attestation
 
 
 class RequestError(Exception):

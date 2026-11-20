@@ -326,3 +326,93 @@ def test_concurrent_change_is_refused_not_lost(w):
 def test_one_clock_source_the_identity_clock(w):
     adm = FlagAdmin(w.idn, w.registry, w.store)
     assert adm._now() == w.clock()
+
+
+# --- round 2: proposals bound to state -----------------------------------
+def test_kill_release_proposal_dies_with_its_incident(w):
+    w.admin.engage_kill(w.staff(), "platform", "incident one")
+    p = w.admin.propose(w.fresh("s-1"), "release_platform_kill", "clear one")
+    # incident 1 is released by another proposal, then incident 2 starts
+    p1 = w.admin.propose(w.fresh("s-1"), "release_platform_kill", "clear one again")
+    w.admin.approve(w.fresh("s-2"), p1.proposal_id)
+    w.admin.engage_kill(w.staff(), "platform", "incident two")
+    assert code(lambda: w.admin.approve(w.fresh("s-2"), p.proposal_id)) == "FLG-015"
+    assert w.store.kill_state().platform is True
+
+
+def test_stale_restricted_enable_refused_after_an_incident_turned_it_off(w):
+    p = w.admin.propose(w.fresh("s-1"), "global", "enable it", key=R)
+    w.admin.set_global(w.staff(), R, False, "incident: off")
+    assert code(lambda: w.admin.approve(w.fresh("s-2"), p.proposal_id)) == "FLG-015"
+    assert not w.ev.is_enabled(w.ctx(), R)
+    # a kill engaged after the proposal also voids it
+    q = w.admin.propose(w.fresh("s-1"), "global", "enable it", key="pay.run_batching")
+    w.admin.engage_kill(w.staff(), "flag", "incident", key="pay.run_batching")
+    assert code(lambda: w.admin.approve(w.fresh("s-2"), q.proposal_id)) == "FLG-015"
+
+
+def test_unrelated_changes_do_not_void_a_proposal(w):
+    p = w.admin.propose(w.fresh("s-1"), "global", "enable it", key=R)
+    w.admin.set_global(w.staff(), K, True, "other flag")
+    assert w.admin.approve(w.fresh("s-2"), p.proposal_id).new is True
+
+
+def test_flag_kill_release_on_restricted_flag_needs_the_role(w):
+    w.admin.engage_kill(w.staff(), "flag", "incident", key=R)
+    assert code(lambda: w.admin.release_kill(w.fresh("s-3"), "flag", "clear it", key=R)) == "FLG-013"
+    assert w.admin.release_kill(w.fresh("s-1"), "flag", "clear it", key=R).new is False
+
+
+def test_spam_cannot_block_platform_kill_release(w):
+    from featureflags import store as st
+    w.admin.engage_kill(w.staff(), "platform", "incident")
+    n = 0
+    for i in range(st.MAX_PER_PROPOSER + 3):
+        try:
+            w.admin.propose(w.fresh("s-1"), "global", "spam it", key=R)
+            n += 1
+        except FlagError as e:
+            assert e.code == "FLG-003"
+    assert n == st.MAX_PER_PROPOSER
+    assert w.admin.propose(w.fresh("s-2"), "release_platform_kill", "clear it").kind == "release_platform_kill"
+    # even a proposer who hit their own cap can still propose the release
+    assert w.admin.propose(w.fresh("s-1"), "release_platform_kill", "clear too")
+
+
+@pytest.mark.parametrize("sid", ["agentx", "x-agent:1", "ai.agent:1", "bot", "svcx", "Agent-1",
+                                 "ſvc:1", "ＡＧＥＮＴ-7", "my_robot"])
+def test_agent_id_refusal_is_not_a_prefix_check(w, sid):
+    from identity import StaffIdentity
+    w.repo.put_staff(StaffIdentity(sid, sid, mfa_enrolled=True))
+    assert code(lambda: w.admin.set_global(w.staff(sid), K, True, "go ahead")) == "FLG-010"
+
+
+def test_staff_id_allow_pattern_from_identity_port(w):
+    import re
+    adm = FlagAdmin(w.idn, w.registry, w.store, staff_id_pattern=re.compile(r"staff-\d+"))
+    assert code(lambda: adm.set_global(w.staff("s-1"), K, True, "go ahead")) == "FLG-010"
+
+
+def test_removing_the_audit_key_stops_writes_too(w):
+    from featureflags import AuditSealer
+    s = w.staff()
+    w.admin.set_global(s, K, True, "roll out")
+    w.store._sealer = AuditSealer({"k2": b"z" * 32}, "k2")  # k1 removed
+    assert code(lambda: w.admin.set_global(s, K, False, "roll back")) == "FLG-050"
+    assert code(w.store.audit) == "FLG-050"
+
+
+def test_restricted_category_is_pinned_and_cannot_be_downgraded_by_code(w):
+    from featureflags import FlagDef, Registry
+    from featureflags import FlagEvaluator
+    w.enable(R)
+    downgraded = Registry([FlagDef(R, "rollout")] )
+    with pytest.raises(FlagError):
+        FlagAdmin(w.idn, downgraded, w.store)
+    with pytest.raises(FlagError):
+        FlagEvaluator(downgraded, w.store, w.clock)
+    assert w.store.pinned_category(R) == "agent_authority"
+    # tampering with the pin is caught
+    cat, kid, seal = w.store._pins[R]
+    w.store._pins[R] = ("rollout", kid, seal)
+    assert code(lambda: w.store.pinned_category(R)) == "FLG-050"

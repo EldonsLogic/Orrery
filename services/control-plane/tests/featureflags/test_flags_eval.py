@@ -134,6 +134,9 @@ def test_store_outage_is_off_even_with_default_true(w):
 
 def test_evaluator_never_raises_on_odd_registry_or_store(w):
     class Boom:
+        def pin_categories(self, items):
+            pass
+
         def kill_state(self):
             raise RuntimeError("x")
     ev = FlagEvaluator(w.registry, Boom(), w.clock)

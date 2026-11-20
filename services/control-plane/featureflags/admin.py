@@ -28,7 +28,12 @@ from .errors import FlagError
 from .model import MAX_BP, MAX_ENTRIES, Proposal, valid_id, valid_key
 
 PROPOSAL_TTL = 900
-_AGENT_ID = re.compile(r"(agent|svc|service|bot|system)[:_\-.]", re.I)
+_AGENT_TOKEN = re.compile(r"agent|svc|service|bot|system|automat|robot")
+
+
+def _looks_like_agent(subject) -> bool:
+    s = unicodedata.normalize("NFKC", str(subject)).casefold()
+    return _AGENT_TOKEN.search(s) is not None
 _BAD_CATEGORIES = {"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"}
 
 
@@ -40,12 +45,16 @@ def _clean_reason(reason) -> str:
 
 
 class FlagAdmin:
-    def __init__(self, idn, registry, store, *, restricted_role=None, staff_roles=None):
+    def __init__(self, idn, registry, store, *, restricted_role=None, staff_roles=None,
+                 staff_id_pattern=None):
         """`staff_roles.has_role(staff_id, role) -> bool` is a port to the staff
         role store. With no role name or no port configured, restricted changes
         are refused (default deny). One clock: the identity service's."""
         self.idn, self.registry, self.store = idn, registry, store
         self.restricted_role, self.staff_roles = restricted_role, staff_roles
+        # optional allow-pattern for staff ids, from the identity port (compiled regex)
+        self.staff_id_pattern = staff_id_pattern
+        store.pin_categories({d.key: d.category for d in registry})
 
     def _now(self) -> int:
         now = self.idn.now()
@@ -60,7 +69,9 @@ class FlagAdmin:
                 raise FlagError("FLG-010")  # agents, services and raw ids are not claims
             check_live(claims, self._now())
             if (claims.realm is not Realm.STAFF or claims.tenant is not None
-                    or not claims.mfa_satisfied or _AGENT_ID.match(str(claims.subject))):
+                    or not claims.mfa_satisfied or _looks_like_agent(claims.subject)
+                    or (self.staff_id_pattern is not None
+                        and self.staff_id_pattern.fullmatch(str(claims.subject)) is None)):
                 raise FlagError("FLG-010")
             staff = self.idn.repo.get_staff(claims.subject)
             if staff is None or not staff.active or staff.session_version != claims.session_version:
@@ -102,6 +113,11 @@ class FlagAdmin:
                                     "subject": subject if valid_id(subject) else None})
         except Exception:
             pass
+
+    def _restricted(self, d) -> bool:
+        """Restricted by the definition or by the sealed pinned category."""
+        from .model import RESTRICTED_CATEGORIES
+        return d.restricted or self.store.pinned_category(d.key) in RESTRICTED_CATEGORIES
 
     def _def(self, key):
         d = self.registry.get(key)
@@ -175,7 +191,7 @@ class FlagAdmin:
         plan = self._plan(kind, key, tenant_id, user_id, value)
         if plan is None:
             return None
-        if plan[5] and d.restricted:
+        if plan[5] and self._restricted(d):
             self._deny(claims, action, "FLG-014")
             raise FlagError("FLG-014")  # enabling a restricted flag: propose and approve
         return self._commit(version, plan, staff.subject, reason, key, tenant_id, user_id)
@@ -202,15 +218,21 @@ class FlagAdmin:
         staff = self._staff(claims, action)
         reason = _clean_reason(reason)
         plan = self._plan(kind, key, tenant_id, user_id, value)
-        if plan is None or not (kind == "release_platform_kill" or (plan[5] and d.restricted)):
+        if plan is None or not (kind == "release_platform_kill" or (plan[5] and self._restricted(d))):
             raise FlagError("FLG-003")  # nothing to approve: use the direct call
         self._require_role(staff, action)
         self._spend_step_up(staff, action)
         now = self._now()
         p = Proposal(secrets.token_urlsafe(16), kind, key, tenant_id, user_id, value, reason,
-                     staff.subject, now + PROPOSAL_TTL)
+                     staff.subject, now + PROPOSAL_TTL, self._state_of(kind, key))
         self.store.put_proposal(p, now)
         return p
+
+    def _state_of(self, kind, key):
+        """What a proposal is bound to: the flag's rules and the kill epoch (every
+        kill engage or release bumps it), so it cannot outlive the incident."""
+        epoch = self.store.kill_state().epoch
+        return (None if kind == "release_platform_kill" else self.store.get_flag(key), epoch)
 
     def approve(self, claims, proposal_id):
         """Step 2 (a different staff human, role, own step-up, consumed). Applies
@@ -224,6 +246,9 @@ class FlagAdmin:
             raise FlagError("FLG-015")
         self._spend_step_up(staff, action)
         self._validate(p.kind, p.flag_key, p.tenant_id, p.user_id, p.value)
+        if p.bound != self._state_of(p.kind, p.flag_key):
+            self._deny(claims, action, "FLG-015")
+            raise FlagError("FLG-015")  # the world changed since it was proposed
         version = self.store.version()
         plan = self._plan(p.kind, p.flag_key, p.tenant_id, p.user_id, p.value)
         if plan is None:
@@ -252,6 +277,8 @@ class FlagAdmin:
             self._deny(claims, "kill.release", "FLG-014")
             raise FlagError("FLG-014")
         staff = self._staff(claims, "kill.release")
+        if level == "flag" and self._restricted(self.registry.get(key)):
+            self._require_role(staff, "kill.release")
         reason = _clean_reason(reason)
         version, k = self.store.version(), self.store.kill_state()
         new, old = self._kill_change(k, level, key, tenant_id, False)

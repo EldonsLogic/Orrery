@@ -45,6 +45,7 @@ class FlagEvaluator:
         """`revoked(claims) -> bool` is an optional port (session or membership
         revocation); when given, a revoked or failing check gives OFF."""
         self.registry, self.store, self.clock, self.revoked = registry, store, clock, revoked
+        store.pin_categories({d.key: d.category for d in registry})  # downgrade refused
         self.ttl = min(max(ttl, 0), MAX_TTL) if type(ttl) is int else 0
         self.max_entries = min(max(max_entries, 1), MAX_CACHE) if type(max_entries) is int else 1
         self._cache: OrderedDict = OrderedDict()

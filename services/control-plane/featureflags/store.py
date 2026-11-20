@@ -1,6 +1,7 @@
 """Flag store port and an in-memory implementation for tests. A real store must
 make `commit` one atomic compare-and-set that writes state and audit together."""
 
+import dataclasses
 import hashlib
 import hmac
 import json
@@ -13,6 +14,8 @@ from .model import AuditRecord, FlagState, KillState, Proposal, TenantAuditView,
 GENESIS = "0" * 64
 MAX_DENIALS = 1000
 MAX_PROPOSALS = 100
+MAX_PER_PROPOSER = 10
+MAX_RELEASE_PROPOSALS = 5  # reserved, so incident recovery never competes with spam
 _BODY = [f for f in AuditRecord.__dataclass_fields__ if f != "seal"]
 
 
@@ -28,6 +31,9 @@ class AuditSealer:
             raise FlagError("FLG-050")
         self._keys = {k: bytes(v) for k, v in keys.items()}
         self.current = current
+
+    def has(self, key_id) -> bool:
+        return key_id in self._keys
 
     def seal(self, key_id, body: dict) -> str:
         key = self._keys.get(key_id)
@@ -60,6 +66,7 @@ class InMemoryFlagStore:
         self._version = 0
         self._audit: list = []
         self._denials: deque = deque(maxlen=MAX_DENIALS)
+        self._pins: dict = {}
         self._proposals: dict = {}
         self._stepups: dict = {}
         self.fail = False  # tests: simulate an outage
@@ -101,6 +108,8 @@ class InMemoryFlagStore:
             prev = self._audit[-1].seal if self._audit else GENESIS
             if self._anchor.length != len(self._audit) or self._anchor.head != prev:
                 raise FlagError("FLG-050")  # log and anchor disagree: refuse to extend
+            if any(not self._sealer.has(r.key_id) for r in self._audit):
+                raise FlagError("FLG-050")  # a key in the log is gone: refuse to write blind
             at = max(entry["at"], self._audit[-1].at if self._audit else 0)  # never goes back
             body = dict(entry, at=at, seq=len(self._audit) + 1, prev_seal=prev,
                         key_id=self._sealer.current)
@@ -110,7 +119,7 @@ class InMemoryFlagStore:
             if flag_state is not None:
                 self._flags[flag_key] = flag_state
             if kill is not None:
-                self._kill = kill
+                self._kill = dataclasses.replace(kill, epoch=self._kill.epoch + 1)
             self._audit.append(record)
             self._anchor.set(len(self._audit), seal)
             self._version += 1
@@ -151,7 +160,14 @@ class InMemoryFlagStore:
         with self._lock:
             self._check()
             self._proposals = {k: v for k, v in self._proposals.items() if v.expires_at > now}
-            if len(self._proposals) >= MAX_PROPOSALS:
+            release = [q for q in self._proposals.values() if q.kind == "release_platform_kill"]
+            others = [q for q in self._proposals.values() if q.kind != "release_platform_kill"]
+            if p.kind == "release_platform_kill":
+                full = len(release) >= MAX_RELEASE_PROPOSALS
+            else:
+                full = (len(others) >= MAX_PROPOSALS
+                        or sum(q.proposer == p.proposer for q in others) >= MAX_PER_PROPOSER)
+            if full:
                 raise FlagError("FLG-003")
             self._proposals[p.proposal_id] = p
 
@@ -175,3 +191,36 @@ class InMemoryFlagStore:
                 return False
             self._stepups[(subject, auth_time)] = now + ttl
             return True
+
+    # --- pinned flag categories (sealed config) -------------------------
+    def _pin_seal(self, key_id, flag_key, category):
+        return self._sealer.seal(key_id, {"pin": flag_key, "category": category})
+
+    def pin_categories(self, items: dict) -> None:
+        """Record each flag's category, sealed. A restricted flag can never be
+        pinned back to a non-restricted category by a code change."""
+        from .model import RESTRICTED_CATEGORIES
+        with self._lock:
+            self._check()
+            for key, category in items.items():
+                pinned = self._pinned(key)
+                if pinned is not None and pinned in RESTRICTED_CATEGORIES \
+                        and category not in RESTRICTED_CATEGORIES:
+                    raise FlagError("FLG-001")
+                if pinned != category:
+                    kid = self._sealer.current
+                    self._pins[key] = (category, kid, self._pin_seal(kid, key, category))
+
+    def _pinned(self, key):
+        rec = self._pins.get(key)
+        if rec is None:
+            return None
+        category, kid, seal = rec
+        if not self._sealer.has(kid) or not hmac.compare_digest(seal, self._pin_seal(kid, key, category)):
+            raise FlagError("FLG-050")
+        return category
+
+    def pinned_category(self, key):
+        with self._lock:
+            self._check()
+            return self._pinned(key)

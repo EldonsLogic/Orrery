@@ -85,6 +85,7 @@ class KillState:
     platform: bool = False
     flags: frozenset = frozenset()
     tenants: frozenset = frozenset()
+    epoch: int = 0  # bumped by the store on every kill change (one per incident step)
 
 
 @dataclass(frozen=True)
@@ -127,3 +128,4 @@ class Proposal:
     reason: str
     proposer: str
     expires_at: int
+    bound: object = None  # (flag state or None, kill epoch) it was proposed against

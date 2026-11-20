@@ -653,7 +653,8 @@
       "label": "Console",
       "tenants": "Tenants",
       "grants": "Support access",
-      "audit": "Audit trail"
+      "audit": "Audit trail",
+      "components": "Component requests"
     },
     "session": {
       "mfa": "MFA verified",
@@ -823,6 +824,261 @@
       "starter": "Starter",
       "growth": "Growth",
       "scale": "Scale"
+    },
+    "factory": {
+      "title": "Component requests",
+      "intro": "Drafts of new components that no library component covers. Agents propose, people decide. Nothing here builds anything: an approval only records your decision.",
+      "serverNote": "The buttons below only send your decision to the server. The server decides who may act and enforces the reviewer role, separation of duties (the requester, drafter, submitter and anyone who attested may not approve) and MFA step-up. A button that is on can still be refused.",
+      "plainTextNote": "Everything from a model or a tenant is shown as plain text only. Unusual control characters appear as <U+XXXX>.",
+      "none": "None",
+      "yes": "Yes",
+      "no": "No",
+      "loading": "Loading component requests",
+      "noAccess": {
+        "title": "No access to component requests",
+        "body": "Your staff role cannot see the component factory."
+      },
+      "error": {
+        "title": "Component requests could not be loaded",
+        "retry": "Try again"
+      },
+      "errors": {
+        "not_wired": "The review service is not connected yet. Nothing was changed.",
+        "step_up_required": "The server needs a fresh MFA step-up for this action. Nothing was changed.",
+        "forbidden": "The server refused: you may not take this action. Nothing was changed.",
+        "unavailable": "The review service did not answer. Nothing was changed.",
+        "other": "The server refused or failed. Nothing was changed.",
+        "CRQ-011": "Only a verified human reviewer may decide.",
+        "CRQ-012": "The requester, drafter, submitter or an earlier attester may not decide this request.",
+        "CRQ-010": "This status change is not allowed.",
+        "CRQ-022": "The record seal is wrong, or no integrity key is configured.",
+        "CRQ-023": "A human may not attest plain for a draft with a money field.",
+        "CRQ-024": "A human risk-class attestation is needed first.",
+        "CRQ-020": "Not shown to be general: too few tenants and no human attestation."
+      },
+      "filter": {
+        "status": "Status",
+        "all": "All statuses ({n})"
+      },
+      "list": {
+        "caption": "Component requests",
+        "empty": "No component requests match this filter.",
+        "tenants": "Tenants with evidence: {n}"
+      },
+      "detail": {
+        "back": "Back to the list",
+        "pick": "Pick a request to see its draft, evidence and history."
+      },
+      "status": {
+        "requested": "Requested",
+        "needs_human_classification": "Needs a risk class",
+        "drafted": "Drafted",
+        "in_review": "In review",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "refused": "Routed to a human-built path",
+        "drafting_failed": "Drafting failed"
+      },
+      "kind": {
+        "compliance": "Compliance",
+        "component": "Component",
+        "entity": "Entity",
+        "workflow": "Workflow",
+        "report": "Report"
+      },
+      "actorKind": {
+        "human": "Person",
+        "agent": "Agent"
+      },
+      "event": {
+        "requested": "Requested",
+        "evidence_added": "Evidence added",
+        "drafted": "Drafted",
+        "draft_failed": "Draft failed",
+        "drafting_failed": "Drafting failed",
+        "needs_classification": "Needs a risk class",
+        "attested_plain": "Attested plain",
+        "submitted": "Submitted for review",
+        "attested": "Attested generalisable",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "refused": "Routed to a human-built path",
+        "reopened": "Reopened"
+      },
+      "decisionOutcome": {
+        "approved": "Approved",
+        "rejected": "Rejected"
+      },
+      "rejectReason": {
+        "not_generalisable": "Not generalisable",
+        "duplicate": "Duplicate",
+        "out_of_scope": "Out of scope",
+        "quality": "Quality",
+        "other": "Other"
+      },
+      "summary": {
+        "need": "Need",
+        "requestedBy": "Requested by",
+        "drafter": "Drafted by",
+        "submitter": "Submitted by",
+        "createdAt": "Created (UTC)"
+      },
+      "flags": {
+        "title": "Flagged text"
+      },
+      "refusal": {
+        "title": "Refused",
+        "route": "Routed to a human-built path. No component is drafted."
+      },
+      "decision": {
+        "title": "Decision",
+        "by": "by"
+      },
+      "risk": {
+        "title": "Risk class",
+        "note": "The class is proven by the server's policy tables, never taken from the model. Anything not provably plain waits for a person.",
+        "needStage": "The need was parked because",
+        "needAttested": "The need was attested plain by",
+        "proven": "Provably plain",
+        "unproven": "Not provably plain",
+        "money": "Money field",
+        "reasons": "Reasons",
+        "draftAttested": "A person attested this draft plain:",
+        "draftNotAttested": "No valid attestation covers this draft yet.",
+        "noDraft": "No draft yet, so no draft classification."
+      },
+      "why": {
+        "artifact_name": "An artifact name is not on the benign list",
+        "money_field": "A field holds money",
+        "field_type": "A field type is not on the allow list",
+        "link_target": "A link points at a class that is not plain",
+        "open_select": "A select field has no closed option list",
+        "field_name": "A field name looks sensitive",
+        "not_all_benign": "A word in the need name is not on the benign list",
+        "sensitive": "The name looks sensitive",
+        "restricted_word": "The name has a restricted word",
+        "identity_domain": "Identity domain",
+        "scope_word": "The name touches ledger, tax, e-invoicing, payroll or audit",
+        "not_a_plain_id": "The need id was not a plain id",
+        "attested_class": "A person attested another class",
+        "rigid_or_compliance": "Compliance or rigid component",
+        "reviewed_table": "Reviewed table",
+        "benign_scope": "Benign scope",
+        "allow_listed_type": "Allow-listed type"
+      },
+      "draft": {
+        "title": "Draft spec",
+        "none": "No draft yet.",
+        "id": "Component id",
+        "version": "Version",
+        "name": "Name",
+        "description": "Description",
+        "provides": "Provides",
+        "capabilities": "Capabilities",
+        "fields": "Fields",
+        "col": {
+          "entity": "Entity",
+          "field": "Field",
+          "type": "Type",
+          "required": "Required",
+          "options": "Options or target"
+        },
+        "permissions": "Permissions",
+        "i18nKeys": "Message keys"
+      },
+      "tests": {
+        "title": "Test plan",
+        "plan": "Planned tests",
+        "files": "Test files in the manifest",
+        "covers": "covers",
+        "blocking": "Blocking"
+      },
+      "gen": {
+        "title": "Generalisation",
+        "met": "Shown general",
+        "notMet": "Not shown general",
+        "count": "Tenants with evidence: {n}, needed: {min}",
+        "attested": "A person attested it is general:",
+        "notAttested": "No person attested it is general.",
+        "rationale": "Model rationale",
+        "rationaleNote": "Display text only. It proves nothing.",
+        "tenantSpecific": "Says tenant specific"
+      },
+      "evidence": {
+        "title": "Evidence by tenant",
+        "note": "Tenants are opaque references, never names. Evidence is never merged across tenants.",
+        "none": "No tenant evidence.",
+        "tenant": "Tenant"
+      },
+      "history": {
+        "title": "History"
+      },
+      "stepUp": {
+        "title": "MFA step-up (placeholder)",
+        "body": "The server will ask for a fresh MFA check before it records this decision (ADR-0047). Step-up is not wired in this screen yet, so the request goes without it and the server may refuse.",
+        "confirm": "Send decision",
+        "cancel": "Cancel"
+      },
+      "actions": {
+        "title": "Decisions",
+        "note": "Each button is off, with a reason, unless you may act. The server checks again.",
+        "attestRisk": "Attest risk class",
+        "riskClass": "Risk class",
+        "attestGen": "Attest generalisable",
+        "approve": "Approve",
+        "reject": "Reject",
+        "rejectReason": "Reason to reject",
+        "done": "Decision recorded. The list was loaded again.",
+        "refusedTitle": "Decision not recorded",
+        "riskClasses": {
+          "plain": "Plain",
+          "stock": "Stock",
+          "ledger": "Ledger",
+          "tax": "Tax",
+          "permission": "Permission"
+        },
+        "rejectReasons": {
+          "not_generalisable": "Not generalisable",
+          "duplicate": "Duplicate",
+          "out_of_scope": "Out of scope",
+          "quality": "Quality",
+          "other": "Other"
+        },
+        "why": {
+          "no_permission": "Your staff role may view requests but not decide them.",
+          "wrong_status": "Not available in this status.",
+          "separation": "You asked for, drafted, submitted or attested this request, so you may not decide it (separation of duties).",
+          "money_field": "A draft with a money field can never be attested plain.",
+          "needs_attestation": "Approval needs a person to attest this draft's risk class first.",
+          "no_generalisation": "Too few tenants with evidence and no person attested it is general."
+        }
+      },
+      "reason": {
+        "CRQ-001": "This request touches the ledger, tax, e-invoicing, payroll maths or audit. Only an engineer builds it, by hand",
+        "CRQ-002": "The request is for one client only. No per-client code is written",
+        "CRQ-003": "The gap analysis request has the wrong shape",
+        "CRQ-004": "The draft does not match the required shape or the component manifest contract",
+        "CRQ-005": "The draft contains hostile text, personal data or a secret",
+        "CRQ-006": "The draft asks for a ledger, tax, stock or permission effect, or an action agents may not own",
+        "CRQ-007": "The library already provides this need",
+        "CRQ-008": "Duplicate request: the existing request is returned",
+        "CRQ-009": "The draft gives no generalisation rationale or says it is tenant specific",
+        "CRQ-010": "This status change is not allowed",
+        "CRQ-011": "Only a verified human reviewer may decide",
+        "CRQ-012": "The requester, the person who ran the draft or the submitter may not decide",
+        "CRQ-013": "The stored draft changed or no longer validates",
+        "CRQ-014": "The time given is invalid or earlier than the last event",
+        "CRQ-015": "No such request",
+        "CRQ-016": "The drafter could not produce a draft",
+        "CRQ-017": "Untrusted text was replaced by a safe id",
+        "CRQ-018": "No reviewed class for this need. An engineer classifies or builds it by hand",
+        "CRQ-019": "The stored request record is malformed or inconsistent",
+        "CRQ-020": "Not shown to be generalisable: too few distinct tenants and no human attestation",
+        "CRQ-021": "The same session supplied more than one tenant",
+        "CRQ-022": "The record seal is wrong, or no integrity key is configured to trust an approval",
+        "CRQ-023": "A human may not attest plain for a draft with a money field",
+        "CRQ-024": "A human risk-class attestation is needed before approval"
+      }
     }
   },
   "chat": {

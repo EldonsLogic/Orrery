@@ -22,7 +22,8 @@ from .view import SECTIONS, VIEW_VERSION, blueprint_digest, build_sections, chec
 
 ROLE = "accountant"
 DECISIONS = ("approved", "changes_requested")
-OWNER_ROLE = "owner"
+# Until Q-371 fixes role ids: the owner and any admin-equivalent role cannot review as accountant (case-insensitive).
+OWNER_EQUIVALENT = frozenset({"owner", "admin", "administrator", "superadmin", "super_admin", "is_admin", "isadmin"})
 FIRST_YEAR, LAST_YEAR = 2000, 2099
 NOTE_LIMIT = 2000
 MAX_SKEW = dt.timedelta(minutes=5)
@@ -75,13 +76,13 @@ class Comment:
                 "blueprintDigest": self.blueprint_digest}
 
 
-def clean_text(value, limit=NOTE_LIMIT) -> str:
+def clean_text(value) -> str:
     """NFC, no control, bidi, zero-width or other format characters (Cc, Cf), trimmed, length-capped."""
     if not isinstance(value, str):
         return ""
     t = unicodedata.normalize("NFC", value)
     t = "".join(c for c in t if c in "\n" or unicodedata.category(c) not in ("Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"))
-    return t.strip()[:limit]
+    return t.strip()
 
 
 def _aware(v, what):
@@ -106,7 +107,9 @@ def _actor(actor, tenant_id) -> str:
         raise AccountantViewError("ACV-SO-003", "signer belongs to another tenant")
     if not isinstance(actor.role_ids, tuple) or ROLE not in actor.role_ids:
         raise AccountantViewError("ACV-SO-004", "role")
-    if OWNER_ROLE in actor.role_ids:  # the reviewer is not the author (Q-373)
+    if not all(isinstance(r, str) for r in actor.role_ids):
+        raise AccountantViewError("ACV-SO-004", "role")
+    if {r.strip().lower() for r in actor.role_ids} & OWNER_EQUIVALENT:  # the reviewer is not the author (Q-373)
         raise AccountantViewError("ACV-SO-010", "a signer who also holds the owner role cannot review as accountant")
     return actor.subject
 
@@ -127,18 +130,23 @@ def _strs(*vals) -> bool:
 
 def _valid(r) -> bool:
     """Shape and content of one record (strict types first; a record can come from an untrusted store)."""
-    if isinstance(r, Decision):
+    if type(r) is Decision:
         return (_strs(r.tenant_id, r.blueprint_digest, r.section, r.user_id, r.decision, r.decided_at, r.note)
                 and r.section in SECTIONS and bool(DIGEST_RE.fullmatch(r.blueprint_digest))
                 and bool(ID_RE.fullmatch(r.user_id)) and r.decision in DECISIONS and _ts_ok(r.decided_at)
                 and len(r.note) <= NOTE_LIMIT and clean_text(r.note) == r.note
                 and (r.decision == "approved" or bool(r.note)))
-    if isinstance(r, Comment):
+    if type(r) is Comment:
         return (_strs(r.tenant_id, r.blueprint_digest, r.section, r.comment_id, r.user_id, r.created_at, r.text)
                 and r.section in SECTIONS and bool(DIGEST_RE.fullmatch(r.blueprint_digest))
                 and bool(ID_RE.fullmatch(r.user_id)) and bool(ID_RE.fullmatch(r.comment_id))
                 and _ts_ok(r.created_at) and 0 < len(r.text) <= NOTE_LIMIT and clean_text(r.text) == r.text)
     return False
+
+
+def _when(r) -> str:
+    t = getattr(r, "decided_at", None) or getattr(r, "created_at", None)
+    return t if isinstance(t, str) and AT_RE.fullmatch(t) else ""
 
 
 def _transition_ok(prev, decision) -> bool:
@@ -158,11 +166,15 @@ def check_records(records, tenant_id, signable=SECTIONS) -> tuple:
         items = tuple(records)
     except TypeError:
         raise AccountantViewError("ACV-REC-001", "records")
-    if any(isinstance(getattr(r, "tenant_id", None), str) and r.tenant_id != tenant_id for r in items):
-        raise AccountantViewError("ACV-REC-001", "record from another tenant")
+    if any(type(r) in (Decision, Comment) and (not isinstance(r.tenant_id, str) or r.tenant_id != tenant_id)
+           for r in items):
+        raise AccountantViewError("ACV-REC-001", "record of another tenant or without a tenant")
+    # Oldest first by the record's own timestamp; the store's order is the tie-break (stable sort), so what is
+    # "open" never depends on the order a store happens to return rows.
+    items = tuple(sorted(items, key=_when))
     out, state, ids, bad = [], {}, set(), 0
     for r in items:
-        if not _valid(r) or r.tenant_id != tenant_id:
+        if not _valid(r):
             bad += 1
         elif isinstance(r, Decision):
             key = (r.blueprint_digest, r.section)
@@ -211,6 +223,8 @@ def record_decision(blueprint, records, *, tenant_id, actor, section, decision, 
     if not _transition_ok(prev, decision):
         raise AccountantViewError("ACV-SO-007", "this section already has a final decision for this Blueprint")
     text = clean_text(note)
+    if len(text) > NOTE_LIMIT:
+        raise AccountantViewError("ACV-SO-011", "note too long")
     if decision == "changes_requested" and not text:
         raise AccountantViewError("ACV-SO-008", "a note is required when requesting changes")
     rec = Decision(tenant_id, digest, section, uid, decision, when, text)
@@ -229,7 +243,12 @@ def add_comment(blueprint, records, *, tenant_id, actor, section, text, created_
     body = clean_text(text)
     if not body:
         raise AccountantViewError("ACV-SO-009", "empty comment")
-    n = sum(isinstance(r, Comment) for r in accepted) + 1
+    if len(body) > NOTE_LIMIT:
+        raise AccountantViewError("ACV-SO-011", "comment too long")
+    # Highest numeric id over every stored comment, quarantined ones included, so a corrupted row never frees its id.
+    seen = [int(m.group(1)) for r in (records if isinstance(records, (tuple, list)) else ())
+            if type(r) is Comment and isinstance(r.comment_id, str) and (m := re.fullmatch(r"c(\d{1,12})", r.comment_id))]
+    n = max(seen, default=0) + 1
     rec = Comment(tenant_id, digest, section, f"c{n:06d}", uid, when, body)
     if not _valid(rec):
         raise AccountantViewError("ACV-SO-001", "record")
@@ -251,6 +270,8 @@ def build_review(blueprint, records=(), *, tenant_id) -> dict:
     for s in base:
         d = cur_dec.get(s["id"])
         state = "not_applicable" if s["status"] not in _SIGNABLE else (d.decision if d else "awaiting")
+        if state == "approved" and bad:  # fail closed: a dropped record might have been a rejection (R1)
+            state = "integrity_error"
         stale_cr = [r for r in old_dec if r.section == s["id"]]
         pending = stale_cr[-1] if (d is None and stale_cr and stale_cr[-1].decision == "changes_requested") else None
         if pending:
@@ -264,6 +285,8 @@ def build_review(blueprint, records=(), *, tenant_id) -> dict:
     states = [s["signOff"]["state"] for s in signable]
     if "changes_requested" in states:
         overall = "changes_requested"
+    elif bad:
+        overall = "integrity_error"
     elif states and all(x == "approved" for x in states):
         overall = "approved_signable_only" if not_reviewed else "approved"
     else:

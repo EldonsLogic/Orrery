@@ -24,9 +24,10 @@ VIEW_VERSION = "0.1.0"
 _validator = None
 
 
-# Control-plane mirrors that change at every state transition and are not the accountant's content.
+# Control-plane fields written at every state transition and save (the state mirror and its timestamp); not the
+# accountant's content. `meta.createdAt` is written once and stays bound.
 # Everything else, including meta.revision and meta.id, is bound.
-DIGEST_EXCLUDED = (("meta", "buildState"),)
+DIGEST_EXCLUDED = (("meta", "buildState"), ("meta", "updatedAt"))
 
 
 def canonical(bp: dict) -> bytes:

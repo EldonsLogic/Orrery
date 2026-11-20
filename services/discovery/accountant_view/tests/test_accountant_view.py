@@ -255,7 +255,8 @@ def test_bad_stored_records_are_quarantined_not_fatal():  # M2 and the "bricked 
     for b in bad:
         v = build_review(BP, [b, g], tenant_id=T)
         assert v["overall"]["quarantined"] == 1, b
-        assert sec(v, "tax_vat")["signOff"]["state"] == "approved"
+        assert sec(v, "tax_vat")["signOff"]["state"] == "integrity_error"  # R1: never approved next to a bad row
+        assert v["overall"]["state"] == "integrity_error"
         assert sec(v, "tax_vat")["signOff"]["decision"]["userId"] == g.user_id == "acc-1"
         assert sec(v, "tax_vat")["signOff"]["decision"]["note"] == "" and sec(v, "tax_vat")["signOff"]["decision"]["decidedAt"] == g.decided_at
         assert all("\u202e" not in json.dumps(c, ensure_ascii=False) for c in sec(v, "tax_vat")["comments"])
@@ -265,7 +266,7 @@ def test_bad_stored_records_are_quarantined_not_fatal():  # M2 and the "bricked 
 def test_duplicate_and_out_of_order_stored_records_quarantined():
     g = _good()
     v = build_review(BP, [g, g], tenant_id=T)
-    assert v["overall"]["quarantined"] == 1 and sec(v, "tax_vat")["signOff"]["state"] == "approved"
+    assert v["overall"]["quarantined"] == 1 and sec(v, "tax_vat")["signOff"]["state"] == "integrity_error"
     rej = _mut(g, decision="changes_requested", note="n")
     v = build_review(BP, [rej, g], tenant_id=T)  # approval after a rejection never happened
     assert sec(v, "tax_vat")["signOff"]["state"] == "changes_requested" and v["overall"]["quarantined"] == 1
@@ -359,8 +360,10 @@ def test_comment_rules():
 
 
 def test_untrusted_text_is_cleaned_and_flagged():
-    r = com(text="a‮b\u0000c​d" + "x" * 5000)
-    assert r[0].text.startswith("abcd") and len(r[0].text) == 2000
+    r = com(text="a‮b\u0000c​d" + "x" * 1500)
+    assert r[0].text.startswith("abcd")
+    assert code(com, text="x" * 2001) == "ACV-SO-011" and code(dec, note="x" * 2001) == "ACV-SO-011"  # R6
+    assert com(text="x" * 1999 + " ")[0].text == "x" * 1999  # trailing space stripped, no boundary bug
     c = build_review(BP, r, tenant_id=T)["sections"][1]["comments"][0]
     assert c["untrustedText"] is True
     d = dec(note="<script>alert(1)</script>")[0]  # kept as data; the screen escapes it
@@ -410,3 +413,71 @@ def test_no_clock_or_model_use():
         t = p.read_text(encoding="utf-8")
         assert "datetime.now" not in t and "utcnow" not in t and "time.time" not in t, p
         assert not re.search(r"anthropic|openai|requests|urllib", t), p
+
+
+# ---- second review (R1 to R7) -----------------------------------------------------------------------------------
+def _rejection_after_approval():
+    appr = dec()[0]
+    rej = _mut(appr, decision="changes_requested", note="VAT rate wrong", user_id="acc-2")
+    return appr, rej
+
+
+@pytest.mark.parametrize("corrupt", [dict(note="wrong\u200b"), dict(decided_at="2026-02-30T10:00:00.000Z"),
+                                     dict(note="wrong\u202e"), dict(user_id="a b")])
+def test_corrupted_rejection_never_leaves_an_approval_standing(corrupt):  # R1
+    appr, rej = _rejection_after_approval()
+    v = build_review(BP, [appr, _mut(rej, **corrupt)], tenant_id=T)
+    assert v["overall"]["quarantined"] == 1
+    assert v["overall"]["state"] == "integrity_error" and not v["overall"]["state"].startswith("approved")
+    assert sec(v, "tax_vat")["signOff"]["state"] == "integrity_error"
+
+
+def test_record_without_tenant_refuses_the_read():  # R1
+    appr, rej = _rejection_after_approval()
+    for t in (None, 5, ""):
+        assert code(build_review, BP, [appr, _mut(rej, tenant_id=t)], tenant_id=T) == "ACV-REC-001"
+
+
+def test_digest_survives_a_real_state_transition():  # R2
+    t = bp()
+    t["meta"]["buildState"] = "owner_approved"
+    t["meta"]["updatedAt"] = "2026-11-21T09:30:00Z"
+    assert blueprint_digest(t) == blueprint_digest(BP)
+    recs = dec()
+    assert sec(build_review(t, recs, tenant_id=T), "tax_vat")["signOff"]["state"] == "approved"
+    from accountant_view.view import canonical
+    assert b"updatedAt" not in canonical(BP) and b"buildState" not in canonical(BP) and b"createdAt" in canonical(BP)
+
+
+def test_open_change_request_does_not_depend_on_store_order():  # R3
+    v1, v2, v3 = bp(), bp(), bp()
+    v2["company"]["legalName"]["en"] += " 2"
+    v3["company"]["legalName"]["en"] += " 3"
+    t1, t2 = NOW, NOW + dt.timedelta(minutes=2)
+    r1 = record_decision(v1, (), tenant_id=T, actor=ACC, section="tax_vat", decision="approved", decided_at=t1, now=t1, note="")
+    r2 = record_decision(v2, (), tenant_id=T, actor=ACC, section="tax_vat", decision="changes_requested", decided_at=t2, now=t2, note="fix it")
+    for order in ([r1[0], r2[0]], [r2[0], r1[0]]):
+        v = build_review(v3, order, tenant_id=T)
+        assert sec(v, "tax_vat")["signOff"]["openChangeRequest"]["note"] == "fix it"
+
+
+@pytest.mark.parametrize("role", ["Owner", "owner ", "ADMIN", "administrator", "Super_Admin"])
+def test_owner_equivalent_roles_refused_case_insensitively(role):  # R4
+    assert code(dec, actor=Signer(T, "x1", ("accountant", role), "human")) == "ACV-SO-010"
+    assert code(dec, actor=Signer(T, "x1", ("accountant", 5), "human")) == "ACV-SO-004"
+
+
+def test_comment_id_never_reuses_a_quarantined_id():  # R5
+    r = com()
+    broken = Comment(T, r[0].blueprint_digest, "tax_vat", "c000001", "u1", r[0].created_at, "a\u200bb")
+    nxt = com([broken])
+    assert nxt[-1].comment_id == "c000002"
+
+
+def test_subclass_records_refused():  # R7
+    class Sneaky(Decision):  # could override any attribute or method after the shape check
+        pass
+    g = _good()
+    s_ = Sneaky(g.tenant_id, g.blueprint_digest, "numbering", "u1", "approved", g.decided_at, "")
+    v = build_review(BP, [s_], tenant_id=T)
+    assert v["overall"]["quarantined"] == 1 and sec(v, "numbering")["signOff"]["decision"] is None

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 CODES = frozenset({"invalid_scope", "invalid_input", "kind_not_allowed", "too_large", "empty_after_redaction",
                    "quota_exceeded", "clock_invalid", "not_found", "audit_failed", "store_failed",
-                   "not_unverified"})
+                   "not_unverified", "secret_detected", "not_owner"})
 
 
 class MemoryRefused(Exception):

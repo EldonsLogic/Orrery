@@ -23,3 +23,6 @@ Unknown.
 
 ## Next step
 Host wiring of recall into chat and the owner endpoint (Q-391); events-contract types (Q-390).
+
+## Review fixes (Opus review of PR #212)
+Appended in the same session. Clock high-water mark removed and erasure no longer reads the clock; expired rows hard-deleted and not counted; model-facing `AgentMemoryTool` (host sets taint, author, source ids); `confirm` owner-only; rule-like text unverified; unverified cap 20 and 7-day TTL; secrets refused, more ID forms masked, odd digits no longer crash; erasure reports success with `audit_failed`; per-tenant audit salt supported. Q-394 and Q-395 added. 84 tests; mutations (no purge, no owner check, clock in erase) each fail a test.

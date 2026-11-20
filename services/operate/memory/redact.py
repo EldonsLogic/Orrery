@@ -1,45 +1,55 @@
-"""Redact obvious secrets and identifiers before a memory is stored. Detection runs on a digit-normalised copy so
-Arabic-Indic digits are caught too. Redaction only removes; it never adds text."""
+"""Redact IDs and refuse secrets before a memory is stored. Detection runs on a digit-normalised copy so Arabic-Indic
+digits are caught too. A secret is refused (`secret_detected`), not masked: a masked remnant can still leak. IDs
+(e-mail, IBAN, phone, card and long digit runs) are masked. Any internal error is the caller's `invalid_input`."""
 from __future__ import annotations
 
 import re
+import unicodedata
 
-from runtime.untrusted import _DATE, _SENSITIVE_VALUE
+from .errors import MemoryRefused
 
 MARK = "[redacted]"
+_KEY = (r"passw(?:or)?d|pwd|passphrase|secret|api[_ -]?key|token|كلمة\s*(?:ال)?(?:سر|مرور)|الرمز\s*السري")
+_SHORT = r"\b(?:pass|passcode|pin|otp|cvv|cvc)\b\s*(?:is|=|:|-|are)|\bpw\b\s*(?:is|=|:|-)?\s*\S+"
 _SECRET = re.compile(
-    r"(?i)\b(?:password|passwd|passcode|secret|api[_ -]?key|token|pin|otp|cvv|"
-    r"كلمة\s*(?:ال)?(?:سر|مرور)|رمز|الرمز)\b\s*(?:is|=|:|هي|هو)?\s*\S+"
+    rf"(?i)(?:{_KEY})\s*(?:is|=|:|-|هي|هو)?\s*\S+|{_SHORT}"
     r"|\bBearer\s+[A-Za-z0-9._~+/=-]{8,}"
-    r"|\b(?:sk|pk|rk|ghp|gho|xox[abp])[-_][A-Za-z0-9_-]{12,}"
+    r"|\b(?:sk|pk|rk|ghp|gho|xox[abp])[-_][A-Za-z0-9_-]{6,}"
     r"|\bAKIA[0-9A-Z]{16}\b"
     r"|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}"
     r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
-    r"|\b[A-Za-z0-9+/_-]{32,}={0,2}")
+    r"|\b[A-Za-z0-9+/_-]{32,}={0,2}"
+    r"|\b(?=[A-Za-z0-9+/]*\d)[A-Za-z0-9+/]{10,}(?:\s+[A-Za-z0-9+/]{10,})+")
+_ID = re.compile(r"[^\s@]+\s*@\s*[^\s@]+\.[^\s@]+|\S+\s+at\s+\S+\s+dot\s+\w+|\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b|"
+                 r"\+?\d[\d\s().\-/]{4,}\d")
+_DATE = re.compile(r"(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?:[T ][\d:.]+(?:Z|[+-]\d{2}:\d{2})?)?")
 
 
 def _digits(text: str) -> str:
-    """Same length, Arabic-Indic and extended digits mapped to ASCII, so spans line up with the original."""
-    return "".join(str(int(c)) if c.isdigit() and not c.isascii() else c for c in text)
+    """Same length; decimal digits of any script mapped to ASCII (other digit-like marks such as a superscript two
+    are left alone), so spans line up with the original."""
+    return "".join(str(unicodedata.decimal(c)) if c.isdecimal() and not c.isascii() else c for c in text)
 
 
 def redact(text: str) -> tuple:
-    """Return (text, flags). flags contains "secret_redacted" and/or "id_redacted"."""
-    flags = set()
-    norm = _digits(text)
-    spans = []
-    for m in _SECRET.finditer(norm):
-        spans.append((m.start(), m.end(), "secret_redacted"))
-    for m in _SENSITIVE_VALUE.finditer(norm):
-        if not _DATE.fullmatch(m.group(0)):
-            spans.append((m.start(), m.end(), "id_redacted"))
-    out, pos = [], 0
-    for s, e, flag in sorted(spans):
-        if e <= pos:
-            continue
-        out.append(text[pos:s] if s >= pos else "")
-        out.append(MARK)
-        pos = e
-        flags.add(flag)
-    out.append(text[pos:])
-    return "".join(out), tuple(sorted(flags))
+    """Return (text, flags). Raises MemoryRefused("secret_detected") for a secret, ("invalid_input") on any fault."""
+    try:
+        norm = _digits(text)
+        if _SECRET.search(norm):
+            raise MemoryRefused("secret_detected")
+        flags, out, pos = set(), [], 0
+        for m in _ID.finditer(norm):
+            if _DATE.fullmatch(m.group(0).strip()) or m.start() < pos:
+                continue
+            out += [text[pos:m.start()], MARK]
+            pos = m.end()
+            flags.add("id_redacted")
+        out.append(text[pos:])
+        rest = _digits("".join(out))
+        if sum(c.isdigit() for c in rest.replace(MARK, "")) >= 9 and not _DATE.search(rest):
+            raise MemoryRefused("secret_detected")  # digits split by letters: a card or account in disguise
+        return "".join(out), tuple(sorted(flags))
+    except MemoryRefused:
+        raise
+    except Exception:
+        raise MemoryRefused("invalid_input") from None

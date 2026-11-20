@@ -12,7 +12,8 @@ class MemoryStore(Protocol):
     def put(self, entry: MemoryEntry) -> None: ...
     def get(self, scope: Scope, entry_id: str): ...
     def list(self, scope: Scope) -> list: ...
-    def count_tenant(self, tenant_id: str) -> int: ...
+    def count_tenant(self, tenant_id: str, now: float) -> int: ...
+    def delete_expired(self, tenant_id: str, now: float) -> int: ...
     def replace(self, entry: MemoryEntry) -> None: ...
     def delete(self, scope: Scope, entry_id: str) -> bool: ...
     def delete_scope(self, scope: Scope) -> int: ...
@@ -40,9 +41,22 @@ class InMemoryStore:
             rows = list(self._rows.get((scope.tenant_id, scope.user_id), {}).values())
         return [e for e in rows if (e.tenant_id, e.user_id) == (scope.tenant_id, scope.user_id)]
 
-    def count_tenant(self, tenant_id):
+    def count_tenant(self, tenant_id, now):
+        """Live (unexpired) rows only: expired data never counts against a cap."""
         with self._lock:
-            return sum(len(v) for (t, _), v in self._rows.items() if t == tenant_id)
+            return sum(1 for (t, _), v in self._rows.items() if t == tenant_id
+                       for e in v.values() if e.expires_at > now)
+
+    def delete_expired(self, tenant_id, now):
+        """Hard-delete expired rows of one tenant (retention is real deletion, not a read filter)."""
+        n = 0
+        with self._lock:
+            for (t, _), v in self._rows.items():
+                if t == tenant_id:
+                    for k in [k for k, e in v.items() if e.expires_at <= now]:
+                        del v[k]
+                        n += 1
+        return n
 
     def delete(self, scope, entry_id):
         with self._lock:

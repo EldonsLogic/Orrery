@@ -1,5 +1,6 @@
 """Exercise the engine entrypoint with a deliberately invalid local app."""
 
+import json
 from pathlib import Path, PurePosixPath
 import subprocess
 import tempfile
@@ -11,6 +12,8 @@ BASE_IMAGE = (
     "6e016c0fc3aec5b32c14ff7c2ac97523cc864748c83ce75197779b8fe5a665a8"
 )
 CONTAINER_BENCH = PurePosixPath("/", "home", "frappe", "frappe-bench")
+# INF-015: the entrypoint refuses to start without a URL-safe Redis password.
+REDIS_ENV = ["-e", "REDIS_PASSWORD=" + "p" * 32]
 
 
 class EngineEntrypointTests(unittest.TestCase):
@@ -22,7 +25,7 @@ class EngineEntrypointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="bench-invalid-app-") as empty_app:
             result = subprocess.run(
                 [
-                    "docker", "run", "--rm", "--network", "none", "--read-only",
+                    "docker", "run", "--rm", "--network", "none", "--read-only", *REDIS_ENV,
                     "--tmpfs", "/tmp:rw,mode=1777",
                     "--tmpfs", f"{CONTAINER_BENCH / 'sites'}:rw,mode=1777",
                     "--mount", f"type=bind,src={empty_app},dst={CONTAINER_BENCH / 'apps' / 'change_engine'},readonly",
@@ -54,7 +57,7 @@ class EngineEntrypointTests(unittest.TestCase):
             apps.chmod(0o666)
             subprocess.run(
                 [
-                    "docker", "run", "--rm", "--network", "none", "--read-only",
+                    "docker", "run", "--rm", "--network", "none", "--read-only", *REDIS_ENV,
                     "--tmpfs", str(CONTAINER_BENCH / "apps" / "hrms"),
                     "--mount", f"type=bind,src={sites},dst={CONTAINER_BENCH / 'sites'}",
                     "--mount", f"type=bind,src={script},dst=/tmp/bench-entrypoint.sh,readonly",
@@ -73,7 +76,7 @@ class EngineEntrypointTests(unittest.TestCase):
         script = Path(__file__).resolve().parents[1] / "entrypoint.sh"
         result = subprocess.run(
             [
-                "docker", "run", "--rm", "--network", "none", "--read-only",
+                "docker", "run", "--rm", "--network", "none", "--read-only", *REDIS_ENV,
                 "--tmpfs", "/tmp:rw,mode=1777",
                 "--tmpfs", f"{CONTAINER_BENCH / 'sites'}:rw,mode=1777",
                 "--tmpfs", str(CONTAINER_BENCH / "apps" / "hrms"),
@@ -87,6 +90,50 @@ class EngineEntrypointTests(unittest.TestCase):
             check=True,
         )
         self.assertEqual(result.stdout.strip().splitlines()[-1], str(CONTAINER_BENCH / "assets"))
+
+    def run_entrypoint(self, redis_env, *command):
+        script = Path(__file__).resolve().parents[1] / "entrypoint.sh"
+        return subprocess.run(
+            [
+                "docker", "run", "--rm", "--network", "none", "--read-only", *redis_env,
+                "--tmpfs", "/tmp:rw,mode=1777",
+                "--tmpfs", f"{CONTAINER_BENCH / 'sites'}:rw,mode=1777",
+                "--tmpfs", str(CONTAINER_BENCH / "apps" / "hrms"),
+                "--mount", f"type=bind,src={script},dst=/tmp/bench-entrypoint.sh,readonly",
+                "--entrypoint", "/bin/bash", BASE_IMAGE,
+                "/tmp/bench-entrypoint.sh", *command,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+
+    def test_missing_or_unsafe_redis_password_stops_startup(self):
+        """INF-015: no Redis password (or one that would break the URL) means no engine."""
+        for redis_env in ([], ["-e", "REDIS_PASSWORD="], ["-e", "REDIS_PASSWORD=bad@pass/word"]):
+            with self.subTest(env=redis_env[1:]):
+                result = self.run_entrypoint(redis_env, "true")
+                self.assertNotEqual(result.returncode, 0, "entrypoint started without a usable password")
+                self.assertIn("REDIS_PASSWORD", result.stderr)
+                self.assertNotIn("bad@pass/word", result.stdout + result.stderr)
+
+    def test_bench_redis_urls_carry_the_password_owner_only(self):
+        """INF-015: the bench config authenticates to both Redis services and is not world-readable."""
+        password = "inf015" + "Q" * 26
+        result = self.run_entrypoint(
+            ["-e", f"REDIS_PASSWORD={password}"], "sh", "-c",
+            f"stat -c %a {CONTAINER_BENCH / 'sites' / 'common_site_config.json'} && "
+            f"cat {CONTAINER_BENCH / 'sites' / 'common_site_config.json'}",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(password, result.stderr, "the entrypoint logged the password")
+        before_config = result.stdout[: result.stdout.index("{")]
+        self.assertEqual(before_config.strip().splitlines()[-1], "600")
+        config = json.loads(result.stdout[result.stdout.index("{"):])
+        self.assertEqual(config["redis_cache"], f"redis://:{password}@redis-cache:6379")
+        self.assertEqual(config["redis_queue"], f"redis://:{password}@redis-queue:6379")
+        self.assertEqual(config["redis_socketio"], f"redis://:{password}@redis-queue:6379")
 
 
 if __name__ == "__main__":

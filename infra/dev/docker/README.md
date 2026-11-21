@@ -15,6 +15,16 @@ The environment stands up:
 
 Compose project names scope containers and volumes. Database and Redis publish no host ports; the engine binds only to IPv4 loopback for local verification. It must not be exposed to customers or the internet (ADR-0016). The internal-only shape with no host port, and the engine's route guard, are in [HEADLESS.md](HEADLESS.md) (ERP-020).
 
+
+### Redis authentication and network (INF-015)
+Both Redis services require a password, and only engine services can reach them.
+- **Where the password comes from.** `REDIS_PASSWORD` is minted fresh for every stack by the runner that starts it (`run_real_bench_ci.py`, `isolation/run_isolation_suite.py`, `smoke_headless_engine.py`) with `secrets.token_urlsafe(32)`. For a manual bench, generate it as in Step 1. No value is committed, printed or logged; Compose passes it to the containers by name from the environment.
+- **Where it lives.** In the Redis and engine containers' environment (like the database root password), in an owner-only `/tmp/redis.conf` inside each Redis container (`requirepass`, `protected-mode yes`; never on a command line), and in the bench's `sites/common_site_config.json` (mode 600) as `redis://:<password>@redis-cache:6379` for `redis_cache` and `redis://:<password>@redis-queue:6379` for `redis_queue` and `redis_socketio`.
+- **Fail closed.** An empty or non-URL-safe password stops the Redis containers and the engine entrypoint, so no stack runs with open Redis. Restarting a project with a new password recreates all its services together.
+- **Network.** Redis is attached only to the internal `redis_internal` network, shared with the engine (and the isolation suite's worker). MariaDB, the gateway-facing `engine_internal` network and any other container cannot reach it, and Redis publishes no host port.
+- **Checks.** `verify_dev_bench.py` proves each Redis answers with the password and refuses an unauthenticated PING; `tests/test_inf_015_redis_auth.py` checks every Compose stack offline. To use `redis-cli` by hand: `docker compose ... exec redis-cache sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping'`.
+- **Residual risk.** Code running inside the engine or a worker holds the password and can still read every tenant's keys (key-prefix isolation only). Production Redis is INF-005's scope.
+
 ---
 
 ## 2. Pinned Version Set
@@ -48,7 +58,8 @@ read -rsp 'Local database root password: ' DB_ROOT_PASSWORD
 printf '\n'
 read -rsp 'Local site administrator password: ' ADMIN_PASSWORD
 printf '\n'
-export DB_ROOT_PASSWORD ADMIN_PASSWORD
+REDIS_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export DB_ROOT_PASSWORD ADMIN_PASSWORD REDIS_PASSWORD
 ```
 Keep credentials in a local secret store outside the repository. Never use real customer or pilot data.
 

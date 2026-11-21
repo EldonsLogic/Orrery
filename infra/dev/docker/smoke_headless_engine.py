@@ -95,7 +95,8 @@ def main():
     keep = parser.parse_args().keep
     env = os.environ.copy()
     env.update(DB_ROOT_PASSWORD=secrets.token_urlsafe(24), ADMIN_PASSWORD=secrets.token_urlsafe(24),
-               SITE_NAME=SITE, ENGINE_INTERNAL_TOKEN=secrets.token_urlsafe(48))
+               SITE_NAME=SITE, ENGINE_INTERNAL_TOKEN=secrets.token_urlsafe(48),
+               REDIS_PASSWORD=secrets.token_urlsafe(32))  # INF-015: per-run Redis password
     failures = []
 
     def check(name, condition):

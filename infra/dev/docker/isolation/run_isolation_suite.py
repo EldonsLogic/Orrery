@@ -97,7 +97,9 @@ def main() -> int:
     os.chmod(workdir, 0o700)
     env = dict(os.environ, COMPOSE_PROJECT_NAME=args.project, ENGINE_PORT=str(args.port),
                DB_ROOT_PASSWORD=os.environ.get("DB_ROOT_PASSWORD") or secrets.token_urlsafe(24),
-               ADMIN_PASSWORD=secrets.token_urlsafe(24))
+               ADMIN_PASSWORD=secrets.token_urlsafe(24),
+               # INF-015: per-run Redis password; containers get it by name from this environment.
+               REDIS_PASSWORD=secrets.token_urlsafe(32))
     rc = 1
     try:
         if args.reuse:

@@ -18,13 +18,38 @@ services:
       timeout: 5s
       retries: 5
 
+  # INF-015: Redis requires the per-run REDIS_PASSWORD (minted by the runners, never committed) and
+  # sits only on the internal redis_internal network shared with engine services. The password goes
+  # into an owner-only config file, not argv; an empty or non-URL-safe value stops the container.
   redis-cache:
     image: redis:7.2.7-alpine@sha256:ddd16a9b1575a774c7e62956be8daa1de5b32cfb5c25b7a216aefed8e0919f9b
     restart: unless-stopped
+    networks: [redis_internal]
+    environment: &redis_env
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    command: &redis_command
+      - sh
+      - -ec
+      - >-
+        test -n "$$REDIS_PASSWORD" || { echo "REDIS_PASSWORD is required (INF-015)" >&2; exit 1; };
+        case "$$REDIS_PASSWORD" in *[!A-Za-z0-9_-]*) echo "REDIS_PASSWORD must be URL-safe" >&2; exit 1;; esac;
+        umask 077;
+        printf 'requirepass %s\nprotected-mode yes\n' "$$REDIS_PASSWORD" > /tmp/redis.conf;
+        chown redis:redis /tmp/redis.conf;
+        exec docker-entrypoint.sh redis-server /tmp/redis.conf
+    healthcheck: &redis_healthcheck
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -qx PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis-queue:
     image: redis:7.2.7-alpine@sha256:ddd16a9b1575a774c7e62956be8daa1de5b32cfb5c25b7a216aefed8e0919f9b
     restart: unless-stopped
+    networks: [redis_internal]
+    environment: *redis_env
+    command: *redis_command
+    healthcheck: *redis_healthcheck
 
   engine:
     build:
@@ -35,14 +60,15 @@ services:
       mariadb:
         condition: service_healthy
       redis-cache:
-        condition: service_started
+        condition: service_healthy
       redis-queue:
-        condition: service_started
+        condition: service_healthy
     environment:
       - DB_HOST=mariadb
       - DB_PORT=3306
       - REDIS_CACHE_HOST=redis-cache
       - REDIS_QUEUE_HOST=redis-queue
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD in the environment}
       - ENGINE_INTERNAL_TOKEN=${ENGINE_INTERNAL_TOKEN:-}
@@ -54,8 +80,14 @@ services:
       - logs_data:/home/frappe/frappe-bench/logs
     ports:
       - "127.0.0.1:${ENGINE_PORT:-8000}:8000"
+    networks: [default, redis_internal]
 
 volumes:
   mariadb_data:
   sites_data:
   logs_data:
+
+networks:
+  # internal: true means no route to the host or the internet, and no published ports.
+  redis_internal:
+    internal: true

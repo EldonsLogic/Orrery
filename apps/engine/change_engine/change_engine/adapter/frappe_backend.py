@@ -641,9 +641,15 @@ class FrappeRuntimeBackend:
                             dep.clear_doctype_cache(str(rep_dt))
 
                 elif kind == "role.upsert":
-                    defn = params.get("definition") or {}
+                    defn = params.get("definition")
                     # The gated subject, the pointer and the definition must name one role (ADR-0051).
-                    if not (segs[:1] == ["roles"] and len(segs) == 2 and subject.get("id") == segs[1] == defn.get("id")):
+                    if not (
+                        isinstance(defn, dict)
+                        and isinstance(subject, dict)
+                        and segs[:1] == ["roles"]
+                        and len(segs) == 2
+                        and subject.get("id") == segs[1] == defn.get("id")
+                    ):
                         raise self._refuse("definition_conflict")
                     self._upsert_role(f, defn["id"], defn)
 
@@ -951,7 +957,7 @@ class FrappeRuntimeBackend:
             if stored and str(stored) != name:
                 raise self._refuse("protected_subject")
         # Every transition names its roles (the Blueprint requires at least one); none falls back to a default.
-        if not all(isinstance(t.get("allowedRoles"), list) and t["allowedRoles"] for t in transitions):
+        if not all(isinstance(t, dict) and isinstance(t.get("allowedRoles"), list) and t["allowedRoles"] for t in transitions):
             raise self._refuse("unsupported_value_type")
         role = {r: self._managed_role(f, r)[0] for t in transitions for r in t["allowedRoles"]}
 
@@ -1277,10 +1283,19 @@ class FrappeRuntimeBackend:
         reads_at = {(r["role"], r["permlevel"]) for r in managed if r["read"]}
         hidden = set(grant["hidden"]) if grant else set()
         # Only fields the adapter placed may sit on a level it owns: a custom_ field it moved with a level setter.
-        # Any other field there is not ours and is never adopted or moved; the step is refused (fail closed).
-        placed = {str(r.get("field_name")) for r in f.get_all(
-            "Property Setter", filters={"doc_type": doctype, "property": "permlevel"}, fields=["field_name"])}
-        if any(lvl in ours and not (fn.startswith("custom_") and fn in placed) for fn, lvl in level_of.items()):
+        # Any other field (or foreign role rule) on an owned level is drift and is never adopted or moved (fail closed).
+        if any(lvl in ours for lvl in foreign):
+            raise self._refuse("protected_subject")
+        placed = {
+            (str(r.get("field_name")), int(str(r.get("value"))))
+            for r in f.get_all(
+                "Property Setter",
+                filters={"doc_type": doctype, "property": "permlevel"},
+                fields=["field_name", "value"],
+            )
+            if r.get("value") is not None and str(r.get("value")).isdigit()
+        }
+        if any(lvl in ours and not (fn.startswith("custom_") and (fn, lvl) in placed) for fn, lvl in level_of.items()):
             raise self._refuse("protected_subject")
         layout = {fn for fn, lvl in level_of.items() if lvl in ours} | {fn for fn in hidden if level_of[fn] in ours | {0}}
         reserved = {lvl for fn, lvl in level_of.items() if lvl >= 1 and fn not in layout} | {lvl for lvl in foreign if lvl >= 1}

@@ -29,7 +29,7 @@ SUBMITTABLE = frozenset({"Sales Order", "Sales Invoice", "Delivery Note", "Purch
 ENGINE_DOCTYPES = {
     "Server Script": "Core", "User Permission": "Core", "Property Setter": "Custom", "Custom Field": "Custom",
     "Role Profile": "Core", "Has Role": "Core", "Webhook": "Integrations", "File": "Core", "Data Import": "Core",
-    "Payment Entry": "Accounts", "GL Entry": "Accounts",
+    "Payment Entry": "Accounts", "Session": "Core", "GL Entry": "Accounts",
 }
 
 

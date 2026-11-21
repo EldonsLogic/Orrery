@@ -149,7 +149,9 @@ def grant_plan_reason(definition: Any, blueprint_entities: set[str]) -> str | No
     An entity is allowed when it is in the reviewed mapping, or when it is an unmapped entity of this Blueprint
     (the adapter creates its document type). The apply stage checks again on the engine (FrappeRuntimeBackend)."""
     perms = definition.get("permissions") if isinstance(definition, dict) else None
-    for p in perms if isinstance(perms, list) else []:
+    if perms is not None and not isinstance(perms, list):
+        return "unsupported_value_type"
+    for p in perms or []:
         entity = p.get("entity") if isinstance(p, dict) else None
         if not isinstance(entity, str):
             return "unsupported_value_type"

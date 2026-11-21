@@ -487,7 +487,8 @@ class TestSec022GrantAllowlist(_Base):
 
         widget = {"id": "widget", "labels": {"en": "Widget", "ar": "Widget"}, "fields": []}
         steps = [st(1, "entity.add", "widget", widget, "entities", "data_shape")]
-        for i, entity in enumerate(("customer", "widget", "server_script", "general_ledger", "payment_entry"), start=2):
+        plan_targets = ("customer", "widget", *self.REFUSED)
+        for i, entity in enumerate(plan_targets, start=2):
             steps.append(st(i, "role.upsert", f"r{i}", role(f"r{i}", [grant(entity, "read")]), "roles", "access"))
         counts = dict.fromkeys(("cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"), 0)
         counts.update(data_shape=1, access=len(steps) - 1)
@@ -510,8 +511,8 @@ class TestSec022GrantAllowlist(_Base):
         got = {s["seq"]: (s["disposition"], s.get("reasonCode")) for s in res["result"]["steps"]}
         self.assertEqual(got[2], ("gated", "protected_subject"))  # reviewed mapping: role.upsert stays gated
         self.assertEqual(got[3], ("gated", "protected_subject"))  # an entity this Blueprint adds
-        for seq in (4, 5, 6):
-            self.assertEqual(got[seq], ("blocked", "protected_subject"), seq)
+        for seq, entity in enumerate(self.REFUSED, start=4):
+            self.assertEqual(got[seq], ("blocked", "protected_subject"), (seq, entity))
         self.assertEqual(res["result"]["verdict"], "rejected")
 
 

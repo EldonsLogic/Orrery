@@ -32,18 +32,18 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0023-one-github-account-per-founder.md](ADR-0023-one-github-account-per-founder.md) | One personal GitHub account per founder | Accepted |
 | [ADR-0024-four-phase-1-markets.md](ADR-0024-four-phase-1-markets.md) | Four phase-1 markets, no fixed launch order | Accepted |
 | [ADR-0025-independent-founder-lanes-in-the-plan.md](ADR-0025-independent-founder-lanes-in-the-plan.md) | Independent founder lanes in the plan | Accepted |
-| [ADR-0026-phased-delivery-and-market-pack-track.md](ADR-0026-phased-delivery-and-market-pack-track.md) | Phased delivery, phase exits and the market-pack track | Proposed |
+| [ADR-0026-phased-delivery-and-market-pack-track.md](ADR-0026-phased-delivery-and-market-pack-track.md) | Phased delivery, phase exits and the market-pack track | Accepted |
 | [ADR-0027-human-floor-action-policy-and-agent-authority.md](ADR-0027-human-floor-action-policy-and-agent-authority.md) | Human floor, action-policy table and agent authority | Proposed |
-| [ADR-0028-recoverable-journaled-change-apply.md](ADR-0028-recoverable-journaled-change-apply.md) | Recoverable, journaled change apply (not universal rollback) | Proposed |
+| [ADR-0028-recoverable-journaled-change-apply.md](ADR-0028-recoverable-journaled-change-apply.md) | Recoverable, journaled change apply (not universal rollback) | Accepted |
 | [ADR-0029-engine-disclosure-wording-and-saas-only.md](ADR-0029-engine-disclosure-wording-and-saas-only.md) | Engine disclosure wording and SaaS-only delivery | Proposed |
 | [ADR-0030-blueprint-to-engine-mapping-contract.md](ADR-0030-blueprint-to-engine-mapping-contract.md) | Blueprint-to-engine mapping contract | Proposed |
 | [ADR-0031-rigid-zone-code-authorship.md](ADR-0031-rigid-zone-code-authorship.md) | Who may write rigid-zone code, and what it must pass | Accepted |
 | [ADR-0032-approval-is-a-recorded-review.md](ADR-0032-approval-is-a-recorded-review.md) | Approval is a recorded GitHub review | Accepted |
 | [ADR-0033-v1-valuation-rounding-and-arabic-review.md](ADR-0033-v1-valuation-rounding-and-arabic-review.md) | v1 stock valuation, rounding and Arabic review defaults | Accepted |
-| [ADR-0034-reviewed-level-needs-a-named-reviewer.md](ADR-0034-reviewed-level-needs-a-named-reviewer.md) | A reviewed component names its reviewer | Proposed |
+| [ADR-0034-reviewed-level-needs-a-named-reviewer.md](ADR-0034-reviewed-level-needs-a-named-reviewer.md) | A reviewed component names its reviewer | Accepted |
 | [ADR-0035-risk-tiered-review.md](ADR-0035-risk-tiered-review.md) | Risk-tiered review and fewer rounds | Accepted |
-| [ADR-0036-tool-api-domain-errors.md](ADR-0036-tool-api-domain-errors.md) | Tool API domain error codes and catalog | Proposed |
-| [ADR-0037-manifest-risk-class-and-transition-kind.md](ADR-0037-manifest-risk-class-and-transition-kind.md) | Manifest-declared entity risk class and explicit transition kind | Proposed |
+| [ADR-0036-tool-api-domain-errors.md](ADR-0036-tool-api-domain-errors.md) | Tool API domain error codes and catalog | Accepted |
+| [ADR-0037-manifest-risk-class-and-transition-kind.md](ADR-0037-manifest-risk-class-and-transition-kind.md) | Manifest-declared entity risk class and explicit transition kind | Accepted |
 | [ADR-0038-secrets-management.md](ADR-0038-secrets-management.md) | Secrets management: one store interface, signing keys stay in the KMS, nothing secret reaches a log, the repo or a model | Proposed |
 | [ADR-0039-role-and-permission-mapping.md](ADR-0039-role-and-permission-mapping.md) | Blueprint roles map to adapter-owned engine roles, field levels and record scopes by a fixed table; anything unmapped or unresolved is denied | Proposed |
 | [ADR-0040-tenant-provisioning-service.md](ADR-0040-tenant-provisioning-service.md) | Tenant provisioning is a durable, resumable step machine that observes before it acts and never duplicates a site or a secret | Proposed |
@@ -56,3 +56,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0049-human-review-queue.md](ADR-0049-human-review-queue.md) | Human review queue and the team_reviewed gate evidence | Proposed |
 | [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |
 | [ADR-0051-adapter-role-and-state-namespacing.md](ADR-0051-adapter-role-and-state-namespacing.md) | Adapter-owned engine roles and workflow states carry a reserved prefix, collisions are refused, role.upsert writes the mapped grants | Proposed |
+| [ADR-0052-isolated-browser-runner-placement.md](ADR-0052-isolated-browser-runner-placement.md) | Isolated browser runner placement (Tier 5 connector) | Proposed |

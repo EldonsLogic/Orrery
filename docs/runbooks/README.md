@@ -24,3 +24,4 @@ Empty until gate G1; each runbook is written when the process first exists, test
 | Component certification and release | G2 | Component factory |
 | Model/provider switch or outage | G2 | Gateway fallback |
 | Brand asset incident (malicious upload) | G2 | From [../security/brand-asset-upload-security.md](../security/brand-asset-upload-security.md) |
+| Release checklist (tenant environment) | G1 | [release-checklist.md](release-checklist.md), pre-release, release, post-release |

@@ -411,6 +411,10 @@ def test_approval_expiry_is_rechecked_at_durable_admission(policy, setup):
 
 def test_business_write_uses_real_backend_impersonation(policy, setup):
     request, context, path = setup
+    request = replace(request, tenant_id="t_tenant_a")
+    approval = replace(context.approvals[0], tenant_id=request.tenant_id,
+                       payload_hash=policy.payload_hash(request, context.submitter.id))
+    context = replace(context, tenant_id=request.tenant_id, approvals=(approval,))
     runtime = SimulatedFrappeRuntime()
     tenant = runtime.ensure_site("alpha")
     user = shadow_user_email(context.submitter.id)
@@ -427,7 +431,7 @@ def test_business_write_uses_real_backend_impersonation(policy, setup):
 
     adapter = ChangeEngineAdapter(frappe_backend=backend, environment="test", action_policy=guard,
                                   action_handlers={request.action_id: post},
-                                  resolve_session_tenant=lambda _: "tenant-a")
+                                  resolve_session_tenant=lambda _: request.tenant_id)
     assert adapter.execute_action("trusted-session", request) == "posted"
     assert seen == [("alpha", user, "40.00")]
     assert runtime.session.user == "Administrator"

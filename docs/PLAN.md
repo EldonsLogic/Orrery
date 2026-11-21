@@ -131,7 +131,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-017 | Factory: AI drafts component code and tests from a request | Blueprint | G2 | BPL-015,PLT-009 | eldon | todo |
 | BPL-018 | Simulator: replay a month of the owner's data on the compiled tenant | Blueprint | G2 | BPL-007,DSC-010 | eldon | done |
 | BPL-019 | Simulation report: expected versus actual, anomalies, owner sign-off view | Blueprint | G2 | BPL-018 | eldon | done |
-| BPL-020 | Build state machine draft to live, with the human gate | Blueprint | G2 | BPL-007,PLT-013 | eldon | todo |
+| BPL-020 | Build state machine draft to live, with the human gate | Blueprint | G2 | BPL-007,PLT-013 | eldon | done |
 | BPL-021 | Blueprint versioning and schema migration | Blueprint | G2 | BPL-006 | eldon | done |
 | BPL-022 | Reuse metrics and Platform Autonomy Rate computation | Blueprint | G2 | BPL-010,GOV-016 | eldon | done |
 | BPL-023 | Exceptions register tooling | Blueprint | G2 | GOV-017 | eldon | done |

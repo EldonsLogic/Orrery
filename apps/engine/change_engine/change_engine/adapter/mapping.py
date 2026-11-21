@@ -88,6 +88,35 @@ def engine_state_name(state_id: Any) -> str:
     return _managed_name(state_id)
 
 
+# BPL-032 / ADR-0039 section 2 as narrowed by ADR-0051: the flags of an engine permission rule. The adapter sets
+# each one explicitly; report, print, share, import, email and set_user_permissions are always 0.
+RULE_FLAGS = ("read", "write", "create", "delete", "submit", "cancel", "amend", "report", "export", "import", "share",
+              "print", "email", "set_user_permissions")
+
+
+def rule_flags(actions: Any, *, masked: bool, submittable: bool) -> dict[str, int]:
+    """Level-0 rule flags for one Blueprint grant; empty when the grant gives nothing (fail closed, never widened).
+
+    read needs to be granted, else nothing is. create and write are withheld when the grant masks fields (RM-018,
+    until the bench denied cases pass). The engine's own dependencies are honoured by dropping, never adding:
+    submit needs a submittable type and write, cancel needs submit, amend needs create and cancel."""
+    acts = {a for a in actions if isinstance(a, str)} if isinstance(actions, list) else set()
+    if "read" not in acts:
+        return {}
+    on = {"read"} | (acts & {"delete", "export"})
+    if not masked:
+        on |= acts & {"create"}
+        if "update" in acts:
+            on.add("write")
+    if submittable and "write" in on and "submit" in acts:
+        on.add("submit")
+        if "cancel" in acts:
+            on.add("cancel")
+            if "create" in on:
+                on.add("amend")
+    return {flag: int(flag in on) for flag in RULE_FLAGS}
+
+
 def entity_to_doctype(entity_id: str) -> str:
     if entity_id in ENTITY_TO_DOCTYPE:
         return ENTITY_TO_DOCTYPE[entity_id]

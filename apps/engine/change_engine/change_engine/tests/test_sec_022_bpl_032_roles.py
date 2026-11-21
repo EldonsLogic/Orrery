@@ -120,6 +120,8 @@ class TestSec022RoleNamespacing(_Base):
         roles = self.roles()
         self.assertEqual(roles["bp-auditor"]["disabled"], 0)
         self.assertEqual(roles["Auditor"], before)
+        self.assertEqual(self.granted("Auditor", "Customer"), {"read"}, "the built-in keeps exactly its standard rule")
+        self.assertEqual(self.granted("bp-auditor", "Customer"), {"read"})
 
     def test_administrator_all_guest_and_system_manager_never_resolve_to_builtins(self) -> None:
         before = {k: v for k, v in self.roles().items() if k in BUILTIN_ROLES}
@@ -253,6 +255,172 @@ class TestWorkflowEngineStateCollisionGate(unittest.TestCase):
         out = execute_workflow_deployment(db, "dep2", TENANT, "Sales Order", self._wf("Draft", "Approved"), user_roles=["System Manager"])
         self.assertNotEqual(out.get("disposition"), "WORKFLOW_STATE_NAME_COLLISION")
         db.acquire_advisory_lock.assert_called_once()
+
+
+class TestBpl032RoleGrants(_Base):
+    def test_action_table_and_engine_dependencies(self) -> None:
+        self.upsert(role("owner", [grant("sales_order", "read", "create", "update", "submit", "cancel", "approve", "export", "delete")]))
+        self.assertEqual(self.granted("bp-owner", "Sales Order"),
+                         {"read", "create", "write", "submit", "cancel", "amend", "export", "delete"})
+
+    def test_flags_the_engine_cannot_hold_are_dropped_not_widened(self) -> None:
+        self.upsert(role("clerk", [
+            grant("sales_order", "read", "update", "cancel"),   # cancel needs submit
+            grant("sales_invoice", "read", "submit"),           # submit needs write
+            grant("customer", "read", "update", "submit"),      # Customer is not submittable
+            grant("item", "create", "update"),                  # no read: nothing at all
+        ]))
+        self.assertEqual(self.granted("bp-clerk", "Sales Order"), {"read", "write"})
+        self.assertEqual(self.granted("bp-clerk", "Sales Invoice"), {"read"})
+        self.assertEqual(self.granted("bp-clerk", "Customer"), {"read", "write"})
+        self.assertEqual(self.rules("bp-clerk", "Item"), {})
+
+    def test_never_granted_flags_stay_off(self) -> None:
+        self.upsert(role("owner", [grant("customer", "read", "create", "update", "delete", "export")]))
+        row = self.rules("bp-owner", "Customer")[("bp-owner", "Customer", 0)]
+        for flag in ("report", "print", "share", "import", "email", "set_user_permissions", "submit", "cancel", "amend"):
+            self.assertEqual(row[flag], 0, flag)
+
+    def test_own_records_scope_sets_owner_only(self) -> None:
+        self.upsert(role("sales_rep", [grant("sales_order", "read", "create", "update")], scope="own_records"))
+        self.assertEqual(self.rules("bp-sales_rep")[("bp-sales_rep", "Sales Order", 0)]["if_owner"], 1)
+
+    def test_location_scopes_are_withheld_until_record_scoping_exists(self) -> None:
+        for scope in ("branch", "warehouse", "department"):
+            self.upsert(role(f"r_{scope}", [grant("sales_order", "read", "update")], scope=scope))
+            self.assertEqual(self.rules(engine_role_name(f"r_{scope}")), {}, scope)
+            self.assertEqual(self.roles()[engine_role_name(f"r_{scope}")]["disabled"], 0)
+
+    def test_assigned_records_and_protected_or_missing_entities_are_refused(self) -> None:
+        self.refused(lambda: self.upsert(role("r_assigned", [grant("sales_order", "read")], scope="assigned_records")),
+                     reason="unsupported_value_type")
+        self.refused(lambda: self.upsert(role("r_ledger", [grant("general_ledger", "read")])))
+        self.refused(lambda: self.upsert(role("r_ghost", [grant("no_such_thing", "read")])), reason="subject_missing")
+        self.assertNotIn("bp-r_assigned", self.roles())
+
+    def test_masked_grant_withholds_create_and_write(self) -> None:
+        self.add_entity("widget", "cost", "note")
+        self.upsert(role("clerk", [grant("widget", "read", "create", "update", "delete", read_only=("note",))]))
+        self.assertEqual(self.granted("bp-clerk", "Widget"), {"read", "delete"})
+
+    def test_unresolved_hidden_field_withholds_the_whole_entity_grant(self) -> None:
+        self.upsert(role("sales_rep", [grant("customer", "read", hidden=("credit_limit",)), grant("sales_order", "read")]))
+        self.assertEqual(self.rules("bp-sales_rep", "Customer"), {})
+        self.assertEqual(self.granted("bp-sales_rep", "Sales Order"), {"read"})
+
+    def test_standard_rules_of_builtin_roles_are_kept(self) -> None:
+        self.upsert(role("owner", [grant("customer", "read", "update")]))
+        for perm in STANDARD_PERMS:
+            if perm["parent"] == "Customer":
+                want = {k for k in FLAGS if perm.get(k)}
+                self.assertEqual(self.granted(perm["role"], "Customer"), want, perm["role"])
+
+    def test_upsert_is_idempotent_and_dropping_an_entity_clears_its_rules(self) -> None:
+        defn = role("owner", [grant("customer", "read", "update"), grant("item", "read")])
+        self.upsert(defn)
+        once = self.rules()
+        self.upsert(defn)
+        self.assertEqual(self.rules(), once)
+        self.upsert(role("owner", [grant("customer", "read", "update")]))
+        self.assertEqual(self.granted("bp-owner", "Item"), set())
+        self.assertEqual(self.granted("bp-owner", "Customer"), {"read", "write"})
+
+    def test_role_disable_removes_every_rule_and_reupsert_restores(self) -> None:
+        defn = role("owner", [grant("customer", "read", "update")])
+        self.upsert(defn)
+        self.run_step(step("role.disable", "owner"))
+        self.assertTrue(all(not any(v for k, v in row.items() if k != "if_owner") for row in self.rules("bp-owner").values()))
+        self.upsert(defn)
+        self.assertEqual(self.roles()["bp-owner"]["disabled"], 0)
+        self.assertEqual(self.granted("bp-owner", "Customer"), {"read", "write"})
+
+
+class TestBpl032FieldLevels(_Base):
+    ROLES = (
+        role("full", [grant("widget", "read", "update")]),
+        role("viewer", [grant("widget", "read")]),
+        role("hider", [grant("widget", "read", hidden=("cost",))]),
+        role("hider2", [grant("widget", "read", hidden=("cost", "note"))]),
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.add_entity("widget", "cost", "note", "title_text")
+
+    def visibility(self) -> dict[str, dict[str, set[str]]]:
+        """Per role: which widget fields it can read and write, from the rules and field levels alone."""
+        out: dict[str, dict[str, set[str]]] = {}
+        for rid in ("full", "viewer", "hider", "hider2"):
+            name = engine_role_name(rid)
+            rules = self.rules(name, "Widget")
+            seen = {"read": set(), "write": set()}
+            for fn in ("custom_cost", "custom_note", "custom_title_text"):
+                row = rules.get((name, "Widget", self.level("Widget", fn)), {})
+                for flag in seen:
+                    if row.get(flag) and rules.get((name, "Widget", 0), {}).get(flag):
+                        seen[flag].add(fn)
+            out[rid] = seen
+        return out
+
+    def expected_visibility(self) -> dict[str, dict[str, set[str]]]:
+        every = {"custom_cost", "custom_note", "custom_title_text"}
+        return {
+            "full": {"read": every, "write": every},
+            "viewer": {"read": every, "write": set()},
+            "hider": {"read": every - {"custom_cost"}, "write": set()},
+            "hider2": {"read": {"custom_title_text"}, "write": set()},
+        }
+
+    def test_hidden_fields_get_their_own_levels(self) -> None:
+        for defn in self.ROLES:
+            self.upsert(defn)
+        self.assertEqual(self.visibility(), self.expected_visibility())
+        self.assertEqual(self.level("Widget", "custom_title_text"), 0)
+        levels = {self.level("Widget", "custom_cost"), self.level("Widget", "custom_note")}
+        self.assertEqual(len(levels), 2)
+        self.assertTrue(levels <= set(range(1, 10)))
+
+    def test_layout_does_not_depend_on_role_order(self) -> None:
+        for defn in reversed(self.ROLES):
+            self.upsert(defn)
+        self.assertEqual(self.visibility(), self.expected_visibility())
+
+    def test_reupsert_is_a_noop(self) -> None:
+        for defn in self.ROLES:
+            self.upsert(defn)
+        rules, setters = self.rules(), self.engine.rows("Property Setter")
+        for defn in self.ROLES:
+            self.upsert(defn)
+        self.assertEqual(self.rules(), rules)
+        self.assertEqual(self.engine.rows("Property Setter"), setters)
+
+    def test_unhiding_returns_fields_to_level_zero(self) -> None:
+        for defn in self.ROLES:
+            self.upsert(defn)
+        self.upsert(role("hider", [grant("widget", "read")]))
+        self.upsert(role("hider2", [grant("widget", "read")]))
+        self.assertEqual(self.level("Widget", "custom_cost"), 0)
+        self.assertEqual(self.level("Widget", "custom_note"), 0)
+        self.assertEqual(self.visibility()["hider2"]["read"], {"custom_cost", "custom_note", "custom_title_text"})
+
+    def test_a_level_held_by_a_field_the_adapter_did_not_place_is_never_granted(self) -> None:
+        self.engine.add_field("Widget", "secret_rate", permlevel=1)
+        for defn in self.ROLES:
+            self.upsert(defn)
+        self.assertNotIn(1, {lvl for (_r, _d, lvl) in self.rules(doctype="Widget") if _r.startswith(ENGINE_NAME_PREFIX)})
+        self.assertEqual(self.level("Widget", "secret_rate"), 1)
+        self.assertEqual(self.visibility(), self.expected_visibility())
+
+    def test_more_than_nine_signatures_is_refused_without_a_write(self) -> None:
+        fields = [f"f{i}" for i in range(10)]
+        self.add_entity("gadget", *fields)
+        for i in range(9):
+            self.upsert(role(f"r{i}", [grant("gadget", "read", hidden=(fields[i],))]))
+        rules, setters = self.rules(), self.engine.rows("Property Setter")
+        self.refused(lambda: self.upsert(role("r9", [grant("gadget", "read", hidden=("f9",))])),
+                     code="limit_exceeded", reason=None)
+        self.assertEqual(self.rules(), rules)
+        self.assertEqual(self.engine.rows("Property Setter"), setters)
 
 
 if __name__ == "__main__":

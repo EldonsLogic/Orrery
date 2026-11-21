@@ -26,6 +26,7 @@ from change_engine.adapter import ADAPTER_ID, ChangeEngineAdapter, FrappeBackend
 from change_engine.adapter import contracts_support as cs
 from change_engine.adapter.mapping import (
     BLUEPRINT_TO_FRAPPE_FIELDTYPE,
+    ENGINE_NAME_PREFIX,
     _sanitize_custom_fieldname,
     engine_role_name,
     engine_state_name,
@@ -41,6 +42,9 @@ SITES_PATH = os.path.expanduser(os.environ.get("BPL027_SITES_PATH", "~/frappe-be
 TENANT = "t_bpl027"
 # Blueprint permission action -> engine permission flag.
 ACTION_FLAG = {"read": "read", "create": "create", "update": "write", "submit": "submit", "cancel": "cancel", "delete": "delete"}
+# Engine permission flags on a rule (ADR-0039 section 2, ADR-0051).
+RULE_FLAGS = ("read", "write", "create", "delete", "submit", "cancel", "amend", "report", "export", "import", "share",
+              "print", "email", "set_user_permissions")
 # Tables whose row counts must not move on a no-op re-apply.
 FINGERPRINT_TABLES = ("Role", "Workflow", "Workflow Document State", "Workflow Transition", "Report", "Custom Field",
                       "Property Setter", "DocType", "Warehouse", "Custom DocPerm")
@@ -198,6 +202,64 @@ def name_clashes(f, exp: dict) -> list[str]:
     return clashes
 
 
+def expected_grants(f, bp: dict) -> dict:
+    """ADR-0051 grant table, written independently of the adapter: {(role, doctype): {"flags", "if_owner", "hidden"}}.
+
+    Fail closed: location scopes are withheld until record scoping exists; a grant without read, or hiding a field
+    the engine does not hold, is withheld; a grant that masks fields gets no create or write (ADR-0039 RM-018);
+    submit needs a submittable type and write, cancel needs submit, amend needs create and cancel."""
+    out = {}
+    for r in bp["roles"]:
+        scope = r["scope"]["type"]
+        if scope not in ("company", "own_records"):
+            continue
+        for p in r["permissions"]:
+            acts, dt = set(p["actions"]), entity_to_doctype(p["entity"])
+            meta = f.get_meta(dt)
+            names = {_attr(d, "fieldname") for d in meta.fields}
+            hidden = [_sanitize_custom_fieldname(h) for h in p.get("hiddenFields", [])]
+            if "read" not in acts or any(h not in names for h in hidden):
+                continue
+            masked = bool(p.get("hiddenFields") or p.get("readOnlyFields"))
+            flags = {"read"} | {"export"} & acts | {"delete"} & acts
+            if not masked:
+                flags |= {"create"} & acts | ({"write"} if "update" in acts else set())
+            if int(getattr(meta, "is_submittable", 0) or 0) and "write" in flags and "submit" in acts:
+                flags.add("submit")
+                if "cancel" in acts:
+                    flags.add("cancel")
+                    if "create" in flags:
+                        flags.add("amend")
+            out[(engine_role_name(r["id"]), dt)] = {"flags": flags, "if_owner": int(scope == "own_records"), "hidden": hidden}
+    return out
+
+
+def grant_gaps(f, bp: dict) -> dict:
+    """Compare managed permission rules on the site with expected_grants (BPL-032): missing, extra, field levels."""
+    exp = expected_grants(f, bp)
+    rules: dict = {}
+    for row in f.get_all("Custom DocPerm", fields=["*"]):
+        role = str(_attr(row, "role") or "")
+        if role.startswith(ENGINE_NAME_PREFIX):
+            on = {k for k in RULE_FLAGS if int(_attr(row, k) or 0)}
+            rules[(role, _attr(row, "parent"), int(_attr(row, "permlevel") or 0))] = (on, int(_attr(row, "if_owner") or 0))
+    act = {(r, dt): v for (r, dt, lvl), v in rules.items() if lvl == 0 and v[0]}
+    missing = sorted((r, dt, fl) for (r, dt), e in exp.items() for fl in e["flags"] - act.get((r, dt), (set(), 0))[0])
+    extra = sorted((r, dt, fl) for (r, dt), (on, _o) in act.items() for fl in on - exp.get((r, dt), {"flags": set()})["flags"])
+    missing += sorted((r, dt, "if_owner") for (r, dt), e in exp.items() if (r, dt) in act and act[(r, dt)][1] != e["if_owner"])
+    levels = []
+    for (r, dt), e in exp.items():
+        meta = f.get_meta(dt)
+        readers = [k for k in exp if k[1] == dt]
+        for fn in e["hidden"]:
+            lvl = int(_attr(meta.get_field(fn), "permlevel") or 0)
+            if lvl == 0 or "read" in rules.get((r, dt, lvl), (set(), 0))[0]:
+                levels.append((r, dt, fn, "visible"))
+            levels += [(o, dt, fn, "hidden") for (o, _d) in readers
+                       if fn not in exp[(o, _d)]["hidden"] and lvl and "read" not in rules.get((o, dt, lvl), (set(), 0))[0]]
+    return {"missing": missing, "extra": extra, "levels": sorted(set(levels))}
+
+
 def ctx() -> dict:
     return {
         "contractVersion": "0.1.2",
@@ -295,6 +357,15 @@ class TestBpl027Offline(unittest.TestCase):
         """SEC-022: the same read-back as bench test_04b, on a case-insensitive simulated engine."""
         bp, engine = self._apply_fixture_offline()
         self.assertEqual(name_clashes(engine, expected_engine_config(bp)), [])
+
+    def test_06_offline_mapped_grants_reach_the_engine(self) -> None:
+        """BPL-032: the same read-back as bench test_06, on a case-insensitive simulated engine."""
+        bp, engine = self._apply_fixture_offline()
+        self.assertEqual(grant_gaps(engine, bp), {"missing": [], "extra": [], "levels": []})
+        granted = expected_grants(engine, bp)
+        self.assertIn(("bp-owner", "Sales Order"), granted)  # the check is not vacuous
+        self.assertEqual(granted[("bp-sales_rep", "Sales Order")]["if_owner"], 1)
+        self.assertNotIn(("bp-warehouse_keeper", "Delivery Note"), granted)  # warehouse scope: withheld
 
     @staticmethod
     def _two_warehouse_artifact(target: dict) -> dict:
@@ -596,19 +667,13 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
                             if eid == ent_id and not cands & names]
         self.assertEqual(missing, [])
 
-    @unittest.expectedFailure
     def test_06_readback_role_permissions(self) -> None:
-        """KNOWN GAP (BPL-027 finding 3): role.upsert creates the role only; no Blueprint permission (actions,
-        hidden or read-only fields) reaches the engine. Needs a design and security review. Remove when fixed."""
+        """BPL-032 (was BPL-027 finding 3): every grant the ADR-0051 table derives from the Blueprint is a rule on the
+        managed role, nothing more, and hidden fields sit on levels the hiding role cannot read. Fails only on a
+        missing, extra or mis-levelled managed rule."""
         self.need("applied")
-        missing = []
         with site_db() as f:
-            for role, dt, flag in self.expected["permissions"]:
-                rows = f.get_all("Custom DocPerm", filters={"parent": dt, "role": role, flag: 1}) or f.get_all(
-                    "DocPerm", filters={"parent": dt, "role": role, flag: 1})
-                if not rows:
-                    missing.append((role, dt, flag))
-        self.assertEqual(missing, [])
+            self.assertEqual(grant_gaps(f, self.bp), {"missing": [], "extra": [], "levels": []})
 
     def test_07_reapply_is_a_noop(self) -> None:
         self.need("applied")

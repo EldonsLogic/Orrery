@@ -19,12 +19,16 @@ from typing import Any, Callable, Iterator
 
 from change_engine.adapter.mapping import (
     BLUEPRINT_TO_FRAPPE_FIELDTYPE,
+    ENGINE_NAME_PREFIX,
+    RULE_FLAGS,
     _DECIMAL_ADD_RE,
     EngineNameError,
     _sanitize_custom_fieldname,
     engine_role_name,
     engine_state_name,
     entity_to_doctype,
+    is_protected_entity,
+    rule_flags,
 )
 from change_engine.api.endpoints import FrappeDeploymentAdapter
 from change_engine.guarded_apply.property_setter_engine import (
@@ -70,6 +74,10 @@ _BP_PROP_TO_FRAPPE = {
     "/options": ("options", "Text"),
 }
 
+
+# BPL-032: highest engine permission level (levels 1..9 carry field masks, ADR-0039 item 3).
+MAX_PERMLEVEL = 9
+_ZERO_RULE = {**dict.fromkeys(RULE_FLAGS, 0), "if_owner": 0}
 
 ENGINE_ENV_VAR = "CHANGE_ENGINE_ENV"
 OFFLINE_SIMULATOR_ENVS = frozenset({"dev", "test"})
@@ -1113,7 +1121,7 @@ class FrappeRuntimeBackend:
         if hasattr(f.db, "commit"):
             f.db.commit()
 
-    # ------------------------------------------------------------------ roles (SEC-022)
+    # ------------------------------------------------------------------ roles and permission rules (SEC-022, BPL-032)
     @staticmethod
     def _refuse(reason: str) -> FrappeBackendError:
         """A step the adapter will not apply, raised before any write (plan reason code in details)."""
@@ -1142,23 +1150,180 @@ class FrappeRuntimeBackend:
         return name, int(row[1] or 0)
 
     def _upsert_role(self, f: Any, role_id: Any, defn: dict[str, Any]) -> None:
-        """Create or re-enable the managed role; the name check runs before the first write."""
+        """Create or re-enable the managed role and reconcile its rules; every check runs before the first write."""
         name, disabled = self._managed_role(f, role_id)
+        grants = self._role_grants(f, defn)
+        plans = [self._plan_rules(f, dt, name, grants.get(dt)) for dt in sorted(set(grants) | self._rule_doctypes(f, name))]
         if disabled is None:
             f.get_doc({"doctype": "Role", "role_name": name, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
         elif disabled:
             f.db.set_value("Role", name, "disabled", 0)
+        for plan in plans:
+            self._write_rules(f, plan)
         if hasattr(f.db, "commit"):
             f.db.commit()
 
     def _disable_role(self, f: Any, role_id: Any) -> None:
-        """Disable the managed role and keep its record (ADR-0039 RM-008)."""
+        """A disabled role keeps its record and holds no rules (ADR-0039 RM-008)."""
         name, disabled = self._managed_role(f, role_id)
         if disabled is None:
             return
+        for plan in [self._plan_rules(f, dt, name, None) for dt in sorted(self._rule_doctypes(f, name))]:
+            self._write_rules(f, plan)
         f.db.set_value("Role", name, "disabled", 1)
         if hasattr(f.db, "commit"):
             f.db.commit()
+
+    def _role_grants(self, f: Any, defn: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """ADR-0051 grant table: {doctype: {"flags", "hidden"}} for one Blueprint role; refuses or withholds, never widens."""
+        scope = defn.get("scope").get("type") if isinstance(defn.get("scope"), dict) else None
+        if scope == "assigned_records":
+            raise self._refuse("unsupported_value_type")
+        perms = defn.get("permissions") or []
+        if not isinstance(perms, list) or not all(isinstance(p, dict) for p in perms):
+            raise self._refuse("unsupported_value_type")
+        resolved: dict[str, dict[str, Any]] = {}
+        for p in perms:
+            entity = p.get("entity")
+            if not isinstance(entity, str):
+                raise self._refuse("unsupported_value_type")
+            if is_protected_entity(entity):
+                raise self._refuse("protected_subject")
+            doctype = entity_to_doctype(entity)
+            exists = f.db.table_exists(doctype) if hasattr(f.db, "table_exists") else f.db.exists("DocType", doctype)
+            if not _SAFE_SQL_IDENT_RE.match(doctype) or not exists:
+                raise self._refuse("subject_missing")
+            if doctype in resolved:
+                raise self._refuse("definition_conflict")
+            resolved[doctype] = p
+        if scope not in ("company", "own_records"):
+            return {}  # branch, warehouse, department: withheld until record scoping on holders exists (ADR-0051)
+        grants: dict[str, dict[str, Any]] = {}
+        for doctype, p in resolved.items():
+            meta = f.get_meta(doctype)
+            fieldnames = {getattr(d, "fieldname", None) for d in meta.fields}
+            hidden = sorted({_sanitize_custom_fieldname(str(h)) for h in p.get("hiddenFields") or []})
+            if any(h not in fieldnames for h in hidden):
+                continue  # a hidden field the engine does not hold under the adapter's name: withhold the grant
+            flags = rule_flags(
+                p.get("actions"),
+                masked=bool(p.get("hiddenFields") or p.get("readOnlyFields")),
+                submittable=bool(int(getattr(meta, "is_submittable", 0) or 0)),
+            )
+            if flags:
+                grants[doctype] = {"flags": {**flags, "if_owner": int(scope == "own_records")}, "hidden": hidden}
+        return grants
+
+    @staticmethod
+    def _rule_doctypes(f: Any, role_name: str) -> set[str]:
+        return {str(r.get("parent")) for r in f.get_all("Custom DocPerm", filters={"role": role_name}, fields=["parent"])}
+
+    @staticmethod
+    def _rule_rows(f: Any, doctype: str) -> list[dict[str, Any]]:
+        rows = []
+        for r in f.get_all("Custom DocPerm", filters={"parent": doctype}, fields=["name"]):
+            d = f.get_doc("Custom DocPerm", r.get("name"))
+            rows.append({
+                "name": r.get("name"),
+                "role": str(getattr(d, "role", "") or ""),
+                "permlevel": int(getattr(d, "permlevel", 0) or 0),
+                **{k: int(getattr(d, k, 0) or 0) for k in (*RULE_FLAGS, "if_owner")},
+            })
+        return rows
+
+    def _plan_rules(self, f: Any, doctype: str, role_name: str, grant: dict[str, Any] | None) -> dict[str, Any]:
+        """Target rules and field levels on one document type after this role's change (ADR-0039 item 3).
+
+        Other managed roles' field visibility is read back from their rules, so the result does not depend on the
+        order roles are applied in. Fields are grouped by the set of reading managed roles that hide them; each
+        group keeps the level it holds or takes the lowest free one. A level holding a field the adapter did not
+        place, or a rule of a role it does not own, is never used."""
+        rows = self._rule_rows(f, doctype)
+        foreign = [r["permlevel"] for r in rows if not r["role"].startswith(ENGINE_NAME_PREFIX)]
+        if not rows:
+            foreign = [int(r.get("permlevel") or 0) for r in f.get_all("DocPerm", filters={"parent": doctype}, fields=["permlevel"])]
+        managed = [r for r in rows if r["role"].startswith(ENGINE_NAME_PREFIX)]
+        level_of = {d.fieldname: int(getattr(d, "permlevel", 0) or 0) for d in f.get_meta(doctype).fields if getattr(d, "fieldname", None)}
+        ours = {r["permlevel"] for r in managed if r["permlevel"] >= 1}
+        reading = {r["role"]: (r["write"], r["if_owner"]) for r in managed if r["permlevel"] == 0 and r["read"] and r["role"] != role_name}
+        if grant:
+            reading[role_name] = (grant["flags"]["write"], grant["flags"]["if_owner"])
+        reads_at = {(r["role"], r["permlevel"]) for r in managed if r["read"]}
+        hidden = set(grant["hidden"]) if grant else set()
+        layout = {fn for fn, lvl in level_of.items() if lvl in ours} | {fn for fn in hidden if level_of[fn] in ours | {0}}
+        reserved = {lvl for fn, lvl in level_of.items() if lvl >= 1 and fn not in layout} | {lvl for lvl in foreign if lvl >= 1}
+        sig = {}
+        for fn in layout:
+            lvl = level_of[fn]
+            hiders = {y for y in reading if y != role_name and lvl >= 1 and (y, lvl) not in reads_at}
+            sig[fn] = tuple(sorted(hiders | ({role_name} if fn in hidden else set())))
+        level_for: dict[tuple[str, ...], int] = {}
+        groups = sorted({s for s in sig.values() if s})
+        for s in groups:
+            held = sorted({level_of[fn] for fn in layout if sig[fn] == s and level_of[fn] in ours} - set(level_for.values()))
+            if held:
+                level_for[s] = held[0]
+        for s in groups:
+            if s not in level_for:
+                free = [lvl for lvl in range(1, MAX_PERMLEVEL + 1) if lvl not in reserved and lvl not in level_for.values()]
+                if not free:
+                    raise FrappeBackendError("limit_exceeded", {"limit": "permission_levels"}, stage="execute", side_effect_free=True)
+                level_for[s] = free[0]
+        target: dict[tuple[str, int], dict[str, int]] = {}
+        if grant:
+            target[(role_name, 0)] = dict(grant["flags"])
+        for s, lvl in level_for.items():
+            for y, (write, if_owner) in reading.items():
+                read = int(y not in s)
+                target[(y, lvl)] = {**_ZERO_RULE, "read": read, "write": int(read and write), "if_owner": if_owner}
+        by_key: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        for r in managed:
+            by_key.setdefault((r["role"], r["permlevel"]), []).append(r)
+        clear = [r for key, rs in by_key.items() for i, r in enumerate(rs)
+                 if key not in target and (key[0] == role_name or key[1] >= 1) or key in target and i > 0]
+        setters = sorted((fn, level_for.get(sig[fn], 0)) for fn in layout if level_for.get(sig[fn], 0) != level_of[fn])
+        return {"doctype": doctype, "custom": bool(rows), "target": target, "rows": by_key, "clear": clear, "setters": setters}
+
+    @staticmethod
+    def _set_rule(f: Any, row: dict[str, Any], values: dict[str, int]) -> None:
+        if any(int(row.get(k) or 0) != v for k, v in values.items()):
+            doc = f.get_doc("Custom DocPerm", row["name"])
+            doc.update(values)
+            doc.save(ignore_permissions=True)
+
+    def _write_rules(self, f: Any, plan: dict[str, Any]) -> None:
+        """Apply a _plan_rules result: narrow first, then move fields, then write the target rules."""
+        doctype = plan["doctype"]
+        if not (plan["target"] or plan["clear"] or plan["setters"]):
+            return
+        if not plan["custom"]:
+            # The engine ignores standard rules once a custom rule exists, so copy them first, through its own API.
+            perms_api = getattr(f, "permissions", None)
+            if perms_api is None and getattr(f, "__name__", None) == "frappe":
+                import importlib
+
+                perms_api = importlib.import_module("frappe.permissions")
+            if perms_api is not None:
+                perms_api.setup_custom_perms(doctype)
+            else:  # a runtime without that API (the offline simulator): the same copy, row by row
+                for r in f.get_all("DocPerm", filters={"parent": doctype}, fields=["name"]):
+                    d = f.get_doc("DocPerm", r.get("name"))
+                    f.get_doc({"doctype": "Custom DocPerm", "parent": doctype, "parenttype": "DocType", "parentfield": "permissions",
+                               "role": getattr(d, "role", None), "permlevel": int(getattr(d, "permlevel", 0) or 0),
+                               **{k: int(getattr(d, k, 0) or 0) for k in (*RULE_FLAGS, "if_owner")}}).insert(ignore_permissions=True)
+        for row in plan["clear"]:
+            self._set_rule(f, row, _ZERO_RULE)
+        for fieldname, level in plan["setters"]:
+            f.make_property_setter({"doctype": doctype, "fieldname": fieldname, "property": "permlevel", "value": level, "property_type": "Int"})
+        for (role_name, level), values in sorted(plan["target"].items()):
+            existing = plan["rows"].get((role_name, level))
+            if existing:
+                self._set_rule(f, existing[0], values)
+            else:
+                f.get_doc({"doctype": "Custom DocPerm", "parent": doctype, "parenttype": "DocType", "parentfield": "permissions",
+                           "role": role_name, "permlevel": level, **values}).insert(ignore_permissions=True)
+        if hasattr(f, "clear_cache"):
+            f.clear_cache(doctype=doctype)
 
     # ------------------------------------------------------------------ shadow users
     def sync_members(

@@ -20,6 +20,8 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 ## In flight (dispatched, no result yet)
 | Plan ID | Model | Scope | Allowed paths | Branch |
 |---|---|---|---|---|
+| PLT-026 | opus-5.5 (worktree) | Fix the 9 security findings on #244 (trust by reference, post-dispatch metering, identity, idempotency, strict schema); resumed after a usage-limit stop | contracts/model-call*, services/operate/runtime/model_call_fake.py and tests, ADR-0054, PLT-026 log | plt-026-fixes (local), then pushed to plt-026-model-call-contract |
+| ERP-016 | fable-5.2 | Re-review partner #204 at 6d416c5 (bench tokens, UAE neutral invoice); resumed after a usage-limit stop | none (review text) | - |
 | - | watcher | Background script exits on any new sayegh9 comment, review or new PR | - | - |
 
 ## Results
@@ -39,6 +41,9 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - QA-014 A-12 contrast pairs (sonnet) pushed to #228: 52 pairs in light and dark, no token pair fails; control borders raised to 3:1.
 - #224: Fable re-review (1 Medium N1, 3 Low) then Opus fixes a5a3f05 pushed; discovery tests 601 passed. Awaits the partner's Tier 3 review.
 - GOV-058 PR #241: Eldon decided Q-127 option A (PLT-009, 010, 011, 021 to the partner; Eldon builds the PLT-026 model-call contract). Needs the partner's agreement; not claimed.
+- Merged: #241 GOV-058 (partner accepted option A), #240 LEG-003, #243 partner plan cleanup. PLT-026 contract PR #244 opened; Fable security review found 2 High (caller-asserted trust labels, unmetered post-dispatch refusals) and 4 Medium, fixes in flight.
+- #224: partner review Medium (same-second rollback) fixed in 00eef82 via a rollback sequence; main merged; Q-544 gates host wiring. #230 and #234 fixed per partner review; #202 M1 fix offered as a patch (lane guard blocks a cross-lane push), partner applying the same rule in his round 6.
+- Both accounts hit a 5-hour usage limit at about 14:30 UTC; the two agents above were resumed after the reset.
 - BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
 ## Files touched

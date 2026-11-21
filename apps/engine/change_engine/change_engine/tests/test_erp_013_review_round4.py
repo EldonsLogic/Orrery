@@ -225,7 +225,7 @@ def test_invisible_marks_refused_in_codes_accounts_links_and_batch_id(backend):
 def test_alm_allowed_in_names_and_embedded_tab_is_schema_error(backend):
     importer = OpeningImporter(backend)
     name = "\u061cمحمد\u061c أحمد"
-    apply(importer, batch({"Customer": [{"customer_name": name, "territory": "الرياض\u200f"}]}))
+    apply(importer, batch({"Customer": [{"customer_name": name, "territory": "الرياض"}]}))
     stored, = backend.records("tenant-a", "Synthetic Trading")
     assert stored["row"]["customer_name"] == name
     refuses(importer, batch({"Customer": [{"customer_name": "\u061c＝1+1"}]}), "IMP-FORMULA")

@@ -36,10 +36,30 @@ OPENING_LINKS = {
 }
 FORMULA = ("=", "+", "-", "@", "\t", "\r")
 SAFE_FORMAT_MARKS = frozenset({"\u200c", "\u200d", "\u200e", "\u200f", "\u061c"})
+# Unicode 15.0 Default_Ignorable_Code_Point ranges (DerivedCoreProperties.txt).
+DEFAULT_IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD),
+    (0x034F, 0x034F),
+    (0x061C, 0x061C),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180F),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x206F),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+)
 NAME_TEXT_FIELDS = frozenset({
-    "customer_name", "customer_type", "customer_group", "territory",
-    "supplier_name", "supplier_type", "supplier_group",
-    "item_name", "item_group", "warehouse_name", "account_name",
+    "customer_name", "customer_type",
+    "supplier_name", "supplier_type",
+    "item_name", "warehouse_name", "account_name",
 })
 ACCOUNT_TYPES = {"Receivable", "Payable", "Stock", "Other"}
 MAX_BYTES = 2_000_000
@@ -88,6 +108,11 @@ def bounded(value, *, depth=0, budget=None):
         fail("IMP-LIMIT")
 
 
+def _is_default_ignorable(ch: str) -> bool:
+    code = ord(ch)
+    return any(lo <= code <= hi for lo, hi in DEFAULT_IGNORABLE_RANGES)
+
+
 def text(value, *, allow_format_marks: bool = False):
     """Reject formula prefixes and disallowed control/format marks; retain exact spelling."""
     if not isinstance(value, str) or not value or not value.strip():
@@ -109,6 +134,11 @@ def text(value, *, allow_format_marks: bool = False):
             fail("IMP-SCHEMA")
         elif unicodedata.category(ch) in {"Cf", "Cc"}:
             fail("IMP-FORMULA")
+    if not allow_format_marks:
+        if (value != value.strip()
+                or any((ch.isspace() and ch != " ") or _is_default_ignorable(ch) for ch in value)
+                or unicodedata.normalize("NFKC", value) != value):
+            fail("IMP-SCHEMA")
     return value
 
 

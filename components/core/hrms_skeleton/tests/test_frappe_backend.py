@@ -1,4 +1,4 @@
-"""The engine adapters, against a fake engine module (not yet run on the real bench; Q-280).
+"""The engine adapters, against a fake engine module (not yet run on the real bench; Q-475).
 
 The fake follows the pinned engine's metadata rules, so it cannot hide a schema mismatch:
 `get_field("name")` is None (standard column, frappe v15.126.0 Meta), only declared fields exist,
@@ -17,7 +17,7 @@ from components.core.hrms_skeleton.specs import (
 )
 
 # Mandatory fields of the pinned schemas that the caller must supply (the engine defaults the rest,
-# for example `status` and `company`). UNVERIFIED against a live bench (Q-280).
+# for example `status` and `company`). UNVERIFIED against a live bench (Q-475).
 PINNED_MANDATORY = {
     "Employee": ("first_name", "gender", "date_of_birth", "date_of_joining"),
     "Salary Structure": ("name",),  # naming rule "Prompt"

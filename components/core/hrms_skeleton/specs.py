@@ -1,7 +1,7 @@
 """Declarative table of the twelve in-scope doctypes: fields, keys, roles and value rules.
 
 Field names follow the engine's HR doctypes and are UNVERIFIED against the pinned bench
-(docs/open-questions.md, Q-280). A field that is not listed here is refused, so a wrong or
+(docs/open-questions.md, Q-475). A field that is not listed here is refused, so a wrong or
 missing name fails closed rather than writing something unreviewed.
 
 No field here carries payroll maths: formulas, conditions and calculated totals are not
@@ -44,7 +44,7 @@ CALLER_IDENTITY_FIELDS = frozenset(
 
 # Platform-owned custom field that holds the applicant principal captured when a leave application
 # is filed. The engine ships no such field, and document persistence drops unknown columns, so the
-# field must be declared on the bench (a `Custom Field`, Q-280). It is protected twice: read-only at
+# field must be declared on the bench (a `Custom Field`, Q-475). It is protected twice: read-only at
 # permission level 2 (no ordinary role can edit it through the document API), and written only by
 # `Store.record_applicant_identity`, once, never from a payload. UNVERIFIED on the pinned bench.
 APPLICANT_IDENTITY_FIELD = "custom_applicant_user"

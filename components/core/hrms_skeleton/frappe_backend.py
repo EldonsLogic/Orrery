@@ -1,7 +1,7 @@
 """Adapters that run `HrmsService` inside the engine, as the calling user (ERP-010).
 
 Everything runs with the caller's own permissions: no `ignore_permissions`, no elevated user.
-UNVERIFIED: not yet run against the pinned bench (Q-280); the unit tests use a fake `frappe`.
+UNVERIFIED: not yet run against the pinned bench (Q-475); the unit tests use a fake `frappe`.
 Any failure to resolve identity, roles or permissions fails closed.
 """
 
@@ -85,7 +85,7 @@ class FrappeStore:
     @contextmanager
     def key_lock(self, doctype: str, scope: Sequence[str]) -> Iterator[None]:
         """One writer per (tenant, company, doctype, key): a process lock plus a database advisory
-        lock around the lookup and the write. UNVERIFIED on the pinned bench (Q-280).
+        lock around the lookup and the write. UNVERIFIED on the pinned bench (Q-475).
 
         It never commits, rolls back or resets the caller's transaction: commit and rollback belong
         to the caller, even when this component writes nothing. So the advisory lock alone does not
@@ -130,7 +130,7 @@ class FrappeStore:
     def find_current(self, doctype: str, filters: Mapping[str, Any]) -> list[dict[str, Any]]:
         """A locking current read (`for_update`), used inside `key_lock`. A plain read here could
         return the caller's stale REPEATABLE-READ snapshot and miss a row another writer just
-        wrote. Parameterised by the engine; no SQL is built here. UNVERIFIED on the bench (Q-280)."""
+        wrote. Parameterised by the engine; no SQL is built here. UNVERIFIED on the bench (Q-475)."""
         return self._read(doctype, filters, current=True)
 
     def _read(self, doctype: str, filters: Mapping[str, Any], current: bool) -> list[dict[str, Any]]:

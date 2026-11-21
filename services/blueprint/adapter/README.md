@@ -1,6 +1,6 @@
 # Fake engine adapter and conformance suite (BPL-025)
 
-Status: draft. Owner: eldon. Contract: [contracts/engine-adapter.md](../../../contracts/engine-adapter.md) 0.1.2 (sections 14 and 15). Decision: ADR-0028 (Proposed).
+Status: draft. Owner: eldon. Contract: [contracts/engine-adapter.md](../../../contracts/engine-adapter.md) 0.1.2 (sections 14 and 15). Decision: ADR-0028 (Accepted).
 
 An in-memory fake of every adapter operation (`capabilities`, `provision_site`, `site_status`, `plan`, `preview`, `apply`, `rollback`, `export_config`, `sync_members`, `health`) and the pytest suite that holds any adapter to the contract. It models behaviour only; **nothing here is evidence about a real engine (UNVERIFIED until ERP-001 and BPL-012 run it on a bench).** Synthetic data only.
 

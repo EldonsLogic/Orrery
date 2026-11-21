@@ -20,7 +20,10 @@ from typing import Any, Callable, Iterator
 from change_engine.adapter.mapping import (
     BLUEPRINT_TO_FRAPPE_FIELDTYPE,
     _DECIMAL_ADD_RE,
+    EngineNameError,
     _sanitize_custom_fieldname,
+    engine_role_name,
+    engine_state_name,
     entity_to_doctype,
 )
 from change_engine.api.endpoints import FrappeDeploymentAdapter
@@ -628,20 +631,10 @@ class FrappeRuntimeBackend:
 
                 elif kind == "role.upsert":
                     defn = params.get("definition") or {}
-                    role_id = str(defn.get("id") or subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
-                        f.db.set_value("Role", role_id, "disabled", 0)
-                    else:
-                        f.get_doc({"doctype": "Role", "role_name": role_id, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
-                    if hasattr(f.db, "commit"):
-                        f.db.commit()
+                    self._upsert_role(f, defn.get("id") or subject.get("id") or segs[-1], defn)
 
                 elif kind == "role.disable":
-                    role_id = str(subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
-                        f.db.set_value("Role", role_id, "disabled", 1)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
+                    self._disable_role(f, subject.get("id") or segs[-1])
 
                 elif kind == "location.upsert":
                     defn = params.get("definition") or {}
@@ -930,11 +923,22 @@ class FrappeRuntimeBackend:
         wf_id = str(defn.get("id") or "workflow")
         entity_id = str(defn.get("entity") or "sales_order")
         doctype = entity_to_doctype(entity_id)
-        self._ensure_doctype_exists(f, doctype, {})
-
         transitions = defn.get("transitions") or []
         states_raw = defn.get("states") or []
         draft_sources = {t.get("from") for t in transitions if isinstance(t, dict)}
+
+        # SEC-022 (ADR-0051): states and roles get adapter-owned names; refuse, before any write, a name that is not
+        # a Blueprint id or that the engine already holds under another spelling (it matches names without case).
+        state = self._managed_state_name
+        state_names = {state(s.get("id")) for s in states_raw}
+        state_names |= {state(t.get(k)) for t in transitions for k in ("from", "to")}
+        role = {str(r): self._managed_role(f, r)[0] for t in transitions for r in (t.get("allowedRoles") or [])}
+        for name in sorted(state_names):  # a failed read raises: no lookup error is taken as "no collision"
+            stored = f.db.get_value("Workflow State", name, "name")
+            if stored and str(stored) != name:
+                raise self._refuse("protected_subject")
+
+        self._ensure_doctype_exists(f, doctype, {})
 
         # Ensure initial state is first and map doc_status cleanly without direct 0->2 jumps
         ordered_states = sorted(
@@ -965,12 +969,12 @@ class FrappeRuntimeBackend:
             allow_edit = "System Manager"
             for t in transitions:
                 if t.get("from") == sid and t.get("allowedRoles"):
-                    allow_edit = str(t["allowedRoles"][0])
+                    allow_edit = role[str(t["allowedRoles"][0])]
                     break
 
             wf_states.append(
                 {
-                    "state": sid,
+                    "state": state(sid),
                     "doc_status": doc_status,
                     "allow_edit": allow_edit,
                     "style": style,
@@ -988,13 +992,13 @@ class FrappeRuntimeBackend:
                 except Exception:
                     pass
             roles = t.get("allowedRoles") or ["System Manager"]
-            for role in roles:
+            for r in roles:
                 wf_transitions.append(
                     {
-                        "state": str(t["from"]),
+                        "state": state(t["from"]),
                         "action": action,
-                        "next_state": str(t["to"]),
-                        "allowed": str(role),
+                        "next_state": state(t["to"]),
+                        "allowed": role.get(str(r), str(r)),
                         "allow_self_approval": False,
                     }
                 )
@@ -1021,6 +1025,8 @@ class FrappeRuntimeBackend:
         status = outcome.get("status")
         if status == "RECOVERY_REQUIRED":
             raise FrappeBackendError("recovery_required", stage="execute")
+        if outcome.get("disposition") == "WORKFLOW_STATE_NAME_COLLISION":  # a state appeared since the check above
+            raise FrappeBackendError("plan_rejected", {"reasonCode": "protected_subject"}, stage="execute")
         if status != "APPLIED":
             raise FrappeBackendError("engine_unavailable", stage="execute")
 
@@ -1041,7 +1047,7 @@ class FrappeRuntimeBackend:
         if not columns:
             columns = [{"fieldname": "name", "label": "ID"}]
 
-        roles = [str(r) for r in (defn.get("visibleToRoles") or ["All"])]
+        roles = [self._managed_role(f, r)[0] for r in defn.get("visibleToRoles") or []] or ["All"]
         rep_payload = {
             "report_name": report_id,
             "ref_doctype": doctype,
@@ -1107,6 +1113,53 @@ class FrappeRuntimeBackend:
         if hasattr(f.db, "commit"):
             f.db.commit()
 
+    # ------------------------------------------------------------------ roles (SEC-022)
+    @staticmethod
+    def _refuse(reason: str) -> FrappeBackendError:
+        """A step the adapter will not apply, raised before any write (plan reason code in details)."""
+        return FrappeBackendError("plan_rejected", {"reasonCode": reason}, stage="execute", side_effect_free=True)
+
+    def _managed_state_name(self, state_id: Any) -> str:
+        try:
+            return engine_state_name(state_id)
+        except EngineNameError:
+            raise self._refuse("unsupported_value_type") from None
+
+    def _managed_role(self, f: Any, role_id: Any) -> tuple[str, int | None]:
+        """(managed name, disabled flag or None when absent) for a Blueprint role id (ADR-0051).
+
+        The engine matches names without case; when its lookup returns a record under another spelling, that
+        record is not ours (a built-in or someone else's role) and the step is refused."""
+        try:
+            name = engine_role_name(role_id)
+        except EngineNameError:
+            raise self._refuse("unsupported_value_type") from None
+        row = f.db.get_value("Role", name, ["name", "disabled"])
+        if not row:
+            return name, None
+        if str(row[0]) != name:
+            raise self._refuse("protected_subject")
+        return name, int(row[1] or 0)
+
+    def _upsert_role(self, f: Any, role_id: Any, defn: dict[str, Any]) -> None:
+        """Create or re-enable the managed role; the name check runs before the first write."""
+        name, disabled = self._managed_role(f, role_id)
+        if disabled is None:
+            f.get_doc({"doctype": "Role", "role_name": name, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
+        elif disabled:
+            f.db.set_value("Role", name, "disabled", 0)
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
+    def _disable_role(self, f: Any, role_id: Any) -> None:
+        """Disable the managed role and keep its record (ADR-0039 RM-008)."""
+        name, disabled = self._managed_role(f, role_id)
+        if disabled is None:
+            return
+        f.db.set_value("Role", name, "disabled", 1)
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
     # ------------------------------------------------------------------ shadow users
     def sync_members(
         self,
@@ -1122,6 +1175,19 @@ class FrappeRuntimeBackend:
             if mode == "full":
                 target_refs |= set(listed_members.keys())
 
+            # SEC-022 (ADR-0051): every role must be an enabled adapter-owned role held under exactly its managed
+            # name; anything else changes no member (unknown_role). sync_members never creates a role.
+            engine_roles: dict[str, str] = {}
+            for ref in sorted(target_refs):
+                for r in (listed_members.get(ref) or {}).get("roleIds", []):
+                    try:
+                        name, disabled = self._managed_role(f, r)
+                    except FrappeBackendError:
+                        disabled = None
+                    if disabled != 0:
+                        raise FrappeBackendError("unknown_role", {"fields": ["/members/roleIds"]}, side_effect_free=True)
+                    engine_roles[r] = name
+
             for ref in sorted(target_refs):
                 rec = listed_members.get(ref)
                 if rec is None:
@@ -1129,11 +1195,7 @@ class FrappeRuntimeBackend:
                 email = shadow_user_email(ref)
                 label = shadow_user_label(ref)
                 enabled = 1 if rec["status"] == "active" else 0
-                roles_payload = [{"role": r} for r in rec.get("roleIds", [])]
-
-                for r in rec.get("roleIds", []):
-                    if hasattr(f.db, "exists") and not f.db.exists("Role", r):
-                        f.get_doc({"doctype": "Role", "role_name": r, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
+                roles_payload = [{"role": engine_roles[r]} for r in rec.get("roleIds", [])]
 
                 if hasattr(f.db, "exists") and f.db.exists("User", email):
                     u_doc = f.get_doc("User", email)

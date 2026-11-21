@@ -62,6 +62,32 @@ _DECIMAL_ADD_RE = re.compile(
 )
 
 
+# SEC-022 / ADR-0051: every role and workflow state the adapter writes carries this reserved prefix. The '-' is
+# outside the Blueprint id grammar, so no raw Blueprint id and no built-in engine name can equal a managed name.
+ENGINE_NAME_PREFIX = "bp-"
+_BLUEPRINT_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+
+
+class EngineNameError(ValueError):
+    """A value that is not a Blueprint id was offered as one; callers refuse the step (fail closed)."""
+
+
+def _managed_name(blueprint_id: Any) -> str:
+    if not isinstance(blueprint_id, str) or not _BLUEPRINT_ID_RE.fullmatch(blueprint_id):
+        raise EngineNameError("not a Blueprint id")
+    return ENGINE_NAME_PREFIX + blueprint_id
+
+
+def engine_role_name(role_id: Any) -> str:
+    """Adapter-owned engine role name for a Blueprint role id (ADR-0039 item 1, ADR-0051)."""
+    return _managed_name(role_id)
+
+
+def engine_state_name(state_id: Any) -> str:
+    """Adapter-owned engine workflow-state name for a Blueprint state id (ADR-0051)."""
+    return _managed_name(state_id)
+
+
 def entity_to_doctype(entity_id: str) -> str:
     if entity_id in ENTITY_TO_DOCTYPE:
         return ENTITY_TO_DOCTYPE[entity_id]

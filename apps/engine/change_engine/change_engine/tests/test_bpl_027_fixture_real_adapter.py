@@ -24,7 +24,13 @@ from types import SimpleNamespace
 
 from change_engine.adapter import ADAPTER_ID, ChangeEngineAdapter, FrappeBackendError, FrappeSiteResolver, make_frappe_adapter
 from change_engine.adapter import contracts_support as cs
-from change_engine.adapter.mapping import BLUEPRINT_TO_FRAPPE_FIELDTYPE, _sanitize_custom_fieldname, entity_to_doctype
+from change_engine.adapter.mapping import (
+    BLUEPRINT_TO_FRAPPE_FIELDTYPE,
+    _sanitize_custom_fieldname,
+    engine_role_name,
+    engine_state_name,
+    entity_to_doctype,
+)
 
 REPO_ROOT = Path(os.environ.get("PLATFORM_REPO_ROOT") or Path(__file__).resolve().parents[5]).expanduser()
 SERVICES_BP_DIR = REPO_ROOT / "services" / "blueprint"
@@ -118,7 +124,12 @@ def seal(art: dict) -> dict:
 
 
 def expected_engine_config(bp: dict) -> dict:
-    """What a correct apply must leave on the site, derived from the Blueprint alone."""
+    """What a correct apply must leave on the site, derived from the Blueprint alone.
+
+    Role and workflow-state names are the adapter-owned names (SEC-022, ADR-0051), never the raw Blueprint ids;
+    "permissions" lists the Blueprint's own grants (what the Blueprint asks for, before ADR-0051 narrows it).
+    """
+    role = engine_role_name
     mapped = {}
     if MAPPING.exists():
         for ent in json.loads(MAPPING.read_text(encoding="utf-8"))["entities"]:
@@ -126,21 +137,22 @@ def expected_engine_config(bp: dict) -> dict:
                 if fld.get("engineField"):
                     mapped[(ent["blueprintEntity"], fld["blueprintField"])] = fld["engineField"]
     return {
-        "roles": sorted(r["id"] for r in bp["roles"]),
+        "roles": sorted(role(r["id"]) for r in bp["roles"]),
         "workflows": {
             wf["id"]: {
                 "doctype": entity_to_doctype(wf["entity"]),
-                "states": sorted(s["id"] for s in wf["states"]),
+                "states": sorted(engine_state_name(s["id"]) for s in wf["states"]),
                 "transitions": sorted(
-                    (t["from"], t.get("actionLabels", {}).get("en") or t["id"], t["to"], role)
+                    (engine_state_name(t["from"]), t.get("actionLabels", {}).get("en") or t["id"], engine_state_name(t["to"]), r)
                     for t in wf["transitions"]
-                    for role in (t.get("allowedRoles") or ["System Manager"])
+                    for r in ([role(x) for x in t["allowedRoles"]] if t.get("allowedRoles") else ["System Manager"])
                 ),
             }
             for wf in bp["workflows"]
         },
         "reports": {
-            r["id"]: {"doctype": entity_to_doctype(r["entity"]) if r.get("entity") else None, "roles": sorted(r.get("visibleToRoles") or ["All"])}
+            r["id"]: {"doctype": entity_to_doctype(r["entity"]) if r.get("entity") else None,
+                      "roles": sorted(role(x) for x in r["visibleToRoles"]) if r.get("visibleToRoles") else ["All"]}
             for r in bp["reports"]
         },
         "warehouses": sorted(loc["id"] for loc in bp["locations"] if loc["kind"] == "warehouse"),
@@ -159,6 +171,31 @@ def expected_engine_config(bp: dict) -> dict:
             if a in ACTION_FLAG
         ),
     }
+
+
+def _attr(obj, key: str):
+    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+
+def name_clashes(f, exp: dict) -> list[str]:
+    """Every engine role and workflow state the apply wrote must carry the adapter-owned name exactly (SEC-022).
+
+    The engine matches names without case, so a lookup of a raw Blueprint id can land on a built-in record
+    ("auditor" -> "Auditor"); this read-back fails on any such alias, on any transition or report role that is
+    not the managed one, and on a state that resolves to a differently spelled record."""
+    clashes = [f"role:{r}" for r in exp["roles"] if f.db.get_value("Role", r, "name") != r]
+    for wf_id, want in exp["workflows"].items():
+        wf = f.get_doc("Workflow", wf_id)
+        got_states = {_attr(s, "state") for s in wf.states}
+        clashes += [f"{wf_id}:state:{s}" for s in want["states"] if s not in got_states]
+        clashes += [f"{wf_id}:record:{s}" for s in want["states"] if f.db.get_value("Workflow State", s, "name") != s]
+        got = {(_attr(t, "state"), _attr(t, "action"), _attr(t, "next_state"), _attr(t, "allowed")) for t in wf.transitions}
+        clashes += [f"{wf_id}:transition:{t}" for t in want["transitions"] if t not in got]
+    for rep_id, want in exp["reports"].items():
+        got_roles = sorted(_attr(r, "role") for r in f.get_doc("Report", rep_id).roles)
+        if got_roles != want["roles"]:
+            clashes.append(f"report:{rep_id}:{got_roles}")
+    return clashes
 
 
 def ctx() -> dict:
@@ -235,6 +272,29 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertEqual(exp["workflows"]["sales_order_flow"]["doctype"], "Sales Order")
         self.assertIn(("warehouse_keeper", "Delivery Note", "submit"), exp["permissions"])
 
+
+    def _apply_fixture_offline(self):
+        """Apply the fixture's entities, roles, workflows and reports through the real backend on a simulated
+        engine whose names match without case, like the bench (no compiler needed)."""
+        from change_engine.adapter import FrappeRuntimeBackend
+        from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
+
+        bp, engine = without_attachments(load_fixture()), CaseInsensitiveEngine("bpl027.localhost")
+        backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
+                                       frappe_factory=lambda: engine, offline_ddl_simulator=True)
+        auditor_before = engine.db.get_value("Role", "Auditor", ["name", "disabled"])
+        for section, kind in (("entities", "entity.add"), ("roles", "role.upsert"), ("workflows", "workflow.upsert"),
+                              ("reports", "report.upsert")):
+            for elem in bp[section]:
+                backend.execute_step(TENANT, {"seq": 1, "kind": kind, "pointer": f"/{section}/{elem['id']}",
+                                              "subject": {"kind": section[:-1], "id": elem["id"]}, "params": {"definition": elem}})
+        self.assertEqual(engine.db.get_value("Role", "Auditor", ["name", "disabled"]), auditor_before)
+        return bp, engine
+
+    def test_04b_offline_records_carry_adapter_owned_names(self) -> None:
+        """SEC-022: the same read-back as bench test_04b, on a case-insensitive simulated engine."""
+        bp, engine = self._apply_fixture_offline()
+        self.assertEqual(name_clashes(engine, expected_engine_config(bp)), [])
 
     @staticmethod
     def _two_warehouse_artifact(target: dict) -> dict:
@@ -511,19 +571,13 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
                 ("ar", "Saudi Arabia", "Asia/Riyadh"),
             )
 
-    @unittest.expectedFailure
-    def test_04b_engine_records_keep_blueprint_ids_exactly(self) -> None:
-        """KNOWN GAP (BPL-027 finding 1, security): role 'auditor' resolves to the engine's built-in 'Auditor' role
-        and state 'approved' to the built-in 'Approved' state, because the engine matches names without case. The
-        mapping contract says adapter roles are its own, never built-in ones. Remove expectedFailure once fixed."""
+    def test_04b_engine_records_carry_adapter_owned_names(self) -> None:
+        """SEC-022 (was BPL-027 finding 1): Blueprint role 'auditor' must become the managed 'bp-auditor', never the
+        built-in 'Auditor', and state 'approved' 'bp-approved', never the built-in 'Approved' (ADR-0051). Fails only
+        on a name that resolves to another record; existence of the records is checked in test_04."""
         self.need("applied")
-        exp, clashes = self.expected, []
         with site_db() as f:
-            clashes += [r for r in exp["roles"] if f.db.get_value("Role", r, "name") != r]
-            for wf_id, want in exp["workflows"].items():
-                states = {s.state for s in f.get_doc("Workflow", wf_id).states}
-                clashes += [f"{wf_id}:{s}" for s in want["states"] if s not in states]
-        self.assertEqual(clashes, [])
+            self.assertEqual(name_clashes(f, self.expected), [])
 
     @unittest.expectedFailure
     def test_05_readback_entities_and_fields(self) -> None:

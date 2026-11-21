@@ -29,7 +29,7 @@ All schemas are JSON Schema draft 2020-12 with `urn:platform:contract:*` ids. Cr
 3. **Fail closed.** Unknown version, unknown step kind, integrity failure, lookup error, missing approval: refuse, change nothing, record an audit id.
 4. **Deterministic.** Same site state + same request gives the same plan, preview and export bytes.
 5. **No data loss.** Removal is quarantine (hidden, not required, data kept). No operation drops stored data in 0.1.0.
-6. **Journaled and recoverable per artifact (ADR-0028, Accepted; ERP-021 and ERP-026 open).** Every step and post-condition succeeds, or executed steps are compensated and the site ends on the base revision, or the site is marked `recovery_required` and blocked until a human resolves it (5.6). Atomicity is promised only where it is demonstrated; a compensated state is verified by export hash, not assumed.
+6. **Journaled and recoverable per artifact (ADR-0028, Accepted; ERP-026 open).** Every step and post-condition succeeds, or executed steps are compensated and the site ends on the base revision, or the site is marked `recovery_required` and blocked until a human resolves it (5.6). Atomicity is promised only where it is demonstrated; a compensated state is verified by export hash, not assumed.
 
 ## 4. Call model
 ### 4.1 Envelope

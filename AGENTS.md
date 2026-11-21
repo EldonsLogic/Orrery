@@ -29,7 +29,7 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the status printed by 
 5. Create your session log now (`scripts/new_log.py`) and keep it live: log every delegated task and its result as it happens and push after each task, so another account or provider can resume (RULES 51).
 
 ## Session end checklist
-1. `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>`; fill it in.
+1. Finish the live session log created at the start (step 5 above; create it now with `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>` only if none exists yet).
 2. Update statuses in `docs/PLAN.md`; add ADR or open-question entries if a decision or doubt arose.
 3. Run `python3 scripts/finish_session.py` (runs every check and the task trail, verifies the branch is pushed and a PR is open). Do not stop until it prints FINISHED. Every commit message names a plan ID; never bypass hooks.
 4. If your work closes a phase or a gate, run `python3 scripts/phase_exit_check.py --phase <name>` and record the exit in a log (see [docs/GATES.md](docs/GATES.md)). Nothing from the next phase counts as passed before that run is recorded.

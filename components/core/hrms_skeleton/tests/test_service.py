@@ -140,6 +140,35 @@ class RoleTests(unittest.TestCase):
                                  "Leave Period": {"from_date": "2026-01-01", "to_date": "2026-12-31"}}.items():
             self.assertEqual(svc.upsert(doctype, payload).action, "created", doctype)
 
+    def test_pay_affecting_leave_fields_require_hr_admin(self):
+        hr, store, _ = make()
+        user, _, _ = make(roles=("HR User",), store=store)
+        for field, value, cleared in (
+            ("is_lwp", True, False),
+            ("is_ppl", True, False),
+            ("fraction_of_daily_salary_per_leave", "0.5", "0"),
+        ):
+            with self.subTest(field=field):
+                payload = {"leave_type_name": field, field: value}
+                refused(self, "role_not_permitted", user.upsert, "Leave Type", payload)
+                created = hr.upsert("Leave Type", payload)
+                self.assertEqual(created.action, "created")
+                refused(self, "role_not_permitted", user.upsert, "Leave Type", payload)
+                refused(self, "role_not_permitted", user.upsert, "Leave Type", {"leave_type_name": field, field: cleared})
+                self.assertEqual(
+                    user.upsert("Leave Type", {"leave_type_name": field, "max_leaves_allowed": "10"}).action,
+                    "updated",
+                )
+                self.assertEqual(store.rows["Leave Type"][created.name][field], value)
+
+    def test_batch_preflights_pay_affecting_leave_fields_before_writing(self):
+        user, store, _ = make(roles=("HR User",))
+        refused(self, "role_not_permitted", user.apply_configuration, [
+            {"doctype": "Branch", "values": {"branch": "HQ"}},
+            {"doctype": "Leave Type", "values": {"leave_type_name": "Unpaid", "is_lwp": True}},
+        ])
+        self.assertEqual(store.writes, 0)
+
     def test_native_permission_and_permlevel_are_also_enforced(self):
         svc, store, _ = make(permissions={"Employee": []})
         refused(self, "permission_denied", svc.upsert, "Employee", EMP)
@@ -258,6 +287,15 @@ class LeaveApplicationTests(unittest.TestCase):
 
     def test_status_cannot_be_set_through_upsert(self):
         refused(self, "field_not_allowed", self.hr.upsert, "Leave Application", {**APPLICATION, "status": "Approved"})
+
+    def test_self_service_cannot_distinguish_missing_employee_from_someone_elses(self):
+        svc, _, _ = make(roles=("Employee",), user="someone@example.invalid", store=self.store)
+        for employee in ("EMP-00001", "missing"):
+            with self.subTest(employee=employee):
+                error = refused(self, "role_not_permitted", svc.upsert,
+                                "Leave Application", {**APPLICATION, "employee": employee})
+                self.assertEqual((error.field, error.doctype), (None, "Leave Application"))
+        refused(self, "employee_not_found", self.hr.upsert, "Leave Application", {**APPLICATION, "employee": "missing"})
 
     def test_edits_only_while_open(self):
         svc, result = self.apply()

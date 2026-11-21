@@ -1,5 +1,6 @@
 """PR #202 review follow-up regressions: name-key twins and IMP-AUTH failure logging (ERP-013, Tier 3)."""
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -247,3 +248,249 @@ def test_confirm_mid_call_auth_revocation_and_backend_imp_auth_are_logged(backen
     assert "confirm-secret" not in serialized
     assert "Accounts Manager" not in serialized
     assert "Guest" not in serialized
+
+
+def test_apply_mutated_tenant_left_changed_logs_only_to_authenticated_tenant(backend):
+    backend.set_company_currency("tenant-b", "Synthetic Trading", "SAR")
+    importer, source = OpeningImporter(backend), batch()
+    preview = importer.preview(source)
+    assert preview["ok"]
+    orig_auth, calls = importer._authorize, {"n": 0}
+
+    def mutating_auth(payload, **kw):
+        calls["n"] += 1
+        ident = orig_auth(payload, **kw)
+        if calls["n"] == 1:
+            source["tenant_id"] = "tenant-b"
+        return ident
+
+    with (
+        patch.object(importer, "_authorize", side_effect=mutating_auth),
+        patch.object(backend, "claim_opening", wraps=backend.claim_opening) as spy_claim,
+        patch.object(backend, "write", wraps=backend.write) as spy_write,
+        pytest.raises(ImportFailure, match="IMP-AUTH"),
+    ):
+        importer.apply(source, confirmed_by="reviewer", plan_hash=preview["plan_hash"])
+    assert spy_claim.call_count == 0 and spy_write.call_count == 0
+    assert backend.records("tenant-b", "Synthetic Trading") == [] and backend.failures("tenant-b") == []
+    assert backend.records("tenant-a", "Synthetic Trading") == []
+    failure, = backend.failures("tenant-a")
+    assert (failure["code"], failure["user_id"], failure["batch_id"], failure["plan_hash"]) == (
+        "IMP-AUTH", "reviewer", "opening-1", preview["plan_hash"],
+    )
+
+
+def test_apply_mutated_tenant_flipped_back_before_deepcopy_never_writes_tenant_b(backend):
+    backend.set_company_currency("tenant-b", "Synthetic Trading", "SAR")
+    importer, source = OpeningImporter(backend), batch()
+    preview = importer.preview(source)
+    assert preview["ok"]
+    orig_prep, calls = importer._prepare, {"n": 0}
+
+    def flipping_prep(payload, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            payload["tenant_id"] = "tenant-b"
+            try:
+                return orig_prep(payload, **kw)
+            finally:
+                payload["tenant_id"] = "tenant-a"
+        return orig_prep(payload, **kw)
+
+    with (
+        patch.object(importer, "_prepare", side_effect=flipping_prep),
+        patch.object(backend, "claim_opening", wraps=backend.claim_opening) as spy_claim,
+        patch.object(backend, "write", wraps=backend.write) as spy_write,
+        pytest.raises(ImportFailure, match="IMP-AUTH"),
+    ):
+        importer.apply(source, confirmed_by="reviewer", plan_hash=preview["plan_hash"])
+    assert spy_claim.call_count == 0 and spy_write.call_count == 0
+    assert backend.records("tenant-b", "Synthetic Trading") == [] and backend.failures("tenant-b") == []
+    assert backend.records("tenant-a", "Synthetic Trading") == []
+    failure, = backend.failures("tenant-a")
+    assert (failure["code"], failure["user_id"], failure["batch_id"], failure["plan_hash"]) == (
+        "IMP-AUTH", "reviewer", "opening-1", preview["plan_hash"],
+    )
+
+
+def test_apply_mutated_batch_id_or_switched_session_refuses_before_transaction(backend, monkeypatch):
+    backend.set_company_currency("tenant-b", "Synthetic Trading", "SAR")
+    importer, source = OpeningImporter(backend), batch()
+    preview = importer.preview(source)
+    assert preview["ok"]
+    orig_prep = importer._prepare
+
+    def mutate_batch(payload, **kw):
+        res = orig_prep(payload, **kw)
+        payload["batch_id"] = "opening-2"
+        return res
+
+    with (
+        patch.object(importer, "_prepare", side_effect=mutate_batch),
+        patch.object(backend, "claim_opening", wraps=backend.claim_opening) as spy_claim,
+        patch.object(backend, "write", wraps=backend.write) as spy_write,
+        pytest.raises(ImportFailure, match="IMP-AUTH"),
+    ):
+        importer.apply(source, confirmed_by="reviewer", plan_hash=preview["plan_hash"])
+    assert spy_claim.call_count == 0 and spy_write.call_count == 0
+
+    source2 = batch(batch_id="opening-switch")
+    preview2 = importer.preview(source2)
+    assert preview2["ok"]
+    base_session, scalls, orig_prep2 = backend.identity(), {"n": 0}, importer._prepare
+
+    def switching_session():
+        scalls["n"] += 1
+        return dict(base_session) if scalls["n"] == 1 else dict(base_session, tenant_id="tenant-b", user_id="other")
+
+    def switch_tenant(payload, **kw):
+        res = orig_prep2(payload, **kw)
+        payload["tenant_id"] = "tenant-b"
+        return res
+
+    monkeypatch.setattr(backend, "_session", switching_session)
+    with (
+        patch.object(importer, "_prepare", side_effect=switch_tenant),
+        patch.object(backend, "claim_opening", wraps=backend.claim_opening) as spy_claim2,
+        patch.object(backend, "write", wraps=backend.write) as spy_write2,
+        pytest.raises(ImportFailure, match="IMP-AUTH"),
+    ):
+        importer.apply(source2, confirmed_by="reviewer", plan_hash=preview2["plan_hash"])
+    assert spy_claim2.call_count == 0 and spy_write2.call_count == 0
+    assert backend.records("tenant-b", "Synthetic Trading") == [] and backend.failures("tenant-b") == []
+    assert [(f["code"], f["user_id"], f["batch_id"]) for f in backend.failures("tenant-a")] == [
+        ("IMP-AUTH", "reviewer", "opening-1"),
+        ("IMP-AUTH", "reviewer", "opening-switch"),
+    ]
+
+
+def test_confirm_mutated_tenant_and_batch_id_refuse_and_log_authenticated_tenant_only(backend, monkeypatch):
+    backend.set_company_currency("tenant-b", "Synthetic Trading", "SAR")
+    importer, source = OpeningImporter(backend), _near_duplicate_source()
+    pending = importer.preview(source)
+    assert pending["ok"] is False
+    groups, base_session = [g["id"] for g in pending["name_groups"]], backend.identity()
+    scalls, acalls, orig_auth = {"n": 0}, {"n": 0}, importer._authorize
+
+    def switching_session():
+        scalls["n"] += 1
+        return dict(base_session) if scalls["n"] == 1 else dict(base_session, tenant_id="tenant-b", user_id="other")
+
+    def mutating_auth(payload, **kw):
+        acalls["n"] += 1
+        ident = orig_auth(payload, **kw)
+        if acalls["n"] == 1:
+            source["tenant_id"] = "tenant-b"
+        return ident
+
+    monkeypatch.setattr(backend, "_session", switching_session)
+    with (
+        patch.object(importer, "_authorize", side_effect=mutating_auth),
+        patch.object(backend, "record_distinct_confirmation", wraps=backend.record_distinct_confirmation) as spy_rec,
+        pytest.raises(ImportFailure, match="IMP-AUTH"),
+    ):
+        importer.confirm(source, confirmed_by="reviewer", owner_confirmed_distinct=groups, plan_hash=pending["plan_hash"])
+    assert spy_rec.call_count == 0 and backend.failures("tenant-b") == []
+
+    monkeypatch.setattr(backend, "_session", lambda: dict(base_session))
+    source2 = _near_duplicate_source()
+    from change_engine.importer import engine as engine_mod
+    orig_bounded = engine_mod.bounded
+
+    def mutating_batch_bounded(payload, **kw):
+        orig_bounded(payload, **kw)
+        payload["batch_id"] = "opening-mutated"
+
+    with (
+        patch.object(engine_mod, "bounded", side_effect=mutating_batch_bounded),
+        patch.object(backend, "record_distinct_confirmation", wraps=backend.record_distinct_confirmation) as spy_rec2,
+        pytest.raises(ImportFailure, match="IMP-AUTH"),
+    ):
+        importer.confirm(source2, confirmed_by="reviewer", owner_confirmed_distinct=groups, plan_hash=pending["plan_hash"])
+    assert spy_rec2.call_count == 0
+    assert [(f["code"], f["user_id"], f["batch_id"]) for f in backend.failures("tenant-a")] == [
+        ("IMP-AUTH", "reviewer", "opening-1"),
+        ("IMP-AUTH", "reviewer", "opening-1"),
+    ]
+
+
+def test_preview_and_validate_mutated_tenant_refuse_without_cross_tenant_read(backend):
+    backend.set_company_currency("tenant-b", "Synthetic Trading", "SAR")
+    importer = OpeningImporter(backend)
+    for method in ("preview", "validate"):
+        source, orig_auth, calls = batch(), importer._authorize, {"n": 0}
+
+        def mutating_auth(payload, **kw):
+            calls["n"] += 1
+            ident = orig_auth(payload, **kw)
+            if calls["n"] == 1:
+                source["tenant_id"] = "tenant-b"
+            return ident
+
+        with (
+            patch.object(importer, "_authorize", side_effect=mutating_auth),
+            patch.object(backend, "company_currency", wraps=backend.company_currency) as spy_ccy,
+            patch.object(backend, "master", wraps=backend.master) as spy_master,
+        ):
+            res = getattr(importer, method)(source)
+        assert res["ok"] is False and [e["code"] for e in res["errors"]] == ["IMP-AUTH"]
+        assert spy_ccy.call_count == 0 and spy_master.call_count == 0
+
+
+def test_name_fields_refuse_non_nfc_and_accept_nfc_cafe_and_common_arabic(backend):
+    importer = OpeningImporter(backend)
+    refuses(importer, batch({"Customer": [{"customer_name": "Cafe\u0301"}]}), "IMP-SCHEMA")
+    refuses(importer, batch({"Account": [
+        {"account_name": "Caf\u00e9", "account_type": "Other"},
+        {"account_name": "Cafe\u0301", "account_type": "Other"},
+    ]}), "IMP-SCHEMA")
+    refuses(importer, batch({"Customer": [{"customer_name": "\u0627\u0655\u0628\u0631\u0627\u0647\u064a\u0645"}]}), "IMP-SCHEMA")
+    assert backend.records("tenant-a", "Synthetic Trading") == []
+
+    arabic_customers = [
+        {"customer_code": "C-CAFE", "customer_name": "Caf\u00e9"},
+        {"customer_code": "C-AR1", "customer_name": "محمد"},
+        {"customer_code": "C-AR2", "customer_name": "شركة الفجر"},
+        {"customer_code": "C-AR3", "customer_name": "عبدالله"},
+        {"customer_code": "C-AR4", "customer_name": "مؤسسة"},
+        {"customer_code": "C-AR5", "customer_name": "إبراهيم"},
+        {"customer_code": "C-AR6", "customer_name": "آل"},
+        {"customer_code": "C-AR7", "customer_name": "شركـة النور"},
+        {"customer_code": "C-AR8", "customer_name": "شركة\u200c\u200d\u200e\u200f\u061c الأمل"},
+        {"customer_code": "C-FW", "customer_name": "Ｃａｓｈ"},
+    ]
+    assert apply(importer, batch({"Customer": arabic_customers}, batch_id="nfc-ok"))["status"] == "applied"
+    stored = {r["row"]["customer_code"]: r["row"]["customer_name"] for r in backend.records("tenant-a", "Synthetic Trading")}
+    for row in arabic_customers:
+        assert stored[row["customer_code"]] == row["customer_name"]
+
+
+@pytest.mark.parametrize("label,ch", [
+    ("braille_blank", "\u2800"),
+    ("ideographic_space", "\u3000"),
+    ("hangul_choseong_filler", "\u115f"),
+    ("hangul_jungseong_filler", "\u1160"),
+    ("hangul_filler", "\u3164"),
+])
+def test_name_fields_refuse_blank_and_filler_twins(backend, label, ch):
+    importer = OpeningImporter(backend)
+    datasets = {"Account": [
+        {"account_name": "Cash", "account_type": "Other"},
+        {"account_name": f"Cash{ch}", "account_type": "Other"},
+    ]}
+    refuses(importer, batch(datasets, batch_id=f"blank-{label}"), "IMP-SCHEMA")
+    assert backend.records("tenant-a", "Synthetic Trading") == []
+
+
+@pytest.mark.parametrize("label,ch", [
+    ("zwsp", "\u200b"),
+    ("shy", "\u00ad"),
+    ("wj", "\u2060"),
+    ("bom", "\ufeff"),
+    ("mvs", "\u180e"),
+    ("tag_space", "\U000e0020"),
+])
+def test_name_fields_refuse_cf_default_ignorables_with_imp_formula(backend, label, ch):
+    importer = OpeningImporter(backend)
+    refuses(importer, batch({"Customer": [{"customer_name": f"Alpha{ch}Trading"}]}, batch_id=f"cf-{label}"), "IMP-FORMULA")
+    assert backend.records("tenant-a", "Synthetic Trading") == []

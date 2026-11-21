@@ -44,3 +44,27 @@ Unknown.
 
 ## Next step
 Cross-model review and Tier 3 human line-by-line review (Eldon) of the ERP-013 follow-up PR; continue live-wiring and founder decisions tracked in `Q-303`, `Q-478`, `Q-550`, `Q-551`, `Q-554`, and `Q-556`.
+
+## Fix round 1
+Addressed Eldon's Fable 5.2 review and the independent Opus review of PR #245 (`ERP-013`, Tier 3, rigid zone: refuse, never repair; tests first):
+1. **High — tenant binding in `apply()`, `confirm()`, `preview()`/`validate()` (`importer/engine.py`):**
+   - Correction to the earlier log entry above: at `b0d1c4f`/`7af58d1`, `apply()` did **not** anchor `tenant` to the authenticated identity — it took `tenant, batch_id = initial["tenant_id"], initial["batch_id"]` from the pre-detachment plan. That claim is now true: `apply()` takes `tenant, user_id = identity["tenant_id"], identity["user_id"]` from the initial `_authorize(source)` and, inside `try` after `bounded(source)` -> `copy.deepcopy(source)` -> second `_authorize(detached)`, raises `IMP-AUTH` unless `reauth["tenant_id"] == tenant`, `reauth["user_id"] == user_id`, `detached["tenant_id"] == tenant`, `detached["batch_id"] == batch_id`, and `initial["tenant_id"] == tenant` — before any `journal`, `claim_opening`, or `write` runs. Failure rows always go to the authenticated `(tenant, user_id)`.
+   - Scope note: `b0d1c4f` moved `deepcopy` and the second `_authorize` inside `try` in `apply()` so post-initial-auth `IMP-AUTH` failures are recorded append-only; fix round 1 retains that placement while binding failure logging strictly to the initial authenticated tenant and user.
+   - Applied the same detachment and re-authorization binding to `confirm()` (checking `reauth["tenant_id"]`, `reauth["user_id"]`, `detached["tenant_id"]`, and `detached_batch_id` before transaction/write) and `preview()`/`validate()` (`bounded` -> `deepcopy` -> re-authorize -> verify `tenant` before `_prepare`).
+2. **Low — non-NFC names and `U+2800` / blank-filler twins (`importer/validation.py`, `docs/open-questions.md`):**
+   - Refused non-NFC values (`unicodedata.normalize("NFC", value) != value`) in name fields (`allow_format_marks=True`) with `IMP-SCHEMA`; did **not** apply NFKC refusal to names. Verified NFC `Café` and common Arabic names (including hamza forms, tatweel, and all five safe marks) pass verbatim while NFD `Café` and decomposed Arabic hamza fail.
+   - Refused `U+2800` (Braille pattern blank) with `IMP-SCHEMA` and verified existing `IMP-SCHEMA` coverage for `U+3000`, `U+115F`, `U+1160`, and `U+3164` with explicit tests.
+   - Recorded fullwidth (`Ｃａｓｈ` next to `Cash`) and Arabic presentation-form twins in names as a residual in the `Q-556` row of `docs/open-questions.md`.
+3. **Low — `Cf` default-ignorable refusal code wording (`importer/README.md`, PR body correction):**
+   - Correction to the PR #245 body and previous README wording: `Cf` default-ignorables in names (`U+200B`, `U+00AD`, `U+2060`, `U+FEFF`, `U+180E`, Unicode tag characters) are refused with `IMP-FORMULA` (existing behaviour in `validation.py:135`, unchanged), whereas non-`Cf` default-ignorables, `U+2800`, non-ASCII whitespace, space runs, and non-NFC names are refused with `IMP-SCHEMA`. Updated `importer/README.md` and added explicit name regression tests asserting `IMP-FORMULA`.
+
+### Fix round 1 verification
+- Tests-first before fix (`PYTHONPATH=apps/engine/change_engine:. uv run --no-project --with pytest --with "pydantic>=2" python -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_*.py -q`): **7 failed, 411 passed**.
+- After fix:
+  - `PYTHONPATH=apps/engine/change_engine:. uv run --no-project --with pytest --with "pydantic>=2" python -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_*.py -q`: **418 passed**.
+  - `uv run --no-project --with pytest python -m pytest scripts/tests -q`: **22 passed, 29 subtests passed**.
+  - `python3 scripts/check_docs.py`: 0 error(s), 0 warning(s).
+  - `python3 scripts/check_repo_hygiene.py`: Repo hygiene OK (1765 files checked).
+  - `python3 scripts/scan_secrets.py`: 0 hit(s).
+  - `python3 scripts/check_plan_independence.py`: Plan independence OK.
+  - `python3 scripts/check_lanes.py --base origin/main --actor partner`: Lane check OK.

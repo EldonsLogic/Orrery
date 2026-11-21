@@ -136,10 +136,13 @@ def text(value, *, allow_format_marks: bool = False):
             fail("IMP-FORMULA")
     if (value != value.strip()
             or any((ch.isspace() and ch != " ")
+                   or ch == "\u2800"
                    or (ch not in SAFE_FORMAT_MARKS and _is_default_ignorable(ch))
                    for ch in value)):
         fail("IMP-SCHEMA")
     if allow_format_marks:
+        if unicodedata.normalize("NFC", value) != value:
+            fail("IMP-SCHEMA")
         stripped = "".join(ch for ch in value if ch not in SAFE_FORMAT_MARKS)
         if stripped != stripped.strip() or "  " in stripped:
             fail("IMP-SCHEMA")

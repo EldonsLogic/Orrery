@@ -45,7 +45,9 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0036-tool-api-domain-errors.md](ADR-0036-tool-api-domain-errors.md) | Tool API domain error codes and catalog | Proposed |
 | [ADR-0037-manifest-risk-class-and-transition-kind.md](ADR-0037-manifest-risk-class-and-transition-kind.md) | Manifest-declared entity risk class and explicit transition kind | Proposed |
 | [ADR-0038-secrets-management.md](ADR-0038-secrets-management.md) | Secrets management: one store interface, signing keys stay in the KMS, nothing secret reaches a log, the repo or a model | Proposed |
+| [ADR-0039-role-and-permission-mapping.md](ADR-0039-role-and-permission-mapping.md) | Blueprint roles map to adapter-owned engine roles, field levels and record scopes by a fixed table; anything unmapped or unresolved is denied | Proposed |
 | [ADR-0040-tenant-provisioning-service.md](ADR-0040-tenant-provisioning-service.md) | Tenant provisioning is a durable, resumable step machine that observes before it acts and never duplicates a site or a secret | Proposed |
+| [ADR-0041-durable-adapter-state-on-tenant-database.md](ADR-0041-durable-adapter-state-on-tenant-database.md) | Durable adapter state lives in the tenant database | Proposed |
 | [ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md](ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md) | ZATCA Phase 2: vendor the ERPGulf pure core, rebuild state | Proposed |
 | [ADR-0043-department-assistants.md](ADR-0043-department-assistants.md) | Department-scoped assistants in the Blueprint (Blueprint 0.4.0) | Proposed |
 | [ADR-0044-ag-ui-agent-to-screen-transport.md](ADR-0044-ag-ui-agent-to-screen-transport.md) | AG-UI as the agent-to-screen transport, not an authority | Proposed |
@@ -54,3 +56,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0047-mfa-design.md](ADR-0047-mfa-design.md) | MFA design: TOTP now, step-up, recovery, throttling, session binding | Proposed |
 | [ADR-0048-agent-authority-propose-not-act.md](ADR-0048-agent-authority-propose-not-act.md) | Agent authority: agents propose, humans and deterministic code decide | Proposed |
 | [ADR-0049-human-review-queue.md](ADR-0049-human-review-queue.md) | Human review queue and the team_reviewed gate evidence | Proposed |
+| [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |

@@ -181,7 +181,7 @@ def tearDownModule():
 
 class TestErp012FrappeAdapter(unittest.TestCase):
     def test_fail_closed_when_real_frappe_absent(self):
-        adapter = make_frappe_adapter(simulated=False)
+        adapter = make_frappe_adapter(simulated=False, test_hooks=True)
         res = adapter.call(
             "provision_site",
             _ctx("t_alpha"),

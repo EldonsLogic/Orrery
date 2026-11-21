@@ -1,0 +1,108 @@
+{
+  "status": "draft",
+  "version": "0.1.0",
+  "review": "unreviewed",
+  "invoice_categories": {
+    "S": {"invoice_rate_percent": 15, "reasons": {}},
+    "Z": {
+      "invoice_rate_percent": 0,
+      "reasons": {
+        "VATEX-SA-32": {"en": "Export of goods", "ar": "صادرات السلع من المملكة", "review": "unreviewed"},
+        "VATEX-SA-33": {"en": "Export of services", "ar": "صادرات الخدمات من المملكة", "review": "unreviewed"},
+        "VATEX-SA-34-1": {"en": "The international transport of Goods", "ar": "النقل الدولي للسلع", "review": "unreviewed"},
+        "VATEX-SA-34-2": {"en": "International transport of passengers", "ar": "النقل الدولي للركاب", "review": "unreviewed"},
+        "VATEX-SA-34-3": {"en": "Services directly connected and incidental to a Supply of international passenger transport", "ar": "الخدمات المرتبطة مباشرة أو عرضياً بتوريد النقل الدولي للركاب", "review": "unreviewed"},
+        "VATEX-SA-34-4": {"en": "Supply of a qualifying means of transport", "ar": "توريد وسائل النقل المؤهلة", "review": "unreviewed"},
+        "VATEX-SA-34-5": {"en": "Any services relating to Goods or passenger transportation, as defined in article twenty five of these Regulations", "ar": "الخدمات ذات الصلة بنقل السلع أو الركاب، وفقاً للتعريف الوارد بالمادة الخامسة والعشرين من اللائحة التنفيذية لنظام ضريبة القيمة المضافة", "review": "unreviewed"},
+        "VATEX-SA-35": {"en": "Medicines and medical equipment", "ar": "الأدوية والمعدات الطبية", "review": "unreviewed"},
+        "VATEX-SA-36": {"en": "Qualifying metals", "ar": "المعادن المؤهلة", "review": "unreviewed"},
+        "VATEX-SA-EDU": {"en": "Private education to citizen", "ar": "الخدمات التعليمية الخاصة للمواطنين", "review": "unreviewed"},
+        "VATEX-SA-HEA": {"en": "Private healthcare to citizen", "ar": "الخدمات الصحية الخاصة للمواطنين", "review": "unreviewed"},
+        "VATEX-SA-MLTRY": {"en": "Supply of qualified military goods", "ar": "توريد السلع العسكرية المؤهلة", "review": "unreviewed"}
+      }
+    },
+    "E": {
+      "invoice_rate_percent": 0,
+      "reasons": {
+        "VATEX-SA-29": {"en": "Financial services mentioned in Article 29 of the VAT Regulations", "ar": "الخدمات المالية", "review": "unreviewed"},
+        "VATEX-SA-29-7": {"en": "Life insurance services mentioned in Article 29 of the VAT Regulations", "ar": "عقد تأمين على الحياة", "review": "unreviewed"},
+        "VATEX-SA-30": {"en": "Real estate transactions mentioned in Article 30 of the VAT Regulations", "ar": "التوريدات العقارية المعفاة من الضريبة", "review": "unreviewed"}
+      }
+    },
+    "O": {"invoice_rate_percent": null, "reasons": {"VATEX-SA-OOS": null}}
+  },
+  "treatments": {
+    "domestic_sale_standard": {
+      "label": {"ar": "مبيعات محلية خاضعة للنسبة الأساسية", "en": "Standard-Rated Domestic Sales"},
+      "review": "unreviewed",
+      "vat_rate_percent": 15,
+      "invoice_category": "S",
+      "posting_accounts": {"output": "2210"},
+      "engine_template": {
+        "doctype": "Sales Taxes and Charges Template",
+        "is_default": 0,
+        "taxes": [{"charge_type": "On Net Total", "account_role": "output", "rate": 15}]
+      }
+    },
+    "domestic_purchase_standard": {
+      "label": {"ar": "مشتريات محلية بضريبة قابلة للخصم بالكامل", "en": "Standard-Rated Domestic Purchases with Fully Deductible VAT"},
+      "review": "unreviewed",
+      "vat_rate_percent": 15,
+      "invoice_category": null,
+      "posting_accounts": {"input": "1151"},
+      "engine_template": {
+        "doctype": "Purchase Taxes and Charges Template",
+        "is_default": 0,
+        "taxes": [{"charge_type": "On Net Total", "account_role": "input", "rate": 15, "category": "Total", "add_deduct_tax": "Add"}]
+      }
+    },
+    "sale_zero_rated": {
+      "label": {"ar": "مبيعات خاضعة لنسبة الصفر", "en": "Zero-Rated Sales"},
+      "review": "unreviewed",
+      "vat_rate_percent": 0,
+      "invoice_category": "Z",
+      "posting_accounts": {"output": "2210"},
+      "engine_template": {
+        "doctype": "Sales Taxes and Charges Template",
+        "is_default": 0,
+        "taxes": [{"charge_type": "On Net Total", "account_role": "output", "rate": 0}]
+      }
+    },
+    "sale_exempt": {
+      "label": {"ar": "مبيعات معفاة من الضريبة", "en": "VAT-Exempt Sales"},
+      "review": "unreviewed",
+      "vat_rate_percent": null,
+      "invoice_category": "E",
+      "posting_accounts": {"output": "2210"},
+      "engine_template": {
+        "doctype": "Sales Taxes and Charges Template",
+        "is_default": 0,
+        "taxes": [{"charge_type": "On Net Total", "account_role": "output", "rate": 0}]
+      }
+    },
+    "sale_out_of_scope": {
+      "label": {"ar": "مبيعات خارج نطاق الضريبة", "en": "Out-of-Scope Sales"},
+      "review": "unreviewed",
+      "vat_rate_percent": null,
+      "invoice_category": "O",
+      "posting_accounts": {},
+      "engine_template": null
+    },
+    "goods_import_standard_at_customs": {
+      "label": {"ar": "ضريبة واردات السلع بالنسبة الأساسية عند الجمارك", "en": "Standard-Rated Goods Import VAT Paid at Customs"},
+      "review": "unreviewed",
+      "vat_rate_percent": 15,
+      "invoice_category": null,
+      "posting_accounts": {"eligible_input": "1152"},
+      "engine_template": null
+    },
+    "services_reverse_charge_standard": {
+      "label": {"ar": "احتساب عكسي بالنسبة الأساسية للخدمات المستوردة", "en": "Standard-Rated Reverse Charge on Imported Services"},
+      "review": "unreviewed",
+      "vat_rate_percent": 15,
+      "invoice_category": null,
+      "posting_accounts": {"eligible_input": "1153", "output": "2220"},
+      "engine_template": null
+    }
+  }
+}

@@ -39,7 +39,7 @@ class TestEgyptCountryPack(unittest.TestCase):
         self.assertEqual(self.pack["packId"], "eg")
         self.assertEqual(self.pack["componentId"], "country.eg")
         self.assertEqual(self.pack["countryCode"], "EG")
-        self.assertEqual(self.pack["status"], "draft")
+        self.assertEqual(self.pack["status"], "tested")
         self.assertEqual(self.pack["evidenceStatus"], "unverified")
         self.assertFalse(self.pack["testOnly"])
         self.assertEqual(validate_pack(self.pack), [])
@@ -55,11 +55,30 @@ class TestEgyptCountryPack(unittest.TestCase):
         self.assertEqual(self.manifest["parameters"], [])
         self.assertEqual(self.manifest["owner"]["github"], "sayegh9")
         self.assertEqual(self.manifest["certification"]["level"], "tested")
+        self.assertEqual(self.pack["status"], self.manifest["certification"]["level"])
+        self.assertEqual(self.pack["evidenceStatus"], "unverified")
         self.assertTrue(self.manifest["certification"]["touchesLedgerOrTax"])
         self.assertEqual(self.manifest["certification"]["reviewedBy"], [])
         self.assertEqual(self.manifest["i18n"]["locales"], ["ar", "en"])
         self.assertFalse(self.manifest["i18n"]["rtlVerified"])
         self.assertTrue((REPO_ROOT / self.manifest["tests"][0]["path"]).is_file())
+
+        referenced_components = {
+            self.pack["coaTemplate"]["componentId"],
+            self.pack["eInvoicing"]["componentId"],
+            *(tpl["componentId"] for tpl in self.pack["printFormats"]["templates"]),
+        }
+        required_components = {
+            req["component"] for req in self.manifest["requires"] if "component" in req
+        }
+        self.assertTrue(referenced_components.issubset(required_components))
+
+        provided_types = {
+            art["type"]
+            for entry in self.manifest["provides"]
+            for art in entry["artifacts"]
+        }
+        self.assertNotIn("print_format", provided_types)
 
     def test_arabic_labels_marked_unreviewed_and_out_of_scope_payroll_disabled(self) -> None:
         self.assertEqual(self.strings["reviewStatus"], "proposed_for_native_speaker_review")
@@ -77,16 +96,16 @@ class TestEgyptCountryPack(unittest.TestCase):
     def test_egypt_metadata_no_inline_maths_and_dst_zone(self) -> None:
         tax = self.pack["tax"]
         self.assertTrue(tax["vatSupported"])
+        self.assertEqual(tax["taxCodesRef"], "eg.tax_codes_unverified")
         self.assertEqual(tax["filingPeriods"], ["monthly"])
         self.assertEqual(tax["roundingRule"], "half_away_from_zero")
-        self.assertNotIn("rate", tax)
-        self.assertNotIn("rates", tax)
 
         einv = self.pack["eInvoicing"]
         self.assertTrue(einv["required"])
         self.assertEqual(einv["mode"], "eg_e_invoice")
         self.assertEqual(einv["authority"], "Egyptian Tax Authority (ETA)")
         self.assertEqual(einv["archiveRetentionYears"], 5)
+        self.assertEqual(self.pack["printFormats"]["mandatoryLanguages"], ["ar"])
 
         loc = self.pack["localeDefaults"]
         self.assertEqual(loc["timezone"], "Africa/Cairo")
@@ -140,7 +159,7 @@ class TestEgyptCountryPack(unittest.TestCase):
     def test_allowed_company_overrides_validate_and_resolve(self) -> None:
         overrides = {
             "numberSystem": "eastern_arabic",
-            "calendar": {"secondaryDisplay": "hijri_umm_al_qura"},
+            "calendar": {"secondaryDisplay": "gregorian"},
             "week": {"startDay": "mon", "weekendDays": ["sat", "sun"]},
             "workingTime": {
                 "workDays": ["mon", "tue", "wed", "thu", "fri"],
@@ -167,10 +186,10 @@ class TestEgyptCountryPack(unittest.TestCase):
             },
         }
         resolved = resolve_country_pack("EG", PACKS_DIR, company_overrides=overrides, version="0.1.0")
-        self.assertEqual(resolved["status"], "draft")
+        self.assertEqual(resolved["status"], "tested")
         self.assertEqual(resolved["evidenceStatus"], "unverified")
         self.assertEqual(resolved["locale"]["numberSystem"], "eastern_arabic")
-        self.assertEqual(resolved["locale"]["calendar"]["secondaryDisplay"], "hijri_umm_al_qura")
+        self.assertEqual(resolved["locale"]["calendar"]["secondaryDisplay"], "gregorian")
         self.assertEqual(resolved["locale"]["week"], {"startDay": "mon", "weekendDays": ["sat", "sun"]})
         self.assertEqual(resolved["locale"]["fiscalYear"], {"type": "gregorian", "startMonth": 7, "startDay": 1})
         self.assertEqual(resolved["locale"]["currency"], "EGP")

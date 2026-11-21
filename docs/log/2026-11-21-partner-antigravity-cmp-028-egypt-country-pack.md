@@ -33,3 +33,10 @@ Unknown.
 
 ## Next step
 - Merge PR #251 (`CMP-028` row claim in `docs/PLAN.md`), complete Tier 3 human line-by-line review + cross-model review (`ADR-0031`, `ADR-0035`), obtain native Arabic review (`ADR-0033`), and obtain Egyptian counsel/accountant sign-off on all `UNVERIFIED` items before promoting `country.eg` above `draft`/`unverified`.
+
+## Review fix round
+Addressed findings from the Opus 5.5 cross-model review and Eldon's Fable 5.2 review of `0ade5e2` on PR #256:
+- `components/compliance/country_pack/packs/eg/0.1.0/pack.json`: aligned `status` with `manifest.json` `certification.level` at `tested` while keeping `evidenceStatus: unverified`; changed `printFormats.mandatoryLanguages` from `["ar", "en"]` to `["ar"]` (language rules were not researched).
+- `components/compliance/country_pack/packs/eg/0.1.0/manifest.json`: listed `finance.coa_eg` and `compliance.eta_eg` in `requires`; removed the three nonexistent `print_format` artifacts from `provides` (leaving `compliance.eta_eg` as owner of those print formats and pointing `compliance.country_pack.eg` at `loader.load_country_pack` and `loader.resolve_country_pack`).
+- `components/compliance/country_pack/packs/eg/0.1.0/README.md`: moved `required`, `mode`, and `componentId` out of the `VERIFIED` SDK row into the `UNVERIFIED` mandate row; marked "July 1 can override" explicitly `UNVERIFIED`; added ETA e-invoicing spec decimal precision as an explicit research gap in the rounding row; recorded open counsel question Q11 (`mandatoryLanguages: ["ar"]`).
+- `components/compliance/country_pack/tests/test_pack_eg.py`: updated tests first — asserted `pack.status == manifest.certification.level == "tested"` and `evidenceStatus == "unverified"`, asserted every component id referenced by `pack.json` is listed in `manifest.requires` and `provides` lists no `print_format` artifacts, replaced the vacuous `rate`/`rates` assertions with a `taxCodesRef` and `mandatoryLanguages` check, and replaced `hijri_umm_al_qura` in the override test with `"gregorian"`.

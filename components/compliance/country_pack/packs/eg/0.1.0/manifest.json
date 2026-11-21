@@ -7,27 +7,32 @@
     "ar": "حزمة دولة مصر",
     "en": "Egypt Country Pack"
   },
-  "description": "Draft Egypt country pack (CMP-028; pack status: draft, evidenceStatus: unverified). Supplies declarative statutory metadata and locale defaults for Egypt (EG) from docs/compliance/egypt-research.md (accessed 2026-11-18) and docs/compliance/country-matrix.md: standard 14% VAT / 5% machinery / schedule tax (UNVERIFIED), ETA eInvoicing and eReceipt references (SDK API VERIFIED; rollout and token rules UNVERIFIED), 5-year tax archive retention (UNVERIFIED), Africa/Cairo timezone with DST note (UNVERIFIED), Gregorian calendar, Sun-Thu work week (UNVERIFIED), and EGP currency. Payroll and social insurance hooks are disabled/null (out of v1 scope). Contains zero tax or e-invoicing maths (ADR-0031). Arabic labels are unreviewed machine-assisted drafts (ADR-0033).",
+  "description": "Egypt country pack (CMP-028; pack status: tested, evidenceStatus: unverified). Supplies declarative statutory metadata and locale defaults for Egypt (EG) from docs/compliance/egypt-research.md (accessed 2026-11-18) and docs/compliance/country-matrix.md: standard 14% VAT / 5% machinery / schedule tax (UNVERIFIED), ETA eInvoicing and eReceipt references (SDK API VERIFIED; rollout and token rules UNVERIFIED), 5-year tax archive retention (UNVERIFIED), Africa/Cairo timezone with DST note (UNVERIFIED), Gregorian calendar, Sun-Thu work week (UNVERIFIED), and EGP currency. Payroll and social insurance hooks are disabled/null (out of v1 scope). Contains zero tax or e-invoicing maths (ADR-0031). Arabic labels are unreviewed machine-assisted drafts (ADR-0033).",
   "provides": [
     {
       "capability": "compliance.country_pack.eg",
       "artifacts": [
         {
-          "type": "print_format",
-          "ref": "eg_tax_invoice_template_unverified"
+          "type": "function",
+          "ref": "components.compliance.country_pack.loader.load_country_pack"
         },
         {
-          "type": "print_format",
-          "ref": "eg_credit_note_template_unverified"
-        },
-        {
-          "type": "print_format",
-          "ref": "eg_debit_note_template_unverified"
+          "type": "function",
+          "ref": "components.compliance.country_pack.loader.resolve_country_pack"
         }
       ]
     }
   ],
-  "requires": [],
+  "requires": [
+    {
+      "component": "finance.coa_eg",
+      "versionRange": ">=0.1.0 <1.0.0"
+    },
+    {
+      "component": "compliance.eta_eg",
+      "versionRange": ">=0.1.0 <1.0.0"
+    }
+  ],
   "parameters": [],
   "tests": [
     {

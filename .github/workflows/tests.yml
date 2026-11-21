@@ -129,6 +129,7 @@ jobs:
           # - Evals exercise the discovery connectors and the operate runtime.
           # - Blueprint tests use discovery templates, component manifests and brand tokens.
           # - ERP-003 and ERP-021 use the dev bench; its tests discover ERP-014 in apps/engine.
+          # - ERP-013 uses the Discovery prevalidation contract and tabular connector.
           # - Components are also used by discovery, studio and the engine.
           # - ERP-016 print documents read docs/brand/tokens/tokens.json, so it selects the engine suite.
           echo "brand=$(check_path '^docs/brand/(tools|tokens)/')" >> "$GITHUB_OUTPUT"
@@ -139,7 +140,7 @@ jobs:
           echo "gateway=$(check_path '^(services/gateway/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
           echo "operate=$(check_path '^(services/(operate|blueprint|control-plane|gateway)/)')" >> "$GITHUB_OUTPUT"
           echo "studio=$(check_path '^(services/studio/|services/blueprint/|services/datasets/|components/)')" >> "$GITHUB_OUTPUT"
-          echo "engine=$(check_path '^(apps/engine/|services/blueprint/|components/|infra/dev/docker/|docs/brand/tokens/tokens\.json$)')" >> "$GITHUB_OUTPUT"
+          echo "engine=$(check_path '^(apps/engine/|services/blueprint/|services/discovery/(prevalidate|connectors)/|components/|infra/dev/docker/|docs/brand/tokens/tokens\.json$)')" >> "$GITHUB_OUTPUT"
           echo "evals=$(check_path '^(evals/|services/(blueprint|discovery|operate)/)')" >> "$GITHUB_OUTPUT"
           echo "scripts=$(check_path '^scripts/')" >> "$GITHUB_OUTPUT"
           echo "infra=$(check_path '^(infra/|apps/engine/)')" >> "$GITHUB_OUTPUT"
@@ -324,6 +325,12 @@ jobs:
         env:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_012_engine_adapter.py apps/engine/change_engine/change_engine/tests/test_erp_012_frappe_adapter.py -q
+
+      - name: Opening balances and master data importer tests (ERP-013)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine:.
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_opening_importer.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_fixes.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_round4.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_round6.py -q
 
       - name: Durable adapter state and production guard tests (ERP-026, offline)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

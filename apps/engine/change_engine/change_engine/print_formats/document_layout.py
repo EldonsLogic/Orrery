@@ -101,6 +101,7 @@ html, body {
   print-color-adjust: exact;
 }
 bdi { unicode-bidi: isolate; direction: ltr; }
+bdi[dir="rtl"] { direction: rtl; }
 [data-locked-region] {
   visibility: visible !important;
   opacity: 1 !important;
@@ -350,6 +351,41 @@ _FORBIDDEN_ATTRS = frozenset({"style", "hidden", "srcdoc", "href", "xlink:href",
                               "background", "poster", "ping", "contenteditable"})
 
 
+# CMP-005 prints the secondary Hijri date in the header meta table as one row: Arabic label,
+# value cell, English label. Only that cell, and only on tax invoices, may carry these two
+# isolates (founder decision on ERP-016): the Arabic month name runs right to left, the English
+# one left to right. Every other direction or language override stays refused.
+_HIJRI_BDI_FORMS = (("rtl", "ar"), ("ltr", "en"))
+
+
+def _hijri_cell_isolates(nodes: list["_Node"], kind: str, problems: list[str]) -> set["_Node"]:
+    """The ``<bdi>`` nodes allowed to override direction or language (empty when none)."""
+    ar_label, en_label = ALL_LABELS["hijri_date"]
+    cells = []
+    for row in nodes:
+        cols = row.children
+        if row.tag != "tr" or [c.tag for c in cols] != ["th", "td", "th"]:
+            continue
+        if cols[0].content().strip() != ar_label or cols[2].content().strip() != en_label:
+            continue
+        in_meta = row.inside(lambda p: p.tag == "table"
+                             and "meta-table" in p.attrs.get("class", "").split())
+        in_header = row.inside(lambda p: p.attrs.get("data-locked-region") == "header")
+        if in_meta and in_header and cols[1].attrs.get("class") == "meta-value":
+            cells.append(cols[1])
+    if len(cells) > 1:
+        problems.append("duplicated Hijri date row")
+    if len(cells) != 1 or not kind.startswith("tax_invoice"):
+        return set()
+    allowed: set[_Node] = set()
+    for form in _HIJRI_BDI_FORMS:
+        for child in cells[0].children:
+            if child.tag == "bdi" and (child.attrs.get("dir"), child.attrs.get("lang")) == form:
+                allowed.add(child)  # the first of each form only; a second one is refused
+                break
+    return allowed
+
+
 class _Node:
     __slots__ = ("tag", "attrs", "children", "parent", "text")
 
@@ -455,6 +491,7 @@ def _verify(document_html: str, kind: str, spec: _Spec) -> list[str]:
         if rest != locked_document_css():
             problems.append("stylesheet differs from the locked document stylesheet")
 
+    hijri_isolates = _hijri_cell_isolates(nodes, kind, problems)
     imgs: list[_Node] = []
     for node in nodes:
         if node.tag in _FORBIDDEN_TAGS:
@@ -471,9 +508,10 @@ def _verify(document_html: str, kind: str, spec: _Spec) -> list[str]:
                 problems.append(f"forbidden attribute 'src' on <{node.tag}>")
             if name == "dir" and node.tag not in ("html", "body", "bdi"):
                 problems.append(f"direction override on <{node.tag}>")
-            if name == "dir" and node.tag == "bdi" and value != "ltr":
+            if name == "dir" and node.tag == "bdi" and value != "ltr" \
+                    and node not in hijri_isolates:
                 problems.append("<bdi> must stay dir=\"ltr\"")
-            if name == "lang" and node.tag != "html":
+            if name == "lang" and node.tag != "html" and node not in hijri_isolates:
                 problems.append(f"language override on <{node.tag}>")
             if "javascript:" in lowered or "vbscript:" in lowered:
                 problems.append(f"script URL in '{name}'")

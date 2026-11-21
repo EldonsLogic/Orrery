@@ -2759,5 +2759,113 @@ class TestUnreviewedArabicGuard(unittest.TestCase):
         self.assertEqual(verify_locked_layout(doc, "tax_invoice_zatca_sa_standard"), [])
 
 
+class TestHijriCellInLockedLayout(unittest.TestCase):
+    """CMP-005 prints the Hijri date cell with its own bdi direction and language (founder
+    decision: the locked layout allows exactly those two forms in exactly that cell)."""
+
+    HIJRI_ON = {"compliance_profile": {"hijriDisplay": {"enabled": True}}}
+    AR_BDI = '<bdi dir="rtl" lang="ar"'
+    EN_BDI = '<bdi dir="ltr" lang="en">'
+    KINDS = (("tax_invoice_zatca_sa_standard", _tax_invoice_data),
+             ("tax_invoice_zatca_sa_simplified", _simplified_invoice_data))
+
+    def _doc(self, factory, **settings):
+        return render_branded_tax_invoice_html(factory(), mode="zatca_sa", **settings)
+
+    def test_enabled_hijri_renders_both_forms_and_passes_the_lock(self):
+        ar_label, en_label = BILINGUAL_LABELS["hijri_date"]
+        for kind, factory in self.KINDS:
+            with self.subTest(kind):
+                doc = self._doc(factory, **self.HIJRI_ON)
+                assert_locked_layout(doc, kind)
+                _, header, _ = _region_text(doc, "header")
+                row = re.search(r"<tr>(?:(?!</tr>).)*" + re.escape(en_label) + r"</th></tr>",
+                                header).group(0)
+                self.assertIn(ar_label, row)
+                self.assertRegex(row, r'<bdi dir="rtl" lang="ar"[^>]*>[^<]+</bdi>')
+                self.assertRegex(row, r'<bdi dir="ltr" lang="en">[^<]+</bdi>')
+
+    def test_without_settings_there_is_no_hijri_row(self):
+        for kind, factory in self.KINDS:
+            with self.subTest(kind):
+                doc = self._doc(factory)
+                self.assertEqual(verify_locked_layout(doc, kind), [])
+                for label in BILINGUAL_LABELS["hijri_date"]:
+                    self.assertNotIn(label, doc)
+                self.assertNotIn('dir="rtl" lang', doc)
+                self.assertNotIn('lang="en"', doc)
+
+    def test_other_direction_or_language_in_the_hijri_cell_is_refused(self):
+        for kind, factory in self.KINDS:
+            doc = self._doc(factory, **self.HIJRI_ON)
+            self.assertEqual(doc.count(self.AR_BDI), 1)
+            self.assertEqual(doc.count(self.EN_BDI), 1)
+            variants = {
+                "rtl+en": doc.replace(self.AR_BDI, '<bdi dir="rtl" lang="en"'),
+                "ltr+ar": doc.replace(self.EN_BDI, '<bdi dir="ltr" lang="ar">'),
+                "rtl+fr": doc.replace(self.AR_BDI, '<bdi dir="rtl" lang="fr"'),
+                "en-US": doc.replace(self.EN_BDI, '<bdi dir="ltr" lang="en-US">'),
+                "auto+ar": doc.replace(self.AR_BDI, '<bdi dir="auto" lang="ar"'),
+                "rtl alone": doc.replace(self.AR_BDI, '<bdi dir="rtl"'),
+                "lang alone": doc.replace(self.EN_BDI, '<bdi lang="en">'),
+                "span lang": doc.replace(self.EN_BDI + "", '<span lang="en">x</span>'
+                                         + self.EN_BDI),
+                "second rtl+ar": doc.replace(self.AR_BDI, '<bdi dir="rtl" lang="ar">x</bdi>'
+                                             + self.AR_BDI),
+                "nested": doc.replace(self.EN_BDI, '<b>' + self.EN_BDI).replace(
+                    "</bdi></td><th class=\"meta-label-en\">"
+                    + BILINGUAL_LABELS["hijri_date"][1],
+                    "</bdi></b></td><th class=\"meta-label-en\">"
+                    + BILINGUAL_LABELS["hijri_date"][1]),
+            }
+            for name, tampered in variants.items():
+                with self.subTest(kind=kind, variant=name):
+                    self.assertNotEqual(tampered, doc)
+                    self.assertTrue(verify_locked_layout(tampered, kind))
+
+    def test_the_two_forms_outside_the_hijri_cell_are_refused(self):
+        ar_label, en_label = BILINGUAL_LABELS["hijri_date"]
+        currency = BILINGUAL_LABELS["currency"][0]
+        for kind, factory in self.KINDS:
+            for settings in ({}, self.HIJRI_ON):
+                doc = self._doc(factory, **settings)
+                injections = {
+                    # The currency value cell, a party card and the totals.
+                    "currency cell": (f'{currency}</th><td class="meta-value">',
+                                      f'{currency}</th><td class="meta-value">'
+                                      '<bdi dir="rtl" lang="ar">x</bdi>'),
+                    "seller": ('data-locked-region="seller">',
+                               'data-locked-region="seller"><bdi dir="ltr" lang="en">x</bdi>'),
+                    "totals": ('data-locked-region="totals">',
+                               'data-locked-region="totals"><bdi dir="rtl" lang="ar">x</bdi>'),
+                    # A look-alike Hijri row outside the header's meta table.
+                    "fake row": ('data-locked-region="totals">',
+                                 'data-locked-region="totals"><table><tr>'
+                                 f'<th class="meta-label-ar">{ar_label}</th>'
+                                 '<td class="meta-value"><bdi dir="rtl" lang="ar">x</bdi></td>'
+                                 f'<th class="meta-label-en">{en_label}</th></tr></table>'),
+                }
+                for name, (anchor, replacement) in injections.items():
+                    with self.subTest(kind=kind, hijri=bool(settings), where=name):
+                        self.assertIn(anchor, doc)
+                        tampered = doc.replace(anchor, replacement, 1)
+                        self.assertTrue(verify_locked_layout(tampered, kind))
+
+    def test_a_duplicated_hijri_row_is_refused(self):
+        for kind, factory in self.KINDS:
+            doc = self._doc(factory, **self.HIJRI_ON)
+            row = re.search(r"<tr><th class=\"meta-label-ar\">"
+                            + re.escape(BILINGUAL_LABELS["hijri_date"][0])
+                            + r"</th>.*?</th></tr>", doc).group(0)
+            with self.subTest(kind):
+                self.assertTrue(verify_locked_layout(doc.replace(row, row + row), kind))
+
+    def test_locked_css_lets_the_arabic_hijri_text_run_right_to_left(self):
+        css = LOCKED_DOCUMENT_CSS
+        self.assertRegex(css, r'bdi \{ unicode-bidi: isolate; direction: ltr; \}\n'
+                              r'bdi\[dir="rtl"\] \{ direction: rtl; \}')
+        self.assertNotRegex(css, r'bdi\[lang')
+
+
 if __name__ == "__main__":
     unittest.main()

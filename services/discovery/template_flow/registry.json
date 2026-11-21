@@ -1,0 +1,17 @@
+{
+  "version": "0.1.0",
+  "note": "The only Blueprint paths an owner correction may set. Anything else is refused. Array elements are addressed by id (guards by field|op), never by index. No entry lets an edit remove a value, change meta, buildState, provenance, country, VAT registration or e-invoicing.",
+  "fields": [
+    {"key": "company.legal_name", "section": "company", "pattern": "/company/legalName/@lang", "kind": "text", "minLength": 1, "maxLength": 200},
+    {"key": "company.cr_number", "section": "company", "pattern": "/company/crNumber", "kind": "digits", "length": 10, "create": true},
+    {"key": "company.vat_number", "section": "company", "pattern": "/company/vatNumber", "kind": "digits", "length": 15, "create": true},
+    {"key": "location.name", "section": "locations", "pattern": "/locations/*/labels/@lang", "kind": "text", "minLength": 1, "maxLength": 80},
+    {"key": "role.name", "section": "roles", "pattern": "/roles/*/labels/@lang", "kind": "text", "minLength": 1, "maxLength": 80},
+    {"key": "entity.name", "section": "entities", "pattern": "/entities/*/labels/@lang", "kind": "text", "minLength": 1, "maxLength": 80},
+    {"key": "approval.name", "section": "approvals", "pattern": "/approvals/*/labels/@lang", "kind": "text", "minLength": 1, "maxLength": 80},
+    {"key": "approval.threshold", "section": "approvals", "pattern": "/approvals/*/conditions/*/value", "kind": "number", "min": "1", "max": "1000000000000"},
+    {"key": "vat.prices_include_vat", "section": "compliance", "pattern": "/compliance/vat/pricesIncludeVat", "kind": "bool"},
+    {"key": "vat.filing_period", "section": "compliance", "pattern": "/compliance/vat/filingPeriod", "kind": "enum", "values": ["monthly", "quarterly"]},
+    {"key": "hijri.display", "section": "compliance", "pattern": "/compliance/hijriDisplay/enabled", "kind": "bool"}
+  ]
+}

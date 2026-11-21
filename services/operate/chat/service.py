@@ -16,11 +16,12 @@ from agui.ports import Principal, RuntimeContext
 from runtime import CancelToken
 
 from . import errors, language
+from change import ChangeRefused
 from .errors import ChatFailure
 from .history import build_window, default_frame
-from .models import ChatLimits, Entry, MessageRecord, RouteRequest, RunSetup, Session
+from .models import ChatLimits, Entry, MessageRecord, PendingBinding, RouteRequest, RunSetup, Session
 from .router import DefaultRouter, safe_route
-from .store import NoRetention
+from .store import MemoryPendingStore, NoRetention
 
 log = logging.getLogger("chat")
 _MSG_ID = re.compile(r"^[A-Za-z0-9_\-:.]{8,128}$")
@@ -33,8 +34,14 @@ def _sha(text: str) -> str:
 
 class ChatService:
     def __init__(self, *, store, runtime_factory, ids, clock, audit=None, router=None, retention=None,
-                 limits: ChatLimits = ChatLimits(), frame_for=default_frame, default_locale: str = "en"):
+                 limits: ChatLimits = ChatLimits(), frame_for=default_frame, default_locale: str = "en",
+                 change=None, pending=None):
+        """`change` is a ChangePort (change.ChangeService) built on the SAME clock. With it, a `change` turn that the
+        router says needs confirmation is proposed and previewed here, the pending confirmation is recorded only after
+        the preview was shown, and a confirming turn goes to `change.confirm` with the router's binding. Without it
+        the chat never proposes or confirms anything."""
         self.store, self.factory, self.ids, self.clock, self.audit = store, runtime_factory, ids, clock, audit
+        self.change, self.pending = change, pending or MemoryPendingStore()
         self.router, self.retention = router or DefaultRouter(), retention or NoRetention()
         self.limits, self.frame_for, self.default_locale = limits, frame_for, default_locale
         self._lock = threading.Lock()
@@ -145,8 +152,11 @@ class ChatService:
     def _run(self, p, session, message_id, text, thash, lang, run_id, token, final):
         lim = self.limits
         t0 = self.clock()
-        mode = safe_route(self.router, RouteRequest(p.tenant_id, p.subject, tuple(p.role_ids), session.session_id,
-                                                    text, lang.locale, "ask"))
+        pend = self.pending.get(p.tenant_id, p.subject, session.session_id) if self.change is not None else None
+        routed = safe_route(self.router, RouteRequest(p.tenant_id, p.subject, tuple(p.role_ids), session.session_id,
+                                                      text, lang.locale, "ask", pend, t0))
+        mode = routed.mode
+        direct = self._change_turn(p, session, text, lang, routed, pend) if self.change is not None else None
         prior = [e for e in self.store.entries(session) if e.message_id != message_id]
         window = build_window(prior, self.frame_for(mode, lang.locale), lim)
         if all(e.message_id != message_id for e in self.store.entries(session)):  # a retry must not duplicate it
@@ -157,7 +167,7 @@ class ChatService:
             "session_id": session.session_id, "message_id": message_id, "run_id": run_id, "text_sha256": thash,
             "text_len": len(text), "locale": lang.locale, "mixed": lang.mixed, "mode": mode})
         log.info("chat message session=%s len=%d locale=%s mode=%s", session.session_id, len(text), lang.locale, mode)
-        runtime = self.factory(RunSetup(window, mode, lang.locale, token))
+        runtime = None if direct is not None else self.factory(RunSetup(window, mode, lang.locale, token))
         ctx = RuntimeContext(principal=p, thread_id=session.thread_id, run_id=run_id, user_text=text,
                              server_state={"mode": mode, "numbers": language.extract_numbers(text, lim.max_numbers)},
                              locale=lang.locale)
@@ -168,7 +178,7 @@ class ChatService:
         parts, opened, approvals, usage, error = [], set(), [], [0, 0], None
         it = None
         try:
-            it = iter(runtime.run(ctx))
+            it = iter(direct if direct is not None else runtime.run(ctx))
             for item in it:
                 if token.cancelled:
                     break
@@ -212,7 +222,7 @@ class ChatService:
         self._audit(p, "chat.turn_completed", {
             "mode": mode, "latency_ms": max(0, int(round((self.clock() - t0) * 1000))),
             "input_tokens": usage[0], "output_tokens": usage[1]},
-            {"model_id": str(getattr(runtime, "model_id", "unknown"))[:256],
+            {"model_id": str(getattr(runtime, "model_id", "change-service" if direct is not None else "unknown"))[:256],
              "prompt_version": str(getattr(runtime, "prompt_version", "unversioned"))[:256]})
         if cancelled:
             e = errors.render("chat_cancelled", lang.locale)
@@ -221,6 +231,74 @@ class ChatService:
             yield wire.run_error(error["message"], error["code"])
         else:
             yield wire.run_finished(session.thread_id, run_id, [wire.interrupt(a) for a in approvals if a])
+
+    # ---- change-by-chat (Q-265, Q-282) -----------------------------------------------------------------------
+    def _change_turn(self, p, session, text, lang, routed, pend):
+        """Return a deterministic reply generator for turns the change service owns, else None (the model runs).
+        Owns: a confirmation bound to the pending preview, a refused or expired one, and a new change request."""
+        key = (p.tenant_id, p.subject, session.session_id)
+        res = routed.resolves_pending
+        if res in ("declined", "expired"):
+            self.pending.clear(*key)
+            self._cancel_quietly(p, session.session_id)
+            return None  # an ordinary turn follows (the router already abstained or answered ask)
+        if res == "confirmed" or (routed.confirms_action_id and routed.confirms_args_hash):
+            self.pending.clear(*key)  # one shot, whatever happens next
+            return self._confirm_events(p, session, lang, routed, pend)
+        if pend is not None:  # any turn that does not answer the pending voids it: a later yes must not apply it
+            self.pending.clear(*key)
+            self._cancel_quietly(p, session.session_id)
+        if routed.mode == "change" and routed.requires_confirmation and routed.decision is not None:
+            self.pending.clear(*key)  # a new request voids the old pending before its own preview exists
+            return self._propose_events(p, session, text, lang, routed)
+        return None
+
+    def _cancel_quietly(self, p, session_id) -> None:
+        try:
+            self.change.cancel(p, session_id)
+        except Exception as exc:  # noqa: BLE001
+            log.error("change cancel failed type=%s", type(exc).__name__)
+
+    def _text(self, text: str) -> list:
+        mid = self.ids.new_id("msg")
+        return [{"type": "TEXT_MESSAGE_START", "messageId": mid, "role": "assistant"},
+                {"type": "TEXT_MESSAGE_CONTENT", "messageId": mid, "delta": text},
+                {"type": "TEXT_MESSAGE_END", "messageId": mid}]
+
+    def _refusal_text(self, exc: Exception, locale: str) -> str:
+        return (exc if isinstance(exc, ChangeRefused) else ChangeRefused("change_unavailable")).text(locale)
+
+    def _confirm_events(self, p, session, lang, routed, pend):
+        sid, locale = session.session_id, lang.locale
+        try:
+            bound = (pend is not None and routed.decision is not None and routed.mode == pend.mode
+                     and routed.confirms_action_id == pend.action_id and routed.confirms_args_hash == pend.args_hash)
+            if not bound:  # the chat's own pending is the only thing a yes can confirm
+                raise ChangeRefused("change_confirmation_mismatch")
+            out = self.change.confirm(p, sid, routed.decision, locale)
+            reply = out.text
+        except Exception as exc:  # noqa: BLE001  only the closed table reaches the customer
+            reply = self._refusal_text(exc, locale)
+        yield from self._text(reply)
+
+    def _propose_events(self, p, session, text, lang, routed):
+        sid, locale = session.session_id, lang.locale
+        try:
+            pv = self.change.propose(p, sid, text, routed.decision, locale)
+            binding = PendingBinding("change", pv.action_id, pv.digest, pv.risk, pv.expires_at)
+        except Exception as exc:  # noqa: BLE001
+            yield from self._text(self._refusal_text(exc, locale))
+            return
+        lines = [pv.text] + [f"- {o['pointer']}: {o['before']} -> {o['after']}" for o in pv.ops]
+        events = self._text("\n".join(lines))
+        # the output gate may drop the preview (engine markers in tenant-typed values): then it was not shown
+        if any(self._scrub(e) != e for e in events):
+            self._cancel_quietly(p, sid)
+            yield from self._text(self._refusal_text(ChangeRefused("change_preview_failed"), locale))
+            return
+        yield from events
+        # reached only when the consumer asked for more after the last preview event: the user was shown the preview
+        self.pending.set(p.tenant_id, p.subject, sid, binding)
 
     @staticmethod
     def _scrub(ev: dict) -> Optional[dict]:

@@ -20,11 +20,12 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 ## In flight (dispatched, no result yet)
 | Plan ID | Model | Scope | Allowed paths | Branch |
 |---|---|---|---|---|
-| DSC-009 | opus-5.5 (worktree) | Fix #224 security findings H1, H2, M3 to M5 with tests first | DSC-009 package and tests | dsc-009-fixes (local commit, orchestrator pushes to dsc-009-owner-approval) |
-| ERP-013, ERP-015 | fable-5.2 | Re-review partner #202 at new head; review new #229 | none (review text) | - |
-| ERP-016, CMP-005 | fable-5.2 | Re-review partner #204 and #155 at new heads | none (review text) | - |
-| INF-009 | fable-5.2 | Re-review partner #225 at new head | none (review text) | - |
-| OPR-015 | sonnet-5.5 | Messaging channel design (WhatsApp or push), approvals never in WhatsApp | docs/product/opr-015-messaging-channel.md | opr-015-messaging-channel (to create) |
+| DSC-009 | opus-5.5 (worktree) | Fix #224 security findings H1, H2, M3 to M5 with tests first | DSC-009 package and tests | dsc-009-fixes (local), then pushed to dsc-009-owner-approval |
+| ERP-013, ERP-015 | fable-5.2 | Re-review partner #202 at new head; review #229 | none (review text) | - |
+| SEC-022, BPL-032 | fable-5.2 | Tier 3 security review of partner #235 (role namespacing) | none (review text) | - |
+| ERP-010 | opus-5.5 | Review partner #236 (follow-ups from #201) | none (review text) | - |
+| QA-014 | sonnet-5.5 | Undefined CSS var lint plus A-06 to A-11 fixes | web/scripts, web/app, docs/specs/qa-014-accessibility-audit.md | qa-014-accessibility-audit (PR #228) |
+| - | watcher | Background script exits on any new sayegh9 comment, review or PR | - | - |
 
 ## Results
 - FND-002 (sonnet): docs/fundraising/accelerator-evaluation.md. Hub71+ wait (relocation, SAFE terms UNVERIFIED), Antler skip, Sanabil/500 wait for MVP, Flat6Labs Riyadh wait (KSA residency), QSTP skip. Hub71 deadline still UNVERIFIED (page 403). Branch fnd-002-accelerators.
@@ -33,6 +34,8 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - DSC-009 security review (fable): 2 High (outcome records bypass fold rules and can corrupt the log; summary hides items past 25 and role permissions), 3 Medium, 4 Low; posted on #224.
 - Merged #201 ERP-010 (approved at Eldon's direction after Fable review; head b482743 only resolved a PLAN conflict).
 - PRs opened: #231 FND-002, #233 GTM-004, #234 BRD-011, #232 PLT-009.
+- Re-reviews posted: #225 approved and merged; #204 request changes (Medium 2 bench tokens and 3 UAE neutral invoice still open, branch conflicts); #155 approved and merged (all findings fixed, CI green).
+- OPR-015 design shipped as PR #237 (row doing); GOV-057 wording fixes as PR #238. #231 FND-002 and #233 GTM-004 merged (Tier 1).
 - BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
 ## Files touched

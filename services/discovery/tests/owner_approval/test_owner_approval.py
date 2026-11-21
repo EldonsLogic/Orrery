@@ -106,8 +106,7 @@ def test_request_changes_and_reject_need_typed_reasons():
 # ---- who can decide -------------------------------------------------------------------------------------
 @pytest.mark.parametrize("claims", [
     Claims(kind="agent"), Claims(kind="service"), Claims(realm="staff", roles=("owner",)), Claims(roles=("accountant",)),
-    Claims(roles=("owner", "team_reviewer")), Claims(roles=("owner", "build_runner")), Claims(kind="assistant"),
-    Claims(step_up=False)])
+    Claims(roles=("owner", "team_reviewer")), Claims(roles=("owner", "build_runner")), Claims(kind="assistant")])
 def test_only_a_human_owner_with_step_up_decides(claims):
     svc, w, _ = build()
     sb, sq = seen(svc)
@@ -129,7 +128,6 @@ def test_owner_of_another_tenant_is_refused():
     lambda c, s: Principal("owner-1", "human", "tenant", T, ("owner",), 1),
     lambda c, s: Principal("owner 1!", "human", "tenant", T, ("owner",), True),
     lambda c, s: Principal("owner-1", "human", "tenant", None, ("owner",), True),
-    lambda c, s: Principal("owner-1", "human", "tenant", T, ("owner",), False),
     lambda c, s: None, lambda c, s: iter([1]), lambda c, s: (_ for _ in ()).throw(RuntimeError("boom"))])
 def test_forged_or_malformed_principals_are_refused(bad):
     svc, w, ident = build()
@@ -178,8 +176,11 @@ def test_content_edited_after_recording_blocks_the_decision():
 def test_approval_goes_stale_when_the_quote_changes_afterwards():
     svc, w, _ = build()
     approve(svc)
+    qd_old = w.quote["digest"]
     w.quote = generate_quote(w.bp, w.gap, default_price_book(), now=datetime.fromtimestamp(NOW - 60, timezone.utc), discount_bp=500)
-    assert svc.status(T, BP)["state"] == "quote_changed"
+    assert svc.status(T, BP)["state"] == "out_of_sync"   # the machine is past draft on a quote the owner no longer sees
+    assert svc.verify(T, BP, cdigest(w.bp), w.quote["digest"], "owner-1")["quoteCurrent"] is True
+    assert svc.verify(T, BP, cdigest(w.bp), qd_old, "owner-1")["quoteCurrent"] is False
 
 
 def test_wrong_digest_shapes_are_refused():

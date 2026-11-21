@@ -46,6 +46,7 @@ class World:
         self.machine = "draft"
         self.regen()
         self.calls, self.gate_error, self.gate_noop = [], None, False
+        self.owner, self.before_approve, self.timeout_after, self.rollback_error = None, None, False, None
 
     def regen(self, bp=None):
         self.bp = bp or make_bp()
@@ -55,7 +56,7 @@ class World:
 
     def revise(self, **extra):
         self.regen(make_bp(rev=self.bp["meta"]["revision"] + 1, extra=extra or {"workflows": []}))
-        self.machine = "draft"
+        self.machine, self.owner = "draft", None
 
 
 class Store:
@@ -74,27 +75,6 @@ class Holds:
         return self.w.held
 
 
-class Gate:
-    def __init__(self, w):
-        self.w = w
-
-    def status(self, t, bp):
-        return {"state": self.w.machine, "contentDigest": self.w.recorded, "contentChanged": self.w.recorded != cdigest(self.w.bp)}
-
-    def approve_owner(self, claims, *, tenant_id, blueprint_id, confirmations):
-        self.w.calls.append(("approve_owner", tenant_id, blueprint_id, list(confirmations)))
-        if self.w.gate_error:
-            raise self.w.gate_error
-        if not self.w.gate_noop:
-            self.w.machine = "owner_approved"
-
-    def roll_back(self, claims, *, tenant_id, blueprint_id, to_state, reason):
-        self.w.calls.append(("roll_back", to_state, reason))
-        if self.w.gate_error:
-            raise self.w.gate_error
-        self.w.machine = to_state
-
-
 class GateRefusal(Exception):
     def __init__(self, code):
         super().__init__("refused")
@@ -102,31 +82,86 @@ class GateRefusal(Exception):
 
 
 class Claims:
-    def __init__(self, subject="owner-1", kind="human", realm="tenant", tenant=T, roles=("owner",), step_up=True):
-        self.subject, self.kind, self.realm, self.tenant, self.roles, self.step_up = subject, kind, realm, tenant, tuple(roles), step_up
+    def __init__(self, subject="owner-1", kind="human", realm="tenant", tenant=T, roles=("owner",), step_up=True, uses=None):
+        self.subject, self.kind, self.realm, self.tenant, self.roles = subject, kind, realm, tenant, tuple(roles)
+        self.uses = uses if uses is not None else (10 ** 6 if step_up else 0)   # fresh MFA step-ups left (ADR-0047: single use)
 
 
 class Identity:
-    """Builds the Principal from claims; consumes a step-up only when asked, like the real adapter."""
+    """Builds the Principal from claims; consumes one step-up per `step_up=True` call, like the real adapter."""
     def __init__(self):
         self.override = None
 
     def resolve(self, claims, *, step_up):
         if self.override is not None:
             return self.override(claims, step_up) if callable(self.override) else self.override
-        if step_up and not claims.step_up:
-            raise RuntimeError("no step-up")
+        if step_up:
+            if claims.uses <= 0:
+                raise RuntimeError("no step-up")
+            claims.uses -= 1
         return Principal(claims.subject, claims.kind, claims.realm, claims.tenant if claims.realm == "tenant" else None,
                          claims.roles, bool(step_up))
+
+
+class Gate:
+    """Mirrors the build state machine's owner gate after the ADR-0050 amendment: it resolves the caller with a step-up
+    itself, computes the digest itself, and asks the owner-approvals port (`svc.verify`) before moving."""
+    def __init__(self, w, ident):
+        self.w, self.ident, self.svc = w, ident, None
+
+    def status(self, t, bp):
+        return {"state": self.w.machine, "contentDigest": self.w.recorded, "contentChanged": self.w.recorded != cdigest(self.w.bp),
+                "owner": copy.deepcopy(self.w.owner)}
+
+    def _human(self, claims):
+        p = self.ident.resolve(claims, step_up=True)
+        if p.kind != "human" or p.step_up is not True:
+            raise GateRefusal("BS-003")
+        return p
+
+    def approve_owner(self, claims, *, tenant_id, blueprint_id, confirmations, expected_digest, quote_digest):
+        self.w.calls.append(("approve_owner", tenant_id, blueprint_id, list(confirmations)))
+        p = self._human(claims)
+        if self.w.before_approve:
+            self.w.before_approve()
+        if self.w.gate_error:
+            raise self.w.gate_error
+        dg = cdigest(self.w.bp)
+        if expected_digest != dg:
+            raise GateRefusal("BS-008")
+        if self.w.machine != "draft":
+            raise GateRefusal("BS-005")
+        ev = self.svc.verify(tenant_id, blueprint_id, dg, quote_digest, p.subject)
+        if ev["quoteCurrent"] is not True:
+            raise GateRefusal("BS-008")
+        if ev["blocked"] or ev["approvedBy"] != p.subject:
+            raise GateRefusal("BS-006")
+        if not self.w.gate_noop:
+            self.w.machine, self.w.recorded = "owner_approved", dg
+            self.w.owner = {"actor": p.subject, "digest": dg, "quoteDigest": quote_digest}
+        if self.w.timeout_after:
+            raise TimeoutError("late")
+
+    def roll_back(self, claims, *, tenant_id, blueprint_id, to_state, reason):
+        self.w.calls.append(("roll_back", to_state, reason))
+        self._human(claims)
+        if self.w.rollback_error:
+            raise self.w.rollback_error
+        if self.w.gate_error:
+            raise self.w.gate_error
+        self.w.machine, self.w.owner = to_state, None
 
 
 def build(w=None, **over):
     w = w or World()
     ident = Identity()
+    gate = Gate(w, ident)
     kw = dict(identity=ident, blueprints=Store(w, "bp"), quotes=Store(w, "quote"), gaps=Store(w, "gap"), holds=Holds(w),
-              gate=Gate(w), content_digest=cdigest, clock=lambda: w.t, integrity_keys=dict(KEYS), key_id="k1")
+              gate=gate, content_digest=cdigest, clock=lambda: w.t, integrity_keys=dict(KEYS), key_id="k1")
     kw.update(over)
-    return OwnerApproval(**kw), w, ident
+    svc = OwnerApproval(**kw)
+    gate.svc = svc
+    return svc, w, ident
 
 
 def seen(svc, claims=None, t=T):

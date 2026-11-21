@@ -6,7 +6,7 @@ CODES = {
     "OA-006": "the draft or the quote changed since it was shown", "OA-007": "this owner already decided on this version",
     "OA-008": "the draft was rejected for this version", "OA-009": "stored approval records failed their integrity check",
     "OA-010": "integrity key missing or weak", "OA-011": "tenant mismatch", "OA-012": "the quote is not usable",
-    "OA-013": "the draft is on hold", "OA-014": "confirmations incomplete", "OA-015": "the build gate refused",
+    "OA-013": "the draft is on hold", "OA-014": "confirmations incomplete", "OA-015": "the build gate refused", "OA-016": "changes were asked for on this version",
 }
 
 

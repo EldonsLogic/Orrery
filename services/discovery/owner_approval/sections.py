@@ -9,10 +9,13 @@ from quote import digest as quote_digest, quote_state, verify_quote
 from quote.money import EXPONENT, MAX_MINOR, money, mul_bp
 
 from .errors import OwnerApprovalError
-from .text import clean
+from .text import clean, clean_cut
 
 MAX_ITEMS = 25
-COLLECTIONS = (("entities", "entity"), ("workflows", "workflow"), ("reports", "report"), ("roles", "role"), ("components", "component"))
+COLLECTIONS = (("entities", "entity"), ("workflows", "workflow"), ("reports", "report"), ("roles", "role"), ("components", "component"),
+               ("approvals", "approval"), ("integrations", "integration"), ("assistants", "assistant"), ("locations", "location"))
+# Parts of the Blueprint that the approval digest covers but this screen does not list item by item (shown as a notice).
+NOT_SHOWN = ("branding", "i18n")
 GAP_KINDS = ("compliance", "component", "entity", "workflow", "report")
 SIM_CHECKS = ("numbers", "tax", "approvals", "permissions", "reports", "month_end")
 
@@ -36,7 +39,9 @@ def _minor(obj):
 def _labels(item) -> dict:
     lab = item.get("labels") if type(item) is dict else None
     lab = lab if type(lab) is dict else {}
-    return {"ar": clean(lab.get("ar"), 80), "en": clean(lab.get("en"), 80)}
+    ar, c1 = clean_cut(lab.get("ar"), 80)
+    en, c2 = clean_cut(lab.get("en"), 80)
+    return {"ar": ar, "en": en, "cut": c1 or c2}
 
 
 def summary_section(content: dict) -> dict:
@@ -49,7 +54,14 @@ def summary_section(content: dict) -> dict:
             if type(it) is dict:
                 items.append({"kind": kind, "kindKey": f"oa.kind.{kind}", "id": clean(it.get("id"), 80), "labels": _labels(it), "untrustedText": True})
     company = content.get("company") if type(content.get("company")) is dict else {}
+    comp = content.get("compliance") if type(content.get("compliance")) is dict else {}
+    vat = comp.get("vat") if type(comp.get("vat")) is dict else {}
+    einv = comp.get("eInvoicing") if type(comp.get("eInvoicing")) is dict else {}
+    compliance = {"country": clean(comp.get("country"), 2), "vatRegistered": vat.get("registered") if type(vat.get("registered")) is bool else None,
+                  "eInvoicingMode": clean(einv.get("mode"), 40), "untrustedText": True}
     return {"id": "summary", "labelKey": "oa.section.summary", "introKey": "oa.summary.intro", "counts": counts,
+            "compliance": compliance, "notShown": [{"key": k, "labelKey": f"oa.summary.not_shown.{k}"} for k in NOT_SHOWN],
+            "notShownNoticeKey": "oa.summary.not_shown",
             "company": {"labels": _labels(company), "country": clean(company.get("country"), 2), "untrustedText": True},
             "items": items, "moreItems": max(0, sum(counts.values()) - len(items))}
 
@@ -104,7 +116,9 @@ def cost_section(quote: dict, state: str) -> dict:
         return {"id": "cost", "labelKey": "oa.section.cost", "currency": cur, "lines": lines, "totals": totals,
                 "unpriced": unpriced, "unpricedCount": len(quote["unpriced"]), "complete": quote["complete"] is True,
                 "quoteState": state, "validUntil": clean(quote["valid_until"], 40), "noticeKey": "oa.cost.not_binding",
-                "placeholderPrices": any(w.get("key") == "quote.warning.placeholder_prices" for w in quote["warnings"])}
+                "placeholderPrices": any(w.get("key") == "quote.warning.placeholder_prices" for w in quote["warnings"]),
+                "notes": [k for k, on in (("oa.cost.unpriced", bool(quote["unpriced"])), ("oa.cost.incomplete", quote["complete"] is not True),
+                                          ("oa.cost.placeholder", any(w.get("key") == "quote.warning.placeholder_prices" for w in quote["warnings"]))) if on]}
     except OwnerApprovalError:
         raise
     except Exception:

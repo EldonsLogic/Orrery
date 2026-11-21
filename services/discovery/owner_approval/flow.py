@@ -14,6 +14,14 @@ How it stays honest (the PLT-013, BPL-019, BPL-020 and DSC-016 lessons, applied)
   approved while the log is damaged, and a hold on the draft blocks approval too.
 - One decision per owner per version (Blueprint digest and quote digest). A rejection of a Blueprint digest beats every
   approval of it, whoever approved and whenever; the draft must be changed to get a new digest.
+- The machine does not trust this flow either way: its owner gate calls `verify` (the port below) and refuses without a
+  current sealed approval by the calling owner for the digest IT computed and the quote digest, and every later gate
+  re-checks it (ADR-0050 amendment). A rejection, a request for changes on a version, a changed quote or a hold stops it.
+- Multi-owner rule (Q-540): any rejection blocks the Blueprint digest for good; any request for changes blocks that
+  version (digest and quote) until the draft or the quote changes; otherwise one owner's approval is enough.
+- One step-up per decision (Q-520): when the machine's gate is called it consumes the step-up, otherwise this flow does.
+  A decision the gate refused does not count: the owner may approve again (explicit states: sealed decision, then the
+  outcome confirmed or refused). Rejections and requests for changes are final.
 - Humans only: agent, assistant and service principals and staff principals never decide. A principal that also holds
   the team reviewer or build runner role cannot decide. Time is the host clock only.
 - The approval is evidence, not the gate. After the decision is sealed the flow asks the build state machine's owner
@@ -29,7 +37,7 @@ from .errors import OwnerApprovalError
 from .ledger import SealedLog
 from .ports import CONFLICT_ROLES, KINDS, OWNER, REALMS, Principal
 from .sections import cost_section, check_quote, gaps_section, simulation_section, summary_section
-from .text import NOTE_LIMIT, clean, note as clean_note
+from .text import NOTE_LIMIT, note as clean_note
 
 import datetime as _dt
 
@@ -45,7 +53,8 @@ DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 CODE_RE = re.compile(r"^[A-Z]{2,4}-[0-9]{3}$")
 SCHEMA = "owner_approval/1"
 _WHO = contextvars.ContextVar("owner_approval_who", default=None)
-_DATA = {"decision": {"decision", "reason", "note", "bpDigest", "quoteDigest", "gapDigest"},
+MAX_SKEW = 300  # seconds a record may be behind the newest one (host clock steps), per record
+_DATA = {"decision": {"decision", "reason", "note", "bpDigest", "quoteDigest", "gapDigest", "forward"},
          "forward_outcome": {"decisionSeq", "outcome", "code"}}
 
 
@@ -142,37 +151,44 @@ class OwnerApproval:
 
     # ----- the log: one rule set for write time and read time ---------------------------------------------
     def _fold(self, t, bp, records) -> dict:
-        decisions, outcomes, last_at, seen, rejected = [], {}, 0, set(), set()
+        decisions, outcomes, max_at, latest, rejected, changes = [], {}, 0, {}, set(), set()
         for r in records:
             body = r["body"]
             try:
                 typ, at, a, d = body["type"], body["at"], body["actor"], body["data"]
                 if set(body) != {"type", "at", "actor", "data"} or typ not in _DATA or type(d) is not dict or set(d) != _DATA[typ] \
-                        or type(at) is not int or not EARLIEST <= at <= LATEST or at < last_at:
-                    raise _corrupt()
+                        or type(at) is not int or not EARLIEST <= at <= LATEST or at < max_at - MAX_SKEW:
+                    raise _corrupt()   # per record: a clock a few seconds behind is tolerated, a far-back one is not
                 if type(a) is not dict or set(a) != {"subject", "role", "kind", "realm"} or a["role"] != OWNER or a["kind"] != "human" \
                         or a["realm"] != "tenant" or type(a["subject"]) is not str or not ID_RE.fullmatch(a["subject"]):
                     raise _corrupt()
-                last_at = at
+                max_at = max(max_at, at)
                 if typ == "decision":
                     dec, rsn, nt = d["decision"], d["reason"], d["note"]
                     if dec not in DECISIONS or rsn not in REASONS[dec] or type(nt) is not str or len(nt) > NOTE_LIMIT \
-                            or clean_note(nt) != nt:
+                            or clean_note(nt) != nt or d["forward"] not in ("none", "gate") or (dec == "approve" and d["forward"] != "gate"):
                         raise _corrupt()
                     for k in ("bpDigest", "quoteDigest", "gapDigest"):
                         if type(d[k]) is not str or not DIGEST_RE.fullmatch(d[k]):
                             raise _corrupt()
                     key = (a["subject"], d["bpDigest"], d["quoteDigest"])
-                    if key in seen or (dec == "approve" and d["bpDigest"] in rejected):
+                    prev = latest.get(key)
+                    # one decision per owner per version; only an approval the gate REFUSED may be tried again
+                    if prev is not None and not (prev["decision"] == "approve" and outcomes.get(prev["seq"]) == "refused"):
                         raise _corrupt("order")
-                    seen.add(key)
+                    if dec == "approve" and (d["bpDigest"] in rejected or (d["bpDigest"], d["quoteDigest"]) in changes):
+                        raise _corrupt("order")
                     if dec == "reject":
                         rejected.add(d["bpDigest"])
-                    decisions.append({"seq": r["seq"], "subject": a["subject"], "at": at, **d})
+                    elif dec == "request_changes":
+                        changes.add((d["bpDigest"], d["quoteDigest"]))
+                    x = {"seq": r["seq"], "subject": a["subject"], "at": at, **d}
+                    latest[key] = x
+                    decisions.append(x)
                 else:
                     ref = next((x for x in decisions if x["seq"] == d["decisionSeq"]), None) if type(d["decisionSeq"]) is int else None
-                    if ref is None or d["decisionSeq"] in outcomes or d["outcome"] not in OUTCOMES or type(d["code"]) is not str \
-                            or not (d["code"] == "" or CODE_RE.fullmatch(d["code"]) or d["code"] in ("unconfirmed", "lost")) \
+                    if ref is None or ref["forward"] != "gate" or d["decisionSeq"] in outcomes or d["outcome"] not in OUTCOMES \
+                            or type(d["code"]) is not str or not (d["code"] == "" or CODE_RE.fullmatch(d["code"]) or d["code"] in ("unconfirmed", "lost")) \
                             or ref["subject"] != a["subject"]:
                         raise _corrupt("outcome")
                     outcomes[d["decisionSeq"]] = d["outcome"]
@@ -182,7 +198,7 @@ class OwnerApproval:
                 raise _corrupt("shape") from None
         for x in decisions:
             x["outcome"] = outcomes.get(x["seq"])
-        return {"decisions": decisions}
+        return {"decisions": decisions, "latest": latest, "rejected": rejected, "changes": changes, "max_at": max_at}
 
     def _records(self, t, bp):
         recs = self._log.read(t, bp)
@@ -190,20 +206,22 @@ class OwnerApproval:
 
     @staticmethod
     def _effective(folded, bp_digest, quote_digest) -> str:
-        """rejected beats all; otherwise the last decision on this Blueprint digest wins. An approval counts only when
-        the gate confirmed it AND it saw this very quote."""
+        """rejected beats all; a request for changes on this very version (by anyone) blocks; otherwise an approval of
+        this version counts only when the gate confirmed it. An approval that saw another quote is `quote_changed`."""
+        if bp_digest in folded["rejected"]:
+            return "rejected"
+        if (bp_digest, quote_digest) in folded["changes"]:
+            return "changes_requested"
         state = "awaiting"
         for d in folded["decisions"]:
-            if d["bpDigest"] != bp_digest:
+            if d["bpDigest"] != bp_digest or d["decision"] != "approve":
                 continue
-            if d["decision"] == "reject":
-                return "rejected"
-            if d["decision"] == "request_changes":
-                state = "changes_requested"
-            elif d["outcome"] == "confirmed":
-                state = "approved" if d["quoteDigest"] == quote_digest else "quote_changed"
-            elif d["outcome"] is None:
-                state = "pending"
+            if d["outcome"] == "confirmed":
+                if d["quoteDigest"] == quote_digest:
+                    return "approved"
+                state = "quote_changed"
+            elif d["outcome"] is None and d["quoteDigest"] == quote_digest:
+                state = "pending" if state != "quote_changed" else state
         return state
 
     # ----- host sources, re-derived on every call -------------------------------------------------------
@@ -237,13 +255,20 @@ class OwnerApproval:
                 blockers.append("quote")
         except OwnerApprovalError:
             blockers.append("quote")
-            gaps = gaps_section(gap) if "requirements" in gap else None
+            try:
+                gaps = gaps_section(gap)
+            except OwnerApprovalError:
+                gaps = None
         try:
             st = self._gate.status(t, bp)
         except Exception:
             raise OwnerApprovalError("OA-004", "gate") from None
         if type(st) is not dict or type(st.get("state")) is not str or type(st.get("contentChanged")) is not bool \
                 or type(st.get("contentDigest")) is not str:
+            raise OwnerApprovalError("OA-004", "gate")
+        owner = st.get("owner")
+        if owner is not None and (type(owner) is not dict or type(owner.get("actor")) is not str or type(owner.get("digest")) is not str
+                                  or type(owner.get("quoteDigest")) is not str):
             raise OwnerApprovalError("OA-004", "gate")
         if st["contentChanged"] or st["contentDigest"] != dg:
             blockers.append("stale")   # the author must record the new content as a revision first
@@ -255,7 +280,7 @@ class OwnerApproval:
             blockers.append("held")
         return {"content": content, "bpDigest": dg, "quote": quote, "quoteDigest": quote["digest"] if cost else None,
                 "gapDigest": quote.get("inputs", {}).get("gap_report_digest") if cost else None, "cost": cost, "gaps": gaps,
-                "machine": st["state"], "blockers": blockers}
+                "machine": st["state"], "machineOwner": owner, "blockers": blockers}
 
     # ----- the screen -----------------------------------------------------------------------------------
     def review(self, claims, *, tenant_id, blueprint_id) -> dict:
@@ -263,32 +288,37 @@ class OwnerApproval:
         def go():
             t, bp = _tenant(tenant_id), _ident(blueprint_id, "blueprint")
             p = self._actor(claims, t, gate=False)
-            now = self._now()
-            ctx = self._context(t, bp, now)
+            ctx = self._context(t, bp, self._now())
             blockers = list(ctx["blockers"])
             try:
                 recs, folded = self._records(t, bp)
             except OwnerApprovalError:
-                recs, folded = (), {"decisions": []}
+                folded = {"decisions": [], "rejected": set(), "changes": set()}
                 blockers.append("integrity")
-            eff = "integrity_error" if "integrity" in blockers else (
-                self._effective(folded, ctx["bpDigest"], ctx["quoteDigest"]))
+            integrity = "integrity" in blockers
+            eff = "integrity_error" if integrity else self._effective(folded, ctx["bpDigest"], ctx["quoteDigest"])
             mine = [d for d in folded["decisions"] if d["subject"] == p.subject and d["bpDigest"] == ctx["bpDigest"]
-                    and d["quoteDigest"] == ctx["quoteDigest"]]
+                    and d["quoteDigest"] == ctx["quoteDigest"] and not (d["decision"] == "approve" and d["outcome"] == "refused")]
+            m = ctx["machine"]
             if eff == "rejected":
                 blockers.append("rejected")
-            if ctx["machine"] not in ("draft", "owner_approved"):
+            if eff == "changes_requested":
+                blockers.append("changes_requested")
+            if m == "live":
                 blockers.append("state")
             if mine:
                 blockers.append("already_decided")
-            can_approve = not blockers and ctx["machine"] == "draft"
-            can_change = not (set(blockers) - {"rejected"}) and ctx["machine"] in ("draft", "owner_approved")
-            if eff == "approved" and ctx["machine"] == "draft":
-                eff = "out_of_sync"
+            base = set(blockers) - {"rejected", "changes_requested", "already_decided", "state"}
+            can_approve = not blockers and m == "draft"
+            can_change = not base and not mine and m != "live" and "quote" not in blockers
+            if m != "draft" and eff not in ("approved", "integrity_error", "pending"):
+                eff = "out_of_sync"     # the machine is past draft without a current approval of THIS version
+            elif m == "draft" and eff == "approved":
+                eff = "approval_spent"  # the plan was sent back to draft; this version needs a new version to approve again
             return {
                 "schema": SCHEMA, "titleKey": "oa.title", "introKey": "oa.intro", "tenantId": t, "blueprintId": bp,
                 "revision": ctx["content"]["meta"]["revision"], "blueprintDigest": ctx["bpDigest"], "quoteDigest": ctx["quoteDigest"],
-                "buildState": ctx["machine"], "buildStateKey": f"oa.build.{ctx['machine']}",
+                "buildState": m, "buildStateKey": f"oa.build.{m}",
                 "state": {"value": eff, "labelKey": f"oa.state.{eff}"},
                 "sections": [summary_section(ctx["content"]), ctx["cost"], ctx["gaps"], simulation_section()],
                 "confirmations": [{"key": c, "labelKey": f"oa.confirm.{c}"} for c in CONFIRMATIONS],
@@ -298,6 +328,7 @@ class OwnerApproval:
                 "canDecide": can_approve or can_change,
                 "blockers": [{"key": b, "labelKey": f"oa.blocker.{b}"} for b in dict.fromkeys(blockers)],
                 "noteLimit": NOTE_LIMIT, "stepUpNoticeKey": "oa.step_up_notice", "evidenceNoticeKey": "oa.notice.not_live",
+                "commitNoticeKey": "oa.notice.not_order",
                 "history": [{"seq": d["seq"], "subject": d["subject"], "decision": d["decision"],
                              "decisionKey": f"oa.decision.{d['decision']}", "reasonKey": f"oa.reason.{d['decision']}.{d['reason']}",
                              "note": d["note"], "untrustedText": True, "at": d["at"], "outcome": d["outcome"],
@@ -315,9 +346,33 @@ class OwnerApproval:
             ctx = self._context(t, bp, self._now())
             _, folded = self._records(t, bp)
             eff = self._effective(folded, ctx["bpDigest"], ctx["quoteDigest"])
+            m = ctx["machine"]
+            if m != "draft" and eff not in ("approved", "pending"):
+                eff = "out_of_sync"
+            elif m == "draft" and eff == "approved":
+                eff = "approval_spent"
             return {"tenantId": t, "blueprintId": bp, "blueprintDigest": ctx["bpDigest"], "quoteDigest": ctx["quoteDigest"],
-                    "state": eff, "buildState": ctx["machine"], "blockers": ctx["blockers"]}
+                    "state": eff, "buildState": m, "blockers": ctx["blockers"]}
         return self._run("status", tenant_id, blueprint_id, go)
+
+    def verify(self, tenant_id, blueprint_id, content_digest, quote_digest, subject) -> dict:
+        """The owner-approvals PORT the build state machine calls (ADR-0050 amendment). Re-derived from the verified log and
+        the live sources on every call: `approvedBy` is `subject` only when that owner has a sealed approval (not refused)
+        of exactly this content digest and quote digest and the content is still this digest; `blocked` when anything
+        stops the build (a rejection of this content, a request for changes on this version, a hold); `quoteCurrent`
+        when this quote is still the live, valid one."""
+        def go():
+            t, bp = _tenant(tenant_id), _ident(blueprint_id, "blueprint")
+            cd, qd, who = _dig(content_digest, "digest"), _dig(quote_digest, "quote_digest"), _ident(subject, "subject")
+            ctx = self._context(t, bp, self._now())
+            _, folded = self._records(t, bp)
+            same = ctx["bpDigest"] == cd
+            ok = same and any(d["subject"] == who and d["decision"] == "approve" and d["bpDigest"] == cd and d["quoteDigest"] == qd
+                              and d["outcome"] in (None, "confirmed") for d in folded["decisions"])
+            blocked = cd in folded["rejected"] or (cd, qd) in folded["changes"] or "held" in ctx["blockers"]
+            return {"tenantId": t, "blueprintId": bp, "contentDigest": cd, "quoteDigest": qd, "approvedBy": who if ok else None,
+                    "blocked": blocked, "quoteCurrent": same and ctx["quoteDigest"] == qd and "quote" not in ctx["blockers"]}
+        return self._run("verify", tenant_id, blueprint_id, go)
 
     # ----- the decision ---------------------------------------------------------------------------------
     def decide(self, claims, *, tenant_id, blueprint_id, decision, reason, note="", seen_blueprint_digest,
@@ -334,7 +389,7 @@ class OwnerApproval:
             seen_b, seen_q = _dig(seen_blueprint_digest, "seen"), _dig(seen_quote_digest, "seen")
             if decision == "approve" and (type(confirmations) not in (list, tuple) or tuple(sorted(confirmations)) != CONFIRMATIONS):
                 raise OwnerApprovalError("OA-014")
-            p = self._actor(claims, t, gate=True)
+            p = self._actor(claims, t, gate=False)
             at = self._now()
             ctx = self._context(t, bp, at)
             for code, key in (("OA-013", "held"), ("OA-012", "quote"), ("OA-006", "stale")):
@@ -342,23 +397,33 @@ class OwnerApproval:
                     raise OwnerApprovalError(code)
             if ctx["bpDigest"] != seen_b or ctx["quoteDigest"] != seen_q:
                 raise OwnerApprovalError("OA-006")
-            if ctx["machine"] != "draft" and not (ctx["machine"] == "owner_approved" and decision != "approve"):
+            m = ctx["machine"]
+            if m == "live" or (decision == "approve" and m != "draft"):
                 raise OwnerApprovalError("OA-005")
+            # One step-up per decision (Q-520): when the machine's own gate is called it consumes the step-up; when no
+            # gate call follows, this flow consumes it here. A single step-up never has to cover two calls.
+            forward = decision == "approve" or m != "draft"
+            if not forward:
+                p = self._actor(claims, t, gate=True)
             actor = {"subject": p.subject, "role": OWNER, "kind": "human", "realm": "tenant"}
-            data = {"decision": decision, "reason": reason, "note": text, "bpDigest": ctx["bpDigest"],
-                    "quoteDigest": ctx["quoteDigest"], "gapDigest": ctx["gapDigest"]}
+            data = {"decision": decision, "reason": reason, "note": text, "bpDigest": ctx["bpDigest"], "quoteDigest": ctx["quoteDigest"],
+                    "gapDigest": ctx["gapDigest"], "forward": "gate" if forward else "none"}
 
             def check(existing):
                 folded = self._fold(t, bp, existing)
-                if existing and at < existing[-1]["body"]["at"]:
+                if at < folded["max_at"] - MAX_SKEW:
                     raise OwnerApprovalError("OA-002", "order")
-                for d in folded["decisions"]:
-                    if d["subject"] == p.subject and d["bpDigest"] == data["bpDigest"] and d["quoteDigest"] == data["quoteDigest"]:
-                        raise OwnerApprovalError("OA-007")
-                    if decision == "approve" and d["bpDigest"] == data["bpDigest"] and d["decision"] == "reject":
+                prev = folded["latest"].get((p.subject, data["bpDigest"], data["quoteDigest"]))
+                if prev is not None and not (prev["decision"] == "approve" and prev["outcome"] == "refused"):
+                    raise OwnerApprovalError("OA-007")
+                if decision == "approve":
+                    if data["bpDigest"] in folded["rejected"]:
                         raise OwnerApprovalError("OA-008")
+                    if (data["bpDigest"], data["quoteDigest"]) in folded["changes"]:
+                        raise OwnerApprovalError("OA-016")
             rec = self._log.append(t, bp, {"type": "decision", "at": at, "actor": actor, "data": data}, check)
-            self._forward(claims, t, bp, p, rec["seq"], decision, ctx)
+            if forward:
+                self._forward(claims, t, bp, p, rec["seq"], decision, ctx)
             return self.review_state(t, bp)
         return self._run("decide", tenant_id, blueprint_id, go)
 
@@ -371,38 +436,59 @@ class OwnerApproval:
         self._log.append(t, bp, {"type": "forward_outcome", "at": self._now(), "actor": actor,
                                  "data": {"decisionSeq": seq, "outcome": outcome, "code": code}})
 
+    @staticmethod
+    def _owner_matches(st, subject, bp_digest, quote_digest) -> bool:
+        o = st.get("owner") if type(st) is dict else None
+        return st.get("state") != "draft" and type(o) is dict and o.get("actor") == subject and o.get("digest") == bp_digest \
+            and o.get("quoteDigest") == quote_digest
+
     def _forward(self, claims, t, bp, p, seq, decision, ctx):
-        """Ask the machine's owner gate (approve) or roll back an earlier owner approval (reject, request_changes)."""
-        if decision != "approve" and ctx["machine"] != "owner_approved":
-            return  # the draft is already a draft; nothing to move (and no outcome is needed)
+        """Ask the machine's owner gate (approve) or roll the build back to draft (reject, request_changes after the draft
+        moved on). The machine re-derives the approval through `verify`; a refusal or an unconfirmed answer is sealed as
+        `refused` and does not count, and the owner may try again (an approval) because no decision took effect."""
         try:
             if decision == "approve":
-                self._gate.approve_owner(claims, tenant_id=t, blueprint_id=bp, confirmations=list(CONFIRMATIONS))
+                self._gate.approve_owner(claims, tenant_id=t, blueprint_id=bp, confirmations=list(CONFIRMATIONS),
+                                         expected_digest=ctx["bpDigest"], quote_digest=ctx["quoteDigest"])
             else:
                 self._gate.roll_back(claims, tenant_id=t, blueprint_id=bp, to_state="draft",
                                      reason="rejected" if decision == "reject" else "owner_reopened")
             st = self._gate.status(t, bp)
-            want = "owner_approved" if decision == "approve" else "draft"
-            if type(st) is not dict or st.get("state") != want or (decision == "approve" and st.get("contentDigest") != ctx["bpDigest"]):
+            if decision == "approve":
+                if not self._owner_matches(st, p.subject, ctx["bpDigest"], ctx["quoteDigest"]):
+                    raise OwnerApprovalError("OA-015", "unconfirmed")
+            elif type(st) is not dict or st.get("state") != "draft":
                 raise OwnerApprovalError("OA-015", "unconfirmed")
         except Exception as e:
             code = getattr(e, "detail", "") if isinstance(e, OwnerApprovalError) else getattr(e, "code", "")
             code = code if type(code) is str and (CODE_RE.fullmatch(code) or code == "unconfirmed") else ""
+            try:  # a timeout may follow a success: settle from the machine's own recorded owner approval
+                st = self._gate.status(t, bp)
+            except Exception:
+                st = None
+            if decision == "approve" and st is not None and self._owner_matches(st, p.subject, ctx["bpDigest"], ctx["quoteDigest"]):
+                self._outcome(t, bp, p, seq, "confirmed", "")
+                return
             self._outcome(t, bp, p, seq, "refused", code)
             raise OwnerApprovalError("OA-015", code) from None
         self._outcome(t, bp, p, seq, "confirmed", "")
 
     def reconcile(self, claims, *, tenant_id, blueprint_id) -> dict:
-        """After a crash between the sealed decision and its outcome: settle each pending approval of THIS owner from the
-        machine's own state (owner_approved on the same digest means confirmed, anything else means lost)."""
+        """After a crash between a sealed decision and its outcome: settle each pending forwarded decision of THIS owner from
+        the machine's own record. An approval is confirmed only when the machine's owner approval names this owner, this
+        content digest and this quote digest (never someone else's); a rollback only when the machine is at draft."""
         def go():
             t, bp = _tenant(tenant_id), _ident(blueprint_id, "blueprint")
             p = self._actor(claims, t, gate=False)
             ctx = self._context(t, bp, self._now())
             _, folded = self._records(t, bp)
+            st = {"state": ctx["machine"], "owner": ctx["machineOwner"]}
             for d in folded["decisions"]:
-                if d["subject"] == p.subject and d["decision"] == "approve" and d["outcome"] is None:
-                    ok = ctx["machine"] == "owner_approved" and d["bpDigest"] == ctx["bpDigest"]
+                if d["subject"] == p.subject and d["forward"] == "gate" and d["outcome"] is None:
+                    if d["decision"] == "approve":
+                        ok = self._owner_matches(st, p.subject, d["bpDigest"], d["quoteDigest"]) and d["bpDigest"] == ctx["bpDigest"]
+                    else:
+                        ok = st["state"] == "draft"
                     self._outcome(t, bp, p, d["seq"], "confirmed" if ok else "refused", "" if ok else "lost")
             return self.review_state(t, bp)
         return self._run("reconcile", tenant_id, blueprint_id, go)

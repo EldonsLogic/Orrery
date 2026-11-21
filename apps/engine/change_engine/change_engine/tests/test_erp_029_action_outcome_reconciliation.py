@@ -372,6 +372,7 @@ def test_tenant_b_journal_rows_stay_separate(recon, tmp_path):
     {"tenant_id": ""}, {"tenant_id": None}, {"journal_key": b"short"}, {"journal_key": "k" * 32},
     {"stuck_after": timedelta(0)}, {"stuck_after": 3600},
     {"handler_deadline": timedelta(0)}, {"handler_deadline": 600}, {"handler_deadline": timedelta(hours=1)},
+    {"read_engine_state": None}, {"clock": None},
 ])
 def test_invalid_configuration_is_refused(recon, tmp_path, kwargs):
     base = dict(tenant_id="tenant-a", read_engine_state=lambda *a: None, journal_key=KEY,
@@ -494,10 +495,15 @@ def test_stuck_keeps_the_specific_reason_and_escalates_once(recon, tmp_path, rea
         with sqlite3.connect(path) as db:
             db.execute("DELETE FROM action_policy_claims WHERE kind = 'idempotency'")
     later = NOW + timedelta(hours=2)
-    reconciler = _reconciler(recon, path, None, clock=lambda: later, read=make_reader(recon))
+    times = iter((NOW, later, later))
+    reconciler = _reconciler(recon, path, None, clock=lambda: next(times), read=make_reader(recon))
+    assert _states(reconciler.reconcile())["request-1"] == ("unknown", reason, False)
     assert _states(reconciler.reconcile())["request-1"] == ("unknown", reason, True)
     assert _states(reconciler.reconcile())["request-1"] == ("unknown", reason, True)
-    assert _journal(path) == [("tenant-a", "request-1", "unknown", reason, 1)]
+    assert _journal(path) == [
+        ("tenant-a", "request-1", "unknown", reason, 0),
+        ("tenant-a", "request-1", "unknown", reason, 1),
+    ]
 
 
 def test_journal_sequence_must_be_positive(recon, tmp_path):
@@ -525,25 +531,42 @@ def test_out_of_range_sequence_is_refused_without_integrity_error(recon, tmp_pat
     _admit(path, _request(2), _applied)
     digest = _admit(path, _request(3), _unknown)
     engine = Engine(recon)
-    _reconciler(recon, path, engine).reconcile()
+    reconciler = _reconciler(recon, path, engine)
+    reconciler.reconcile()
     with sqlite3.connect(path) as db:
         db.execute("PRAGMA ignore_check_constraints = ON")
         db.execute("DROP TRIGGER action_outcome_reconciliation_no_update")
         db.execute(tamper)
-    before = _journal(path)
+        if "SELECT 0," in tamper:
+            reconciler._prev = ""
+            for seq, *fields in db.execute(
+                "SELECT sequence, tenant_id, request_id, state, reason, stuck, timestamp "
+                "FROM action_outcome_reconciliation ORDER BY sequence"
+            ).fetchall():
+                mac = reconciler._mac(seq, tuple(fields))
+                db.execute("UPDATE action_outcome_reconciliation SET mac = ? WHERE sequence = ?", (mac, seq))
+                reconciler._prev = mac
+    before, calls = _journal(path), list(engine.calls)
     engine.effects[("tenant-a", "finance-a", "key-3")] = ("applied", "request-3", digest)
     with pytest.raises(recon.ReconciliationRefused, match="journal_tampered"):
         _reconciler(recon, path, engine).reconcile()
     assert _journal(path) == before
+    assert engine.calls == calls
 
 
-def test_journal_with_an_older_schema_is_refused(recon, tmp_path):
+@pytest.mark.parametrize("ddl", [
+    "CREATE TABLE action_outcome_reconciliation (sequence INTEGER PRIMARY KEY CHECK (sequence > 0), "
+    "tenant_id TEXT NOT NULL, request_id TEXT NOT NULL, state TEXT NOT NULL, "
+    "reason TEXT NOT NULL, timestamp TEXT NOT NULL, mac TEXT NOT NULL)",
+    "CREATE TABLE action_outcome_reconciliation (sequence INTEGER PRIMARY KEY, "
+    "tenant_id TEXT NOT NULL, request_id TEXT NOT NULL, state TEXT NOT NULL, "
+    "reason TEXT NOT NULL, stuck INTEGER NOT NULL, timestamp TEXT NOT NULL, mac TEXT NOT NULL)",
+])
+def test_journal_with_an_older_schema_is_refused(recon, tmp_path, ddl):
     path = tmp_path / "policy.sqlite3"
     policy.ActionPolicyStore(path)
     with sqlite3.connect(path) as db:
-        db.execute("CREATE TABLE action_outcome_reconciliation (sequence INTEGER PRIMARY KEY, "
-                   "tenant_id TEXT NOT NULL, request_id TEXT NOT NULL, state TEXT NOT NULL, "
-                   "reason TEXT NOT NULL, timestamp TEXT NOT NULL, mac TEXT NOT NULL)")
+        db.execute(ddl)
     with pytest.raises(ValueError, match="schema"):
         _reconciler(recon, path, Engine(recon))
 
@@ -582,6 +605,9 @@ def test_not_applied_must_carry_no_effect_fields(recon, tmp_path, extra):
 
     results = _states(_reconciler(recon, path, None, read=read).reconcile())
     assert results["request-1"] == ("unknown", "readback_mismatch", False)
+    # Once the handler has recorded unknown, a clean not_applied is final even before handler_deadline.
+    clean = _reconciler(recon, path, None, read=lambda t, s, k: recon.EngineReadback(t, s, k, "not_applied"))
+    assert _states(clean.reconcile())["request-1"] == ("failed", "readback", False)
 
 
 def test_binding_submitter_must_match_the_audited_submitter(recon, tmp_path):

@@ -157,7 +157,6 @@ class ActionOutcomeReconciler:
                 selected = list(dict.fromkeys(request_ids))
             db = sqlite3.connect(self._uri, uri=True)
             try:
-                self._reset()
                 self._verify(db)
             finally:
                 db.close()
@@ -286,12 +285,14 @@ class ActionOutcomeReconciler:
     def _verify(self, db: sqlite3.Connection) -> None:
         """Check the chain across every tenant's entries; act only on this tenant's.
 
-        Rows after the last checked one are verified in order; then the table must hold
-        exactly sequences 1..n, so a gap, a duplicate or a sequence <= 0 is refused.
+        Every row in the table is verified in sequence order from 1..n, so a gap,
+        a duplicate, a sequence <= 0 or a shrinkage from an earlier check is refused.
         """
+        floor = self._sequence
+        self._reset()
         rows = db.execute(
             "SELECT sequence, tenant_id, request_id, state, reason, stuck, timestamp, mac "
-            "FROM action_outcome_reconciliation WHERE sequence > ? ORDER BY sequence", (self._sequence,),
+            "FROM action_outcome_reconciliation ORDER BY sequence"
         ).fetchall()
         for sequence, tenant_id, request_id, state, reason, stuck, timestamp, mac in rows:
             fields = (tenant_id, request_id, state, reason, stuck, timestamp)
@@ -309,7 +310,5 @@ class ActionOutcomeReconciler:
             self._sequence, self._prev = sequence, mac
             if tenant_id == self._tenant:
                 self._latest[request_id] = _Entry(state, reason, bool(stuck), instant)
-        count, low = db.execute(
-            "SELECT COUNT(*), MIN(sequence) FROM action_outcome_reconciliation").fetchone()
-        if count != self._sequence or (count and low != 1):
+        if self._sequence < floor:
             raise ReconciliationRefused("journal_tampered")

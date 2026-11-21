@@ -54,3 +54,40 @@ Unknown.
 - The founders answer Q-558.
 - OPR-004 and OPR-007 supply a real engine reader with a tested fence, and the inbox route for stuck outcomes (design note section 7).
 - The ERP-029 row status is changed in PLAN via PR #251's owner (not edited here).
+
+## Review fix round (continued on antigravity after a Claude rate limit)
+Date: 2026-11-22
+Author: partner
+Tool and model: antigravity (Gemini 4 Argon, continuing Claude Opus 5.5 WIP `ba87c95`)
+
+### Findings fixed (Gemini 4 Argon comment and Fable 5.2 review for Eldon on `d775c35`)
+1. **Whole-run atomic `outcome_conflict` detection (Gemini Medium 1, Fable Medium 2):**
+   - `reconcile()` commits all transitions of a run in one `BEGIN IMMEDIATE` transaction (`_commit()`), or refuses and writes nothing.
+   - `_check_run()` checks every journaled final entry of the tenant (including requests outside `request_ids`) against `outcome_for` before any engine read-back and again under `BEGIN IMMEDIATE` in `_commit()`, raising `ReconciliationRefused("outcome_conflict", tuple(conflicts))` with the journal unchanged.
+   - Tested with the reviewer's repro (`request-1` applied, `request-2` journaled failed by read-back and then recorded as applied, `request-3` unknown) across `request_ids=None`, `("request-1",)`, `("request-3",)` and `("request-2",)`, plus a conflict recorded concurrently during read-back.
+2. **In-flight handler protection and under-lock outcome re-read (Fable High 1):**
+   - `ActionOutcomeReconciler` now requires `handler_deadline: timedelta` (`0 < handler_deadline < stuck_after`). When `outcome_for` is `None` and `now - audit.timestamp < handler_deadline`, a `not_applied` read-back returns `("unknown", "handler_in_flight")` so a slow handler is not marked `failed` before it finishes.
+   - Inside `BEGIN IMMEDIATE` in `_commit()`, `outcome_for` is re-read before inserting so a terminal outcome recorded while the read-back was running wins (`("applied", "recorded")`).
+3. **Preserve specific failure reasons on `stuck` escalation (Gemini Medium 2):**
+   - Replaced the `"stuck"` reason override with a dedicated `stuck` column (`INTEGER NOT NULL CHECK (stuck IN (0, 1) AND (stuck = 0 OR state = 'unknown'))`), included in the HMAC calculation.
+   - `readback_mismatch`, `readback_invalid`, `reader_error`, `admission_unbound`, `readback_pending` and `handler_in_flight` remain intact in both the journal and `ReconciledOutcome` when `stuck = True`, and the transition from `stuck = 0` to `stuck = 1` is journaled once.
+4. **Sequence constraint and exhaustive chain verification (Gemini Low 3):**
+   - Added `CHECK (sequence > 0)` to `action_outcome_reconciliation` and a schema layout check in `__init__` that refuses any older draft table lacking the `stuck` column or `CHECK (sequence > 0)`.
+   - `_verify()` reads all rows in `ORDER BY sequence` from sequence 1 (`sequence == prev + 1`) and verifies that the sequence count never shrinks from an earlier check on the instance, refusing any gap, duplicate, or `sequence <= 0` with `journal_tampered`. `_commit()` catches `sqlite3.IntegrityError` and raises `ReconciliationRefused("journal_tampered")`.
+5. **Backwards clock refusal (Gemini Low 4):**
+   - `_check_run()` refuses with `clock_unavailable` when `now` is earlier than any admission timestamp or any latest journal entry timestamp for the tenant, matching `action_policy_store.py:147`.
+6. **Mutation coverage, single-instance thread safety and design note gates (Fable Medium 3, Low 4, Low 5):**
+   - Added `threading.Lock()` per reconciler instance (`test_one_instance_shared_across_threads`).
+   - Added tests killing mutations on key/submitter echo, `not_applied` cleanliness, binding submitter vs audit submitter, `admission_key()` tenant filter, and a barrier-forced contradictory-readback race under `BEGIN IMMEDIATE`.
+   - Updated `docs/architecture/action-outcome-reconciliation.md` sections 2-5, 7 and 8 (including external head anchor and ERP-023 audit-row MAC protection in the section 7 live-handler gate checklist).
+
+### Verification (review fix round)
+- ERP-029: 64 passed (up from 32 before the review fix round; 61 in WIP `ba87c95`).
+- Mutation checks across `action_outcome_reconciler.py` and `action_policy_store.py`: 26 of 26 mutations killed.
+- ERP-023: 73 passed.
+- ERP-021: 7 passed.
+- ERP-026 offline: 30 passed, 36 skipped (live), 39 subtests.
+- CE-SEC mocks: 61 passed, 60 subtests.
+- BPL-025 conformance: 208 passed (`make_harness`) and 208 passed (`make_frappe_harness`, `CHANGE_ENGINE_ENV=test`).
+- `scripts/tests`: 36 passed, 29 subtests.
+- `check_docs`, `check_repo_hygiene`, `scan_secrets` and `check_lanes --base origin/main --actor partner`: all passed.

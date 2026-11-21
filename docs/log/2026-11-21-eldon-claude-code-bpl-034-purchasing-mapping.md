@@ -24,5 +24,7 @@ Added a draft purchasing and price-list mapping (supplier, price list and its li
 Unknown.
 
 ## Next step
-- contracts/README.md table still says engine-mapping 0.1.0 and lists only the golden-path example: update to 0.2.0 and add the purchasing example (outside this session's allowed paths).
-- Partner lane: the adapter's entity table (`adapter/mapping.py`, PR #235) must add these entities from this contract before BPL-027 test_03 can apply live; bench-verify the names (ERP-021/ERP-022 style run).
+- Partner lane: the adapter's entity table (`adapter/mapping.py`, PR #235) must add these entities from this contract before BPL-027 test_03 can apply live; bench-verify the names (ERP-021/ERP-022 style run), including discount handling for both examples.
+
+## Fix round (Fable review of da0ab64)
+Purchasing example 0.1.1: invoice date to `bill_date`; line `unit_cost` to `price_list_rate`; due date, outstanding amount and payment terms moved to `unmapped`; `unmapped` completed (supplier code, phone, email, city, notes; `disabled` and line `description` now mapped); rejected-warehouse note and submit precondition; order submit reworded; warehouse keeper read masks; price list currency note; README comma, ADR cites, this log. New tests (completeness and computed-field authority) are scoped to the purchasing example because the golden path (not edited) lists no unmapped fields and maps `sales_invoice.outstanding_amount` as a plain field.

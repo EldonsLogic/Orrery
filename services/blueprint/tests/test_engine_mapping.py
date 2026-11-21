@@ -197,3 +197,32 @@ def test_purchase_line_and_document_totals_reproduce_the_golden_numbers(entity):
     doc = P_MAPPED[entity]["parent"]["blueprintEntity"]
     tot = [f for f in P_MAPPED[doc]["fields"] if f["blueprintField"] == "total_amount"][0]["computed"]["expression"]
     assert _q(_evaluate(tot, subtotal="100.00", discount_percent=10, vat_amount=0)) == Decimal("90.00")
+
+
+def _unmapped(m):
+    return {(u["blueprintEntity"], u["blueprintField"]) for u in m.get("unmapped", [])}
+
+
+# Scoped to the purchasing example: the golden-path example (BPL-029) is not edited by BPL-034.
+def test_purchasing_every_blueprint_field_of_a_mapped_entity_is_mapped_or_listed_unmapped():
+    listed = _unmapped(PURCHASING)
+    for name, em in P_MAPPED.items():
+        mapped = {f["blueprintField"] for f in em["fields"]}
+        for f in ENTITIES[name]["fields"]:
+            assert f["id"] in mapped or (name, f["id"]) in listed, f"{name}.{f['id']} is neither mapped nor unmapped"
+            assert not (f["id"] in mapped and (name, f["id"]) in listed), f"{name}.{f['id']} is both"
+    assert all(u["reason"].strip() for u in PURCHASING["unmapped"])
+
+
+# Scoped to purchasing: the golden-path example maps sales_invoice.outstanding_amount as a plain field (BPL-029, not edited here).
+def test_purchasing_blueprint_computed_field_is_never_mapped_as_a_plain_field():
+    m = PURCHASING
+    listed = _unmapped(m)
+    for em in m["entities"]:
+        name = em["blueprintEntity"]
+        computed_ids = {f["id"] for f in ENTITIES[name]["fields"] if f.get("computed")}
+        for fm in em["fields"]:
+            if fm["blueprintField"] in computed_ids:
+                assert fm.get("computed", {}).get("authority") == "engine", \
+                    f"{name}.{fm['blueprintField']} is computed in the Blueprint but mapped as a plain field"
+                assert (name, fm["blueprintField"]) not in listed

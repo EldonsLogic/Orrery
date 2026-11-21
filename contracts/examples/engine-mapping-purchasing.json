@@ -1,6 +1,6 @@
 {
   "$schema": "../engine-mapping.schema.json",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "mappingId": "purchasing-trading",
   "status": "draft",
   "verification": {
@@ -25,7 +25,8 @@
       "fields": [
         {"blueprintField": "supplier_name", "blueprintType": "string", "engineField": "supplier_name", "engineType": "Data"},
         {"blueprintField": "supplier_type", "blueprintType": "select", "engineField": "supplier_group", "engineType": "Link", "engineLinkDoctype": "Supplier Group", "notes": "Blueprint options (local, importer, manufacturer) become adapter-created supplier groups; the engine's own supplier type is company or individual."},
-        {"blueprintField": "vat_number", "blueprintType": "string", "engineField": "tax_id", "engineType": "Data"}
+        {"blueprintField": "vat_number", "blueprintType": "string", "engineField": "tax_id", "engineType": "Data"},
+        {"blueprintField": "disabled", "blueprintType": "boolean", "engineField": "disabled", "engineType": "Check"}
       ]
     },
     {
@@ -35,7 +36,7 @@
       "submittable": false,
       "ledgerEffect": "none",
       "fields": [
-        {"blueprintField": "price_list_name", "blueprintType": "string", "engineField": "price_list_name", "engineType": "Data", "notes": "The adapter sets the engine's selling flag on lists created from this entity."}
+        {"blueprintField": "price_list_name", "blueprintType": "string", "engineField": "price_list_name", "engineType": "Data", "notes": "The adapter sets the engine's selling flag and the price list currency (the company currency) on lists created from this entity."}
       ]
     },
     {
@@ -79,8 +80,9 @@
       "ledgerEffect": "none",
       "fields": [
         {"blueprintField": "item", "blueprintType": "link", "engineField": "item_code", "engineType": "Link", "engineLinkDoctype": "Item"},
+        {"blueprintField": "description", "blueprintType": "string", "engineField": "description", "engineType": "Small Text"},
         {"blueprintField": "quantity", "blueprintType": "decimal", "engineField": "qty", "engineType": "Float"},
-        {"blueprintField": "unit_cost", "blueprintType": "money", "engineField": "rate", "engineType": "Currency"},
+        {"blueprintField": "unit_cost", "blueprintType": "money", "engineField": "price_list_rate", "engineType": "Currency", "notes": "Mapped to the list rate so the engine applies discount_percentage to derive its rate and amount; line_total stays traceable to quantity, unit_cost and discount_percent."},
         {"blueprintField": "discount_percent", "blueprintType": "percent", "engineField": "discount_percentage", "engineType": "Percent"},
         {"blueprintField": "line_total", "blueprintType": "money", "engineField": "amount", "engineType": "Currency", "computed": {"authority": "engine", "expression": "quantity * unit_cost * (1 - discount_percent / 100)", "inputs": ["quantity", "unit_cost", "discount_percent"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["quantity", "unit_cost", "discount_percent"]}}
       ]
@@ -94,7 +96,7 @@
       "fields": [
         {"blueprintField": "purchase_order", "blueprintType": "link", "engineField": null, "engineType": "Link", "engineLinkDoctype": "Purchase Order", "notes": "The engine links the order on each line (purchase_order and its row), not on the header."},
         {"blueprintField": "supplier", "blueprintType": "link", "engineField": "supplier", "engineType": "Link", "engineLinkDoctype": "Supplier"},
-        {"blueprintField": "receipt_date", "blueprintType": "date", "engineField": "posting_date", "engineType": "Date"},
+        {"blueprintField": "receipt_date", "blueprintType": "date", "engineField": "posting_date", "engineType": "Date", "notes": "The adapter sets set_posting_time so the engine keeps the given date instead of today."},
         {"blueprintField": "warehouse", "blueprintType": "select", "engineField": "set_warehouse", "engineType": "Link", "engineLinkDoctype": "Warehouse"},
         {"blueprintField": "supplier_delivery_ref", "blueprintType": "string", "engineField": "supplier_delivery_note", "engineType": "Data"}
       ]
@@ -112,8 +114,9 @@
       "ledgerEffect": "none",
       "fields": [
         {"blueprintField": "item", "blueprintType": "link", "engineField": "item_code", "engineType": "Link", "engineLinkDoctype": "Item"},
+        {"blueprintField": "description", "blueprintType": "string", "engineField": "description", "engineType": "Small Text"},
         {"blueprintField": "quantity", "blueprintType": "decimal", "engineField": "qty", "engineType": "Float", "notes": "Accepted quantity."},
-        {"blueprintField": "rejected_quantity", "blueprintType": "decimal", "engineField": "rejected_qty", "engineType": "Float"}
+        {"blueprintField": "rejected_quantity", "blueprintType": "decimal", "engineField": "rejected_qty", "engineType": "Float", "notes": "The engine needs a rejected warehouse when this is above zero; the adapter sets it from the tenant's rejected-stock warehouse."}
       ]
     },
     {
@@ -126,13 +129,11 @@
         {"blueprintField": "supplier", "blueprintType": "link", "engineField": "supplier", "engineType": "Link", "engineLinkDoctype": "Supplier"},
         {"blueprintField": "purchase_order", "blueprintType": "link", "engineField": null, "engineType": "Link", "engineLinkDoctype": "Purchase Order", "notes": "The engine links the order on each line, not on the header."},
         {"blueprintField": "supplier_invoice_number", "blueprintType": "string", "engineField": "bill_no", "engineType": "Data"},
-        {"blueprintField": "invoice_date", "blueprintType": "date", "engineField": "posting_date", "engineType": "Date"},
-        {"blueprintField": "due_date", "blueprintType": "date", "engineField": "due_date", "engineType": "Date"},
+        {"blueprintField": "invoice_date", "blueprintType": "date", "engineField": "bill_date", "engineType": "Date", "notes": "Supplier invoice date (the date on the supplier document); the engine posting date is left to the engine default."},
         {"blueprintField": "discount_percent", "blueprintType": "percent", "engineField": "additional_discount_percentage", "engineType": "Percent"},
         {"blueprintField": "subtotal", "blueprintType": "money", "engineField": "total", "engineType": "Currency", "computed": {"authority": "engine", "expression": "sum of line_total", "inputs": ["line_total"], "aggregation": {"over": "lines", "function": "sum", "field": "line_total"}, "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["line_changed", "line_added", "line_removed"]}},
         {"blueprintField": "vat_amount", "blueprintType": "money", "engineField": "total_taxes_and_charges", "engineType": "Currency", "computed": {"authority": "engine", "expression": "0 until the tax path is mapped; the tax variant is a later path", "inputs": ["subtotal"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["subtotal_changed", "tax_changed"]}},
-        {"blueprintField": "total_amount", "blueprintType": "money", "engineField": "grand_total", "engineType": "Currency", "computed": {"authority": "engine", "expression": "subtotal * (1 - discount_percent / 100) + vat_amount", "inputs": ["subtotal", "discount_percent", "vat_amount"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["subtotal_changed", "discount_changed", "tax_changed"]}},
-        {"blueprintField": "outstanding_amount", "blueprintType": "money", "engineField": "outstanding_amount", "engineType": "Currency", "notes": "Engine-maintained; changes only through payments, which are not mapped yet."}
+        {"blueprintField": "total_amount", "blueprintType": "money", "engineField": "grand_total", "engineType": "Currency", "computed": {"authority": "engine", "expression": "subtotal * (1 - discount_percent / 100) + vat_amount", "inputs": ["subtotal", "discount_percent", "vat_amount"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["subtotal_changed", "discount_changed", "tax_changed"]}}
       ]
     },
     {
@@ -148,8 +149,9 @@
       "ledgerEffect": "none",
       "fields": [
         {"blueprintField": "item", "blueprintType": "link", "engineField": "item_code", "engineType": "Link", "engineLinkDoctype": "Item"},
+        {"blueprintField": "description", "blueprintType": "string", "engineField": "description", "engineType": "Small Text"},
         {"blueprintField": "quantity", "blueprintType": "decimal", "engineField": "qty", "engineType": "Float"},
-        {"blueprintField": "unit_cost", "blueprintType": "money", "engineField": "rate", "engineType": "Currency"},
+        {"blueprintField": "unit_cost", "blueprintType": "money", "engineField": "price_list_rate", "engineType": "Currency", "notes": "Mapped to the list rate so the engine applies discount_percentage to derive its rate and amount; line_total stays traceable to quantity, unit_cost and discount_percent."},
         {"blueprintField": "discount_percent", "blueprintType": "percent", "engineField": "discount_percentage", "engineType": "Percent"},
         {"blueprintField": "line_total", "blueprintType": "money", "engineField": "amount", "engineType": "Currency", "computed": {"authority": "engine", "expression": "quantity * unit_cost * (1 - discount_percent / 100)", "inputs": ["quantity", "unit_cost", "discount_percent"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["quantity", "unit_cost", "discount_percent"]}}
       ]
@@ -217,7 +219,7 @@
       "blueprintRole": "warehouse_keeper",
       "engineRole": "platform_warehouse_keeper",
       "grants": [
-        {"blueprintEntity": "purchase_order", "actions": ["read", "submit"]},
+        {"blueprintEntity": "purchase_order", "actions": ["read", "submit"], "fieldMasks": [{"blueprintField": "supplier", "access": "read"}, {"blueprintField": "order_date", "access": "read"}]},
         {"blueprintEntity": "purchase_receipt", "actions": ["read", "create", "update", "submit"]}
       ]
     },
@@ -245,7 +247,7 @@
     },
     {
       "id": "submit_purchase_order",
-      "description": "Submit the purchase order to the supplier; no posting",
+      "description": "Confirm the order; sending it to the supplier is a separate action; no posting",
       "blueprintAction": "submit",
       "toEntity": "purchase_order",
       "engineMethod": "submit the Purchase Order document",
@@ -271,7 +273,7 @@
       "toEntity": "purchase_receipt",
       "engineMethod": "submit the Purchase Receipt document",
       "idempotencyKeyParts": ["tenant", "purchase_receipt", "purchase_receipt_revision"],
-      "preconditions": ["a repeat submit creates no second movement"],
+      "preconditions": ["a repeat submit creates no second movement", "a rejected warehouse is set on every line with a rejected quantity above zero"],
       "humanFloor": true
     },
     {
@@ -341,6 +343,56 @@
       "blueprintEntity": "purchase_invoice",
       "blueprintField": "invoice_scan",
       "reason": "attachment support is open (BPL-033)"
+    },
+    {
+      "blueprintEntity": "supplier",
+      "blueprintField": "supplier_code",
+      "reason": "the engine names a supplier from its naming series, so a user-chosen code is risky as the key; decide with the adapter naming rules, later path"
+    },
+    {
+      "blueprintEntity": "supplier",
+      "blueprintField": "phone",
+      "reason": "contact details live on separate engine contact and address documents; later path"
+    },
+    {
+      "blueprintEntity": "supplier",
+      "blueprintField": "email",
+      "reason": "contact details live on separate engine contact and address documents; later path"
+    },
+    {
+      "blueprintEntity": "supplier",
+      "blueprintField": "city",
+      "reason": "address lives on a separate engine address document; later path"
+    },
+    {
+      "blueprintEntity": "purchase_order",
+      "blueprintField": "notes",
+      "reason": "the engine has no plain notes field on the order; free text goes to terms or comments, later path"
+    },
+    {
+      "blueprintEntity": "purchase_receipt",
+      "blueprintField": "notes",
+      "reason": "the engine has no plain notes field on the receipt; free text goes to remarks or comments, later path"
+    },
+    {
+      "blueprintEntity": "purchase_invoice",
+      "blueprintField": "notes",
+      "reason": "the engine has no plain notes field on the invoice; free text goes to remarks or comments, later path"
+    },
+    {
+      "blueprintEntity": "purchase_invoice",
+      "blueprintField": "payment_terms_days",
+      "reason": "mapped with payments"
+    },
+    {
+      "blueprintEntity": "purchase_invoice",
+      "blueprintField": "due_date",
+      "reason": "mapped with payments"
+    },
+    {
+      "blueprintEntity": "purchase_invoice",
+      "blueprintField": "outstanding_amount",
+      "reason": "mapped with payments"
     }
   ]
 }

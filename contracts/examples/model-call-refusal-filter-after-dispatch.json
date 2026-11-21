@@ -1,0 +1,8 @@
+{
+  "kind": "refusal",
+  "call_id": "call_run_1_step_3",
+  "code": "filter_blocked",
+  "reason": "flagged",
+  "retryable": false,
+  "reservation_released": false
+}

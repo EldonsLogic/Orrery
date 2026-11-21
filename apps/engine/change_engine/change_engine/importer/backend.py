@@ -30,7 +30,11 @@ class ImportBackend(Protocol):
     """
 
     def identity(self) -> dict: ...
+    def company_currency(self, tenant_id: str, company: str) -> str: ...
     def master(self, tenant_id: str, company: str, entity: str, key: str) -> dict | None: ...
+    def distinct_confirmations(self, tenant_id: str, company: str, batch_id: str, source_digest: str) -> list[str]: ...
+    def record_distinct_confirmation(self, tenant_id: str, company: str, batch_id: str,
+                                     source_digest: str, group_ids: list[str], user_id: str) -> None: ...
     def claim_opening(self, tenant_id: str, company: str, batch_id: str) -> None: ...
     def transaction(self) -> ContextManager: ...
     def journal(self, tenant_id: str, batch_id: str) -> dict | None: ...
@@ -47,12 +51,18 @@ class SQLiteImportBackend:
     Use a file database for restart durability, :memory: for isolated simulations.
     """
 
-    def __init__(self, path: str = ":memory:", *, session: Callable[[], dict] | None = None):
+    def __init__(self, path: str = ":memory:", *, session: Callable[[], dict] | None = None,
+                 company_currencies: dict[tuple[str, str], str] | None = None,
+                 default_currency: str = "SAR"):
         self._session = session
+        self._default_currency = default_currency
         self._lock = threading.RLock()
         self.conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False, timeout=10)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript("""
+            CREATE TABLE IF NOT EXISTS import_companies (
+                tenant_id TEXT NOT NULL, company TEXT NOT NULL, currency TEXT NOT NULL,
+                PRIMARY KEY (tenant_id, company));
             CREATE TABLE IF NOT EXISTS import_records (
                 tenant_id TEXT NOT NULL, company TEXT NOT NULL, entity TEXT NOT NULL,
                 business_key TEXT NOT NULL, row_json TEXT NOT NULL,
@@ -68,6 +78,10 @@ class SQLiteImportBackend:
                 tenant_id TEXT NOT NULL, batch_id TEXT NOT NULL, entity TEXT NOT NULL,
                 business_key TEXT NOT NULL, before_json TEXT NOT NULL, after_json TEXT NOT NULL,
                 PRIMARY KEY (tenant_id, batch_id, entity, business_key));
+            CREATE TABLE IF NOT EXISTS import_distinct_confirmations (
+                tenant_id TEXT NOT NULL, company TEXT NOT NULL, batch_id TEXT NOT NULL,
+                source_digest TEXT NOT NULL, group_ids_json TEXT NOT NULL, confirmed_by TEXT NOT NULL,
+                PRIMARY KEY (tenant_id, company, batch_id, source_digest));
             CREATE TABLE IF NOT EXISTS import_failures (
                 seq INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, batch_id TEXT NOT NULL,
                 plan_hash TEXT NOT NULL, code TEXT NOT NULL, user_id TEXT NOT NULL);
@@ -80,6 +94,12 @@ class SQLiteImportBackend:
             if "user_id" not in {r[1] for r in self.conn.execute("PRAGMA table_info(import_failures)")}:
                 # Keep historical failures whose actor was never captured.
                 self.conn.execute("ALTER TABLE import_failures ADD COLUMN user_id TEXT")
+            for (tenant_id, company), currency in (company_currencies or {}).items():
+                self.conn.execute(
+                    """INSERT INTO import_companies VALUES (?, ?, ?)
+                       ON CONFLICT(tenant_id, company) DO UPDATE SET currency=excluded.currency""",
+                    (tenant_id, company, currency),
+                )
 
     def identity(self) -> dict:
         """Resolve the trusted session; callback errors never grant permissions."""
@@ -96,10 +116,48 @@ class SQLiteImportBackend:
                 if (os.environ.get("CHANGE_ENGINE_ENV") in {"dev", "test"}
                         and isinstance(roles, (list, tuple, set, frozenset))
                         and {"Accounts Manager", "System Manager"}.intersection(roles)):
-                    identity["capabilities"] = ["opening_import"]
+                    identity["capabilities"] = ["opening_import", "opening_import_confirm"]
             return identity
         except Exception:
             raise ImportFailure("IMP-AUTH") from None
+
+    def set_company_currency(self, tenant_id: str, company: str, currency: str) -> None:
+        """Configure the functional currency for a synthetic company."""
+        with self.transaction():
+            self.conn.execute(
+                """INSERT INTO import_companies VALUES (?, ?, ?)
+                   ON CONFLICT(tenant_id, company) DO UPDATE SET currency=excluded.currency""",
+                (tenant_id, company, currency),
+            )
+
+    def company_currency(self, tenant_id: str, company: str) -> str:
+        """Return the company's configured functional currency."""
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT currency FROM import_companies WHERE tenant_id=? AND company=?",
+                (tenant_id, company),
+            ).fetchone()
+        return row[0] if row else self._default_currency
+
+    def distinct_confirmations(self, tenant_id: str, company: str, batch_id: str, source_digest: str) -> list[str]:
+        """Return server-recorded distinct group IDs for this exact batch source."""
+        with self._lock:
+            row = self.conn.execute(
+                """SELECT group_ids_json FROM import_distinct_confirmations
+                   WHERE tenant_id=? AND company=? AND batch_id=? AND source_digest=?""",
+                (tenant_id, company, batch_id, source_digest),
+            ).fetchone()
+        return json.loads(row[0]) if row else []
+
+    def record_distinct_confirmation(self, tenant_id: str, company: str, batch_id: str,
+                                     source_digest: str, group_ids: list[str], user_id: str) -> None:
+        """Record owner confirmation of near-duplicate name groups inside a transaction."""
+        self.conn.execute(
+            """INSERT INTO import_distinct_confirmations VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(tenant_id, company, batch_id, source_digest) DO UPDATE
+               SET group_ids_json=excluded.group_ids_json, confirmed_by=excluded.confirmed_by""",
+            (tenant_id, company, batch_id, source_digest, canonical(sorted(group_ids)), user_id),
+        )
 
     @contextmanager
     def transaction(self):

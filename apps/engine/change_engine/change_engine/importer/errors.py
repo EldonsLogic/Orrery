@@ -3,6 +3,7 @@ MESSAGES = {
     "IMP-SCHEMA": ("Invalid import schema or field mapping.", "مخطط الاستيراد أو ربط الحقول غير صالح."),
     "IMP-NUMBER": ("Invalid exact amount or quantity.", "المبلغ الدقيق أو الكمية غير صالحين."),
     "IMP-PRECISION": ("An amount exceeds the currency precision.", "يتجاوز المبلغ الدقة العشرية للعملة."),
+    "IMP-CURRENCY": ("Batch currency does not match the company functional currency.", "عملة الدفعة لا تطابق العملة الوظيفية للشركة."),
     "IMP-LIMIT": ("Import size limit exceeded.", "تم تجاوز حد حجم الاستيراد."),
     "IMP-FORMULA": ("Spreadsheet formula content is blocked.", "تم حظر محتوى صيغ جدول البيانات."),
     "IMP-DUPLICATE": ("Duplicate business key requires review.", "يتطلب مفتاح العمل المكرر مراجعة."),
@@ -22,9 +23,12 @@ MESSAGES = {
 class ImportFailure(Exception):
     """Safe bilingual failure: never embed source cells or backend exceptions."""
 
-    def __init__(self, code: str, *, report_counts: dict | None = None):
+    def __init__(self, code: str, *, report_counts: dict | None = None,
+                 name_groups: list[dict] | None = None, plan_hash: str | None = None):
         self.code = code if code in MESSAGES else "IMP-WRITE"
         self.report_counts = report_counts
+        self.name_groups = name_groups
+        self.plan_hash = plan_hash
         super().__init__(self.code)
 
     def to_dict(self) -> dict:

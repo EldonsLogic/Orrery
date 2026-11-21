@@ -18,7 +18,7 @@ class OpeningImporter:
             raise ValueError("max_rows must be between 1 and 10000")
         self.backend, self.max_rows = backend, max_rows
 
-    def _authorize(self, source):
+    def _authorize(self, source, *, required_capability: str = "opening_import"):
         """Authenticate all stages before traversing untrusted datasets or reports."""
         try:
             identity = self.backend.identity()
@@ -29,17 +29,24 @@ class OpeningImporter:
                     or not isinstance(identity.get("companies"), (list, tuple, set, frozenset))
                     or source["company"] not in identity["companies"]
                     or not isinstance(identity.get("capabilities"), (list, tuple, set, frozenset))
-                    or "opening_import" not in identity["capabilities"]):
+                    or "opening_import" not in identity["capabilities"]
+                    or required_capability not in identity["capabilities"]):
                 raise ImportFailure("IMP-AUTH")
             return identity
         except Exception:
             raise ImportFailure("IMP-AUTH") from None
 
-    def _prepare(self, source):
+    def _prepare(self, source, *, confirm_distinct=None):
         """Build one plan using company-scoped master reads; fail closed on errors."""
         try:
-            plan, result = prepare(source, self.max_rows, lambda entity, key: self.backend.master(
-                source["tenant_id"], source["company"], entity, key))
+            plan, result = prepare(
+                source, self.max_rows,
+                lambda entity, key: self.backend.master(source["tenant_id"], source["company"], entity, key),
+                lambda tenant_id, company: self.backend.company_currency(tenant_id, company),
+                lambda tenant_id, company, batch_id, digest: self.backend.distinct_confirmations(
+                    tenant_id, company, batch_id, digest),
+                confirm_distinct=confirm_distinct,
+            )
             previous = self.backend.journal(plan["tenant_id"], plan["batch_id"])
             if (previous and previous["company"] == plan["company"]
                     and previous.get("source_digest") == plan["source_digest"]):
@@ -64,7 +71,32 @@ class OpeningImporter:
             return result
         except ImportFailure as exc:
             # Fail at the first error: the flag means further errors may be omitted.
-            return {"ok": False, "errors": [exc.to_dict()], "errors_truncated": True}
+            payload = {"ok": False, "errors": [exc.to_dict()], "errors_truncated": True}
+            if exc.name_groups is not None:
+                payload["name_groups"] = exc.name_groups
+                payload["plan_hash"] = exc.plan_hash
+            return payload
+
+    def confirm(self, source: dict, *, confirmed_by: str | None = None,
+                owner_confirmed_distinct: list[str] | tuple[str, ...] | None = None) -> dict:
+        """Verify and server-record owner distinct confirmation for flagged name groups."""
+        identity = self._authorize(source, required_capability="opening_import_confirm")
+        if (confirmed_by != identity["user_id"]
+                or not isinstance(owner_confirmed_distinct, (list, tuple, set, frozenset))
+                or not all(isinstance(gid, str) for gid in owner_confirmed_distinct)):
+            raise ImportFailure("IMP-CONFIRM")
+        ids = list(owner_confirmed_distinct)
+        if len(set(ids)) != len(ids):
+            raise ImportFailure("IMP-CONFIRM")
+        source = copy.deepcopy(source)
+        identity = self._authorize(source, required_capability="opening_import_confirm")
+        with self.backend.transaction():
+            plan, result = self._prepare(source, confirm_distinct=ids)
+            self.backend.record_distinct_confirmation(
+                plan["tenant_id"], plan["company"], plan["batch_id"],
+                plan["source_digest"], result["owner_confirmed_distinct"], identity["user_id"],
+            )
+        return result
 
     def apply(self, source: dict, *, confirmed_by: str | None = None, plan_hash: str | None = None) -> dict:
         """Confirm and atomically apply an exact plan, including prior master state.
@@ -99,17 +131,19 @@ class OpeningImporter:
                     self.backend.claim_opening(tenant, plan["company"], batch_id)
                 if not hmac.compare_digest(plan_hash, preview["plan_hash"]):
                     raise ImportFailure("IMP-CONFIRM")
+                master_rows = {(c["entity"], c["key"]): c["after"] for c in plan["master_changes"]}
                 # Master records exist before any opening detail links to them.
                 order = ("Account", "Customer", "Supplier", "Item", "Warehouse", "TrialBalance", "AR", "AP", "Stock")
                 for entity in order:
                     for index, row in enumerate(plan["datasets"].get(entity, [])):
                         key = business_key(entity, row) if entity in MASTER_FIELDS else canonical([batch_id, index])
-                        self.backend.write(tenant, plan["company"], entity, key, row)
+                        written = master_rows[(entity, key)] if entity in MASTER_FIELDS else row
+                        self.backend.write(tenant, plan["company"], entity, key, written)
                 self.backend.commit_batch(plan, plan_hash, identity["user_id"])
             return {"status": "applied", "plan_hash": plan_hash}
         except Exception as exc:
             code = exc.code if isinstance(exc, ImportFailure) else "IMP-WRITE"
-            if code not in {"IMP-CONFIRM", "IMP-REFERENCE", "IMP-SCHEMA", "IMP-REPORT"}:
+            if code not in {"IMP-REFERENCE", "IMP-SCHEMA", "IMP-REPORT"}:
                 try:
                     self.backend.record_failure(tenant, batch_id, plan_hash, code, user_id=identity["user_id"])
                 except Exception:

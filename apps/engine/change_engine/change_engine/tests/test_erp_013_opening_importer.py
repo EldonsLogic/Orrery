@@ -26,7 +26,8 @@ def report(rows):
 def batch(datasets=None, **changes):
     """Build a source-bound batch using the upstream prevalidation contract."""
     datasets = datasets if datasets is not None else {
-        "Customer": [{"customer_code": "C1", "customer_name": "Synthetic buyer"}],
+        "Customer": [{"customer_code": "C1", "customer_name": "Synthetic buyer"},
+                     {"customer_code": "C2", "customer_name": "Delta Wholesale"}],
         "Account": [{"account_number": "1100", "account_type": "Receivable"},
                     {"account_number": "1200", "account_type": "Receivable"},
                     {"account_number": "3000", "account_type": "Other"}],
@@ -34,7 +35,8 @@ def batch(datasets=None, **changes):
             {"account": "1100", "account_type": "Receivable", "debit": "0.1", "credit": "0"},
             {"account": "1200", "account_type": "Receivable", "debit": "0.2", "credit": "0"},
             {"account": "3000", "account_type": "Other", "debit": "0", "credit": "0.3"}],
-        "AR": [{"customer": "C1", "amount": "0.3"}],
+        "AR": [{"customer": "C1", "account": "1100", "amount": "0.1"},
+               {"customer": "C2", "account": "1200", "amount": "0.2"}],
     }
     result = dict(tenant_id="tenant-a", company="Synthetic Trading", batch_id="opening-1",
                   posting_date="2026-01-01", currency="SAR", datasets=datasets,
@@ -189,8 +191,11 @@ def test_confirmation_hash_binding_conflict_and_master_upsert(backend):
             importer.apply(source, **confirmation)
     for key, val in (("tenant_id", "tenant-b"), ("company", "Other")):
         refuses(importer, dict(source, **{key: val}), "IMP-AUTH")
-    for key, val in (("batch_id", "other"), ("posting_date", "2026-01-02"), ("currency", "AED")):
+    for key, val in (("batch_id", "other"), ("posting_date", "2026-01-02")):
         assert importer.preview(dict(source, **{key: val}))["plan_hash"] != preview["plan_hash"]
+    backend.set_company_currency("tenant-a", "Synthetic Trading", "AED")
+    assert importer.preview(dict(source, currency="AED"))["plan_hash"] != preview["plan_hash"]
+    backend.set_company_currency("tenant-a", "Synthetic Trading", "SAR")
     assert importer.preview(dict(source, currency_precision=2))["plan_hash"] == preview["plan_hash"]
     apply(importer, source)
     mutated = batch({"Customer": [{"customer_code": "C1", "customer_name": "Two"}]})

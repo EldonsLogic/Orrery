@@ -244,6 +244,9 @@ def test_master_change_between_preview_and_apply_requires_new_approval(backend):
     with pytest.raises(ImportFailure, match="IMP-CONFIRM"):
         importer.apply(source, confirmed_by="reviewer", plan_hash=preview["plan_hash"])
     assert backend.records("tenant-a", "Synthetic Trading")[0]["row"]["customer_name"] == "Concurrent"
+    failure, = backend.failures("tenant-a")
+    assert (failure["code"], failure["user_id"], failure["plan_hash"]) == (
+        "IMP-CONFIRM", "reviewer", preview["plan_hash"])
 
 
 @pytest.mark.parametrize("kind", ["AR", "AP", "Stock"])
@@ -399,6 +402,7 @@ def test_default_backend_has_no_capability():
 def test_unknown_currency_is_rejected_and_configured_iso_subset_is_allowed(backend):
     refuses(OpeningImporter(backend), batch(currency="ZZZ", currency_precision=2), "IMP-SCHEMA")
     for code in ("SAR", "AED", "EGP", "QAR", "USD", "EUR", "GBP"):
+        backend.set_company_currency("tenant-a", "Synthetic Trading", code)
         source = batch({"Customer": [{"customer_name": "Buyer"}]}, currency=code, currency_precision=2)
         assert OpeningImporter(backend).preview(source)["ok"]
 
@@ -476,3 +480,144 @@ def test_backend_read_failure_is_sanitized_and_fails_closed(backend):
 def test_long_name_comparison_work_is_bounded_before_upstream(backend):
     source = batch({"Customer": [{"customer_name": "X" * 1020 + suffix} for suffix in ("a", "b", "c")]})
     refuses(OpeningImporter(backend), forged_clean(source), "IMP-LIMIT")
+
+
+def test_offsetting_control_accounts_reject_dummy_zero_detail(backend):
+    datasets = {
+        "Account": [{"account_number": key, "account_type": "Receivable"} for key in ("1100", "1200")],
+        "TrialBalance": [
+            {"account": "1100", "account_type": "Receivable", "debit": "100.00", "credit": "0"},
+            {"account": "1200", "account_type": "Receivable", "debit": "0", "credit": "100.00"},
+        ],
+        "Customer": [{"customer_code": "C1"}],
+        "AR": [{"customer": "C1", "amount": "0"}],
+    }
+    importer = OpeningImporter(backend)
+    refuses(importer, batch(datasets), "IMP-RECONCILE")
+    datasets["AR"][0]["account"] = "1100"
+    refuses(importer, batch(datasets), "IMP-RECONCILE")
+    assert backend.records("tenant-a", "Synthetic Trading") == []
+
+
+@pytest.mark.parametrize("entity,control", [("AR", "ar"), ("AP", "ap"), ("Stock", "stock")])
+def test_single_control_persists_its_account_on_the_detail(backend, entity, control):
+    apply(OpeningImporter(backend), batch(opening_details()))
+    detail, = [r["row"] for r in backend.records("tenant-a", "Synthetic Trading") if r["entity"] == entity]
+    assert detail["account"] == control
+
+
+def test_per_account_reconciliation_and_account_link_validation(backend):
+    datasets = {
+        "Account": [{"account_number": "1100", "account_type": "Receivable"},
+                    {"account_number": "1200", "account_type": "Receivable"},
+                    {"account_number": "2100", "account_type": "Payable"},
+                    {"account_number": "3000", "account_type": "Other"}],
+        "TrialBalance": [
+            {"account": "1100", "account_type": "Receivable", "debit": "40.00", "credit": "0"},
+            {"account": "1200", "account_type": "Receivable", "debit": "60.00", "credit": "0"},
+            {"account": "3000", "account_type": "Other", "debit": "0", "credit": "100.00"},
+        ],
+        "Customer": [{"customer_code": "C1"}, {"customer_code": "C2"}],
+        "AR": [{"customer": "C1", "account": "1100", "amount": "40.00"},
+               {"customer": "C2", "account": "1200", "amount": "60.00"}],
+    }
+    importer = OpeningImporter(backend)
+    assert importer.preview(batch(datasets))["ok"]
+    # Swapping amounts across the two Receivable accounts keeps aggregate total 100.00 but must fail per account.
+    swapped = copy.deepcopy(datasets)
+    swapped["AR"][0]["amount"], swapped["AR"][1]["amount"] = "60.00", "40.00"
+    refuses(importer, batch(swapped), "IMP-RECONCILE")
+    # Detail naming a wrong-type account fails IMP-REFERENCE; naming an account absent from TB fails IMP-RECONCILE.
+    wrong_type = copy.deepcopy(datasets)
+    wrong_type["AR"][0]["account"] = "2100"
+    refuses(importer, batch(wrong_type), "IMP-REFERENCE")
+    not_in_tb = copy.deepcopy(datasets)
+    not_in_tb["Account"].append({"account_number": "1300", "account_type": "Receivable"})
+    not_in_tb["AR"].append({"customer": "C1", "account": "1300", "amount": "0"})
+    refuses(importer, batch(not_in_tb), "IMP-RECONCILE")
+
+
+def test_functional_currency_is_checked_and_preview_echoes_context(backend):
+    importer = OpeningImporter(backend)
+    refuses(importer, batch(currency="USD"), "IMP-CURRENCY")
+    source = batch()
+    preview = importer.preview(source)
+    assert {key: preview[key] for key in ("company", "posting_date", "currency")} == {
+        key: source[key] for key in ("company", "posting_date", "currency")}
+
+
+def test_near_duplicate_names_require_a_bound_owner_confirmation(backend, monkeypatch):
+    importer = OpeningImporter(backend)
+    datasets = {
+        "Item": [{"item_code": f"SKU-RED-{size}", "item_name": f"Blue Shirt {size}"} for size in ("M", "L")],
+        "Customer": [{"customer_code": code, "customer_name": name}
+                     for code, name in (("CUST-A", "محمد أحمد"), ("CUST-B", "أحمد محمد"))],
+    }
+    source = batch(datasets)
+    # A genuine upstream report with a flagged name group must also be resolvable.
+    source["prevalidation"] = prevalidate(datasets["Customer"] + datasets["Item"], {
+        "required": {"*": []}, "fields": {"party": "customer_name", "item": "item_name"}}).to_dict()
+    pending = importer.preview(source)
+    assert pending["ok"] is False
+    assert {group["entity"] for group in pending["name_groups"]} == {"Item", "Customer"}
+    groups = [group["id"] for group in pending["name_groups"]]
+    assert importer.preview(dict(source, owner_confirmed_distinct=groups))["errors"][0]["code"] == "IMP-SCHEMA"
+    with pytest.raises(ImportFailure, match="IMP-REPORT"):
+        importer.apply(source, confirmed_by="reviewer", plan_hash="0" * 64)
+    identity = backend.identity()
+    monkeypatch.setattr(backend, "_session", lambda: dict(identity, capabilities=["opening_import"]))
+    with pytest.raises(ImportFailure, match="IMP-AUTH"):
+        importer.confirm(source, confirmed_by="reviewer", owner_confirmed_distinct=groups)
+    monkeypatch.setattr(backend, "_session", lambda: identity)
+    changes = copy.deepcopy(datasets)
+    changes["Item"][0]["item_name"] = "Blue Shirts M"
+    edited = batch(changes)
+    for candidate, ids in ((source, groups[:1]), (source, [groups[0], "0" * 64]), (edited, groups)):
+        with pytest.raises(ImportFailure, match="IMP-CONFIRM"):
+            importer.confirm(candidate, confirmed_by="reviewer", owner_confirmed_distinct=ids)
+    confirmed = importer.confirm(source, confirmed_by="reviewer", owner_confirmed_distinct=groups)
+    assert confirmed["ok"]
+    assert confirmed["owner_confirmed_distinct"] == sorted(groups)
+    assert confirmed["plan_hash"] != pending["plan_hash"]
+    assert backend.records("tenant-a", "Synthetic Trading") == []
+    assert not importer.preview(dict(source, batch_id="different-batch"))["ok"]
+    assert apply(OpeningImporter(backend), source)["status"] == "applied"
+    assert apply(importer, source)["status"] == "already_applied"
+
+
+def test_similar_codes_are_not_name_findings_in_opening_details(backend):
+    datasets = opening_details("50")
+    datasets["Customer"] = [{"customer_code": f"CUST-{suffix}"} for suffix in ("A", "B")]
+    datasets["Item"] = [{"item_code": f"SKU-RED-{size}"} for size in ("S", "M")]
+    datasets["AR"] = [{"customer": row["customer_code"], "amount": "25"} for row in datasets["Customer"]]
+    datasets["Stock"] = [{"item_code": row["item_code"], "warehouse": "W1", "qty": "1", "valuation_rate": "50"}
+                         for row in datasets["Item"]]
+    assert OpeningImporter(backend).preview(batch(datasets))["ok"]
+
+
+@pytest.mark.parametrize("explicit_clear", [False, True])
+def test_master_update_preserves_omissions_and_reports_explicit_clears(backend, explicit_clear):
+    importer = OpeningImporter(backend)
+    old = {"customer_code": "C1", "customer_name": "Before", "tax_id": "synthetic-tax"}
+    apply(importer, batch({"Customer": [old]}))
+    update = {"customer_code": "C1", "customer_name": "After"}
+    if explicit_clear:
+        update["tax_id"] = ""
+    source = batch({"Customer": [update]}, batch_id="update")
+    preview = importer.preview(source)
+    assert preview["master_update_fields"] == [
+        {"entity": "Customer", "row": 1, "changed_fields": ["customer_name"],
+         "cleared_fields": ["tax_id"] if explicit_clear else []}]
+    apply(importer, source)
+    stored, = backend.records("tenant-a", "Synthetic Trading")
+    assert stored["row"] == (dict(update, tax_id="synthetic-tax") if not explicit_clear else
+                             {"customer_code": "C1", "customer_name": "After"})
+
+
+@pytest.mark.parametrize("mark", ["\u200e", "\u200f", "\u200c", "\u200d"])
+def test_arabic_text_keeps_directional_and_joining_marks(backend, mark):
+    importer = OpeningImporter(backend)
+    name = mark + "محمد" + mark + " أحمد"
+    apply(importer, batch({"Customer": [{"customer_name": name}]}))
+    assert backend.records("tenant-a", "Synthetic Trading")[0]["row"]["customer_name"] == name
+    refuses(importer, batch({"Customer": [{"customer_name": mark + "＝1+1"}]}), "IMP-FORMULA")

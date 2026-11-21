@@ -1,6 +1,7 @@
 """Plain types of the intent router. Closed label sets; the decision carries codes only, never free text."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 MODES = ("discover", "ask", "act", "change")
@@ -24,6 +25,11 @@ REASONS = frozenset({
 })
 
 
+def is_clock(x) -> bool:
+    """A usable host clock reading: a real, finite number (not a bool, NaN or infinity)."""
+    return type(x) in (int, float) and math.isfinite(x)
+
+
 def max_risk(*risks) -> str:
     """Highest valid class of the arguments; an invalid or missing value is skipped. Never lowers."""
     valid = [r for r in risks if r in _RANK]
@@ -41,9 +47,8 @@ class Pending:
 
     def __post_init__(self):
         if self.mode in PRIVILEGED and (not self.action_id or not self.args_hash or self.risk not in _RANK
-                                        or not isinstance(self.expires_at, (int, float))
-                                        or isinstance(self.expires_at, bool)):
-            raise ValueError("a privileged Pending needs action_id, args_hash, a valid risk and expires_at")
+                                        or not is_clock(self.expires_at)):
+            raise ValueError("a privileged Pending needs action_id, args_hash, a valid risk and a finite expires_at")
 
 
 @dataclass(frozen=True)

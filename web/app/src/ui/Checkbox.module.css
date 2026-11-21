@@ -3,6 +3,7 @@
   grid-template-columns: auto 1fr;
   column-gap: var(--space-unit);
   align-items: start;
+  min-block-size: var(--touch-target);
 }
 
 .box {

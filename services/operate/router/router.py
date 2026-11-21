@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from .models import (ABSTAIN, MODE_RISK_FLOOR, PRIVILEGED, RISK_ORDER, SAFE_MODE, RouteContext, RouteDecision,
+from .models import (ABSTAIN, is_clock, MODE_RISK_FLOOR, PRIVILEGED, RISK_ORDER, SAFE_MODE, RouteContext, RouteDecision,
                      max_risk)
 from .ports import ClassifierRequest, ModelClassifierPort, bucket, decode_label
 from .rules import RuleResult, run_rules
@@ -61,7 +61,7 @@ class IntentRouter:
 
     # -- internals ----------------------------------------------------------------------------------------------
     def _pending(self, turn, ctx, codes, hint, n_data):
-        t = normalise(turn)
+        t = normalise(turn).rstrip(".!,;:… ،؛")  # "Yes." and "نعم،" confirm; "yes?" is a question and does not
         yes, no = bool(_YES.match(t)), bool(_NO.match(t))
         if not (yes or no):
             return None
@@ -72,8 +72,8 @@ class IntentRouter:
                                      risk_hint=max_risk(hint), data_items_ignored=n_data)
             return None
         pend = ctx.pending
-        if yes and not (ctx.now is not None and ctx.now < pend.expires_at):
-            codes.add("pending_expired")  # no clock or past expiry: the confirmation is void, ask again
+        if yes and not (is_clock(ctx.now) and is_clock(pend.expires_at) and ctx.now < pend.expires_at):
+            codes.add("pending_expired")  # no usable clock or past expiry: the confirmation is void, ask again
             return RouteDecision(SAFE_MODE, "low", tuple(sorted(codes)), True, CLARIFY_CONFIRM, False,
                                  max_risk(hint), data_items_ignored=n_data)
         codes.add("confirmation_of_pending")

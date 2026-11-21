@@ -1,0 +1,204 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  min-inline-size: 0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(var(--space-unit) * 3);
+  align-items: start;
+}
+
+.listPane,
+.detailPane {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  min-inline-size: 0;
+}
+
+/* Narrow screens: the list or the detail, one at a time. */
+.layout[data-selected='true'] .listPane {
+  display: none;
+}
+
+.layout[data-selected='false'] .detailPane {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .layout {
+    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+  }
+
+  .layout[data-selected='true'] .listPane,
+  .layout[data-selected='false'] .detailPane {
+    display: flex;
+  }
+
+  .back {
+    display: none;
+  }
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: calc(var(--space-unit) / 2);
+  inline-size: 100%;
+  min-block-size: var(--touch-target);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.item[aria-current='true'] {
+  border-color: var(--color-primary);
+  border-width: 2px;
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.itemTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-unit);
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  min-inline-size: 0;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  min-inline-size: 0;
+}
+
+.block h1,
+.block h2,
+.block h3 {
+  margin: 0;
+}
+
+.note {
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+  margin: 0;
+}
+
+/* Untrusted text: wraps anywhere, keeps line breaks, never overflows the screen. */
+.plain {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.code {
+  font-family: var(--font-mono, var(--font-body));
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: calc(var(--space-unit) / 2) calc(var(--space-unit) * 2);
+  margin: 0;
+}
+
+.facts dt {
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+}
+
+.facts dd {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  inline-size: 100%;
+}
+
+.table th,
+.table td {
+  padding: calc(var(--space-unit) / 2) var(--space-unit);
+  text-align: start;
+  border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  vertical-align: top;
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  margin: 0;
+  padding-inline-start: calc(var(--space-unit) * 3);
+}
+
+.detailLine {
+  padding-inline-start: calc(var(--space-unit) * 2);
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+}
+
+.tenant {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) / 2);
+}
+
+.action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-unit) calc(var(--space-unit) * 2);
+}
+
+.why {
+  flex-basis: 100%;
+  margin: 0;
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-unit);
+}

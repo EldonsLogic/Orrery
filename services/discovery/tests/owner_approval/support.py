@@ -47,7 +47,7 @@ class World:
         self.regen()
         self.calls, self.gate_error, self.gate_noop = [], None, False
         self.owner, self.before_approve, self.timeout_after, self.rollback_error = None, None, False, None
-        self.rolled_at = None
+        self.rollbacks = 0
 
     def regen(self, bp=None):
         self.bp = bp or make_bp()
@@ -112,7 +112,7 @@ class Gate:
 
     def status(self, t, bp):
         return {"state": self.w.machine, "contentDigest": self.w.recorded, "contentChanged": self.w.recorded != cdigest(self.w.bp),
-                "owner": copy.deepcopy(self.w.owner), "lastRollbackAt": self.w.rolled_at}
+                "owner": copy.deepcopy(self.w.owner), "rollbacks": self.w.rollbacks}
 
     def _human(self, claims):
         p = self.ident.resolve(claims, step_up=True)
@@ -150,7 +150,7 @@ class Gate:
             raise self.w.rollback_error
         if self.w.gate_error:
             raise self.w.gate_error
-        self.w.machine, self.w.owner, self.w.rolled_at = to_state, None, self.w.t
+        self.w.machine, self.w.owner, self.w.rollbacks = to_state, None, self.w.rollbacks + 1
 
 
 def build(w=None, **over):

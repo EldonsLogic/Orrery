@@ -169,7 +169,7 @@ def cost_section(quote: dict, state: str) -> dict:
                 unit, total, qty = _minor(ln["unit"]), _minor(ln["total"]), ln["quantity"]
                 if type(qty) is not int or qty < 0 or unit * qty != total:
                     _bad("line")
-                params = {k: clean(v, 120) for k, v in (ln.get("params") or {}).items() if type(k) is str and type(v) in (str, int)}
+                params = {k: clean(v if type(v) is str else str(v), 120) for k, v in (ln.get("params") or {}).items() if type(k) is str and type(v) in (str, int)}
                 rows.append({"id": clean(ln["id"], 80), "labelKey": clean(ln["label_key"], 80), "params": params, "untrustedText": True,
                              "quantity": qty, "unit": money(unit, cur), "total": money(total, cur), "_t": total})
             lines[sec] = rows

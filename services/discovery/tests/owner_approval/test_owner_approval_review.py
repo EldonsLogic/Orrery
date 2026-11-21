@@ -230,7 +230,6 @@ def test_m4_one_owners_request_for_changes_is_not_overridden_by_another_approval
     assert svc.verify(T, BP, cdigest(w.bp), w.quote["digest"], "owner-1")["blocked"] is True
     # a new quote or a new draft resolves it
     w.quote = generate_quote(w.bp, w.gap, default_price_book(), now=datetime.fromtimestamp(NOW - 60, timezone.utc), discount_bp=100)
-    w.t += 1   # N3: an approval in flight counts only when it is newer than the machine's last rollback
     assert approve(svc, Claims("owner-3"))["state"] == "approved"
 
 

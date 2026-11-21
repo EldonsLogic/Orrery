@@ -100,7 +100,7 @@ class _B:
     last_at: int = 0
     head_seq: int = 0
     head_seal: str = ""
-    rolled_at: object = None        # time of the last rollback (owner approvals with no outcome older than it are spent)
+    rollbacks: int = 0              # rollbacks so far (an owner approval with no outcome sealed before the last one is spent)
 
 
 def idempotency_key(tenant_id, bp, kind, digest, attempt) -> str:
@@ -286,7 +286,7 @@ class BuildStateMachine:
                 raise BuildStateError("BS-008")
             if d["reason"] == "simulation_rejected" and "sim" in n.att:
                 n.rejected_reports.add(n.att["sim"]["reportDigest"])   # a rejected simulation stays rejected
-            n.state, n.rolled_at = d["to"], at
+            n.state, n.rollbacks = d["to"], n.rollbacks + 1
             n.att = {k: v for k, v in n.att.items() if _STAGE[k] <= _IDX[d["to"]]}
         elif typ == "apply_started":
             kind = d["kind"]
@@ -817,7 +817,7 @@ class BuildStateMachine:
                                                   "kindKey": f"bs.pending.{pend['kind']}",
                                                   "statusKey": f"bs.pending.{'unknown' if pend['outcome'] == 'unknown' else 'applying'}"},
                 "recovery": None if not b.recovery else {"kind": b.recovery["kind"], "needsRecovery": True}, "cutoverStarted": "cutover" in b.att, "approvals": sorted(b.att),
-                "owner": None if "owner" not in b.att else dict(b.att["owner"]), "lastRollbackAt": b.rolled_at}
+                "owner": None if "owner" not in b.att else dict(b.att["owner"]), "rollbacks": b.rollbacks}
 
     def verify_tenant(self, tenant_id) -> list:
         """(blueprint id, code) for every build of the tenant whose log fails; an unreadable manifest raises BS-011."""

@@ -281,16 +281,35 @@ def test_n3_a_new_approval_after_the_rollback_is_credited():
     w.t += 10
     svc._gate.roll_back(Claims(), tenant_id=T, blueprint_id=BP, to_state="draft", reason="rejected")
     svc.reconcile(Claims(), tenant_id=T, blueprint_id=BP)     # settles the old one as lost
-    w.t += 1
     approve(svc)
     assert svc.status(T, BP)["state"] == "approved"
 
 
-def test_n3_gate_status_without_last_rollback_fails_closed():
+def test_n3_gate_status_without_rollback_count_fails_closed():
     svc, w, _ = build()
     real = svc._gate.status
-    svc._gate.status = lambda t, bp: {k: v for k, v in real(t, bp).items() if k != "lastRollbackAt"}
+    svc._gate.status = lambda t, bp: {k: v for k, v in real(t, bp).items() if k != "rollbacks"}
     assert code(svc.status, T, BP) == "OA-004"
+    for bad in (-1, True, "1", 1.0):
+        svc._gate.status = lambda t, bp, bad=bad: {**real(t, bp), "rollbacks": bad}
+        assert code(svc.status, T, BP) == "OA-004"
+
+
+# ---- partner review M1: an approval in the same second as a rollback ----------------------------------------
+def test_m1_same_second_approval_after_a_rollback_is_credited_and_burns_no_try():
+    svc, w, _ = build()
+    crash_after_gate_moved(svc)
+    svc._gate.roll_back(Claims(), tenant_id=T, blueprint_id=BP, to_state="draft", reason="rejected")   # same second
+    svc.reconcile(Claims(), tenant_id=T, blueprint_id=BP)
+    approve(svc)                                                        # still the same second
+    assert w.machine == "owner_approved" and svc.status(T, BP)["state"] == "approved"
+
+
+def test_m1_pending_approval_from_before_a_same_second_rollback_is_not_credited():
+    svc, w, _ = build()
+    crash_after_gate_moved(svc)                                         # pending approval, machine moved
+    svc._gate.roll_back(Claims(), tenant_id=T, blueprint_id=BP, to_state="draft", reason="rejected")   # same second
+    assert svc.verify(T, BP, cdigest(w.bp), w.quote["digest"], "owner-1")["approvedBy"] is None
 
 
 # ---- N4: a store commit is read back ------------------------------------------------------------------------
@@ -303,3 +322,31 @@ def test_n4_a_commit_that_did_not_write_fails_closed():
     svc, w, _ = build(store=SilentStore(), ephemeral=False)
     assert code(svc.decide, Claims(), **reject_args(svc, Claims())) == "OA-004"
     assert code(approve, svc) == "OA-004" and w.calls == []
+
+
+# ---- partner review lows: L3 audit gets validated ids only, L4 int params shown, L5 manifest compare-and-swap ------
+def test_l3_audit_never_receives_raw_unvalidated_ids():
+    events = []
+    svc, w, _ = build(audit=events.append)
+    code(svc.status, "bad tenant‮", "bp id with spaces")
+    assert events[-1]["code"] == "OA-001" and events[-1]["tenant"] is None and events[-1]["blueprint"] is None
+    svc.status(T, BP)
+    assert events[-1]["tenant"] == T and events[-1]["blueprint"] == BP
+
+
+def test_l4_integer_quote_line_param_is_shown_not_blanked():
+    import copy
+    from owner_approval.sections import cost_section
+    svc, w, _ = build()
+    q = copy.deepcopy(w.quote)
+    sec = "recurring" if q["lines"]["recurring"] else "one_off"
+    q["lines"][sec][0]["params"] = {"seats": 12, "flag": True}
+    assert cost_section(q, "valid")["lines"][sec][0]["params"] == {"seats": "12"}   # a bool is not a param
+
+
+def test_l5_memory_store_refuses_a_commit_on_a_stale_tenant_manifest():
+    store = MemoryStore()
+    store.commit(T, "bp-a", {"seq": 1}, {"n": 1})
+    with pytest.raises(ValueError):
+        store.commit(T, "bp-b", {"seq": 1}, {"n": 1})     # built on the manifest from before bp-a's commit
+    store.commit(T, "bp-b", {"seq": 1}, {"n": 2})

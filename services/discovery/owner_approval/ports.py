@@ -16,8 +16,8 @@ quotes.load(tenant_id, blueprint_id) -> dict               the current quote dra
 gaps.load(tenant_id, blueprint_id) -> dict                 the gap report (DSC-006) the quote was made from.
 holds.held(tenant_id, blueprint_id) -> bool                True when the draft is quarantined or on hold.
 gate: status(tenant_id, blueprint_id) -> dict              the build state machine's `status` (state, contentDigest,
-                                                            contentChanged, owner, lastRollbackAt: epoch seconds of
-                                                            the last rollback or None; required);
+                                                            contentChanged, owner, rollbacks: how many rollbacks
+                                                            the build has had, an int >= 0; required);
       approve_owner(claims, *, tenant_id, blueprint_id, confirmations)
       roll_back(claims, *, tenant_id, blueprint_id, to_state, reason)
                                                             the machine's own gates. Each resolves identity and

@@ -55,7 +55,7 @@ SCHEMA = "owner_approval/1"
 _WHO = contextvars.ContextVar("owner_approval_who", default=None)
 MAX_SKEW = 300  # seconds a record may be behind the newest one (host clock steps), per record
 MAX_TRIES = 5   # decisions one owner may seal on one version (refused approvals included)
-_DATA = {"decision": {"decision", "reason", "note", "bpDigest", "quoteDigest", "gapDigest", "forward"},
+_DATA = {"decision": {"decision", "reason", "note", "bpDigest", "quoteDigest", "gapDigest", "forward", "rollbacks"},
          "forward_outcome": {"decisionSeq", "outcome", "code"}}
 
 
@@ -118,7 +118,9 @@ class OwnerApproval:
 
     def _run(self, action, tenant_id, bp, fn):
         tok = _WHO.set(None)
-        t, b = (tenant_id if type(tenant_id) is str else None), (bp if type(bp) is str else None)
+        # only validated identifiers reach the audit sink (raw caller strings never do)
+        t = tenant_id if type(tenant_id) is str and TENANT_RE.fullmatch(tenant_id) else None
+        b = bp if type(bp) is str and ID_RE.fullmatch(bp) else None
         try:
             out = fn()
         except OwnerApprovalError as e:
@@ -179,6 +181,8 @@ class OwnerApproval:
                     for k in ("bpDigest", "quoteDigest", "gapDigest"):
                         if type(d[k]) is not str or not DIGEST_RE.fullmatch(d[k]):
                             raise _corrupt()
+                    if type(d["rollbacks"]) is not int or d["rollbacks"] < 0:
+                        raise _corrupt()
                     key = (a["subject"], d["bpDigest"], d["quoteDigest"])
                     prev = latest.get(key)
                     # one decision per owner per version; only an approval the gate REFUSED may be tried again
@@ -285,7 +289,7 @@ class OwnerApproval:
         if owner is not None and (type(owner) is not dict or type(owner.get("actor")) is not str or type(owner.get("digest")) is not str
                                   or type(owner.get("quoteDigest")) is not str):
             raise OwnerApprovalError("OA-004", "gate")
-        if "lastRollbackAt" not in st or not (st["lastRollbackAt"] is None or type(st["lastRollbackAt"]) is int):
+        if type(st.get("rollbacks")) is not int or st["rollbacks"] < 0:
             raise OwnerApprovalError("OA-004", "gate")   # needed to tell a pending approval from one a rollback spent
         if st["contentChanged"] or st["contentDigest"] != dg:
             blockers.append("stale")   # the author must record the new content as a revision first
@@ -301,7 +305,7 @@ class OwnerApproval:
         return {"content": content, "summary": summary, "quoteState": qstate if cost else None,
                 "bpDigest": dg, "quote": quote, "quoteDigest": quote["digest"] if cost else None,
                 "gapDigest": quote.get("inputs", {}).get("gap_report_digest") if cost else None, "cost": cost, "gaps": gaps,
-                "machine": st["state"], "machineOwner": owner, "lastRollbackAt": st["lastRollbackAt"], "blockers": blockers}
+                "machine": st["state"], "machineOwner": owner, "rollbacks": st["rollbacks"], "blockers": blockers}
 
     # ----- the screen -----------------------------------------------------------------------------------
     def review(self, claims, *, tenant_id, blueprint_id) -> dict:
@@ -391,10 +395,11 @@ class OwnerApproval:
             _, folded = self._records(t, bp)
             same, past_draft = ctx["bpDigest"] == cd, ctx["machine"] != "draft"
             # a confirmed approval moved the machine once; back at draft it is spent (a rollback happened since). One with no
-            # outcome yet (in flight, or left by a crash) counts only when it is newer than the machine's last rollback.
-            lr = ctx["lastRollbackAt"]
+            # outcome yet (in flight, or left by a crash) counts only when no rollback happened since it was sealed: it
+            # records the machine's rollback count it saw (a count, not a time, so a same-second rollback is told apart).
+            rb = ctx["rollbacks"]
             ok = same and any(d["subject"] == who and d["decision"] == "approve" and d["bpDigest"] == cd and d["quoteDigest"] == qd
-                              and ((d["outcome"] is None and (lr is None or d["at"] > lr)) or (d["outcome"] == "confirmed" and past_draft))
+                              and ((d["outcome"] is None and d["rollbacks"] == rb) or (d["outcome"] == "confirmed" and past_draft))
                               for d in folded["decisions"])
             blocked = cd in folded["rejected"] or (cd, qd) in folded["changes"] or "held" in ctx["blockers"]
             # validity counts at approval time only: past draft, the same quote (bound to this content and gap report,
@@ -439,7 +444,7 @@ class OwnerApproval:
                 p = self._actor(claims, t, gate=True)
             actor = {"subject": p.subject, "role": OWNER, "kind": "human", "realm": "tenant"}
             data = {"decision": decision, "reason": reason, "note": text, "bpDigest": ctx["bpDigest"], "quoteDigest": ctx["quoteDigest"],
-                    "gapDigest": ctx["gapDigest"], "forward": "gate" if forward else "none"}
+                    "gapDigest": ctx["gapDigest"], "forward": "gate" if forward else "none", "rollbacks": ctx["rollbacks"]}
 
             def check(existing):
                 folded = self._fold(t, bp, existing)

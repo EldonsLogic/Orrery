@@ -13,7 +13,10 @@ store.manifest(tenant) -> dict | None   the stored sealed manifest of a tenant.
 store.has_records(tenant) -> bool       True when any stream of the tenant has records (so a lost manifest is caught).
 store.commit(tenant, stream, record, manifest)
                                         write record and manifest in ONE atomic transaction with a unique key on
-                                        (tenant, stream, seq); raise on any conflict or failure.
+                                        (tenant, stream, seq) AND a compare-and-swap on the tenant manifest counter
+                                        (the stored `n` must be the new `n` - 1): the manifest is shared by every
+                                        Blueprint stream of the tenant, so two streams must not both commit on the
+                                        same old manifest; raise on any conflict or failure.
 A store error on read is OA-009 (fail closed); on commit it is OA-004 and nothing counts as written. After every commit
 the stream is read back and its head must be the new record, or it is OA-004 too."""
 from __future__ import annotations
@@ -71,6 +74,9 @@ class MemoryStore:
         log = self._logs.get((tenant, stream), [])
         if record["seq"] != len(log) + 1:
             raise ValueError("seq")
+        old = self._manifests.get(tenant)
+        if manifest["n"] != (old["n"] if old else 0) + 1:
+            raise ValueError("manifest")   # another stream of this tenant committed first
         self._logs[(tenant, stream)] = list(log) + [record]
         self._manifests[tenant] = manifest
 

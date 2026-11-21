@@ -92,11 +92,13 @@ def test_h2_summary_shows_permissions_approval_rules_integration_targets_and_ass
                              "tools": [{"tool": "payments.create"}]}]}
     w.regen(make_bp(extra=extra))
     items = {i["kind"]: i for i in svc.review(Claims(), tenant_id=T, blueprint_id=BP)["sections"][0]["items"]}
-    assert items["role"]["details"] == {"admin": True, "chatActions": True, "permissions": [{"entity": "payment", "actions": ["create", "approve"]}]}
-    assert items["approval"]["details"] == {"entity": "payment", "action": "payment", "selfApproval": True,
-                                            "steps": [{"order": 1, "approverRole": "clerk", "mode": "any_one"}]}
+    assert items["role"]["details"] == {"admin": True, "chatActions": True, "permissions": [{"entity": "payment", "actions": ["create", "approve"]}],
+                                        "scope": {"type": "", "values": []}}
+    assert items["approval"]["details"] == {"entity": "payment", "action": "payment", "selfApproval": True, "conditional": False, "conditions": [],
+                                            "steps": [{"order": 1, "approverRole": "clerk", "mode": "any_one", "timeoutHours": None,
+                                                       "escalateToRole": None}]}
     assert items["integration"]["details"] == {"connector": "bank.feed", "direction": "out"}
-    assert items["assistant"]["details"] == {"roles": ["clerk"], "tools": ["payments.create"]}
+    assert items["assistant"]["details"] == {"roles": ["clerk"], "tools": [{"tool": "payments.create", "confirm": False, "transitions": []}]}
     assert "details" not in items["workflow"]
 
 
@@ -164,3 +166,140 @@ def test_l8_refused_approvals_are_capped_per_owner_and_version():
     for _ in range(5):
         assert code(approve, svc) == "OA-015"
     assert code(approve, svc) == "OA-007"
+
+
+# ---- N1: the summary shows what narrows or widens an approval rule, role or assistant ------------------------
+N1_EXTRA = {
+    "roles": [{"id": "clerk", "labels": {"ar": "ك", "en": "Clerk"}, "scope": {"type": "branch", "values": ["riyadh", "jeddah"]},
+               "permissions": [{"entity": "payment", "actions": ["create"]}]}],
+    "approvals": [{"id": "pay", "labels": {"ar": "د", "en": "Payments need approval"}, "appliesTo": {"entity": "payment", "action": "submit"},
+                   "conditions": [{"field": "amount", "op": "gt", "value": 10 ** 12}, {"field": "memo", "op": "is_set"}],
+                   "steps": [{"order": 1, "approverRole": "owner", "mode": "any_one", "timeoutHours": 1, "escalateToRole": "clerk"}]}],
+    "assistants": [{"id": "helper", "labels": {"ar": "م", "en": "Helper"}, "roles": ["clerk"],
+                    "tools": [{"tool": "payment.create", "confirm": False},
+                              {"tool": "payment.transition", "confirm": True, "transitions": ["send", "hold"]}]}]}
+
+
+def n1_items(extra=None):
+    svc, w, _ = build()
+    w.regen(make_bp(extra=extra or N1_EXTRA))
+    v = svc.review(Claims(), tenant_id=T, blueprint_id=BP)
+    return v, {i["kind"]: i for i in v["sections"][0]["items"]}
+
+
+def test_n1_approval_rule_conditions_are_shown_and_flagged():
+    _, items = n1_items()
+    det = items["approval"]["details"]
+    assert det["conditional"] is True
+    assert det["conditions"] == [{"field": "amount", "op": "gt", "value": "1000000000000"}, {"field": "memo", "op": "is_set", "value": None}]
+    _, plain = n1_items({"approvals": [{"id": "a", "labels": {"ar": "a", "en": "a"}, "steps": []}]})
+    assert plain["approval"]["details"]["conditional"] is False and plain["approval"]["details"]["conditions"] == []
+
+
+def test_n1_approval_step_timeout_and_escalation_are_shown():
+    _, items = n1_items()
+    assert items["approval"]["details"]["steps"] == [{"order": 1, "approverRole": "owner", "mode": "any_one",
+                                                      "timeoutHours": 1, "escalateToRole": "clerk"}]
+
+
+def test_n1_role_scope_type_and_values_are_shown():
+    _, items = n1_items()
+    assert items["role"]["details"]["scope"] == {"type": "branch", "values": ["riyadh", "jeddah"]}
+
+
+def test_n1_assistant_tool_confirm_and_transitions_are_shown():
+    _, items = n1_items()
+    assert items["assistant"]["details"]["tools"] == [{"tool": "payment.create", "confirm": False, "transitions": []},
+                                                      {"tool": "payment.transition", "confirm": True, "transitions": ["send", "hold"]}]
+
+
+def test_n1_a_condition_value_too_long_to_show_blocks_approval():
+    extra = {"approvals": [{"id": "a", "labels": {"ar": "a", "en": "a"}, "conditions": [{"field": "memo", "op": "eq", "value": "x" * 500}]}]}
+    v, _ = n1_items(extra)
+    assert v["sections"][0]["moreItems"] > 0 and "too_large" in [b["key"] for b in v["blockers"]]
+
+
+def test_n1_every_detail_field_has_a_label_in_both_languages():
+    import json
+    from pathlib import Path
+    from owner_approval.sections import DETAIL_FIELDS
+    lab = json.loads((Path(__file__).parents[2] / "owner_approval" / "labels.json").read_text())
+    assert set(lab["en"]) == set(lab["ar"])
+    for f in DETAIL_FIELDS:
+        assert f"oa.detail.{f}" in lab["en"]
+    assert "condition" in lab["en"]["oa.summary.not_shown"]
+
+
+# ---- N2: the try cap is shown, and gate timeouts do not burn it -----------------------------------------------
+def test_n2_review_reports_the_tries_blocker_when_the_cap_is_reached():
+    svc, w, _ = build()
+    w.gate_error = GateRefusal("BS-006")
+    for _ in range(5):
+        assert code(approve, svc) == "OA-015"
+    v = svc.review(Claims(), tenant_id=T, blueprint_id=BP)
+    assert "tries" in [b["key"] for b in v["blockers"]] and v["decisions"][0]["allowed"] is False
+
+
+def test_n2_timeouts_with_no_gate_code_do_not_count_toward_the_cap():
+    svc, w, _ = build()
+    w.gate_error = TimeoutError("slow")
+    for _ in range(6):
+        assert code(approve, svc) == "OA-015"
+    assert "tries" not in [b["key"] for b in svc.review(Claims(), tenant_id=T, blueprint_id=BP)["blockers"]]
+    w.gate_error = None
+    approve(svc)
+    assert svc.status(T, BP)["state"] == "approved"
+
+
+# ---- N3: an approval left without an outcome is not credited after a rollback ---------------------------------
+def crash_after_gate_moved(svc):
+    def crash(*a):
+        raise RuntimeError("crash")
+    real, svc._outcome = svc._outcome, crash
+    with pytest.raises(OwnerApprovalError):
+        approve(svc)
+    svc._outcome = real
+
+
+def test_n3_pending_approval_older_than_the_last_rollback_is_not_credited():
+    svc, w, _ = build()
+    crash_after_gate_moved(svc)
+    assert w.machine == "owner_approved"
+    w.t += 10
+    svc._gate.roll_back(Claims(), tenant_id=T, blueprint_id=BP, to_state="draft", reason="rejected")
+    dg, qd = cdigest(w.bp), w.quote["digest"]
+    assert svc.verify(T, BP, dg, qd, "owner-1")["approvedBy"] is None
+    with pytest.raises(GateRefusal) as e:
+        svc._gate.approve_owner(Claims(), tenant_id=T, blueprint_id=BP, confirmations=["gaps", "quote", "summary"],
+                                expected_digest=dg, quote_digest=qd)
+    assert e.value.code == "BS-006"
+
+
+def test_n3_a_new_approval_after_the_rollback_is_credited():
+    svc, w, _ = build()
+    crash_after_gate_moved(svc)
+    w.t += 10
+    svc._gate.roll_back(Claims(), tenant_id=T, blueprint_id=BP, to_state="draft", reason="rejected")
+    svc.reconcile(Claims(), tenant_id=T, blueprint_id=BP)     # settles the old one as lost
+    w.t += 1
+    approve(svc)
+    assert svc.status(T, BP)["state"] == "approved"
+
+
+def test_n3_gate_status_without_last_rollback_fails_closed():
+    svc, w, _ = build()
+    real = svc._gate.status
+    svc._gate.status = lambda t, bp: {k: v for k, v in real(t, bp).items() if k != "lastRollbackAt"}
+    assert code(svc.status, T, BP) == "OA-004"
+
+
+# ---- N4: a store commit is read back ------------------------------------------------------------------------
+class SilentStore(MemoryStore):
+    def commit(self, tenant, stream, record, manifest):
+        return None   # says OK, writes nothing
+
+
+def test_n4_a_commit_that_did_not_write_fails_closed():
+    svc, w, _ = build(store=SilentStore(), ephemeral=False)
+    assert code(svc.decide, Claims(), **reject_args(svc, Claims())) == "OA-004"
+    assert code(approve, svc) == "OA-004" and w.calls == []

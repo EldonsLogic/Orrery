@@ -14,7 +14,8 @@ store.has_records(tenant) -> bool       True when any stream of the tenant has r
 store.commit(tenant, stream, record, manifest)
                                         write record and manifest in ONE atomic transaction with a unique key on
                                         (tenant, stream, seq); raise on any conflict or failure.
-A store error on read is OA-009 (fail closed); on commit it is OA-004 and nothing counts as written."""
+A store error on read is OA-009 (fail closed); on commit it is OA-004 and nothing counts as written. After every commit
+the stream is read back and its head must be the new record, or it is OA-004 too."""
 from __future__ import annotations
 
 import copy
@@ -181,4 +182,7 @@ class SealedLog:
             self._store.commit(tenant, stream, copy.deepcopy(rec), manifest)
         except Exception:
             raise OwnerApprovalError("OA-004", "store") from None
+        back = self.read(tenant, stream)   # a store that returns without writing must not look like a write
+        if not back or back[-1]["seq"] != rec["seq"] or not hmac.compare_digest(back[-1]["seal"], rec["seal"]):
+            raise OwnerApprovalError("OA-004", "readback")
         return copy.deepcopy(rec)

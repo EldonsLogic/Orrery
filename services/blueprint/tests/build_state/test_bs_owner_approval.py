@@ -100,6 +100,15 @@ def test_status_exposes_the_recorded_owner_approval():
     assert o == {"actor": "u-owner", "digest": content_digest(w.bps.d[(T, BP)]), "quoteDigest": QD}
 
 
+def test_status_exposes_the_last_rollback_time():
+    w = drafted()
+    w.approve()
+    assert w.status()["lastRollbackAt"] is None
+    w.m.roll_back("rev", **w.args(to_state="draft", reason="rejected"))
+    at = w.status()["lastRollbackAt"]
+    assert type(at) is int and at == w.clock.t
+
+
 def test_constructor_requires_the_port():
     w = World()
     with pytest.raises(Exception):

@@ -182,7 +182,7 @@ class OwnerApproval:
                     key = (a["subject"], d["bpDigest"], d["quoteDigest"])
                     prev = latest.get(key)
                     # one decision per owner per version; only an approval the gate REFUSED may be tried again
-                    if prev is not None and not (prev["decision"] == "approve" and outcomes.get(prev["seq"]) == "refused"):
+                    if prev is not None and not (prev["decision"] == "approve" and outcomes.get(prev["seq"], (None,))[0] == "refused"):
                         raise _corrupt("order")
                     if dec == "approve" and (d["bpDigest"] in rejected or (d["bpDigest"], d["quoteDigest"]) in changes):
                         raise _corrupt("order")
@@ -199,14 +199,20 @@ class OwnerApproval:
                             or type(d["code"]) is not str or not (d["code"] == "" or CODE_RE.fullmatch(d["code"]) or d["code"] in ("unconfirmed", "lost")) \
                             or ref["subject"] != a["subject"]:
                         raise _corrupt("outcome")
-                    outcomes[d["decisionSeq"]] = d["outcome"]
+                    outcomes[d["decisionSeq"]] = (d["outcome"], d["code"])
             except OwnerApprovalError:
                 raise
             except Exception:
                 raise _corrupt("shape") from None
         for x in decisions:
-            x["outcome"] = outcomes.get(x["seq"])
+            x["outcome"], x["outcomeCode"] = outcomes.get(x["seq"], (None, None))
         return {"decisions": decisions, "latest": latest, "rejected": rejected, "changes": changes, "max_at": max_at}
+
+    @staticmethod
+    def _tries(folded, subject, bp_digest, quote_digest) -> int:
+        """Decisions that count toward MAX_TRIES: a refusal with no gate code (a timeout) is the host's failure, not a try."""
+        return sum(1 for x in folded["decisions"] if x["subject"] == subject and x["bpDigest"] == bp_digest
+                   and x["quoteDigest"] == quote_digest and not (x["outcome"] == "refused" and x["outcomeCode"] == ""))
 
     def _records(self, t, bp):
         recs = self._log.read(t, bp)
@@ -279,6 +285,8 @@ class OwnerApproval:
         if owner is not None and (type(owner) is not dict or type(owner.get("actor")) is not str or type(owner.get("digest")) is not str
                                   or type(owner.get("quoteDigest")) is not str):
             raise OwnerApprovalError("OA-004", "gate")
+        if "lastRollbackAt" not in st or not (st["lastRollbackAt"] is None or type(st["lastRollbackAt"]) is int):
+            raise OwnerApprovalError("OA-004", "gate")   # needed to tell a pending approval from one a rollback spent
         if st["contentChanged"] or st["contentDigest"] != dg:
             blockers.append("stale")   # the author must record the new content as a revision first
         try:
@@ -293,7 +301,7 @@ class OwnerApproval:
         return {"content": content, "summary": summary, "quoteState": qstate if cost else None,
                 "bpDigest": dg, "quote": quote, "quoteDigest": quote["digest"] if cost else None,
                 "gapDigest": quote.get("inputs", {}).get("gap_report_digest") if cost else None, "cost": cost, "gaps": gaps,
-                "machine": st["state"], "machineOwner": owner, "blockers": blockers}
+                "machine": st["state"], "machineOwner": owner, "lastRollbackAt": st["lastRollbackAt"], "blockers": blockers}
 
     # ----- the screen -----------------------------------------------------------------------------------
     def review(self, claims, *, tenant_id, blueprint_id) -> dict:
@@ -321,6 +329,8 @@ class OwnerApproval:
                 blockers.append("state")
             if mine:
                 blockers.append("already_decided")
+            if not integrity and self._tries(folded, p.subject, ctx["bpDigest"], ctx["quoteDigest"]) >= MAX_TRIES:
+                blockers.append("tries")    # decide refuses every decision on this version past the cap (OA-007)
             base = set(blockers) - {"rejected", "changes_requested", "already_decided", "state", "too_large", "quote"}
             can_approve = not blockers and m == "draft"
             can_change = not base and not mine and m != "live" and ctx["quoteState"] in ("valid", "expired")
@@ -380,9 +390,12 @@ class OwnerApproval:
             ctx = self._context(t, bp, self._now())
             _, folded = self._records(t, bp)
             same, past_draft = ctx["bpDigest"] == cd, ctx["machine"] != "draft"
-            # a confirmed approval moved the machine once; back at draft it is spent (a rollback happened since)
+            # a confirmed approval moved the machine once; back at draft it is spent (a rollback happened since). One with no
+            # outcome yet (in flight, or left by a crash) counts only when it is newer than the machine's last rollback.
+            lr = ctx["lastRollbackAt"]
             ok = same and any(d["subject"] == who and d["decision"] == "approve" and d["bpDigest"] == cd and d["quoteDigest"] == qd
-                              and (d["outcome"] is None or (d["outcome"] == "confirmed" and past_draft)) for d in folded["decisions"])
+                              and ((d["outcome"] is None and (lr is None or d["at"] > lr)) or (d["outcome"] == "confirmed" and past_draft))
+                              for d in folded["decisions"])
             blocked = cd in folded["rejected"] or (cd, qd) in folded["changes"] or "held" in ctx["blockers"]
             # validity counts at approval time only: past draft, the same quote (bound to this content and gap report,
             # arithmetic re-derived) stays current after it expires; at draft it must be valid now
@@ -435,8 +448,7 @@ class OwnerApproval:
                 prev = folded["latest"].get((p.subject, data["bpDigest"], data["quoteDigest"]))
                 if prev is not None and not (prev["decision"] == "approve" and prev["outcome"] == "refused"):
                     raise OwnerApprovalError("OA-007")
-                if sum(1 for x in folded["decisions"] if x["subject"] == p.subject and x["bpDigest"] == data["bpDigest"]
-                       and x["quoteDigest"] == data["quoteDigest"]) >= MAX_TRIES:
+                if self._tries(folded, p.subject, data["bpDigest"], data["quoteDigest"]) >= MAX_TRIES:
                     raise OwnerApprovalError("OA-007", "tries")   # bounded log growth from refused approvals
                 if decision == "approve":
                     if data["bpDigest"] in folded["rejected"]:

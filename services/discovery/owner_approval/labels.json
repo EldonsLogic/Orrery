@@ -87,7 +87,7 @@
   "oa.kind.integration": "Connection to another tool",
   "oa.kind.assistant": "Assistant",
   "oa.kind.location": "Location",
-  "oa.summary.not_shown": "Your approval covers the whole plan. We list every item by name. For job roles, approval rules, connections and assistants we also show what they allow. Other details, such as record fields and process steps, are not listed here. These parts are also not listed:",
+  "oa.summary.not_shown": "Your approval covers the whole plan. We list every item by name. For job roles, approval rules, connections and assistants we also show what they allow and what limits or widens it: which records a role reaches, when a rule applies (its conditions), how long approvers have and who it passes to, and whether an assistant asks before each action. Other details, such as record fields, field limits, process steps, assistant usage caps and memory, are not listed here. These parts are also not listed:",
   "oa.summary.not_shown.branding": "Logo and colours",
   "oa.summary.not_shown.i18n": "Language settings",
   "oa.cost.unpriced": "Some items have no price yet. They are not in the total.",
@@ -109,7 +109,15 @@
   "oa.detail.connector": "Connects to",
   "oa.detail.direction": "Data flow",
   "oa.detail.roles": "Who may use it",
-  "oa.detail.tools": "What it may do"
+  "oa.detail.tools": "What it may do",
+  "oa.detail.scope": "Which records this role reaches",
+  "oa.detail.conditional": "Applies only in some cases",
+  "oa.detail.conditions": "Only when",
+  "oa.detail.timeoutHours": "Hours to answer",
+  "oa.detail.escalateToRole": "If no answer, passes to",
+  "oa.detail.confirm": "Asks the user before each action",
+  "oa.detail.transitions": "Steps it may take",
+  "oa.blocker.tries": "You tried to approve this version too many times. Ask us for help."
  },
  "ar": {
   "oa.title": "اعتمد خطتك",
@@ -199,7 +207,7 @@
   "oa.kind.integration": "ربط بأداة أخرى",
   "oa.kind.assistant": "مساعد",
   "oa.kind.location": "موقع",
-  "oa.summary.not_shown": "اعتمادك يشمل الخطة كاملة. نعرض كل بند باسمه. ونعرض أيضًا ما تسمح به الوظائف وقواعد الموافقة والروابط والمساعدون. التفاصيل الأخرى، مثل حقول السجلات وخطوات العمليات، غير معروضة هنا. وهذه الأجزاء أيضًا غير معروضة:",
+  "oa.summary.not_shown": "اعتمادك يشمل الخطة كاملة. نعرض كل بند باسمه. ونعرض أيضًا ما تسمح به الوظائف وقواعد الموافقة والروابط والمساعدون، وما يقيده أو يوسعه: السجلات التي تصل إليها الوظيفة، ومتى تنطبق القاعدة (شروطها)، والمدة المتاحة للمعتمدين ولمن تنتقل بعدها، وهل يسأل المساعد قبل كل إجراء. التفاصيل الأخرى، مثل حقول السجلات وقيود الحقول وخطوات العمليات وحدود استخدام المساعد وذاكرته، غير معروضة هنا. وهذه الأجزاء أيضًا غير معروضة:",
   "oa.summary.not_shown.branding": "الشعار والألوان",
   "oa.summary.not_shown.i18n": "إعدادات اللغة",
   "oa.cost.unpriced": "بعض البنود بلا سعر بعد. وهي غير مشمولة في الإجمالي.",
@@ -221,6 +229,14 @@
   "oa.detail.connector": "يرتبط بـ",
   "oa.detail.direction": "اتجاه البيانات",
   "oa.detail.roles": "من يمكنه استخدامه",
-  "oa.detail.tools": "ما يمكنه فعله"
+  "oa.detail.tools": "ما يمكنه فعله",
+  "oa.detail.scope": "السجلات التي تصل إليها هذه الوظيفة",
+  "oa.detail.conditional": "تنطبق في بعض الحالات فقط",
+  "oa.detail.conditions": "فقط عندما",
+  "oa.detail.timeoutHours": "ساعات الرد",
+  "oa.detail.escalateToRole": "إن لم يرد أحد، تنتقل إلى",
+  "oa.detail.confirm": "يسأل المستخدم قبل كل إجراء",
+  "oa.detail.transitions": "الخطوات التي يمكنه تنفيذها",
+  "oa.blocker.tries": "حاولت اعتماد هذه النسخة مرات كثيرة. اطلب منا المساعدة."
  }
 }

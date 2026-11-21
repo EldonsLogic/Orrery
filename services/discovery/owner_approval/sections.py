@@ -5,6 +5,8 @@ minor units only, and every figure is re-derived here from the lines (principle 
 up is refused (OA-012). Blueprint and quote text is untrusted: cleaned, bounded and marked `untrustedText`."""
 from __future__ import annotations
 
+import json
+
 from quote import digest as quote_digest, quote_state, verify_quote
 from quote.money import EXPONENT, MAX_MINOR, money, mul_bp
 
@@ -14,7 +16,7 @@ from .text import clean, clean_cut
 MAX_ITEMS = 200     # per collection; anything past it is counted in moreItems and blocks approval (the screen is complete)
 MAX_DETAIL = 64     # per list inside an item's details; overflow counts in moreItems too
 DETAIL_FIELDS = ("admin", "chatActions", "permissions", "entity", "action", "selfApproval", "steps", "connector", "direction",
-                 "roles", "tools")
+                 "roles", "tools", "scope", "conditional", "conditions", "timeoutHours", "escalateToRole", "confirm", "transitions")
 COLLECTIONS = (("entities", "entity"), ("workflows", "workflow"), ("reports", "report"), ("roles", "role"), ("components", "component"),
                ("approvals", "approval"), ("integrations", "integration"), ("assistants", "assistant"), ("locations", "location"))
 # Parts of the Blueprint that the approval digest covers but this screen does not list item by item (shown as a notice).
@@ -55,8 +57,19 @@ def _d(v):
     return v if type(v) is dict else {}
 
 
+def _value(v):
+    """A condition value as bounded plain text (None when the op takes none). (text, cut)."""
+    if v is None:
+        return None, False
+    try:
+        return clean_cut(v if type(v) is str else json.dumps(v, sort_keys=True, ensure_ascii=False), 120)
+    except Exception:
+        return "", True
+
+
 def _details(kind, it):
-    """What a role, approval rule, integration or assistant allows: ids and enums only, bounded. (details, hidden)."""
+    """What a role, approval rule, integration or assistant allows, and what narrows or widens it: ids, enums and bounded
+    values only. (details, hidden); anything cut counts in `hidden`, so approval is blocked rather than shown short."""
     cut = lambda arr: (arr[:MAX_DETAIL], max(0, len(arr) - MAX_DETAIL))  # noqa: E731
     if kind == "role":
         perms, hidden = cut(_list(it.get("permissions")))
@@ -65,19 +78,38 @@ def _details(kind, it):
             acts, h = cut(_list(_d(pm).get("actions")))
             hidden += h
             rows.append({"entity": clean(_d(pm).get("entity"), 80), "actions": [clean(a, 40) for a in acts]})
-        return {"admin": it.get("isAdmin") is True, "chatActions": it.get("canUseChatActions") is not False, "permissions": rows}, hidden
+        sc = _d(it.get("scope"))
+        vals, h = cut(_list(sc.get("values")))
+        return {"admin": it.get("isAdmin") is True, "chatActions": it.get("canUseChatActions") is not False, "permissions": rows,
+                "scope": {"type": clean(sc.get("type"), 40), "values": [clean(v, 80) for v in vals]}}, hidden + h
     if kind == "approval":
         steps, hidden = cut(_list(it.get("steps")))
+        conds, h = cut(_list(it.get("conditions")))
+        hidden += h
+        rows = []
+        for c in conds:
+            val, was_cut = _value(_d(c).get("value"))
+            hidden += was_cut
+            rows.append({"field": clean(_d(c).get("field"), 80), "op": clean(_d(c).get("op"), 16), "value": val})
+        num = lambda v: v if type(v) is int else None  # noqa: E731
         ap = _d(it.get("appliesTo"))
         return {"entity": clean(ap.get("entity"), 80), "action": clean(ap.get("action"), 40), "selfApproval": it.get("selfApproval") is True,
-                "steps": [{"order": _d(s).get("order") if type(_d(s).get("order")) is int else None,
-                           "approverRole": clean(_d(s).get("approverRole"), 80), "mode": clean(_d(s).get("mode"), 40)} for s in steps]}, hidden
+                "conditional": bool(rows) or bool(h), "conditions": rows,
+                "steps": [{"order": num(_d(s).get("order")), "approverRole": clean(_d(s).get("approverRole"), 80), "mode": clean(_d(s).get("mode"), 40),
+                           "timeoutHours": num(_d(s).get("timeoutHours")),
+                           "escalateToRole": clean(_d(s).get("escalateToRole"), 80) or None} for s in steps]}, hidden
     if kind == "integration":
         return {"connector": clean(it.get("connector"), 120), "direction": clean(it.get("direction"), 8)}, 0
     if kind == "assistant":
-        roles, h1 = cut(_list(it.get("roles")))
-        tools, h2 = cut(_list(it.get("tools")))
-        return {"roles": [clean(r, 80) for r in roles], "tools": [clean(_d(x).get("tool"), 130) for x in tools]}, h1 + h2
+        roles, hidden = cut(_list(it.get("roles")))
+        tools, h = cut(_list(it.get("tools")))
+        hidden += h
+        rows = []
+        for x in tools:
+            tr, h = cut(_list(_d(x).get("transitions")))
+            hidden += h
+            rows.append({"tool": clean(_d(x).get("tool"), 130), "confirm": _d(x).get("confirm") is True, "transitions": [clean(v, 80) for v in tr]})
+        return {"roles": [clean(r, 80) for r in roles], "tools": rows}, hidden
     return None, 0
 
 

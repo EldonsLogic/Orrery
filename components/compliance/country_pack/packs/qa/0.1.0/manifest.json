@@ -19,7 +19,10 @@
       ]
     }
   ],
-  "requires": [],
+  "requires": [
+    { "component": "finance.coa_qa_unresolved", "versionRange": ">=0.1.0 <1.0.0" },
+    { "component": "sales.invoice_print_qa_unresolved", "versionRange": ">=0.1.0 <1.0.0" }
+  ],
   "parameters": [],
   "tests": [
     {
@@ -30,8 +33,8 @@
     }
   ],
   "certification": {
-    "level": "draft",
-    "touchesLedgerOrTax": false,
+    "level": "tested",
+    "touchesLedgerOrTax": true,
     "reviewedBy": []
   },
   "engineCompatibility": {

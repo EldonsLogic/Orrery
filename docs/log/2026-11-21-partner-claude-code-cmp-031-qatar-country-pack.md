@@ -28,3 +28,16 @@ Unknown.
 
 ## Next step
 Native Arabic review of the three Arabic labels (ADR-0033). Re-check VAT and e-invoicing status against official sources. Author a Qatar chart of accounts, invoice template and `qa.holidays` calendar (new plan rows if wanted).
+
+## Review fix round
+Cross-model review (Claude Opus 5.5) of 3cd19b7 asked for changes. Fixed:
+- High, false manifest declaration: `manifest.json` now has `touchesLedgerOrTax: true` and `certification.level: tested`, as `zatca_sa` does. `pack.json` `status` is `tested` and `evidenceStatus` stays `unverified`. `SOURCES.md` now says not to promote past `tested` before Arabic sign-off. The earlier "Manifest touchesLedgerOrTax is false" decision above is superseded. Test updated first: it asserts `touchesLedgerOrTax` is true, the level is not above `tested`, and `evidenceStatus` is `unverified`.
+- Medium, placeholder ids: `finance.coa_qa_unresolved` and `sales.invoice_print_qa_unresolved` are listed in the manifest `requires`, so the compiler refuses the pack until real components exist. New test asserts both are listed.
+- Low, `mandatoryLanguages`: `en` dropped (no source). `SOURCES.md` notes the Arabic requirement is UNVERIFIED for invoices (the source covers financial statements). New test asserts `["ar"]`.
+- Tests: 25 pass (23 before, 2 added, 1 renamed and 1 extended).
+- Not changed, per the review: the CR number pattern stays unsourced and flagged UNVERIFIED.
+
+Next step (follow-ups for the coordinator to turn into plan rows; none added here):
+- The loader or registry refuses `draft` packs outside sandbox, and unknown component ids fail closed (today `resolve_country_pack("QA")` returns the placeholders quietly).
+- An `invoice` print kind in `pack.schema.json` for countries without VAT (Tier 3, its own PR); then replace the `tax_invoice` stand-in.
+- `vatNumberPattern` may be `null` when VAT is unsupported, replacing the `^(?!)$` workaround.

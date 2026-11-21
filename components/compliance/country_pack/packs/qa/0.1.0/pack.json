@@ -5,10 +5,10 @@
   "componentId": "country.qa",
   "countryCode": "QA",
   "version": "0.1.0",
-  "status": "draft",
+  "status": "tested",
   "evidenceStatus": "unverified",
   "testOnly": false,
-  "notes": "DRAFT, all facts UNVERIFIED (CMP-030 research, accessed 2026-11-18; see SOURCES.md). No VAT in force, no e-invoicing law enacted, payroll and WPS out of v1 scope. CoA and print template refs are unresolved placeholders. Arabic text is unreviewed (ADR-0033). Declarative metadata only, no tax maths.",
+  "notes": "Tested for structure only; all facts UNVERIFIED (CMP-030 research, accessed 2026-11-18; see SOURCES.md). No VAT in force, no e-invoicing law enacted, payroll and WPS out of v1 scope. CoA and print template refs are unresolved placeholders. Arabic text is unreviewed (ADR-0033). Declarative metadata only, no tax maths.",
   "name": {
     "ar": "حزمة دولة قطر (مسودة غير مراجعة)",
     "en": "Qatar Country Pack (draft, unverified)"
@@ -96,7 +96,7 @@
   },
   "printFormats": {
     "legalLayoutPrecedence": true,
-    "mandatoryLanguages": ["ar", "en"],
+    "mandatoryLanguages": ["ar"],
     "templates": [
       {
         "kind": "tax_invoice",

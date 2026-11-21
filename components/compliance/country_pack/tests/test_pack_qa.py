@@ -37,8 +37,9 @@ class TestQatarPack(unittest.TestCase):
         # Unpinned load picks the same pack (no test-only version beside it).
         self.assertEqual(load_country_pack("qa", PACKS_DIR)["version"], "0.1.0")
 
-    def test_status_and_evidence_are_draft_unverified(self) -> None:
-        self.assertEqual(self.pack["status"], "draft")
+    def test_status_is_tested_and_evidence_unverified(self) -> None:
+        # Tested = structure only; the facts stay UNVERIFIED and Arabic text needs sign-off (ADR-0033).
+        self.assertEqual(self.pack["status"], "tested")
         self.assertEqual(self.pack["evidenceStatus"], "unverified")
         self.assertIn("UNVERIFIED", self.pack["notes"])
         self.assertLessEqual(len(self.pack["notes"]), 500)
@@ -159,6 +160,18 @@ class TestQatarPack(unittest.TestCase):
             with self.subTest(override=override), self.assertRaises(OverrideRejectedError):
                 apply_company_overrides(self.pack, override)
 
+    def test_unresolved_placeholders_are_required_by_manifest(self) -> None:
+        manifest = json.loads((QA_DIR / "manifest.json").read_text(encoding="utf-8"))
+        required = {r.get("component") for r in manifest["requires"]}
+        placeholders = {self.pack["coaTemplate"]["componentId"]} | {
+            t["componentId"] for t in self.pack["printFormats"]["templates"]
+        }
+        self.assertEqual(placeholders, {"finance.coa_qa_unresolved", "sales.invoice_print_qa_unresolved"})
+        self.assertTrue(placeholders <= required, "the compiler must refuse the pack until real components exist")
+
+    def test_mandatory_print_languages_are_arabic_only(self) -> None:
+        self.assertEqual(self.pack["printFormats"]["mandatoryLanguages"], ["ar"])
+
     def test_manifest_matches_pack_and_schema(self) -> None:
         manifest = json.loads((QA_DIR / "manifest.json").read_text(encoding="utf-8"))
         schema = json.loads((REPO_ROOT / "contracts" / "component.manifest.schema.json").read_text(encoding="utf-8"))
@@ -167,6 +180,11 @@ class TestQatarPack(unittest.TestCase):
         self.assertEqual(manifest["id"], self.pack["componentId"])
         self.assertEqual(manifest["version"], self.pack["version"])
         self.assertEqual(manifest["certification"]["level"], self.pack["status"])
+        # The pack locks tax, CoA and e-invoicing settings, so it touches ledger or tax and cannot be draft.
+        self.assertIs(manifest["certification"]["touchesLedgerOrTax"], True)
+        self.assertIn(manifest["certification"]["level"], ("draft", "tested"))
+        self.assertNotIn(manifest["certification"]["level"], ("reviewed", "certified", "regulated"))
+        self.assertEqual(self.pack["evidenceStatus"], "unverified")
         self.assertEqual(manifest["name"], self.pack["name"])
         self.assertTrue((REPO_ROOT / manifest["tests"][0]["path"]).is_file())
 

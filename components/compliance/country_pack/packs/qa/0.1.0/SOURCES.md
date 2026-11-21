@@ -1,6 +1,6 @@
 # Qatar country pack 0.1.0: sources and evidence
 
-Status: draft. Every fact in `pack.json` is UNVERIFIED (`evidenceStatus: unverified`). Source: the CMP-030 research, [docs/compliance/qatar-research.md](../../../../../../docs/compliance/qatar-research.md). Access date for every URL: 2026-11-18. The pack holds declarative metadata only: no tax maths, no rates (ADR-0031). Nothing here is legal or tax advice.
+Status: tested (structure only, schema and unit tests pass). Every fact in `pack.json` is UNVERIFIED (`evidenceStatus: unverified`). Source: the CMP-030 research, [docs/compliance/qatar-research.md](../../../../../../docs/compliance/qatar-research.md). Access date for every URL: 2026-11-18. The pack holds declarative metadata only: no tax maths, no rates (ADR-0031). Nothing here is legal or tax advice.
 
 ## Facts, values and sources
 | Pack field | Value | Evidence | Source (URL, accessed 2026-11-18) |
@@ -21,7 +21,7 @@ Status: draft. Every fact in `pack.json` is UNVERIFIED (`evidenceStatus: unverif
 | `localeDefaults.timezone`, `currency`, `formats.*`, `numberSystem` | `Asia/Qatar`, `QAR`, 2 decimals, western digits | UNVERIFIED, no source in the research (standard IANA and ISO 4217 values, not read in this session) | none |
 | `payrollHooks.*` | `wpsEnabled: false`, all refs `null` | Out of v1 scope (payroll is not AI-written, AGENTS.md). WPS via banks and end-of-service gratuity exist per the research: UNVERIFIED | https://www.dohaguides.com/wage-protection-system-wps-qatar/ ; https://www.greythr.com/middle-east/blog/qatar-wps-compliance-2026/ ; https://www.gulf-times.com/story/371296/qatar-labour-law-end-of-service-benefits |
 | `coaTemplate` | `finance.coa_qa_unresolved` | UNRESOLVED placeholder. No Qatar chart component exists. IFRS is the accounting standard (UNVERIFIED); no mandatory national chart found. | https://www.ifac.org/about-ifac/membership/profile/qatar ; https://taxsummaries.pwc.com/qatar/corporate/tax-administration |
-| `printFormats.mandatoryLanguages` | `ar`, `en` | UNVERIFIED. Statutory financial statements are in Arabic (secondary source); invoice language rules not found | https://taxsummaries.pwc.com/qatar/corporate/tax-administration |
+| `printFormats.mandatoryLanguages` | `ar` | UNVERIFIED. The Arabic requirement is UNVERIFIED for invoices: the source covers statutory financial statements only (secondary source); invoice language rules not found. `en` is dropped because it has no source. | https://taxsummaries.pwc.com/qatar/corporate/tax-administration |
 | `printFormats.templates` | `sales.invoice_print_qa_unresolved` | UNRESOLVED placeholder. No Qatar template exists, and the schema has no invoice kind without tax, so `tax_invoice` is a stand-in. | none |
 
 ## Facts the pack schema does not hold (UNVERIFIED, for later packs and components)
@@ -30,4 +30,4 @@ Status: draft. Every fact in `pack.json` is UNVERIFIED (`evidenceStatus: unverif
 - Accounting standard: IFRS. Source: https://www.ifac.org/about-ifac/membership/profile/qatar (2026-11-18).
 
 ## Arabic text needing native review (ADR-0033, Q-28)
-`name.ar` in `pack.json` and `manifest.json`, and `localeDefaults.workingTime.reducedPeriods[0].labels.ar`. All are unreviewed. Do not promote past `draft` before a native Arabic reviewer signs off.
+`name.ar` in `pack.json` and `manifest.json`, and `localeDefaults.workingTime.reducedPeriods[0].labels.ar`. All are unreviewed. Do not promote past `tested` before a native Arabic reviewer signs off.

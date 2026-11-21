@@ -1,0 +1,168 @@
+{
+  "packId": "sa",
+  "version": "0.1.0",
+  "purpose": "Per-fact evidence for pack.json (CMP-029). pack.schema.json has no per-fact evidence field and caps notes at 500 characters, so sources live here. Labels: VERIFIED-OFFICIAL (official source read, per the cited repo doc), SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim). Access dates are those recorded in the cited repo doc; no source was re-read in this session. NOT legal advice.",
+  "facts": [
+    {
+      "paths": ["coaTemplate"],
+      "claim": "The chart is the CMP-006 Saudi trading chart, referenced by path and version range, not copied. No component manifest exists for it yet, so componentId finance.coa_sa_trading names a component still to be registered. Adoption needs accountant review (Q-8).",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/ksa-coa-and-tax-codes.md",
+      "sources": [
+        {"url": "https://www.socpa.org.sa/Socpa/Professional-standards/Accounting-standards/Auditing-Standards-Endorsed.aspx", "accessed": "2026-11-18", "note": "SOCPA endorsement of IFRS for SMEs, cited by CMP-006"}
+      ]
+    },
+    {
+      "paths": ["tax.vatSupported", "tax.taxCodesRef"],
+      "claim": "VAT applies in KSA (15% from 2020-07-01). The rate and the seven treatments live in the CMP-006 file vat_treatments.json, referenced here; the pack holds no rate.",
+      "status": "SECONDARY",
+      "ref": "docs/compliance/ksa-coa-and-tax-codes.md",
+      "sources": [
+        {"url": "https://zatca.gov.sa/en/RulesRegulations/VAT/Pages/About-Vat.aspx", "accessed": "2026-11-18", "note": "cited by CMP-006 for the 15% rate"}
+      ]
+    },
+    {
+      "paths": ["tax.filingPeriods"],
+      "claim": "VAT returns are filed monthly or quarterly; which one applies is set per taxpayer by ZATCA.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row K5",
+      "sources": [
+        {"url": "https://zatca.gov.sa/en/RulesRegulations/Taxes/Pages/default.aspx", "accessed": "2026-11-04", "note": "not fetched in the research"}
+      ]
+    },
+    {
+      "paths": ["tax.roundingRule"],
+      "claim": "Commercial rounding, half away from zero, so credit notes mirror invoices. A founder decision, not a ZATCA rule.",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/decisions/ADR-0033-v1-valuation-rounding-and-arabic-review.md"
+    },
+    {
+      "paths": ["tax.vatNumberPattern"],
+      "claim": "A KSA VAT registration number has 15 digits and starts and ends with 3. The rule was not re-read; the Blueprint contract today checks only 15 digits.",
+      "status": "UNVERIFIED",
+      "ref": "contracts/blueprint.schema.json company.vatNumber",
+      "sources": [
+        {"url": "https://www.zatca.gov.sa/ar/E-Invoicing/SystemsDevelopers/Documents/20230519_ZATCA_Electronic_Invoice_XML_Implementation_Standard_%20vF.pdf", "accessed": "2026-11-18", "note": "XML standard cited by CMP-006; the VAT number rule in it was not read"}
+      ]
+    },
+    {
+      "paths": ["tax.crNumberPattern"],
+      "claim": "A commercial registration number has 10 digits, as the Blueprint contract already assumes for KSA.",
+      "status": "UNVERIFIED",
+      "ref": "contracts/blueprint.schema.json company.crNumber"
+    },
+    {
+      "paths": ["eInvoicing.required", "eInvoicing.mode", "eInvoicing.authority", "eInvoicing.componentId"],
+      "claim": "ZATCA e-invoicing Phase 1 (generation) has applied to all taxpayers since 2021-12-04; the pack uses the existing compliance.zatca_sa Phase 1 component. Phase 2 integration applies by wave and is a per-customer setting (country-matrix K3), not a pack default.",
+      "status": "VERIFIED-OFFICIAL",
+      "ref": "docs/compliance/country-matrix.md rows K1 and K3",
+      "sources": [
+        {"url": "https://zatca.gov.sa/en/E-Invoicing/Introduction/Pages/Roll-out-phases.aspx", "accessed": "2026-11-04"},
+        {"url": "https://zatca.gov.sa/en/MediaCenter/News/Pages/Wave25-E-invoicing.aspx", "accessed": "2026-11-04", "note": "wave 25 thresholds and dates"}
+      ]
+    },
+    {
+      "paths": ["eInvoicing.mandatoryDocumentLanguages", "printFormats.mandatoryLanguages"],
+      "claim": "A tax invoice must carry its details in Arabic and may be bilingual. Printing English as well is a platform default (Arabic and English equal, principle 4), not a legal requirement.",
+      "status": "SECONDARY",
+      "ref": "docs/compliance/country-matrix.md row K7",
+      "sources": [
+        {"url": "https://zatca.gov.sa/en/HelpCenter/guidelines/Documents/Input%20Tax%20Deduction.pdf", "accessed": "2026-11-04"}
+      ]
+    },
+    {
+      "paths": ["eInvoicing.archiveRetentionYears"],
+      "claim": "Six-year retention is commonly cited; do not rely on it until the resolution is read.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row K9",
+      "sources": [
+        {"url": "https://zatca.gov.sa/en/E-Invoicing/Introduction/LawsAndRegulations/Documents/E-Invoicing%20Implementation%20Resolution_EN.pdf", "accessed": "2026-11-04", "note": "not read in the research"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.timezone"],
+      "claim": "KSA uses one time zone, the IANA zone Asia/Riyadh. The loader checks that the zone exists; no official source was read.",
+      "status": "UNVERIFIED",
+      "ref": "docs/architecture/calendars-and-locale.md"
+    },
+    {
+      "paths": ["localeDefaults.calendar", "formats.hijriDateFormat"],
+      "claim": "Commerce and tax run on the Gregorian calendar; Hijri (Umm al-Qura) is shown as a second date. No official Hijri requirement was found; ZATCA XML is believed to use Gregorian dates.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row K8"
+    },
+    {
+      "paths": ["localeDefaults.week", "localeDefaults.workingTime.workDays"],
+      "claim": "The weekend is Friday and Saturday; the work week runs Sunday to Thursday. Companies can override it.",
+      "status": "UNVERIFIED",
+      "ref": "docs/architecture/calendars-and-locale.md section Week, weekend and working time"
+    },
+    {
+      "paths": ["localeDefaults.workingTime.hours"],
+      "claim": "08:00 to 17:00 is a platform default that companies override. The statutory daily and weekly limits in the Labour Law were not read.",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/architecture/calendars-and-locale.md",
+      "sources": [
+        {"url": "https://laws.boe.gov.sa", "accessed": "2026-11-04", "note": "Labour Law, not fetched (country-matrix K15)"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.workingTime.reducedPeriods"],
+      "claim": "Shorter Ramadan hours (09:00 to 15:00, six hours) for Muslim workers, as the Labour Law is commonly reported to require. Not read.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row K15",
+      "sources": [
+        {"url": "https://laws.boe.gov.sa", "accessed": "2026-11-04", "note": "not fetched"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.fiscalYear"],
+      "claim": "Gregorian year from 1 January is a platform default; companies may choose another start or a Hijri year. Whether zakat needs a Hijri year is open (CMP-025).",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/architecture/calendars-and-locale.md section Fiscal year and periods"
+    },
+    {
+      "paths": ["localeDefaults.holidays"],
+      "claim": "Holidays come from the sa.holidays calendar, which CMP-024 builds; it does not exist yet. The pack holds no holiday dates.",
+      "status": "UNVERIFIED",
+      "ref": "docs/PLAN.md row CMP-024"
+    },
+    {
+      "paths": ["localeDefaults.numberSystem", "formats.numberSystem", "formats.decimalSeparator", "formats.thousandsSeparator", "formats.gregorianDateFormat"],
+      "claim": "Western digits, a dot for decimals, a comma for thousands and day/month/year dates are platform display defaults; the user can switch to Eastern Arabic digits.",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/architecture/calendars-and-locale.md"
+    },
+    {
+      "paths": ["localeDefaults.currency", "formats.currency", "formats.currencyDecimals"],
+      "claim": "The currency is the Saudi riyal (ISO 4217 SAR) with two decimals. ISO 4217 was not read.",
+      "status": "UNVERIFIED",
+      "ref": "docs/architecture/country-packs.md"
+    },
+    {
+      "paths": ["payrollHooks"],
+      "claim": "Payroll, WPS (Mudad), GOSI and end-of-service are off: payroll is out of v1 scope and arrives with CMP-015 and CMP-016 (gate G3). The underlying rules are unread.",
+      "status": "UNVERIFIED",
+      "ref": "docs/specs/core-module-scope-trading.md section 4",
+      "sources": [
+        {"url": "https://mudad.com.sa", "accessed": "2026-11-04", "note": "WPS, not fetched (K13)"},
+        {"url": "https://www.gosi.gov.sa", "accessed": "2026-11-04", "note": "GOSI, not fetched (K12)"}
+      ]
+    },
+    {
+      "paths": ["printFormats.legalLayoutPrecedence", "printFormats.templates"],
+      "claim": "The tax invoice and simplified invoice use the locked ZATCA layouts of the ERP-007 print formats; the legal layout always wins over tenant branding.",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/decisions/ADR-0014-theming-and-tenant-branding.md"
+    }
+  ],
+  "pendingRefs": [
+    {"path": "coaTemplate.componentId", "value": "finance.coa_sa_trading", "blockedBy": "No component manifest wraps the CMP-006 chart yet; artifactRef points at the real file."},
+    {"path": "localeDefaults.holidays.calendarRef.id", "value": "sa.holidays", "blockedBy": "CMP-024 holiday calendars"}
+  ],
+  "arabicLabels": [
+    {"file": "pack.json", "path": "name.ar", "text": "حزمة المملكة العربية السعودية", "review": "unreviewed", "rule": "ADR-0033"},
+    {"file": "pack.json", "path": "localeDefaults.workingTime.reducedPeriods[0].labels.ar", "text": "ساعات العمل في رمضان", "review": "unreviewed", "rule": "ADR-0033"},
+    {"file": "manifest.json", "path": "name.ar", "text": "حزمة المملكة العربية السعودية", "review": "unreviewed", "rule": "ADR-0033"}
+  ]
+}

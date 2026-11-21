@@ -1,0 +1,65 @@
+{
+  "$schema": "../../../../../../contracts/component.manifest.schema.json",
+  "id": "country.sa",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": {
+    "ar": "حزمة المملكة العربية السعودية",
+    "en": "Saudi Arabia country pack"
+  },
+  "description": "Draft Saudi Arabia country pack (CMP-029): declarative locale defaults, formats, override policy and references to the CMP-006 chart of accounts and VAT treatments, the ZATCA Phase 1 component and the ZATCA print layouts. It holds no tax, ledger or e-invoice maths (ADR-0031). Level is tested, not draft, because the manifest contract forbids draft when touchesLedgerOrTax is true; the pack itself is status draft, evidence unverified. Facts and sources: evidence.json. Arabic labels unreviewed (ADR-0033).",
+  "provides": [
+    {
+      "capability": "country.sa.pack_metadata",
+      "artifacts": [
+        {
+          "type": "function",
+          "ref": "components.compliance.country_pack.loader.resolve_country_pack"
+        }
+      ]
+    }
+  ],
+  "requires": [
+    {
+      "component": "compliance.zatca_sa",
+      "versionRange": ">=0.1.0 <1.0.0"
+    }
+  ],
+  "parameters": [],
+  "tests": [
+    {
+      "id": "test_pack_sa_ae",
+      "kind": "unit",
+      "path": "../../../tests/test_pack_sa_ae.py",
+      "blocking": true
+    }
+  ],
+  "certification": {
+    "level": "tested",
+    "touchesLedgerOrTax": true,
+    "reviewedBy": []
+  },
+  "engineCompatibility": {
+    "adapter": "change_engine",
+    "engineRange": ">=0.1.0 <1.0.0",
+    "testedAgainst": []
+  },
+  "licence": {
+    "spdx": "LicenseRef-Proprietary"
+  },
+  "owner": {
+    "github": "sayegh9"
+  },
+  "i18n": {
+    "locales": [
+      "ar",
+      "en"
+    ],
+    "rtlVerified": false
+  },
+  "dataHandling": {
+    "storesPersonalData": false,
+    "sendsDataToModels": false,
+    "promotableToLibrary": true
+  }
+}

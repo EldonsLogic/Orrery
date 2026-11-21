@@ -1,0 +1,60 @@
+{
+  "$schema": "../../../../../../contracts/component.manifest.schema.json",
+  "id": "country.ae",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": {
+    "ar": "حزمة الإمارات العربية المتحدة",
+    "en": "United Arab Emirates country pack"
+  },
+  "description": "Draft United Arab Emirates country pack (CMP-029): declarative locale defaults, formats and override policy. The UAE chart of accounts, tax codes, tax invoice mode and e-invoicing component do not exist yet, so those references are pending (evidence.json). It holds no tax, ledger or e-invoice maths (ADR-0031). Level is tested, not draft, because the manifest contract forbids draft when touchesLedgerOrTax is true; the pack itself is status draft, evidence unverified. Arabic labels unreviewed (ADR-0033).",
+  "provides": [
+    {
+      "capability": "country.ae.pack_metadata",
+      "artifacts": [
+        {
+          "type": "function",
+          "ref": "components.compliance.country_pack.loader.resolve_country_pack"
+        }
+      ]
+    }
+  ],
+  "requires": [],
+  "parameters": [],
+  "tests": [
+    {
+      "id": "test_pack_sa_ae",
+      "kind": "unit",
+      "path": "../../../tests/test_pack_sa_ae.py",
+      "blocking": true
+    }
+  ],
+  "certification": {
+    "level": "tested",
+    "touchesLedgerOrTax": true,
+    "reviewedBy": []
+  },
+  "engineCompatibility": {
+    "adapter": "change_engine",
+    "engineRange": ">=0.1.0 <1.0.0",
+    "testedAgainst": []
+  },
+  "licence": {
+    "spdx": "LicenseRef-Proprietary"
+  },
+  "owner": {
+    "github": "sayegh9"
+  },
+  "i18n": {
+    "locales": [
+      "ar",
+      "en"
+    ],
+    "rtlVerified": false
+  },
+  "dataHandling": {
+    "storesPersonalData": false,
+    "sendsDataToModels": false,
+    "promotableToLibrary": true
+  }
+}

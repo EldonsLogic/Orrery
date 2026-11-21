@@ -1,0 +1,151 @@
+{
+  "$schema": "../../../pack.schema.json",
+  "schemaVersion": "0.1.0",
+  "packId": "sa",
+  "componentId": "country.sa",
+  "countryCode": "SA",
+  "version": "0.1.0",
+  "status": "draft",
+  "evidenceStatus": "unverified",
+  "testOnly": false,
+  "notes": "DRAFT, not for tenants. Declarative metadata only, no tax, ledger or e-invoice maths (ADR-0031). Sources, access dates and evidence labels per fact, pending refs and the unreviewed Arabic labels (ADR-0033) are in evidence.json beside this file: the schema has no per-fact evidence field. Chart and tax codes are the CMP-006 files, referenced, not copied. Payroll and WPS are off: out of v1 scope (CMP-015).",
+  "name": {
+    "ar": "حزمة المملكة العربية السعودية",
+    "en": "Saudi Arabia country pack"
+  },
+  "coaTemplate": {
+    "componentId": "finance.coa_sa_trading",
+    "artifactRef": "apps/engine/compliance/ksa/sa_trading_chart_of_accounts.json",
+    "versionRange": ">=0.1.0 <0.2.0"
+  },
+  "tax": {
+    "vatSupported": true,
+    "taxCodesRef": "apps/engine/compliance/ksa/vat_treatments.json",
+    "filingPeriods": ["monthly", "quarterly"],
+    "roundingRule": "half_away_from_zero",
+    "vatNumberPattern": "^3[0-9]{13}3$",
+    "crNumberPattern": "^[0-9]{10}$"
+  },
+  "eInvoicing": {
+    "required": true,
+    "mode": "zatca_phase1",
+    "authority": "ZATCA",
+    "componentId": "compliance.zatca_sa",
+    "mandatoryDocumentLanguages": ["ar"],
+    "archiveRetentionYears": 6
+  },
+  "localeDefaults": {
+    "timezone": "Asia/Riyadh",
+    "calendar": {
+      "primary": "gregorian",
+      "secondaryDisplay": "hijri_umm_al_qura"
+    },
+    "week": {
+      "startDay": "sun",
+      "weekendDays": ["fri", "sat"]
+    },
+    "workingTime": {
+      "workDays": ["sun", "mon", "tue", "wed", "thu"],
+      "hours": {
+        "from": "08:00",
+        "to": "17:00"
+      },
+      "reducedPeriods": [
+        {
+          "id": "ramadan_hours",
+          "labels": {
+            "ar": "ساعات العمل في رمضان",
+            "en": "Ramadan working hours"
+          },
+          "rule": "ramadan",
+          "hours": {
+            "from": "09:00",
+            "to": "15:00"
+          }
+        }
+      ]
+    },
+    "fiscalYear": {
+      "type": "gregorian",
+      "startMonth": 1,
+      "startDay": 1
+    },
+    "holidays": {
+      "calendarRef": {
+        "id": "sa.holidays",
+        "version": "0.1.0"
+      }
+    },
+    "numberSystem": "western",
+    "currency": "SAR"
+  },
+  "formats": {
+    "currency": "SAR",
+    "currencyDecimals": 2,
+    "gregorianDateFormat": "DD/MM/YYYY",
+    "hijriDateFormat": "iDD/iMM/iYYYY",
+    "numberSystem": "western",
+    "decimalSeparator": ".",
+    "thousandsSeparator": ","
+  },
+  "payrollHooks": {
+    "wpsEnabled": false,
+    "wpsFormatRef": null,
+    "socialInsuranceRef": null,
+    "eosbRuleRef": null
+  },
+  "printFormats": {
+    "legalLayoutPrecedence": true,
+    "mandatoryLanguages": ["ar", "en"],
+    "templates": [
+      {
+        "kind": "tax_invoice",
+        "templateRef": "apps/engine/change_engine/change_engine/print_formats/branded_documents.py#tax_invoice_zatca_sa_standard",
+        "componentId": "compliance.zatca_sa"
+      },
+      {
+        "kind": "simplified_invoice",
+        "templateRef": "apps/engine/change_engine/change_engine/print_formats/branded_documents.py#tax_invoice_zatca_sa_simplified",
+        "componentId": "compliance.zatca_sa"
+      }
+    ]
+  },
+  "overridesPolicy": {
+    "overridablePaths": [
+      "timezone",
+      "calendar.primary",
+      "calendar.secondaryDisplay",
+      "week.startDay",
+      "week.weekendDays",
+      "workingTime.workDays",
+      "workingTime.hours",
+      "workingTime.reducedPeriods",
+      "fiscalYear",
+      "holidays.overrides",
+      "numberSystem"
+    ],
+    "lockedPaths": [
+      "countryCode",
+      "packId",
+      "componentId",
+      "version",
+      "coaTemplate",
+      "tax",
+      "eInvoicing",
+      "formats",
+      "payrollHooks",
+      "printFormats",
+      "holidays.calendarRef",
+      "currency"
+    ],
+    "constraints": {
+      "fiscalYearLocked": false,
+      "allowedFiscalYearTypes": ["gregorian", "hijri"],
+      "allowedCurrencies": ["SAR"]
+    }
+  },
+  "upgradePolicy": {
+    "compatibilityRange": ">=0.1.0 <0.2.0",
+    "migrationRequired": false
+  }
+}

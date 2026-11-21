@@ -1,0 +1,165 @@
+{
+  "$schema": "../../../pack.schema.json",
+  "schemaVersion": "0.1.0",
+  "packId": "ae",
+  "componentId": "country.ae",
+  "countryCode": "AE",
+  "version": "0.1.0",
+  "status": "draft",
+  "evidenceStatus": "unverified",
+  "testOnly": false,
+  "notes": "DRAFT, not for tenants. Declarative metadata only, no tax, ledger or e-invoice maths (ADR-0031). Sources, access dates and evidence labels per fact, pending refs and the unreviewed Arabic labels (ADR-0033) are in evidence.json beside this file: the schema has no per-fact evidence field. No UAE chart, tax codes, invoice mode or e-invoicing component exists yet: those refs are pending. Payroll and WPS are off: out of v1 scope (CMP-015).",
+  "name": {
+    "ar": "حزمة الإمارات العربية المتحدة",
+    "en": "United Arab Emirates country pack"
+  },
+  "coaTemplate": {
+    "componentId": "finance.coa_ae_trading",
+    "artifactRef": "pending:ae_trading_chart_of_accounts",
+    "versionRange": ">=0.1.0 <0.2.0"
+  },
+  "tax": {
+    "vatSupported": true,
+    "taxCodesRef": null,
+    "filingPeriods": [
+      "quarterly",
+      "monthly"
+    ],
+    "roundingRule": "half_away_from_zero",
+    "vatNumberPattern": "^[0-9]{15}$",
+    "crNumberPattern": "^[A-Za-z0-9/-]{1,30}$"
+  },
+  "eInvoicing": {
+    "required": false,
+    "mode": "pint_ae_via_asp",
+    "authority": "UAE Ministry of Finance and Federal Tax Authority",
+    "componentId": null,
+    "mandatoryDocumentLanguages": [],
+    "archiveRetentionYears": 5
+  },
+  "localeDefaults": {
+    "timezone": "Asia/Dubai",
+    "calendar": {
+      "primary": "gregorian",
+      "secondaryDisplay": "none"
+    },
+    "week": {
+      "startDay": "mon",
+      "weekendDays": [
+        "sat",
+        "sun"
+      ]
+    },
+    "workingTime": {
+      "workDays": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri"
+      ],
+      "hours": {
+        "from": "08:00",
+        "to": "17:00"
+      },
+      "reducedPeriods": [
+        {
+          "id": "ramadan_hours",
+          "labels": {
+            "ar": "ساعات العمل في رمضان",
+            "en": "Ramadan working hours"
+          },
+          "rule": "ramadan",
+          "hours": {
+            "from": "08:00",
+            "to": "15:00"
+          }
+        }
+      ]
+    },
+    "fiscalYear": {
+      "type": "gregorian",
+      "startMonth": 1,
+      "startDay": 1
+    },
+    "holidays": {
+      "calendarRef": {
+        "id": "ae.holidays",
+        "version": "0.1.0"
+      }
+    },
+    "numberSystem": "western",
+    "currency": "AED"
+  },
+  "formats": {
+    "currency": "AED",
+    "currencyDecimals": 2,
+    "gregorianDateFormat": "DD/MM/YYYY",
+    "hijriDateFormat": "iDD/iMM/iYYYY",
+    "numberSystem": "western",
+    "decimalSeparator": ".",
+    "thousandsSeparator": ","
+  },
+  "payrollHooks": {
+    "wpsEnabled": false,
+    "wpsFormatRef": null,
+    "socialInsuranceRef": null,
+    "eosbRuleRef": null
+  },
+  "printFormats": {
+    "legalLayoutPrecedence": true,
+    "mandatoryLanguages": [
+      "ar",
+      "en"
+    ],
+    "templates": [
+      {
+        "kind": "tax_invoice",
+        "templateRef": "pending:ae_tax_invoice_mode",
+        "componentId": "compliance.pint_ae"
+      }
+    ]
+  },
+  "overridesPolicy": {
+    "overridablePaths": [
+      "timezone",
+      "calendar.primary",
+      "calendar.secondaryDisplay",
+      "week.startDay",
+      "week.weekendDays",
+      "workingTime.workDays",
+      "workingTime.hours",
+      "workingTime.reducedPeriods",
+      "fiscalYear",
+      "holidays.overrides",
+      "numberSystem"
+    ],
+    "lockedPaths": [
+      "countryCode",
+      "packId",
+      "componentId",
+      "version",
+      "coaTemplate",
+      "tax",
+      "eInvoicing",
+      "formats",
+      "payrollHooks",
+      "printFormats",
+      "holidays.calendarRef",
+      "currency"
+    ],
+    "constraints": {
+      "fiscalYearLocked": false,
+      "allowedFiscalYearTypes": [
+        "gregorian"
+      ],
+      "allowedCurrencies": [
+        "AED"
+      ]
+    }
+  },
+  "upgradePolicy": {
+    "compatibilityRange": ">=0.1.0 <0.2.0",
+    "migrationRequired": false
+  }
+}

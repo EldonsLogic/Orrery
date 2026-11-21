@@ -1,0 +1,78 @@
+{
+  "$schema": "../../../contracts/component.manifest.schema.json",
+  "id": "core.hrms_skeleton",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": {
+    "ar": "هيكل الموارد البشرية: الموظفون والإجازات وبنية الرواتب",
+    "en": "HR Skeleton: Employees, Leave and Payroll Structure"
+  },
+  "description": "Minimal HR for v1 (ERP-010): twelve record types only, everything else refused by default. Keyed idempotent configuration of employees, leave and salary structure with tenant and company scope, backend-resolved roles, no self-approval of leave, and exact decimal and date validation. It computes no pay, tax, social-security or end-of-service amount (ADR-0031); payroll runs and WPS output are CMP-015.",
+  "provides": [
+    {
+      "capability": "hr.skeleton.configure",
+      "artifacts": [
+        { "type": "function", "ref": "components.core.hrms_skeleton.service.HrmsService.upsert" },
+        { "type": "function", "ref": "components.core.hrms_skeleton.service.HrmsService.apply_configuration" },
+        { "type": "function", "ref": "components.core.hrms_skeleton.scope.assert_allowed_doctype" },
+        { "type": "entity", "ref": "Employee" },
+        { "type": "entity", "ref": "Department" },
+        { "type": "entity", "ref": "Designation" },
+        { "type": "entity", "ref": "Branch" },
+        { "type": "entity", "ref": "Leave Type" },
+        { "type": "entity", "ref": "Leave Period" },
+        { "type": "entity", "ref": "Leave Policy" },
+        { "type": "entity", "ref": "Leave Allocation" },
+        { "type": "entity", "ref": "Leave Application" },
+        { "type": "entity", "ref": "Salary Component", "riskClass": "ledger" },
+        { "type": "entity", "ref": "Salary Structure", "riskClass": "ledger" },
+        { "type": "entity", "ref": "Salary Structure Assignment", "riskClass": "ledger" }
+      ]
+    },
+    {
+      "capability": "hr.leave.decide",
+      "artifacts": [
+        { "type": "function", "ref": "components.core.hrms_skeleton.service.HrmsService.decide_leave_application" }
+      ]
+    }
+  ],
+  "requires": [],
+  "parameters": [],
+  "tests": [
+    { "id": "test_manifest_and_scope", "kind": "unit", "path": "tests/test_manifest_and_scope.py", "blocking": true },
+    { "id": "test_validation", "kind": "unit", "path": "tests/test_validation.py", "blocking": true },
+    { "id": "test_service", "kind": "security", "path": "tests/test_service.py", "blocking": true },
+    { "id": "test_service_hardening", "kind": "security", "path": "tests/test_service_hardening.py", "blocking": true },
+    { "id": "test_frappe_backend", "kind": "unit", "path": "tests/test_frappe_backend.py", "blocking": true },
+    { "id": "test_strings", "kind": "arabic_text", "path": "tests/test_strings.py", "blocking": true }
+  ],
+  "certification": {
+    "level": "tested",
+    "touchesLedgerOrTax": true,
+    "reviewedBy": []
+  },
+  "engineCompatibility": {
+    "adapter": "change_engine",
+    "engineRange": ">=0.1.0 <1.0.0",
+    "dependsOnEngineApps": [
+      { "app": "hrms", "range": ">=15.64.0 <16.0.0" }
+    ],
+    "testedAgainst": []
+  },
+  "licence": {
+    "spdx": "LicenseRef-Proprietary"
+  },
+  "owner": {
+    "github": "sayegh9"
+  },
+  "i18n": {
+    "locales": ["ar", "en"],
+    "rtlVerified": false,
+    "stringsFile": "strings.json"
+  },
+  "dataHandling": {
+    "storesPersonalData": true,
+    "sendsDataToModels": false,
+    "promotableToLibrary": false
+  }
+}

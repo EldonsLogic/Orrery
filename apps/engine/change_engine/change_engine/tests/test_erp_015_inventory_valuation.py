@@ -27,11 +27,16 @@ value is not a ledger figure), and rounds half away from zero to the currency pr
   rounds the running quantity to 2 decimals while quantity fields accept 3. The seeded moves use 2 decimals;
   ``test_7`` keeps a 3-decimal case as an expected failure until Q-514 (b) is answered; ``test_8`` pins the
   observed engine baseline for it, so the expected failure cannot hide an unrelated one.
+* Back-dated entries (trading scope 2.3 keeps the engine's repost on): the oracle values the moves that are
+  posted and not cancelled in POSTING order (date, then time), whatever order they were submitted in, which is
+  what the engine's repost must leave behind. A cancellation removes its move from that order. An issue is
+  rejected if, in posting order, it would leave any move of its item and warehouse without stock. The dev bench
+  runs no worker, so the probe runs the engine's own repost job (``repost_entries``, the hourly scheduler job)
+  in-process after each move; ``test_9`` checks the result.
 
 Out of scope for v1, so not tested: FIFO and LIFO (ADR-0033 rejects FIFO; the engine default is FIFO and the
 live test asserts it is overridden), Landed Cost Voucher (hidden, deferred ERP-011 candidate in the trading
-scope), batches and serial numbers (hidden), back-dated postings (need the repost worker, which the dev bench
-does not run), multi-currency purchases.
+scope), batches and serial numbers (hidden), multi-currency purchases.
 
 Run the live layer against your own bench (never someone else's Compose project, never 127.0.0.1:3306)::
 
@@ -39,8 +44,9 @@ Run the live layer against your own bench (never someone else's Compose project,
     PYTHONPATH=apps/engine/change_engine python3 -m unittest \
     apps/engine/change_engine/change_engine/tests/test_erp_015_inventory_valuation.py -v
 
-``ERP015_EXAMPLES`` (default 40) sets the seeded drift moves, ``ERP015_SEED`` the seed. The probe refuses a
-site that already holds its items.
+The site needs a synthetic tenant in its config (``bench --site <site> set-config tenant_id t_<name>``), which
+the event stream requires. ``ERP015_EXAMPLES`` (default 40) sets the seeded drift moves, ``ERP015_SEED`` the seed.
+The probe refuses a site that already holds its items, another company or any GL entry.
 """
 from __future__ import annotations
 
@@ -49,6 +55,7 @@ import json
 import os
 import random
 import subprocess
+import sys
 import unittest
 from collections import defaultdict
 from decimal import ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
@@ -67,6 +74,8 @@ NEAR_TIE = Decimal("0.0001")  # engine rates carry 9 decimals; only this close t
 RATE_TOL = Decimal("0.000001")
 MOVES = ("receipt", "purchase_receipt", "issue", "delivery", "transfer", "purchase_return", "sales_return",
          "reconcile", "cancel")
+ISSUES = ("issue", "delivery", "transfer")  # the moves that negative stock can reject
+POSTING_DATE, BACK_DATE = "2026-03-02", "2026-03-01"  # every move posts on POSTING_DATE unless it names a date
 
 # ---- inputs ----
 
@@ -114,16 +123,31 @@ FORCED = [
     # Three-decimal quantities: receive and issue the same 12.345 Kg; exactly nothing may remain.
     {"id": "q1", "op": "receipt", "item": "E15-QTY", "wh": "W1", "qty": "12.345", "rate": "10.00"},
     {"id": "q2", "op": "issue", "item": "E15-QTY", "wh": "W1", "qty": "12.345"},
+    # Back-dated entries: two receipts dated the day before every other move, then a cancellation of one of
+    # them. Each forces the engine to repost b1 and b2 (and the cancellation, b6's starting rate).
+    {"id": "b1", "op": "receipt", "item": "E15-BACK", "wh": "W1", "qty": "10", "rate": "50.00"},
+    {"id": "b2", "op": "issue", "item": "E15-BACK", "wh": "W1", "qty": "4"},
+    {"id": "b3", "op": "receipt", "item": "E15-BACK", "wh": "W1", "qty": "5", "rate": "80.00",
+     "date": BACK_DATE, "time": "09:00:00"},
+    {"id": "b4", "op": "receipt", "item": "E15-BACK", "wh": "W1", "qty": "6", "rate": "70.00",
+     "date": BACK_DATE, "time": "10:00:00"},
+    {"id": "b5", "op": "cancel", "ref": "b4"},
+    {"id": "b6", "op": "issue", "item": "E15-BACK", "wh": "W1", "qty": "3"},
 ]
 SALES_RETURN_RULE = "current average"  # the engine's rule; "delivery cost" is the v1 expectation (Q-514 a)
 QTY_PRECISION_ITEMS = {"E15-QTY"}  # checked only by test_7 and test_8 (Q-514 b)
+BACKDATED_ITEMS = {"E15-BACK"}  # checked by test_9, so a repost failure is reported on its own
 REJECTED = {"g7", "g12", "g14"}
 # Hand-computed from first principles (not by the oracle): rate = value / qty; value rounded half away from zero.
 FORCED_EXACT = {
     "g1": {"value": "1000.00", "rate": "100"}, "g2": {"value": "2300.00", "rate": "115"},
     "g3": {"value": "1725.00", "diff": "-575.00", "rate": "115"},  # FIFO would issue 500.00
     "g4": {"value": "2525.00", "rate": "126.25"}, "g5": {"value": "2135.00", "diff": "-390.00"},
-    "g6": {"value": "2762.94", "diff": "627.94"},  # 5 x 2135.00 / 17 at the current average
+    # g6 is a REGRESSION PIN of observed engine behaviour, not an independent expectation: its rule (a sales
+    # return at the current average, 5 x 2135.00 / 17) comes from the engine, which ADR-0031 does not let us
+    # change, until Q-514 (a) is answered. If (a) is answered "delivery cost", test_1 and test_2 fail by design
+    # and V1_SALES_RETURN (test_6) becomes the expectation.
+    "g6": {"value": "2762.94", "diff": "627.94"},
     "g8": {"value": "0.00", "diff": "-2762.94"},
     "g9": {"value": "399.96", "rate": "99.99"}, "g13": {"value": "0.00", "diff": "-399.96"},
     "h2": {"value": "2.01", "rate": "1.005"}, "h3": {"value": "1.01", "diff": "-1.00"},
@@ -133,6 +157,16 @@ FORCED_EXACT = {
     "r5": {"value": "147.70", "diff": "80.59", "rate": "21.10"}, "r6": {"value": "0.00", "diff": "-147.70"},
 }
 V1_SALES_RETURN = {"g6": {"value": "2710.00", "diff": "575.00"}}  # adds back the 575.00 that g3 booked
+# Hand-computed in posting order b3 (5 x 80.00), b1, b2, b6, with b4 cancelled: rate 900.00 / 15 = 60.
+# Submitted order without a repost would leave b1 at 500.00 and b2 at 300.00 (-200.00).
+BACKDATED_EXACT = {
+    "b3": {"value": "400.00", "diff": "400.00", "rate": "80"},
+    "b1": {"value": "900.00", "diff": "500.00", "rate": "60"},
+    "b2": {"value": "660.00", "diff": "-240.00", "rate": "60"},
+    "b6": {"value": "480.00", "diff": "-180.00", "rate": "60"},
+}
+# While b4 stood (before b5), in posting order b3, b4, b1, b2: b2 left 17 x 1320.00 / 21 = 1068.571... -> 1068.57.
+BACKDATED_BEFORE_CANCEL = {"b4": ("820.00", "420.00"), "b2": ("1068.57", "-251.43")}
 
 
 def make_ops(seed: int, n: int) -> list:
@@ -179,33 +213,35 @@ def make_ops(seed: int, n: int) -> list:
 
 # ---- exact oracle (test code: it checks, it never posts) ----
 
-def simulate(ops, sales_return=SALES_RETURN_RULE):
-    """Moving Average on whole-cent book values. Returns ({op id: {"effects": [...], "reject", "cancels"}},
-    final book). An effect is one (item, wh) row: dqty, dvalue, qty and value after, and ``raw``, the value
-    before rounding to the cent (used only to spot half-cent ties)."""
-    book, out, pre, last, by_id = {}, {}, {}, {}, {o["id"]: o for o in ops}
-    for op in ops:
+def slot(i: int) -> str:
+    """The posting time the probe gives the i-th submitted operation (unless the operation names one)."""
+    return f"{8 + i // 3600:02d}:{(i // 60) % 60:02d}:{i % 60:02d}"
+
+
+def posting_keys(ops) -> dict:
+    """{op id: (posting date, posting time)}, the order the engine's ledger and repost follow."""
+    return {o["id"]: (o.get("date", POSTING_DATE), o.get("time", slot(i))) for i, o in enumerate(ops)}
+
+
+class _Short(Exception):
+    """A move would leave its item and warehouse with negative stock."""
+
+
+def _replay(live, by_id, sales_return):
+    """Value ``live`` (posted, not cancelled, already in posting order) from an empty book. Returns
+    ({op id: effects}, book). Raises _Short on negative stock."""
+    book, out = {}, {}
+    for op in live:
         oid, kind = op["id"], op["op"]
-        if kind == "cancel":
-            ref = op["ref"]
-            for e in out[ref]["effects"]:
-                if last[(e["item"], e["wh"])] != ref:
-                    raise ValueError(f"{oid}: a cancel must target the latest move of its item")
-            book.update(pre[ref])
-            for key in pre[ref]:
-                last[key] = oid
-            out[oid] = {"effects": [], "cancels": ref}
-            continue
         src = by_id[op["ref"]] if "ref" in op else op
         item, wh = src["item"], src["wh"]
         qty, val = book.get((item, wh), (D0, D0))
         q = Decimal(op["qty"]) if "qty" in op else None
         if kind in ("receipt", "purchase_receipt"):
             moves = [(wh, q, val + q * Decimal(op["rate"]))]
-        elif kind in ("issue", "delivery", "transfer"):
+        elif kind in ISSUES:
             if q > qty:
-                out[oid] = {"effects": [], "reject": True}
-                continue
+                raise _Short(oid)
             left = D0 if q == qty else (qty - q) * val / qty
             moves = [(wh, -q, left)]
             if kind == "transfer":
@@ -216,7 +252,7 @@ def simulate(ops, sales_return=SALES_RETURN_RULE):
                 raise ValueError(f"{oid}: v1 tests never return the whole stock to a supplier")
             moves = [(wh, -q, val - q * Decimal(src["rate"]))]
         elif kind == "sales_return":
-            e = out[op["ref"]]["effects"][0]
+            e = out[op["ref"]][0]
             if sales_return == "delivery cost":
                 moves = [(wh, -e["dqty"], val - e["dvalue"])]
             else:
@@ -225,18 +261,52 @@ def simulate(ops, sales_return=SALES_RETURN_RULE):
             moves = [(wh, q, q * Decimal(op["rate"]))]
         else:
             raise ValueError(f"unknown op {kind}")
-        pre[oid] = {(item, w): book.get((item, w), (D0, D0)) for w, _, _ in moves}
         effects = []
         for w, nq_or_dq, raw in moves:
             qty, val = book.get((item, w), (D0, D0))
             nq = nq_or_dq if kind == "reconcile" else qty + nq_or_dq
             nv = half_away(raw)
-            if nq < 0 or (nq == 0 and nv != 0):
-                raise ValueError(f"{oid}: stock would be negative or keep value at zero qty")
-            book[(item, w)], last[(item, w)] = (nq, nv), oid
+            if nq < 0:
+                raise _Short(oid)
+            if nq == 0 and nv != 0:
+                raise ValueError(f"{oid}: stock would keep value at zero qty")
+            book[(item, w)] = (nq, nv)
             effects.append({"item": item, "wh": w, "dqty": nq - qty, "dvalue": nv - val, "qty": nq, "value": nv,
                             "raw": raw, "reconcile": kind == "reconcile"})
-        out[oid] = {"effects": effects}
+        out[oid] = effects
+    return out, book
+
+
+def simulate(ops, sales_return=SALES_RETURN_RULE):
+    """Moving Average on whole-cent book values, in posting order. Operations are submitted in list order;
+    after each one the posted, uncancelled moves are revalued in posting order (what the engine's repost
+    does), so a back-dated move or a cancellation changes the moves posted after it. Returns
+    ({op id: {"effects": [...], "at", "reject", "cancels"}}, final book), where ``at`` is the op's posting
+    (date, time) in the whole run (so it stays right on a subset of the ops). An effect is one (item, wh) row: dqty,
+    dvalue, qty and value after, and ``raw``, the value before rounding to the cent (used only to spot half-cent
+    ties). A cancelled move keeps the effects it had when it was last posted."""
+    by_id, keys = {o["id"]: o for o in ops}, posting_keys(ops)
+    live, effects, book, out = [], {}, {}, {}
+    for op in ops:
+        oid = op["id"]
+        if op["op"] == "cancel":
+            trial = [o for o in live if o["id"] != op["ref"]]
+            out[oid] = {"effects": [], "cancels": op["ref"]}
+        else:
+            trial = sorted(live + [op], key=lambda o: keys[o["id"]])
+        try:
+            now, book_now = _replay(trial, by_id, sales_return)
+        except _Short as short:
+            if op["op"] not in ISSUES:
+                raise ValueError(f"{oid}: would leave {short} with negative stock") from None
+            out[oid] = {"effects": [], "reject": True}
+            continue
+        live, book = trial, book_now
+        effects.update(now)
+    for op in ops:
+        if op["id"] not in out:
+            out[op["id"]] = {"effects": effects[op["id"]]}
+        out[op["id"]]["at"] = keys[op["id"]]
     return out, book
 
 
@@ -249,6 +319,11 @@ def subset(ops, final, data, keep):
     return ([o for o in ops if keep(item_of(o, ops))], {k: v for k, v in final.items() if keep(k[0])},
             data["results"], [r for r in data["sle"] if keep(r["item_code"])],
             [b for b in data["bins"] if keep(b["item_code"])])
+
+
+def posted_at(row) -> tuple:
+    """A ledger row's (posting date, posting time) as the probe dumps them (CAST AS CHAR), normalised."""
+    return str(row["posting_date"])[:10], str(row["posting_time"]).split(".")[0].zfill(8)
 
 
 def cents_ok(engine: Decimal, exact: Decimal) -> bool:
@@ -271,9 +346,18 @@ def check_run(ops, sim, final, results, sle, bins):
     cancelled = {o["ref"] for o in ops if o["op"] == "cancel"}
     for op in ops:
         oid, res, exp = op["id"], results[op["id"]], sim[op["id"]]
+        if op["op"] != "cancel" and tuple(res.get("at") or ()) != exp["at"]:
+            problems.append(f"{oid}: posted at {res.get('at')}, the oracle orders it at {exp['at']}")
         if exp.get("reject"):
-            if not res.get("error") or active.get(res.get("voucher_no") or ""):
-                problems.append(f"{oid}: issue beyond stock on hand was not rejected cleanly")
+            if "NegativeStock" not in (res.get("error") or ""):
+                problems.append(f"{oid}: not rejected for negative stock: {res.get('error') or 'it posted'}")
+            # Nothing may be left behind: no row of its voucher, and no row of its item and warehouses at its
+            # posting time (on the live path a rejected move has no voucher, so the time is what identifies it).
+            whs, at = {op["wh"], op.get("to_wh")}, tuple(res.get("at") or ())
+            left = [r for r in sle if (res.get("voucher_no") and r["voucher_no"] == res["voucher_no"])
+                    or (r["item_code"] == op["item"] and r["wh"] in whs and posted_at(r) == at)]
+            if left or not at:
+                problems.append(f"{oid}: a rejected move left {len(left)} ledger rows (posting time {at or 'unknown'})")
             continue
         if res.get("error"):
             problems.append(f"{oid}: engine error {res['error']}")
@@ -344,26 +428,26 @@ def forced_exact_problems(results, sle, cases=None):
 
 def perfect_engine(ops, sim):
     """Synthetic engine output that follows the documented rules (values stored half away from zero, rates
-    to 9 decimals). Only the pure layer uses it, to show the checker passes it and catches mutations."""
-    results, sle, stored, seq = {}, [], {}, 0
+    to 9 decimals, ledger rows in posting order after the repost, a rejected move posts nothing and has no
+    voucher). Only the pure layer uses it, to show the checker passes it and catches mutations."""
+    keys, results, sle, stored = posting_keys(ops), {}, [], {}
+    cancelled = {o["ref"] for o in ops if o["op"] == "cancel"}
     for op in ops:
-        exp = sim[op["id"]]
-        voucher = f"V-{op['id']}"
-        results[op["id"]] = {"voucher_no": voucher, "error": "NegativeStockError" if exp.get("reject") else None}
-        if op["op"] == "cancel":
-            for r in sle:
-                if r["voucher_no"] == f"V-{op['ref']}":
-                    r["is_cancelled"] = 1
-                    stored[(r["item_code"], r["wh"])] = Decimal(r["value"]) - Decimal(r["diff"])
-            continue
-        for e in exp["effects"]:
-            key, seq = (e["item"], e["wh"]), seq + 1
-            value = e["value"]
-            rate = (e["value"] / e["qty"]).quantize(Decimal("1e-9")) if e["qty"] else D0
-            sle.append({"voucher_no": voucher, "item_code": e["item"], "wh": e["wh"], "seq": seq, "is_cancelled": 0,
-                        "actual_qty": str(D0 if e["reconcile"] else e["dqty"]), "qty_after": str(e["qty"]), "rate": str(rate),
-                        "value": str(value), "diff": str(value - stored.get(key, D0))})
-            stored[key] = value
+        reject = sim[op["id"]].get("reject")
+        results[op["id"]] = {"voucher_no": None if reject else f"V-{op['id']}", "at": list(keys[op["id"]]),
+                             "error": "NegativeStockError: insufficient stock" if reject else None}
+    posted = [o for o in ops if o["op"] != "cancel" and not sim[o["id"]].get("reject")]
+    for op in sorted(posted, key=lambda o: keys[o["id"]]):
+        for e in sim[op["id"]]["effects"]:
+            key, value, active = (e["item"], e["wh"]), e["value"], op["id"] not in cancelled
+            rate = (value / e["qty"]).quantize(Decimal("1e-9")) if e["qty"] else D0
+            sle.append({"voucher_no": f"V-{op['id']}", "item_code": e["item"], "wh": e["wh"], "seq": len(sle),
+                        "is_cancelled": int(not active), "posting_date": keys[op["id"]][0],
+                        "posting_time": keys[op["id"]][1], "actual_qty": str(D0 if e["reconcile"] else e["dqty"]),
+                        "qty_after": str(e["qty"]), "rate": str(rate), "value": str(value),
+                        "diff": str(value - stored.get(key, D0) if active else e["dvalue"])})
+            if active:
+                stored[key] = value
     _, final = simulate(ops)
     bins = [{"item_code": i, "wh": w, "qty": str(q), "value": str(v)} for (i, w), (q, v) in final.items()]
     return results, sle, bins
@@ -388,6 +472,42 @@ class TestOracleAndChecker(unittest.TestCase):
             self.assertEqual((v1[oid]["effects"][0]["value"], v1[oid]["effects"][0]["dvalue"]),
                              (Decimal(want["value"]), Decimal(want["diff"])))
         self.assertEqual((sim["q2"]["effects"][0]["qty"], sim["q2"]["effects"][0]["value"]), (D0, D0))
+        for oid, want in BACKDATED_EXACT.items():
+            e = sim[oid]["effects"][0]
+            got = {"value": e["value"], "diff": e["dvalue"], "rate": e["value"] / e["qty"]}
+            for field, value in want.items():
+                self.assertEqual(got[field], Decimal(value), f"{oid} {field}")
+
+    def test_oracle_replays_back_dated_moves_in_posting_order(self):
+        ops = make_ops(SEED, 1)
+        cut = [o["id"] for o in ops].index("b5")
+        before, _ = simulate(ops[:cut])  # b4 still stands
+        for oid, (value, diff) in BACKDATED_BEFORE_CANCEL.items():
+            e = before[oid]["effects"][0]
+            self.assertEqual((e["value"], e["dvalue"]), (Decimal(value), Decimal(diff)), oid)
+        sim, final = simulate(ops)
+        self.assertEqual(final[("E15-BACK", "W1")], (Decimal(8), Decimal("480.00")))
+        self.assertEqual(sim["b4"]["effects"][0]["value"], Decimal("820.00"), "a cancelled move keeps its last value")
+        # Submission order is not posting order: without the dates the same moves value b2 at 50 a unit.
+        undated = [{k: v for k, v in o.items() if k not in ("date", "time")} for o in ops]
+        flat, _ = simulate(undated)
+        self.assertEqual((flat["b2"]["effects"][0]["value"], flat["b2"]["effects"][0]["dvalue"]),
+                         (Decimal("300.00"), Decimal("-200.00")))
+        base = [{"id": "k1", "op": "receipt", "item": "I", "wh": "W1", "qty": "5", "rate": "10.00"},
+                {"id": "k2", "op": "issue", "item": "I", "wh": "W1", "qty": "5"},
+                {"id": "k3", "op": "receipt", "item": "I", "wh": "W1", "qty": "2", "rate": "12.00",
+                 "date": BACK_DATE, "time": "09:00:00"}]
+        sim, final = simulate(base)  # posting order k3, k1, k2: k2 leaves 2 x 74.00 / 7 = 21.142... -> 21.14
+        self.assertEqual((sim["k2"]["effects"][0]["value"], final[("I", "W1")]),
+                         (Decimal("21.14"), (2, Decimal("21.14"))))
+        # A back-dated issue that has stock on its own date but would leave k2 short is rejected.
+        late_short = base + [{"id": "k4", "op": "issue", "item": "I", "wh": "W1", "qty": "1", "date": BACK_DATE,
+                              "time": "10:00:00"}, {"id": "k5", "op": "issue", "item": "I", "wh": "W1", "qty": "2"}]
+        sim, final = simulate(late_short)
+        self.assertEqual((sim["k4"].get("reject"), sim["k5"].get("reject")), (None, True))
+        self.assertEqual(final[("I", "W1")], (1, Decimal("10.33")))  # k3, k4, k1, k2: 1 x 62.00 / 6
+        with self.assertRaises(ValueError):  # cancelling k3 would leave k4 short in posting order
+            simulate(late_short + [{"id": "k6", "op": "cancel", "ref": "k3"}])
 
     def test_oracle_invariants_on_seeded_sequences(self):
         for k in range(25):
@@ -412,6 +532,12 @@ class TestOracleAndChecker(unittest.TestCase):
         results, sle, bins = perfect_engine(ops, sim)
         self.assertEqual(check_run(ops, sim, final, results, sle, bins), [])
         self.assertEqual(forced_exact_problems(results, sle), [])
+        self.assertEqual(forced_exact_problems(results, sle, BACKDATED_EXACT), [])
+        data = {"results": results, "sle": sle, "bins": bins}  # the live tests check item subsets of one run
+        for keep in (lambda i: i in BACKDATED_ITEMS, lambda i: i in QTY_PRECISION_ITEMS,
+                     lambda i: i not in QTY_PRECISION_ITEMS | BACKDATED_ITEMS):
+            ops_k, final_k, results_k, sle_k, bins_k = subset(ops, final, data, keep)
+            self.assertEqual(check_run(ops_k, sim, final_k, results_k, sle_k, bins_k), [])
 
     def test_checker_catches_defects(self):
         ops = make_ops(SEED, EXAMPLES)
@@ -441,6 +567,16 @@ class TestOracleAndChecker(unittest.TestCase):
             "rate off": lambda res, s, b: row(s, "g4").update(rate="126.26"),
             "unrounded value": lambda res, s, b: row(s, "h3").update(value="1.005", diff="-1.005"),
             "bin differs": lambda res, s, b: b[0].update(value=str(Decimal(b[0]["value"]) + 1)),
+            "rejected for another reason": lambda res, s, b: res["g7"].update(error="ValidationError: closed period"),
+            "rejected move left a row": lambda res, s, b: s.append(
+                {**row(s, "g6"), "voucher_no": "V-orphan", "seq": len(s), "posting_time": res["g7"]["at"][1]}),
+            "posted at another time": lambda res, s, b: res["b3"].update(at=[POSTING_DATE, "23:00:00"]),
+            "back-dated receipt not reposted": lambda res, s, b: [
+                row(s, "b1").update(value="500.00", diff="500.00", rate="50"),
+                row(s, "b2").update(value="300.00", diff="-200.00", rate="50"),
+                row(s, "b6").update(value="225.00", diff="-75.00", rate="50")],
+            "cancelled back-dated receipt not reposted": lambda res, s, b: row(s, "b2").update(
+                value="1068.57", diff="-251.43", rate=str((Decimal("1068.57") / 11).quantize(Decimal("1e-9")))),
         }
         for name, mutate in cases.items():
             with self.subTest(name):
@@ -454,11 +590,17 @@ class TestOracleAndChecker(unittest.TestCase):
             self.assertEqual(len({o["id"] for o in a}), len(a))
             self.assertTrue(all(o["op"] in MOVES for o in a))
             self.assertTrue(all(Decimal(o["qty"]) > 0 for o in a if "qty" in o))
-            ids = [o["id"] for o in a]
+            ids, by_id = [o["id"] for o in a], {o["id"]: o for o in a}
             for o in a:
-                if o["op"] == "cancel":  # cancel only the move just posted: no back-dated repost is needed
+                if o["op"] == "cancel":  # the probe cancels the move it just submitted (b4 is back-dated)
                     self.assertEqual(ids.index(o["id"]), ids.index(o["ref"]) + 1)
-            simulate(a)  # raises on negative stock, whole-stock purchase returns and stale cancels
+                if "date" in o:  # back-dated moves post the day before every other move, at a time of their own
+                    self.assertEqual((o["date"], o["op"]), (BACK_DATE, "receipt"))
+                    self.assertLess(BACK_DATE, POSTING_DATE)
+            self.assertEqual(by_id["b4"].get("date"), BACK_DATE, "b5 cancels a back-dated move")
+            keys = list(posting_keys(a).values())
+            self.assertEqual(len(set(keys)), len(keys), "every move has its own posting time")
+            simulate(a)  # raises on negative stock, whole-stock purchase returns and cancels that leave a gap
 
     def test_live_bench_env_is_all_or_nothing(self):
         """Fail closed: one variable alone (or REQUIRE_ERP015_LIVE=1 without a bench) must not skip silently."""
@@ -480,6 +622,8 @@ class TestOracleAndChecker(unittest.TestCase):
         self.assertIn("main", {n.name for n in tree.body if isinstance(n, ast.FunctionDef)})
         source = PROBE_FILE.read_text(encoding="utf-8")
         self.assertNotIn("127.0.0.1", source)
+        self.assertTrue(f'POSTING_DATE = "{POSTING_DATE}"' in source, "the probe and the oracle share the posting date")
+        self.assertTrue("repost_entries" in source, "the probe runs the engine's repost job")
         self.assertNotIn("3306", source)
 
 
@@ -515,7 +659,7 @@ class TestLiveInventoryValuation(unittest.TestCase):
 
     def test_1_stock_ledger_follows_moving_average(self):
         ops, final, results, sle, bins = subset(self.ops, self.final, self.data,
-                                                lambda item: item not in QTY_PRECISION_ITEMS)
+                                                lambda item: item not in QTY_PRECISION_ITEMS | BACKDATED_ITEMS)
         self.assertEqual(check_run(ops, self.sim, final, results, sle, bins), [])
 
     def test_2_forced_cases_are_exact(self):
@@ -568,18 +712,41 @@ class TestLiveInventoryValuation(unittest.TestCase):
         # x7 (cancelled by x8) moves stock between warehouses on the same account at zero difference: no GL rows.
         self.assertEqual(by_voucher[d["results"]["x7"]["voucher_no"]], [])
 
+    @staticmethod
+    def _not_the_known_mismatch(reason):
+        """For the expected failures below: when the engine no longer shows the pinned figures, or the data
+        cannot be read, the test returns WITHOUT failing. unittest reports a passing ``expectedFailure`` as an
+        unexpected success, which fails the run, so the decorator only ever absorbs the known mismatch."""
+        print(f"\nERP-015 expected failure is not the known mismatch: {reason}", file=sys.stderr)
+
     @unittest.expectedFailure  # Q-514 (a): the engine values a Moving Average sales return at the current average
     def test_6_sales_return_adds_back_the_delivery_cost(self):
-        problems = forced_exact_problems(self.data["results"], self.data["sle"], V1_SALES_RETURN)
-        by_voucher, res = self._gl_by_voucher(), self.data["results"]
-        rows = by_voucher[res["g3"]["voucher_no"]] + by_voucher[res["g6"]["voucher_no"]]
-        self.assertEqual((problems, mirror_mismatch(rows)), ([], {}), "a full sales return mirrors its delivery")
+        d, res = self.data, self.data["results"]
+        try:
+            pinned = forced_exact_problems(res, d["sle"], {"g6": FORCED_EXACT["g6"]})  # 2762.94 and 627.94
+            problems = forced_exact_problems(res, d["sle"], V1_SALES_RETURN)
+            by_voucher = self._gl_by_voucher()
+            mismatch = mirror_mismatch(by_voucher[res["g3"]["voucher_no"]] + by_voucher[res["g6"]["voucher_no"]])
+        except Exception as exc:  # noqa: BLE001 - any read error is reported, never absorbed
+            return self._not_the_known_mismatch(f"g3/g6 could not be read: {exc!r}")
+        if pinned:
+            return self._not_the_known_mismatch(f"g6 is no longer at the observed engine figures: {pinned}")
+        # The known mismatch, the only line expected to fail: a full sales return mirrors its delivery.
+        self.assertEqual((problems, mismatch), ([], {}))
 
     @unittest.expectedFailure  # Q-514 (b): with float_precision unset the ledger rounds running qty to 2 decimals
     def test_7_three_decimal_quantities_leave_exact_stock(self):
-        ops, final, results, sle, bins = subset(self.ops, self.final, self.data,
-                                                lambda item: item in QTY_PRECISION_ITEMS)
-        self.assertEqual(check_run(ops, self.sim, final, results, sle, bins), [])
+        d = self.data
+        try:
+            q1 = [r for r in d["sle"] if r["voucher_no"] == d["results"]["q1"]["voucher_no"]]
+            observed = [(Decimal(r["qty_after"]), Decimal(r["rate"])) for r in q1]
+            ops, final, results, sle, bins = subset(self.ops, self.final, d, lambda item: item in QTY_PRECISION_ITEMS)
+            problems = check_run(ops, self.sim, final, results, sle, bins)
+        except Exception as exc:  # noqa: BLE001 - any read error is reported, never absorbed
+            return self._not_the_known_mismatch(f"q1/q2 could not be read: {exc!r}")
+        if observed != [(Decimal("12.35"), Decimal("9.995951417"))]:
+            return self._not_the_known_mismatch(f"q1 is no longer at the observed engine figures: {observed}")
+        self.assertEqual(problems, [])  # the known mismatch, the only line expected to fail
 
     def test_8_three_decimal_quantities_post_at_the_engine_baseline(self):
         """Not an expected failure, so test_7 cannot hide an unrelated one: q1 and q2 post, and the only
@@ -599,6 +766,31 @@ class TestLiveInventoryValuation(unittest.TestCase):
         ops, final, results, sle, bins = subset(self.ops, self.final, d, lambda item: item in QTY_PRECISION_ITEMS)
         problems = check_run(ops, self.sim, final, results, sle, bins)
         self.assertEqual([" ".join(p.split()[:3]) for p in problems], ["q1 W1: qty", "q1 W1: rate"], problems)
+
+    def test_9_back_dated_entries_are_reposted_in_posting_order(self):
+        """b3 and b4 post the day before every other move and b5 cancels b4. After the engine's repost job the
+        ledger, bins and GL must be those of posting order (b3, b1, b2, b6), not of submission order."""
+        d, res = self.data, self.data["results"]
+        # Item-based reposting (the engine default): each entry names the item and warehouse, not the voucher.
+        ours = [r for r in d["reposts"] if r["item_code"] in BACKDATED_ITEMS]
+        self.assertGreaterEqual(len(ours), 2, "b3, b4 and the cancellation b5 queue reposts")
+        self.assertEqual({r["posting_date"] for r in ours}, {BACK_DATE}, "reposted from the back date")
+        self.assertEqual([r for r in d["reposts"] if r["status"] not in ("Completed", "Skipped")], [],
+                         "every queued repost ran to completion")
+        ops, final, results, sle, bins = subset(self.ops, self.final, d, lambda item: item in BACKDATED_ITEMS)
+        self.assertEqual(check_run(ops, self.sim, final, results, sle, bins), [])
+        self.assertEqual(forced_exact_problems(res, d["sle"], BACKDATED_EXACT), [])
+        by_voucher, acc = self._gl_by_voucher(), d["accounts"]
+        for oid, want in BACKDATED_EXACT.items():  # the GL was reposted too: stock account = ledger difference
+            with self.subTest(oid):
+                rows = [r for r in by_voucher[res[oid]["voucher_no"]] if not int(r["is_cancelled"])]
+                net = {a: sum((Decimal(r["debit"]) - Decimal(r["credit"]) for r in rows if r["account"] == a), D0)
+                       for a in (acc["stock_in_hand"], acc["stock_adjustment"])}
+                self.assertEqual((net[acc["stock_in_hand"]], net[acc["stock_adjustment"]]),
+                                 (Decimal(want["diff"]), -Decimal(want["diff"])))
+        b4 = by_voucher[res["b4"]["voucher_no"]]
+        self.assertTrue(b4, "b4 posted to the GL before it was cancelled")
+        self.assertFalse(mirror_mismatch(b4), "the cancelled back-dated receipt is reversed exactly")
 
 
 if __name__ == "__main__":

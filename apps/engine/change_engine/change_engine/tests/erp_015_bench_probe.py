@@ -4,8 +4,11 @@ Runs inside the bench (``env/bin/python apps/change_engine/change_engine/tests/e
 fresh throwaway synthetic site. It never asserts: it writes one JSON document to stdout and the host test
 (``test_erp_015_inventory_valuation.py``) checks it. Amounts are read as decimal strings (``CAST(... AS CHAR)``),
 so no float sits between the ledger and the checks. Input on stdin: ``{"site": ..., "ops": [...]}`` built by the
-host from a seed. Every operation posts in order at a later posting time than the one before, so the engine never
-needs a back-dated repost (the dev bench runs no worker). All names and data are synthetic.
+host from a seed. Each operation posts on ``POSTING_DATE`` at a later time than the one before, unless it names
+its own ``date`` and ``time`` (a back-dated move). The dev bench runs no worker, so after every move the probe runs
+the engine's own repost job (``repost_entries``, normally the hourly scheduler job) in-process; the host test checks
+the ledger it leaves. The probe changes Stock, System and Accounts settings, so it refuses any site that already
+has another company or any GL entry. All names and data are synthetic.
 """
 from __future__ import annotations
 
@@ -23,7 +26,7 @@ from change_engine.proofs.phase0_bench_proof import (  # noqa: E402
 
 CO = {"company": "ERP15 Trading KSA", "abbr": "E15K", "country": "Saudi Arabia", "currency": "SAR"}
 ITEMS = {"E15-GOLD": "Nos", "E15-HALF": "Nos", "E15-XFER": "Nos", "E15-RECO": "Nos", "E15-DRIFT": "Kg",
-         "E15-QTY": "Kg"}
+         "E15-QTY": "Kg", "E15-BACK": "Nos"}
 WAREHOUSES = ("W1", "W2", "W3")
 POSTING_DATE = "2026-03-02"
 ENTRY_TYPES = {"receipt": "Material Receipt", "issue": "Material Issue", "transfer": "Material Transfer"}
@@ -98,7 +101,8 @@ def _post(fr, ctx, op, when, vouchers):
     from erpnext.controllers.sales_and_purchase_return import make_return_doc
 
     kind, wh = op["op"], ctx["wh"]
-    base = {"company": CO["company"], "posting_date": POSTING_DATE, "posting_time": when, "set_posting_time": 1}
+    base = {"company": CO["company"], "posting_date": op.get("date", POSTING_DATE), "posting_time": op.get("time", when),
+            "set_posting_time": 1}
     if kind == "cancel":
         doc = fr.get_doc(*vouchers[op["ref"]])
         doc.cancel()
@@ -142,6 +146,25 @@ def _post(fr, ctx, op, when, vouchers):
     return doc.doctype, doc.name
 
 
+def _run_reposts(fr):
+    """Run the queued valuation reposts now, with the engine's own scheduler job (no worker on the dev bench)."""
+    from erpnext.stock.doctype.repost_item_valuation.repost_item_valuation import repost_entries
+
+    if fr.db.exists("Repost Item Valuation", {"docstatus": 1, "status": ["in", ["Queued", "In Progress"]]}):
+        repost_entries()
+        fr.db.commit()
+
+
+def _refuse_a_used_site(fr):
+    """Before any setting changes: a site with ERP-015 postings, another company or any GL entry is not ours."""
+    if fr.db.exists("Stock Ledger Entry", {"item_code": ["like", "E15-%"]}):
+        raise SystemExit("site already holds ERP-015 postings: use a fresh disposable site")
+    others = [c for c in fr.get_all("Company", pluck="name") if c != CO["company"]]
+    if others or fr.db.count("GL Entry"):
+        raise SystemExit("site has another company or GL entries: the probe changes Stock, System and Accounts "
+                         "settings, so it runs only on a fresh disposable site")
+
+
 def _settings(fr, ctx):
     from frappe.model.meta import get_field_precision
 
@@ -169,22 +192,25 @@ def _settings(fr, ctx):
 def main():
     params = json.load(sys.stdin)
     with _FrappeSiteContext(params["site"]) as fr:
-        if fr.db.exists("Stock Ledger Entry", {"item_code": ["like", "E15-%"]}):
-            raise SystemExit("site already holds ERP-015 postings: use a fresh disposable site")
+        _refuse_a_used_site(fr)
         ctx = _setup(fr)
         results, vouchers = {}, {}
         for i, op in enumerate(params["ops"]):
             when = f"{8 + i // 3600:02d}:{(i // 60) % 60:02d}:{i % 60:02d}"
+            at = [op.get("date", POSTING_DATE), op.get("time", when)]
             try:
                 vtype, vno = _post(fr, ctx, op, when, vouchers)
                 fr.db.commit()
                 vouchers[op["id"]] = (vtype, vno)
-                results[op["id"]] = {"voucher_type": vtype, "voucher_no": vno, "error": None}
+                results[op["id"]] = {"voucher_type": vtype, "voucher_no": vno, "at": at, "error": None}
             except Exception as exc:  # recorded for the host test; a rejected move must leave nothing behind
                 fr.db.rollback()
-                results[op["id"]] = {"voucher_no": None, "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
+                results[op["id"]] = {"voucher_no": None, "at": at, "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
+                continue
+            _run_reposts(fr)
         labels = {w: label for label, w in ctx["wh"].items()}
         sle = _rows(fr, "select voucher_type, voucher_no, item_code, warehouse, is_cancelled, "
+                        "cast(posting_date as char) posting_date, cast(posting_time as char) posting_time, "
                         "cast(actual_qty as char) actual_qty, cast(qty_after_transaction as char) qty_after, "
                         "cast(valuation_rate as char) rate, cast(stock_value as char) value, "
                         "cast(stock_value_difference as char) diff from `tabStock Ledger Entry` "
@@ -198,8 +224,11 @@ def main():
         gl = _rows(fr, "select voucher_type, voucher_no, company, account, cast(debit as char) debit, "
                        "cast(credit as char) credit, is_cancelled from `tabGL Entry` where company = %s",
                    (CO["company"],))
+        reposts = _rows(fr, "select voucher_type, voucher_no, item_code, warehouse, based_on, status, docstatus, "
+                            "cast(posting_date as char) posting_date, "
+                            "left(coalesce(error_log, ''), 500) error from `tabRepost Item Valuation` order by creation")
         json.dump({"settings": _settings(fr, ctx), "accounts": ctx["accounts"], "results": results, "sle": sle,
-                   "bins": bins, "gl": gl}, sys.stdout, default=str)
+                   "bins": bins, "gl": gl, "reposts": reposts}, sys.stdout, default=str)
 
 
 if __name__ == "__main__":

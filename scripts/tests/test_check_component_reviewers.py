@@ -86,3 +86,19 @@ def test_run_passes_on_clean_tree(tmp_path):
 
 def test_real_repo_manifests_pass():
     assert c.run(Path(__file__).resolve().parent.parent.parent) == 0
+
+
+def test_logins_outside_the_github_charset_fail_closed():
+    # Gemini review of e7995c6, High: zero-width and lookalike logins slipped past the owner check.
+    for bad in ["sayegh9​", "ѕayegh9", "say egh9", "sayegh9 x", "a" * 40, "say_egh9"]:
+        out = c.check_manifest(manifest(reviewed_by=["eldonslogic", bad]), "m")
+        assert out and any("not a valid GitHub login" in p for p in out), bad
+    out = c.check_manifest(manifest(owner="sayegh9​", reviewed_by=["eldonslogic"]), "m")
+    assert out and "not a valid GitHub login" in out[0]
+
+
+def test_non_string_level_fails_closed_without_crashing():
+    for level in [["reviewed"], {"x": 1}, 3, None]:
+        data = manifest()
+        data["certification"]["level"] = level
+        assert c.check_manifest(data, "m"), level

@@ -20,12 +20,19 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 ## In flight (dispatched, no result yet)
 | Plan ID | Model | Scope | Allowed paths | Branch |
 |---|---|---|---|---|
-| DSC-009 | fable-5.2 | Different-model Tier 3 security review of #224 (owner approval flow), read-only | none (review text returned) | dsc-009-owner-approval |
-| PLT-009 | opus-5.5 | Model gateway design: home within lanes, routing, budgets, caching, logs, residency; ADR Proposed | docs/architecture/model-gateway.md, one new ADR | plt-009-model-gateway (to create) |
+| DSC-009 | opus-5.5 (worktree) | Fix #224 security findings H1, H2, M3 to M5 with tests first | DSC-009 package and tests | dsc-009-fixes (local commit, orchestrator pushes to dsc-009-owner-approval) |
+| ERP-013, ERP-015 | fable-5.2 | Re-review partner #202 at new head; review new #229 | none (review text) | - |
+| ERP-016, CMP-005 | fable-5.2 | Re-review partner #204 and #155 at new heads | none (review text) | - |
+| INF-009 | fable-5.2 | Re-review partner #225 at new head | none (review text) | - |
+| OPR-015 | sonnet-5.5 | Messaging channel design (WhatsApp or push), approvals never in WhatsApp | docs/product/opr-015-messaging-channel.md | opr-015-messaging-channel (to create) |
 
 ## Results
 - FND-002 (sonnet): docs/fundraising/accelerator-evaluation.md. Hub71+ wait (relocation, SAFE terms UNVERIFIED), Antler skip, Sanabil/500 wait for MVP, Flat6Labs Riyadh wait (KSA residency), QSTP skip. Hub71 deadline still UNVERIFIED (page 403). Branch fnd-002-accelerators.
 - GTM-004 (sonnet): docs/gtm/dubai-ai-agents-championship.md. Recommends an Owner Interview agent (draft Blueprint, human approves). Registration Jan 2027 per official page, Dec 2026 per press: treat Dec 2026 as binding until confirmed. Needs a Dubai trade licence to receive funds; IP stays ours. Founder decisions listed in the file. Branch gtm-004-championship.
+- PLT-009 (opus): design plus ADR-0053 Proposed, PR #232; home must be services/gateway/ (partner lane), Q-543 asks founders to decide the lane (recommend moving PLT-009 to partner). Row left doing.
+- DSC-009 security review (fable): 2 High (outcome records bypass fold rules and can corrupt the log; summary hides items past 25 and role permissions), 3 Medium, 4 Low; posted on #224.
+- Merged #201 ERP-010 (approved at Eldon's direction after Fable review; head b482743 only resolved a PLAN conflict).
+- PRs opened: #231 FND-002, #233 GTM-004, #234 BRD-011, #232 PLT-009.
 - BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
 ## Files touched

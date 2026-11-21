@@ -26,6 +26,14 @@ _HEX_RE = re.compile(r"#[0-9a-fA-F]{6}")
 # between words. That is a valid unquoted CSS family (or generic) name, so nothing can end a
 # declaration, add a rule or leave an empty list item such as ``a,,b`` or a trailing comma.
 _FONT_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*( [A-Za-z][A-Za-z0-9_-]*)*")
+# CSS-wide keywords and ``default`` are not valid family names (CSS Fonts 4, 2.1.1, accessed
+# 2026-11-21): ``inherit, sans-serif`` would make the whole declaration invalid.
+_RESERVED_FONT_NAMES = frozenset({"inherit", "initial", "unset", "revert", "revert-layer",
+                                  "default"})
+# A generic family is only a generic when it is unquoted; the primary family is quoted.
+_GENERIC_FONT_NAMES = frozenset({"serif", "sans-serif", "system-ui", "monospace", "cursive",
+                                 "fantasy", "ui-serif", "ui-sans-serif", "ui-monospace",
+                                 "ui-rounded", "math", "emoji", "fangsong"})
 _MAX_FONT_NAME = 64
 _MAX_FALLBACKS = 6
 _COLOUR_KEYS = ("surface", "background", "text", "primary", "success", "warning", "danger")
@@ -69,8 +77,11 @@ def _font_names(family: object, fallback: object) -> list[str]:
         raise DocumentTokenError("brand token body font family is not a plain font name")
     names = [family.strip()] + [part.strip() for part in fallback.split(",")]
     if len(names) < 2 or len(names) > _MAX_FALLBACKS + 1 or any(
-            len(name) > _MAX_FONT_NAME or not _FONT_NAME_RE.fullmatch(name) for name in names):
+            len(name) > _MAX_FONT_NAME or not _FONT_NAME_RE.fullmatch(name)
+            or name.lower() in _RESERVED_FONT_NAMES for name in names):
         raise DocumentTokenError("brand token body font family is not a plain font name")
+    if names[0].lower() in _GENERIC_FONT_NAMES:
+        raise DocumentTokenError("brand token body font family cannot be a generic family name")
     return names
 
 

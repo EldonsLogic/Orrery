@@ -16,7 +16,6 @@ Arabic copy new in ERP-016 is UNREVIEWED (ADR-0033); see ``document_labels``.
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from typing import Any, Mapping
 
 from .bilingual_tax_invoice import (
@@ -38,7 +37,8 @@ from .document_reconciliation import (
     check_amounts,
     format_amount,
     format_unit_price,
-    normalise_document,
+    in_print_context,
+    snapshot_document,
 )
 from .document_layout import assert_locked_layout, render_document_shell, render_token_block
 
@@ -134,19 +134,13 @@ def _lines_head(keys: list[str]) -> str:
     return "".join(cells)
 
 
-def _totals_table(totals: Mapping[str, Any], currency: str, precision: int,
-                  document_discount: Decimal = _ZERO) -> str:
+def _totals_table(checked: CheckedAmounts, currency: str) -> str:
     rows = []
-    discount_label = BILINGUAL_LABELS["discount"]
-    entries: list[tuple[str, str, Decimal, str]] = []
-    if document_discount > _ZERO:
-        entries.append((discount_label[0], discount_label[1], document_discount, ""))
-    for key, cls in (("total_taxable_amount", ""), ("total_vat_amount", ""),
-                     ("grand_total", ' class="grand-row"')):
+    for key, value, cls in (("total_taxable_amount", checked.taxable, ""),
+                            ("total_vat_amount", checked.vat, ""),
+                            ("grand_total", checked.grand, ' class="grand-row"')):
         ar, en = BILINGUAL_LABELS[key]
-        entries.append((ar, en, _to_dec(totals[key], key), cls))
-    for ar, en, value, cls in entries:
-        amount = format_amount(value, precision)
+        amount = format_amount(value, checked.precision)
         rows.append(
             f"<tr{cls}>"
             f'<th class="tot-ar">{_esc(ar)}</th>'
@@ -178,6 +172,7 @@ def _shell(kind: str, title: tuple[str, str], reference: str, brand: ResolvedDoc
 
 
 # ------------------------------------------------------------------ tax invoice
+@in_print_context
 def render_branded_tax_invoice_html(
     invoice_data: Mapping[str, Any],
     *,
@@ -193,14 +188,13 @@ def render_branded_tax_invoice_html(
     if mode not in ("zatca_sa", "neutral"):
         raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
     brand = resolve_document_branding(branding, entitlements=entitlements)
-    # Normalise once, check that exact copy, and render that same copy: no line is ever printed
-    # that the check did not see (a tuple of lines included).
-    invoice = normalise_document(invoice_data)
+    # Snapshot once, check that copy, and print from the checked snapshot (its checked numeric
+    # fields are the Decimal values the check used): the caller's objects are never read again.
     errors: list[str] = []
-    check_amounts(invoice, errors, tax_invoice=True)
-    if errors:
+    checked = check_amounts(snapshot_document(invoice_data), errors, tax_invoice=True)
+    if errors or checked is None:
         raise ValueError("; ".join(errors))
-    view = prepare_tax_invoice_view(invoice, mode)
+    view = prepare_tax_invoice_view(checked.document, mode)
 
     header = _header_region(
         brand,
@@ -329,7 +323,6 @@ def _lines_region(lines: list[Mapping[str, Any]], checked: CheckedAmounts) -> st
     places = checked.precision
     rows = []
     for idx, (line, row) in enumerate(zip(lines, checked.lines), start=1):
-        vat_raw = line.get("vat_rate", "0")
         desc_en = str(line.get("description") or "").strip()
         desc_ar = str(line.get("description_ar") or "").strip()
         desc = f'<div class="item-desc-en">{_esc(desc_en)}</div>'
@@ -343,7 +336,7 @@ def _lines_region(lines: list[Mapping[str, Any]], checked: CheckedAmounts) -> st
             f'<td class="num-col">{_ltr(_fmt_qty(row.quantity))}</td>'
             f'<td class="num-col">{_ltr(format_unit_price(row.unit_price, places))}</td>'
             f'<td class="num-col">{_ltr(format_amount(row.discount, places))}</td>'
-            f'<td class="num-col">{_ltr(_fmt_pct(vat_raw) if vat_raw not in (None, "") else "0%")}</td>'
+            f'<td class="num-col">{_ltr(_fmt_pct(row.vat_rate if row.vat_rate is not None else 0))}</td>'
             f'<td class="num-col">{_ltr(format_amount(row.amount, places))}</td>'
             "</tr>"
         )
@@ -355,11 +348,11 @@ def _lines_region(lines: list[Mapping[str, Any]], checked: CheckedAmounts) -> st
     )
 
 
-def _totals_region(data: Mapping[str, Any], currency: str, checked: CheckedAmounts) -> str:
+def _totals_region(currency: str, checked: CheckedAmounts) -> str:
     return (
         '<div class="summary-section"><div class="summary-totals-cell summary-wide" '
         'data-locked-region="totals">'
-        f'{_totals_table(data["totals"], currency, checked.precision, checked.document_discount)}'
+        f'{_totals_table(checked, currency)}'
         "</div></div>"
     )
 
@@ -384,6 +377,7 @@ def _terms_region(data: Mapping[str, Any]) -> str:
 def _validate_commercial(data: Mapping[str, Any], *, id_key: str, due_key: str,
                          parties: tuple[str, ...]
                          ) -> tuple[str, str, str, str, CheckedAmounts]:
+    """Check the snapshot ``data``; the caller prints only from ``checked.document``."""
     errors: list[str] = []
     doc_id = _need(data, id_key, errors)
     issue = _need(data, "issue_date", errors)
@@ -403,6 +397,7 @@ def _validate_commercial(data: Mapping[str, Any], *, id_key: str, due_key: str,
     return doc_id, issue, due, currency, checked
 
 
+@in_print_context
 def render_branded_quote_html(
     quote_data: Mapping[str, Any],
     *,
@@ -411,10 +406,11 @@ def render_branded_quote_html(
 ) -> str:
     """Tenant-branded bilingual quotation (not a tax invoice; no QR)."""
     brand = resolve_document_branding(branding, entitlements=entitlements)
-    quote_data = normalise_document(quote_data)
     quote_id, issue, valid_until, currency, checked = _validate_commercial(
-        quote_data, id_key="quote_id", due_key="valid_until", parties=("seller", "buyer")
+        snapshot_document(quote_data), id_key="quote_id", due_key="valid_until",
+        parties=("seller", "buyer")
     )
+    quote_data = checked.document
     status = quote_data.get("status")
     pill = ""
     if status is not None:
@@ -442,13 +438,14 @@ def render_branded_quote_html(
         + _party_region("buyer", _render_party_card(*_pair("customer"), quote_data["buyer"]))
         + "</div>"
         + _lines_region(quote_data["lines"], checked)
-        + _totals_region(quote_data, currency, checked)
+        + _totals_region(currency, checked)
         + _terms_region(quote_data)
         + _footer_region(brand, quote_id)
     )
     return _shell("quote", _pair("quote_title"), quote_id, brand, body)
 
 
+@in_print_context
 def render_branded_purchase_order_html(
     po_data: Mapping[str, Any],
     *,
@@ -457,10 +454,11 @@ def render_branded_purchase_order_html(
 ) -> str:
     """Tenant-branded bilingual purchase order (not a tax invoice; no QR)."""
     brand = resolve_document_branding(branding, entitlements=entitlements)
-    po_data = normalise_document(po_data)
     po_id, issue, required_by, currency, checked = _validate_commercial(
-        po_data, id_key="po_id", due_key="required_by", parties=("buyer", "supplier")
+        snapshot_document(po_data), id_key="po_id", due_key="required_by",
+        parties=("buyer", "supplier")
     )
+    po_data = checked.document
     meta = [
         (_pair("po_number"), _ltr(po_id)),
         (_pair("issue_date"), _ltr(issue)),
@@ -486,7 +484,7 @@ def render_branded_purchase_order_html(
         + "</div>"
         + f'<div class="delivery-box" data-locked-region="delivery">{delivery_card}</div>'
         + _lines_region(po_data["lines"], checked)
-        + _totals_region(po_data, currency, checked)
+        + _totals_region(currency, checked)
         + _terms_region(po_data)
         + _footer_region(brand, po_id)
     )

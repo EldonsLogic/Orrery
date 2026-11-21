@@ -462,6 +462,7 @@ def render_tax_invoice_html(
     branding: InvoiceBranding | Mapping[str, Any] | None = None,
     locale: dict[str, Any] | None = None,
     compliance_profile: dict[str, Any] | None = None,
+    country_default: bool | None = None,
 ) -> str:
     """Render a bilingual Arabic/English RTL print-ready HTML tax invoice.
 
@@ -471,6 +472,7 @@ def render_tax_invoice_html(
         branding: Optional tenant branding validated against WCAG AA 4.5:1 on white and logo rules.
         locale: Resolved company.locale settings; Gregorian issue date stays mandatory.
         compliance_profile: Resolved profile; hijriDisplay.enabled takes precedence.
+        country_default: Override whether ``zatca_sa`` shows Hijri when no settings are given.
     """
     if mode not in ("zatca_sa", "neutral"):
         raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
@@ -523,7 +525,8 @@ def render_tax_invoice_html(
     # Companions and legacy hijri_date payloads are untrusted caches, never sources.
     resolved_locale = {} if locale is None else locale
     resolved_profile = {} if compliance_profile is None else compliance_profile
-    show_hijri = display_enabled(resolved_locale, resolved_profile, country_default=mode == "zatca_sa")
+    resolved_default = (mode == "zatca_sa") if country_default is None else bool(country_default)
+    show_hijri = display_enabled(resolved_locale, resolved_profile, country_default=resolved_default)
     number_system = resolved_locale.get("numberSystem", "western")
     localise_digits("", number_system)  # explicit settings errors fail closed
     # Mandatory legal Gregorian date: Western ASCII digits always; invalid input fails closed.
@@ -1658,8 +1661,16 @@ def render_frappe_sales_invoice_html(
         frappe_module=frappe_module,
         mode=mode,
     )
-    return render_tax_invoice_html(invoice_dict, mode=resolved_mode, branding=branding,
-                                   locale=locale, compliance_profile=compliance_profile)
+    # The installed print template invokes {{ render_frappe_sales_invoice_html(doc) }} without
+    # resolved per-site settings until CMP-023; keep the Hijri row OFF unless enabled by settings.
+    return render_tax_invoice_html(
+        invoice_dict,
+        mode=resolved_mode,
+        branding=branding,
+        locale=locale,
+        compliance_profile=compliance_profile,
+        country_default=False,
+    )
 
 
 def install_bilingual_tax_invoice_print_format(

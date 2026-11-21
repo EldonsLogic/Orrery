@@ -5,7 +5,9 @@ Consumers can derive on render without persisting companions. Gregorian source
 fields remain authoritative; companions are read-only Data, never Date columns.
 """
 
+from datetime import datetime
 import logging
+import re
 
 try:
     import frappe
@@ -15,6 +17,10 @@ except ImportError:
 from .hijri import HijriDateError, MESSAGES, to_hijri
 
 _log = logging.getLogger(__name__)
+_DATETIME_STR = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}"
+    r"(?::[0-9]{2}(?:\.[0-9]{1,6})?)?(?:Z|[+-][0-9]{2}:[0-9]{2})?"
+)
 
 TRADING_DATES = {
     "Sales Invoice": ("posting_date", "due_date"),
@@ -43,14 +49,30 @@ def _get(doc, key):
     return doc.get(key) if isinstance(doc, dict) else getattr(doc, key, None)
 
 
+def _is_datetime_value(value) -> bool:
+    """Return True when a Date field holds a Python datetime or valid ISO/engine timestamp."""
+    if isinstance(value, datetime):
+        return True
+    if not isinstance(value, str) or not _DATETIME_STR.fullmatch(value):
+        return False
+    try:
+        datetime.fromisoformat(value)
+        return True
+    except ValueError:
+        return False
+
+
 def _companion_value(doctype: str, source: str, value) -> str:
     """Hijri display for one source date, empty when there is nothing safe to show.
 
-    Far-future sentinels (2099-12-31) and legacy dates outside the calendar tables are
-    normal business data: leave the display empty and log the field, never the value.
-    Malformed values, a missing converter and other failures still propagate.
+    Far-future sentinels (2099-12-31), legacy dates outside the calendar tables, and
+    datetime values in a source Date field leave the display empty and log the field,
+    never the value. Malformed values, a missing converter and other failures still propagate.
     """
     if value in (None, ""):
+        return ""
+    if _is_datetime_value(value):
+        _log.warning("Hijri companion left empty: %s.%s holds a datetime value", doctype, source)
         return ""
     try:
         return to_hijri(value)

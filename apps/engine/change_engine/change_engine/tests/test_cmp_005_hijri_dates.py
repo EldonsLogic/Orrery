@@ -167,6 +167,34 @@ class HijriCompanionsTest(unittest.TestCase):
             sync_companions(doc)
         self.assertEqual((doc.custom_transaction_date_hijri, doc.custom_valid_till_hijri), ("1446-03-15", ""))
 
+    def test_datetime_source_leaves_companion_empty_while_malformed_text_refuses(self):
+        for dt_val in (datetime(2024, 9, 18, 23, 30), "2024-09-18T23:30:00",
+                       "2024-09-18 23:30:00", "2024-09-18 23:30:00.123456"):
+            doc = SimpleNamespace(doctype="Sales Invoice", posting_date="2024-09-18", due_date=dt_val,
+                                  custom_due_date_hijri="stale",
+                                  meta=SimpleNamespace(has_field=lambda field: True))
+            with self.subTest(dt_val=dt_val), self.assertLogs(hijri_fields.__name__, "WARNING") as logged:
+                sync_companions(doc, "validate")
+            self.assertEqual(doc.custom_posting_date_hijri, "1446-03-15")
+            self.assertEqual(doc.custom_due_date_hijri, "")
+            self.assertEqual(doc.due_date, dt_val)
+            log_text = " ".join(logged.output)
+            self.assertIn("Sales Invoice", log_text)
+            self.assertIn("due_date", log_text)
+            self.assertNotIn("2024-09-18", log_text)
+            self.assertNotIn("23:30", log_text)
+            with self.assertLogs(hijri_fields.__name__, "WARNING"):
+                self.assertEqual(derive_companions(doc)["custom_due_date_hijri"], "")
+
+        for bad in ("not-a-date", "31/12/2099", "2024-02-30", "2024-02-30T12:00:00"):
+            doc = SimpleNamespace(doctype="Sales Invoice", posting_date="2024-09-18", due_date=bad,
+                                  custom_posting_date_hijri="unchanged",
+                                  meta=SimpleNamespace(has_field=lambda field: True))
+            with self.subTest(bad=bad), self.assertRaises(hijri.HijriDateError) as raised:
+                sync_companions(doc, "validate")
+            self.assertEqual(raised.exception.code, "invalid_date")
+            self.assertEqual(doc.custom_posting_date_hijri, "unchanged")
+
     def test_hook_failures_become_frappe_validation_errors_when_running_in_the_engine(self):
         class ValidationError(Exception):
             pass
@@ -384,17 +412,48 @@ class HijriPrintTest(unittest.TestCase):
             with self.subTest(posting_date=posting_date):
                 invoice_dict, _ = sales_invoice_to_zatca_dict(sales_invoice(posting_date), frappe_module=fm)
                 self.assertEqual(invoice_dict["issue_date"], "2026-11-17")
-                rendered = render_frappe_sales_invoice_html(sales_invoice(posting_date), frappe_module=fm)
-                self.assertIn("2026-11-17", rendered)
-                self.assertIn("data-zatca-tlv=", rendered)
-                self.assertIn("Jumada", rendered)
+                # Without resolved tenant settings on the engine print path, Hijri stays OFF.
+                no_settings = render_frappe_sales_invoice_html(sales_invoice(posting_date), frappe_module=fm)
+                self.assertIn("2026-11-17", no_settings)
+                self.assertIn("data-zatca-tlv=", no_settings)
+                self.assertNotIn("Jumada", no_settings)
+                self.assertNotIn("التاريخ الهجري", no_settings)
+                # With settings that enable it, Hijri is printed.
+                enabled = render_frappe_sales_invoice_html(
+                    sales_invoice(posting_date), frappe_module=fm,
+                    compliance_profile={"hijriDisplay": {"enabled": True}},
+                )
+                self.assertIn("Jumada", enabled)
+                self.assertIn("التاريخ الهجري", enabled)
+        # Locale calendar enabling also prints it, and numberSystem is honoured on Hijri only.
+        eastern = render_frappe_sales_invoice_html(
+            sales_invoice("2026-11-17"), frappe_module=fm,
+            locale={"calendar": {"secondaryDisplay": "hijri_umm_al_qura"}, "numberSystem": "eastern_arabic"},
+        )
+        self.assertIn("2026-11-17", eastern)
+        self.assertNotIn("٢٠٢٦", eastern)
+        self.assertIn("١٤٤٨", eastern)
+        self.assertIn("جمادى", eastern)
+        # hijriDisplay.enabled: false never prints Hijri even when locale enables it.
+        for kwargs in (
+            {"compliance_profile": {"hijriDisplay": {"enabled": False}}},
+            {"locale": {"calendar": {"secondaryDisplay": "hijri_umm_al_qura"}, "numberSystem": "eastern_arabic"},
+             "compliance_profile": {"hijriDisplay": {"enabled": False}}},
+        ):
+            disabled = render_frappe_sales_invoice_html(sales_invoice("2026-11-17"), frappe_module=fm, **kwargs)
+            self.assertIn("2026-11-17", disabled)
+            self.assertNotIn("Jumada", disabled)
+            self.assertNotIn("التاريخ الهجري", disabled)
         # Timestamps never reach the legal invoice: the whole render fails closed.
         for timestamp in (datetime(2026, 11, 17, 23, 30), "2026-11-17T23:30:00"):
             with self.subTest(posting_date=timestamp), self.assertRaises(hijri.HijriDateError):
                 render_frappe_sales_invoice_html(sales_invoice(timestamp), frappe_module=fm)
         # A date past the Hijri table still produces the legal invoice, without the Hijri line.
         with self.assertLogs(level="WARNING"):
-            rendered = render_frappe_sales_invoice_html(sales_invoice("2080-01-01"), frappe_module=fm)
+            rendered = render_frappe_sales_invoice_html(
+                sales_invoice("2080-01-01"), frappe_module=fm,
+                compliance_profile={"hijriDisplay": {"enabled": True}},
+            )
         self.assertIn("2080-01-01", rendered)
         self.assertNotIn("Jumada", rendered)
 

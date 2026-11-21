@@ -200,10 +200,10 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-010 | Gateway regional routing and provider fallback | Platform | G3 | PLT-009,CMP-019 | eldon | todo |
 | PLT-011 | Per-tenant AI cost attribution and caps | Platform | G2 | PLT-009,PLT-007 | eldon | todo |
 | PLT-012 | Internal team console | Platform | G2 | PLT-005 | eldon | done |
-| PLT-013 | Human review queue (team_reviewed gate) | Platform | G2 | PLT-012 | eldon | todo |
+| PLT-013 | Human review queue (team_reviewed gate) | Platform | G2 | PLT-012 | eldon | done |
 | PLT-014 | Component factory review screens | Platform | G2 | PLT-012,BPL-016 | eldon | done |
 | PLT-015 | Observability: logs, metrics, traces, alerts | Platform | G1 | INF-004 | partner | todo |
-| PLT-016 | Feature flags | Platform | G2 | PLT-012 | eldon | todo |
+| PLT-016 | Feature flags | Platform | G2 | PLT-012 | eldon | done |
 | PLT-017 | Per-tenant brand asset storage | Platform | G2 | PLT-003,INF-011 | partner | todo |
 | PLT-018 | Entitlement to remove the Powered-by mark | Platform | G2 | PLT-006,BRD-007 | eldon | todo |
 | PLT-019 | Audited just-in-time support access | Platform | G3 | PLT-012,SEC-008 | eldon | todo |

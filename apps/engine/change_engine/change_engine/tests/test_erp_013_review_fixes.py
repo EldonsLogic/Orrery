@@ -205,7 +205,7 @@ def test_different_batch_ids_compete_for_one_company_opening(tmp_path):
 
 
 def test_master_updates_show_count_and_keep_verbatim_prior_values(backend):
-    old = {"customer_code": "C1", "customer_name": "  Before  ", "tax_id": "synthetic-old"}
+    old = {"customer_code": "C1", "customer_name": "\u200fBefore", "tax_id": "synthetic-old"}
     new = {"customer_code": "C1", "customer_name": "After", "tax_id": "synthetic-new"}
     importer = OpeningImporter(backend)
     apply(importer, batch({"Customer": [old]}))
@@ -217,7 +217,7 @@ def test_master_updates_show_count_and_keep_verbatim_prior_values(backend):
 
 
 def test_failed_master_update_restores_values_and_discards_audit(backend):
-    old = {"customer_code": "C1", "customer_name": "  Before  ", "tax_id": "synthetic-old"}
+    old = {"customer_code": "C1", "customer_name": "\u200fBefore", "tax_id": "synthetic-old"}
     importer = OpeningImporter(backend)
     apply(importer, batch({"Customer": [old]}))
     before = backend.records("tenant-a", "Synthetic Trading")

@@ -79,12 +79,17 @@ def canonical(value) -> str:
                       default=lambda v: format(v, "f") if isinstance(v, Decimal) else fail(), allow_nan=False)
 
 
+_PLAIN_TYPES = frozenset({str, dict, list, tuple, Decimal, int, float, bool, type(None)})
+
+
 def bounded(value, *, depth=0, budget=None):
     """Bound depth, node count, and bytes before copying or hashing input."""
     budget = [0, 0] if budget is None else budget
     budget[0] += 1
     if depth > 12 or budget[0] > 200_000:
         fail("IMP-LIMIT")
+    if type(value) not in _PLAIN_TYPES:
+        fail()  # exact built-in types only: a subclass could answer differently on a later read
     if isinstance(value, str):
         budget[1] += len(value.encode("utf-8"))
     elif isinstance(value, dict):
@@ -134,11 +139,18 @@ def text(value, *, allow_format_marks: bool = False):
             fail("IMP-SCHEMA")
         elif unicodedata.category(ch) in {"Cf", "Cc"}:
             fail("IMP-FORMULA")
-    if not allow_format_marks:
-        if (value != value.strip()
-                or any((ch.isspace() and ch != " ") or _is_default_ignorable(ch) for ch in value)
-                or unicodedata.normalize("NFKC", value) != value):
+    if (value != value.strip()
+            or any((ch.isspace() and ch != " ")
+                   or ch == "\u2800"
+                   or (ch not in SAFE_FORMAT_MARKS and _is_default_ignorable(ch))
+                   for ch in value)):
+        fail("IMP-SCHEMA")
+    if allow_format_marks:
+        stripped = "".join(ch for ch in value if ch not in SAFE_FORMAT_MARKS)
+        if stripped != stripped.strip() or "  " in stripped:
             fail("IMP-SCHEMA")
+    elif unicodedata.normalize("NFKC", value) != value:
+        fail("IMP-SCHEMA")
     return value
 
 
@@ -166,15 +178,23 @@ def number(value, *, positive=False, currency_precision=None):
     return n
 
 
-def business_key(entity, row):
-    """Prefer stable codes; names are fallback keys, stripping invisible marks from keys."""
+def _key_field(entity, row):
     for field in KEYS[entity]:
         if row.get(field):
-            val = row[field]
-            if field in NAME_TEXT_FIELDS:
-                val = "".join(c for c in val if c not in SAFE_FORMAT_MARKS)
-            return canonical([field, val])
+            return field
     fail()
+
+
+def _key_value(field, value):
+    if field in NAME_TEXT_FIELDS:
+        return unicodedata.normalize("NFC", "".join(c for c in value if c not in SAFE_FORMAT_MARKS))
+    return value
+
+
+def business_key(entity, row):
+    """Prefer stable codes; name fallback keys strip safe marks and key on NFC without altering stored values."""
+    field = _key_field(entity, row)
+    return canonical([field, _key_value(field, row[field])])
 
 
 def check_report(report, source_rows, *, allow_name_groups: bool = False):
@@ -194,7 +214,7 @@ def _resolve_master(target, value, incoming, lookup, references):
     """Resolve one reference against incoming and stored company masters."""
     candidates = []
     for key_field in KEYS[target]:
-        key = canonical([key_field, value])
+        key = canonical([key_field, _key_value(key_field, value)])
         master = incoming[target].get(key)
         if master is None:
             master = lookup(target, key)
@@ -220,6 +240,9 @@ def master_context(rows, row_clears, lookup):
             key = business_key(entity, row)
             before = lookup(entity, key)
             if before is not None:
+                key_field = _key_field(entity, row)
+                if key_field in NAME_TEXT_FIELDS and before.get(key_field) != row[key_field]:
+                    fail("IMP-DUPLICATE")
                 after = dict(before)
                 after.update(row)
                 for field in clears:

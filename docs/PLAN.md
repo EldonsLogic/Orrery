@@ -45,7 +45,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-029 | One personal GitHub account per founder in lanes, owners and docs; recover unmerged work (ADR-0023) | Governance | G0 | GOV-028 | eldon | done |
 | LEG-001 | Founders' agreement: roles, equity, decision rights, IP assignment incl. partner prototype | Legal | G0 | - | eldon | done |
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) | Legal | G0 | GOV-004 | eldon | doing |
-| LEG-003 | Engage counsel in KSA, UAE, Egypt and Qatar; scope of work | Legal | G0 | - | eldon | todo |
+| LEG-003 | Engage counsel in KSA, UAE, Egypt and Qatar; scope of work | Legal | G0 | - | eldon | doing |
 | LEG-004 | Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) | Legal | G0 | GOV-004 | partner | done |
 | LEG-005 | Register domains and social handles for the working name (hold only) | Legal | G0 | - | eldon | todo |
 | LEG-006 | GPL licence-boundary review: SaaS-only engine, separate services, no distribution | Legal | G1 | LEG-003 | eldon | todo |

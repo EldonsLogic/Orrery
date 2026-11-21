@@ -15,11 +15,12 @@ from components.compliance.country_pack import (
     PackNotFoundError,
     PackValidationError,
     UnknownCountryError,
-    apply_company_overrides,
     load_country_pack,
     resolve_country_pack,
     validate_pack,
 )
+# Private since CMP-034: resolve_country_pack is the only production entry (it runs the go-live gate first).
+from components.compliance.country_pack.loader import _apply_company_overrides as apply_company_overrides
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = PACKAGE_DIR / "pack.schema.json"

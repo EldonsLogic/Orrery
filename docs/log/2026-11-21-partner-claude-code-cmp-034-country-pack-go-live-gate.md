@@ -28,3 +28,12 @@ Unknown.
 - After merge, open pack PRs #255 (Qatar), #256 (Egypt) and #257 (KSA/UAE) need `environment="test"` in their tests.
 - Q-560: founders decide who certifies a pack and on what evidence.
 - Any production consumer of `compliance.countryPack` (BPL-027, ERP-012) must call the loader with the default `environment="production"`.
+
+## Review fix round
+Eldon's cross-model review of PR #259 (Fable 5.2) and the Gemini review agreed on four fixes and one question. Merged origin/main first (no-ff, no rebase).
+- Medium, `testOnly` in production: `_check_go_live` now refuses a `testOnly: true` pack in production whatever `allow_test_packs` says, pinned or unpinned. The old test that asserted the opposite is flipped and split into pinned, unpinned and message tests.
+- Medium, `secondary` evidence: production evidence is an allowlist, `PRODUCTION_EVIDENCE = {verified_official}`. `secondary` is refused because country-matrix.md treats SECONDARY as UNVERIFIED, until Q-560 is answered. Sandbox and test still accept it. Framework section 6 updated.
+- Low, `apply_company_overrides`: made private (`_apply_company_overrides`) and dropped from the package exports; `resolve_country_pack` is the only production entry, documented in its docstring and section 6. Chosen over adding an `environment` gate because it is the smaller change and leaves one gated path. The CMP-021 tests import the private name from `loader` directly. No caller outside the package exists on main; open PRs that import it need the same change.
+- Low, environment type: `_check_environment` uses `type(environment) is str`. New test with a `str` subclass whose `__eq__` returns True (it inherits `str.__ne__`, so before the fix `"staging"` passed the membership test and skipped the gate). A first draft of this test also overrode `__ne__` and passed before the fix; corrected so it fails without the fix.
+- Q-560: added Eldon's point that pack `status` is self-declared, so must it match the manifest `certification.level` and a named reviewer.
+- Tests: before 17 of 17 passing; with the new tests and no fix, 12 failures and an import error; after the fix 23 of 23 pass.

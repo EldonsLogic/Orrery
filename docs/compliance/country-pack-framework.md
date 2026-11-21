@@ -62,10 +62,11 @@ Raised in [open-questions.md](../open-questions.md) (`Q-289`, owner `eldon`):
 - **Regulatory evidence:** Pack facts follow [country-matrix.md](country-matrix.md) (`VERIFIED-OFFICIAL`, `SECONDARY`, or `UNVERIFIED` per `evidenceStatus`; no unverified regulatory claim is treated as verified).
 
 ## 6. Go-live gate (CMP-034)
-`load_country_pack` and `resolve_country_pack` take a keyword `environment`: `"sandbox"`, `"test"` or `"production"`. The default is `"production"`, so a caller that forgets the argument gets the strict gate. Any other value is refused with `CountryPackError`.
-- **Production** refuses a pack (`PackValidationError`, naming every reason) when `status` is below `certified` (`draft`, `tested`, `reviewed`) or `evidenceStatus` is `unverified`. `certified` and `regulated` pass, the same production boundary ADR-0034 sets for components; `secondary` evidence passes.
-- **Sandbox and test** accept `draft`, `tested` and `unverified` packs, so research-stage packs stay loadable for tests and demos.
-- `allow_test_packs` is unchanged and separate: a `testOnly: true` pack is refused in every environment unless it is set, and setting it never opens the production gate.
-- An unpinned production load picks the highest non-test version and then applies the gate; it does not fall back to an older certified version past a newer draft.
+`load_country_pack` and `resolve_country_pack` take a keyword `environment`: `"sandbox"`, `"test"` or `"production"`. The default is `"production"`, so a caller that forgets the argument gets the strict gate. Any other value, including a `str` subclass (the check is on the exact type), is refused with `CountryPackError`.
+- **Production** refuses a pack (`PackValidationError`, naming every reason) when `status` is below `certified` (`draft`, `tested`, `reviewed`), when `evidenceStatus` is anything but `verified_official`, or when the pack is marked `testOnly: true`. `certified` and `regulated` pass, the same production boundary ADR-0034 sets for components. Evidence is an allowlist: `secondary` is refused, because [country-matrix.md](country-matrix.md) treats SECONDARY as UNVERIFIED, until [Q-560](../open-questions.md) is answered.
+- **Sandbox and test** accept `draft`, `tested`, `secondary` and `unverified` packs, so research-stage packs stay loadable for tests and demos.
+- `allow_test_packs` opens `testOnly: true` packs in sandbox and test only. Without it a `testOnly` pack is refused in every environment; with it a `testOnly` pack is still refused in production, pinned or unpinned.
+- An unpinned production load picks the highest version (the highest non-test version unless `allow_test_packs` is set) and then applies the gate; it does not fall back to an older certified version past a newer draft or test pack.
+- `resolve_country_pack` is the only production entry. The override merger (`_apply_company_overrides`) is private, runs no go-live gate and takes a raw pack, so it is not exported from the package.
 
 The compiler's registry gate covers only `blueprint.components[]`, not `compliance.countryPack`, so any production consumer of a country pack must call the loader with `environment="production"` (the default). Who may certify a pack, and on what evidence, is open: [Q-560](../open-questions.md), linked to Q-202.

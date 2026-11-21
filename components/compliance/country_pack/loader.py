@@ -23,6 +23,8 @@ ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Go-live gate (CMP-034): mirrors ADR-0034's production boundary for components.
 ENVIRONMENTS = ("sandbox", "test", "production")
 PRODUCTION_STATUSES = frozenset({"certified", "regulated"})
+# `secondary` counts as UNVERIFIED (country-matrix.md) until Q-560 is answered; allowlist, not denylist.
+PRODUCTION_EVIDENCE = frozenset({"verified_official"})
 
 
 class CountryPackError(ValueError):
@@ -218,19 +220,22 @@ def validate_pack_or_raise(pack: Any, schema_path: Path | None = None) -> None:
 
 
 def _check_environment(environment: Any) -> None:
-    if not isinstance(environment, str) or environment not in ENVIRONMENTS:
+    # Exact type: a str subclass could override __eq__ to pass the membership test and skip the gate.
+    if type(environment) is not str or environment not in ENVIRONMENTS:
         raise CountryPackError(f"Unknown environment {environment!r} (allowed: {', '.join(ENVIRONMENTS)})")
 
 
 def _check_go_live(pack: dict[str, Any], label: str, environment: str) -> None:
-    """Refuse, in production, a pack below `certified` or with unverified evidence (fail closed)."""
+    """Refuse, in production, a pack below `certified`, without official evidence, or marked testOnly (fail closed)."""
     if environment != "production":
         return
     reasons = []
     if pack["status"] not in PRODUCTION_STATUSES:
         reasons.append(f"status '{pack['status']}' is below certified")
-    if pack["evidenceStatus"] == "unverified":
-        reasons.append("evidenceStatus is 'unverified'")
+    if pack["evidenceStatus"] not in PRODUCTION_EVIDENCE:
+        reasons.append(f"evidenceStatus '{pack['evidenceStatus']}' is not verified_official")
+    if pack.get("testOnly") is True:
+        reasons.append("pack is marked testOnly=true (allow_test_packs never applies in production)")
     if reasons:
         raise PackValidationError(f"Country pack {label} cannot be used in production: {'; '.join(reasons)}", errors=reasons)
 
@@ -254,8 +259,9 @@ def load_country_pack(
     """Load and validate a country pack from `<packs_dir>/<country>/<version>/pack.json`.
 
     Packs marked `testOnly: true` are rejected unless `allow_test_packs=True`. In `environment="production"`
-    (the default) a pack whose `status` is below `certified` or whose `evidenceStatus` is `unverified` is
-    rejected; `"sandbox"` and `"test"` accept them. Any other environment is rejected.
+    (the default) a pack whose `status` is below `certified`, whose `evidenceStatus` is not `verified_official`,
+    or that is marked `testOnly` (whatever `allow_test_packs` says) is rejected; `"sandbox"` and `"test"` accept
+    them. Any other environment, including a `str` subclass, is rejected.
     """
     _check_environment(environment)
     if not isinstance(country_code, str) or not COUNTRY_CODE_RE.match(country_code.strip()):
@@ -433,8 +439,11 @@ def _validate_merged_locale(
         errors.append(f"currency '{merged.get('currency')}' not in allowedCurrencies {allowed_cur}")
 
 
-def apply_company_overrides(pack: dict[str, Any], company_overrides: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Merge allowed company overrides onto a validated pack; fail closed on locked/unknown paths."""
+def _apply_company_overrides(pack: dict[str, Any], company_overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Merge allowed company overrides onto a validated pack; fail closed on locked/unknown paths.
+
+    Private (CMP-034): it runs no go-live gate. `resolve_country_pack` is the only production entry.
+    """
     validate_pack_or_raise(pack)
     overrides = {} if company_overrides is None else company_overrides
     if not isinstance(overrides, dict):
@@ -495,7 +504,8 @@ def resolve_country_pack(
     """Select, validate, and resolve a country pack with company overrides from explicit inputs.
 
     Requires a pinned `version` unless `allow_unpinned=True` and rejects `testOnly: true`
-    packs unless `allow_test_packs=True`. `environment` gates go-live as in `load_country_pack`.
+    packs unless `allow_test_packs=True` (never in production). `environment` gates go-live as in
+    `load_country_pack`. This is the only production entry: the override merger is private and ungated.
     """
     _check_environment(environment)
     if version is None and not allow_unpinned:
@@ -511,4 +521,4 @@ def resolve_country_pack(
     )
     if pack_id is not None and pack_id != pack["packId"]:
         raise PackValidationError(f"Requested pack_id '{pack_id}' does not match loaded pack '{pack['packId']}'")
-    return apply_company_overrides(pack, company_overrides=company_overrides)
+    return _apply_company_overrides(pack, company_overrides=company_overrides)

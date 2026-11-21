@@ -68,4 +68,4 @@ Raised in [open-questions.md](../open-questions.md) (`Q-289`, owner `eldon`):
 - `allow_test_packs` is unchanged and separate: a `testOnly: true` pack is refused in every environment unless it is set, and setting it never opens the production gate.
 - An unpinned production load picks the highest non-test version and then applies the gate; it does not fall back to an older certified version past a newer draft.
 
-The compiler's registry gate covers only `blueprint.components[]`, not `compliance.countryPack`, so any production consumer of a country pack must call the loader with `environment="production"` (the default). Who may certify a pack, and on what evidence, is open: [Q-558](../open-questions.md), linked to Q-202.
+The compiler's registry gate covers only `blueprint.components[]`, not `compliance.countryPack`, so any production consumer of a country pack must call the loader with `environment="production"` (the default). Who may certify a pack, and on what evidence, is open: [Q-560](../open-questions.md), linked to Q-202.

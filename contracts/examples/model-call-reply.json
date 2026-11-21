@@ -1,0 +1,17 @@
+{
+  "kind": "reply",
+  "call_id": "call_run_1_step_1",
+  "idempotency_key": "run_1:step_1:attempt_1",
+  "tier": "mid",
+  "text": "Order SO-1 totals 10.00.",
+  "tool_calls": [],
+  "stop_reason": "end",
+  "trust": "untrusted",
+  "tainted": true,
+  "usage": { "input_tokens": 412, "output_tokens": 38, "cached_tokens": 0, "cost_micro_usd": 1806 },
+  "attempts": 1,
+  "fallback_used": false,
+  "meter_event_id": "01HZX3Q9V6M2T8K4R7N5B1C0DE",
+  "model_id": "mid-primary",
+  "replayed": false
+}

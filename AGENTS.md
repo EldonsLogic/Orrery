@@ -26,6 +26,7 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the status printed by 
 2. `git pull` (or confirm you are on the latest main). If the person you work with has not done the one-time setup, walk them through [docs/ONBOARDING.md](docs/ONBOARDING.md) first; it also defines the two founders' lanes (stay in your lane's paths).
 3. Read [docs/RULES.md](docs/RULES.md) (every standing founder rule), the output of `python3 scripts/build_status.py` and the latest 3 files in `docs/log/` (or run `python3 scripts/session_start.py`).
 4. Pick a `todo` row in [docs/PLAN.md](docs/PLAN.md) whose Depends are `done`; set it `doing` with an owner.
+5. Create your session log now (`scripts/new_log.py`) and keep it live: log every delegated task and its result as it happens and push after each task, so another account or provider can resume (RULES 51).
 
 ## Session end checklist
 1. `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>`; fill it in.

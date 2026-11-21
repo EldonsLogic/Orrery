@@ -1,0 +1,114 @@
+.root {
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+}
+
+:lang(ar) .root {
+  line-height: var(--text-body-line-ar);
+}
+
+.topBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  padding-inline: max(calc(var(--space-unit) * 2), var(--safe-inline));
+  padding-block-start: max(var(--space-unit), var(--safe-block-start));
+  background: var(--color-surface);
+  border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+}
+
+.meta {
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+}
+
+.lang {
+  display: flex;
+  align-items: center;
+  gap: var(--space-unit);
+  margin-inline-start: auto;
+}
+
+.lang select {
+  min-block-size: max(var(--button-height), var(--touch-target));
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid color-mix(in srgb, var(--color-text) 25%, transparent);
+  border-radius: var(--radius-control);
+  font: inherit;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 2);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+}
+
+.nav a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--touch-target);
+  color: var(--color-primary);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+  padding: calc(var(--space-unit) * 3);
+  padding-inline: max(calc(var(--space-unit) * 3), var(--safe-inline));
+  max-inline-size: 72rem;
+}
+
+.main:focus {
+  outline: none;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+}
+
+.section h2,
+.main h1 {
+  margin: 0;
+}
+
+.countdown {
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-unit);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 2);
+  border: 0;
+  padding: 0;
+  margin: 0;
+}

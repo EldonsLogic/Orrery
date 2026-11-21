@@ -359,6 +359,12 @@ jobs:
           PYTHONPATH: services/blueprint:apps/engine/change_engine
         run: python3 -m pytest services/blueprint/tests/adapter -q
 
+      - name: Adapter-level cross-tenant isolation tests (mocked/simulated, SEC-004)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_sec_004_cross_tenant_isolation.py -q
+
       # --- evals ---
       - name: Install dependencies (evals)
         if: steps.filter.outputs.evals == 'true'

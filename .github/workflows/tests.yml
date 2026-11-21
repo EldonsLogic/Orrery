@@ -321,6 +321,12 @@ jobs:
           apps/engine/change_engine/change_engine/tests/test_erp_026_review_fixes.py
           apps/engine/change_engine/change_engine/tests/test_erp_026_pr126_review_fixes.py
 
+      - name: Trading fixture real-adapter offline tests (BPL-027; bench tests skip without a bench)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_027_fixture_real_adapter.py -q
+
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:

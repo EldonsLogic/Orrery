@@ -1082,6 +1082,14 @@ class ChangeEngineAdapter:
     ) -> None:
         kind, pointer, params = step["kind"], step["pointer"], step["params"]
         segs = _segs(pointer)
+        if persist_storage and self.frappe_backend is not None:
+            # Execute the engine backend BEFORE mutating site.config/site.retained so a failed
+            # step never mutates or aliases in-memory state. Partial engine effects are handled
+            # fail-closed in _execute_all (any exception not proven side_effect_free transitions
+            # the site to recovery_required rather than hiding engine-side writes).
+            if guard is not None:
+                guard()
+            self.frappe_backend.execute_step(site.tenant_id, step)
         cfg = site.config
         if kind == "settings.set":
             doc = cfg["settings"].setdefault(segs[0], {})
@@ -1124,8 +1132,6 @@ class ChangeEngineAdapter:
                 coll.append(defn)
 
         if persist_storage:
-            if self.frappe_backend is not None:
-                self.frappe_backend.execute_step(site.tenant_id, step)
             if guard is not None and kind in ("entity.add", "field.add"):
                 guard()  # the engine step above may have run long: re-check ownership before the DDL
             if kind == "entity.add":
@@ -1419,7 +1425,10 @@ class ChangeEngineAdapter:
                     err_code = "engine_unavailable"
                     err_details = {}
                 failure = AdapterError(err_code, {"stepSeq": seq, **(err_details or {})}, stage="execute")
-                comp_fault = err_code == "recovery_required"
+                if self.frappe_backend is not None:
+                    comp_fault = err_code == "recovery_required" or not bool(getattr(exc, "side_effect_free", False))
+                else:
+                    comp_fault = err_code == "recovery_required"
                 break
             entry_j["executed"] = True
             entry["status"] = "applied"

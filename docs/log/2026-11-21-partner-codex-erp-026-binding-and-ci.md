@@ -29,3 +29,8 @@ Unknown or approximate, if known.
 
 ## Next step
 ERP-026 still needs a green GitHub Actions MariaDB job, the live Frappe bench, and Tier 3 founder review and acceptance of ADR-0041. The local run verified the MariaDB store against the pinned image.
+
+## Merge verification
+Merged BPL-027 from main. Ownership checks run before journaling, before the backend call and before DDL. The backend runs before configuration changes, and backend errors without proof that they were side-effect-free require recovery. CI retains both offline suites and the ERP-026 MariaDB job. The decision index retains all main entries and ADR-0041.
+
+BPL-027 passed 5 tests with 9 bench cases skipped. ERP-026 passed 30 SQLite tests and 66 MariaDB tests with required mode enabled. Both lease-expiry checks passed. BPL-012 and ERP-012 passed 15 tests, BPL-008 passed 6, each conformance harness passed 208, CE-SEC mocks passed 54, and script tests passed 22.

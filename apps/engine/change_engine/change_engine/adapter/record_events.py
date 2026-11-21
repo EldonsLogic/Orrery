@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import copy
 from datetime import datetime, timezone
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import re
 import sys
-import threading
-import time
 
 from change_engine.adapter.mapping import entity_to_doctype
 from change_engine.guarded_apply.schema_reconciler import make_bounded_lock_key
@@ -37,8 +33,6 @@ RECORD_HOOKS = {
     "on_trash": "deleted",
     "after_rename": "updated",
 }
-_VALID_ENTITIES = frozenset(RECORD_ENTITIES.values())
-_VALID_VERBS = frozenset(RECORD_HOOKS.values())
 _TENANT_ID = re.compile(r"[A-Za-z0-9_]{1,64}")
 _ENGINE_NAME = re.compile(r"frappe|erpnext", re.IGNORECASE)
 _IGNORED_DIFF_FIELDS = frozenset({"modified", "modified_by", "creation", "owner", "idx", "docstatus"})
@@ -46,216 +40,9 @@ _BATCH_SIZE = 100
 _MAX_ROWS_PER_TICK = 10_000
 _MAX_DELIVERY_ATTEMPTS = 5
 
-# Self-contained Contract 4 ULID & envelope validation constants (mirrors services/blueprint/events).
-_ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-_ULID_RE = re.compile(r"[0-7][0-9A-HJKMNP-TV-Z]{25}")
-_ULID_MAX_MS = (1 << 48) - 1
-_ULID_RAND_BITS = 80
-_MAX_DATA_BYTES = 64 * 1024
-_MAX_DATA_DEPTH = 6
-_MAX_DATA_NODES = 5000
-_MAX_DATA_KEYS = 40
-_WHOLE_RECORD_KEYS = frozenset({"record", "whole_record", "full_record", "document", "doc", "row", "snapshot"})
-_WHOLE_RECORD_MARKER = "__whole_record__"
-_TENANT_KEYS = frozenset({"tenantid", "tenantids", "tenant"})
-_TENANT_VALUE_RE = re.compile(r"t_[A-Za-z0-9_]{3,62}")
-_ISO_Z_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z")
-
-
-class RecordEventError(Exception):
-    """Contract validation or rejection error raised by the self-contained engine emitter."""
-
-    def __init__(self, code: str, message: str = "") -> None:
-        self.code = code
-        self.message = message
-        super().__init__(f"{code}: {message}" if message else code)
-
-
-class _UlidGenerator:
-    """Monotonic Crockford base32 ULID generator using the Python standard library only."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._last_ms = -1
-        self._last_rand = 0
-
-    @staticmethod
-    def _encode(value: int) -> str:
-        out = []
-        for _ in range(26):
-            out.append(_ULID_ALPHABET[value & 31])
-            value >>= 5
-        return "".join(reversed(out))
-
-    @staticmethod
-    def _fresh() -> int:
-        return int.from_bytes(os.urandom(10), "big")
-
-    def generate(self) -> str:
-        with self._lock:
-            ms = max(time.time_ns() // 1_000_000, self._last_ms)
-            if ms == self._last_ms:
-                rand = self._last_rand + 1
-                if rand >> _ULID_RAND_BITS:
-                    ms += 1
-                    rand = self._fresh()
-            else:
-                rand = self._fresh()
-            if ms > _ULID_MAX_MS:
-                raise RecordEventError("EVS-ENV-001", "ULID timestamp out of range")
-            self._last_ms, self._last_rand = ms, rand
-            return self._encode((ms << _ULID_RAND_BITS) | rand)
-
-
-_ULID_GENERATOR = _UlidGenerator()
-
-
-def _new_ulid() -> str:
-    return _ULID_GENERATOR.generate()
-
-
-def _is_valid_ulid(value: object) -> bool:
-    return isinstance(value, str) and _ULID_RE.fullmatch(value) is not None
-
-
-def _iso_z_now() -> str:
-    now = datetime.now(timezone.utc)
-    return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
-
-
-def _norm_key(key: str) -> str:
-    return re.sub(r"[^a-z]", "", key.lower())
-
-
-def _validate_record_data(data: object, tenant_id: str) -> None:
-    """Validate record event `data` against Contract 4 shape, size, and tenant-isolation rules."""
-    if not isinstance(data, dict):
-        raise RecordEventError("EVS-DATA-001", "data must be a JSON object")
-
-    nodes = 0
-    keys = 0
-    stack: list[tuple[object, int, str]] = [(data, 1, "data")]
-    while stack:
-        val, depth, path = stack.pop()
-        nodes += 1
-        if nodes > _MAX_DATA_NODES:
-            raise RecordEventError("EVS-DATA-002", f"{path}: more than {_MAX_DATA_NODES} values")
-        if depth > _MAX_DATA_DEPTH:
-            raise RecordEventError("EVS-DATA-003", f"{path}: nesting deeper than {_MAX_DATA_DEPTH}")
-        if isinstance(val, dict):
-            keys += len(val)
-            if keys > _MAX_DATA_KEYS:
-                raise RecordEventError("EVS-DATA-004", f"data: more than {_MAX_DATA_KEYS} keys")
-            if val.get(_WHOLE_RECORD_MARKER):
-                raise RecordEventError("EVS-DATA-004", f"{path}: object marked as a whole record")
-            for k, v in val.items():
-                if not isinstance(k, str):
-                    raise RecordEventError("EVS-DATA-005", f"{path}: non-string key")
-                child_path = f"{path}.{k[:60]}"
-                if _norm_key(k) in _TENANT_KEYS:
-                    raise RecordEventError("EVS-TENANT-001", f"{child_path}: data must not carry a tenant id")
-                if k in _WHOLE_RECORD_KEYS and isinstance(v, (dict, list)):
-                    raise RecordEventError("EVS-DATA-004", f"{child_path}: whole record embedded")
-                stack.append((v, depth + 1, child_path))
-        elif isinstance(val, list):
-            for idx, item in enumerate(val):
-                stack.append((item, depth + 1, f"{path}[{idx}]"))
-        elif isinstance(val, str):
-            if _TENANT_VALUE_RE.fullmatch(val) and val != tenant_id:
-                raise RecordEventError("EVS-TENANT-001", f"{path}: another tenant's id inside data")
-        elif isinstance(val, bool) or val is None or isinstance(val, int):
-            pass
-        elif isinstance(val, float):
-            if not math.isfinite(val):
-                raise RecordEventError("EVS-DATA-005", f"{path}: NaN or infinity")
-        else:
-            raise RecordEventError("EVS-DATA-005", f"{path}: value of type {type(val).__name__} is not JSON")
-
-    if "changed_fields" in data:
-        cf = data["changed_fields"]
-        if not isinstance(cf, list) or len(cf) > 100 or not all(
-            isinstance(item, str) and 1 <= len(item) <= 256 for item in cf
-        ):
-            raise RecordEventError("EVS-DATA-001", "data.changed_fields must be a list of <= 100 non-empty strings")
-    if "changes" in data and not isinstance(data["changes"], dict):
-        raise RecordEventError("EVS-DATA-001", "data.changes must be an object")
-
-    try:
-        encoded = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
-    except (TypeError, ValueError) as exc:
-        raise RecordEventError("EVS-DATA-005", "data is not serialisable as JSON") from exc
-    if len(encoded) > _MAX_DATA_BYTES:
-        raise RecordEventError("EVS-DATA-002", f"data exceeds {_MAX_DATA_BYTES} bytes")
-
-
-def _build_record_event(
-    *,
-    tenant_id: str,
-    actor_kind: str,
-    actor_id: str,
-    entity: str,
-    verb: str,
-    data: dict,
-    event_id: str,
-    subject_id: str,
-) -> dict:
-    """Construct and validate a Contract 4 business record event envelope using stdlib only."""
-    if entity not in _VALID_ENTITIES or verb not in _VALID_VERBS:
-        raise RecordEventError("EVS-TYPE-001", f"unsupported record event type: {entity}.{verb}")
-    if not _is_valid_ulid(event_id):
-        raise RecordEventError("EVS-ENV-001", "event_id is not a valid ULID")
-    if (not isinstance(tenant_id, str) or not _TENANT_ID.fullmatch(tenant_id)
-            or tenant_id == "platform" or _ENGINE_NAME.search(tenant_id)):
-        raise RecordEventError("EVS-TENANT-002", "invalid tenant_id for record event")
-    if actor_kind not in ("user", "system"):
-        raise RecordEventError("EVS-ENV-001", "invalid actor.kind")
-    if not isinstance(actor_id, str) or not (1 <= len(actor_id) <= 256):
-        raise RecordEventError("EVS-ENV-001", "invalid actor.id")
-    if not isinstance(subject_id, str) or not (1 <= len(subject_id) <= 256):
-        raise RecordEventError("EVS-SUBJ-001", "invalid subject.id")
-
-    _validate_record_data(data, tenant_id)
-    now_iso = _iso_z_now()
-    if not _ISO_Z_RE.fullmatch(now_iso):
-        raise RecordEventError("EVS-ENV-001", "invalid timestamp format")
-
-    return {
-        "event_id": event_id,
-        "type": f"{entity}.{verb}",
-        "schema_version": 1,
-        "occurred_at": now_iso,
-        "recorded_at": now_iso,
-        "tenant_id": tenant_id,
-        "actor": {
-            "kind": actor_kind,
-            "id": actor_id,
-            "role_ids": [],
-            "on_behalf_of": None,
-        },
-        "source": {"service": "engine"},
-        "correlation_id": event_id,
-        "causation_id": None,
-        "subject": {"entity": entity, "id": subject_id},
-        "data": copy.deepcopy(data),
-        "data_class": "business",
-        "trace": None,
-    }
-
-
-def _is_event_rejection_error(exc: BaseException) -> bool:
-    """True when the sink rejected the event itself (contract/poison error), False for outages."""
-    if isinstance(exc, RecordEventError):
-        return True
-    evstream_mod = sys.modules.get("evstream")
-    ev_err = getattr(evstream_mod, "EventError", None) if evstream_mod is not None else None
-    if isinstance(ev_err, type) and issubclass(ev_err, BaseException) and isinstance(exc, ev_err):
-        return True
-    code = getattr(exc, "code", None)
-    return isinstance(code, str) and code.startswith("EVS-") and type(exc).__name__ == "EventError"
-
 
 def _import_evstream():
-    """Optional helper to import evstream in monorepo/test environments (not required at runtime)."""
+    """Import evstream via environment, installed package, or monorepo discovery."""
     try:
         import evstream  # type: ignore
         return evstream
@@ -271,9 +58,12 @@ def _import_evstream():
                 cand_str = str(cand)
                 if cand_str not in sys.path:
                     sys.path.insert(0, cand_str)
-                import evstream  # type: ignore
-                return evstream
-        raise
+                try:
+                    import evstream  # type: ignore
+                    return evstream
+                except ModuleNotFoundError as exc:
+                    raise RuntimeError("Event stream package is required on tenant-bound sites") from exc
+        raise RuntimeError("Event stream package is required on tenant-bound sites")
 
 
 def _utc_now() -> str:
@@ -419,6 +209,13 @@ def record_document_event(doc, method: str, *args) -> None:
     """Run after the engine writes a record, with the same connection and no commit."""
     import frappe
 
+    # A bare bench/install site is not an event producer until trusted provisioning
+    # binds it to a tenant. A sink or even an invalid explicit binding must fail
+    # closed below; absence of a sink never disables capture for a bound tenant.
+    if "tenant_id" not in frappe.conf and not frappe.conf.get("record_event_sink"):
+        return
+    tenant_id = _site_tenant(frappe)
+
     entity = RECORD_ENTITIES[doc.doctype]
     verb = RECORD_HOOKS[method]
     previous = None
@@ -435,27 +232,29 @@ def record_document_event(doc, method: str, *args) -> None:
             return
         raise RuntimeError("Event outbox tables are missing; run bench migrate")
 
-    tenant_id = _site_tenant(frappe)
+    evstream = _import_evstream()
+    Context, build_event, new_ulid = evstream.Context, evstream.build_event, evstream.new_ulid
+
     user = frappe.session.user
     actor_kind = "user" if user else "system"
     actor_id = _opaque_id(tenant_id, "actor", user) if user else "runtime"
-    event_id = _new_ulid()
+    event_id = new_ulid()
 
     if method == "after_rename":
         old_name = args[0] if len(args) >= 1 and args[0] else doc.name
         new_name = args[1] if len(args) >= 2 and args[1] else doc.name
         merge = bool(args[2]) if len(args) >= 3 else False
         subject_id, merged_from_id = _rename_subject_id(
-            frappe.db, entity, old_name, new_name, merge=merge, new_ulid=_new_ulid,
+            frappe.db, entity, old_name, new_name, merge=merge, new_ulid=new_ulid,
         )
         data: dict = {"id": subject_id, "changed_fields": ["name"]}
         if merged_from_id:
             data["merged_from_id"] = merged_from_id
     else:
         if verb == "created":
-            subject_id = _new_subject_id(frappe.db, entity, doc.name, _new_ulid)
+            subject_id = _new_subject_id(frappe.db, entity, doc.name, new_ulid)
         else:
-            subject_id = _get_or_create_subject_id(frappe.db, entity, doc.name, _new_ulid)
+            subject_id = _get_or_create_subject_id(frappe.db, entity, doc.name, new_ulid)
         data = {"id": subject_id}
         if verb in ("submitted", "cancelled"):
             data["changes"] = {"status": verb}
@@ -468,17 +267,15 @@ def record_document_event(doc, method: str, *args) -> None:
                 data["changed_fields"] = changed
         amended_from = doc.get("amended_from")
         if verb == "created" and amended_from:
-            data["amended_from_id"] = _get_or_create_subject_id(frappe.db, entity, amended_from, _new_ulid)
+            data["amended_from_id"] = _get_or_create_subject_id(frappe.db, entity, amended_from, new_ulid)
 
-    event = _build_record_event(
-        tenant_id=tenant_id,
-        actor_kind=actor_kind,
-        actor_id=actor_id,
-        entity=entity,
-        verb=verb,
-        data=data,
+    event = build_event(
+        Context(tenant_id, actor_kind, actor_id, "engine"),
+        f"{entity}.{verb}",
+        data,
         event_id=event_id,
-        subject_id=subject_id,
+        correlation_id=event_id,
+        subject={"entity": entity, "id": subject_id},
     )
     frappe.db.sql(
         f"INSERT INTO `{OUTBOX_TABLE}` (event_id, payload) VALUES (%s, %s)",
@@ -514,6 +311,7 @@ def publish_pending(*, max_rows: int = _MAX_ROWS_PER_TICK, max_attempts: int = _
         return 0
 
     tenant_id = _site_tenant(frappe)
+    event_error = _import_evstream().EventError
     append = frappe.get_attr(sink_path)
     db = frappe.db
     # One drainer per site database. A DB lock does not lock the document writes.
@@ -560,7 +358,7 @@ def publish_pending(*, max_rows: int = _MAX_ROWS_PER_TICK, max_attempts: int = _
                         raise RuntimeError("Event sink returned an invalid acknowledgment")
                 except Exception as exc:
                     next_attempts = attempts + 1
-                    if _is_event_rejection_error(exc) and next_attempts >= max_attempts:
+                    if isinstance(exc, event_error) and next_attempts >= max_attempts:
                         _dead_letter_row(db, event_id, next_attempts, str(exc))
                         continue
                     db.rollback()

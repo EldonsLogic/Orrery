@@ -132,10 +132,8 @@ def _provision_site(
     if not SAFE_SITE_RE.fullmatch(site_name):
         raise ValueError(f"Unsafe site name: {site_name}")
     db_name = f"_ce005_{uuid.uuid4().hex[:10]}"
-    tenant_slug = re.sub(r"[^A-Za-z0-9_]", "_", site_name.split(".", 1)[0])
-    tenant_id = f"t_{tenant_slug}"[:64]
     script = (
-        'site="$1"; db_name="$2"; tenant_id="$3"; '
+        'site="$1"; db_name="$2"; '
         'bench new-site "$site" '
         '--db-host mariadb '
         '--mariadb-user-host-login-scope=% '
@@ -143,8 +141,7 @@ def _provision_site(
         '--admin-password "$ADMIN_PASSWORD" '
         '--db-name "$db_name" '
         '--db-password "$ADMIN_PASSWORD" '
-        '--install-app erpnext --install-app hrms --install-app change_engine && '
-        'bench --site "$site" set-config tenant_id "$tenant_id"'
+        '--install-app erpnext --install-app hrms --install-app change_engine'
     )
     res = _run_compose(
         project,
@@ -163,7 +160,6 @@ def _provision_site(
         "ce_sec_005_provision",
         site_name,
         db_name,
-        tenant_id,
         timeout=300,
     )
     if res.returncode != 0:

@@ -52,3 +52,5 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0044-ag-ui-agent-to-screen-transport.md](ADR-0044-ag-ui-agent-to-screen-transport.md) | AG-UI as the agent-to-screen transport, not an authority | Proposed |
 | [ADR-0047-mfa-design.md](ADR-0047-mfa-design.md) | MFA design: TOTP now, step-up, recovery, throttling, session binding | Proposed |
 | [ADR-0048-agent-authority-propose-not-act.md](ADR-0048-agent-authority-propose-not-act.md) | Agent authority: agents propose, humans and deterministic code decide | Proposed |
+| [ADR-0049-human-review-queue.md](ADR-0049-human-review-queue.md) | Human review queue and the team_reviewed gate evidence | Proposed |
+| [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |

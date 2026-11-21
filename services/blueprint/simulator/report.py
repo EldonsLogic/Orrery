@@ -54,7 +54,7 @@ def _period(period) -> tuple:
 
 def simulate(rows, *, tenant_id: str, period: tuple, tool_set: dict, mapping: dict, caller: dict, port,
              connector_id: str = "intake", findings=None, kind_aliases=None, tax_codes=None, accounts=None,
-             tolerances=None, run_epoch: int = 0, on_existing: str = "refuse") -> dict:
+             tolerances=None, run_epoch: int = 0, on_existing: str = "refuse", blueprint_id=None, blueprint_digest=None) -> dict:
     """Replay one month of intake rows on the tenant behind `port` and return the report dict.
 
     `on_existing`: `refuse` (default; a tenant that already reports data aborts the run, SIM-129), `resume`
@@ -62,10 +62,19 @@ def simulate(rows, *, tenant_id: str, period: tuple, tool_set: dict, mapping: di
     (fresh epoch on a tenant with data, flagged SIM-130; totals will include the earlier documents)."""
     if on_existing not in ("refuse", "resume", "allow"):
         raise SimulatorError("SIM-E01", "on_existing")
+    # The Blueprint the run was built from (BPL-020, Q-510): its id and the content digest the build state machine
+    # computes. They sit in the report body, so the report digest that sign-off binds covers them. Both or neither.
+    if (blueprint_id is None) != (blueprint_digest is None) or (blueprint_id is not None and (
+            not isinstance(blueprint_id, str) or not 0 < len(blueprint_id) <= 80
+            or not isinstance(blueprint_digest, str) or len(blueprint_digest) != 64
+            or any(c not in "0123456789abcdef" for c in blueprint_digest))):
+        raise SimulatorError("SIM-E01", "blueprint binding")
     try:
         with localcontext(CTX):  # exact arithmetic; rounding, invalid or overflow raises instead of passing
             report = _simulate(rows, tenant_id, period, tool_set, mapping, caller, port, connector_id, findings,
                                kind_aliases, tax_codes, accounts, tolerances, run_epoch, on_existing)
+        if blueprint_id is not None:   # an unbound report keeps its old shape and digest
+            report["blueprintId"], report["blueprintDigest"] = blueprint_id, blueprint_digest
     except decimal.DecimalException:
         raise SimulatorError("SIM-E05", "decimal arithmetic")
     errors = validate_report(report)  # never hand out a report that breaks its own schema

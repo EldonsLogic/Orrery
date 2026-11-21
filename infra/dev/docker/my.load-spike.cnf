@@ -1,0 +1,22 @@
+# ERP-002 50-tenant load spike: MariaDB settings used for the tuned phases (sites 28..50 and
+# all load waves). NOT mounted by default; the dev stack keeps the light `my.cnf`.
+#
+# Values are the ones the run's own `SHOW VARIABLES` snapshots recorded. In the live run they
+# were applied at runtime between batches with `SET GLOBAL` (shell history was not kept), which
+# is equivalent for these two dynamic variables. Variables not listed were left at the pinned
+# image's defaults; their values were not recorded and are UNVERIFIED.
+#
+# Reproduce by mounting this file next to my.cnf, for example in a compose override:
+#   mariadb:
+#     volumes:
+#       - ./my.load-spike.cnf:/etc/mysql/conf.d/load-spike.cnf:ro
+# or at runtime (needs the root password, never put it on the command line in shared shells):
+#   SET GLOBAL innodb_buffer_pool_size = 1073741824;
+#   SET GLOBAL table_open_cache = 8192;
+[mysqld]
+innodb_buffer_pool_size = 1G
+table_open_cache = 8192
+# Not tuned. Observed container default during the run (read-only variable, set by the
+# container ulimit): open_files_limit = 32270.
+# innodb_flush_log_at_trx_commit: server default 1 (used for all load waves). The runner sets 2
+# only during bulk SQL restore (--bulk-import-trx-commit-2) and restores 1 afterwards.

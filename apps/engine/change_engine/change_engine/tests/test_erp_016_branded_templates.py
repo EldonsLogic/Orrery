@@ -2382,7 +2382,7 @@ class TestGrandAndNetTotalDiscounts(unittest.TestCase):
 
 
 class TestInvoiceDiscountInformationRow(unittest.TestCase):
-    """Item 4 (UNVERIFIED, Q-520): the allocated invoice discount is also shown on its own."""
+    """Item 4 (UNVERIFIED, Q-552): the allocated invoice discount is also shown on its own."""
 
     def _row(self, doc):
         return _printed_totals(doc).get(_INFO_ROW_EN)
@@ -2622,7 +2622,7 @@ def _uae_variants():
 class TestNeutralModeIsNeverAUaeTaxInvoice(unittest.TestCase):
     # UNVERIFIED: Cabinet Decision 52/2017 Art. 59(1) (https://tax.gov.ae/en/legislation.aspx,
     # accessed 2026-11-21) needs "Tax Invoice", supplier TRN and tax in AED; neutral mode prints
-    # none of that, so it is refused until a UAE mode exists (Q-523).
+    # none of that, so it is refused until a UAE mode exists (Q-553).
     def test_uae_supplier_or_aed_is_refused_with_a_stable_error(self):
         from change_engine.print_formats.branded_documents import UaeTaxInvoiceModeUnavailable
 

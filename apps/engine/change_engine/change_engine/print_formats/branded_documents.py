@@ -53,7 +53,7 @@ _ZATCA_KINDS = {"standard": "tax_invoice_zatca_sa_standard",
 
 
 class UaeTaxInvoiceModeUnavailable(ValueError):
-    """Neutral mode cannot print a UAE tax invoice; there is no UAE mode yet (Q-523).
+    """Neutral mode cannot print a UAE tax invoice; there is no UAE mode yet (Q-553).
 
     UNVERIFIED: Cabinet Decision 52/2017 Art. 59(1) (https://tax.gov.ae/en/legislation.aspx,
     accessed 2026-11-21) asks for the words "Tax Invoice", the supplier TRN (and the recipient's
@@ -223,7 +223,7 @@ def render_branded_tax_invoice_html(
     checked = check_amounts(snapshot, errors, tax_invoice=True)
     if errors or checked is None:
         raise ValueError("; ".join(errors))
-    # ZATCA lists line and invoice discounts separately (UNVERIFIED, Q-520): in tax invoice mode
+    # ZATCA lists line and invoice discounts separately (UNVERIFIED, Q-552): in tax invoice mode
     # the invoice discount already spread into the lines is also shown on an informational row.
     included = (
         (_pair("invoice_discount_included"), checked.allocated)

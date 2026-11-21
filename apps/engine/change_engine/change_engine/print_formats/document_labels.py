@@ -51,7 +51,7 @@ DOCUMENT_LABELS: dict[str, tuple[str, str]] = {
     "status_pending": ("قيد الانتظار", "Pending"),
     "status_accepted": ("مقبول", "Accepted"),
     "status_expired": ("منتهي", "Expired"),
-    # Informational only (ERP-016 round 5, Q-520): the invoice discount the engine spread into
+    # Informational only (ERP-016 round 5, Q-552): the invoice discount the engine spread into
     # the line amounts, shown on its own; it is never subtracted again.
     "invoice_discount_included": ("خصم الفاتورة (مشمول في مبالغ البنود)",
                                   "Invoice discount (included in line amounts)"),

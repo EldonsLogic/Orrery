@@ -1,6 +1,6 @@
 """Durable, append-only admission and audit journal for guarded business actions."""
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -34,6 +34,16 @@ class ActionAudit:
     decision: str
     reason: str
     break_glass: bool = False
+
+
+@dataclass(frozen=True)
+class ActionOutcome:
+    """One observed effect outcome for an admitted tenant request."""
+
+    tenant_id: str
+    request_id: str
+    status: str
+    timestamp: datetime
 
 
 def _serialize(value: object) -> list[str] | str:
@@ -83,6 +93,22 @@ class ActionPolicyStore:
                 BEFORE INSERT ON action_policy_audit
                 WHEN EXISTS (SELECT 1 FROM action_policy_audit WHERE sequence = NEW.sequence)
                 BEGIN SELECT RAISE(ABORT, 'Append-only audit'); END;
+                CREATE TABLE IF NOT EXISTS action_policy_outcomes (
+                    tenant_id TEXT NOT NULL, request_id TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK (status IN ('applied', 'failed', 'unknown')),
+                    timestamp TEXT NOT NULL, PRIMARY KEY (tenant_id, request_id)
+                );
+                CREATE TRIGGER IF NOT EXISTS action_policy_outcomes_no_update
+                BEFORE UPDATE ON action_policy_outcomes
+                BEGIN SELECT RAISE(ABORT, 'Append-only outcome'); END;
+                CREATE TRIGGER IF NOT EXISTS action_policy_outcomes_no_delete
+                BEFORE DELETE ON action_policy_outcomes
+                BEGIN SELECT RAISE(ABORT, 'Append-only outcome'); END;
+                CREATE TRIGGER IF NOT EXISTS action_policy_outcomes_no_replace
+                BEFORE INSERT ON action_policy_outcomes
+                WHEN EXISTS (SELECT 1 FROM action_policy_outcomes
+                             WHERE tenant_id = NEW.tenant_id AND request_id = NEW.request_id)
+                BEGIN SELECT RAISE(ABORT, 'Append-only outcome'); END;
             """)
         db.close()
 
@@ -144,5 +170,33 @@ class ActionPolicyStore:
                 fields["approvers"] = tuple(_principal(actor) for actor in fields["approvers"])
                 records.append(ActionAudit(**fields))
             return tuple(records)
+        finally:
+            db.close()
+
+    def record_outcome(self, tenant_id: str, request_id: str, status: str) -> None:
+        """Append an outcome only for an admitted request, preserving all replay claims."""
+        db = sqlite3.connect(self._uri, uri=True)
+        try:
+            with db:
+                inserted = db.execute(
+                    "INSERT INTO action_policy_outcomes (tenant_id, request_id, status, timestamp) "
+                    "SELECT tenant_id, claim, ?, ? FROM action_policy_claims "
+                    "WHERE tenant_id = ? AND kind = 'request' AND claim = ?",
+                    (status, datetime.now(timezone.utc).isoformat(), tenant_id, request_id),
+                ).rowcount
+                if inserted != 1:
+                    raise ValueError("Outcome requires a request claim")
+        finally:
+            db.close()
+
+    def outcome_for(self, tenant_id: str, request_id: str) -> ActionOutcome | None:
+        """Read the recorded outcome, if any, for a request in the given tenant."""
+        db = sqlite3.connect(self._uri, uri=True)
+        try:
+            row = db.execute(
+                "SELECT status, timestamp FROM action_policy_outcomes WHERE tenant_id = ? AND request_id = ?",
+                (tenant_id, request_id),
+            ).fetchone()
+            return ActionOutcome(tenant_id, request_id, row[0], datetime.fromisoformat(row[1])) if row else None
         finally:
             db.close()

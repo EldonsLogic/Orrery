@@ -276,6 +276,7 @@ class ChangeEngineAdapter:
         *,
         action_policy: ActionPolicyEnforcer | None = None,
         action_handlers: dict[str, Callable[[Any, AuthorizedAction], Any]] | None = None,
+        resolve_session_tenant: Callable[[str], str | None] | None = None,
     ) -> None:
         self.test_hooks = test_hooks
         self.db_path = db_path
@@ -283,6 +284,8 @@ class ChangeEngineAdapter:
         self.frappe_backend = frappe_backend
         self._action_policy = action_policy
         self._action_handlers = dict(action_handlers or {})
+        # This lookup is backed by authenticated session state and receives no request data.
+        self._resolve_session_tenant = resolve_session_tenant
         self.now = 0
         self._seq = self._initial_seq()
         self._faults: list[dict[str, Any]] = []
@@ -304,7 +307,7 @@ class ChangeEngineAdapter:
             "retained": site.retained,
         }
 
-    def execute_as_caller(
+    def _execute_as_caller(
         self,
         tenant_id: str,
         caller: dict[str, Any] | None,
@@ -327,22 +330,32 @@ class ChangeEngineAdapter:
         """Dispatch a business write to its server-registered handler after policy admission.
 
         Handlers run with the resolved human's engine permissions. They must apply
-        the admitted snapshot and verify its target revisions in the effect transaction.
+        the admitted snapshot, verify target revisions in the effect transaction,
+        and return only after a durable effect.
         """
         if self._action_policy is None:
             raise AdapterError("permission_denied", stage="authorize")
+        tenant_id = None
+        if self._resolve_session_tenant is not None and type(session) is str:
+            try:
+                tenant_id = self._resolve_session_tenant(session)
+            except Exception:
+                pass  # The enforcer records the missing binding as a refusal.
         action_id = request.action_id if type(request) is ActionRequest else None
         handler = self._action_handlers.get(action_id) if type(action_id) is str else None
         action = self._action_policy.authorize(
-            session, request, handler_available=callable(handler) and self.frappe_backend is not None,
+            session, request, session_tenant_id=tenant_id,
+            handler_available=callable(handler) and self.frappe_backend is not None,
         )
-        if action is None or handler is None:
+        if action is None or handler is None or tenant_id is None:
             raise AdapterError("permission_denied", stage="authorize")
         caller = {"service": "operate_gateway", "onBehalfOf": {"kind": "user", "id": action.submitter_id}}
         try:
-            return self.execute_as_caller(action.request.tenant_id, caller, lambda engine: handler(engine, action))
-        except AdapterError as exc:
-            code = "permission_denied" if exc.code == "permission_denied" else "engine_unavailable"
+            return self._action_policy.execute_admitted(
+                action, lambda run: self._execute_as_caller(tenant_id, caller, run), handler,
+            )
+        except Exception as exc:
+            code = "permission_denied" if isinstance(exc, AdapterError) and exc.code == "permission_denied" else "engine_unavailable"
             raise AdapterError(code, stage="execute") from None
 
     def _initial_seq(self) -> int:

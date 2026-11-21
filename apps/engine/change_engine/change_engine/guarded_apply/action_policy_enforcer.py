@@ -2,16 +2,21 @@
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
+from fractions import Fraction
 from hashlib import sha256
 from hmac import compare_digest
 import json
 import re
-from typing import Callable
+from typing import Any, Callable
 
 from .action_policy_store import ActionAudit, ActionPolicyStore, Principal, valid_instant
 
 _DECIMAL = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
-_CURRENCY = re.compile(r"[A-Z]{3}")
+# Minor-unit exponents for the currencies supported by the platform simulator.
+_CURRENCY_PRECISION = {
+    "SAR": 2, "AED": 2, "EGP": 2, "QAR": 2, "USD": 2, "EUR": 2, "GBP": 2,
+    "KWD": 3, "BHD": 3, "OMR": 3, "JOD": 3,
+}
 _MAX_SAFE_INT = 2**53 - 1
 
 
@@ -173,10 +178,19 @@ def _require(condition: object, reason: str) -> None:
         raise _Denied(reason)
 
 
+def _money(value: object, currency: object) -> Decimal:
+    """Validate non-negative monetary text at the currency's scale without rounding."""
+    _require(type(currency) is str and currency in _CURRENCY_PRECISION, "invalid_currency")
+    amount = _decimal(value)
+    _require(not amount.is_signed() and -amount.as_tuple().exponent <= _CURRENCY_PRECISION[currency],
+             "invalid_money")
+    return amount
+
+
 def _validated_rows(table: PolicyTable) -> dict[str, PolicyRow]:
     _require(type(table) is PolicyTable and _identifier(table.version) and type(table.rows) is tuple,
              "invalid_table")
-    _require(table.currency is None or type(table.currency) is str and _CURRENCY.fullmatch(table.currency),
+    _require(table.currency is None or type(table.currency) is str and table.currency in _CURRENCY_PRECISION,
              "invalid_table")
     rows = {row.action_id: row for row in table.rows}
     _require(len(rows) == len(table.rows) == len(_ROWS), "invalid_table")
@@ -185,7 +199,8 @@ def _validated_rows(table: PolicyTable) -> dict[str, PolicyRow]:
         _require(type(row) is PolicyRow and type(row.enabled) is bool and type(row.floor) is bool and type(row.approvals) is int
                  and type(row.version) is int and replace(row, cap=None) == baseline, "invalid_table")
         if row.cap is not None:
-            _require(row.threshold_approval and _decimal(row.cap) >= 0 and table.currency, "invalid_table")
+            _require(row.threshold_approval, "invalid_table")
+            _money(row.cap, table.currency)
     return rows
 
 
@@ -218,17 +233,41 @@ def _check_payload(request: ActionRequest, row: PolicyRow) -> None:
         _require(_identifier(payload["customer"]) and type(ids) is list and bool(ids)
                  and all(_identifier(key) and key in targets for key in ids), "invalid_revisions")
 
+    currency = payload.get("currency")
     if "currency" in payload:
-        _require(type(payload["currency"]) is str and _CURRENCY.fullmatch(payload["currency"]), "invalid_currency")
-    if "lines" in row.required_fields:
+        _require(type(currency) is str and currency in _CURRENCY_PRECISION, "invalid_currency")
+    total = _money(payload["total"], currency) if "total" in payload else None
+    for field in ("amount", "discount"):
+        if field in payload:
+            _money(payload[field], currency)
+    if "lines" in payload:
         lines = payload["lines"]
         _require(type(lines) is list and bool(lines), "invalid_lines")
+        line_total = Fraction(0)
+        priced = row.action_id != "AP-STOCK-01" or total is not None
         for line in lines:
             _require(type(line) is dict and _identifier(line.get("item")), "invalid_lines")
             quantity = line.get("quantity")
-            _require((quantity if type(quantity) is int else _decimal(quantity)) > 0, "invalid_quantity")
-            if row.action_id != "AP-STOCK-01":
-                _require("price" in line and "discount" in line, "invalid_lines")
+            quantity = quantity if type(quantity) is int else _decimal(quantity)
+            _require(quantity > 0, "invalid_quantity")
+            if priced or "price" in line or "discount" in line:
+                price = _money(line.get("price"), currency)
+                discount = _money(line.get("discount"), currency)
+                # Discount is an absolute line amount. Fractions keep the exact
+                # product and sum independent of the ambient Decimal context.
+                net = Fraction(quantity) * Fraction(price) - Fraction(discount)
+                _require(net >= 0, "invalid_money")
+                line_total += net
+        if total is not None:
+            _require(Fraction(total) == line_total, "total_mismatch")
+
+
+def _bound_amount(context: ActionContext, payload: dict, field: str) -> Decimal:
+    """Compare the request amount with the amount resolved from engine state."""
+    _require(context.currency == payload.get("currency"), "invalid_amount")
+    amount = _money(context.amount, context.currency)
+    _require(amount == _money(payload.get(field), context.currency), "invalid_amount")
+    return amount
 
 
 def _minimum_approvals(
@@ -239,16 +278,13 @@ def _minimum_approvals(
     amount_field = "total" if row.action_id == "AP-FIN-01" else "amount"
     amount = None
     if context.amount is not None or amount_field in request.payload:
-        amount = _decimal(context.amount)
-        bound_amount = _decimal(request.payload.get(amount_field))
-        _require(amount == bound_amount and amount >= 0 and context.currency == request.payload.get("currency"),
-                 "invalid_amount")
+        amount = _bound_amount(context, request.payload, amount_field)
     if context.threshold is None:
         return 1
     _require(row.cap is not None and amount is not None and context.currency == table.currency,
              "invalid_threshold")
-    threshold = _decimal(context.threshold)
-    _require(0 <= threshold <= _decimal(row.cap), "invalid_threshold")
+    threshold = _money(context.threshold, context.currency)
+    _require(threshold <= _money(row.cap, table.currency), "invalid_threshold")
     return int(amount > threshold)
 
 
@@ -257,13 +293,17 @@ def _check_permission_change(
 ) -> None:
     target = request.payload["target_user"]
     _require(target not in {context.submitter.id, context.drafter.id, context.drafter.owner_id}, "self_target")
+    previous_limits = request.payload["limits_before"]
     limits = request.payload["limits_after"]
-    _require(type(limits) is dict, "invalid_limits")
+    _require(type(previous_limits) is dict and type(limits) is dict, "invalid_limits")
+    if previous_limits or limits:
+        _require(context.currency == request.payload.get("currency") == table.currency, "invalid_limits")
+    for limit in previous_limits.values():
+        _money(limit, table.currency)
     for action_id, limit in limits.items():
         rule = rows.get(action_id)
-        _require(rule is not None and rule.cap is not None and context.currency == table.currency
-                 and request.payload.get("currency") == table.currency
-                 and 0 <= _decimal(limit) <= _decimal(rule.cap), "invalid_limits")
+        _require(rule is not None and rule.cap is not None
+                 and _money(limit, table.currency) <= _money(rule.cap, table.currency), "invalid_limits")
 
 
 def _approve(
@@ -305,6 +345,10 @@ class AuthorizedAction:
         return self.request.payload
 
 
+class ActionEffectFailed(Exception):
+    """A handler confirms it had no durable effect, including after a verified rollback."""
+
+
 class ActionPolicyEnforcer:
     """Verify the trusted state and durably admit an exact snapshot before any effect."""
 
@@ -324,7 +368,8 @@ class ActionPolicyEnforcer:
         self._clock = clock
 
     def authorize(
-        self, session: str, request: ActionRequest, *, handler_available: bool = True,
+        self, session: str, request: ActionRequest, *, session_tenant_id: str | None,
+        handler_available: bool = True,
     ) -> AuthorizedAction | None:
         """Return an admission only after its audit and replay claims commit."""
         context = None
@@ -341,11 +386,12 @@ class ActionPolicyEnforcer:
                 request.tenant_id, request.request_id, request.action_id, request.table_version,
                 request.idempotency_key,
             ))), "invalid_request")
+            _require(_identifier(session_tenant_id) and request.tenant_id == session_tenant_id, "tenant_mismatch")
             request = replace(request, payload=json.loads(canonical_json(request.payload)),
                               target_revisions=json.loads(canonical_json(request.target_revisions)))
             resolved = self._resolve(session, request)
             _require(type(resolved) is ActionContext and (resolved.tenant_id, resolved.request_id, resolved.action_id)
-                     == (request.tenant_id, request.request_id, request.action_id), "unresolved_request")
+                     == (session_tenant_id, request.request_id, request.action_id), "unresolved_request")
             context = resolved
             _require(_check_identity(context.submitter, submitter=True) and _check_identity(context.drafter),
                      "unresolved_identity")
@@ -359,6 +405,10 @@ class ActionPolicyEnforcer:
             _require(context.submitter.kind == "human", "human_required")
             _require(handler_available is True, "operation_unavailable")
             _check_payload(request, row)
+            if row.action_id == "AP-FIN-02":
+                # Cancellation carries the engine's correcting-entry preview
+                # magnitude. There are no signed credit inputs in the starter table.
+                _bound_amount(context, request.payload, "total")
             if row.action_id == "AP-PERM-01":
                 _check_permission_change(request, context, table, rows)
             required = _minimum_approvals(row, table, context, request)
@@ -394,6 +444,29 @@ class ActionPolicyEnforcer:
             # A decision that cannot be durably recorded never reaches the engine.
             return None
         return None
+
+    def execute_admitted(
+        self, action: AuthorizedAction, run_as_caller: Callable[[Callable[[Any], Any]], Any],
+        handler: Callable[[Any, AuthorizedAction], Any],
+    ) -> Any:
+        """Run a durably admitted action once and append its observed outcome."""
+        status = "failed"
+
+        def effect(engine: Any) -> Any:
+            nonlocal status
+            status = "unknown"
+            try:
+                return handler(engine, action)
+            except ActionEffectFailed:
+                status = "failed"
+                raise
+
+        try:
+            result = run_as_caller(effect)
+            status = "applied"
+            return result
+        finally:
+            self.store.record_outcome(action.request.tenant_id, action.request.request_id, status)
 
     @staticmethod
     def _audit(

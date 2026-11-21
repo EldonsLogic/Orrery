@@ -57,7 +57,7 @@ def guard_for(policy, context, path, *, table=None, clock=lambda: NOW):
 
 
 def admit(guard, request):
-    return guard.authorize("trusted-session", request)
+    return guard.authorize("trusted-session", request, session_tenant_id="tenant-a")
 
 
 def test_jcs_key_order_utf8_and_decimal_text(policy, setup):
@@ -84,6 +84,51 @@ def test_malformed_amount_refused(policy, setup, value):
     with pytest.raises(ValueError):
         policy.payload_hash(request, context.submitter.id)
     assert admit(guard_for(policy, context, path), request) is None
+
+
+@pytest.mark.parametrize(("total", "price", "discount", "threshold"), [
+    pytest.param("-40.00", "20.00", "0.00", None, id="negative-total"),
+    pytest.param("40.00", "20.000", "0.00", None, id="over-scale-price"),
+    pytest.param("39.00", "20.00", "0.00", None, id="mismatched-total"),
+    pytest.param("40.00", "20.00", "-1.00", None, id="negative-discount"),
+    pytest.param("40.00", "20.00", "0.00", "39.000", id="over-scale-threshold"),
+])
+def test_money_bounds_with_matching_approval(policy, setup, total, price, discount, threshold):
+    request, context, path = setup
+    # A sales order has no threshold-based amount check.
+    if total.startswith("-"):
+        request = replace(request, action_id="AP-SALES-01", target_revisions={"customer-a": 1})
+        context = replace(context, action_id=request.action_id, approvals_required=1,
+                          submitter=replace(context.submitter, roles=frozenset({"sales"})))
+    lines = [{**request.payload["lines"][0], "price": price, "discount": discount}]
+    request = replace(request, payload={**request.payload, "total": total, "lines": lines})
+    approval = replace(context.approvals[0], action_id=request.action_id,
+                       payload_hash=policy.payload_hash(request, context.submitter.id))
+    context = replace(context, approvals=(approval,), amount=total, threshold=threshold)
+    assert admit(guard_for(policy, context, path), request) is None
+
+
+def test_priced_lines_use_exact_quantity_and_discount(policy, setup):
+    request, context, path = setup
+    request = replace(request, payload={**request.payload, "currency": "KWD", "total": "9.004", "lines": [
+        {"item": "item-a", "quantity": "1.5", "price": "4.002", "discount": "0.001"},
+        {"item": "item-b", "quantity": 2, "price": "1.501", "discount": "0.000"},
+    ]})
+    approval = replace(context.approvals[0], payload_hash=policy.payload_hash(request, context.submitter.id))
+    context = replace(context, currency="KWD", amount="9.004", approvals=(approval,))
+    assert admit(guard_for(policy, context, path), request).payload == request.payload
+
+
+@pytest.mark.parametrize(("total", "allowed"), [("40.00", True), ("39.00", False), ("-40.00", False)])
+def test_cancellation_total_matches_trusted_preview(policy, setup, total, allowed):
+    request, context, path = setup
+    request = replace(request, action_id="AP-FIN-02", target_revisions={"invoice-a": 4}, payload={
+        "invoice_id": "invoice-a", "reason": "Duplicate invoice", "total": total, "currency": "SAR",
+    })
+    approval = replace(context.approvals[0], action_id=request.action_id,
+                       payload_hash=policy.payload_hash(request, context.submitter.id))
+    context = replace(context, action_id=request.action_id, approvals=(approval,))
+    assert (admit(guard_for(policy, context, path), request) is not None) is allowed
 
 
 @pytest.mark.parametrize(("action", "role", "fields", "targets", "allowed"), [
@@ -205,7 +250,7 @@ def test_permission_change_requires_second_owner_and_cannot_target_self(policy, 
 def test_handler_missing_is_audited(policy, setup):
     request, context, path = setup
     guard = guard_for(policy, context, path)
-    adapter = ChangeEngineAdapter(action_policy=guard)
+    adapter = ChangeEngineAdapter(action_policy=guard, resolve_session_tenant=lambda _: "tenant-a")
     with pytest.raises(AdapterError, match="^permission_denied$"):
         adapter.execute_action("trusted-session", request)
     assert guard.store.audit_log()[-1].decision == "deny"
@@ -233,7 +278,7 @@ def test_invalid_tables_and_lookup_failure_audited(policy, setup):
     for load in options:
         assert admit(guard_for(policy, context, path, table=load), request) is None
     guard = guard_for(policy, context, path)
-    assert guard.authorize("untrusted-session", request) is None
+    assert guard.authorize("untrusted-session", request, session_tenant_id=None) is None
     assert admit(guard_for(policy, context, path, clock=lambda: None), request) is None
     assert {entry.decision for entry in guard.store.audit_log()} == {"deny"}
 
@@ -284,7 +329,39 @@ def test_unconfigured_adapter_refuses_business_action():
         adapter.execute_action("trusted-session", None)
 
 
-def test_adapter_uses_bound_snapshot_and_admits_before_effect(policy, setup):
+def test_gateway_adapter_does_not_expose_raw_callback_runner():
+    adapter = ChangeEngineAdapter()
+    assert callable(adapter.execute_action)
+    assert not hasattr(adapter, "execute_as_caller")
+
+
+@pytest.mark.parametrize("requested_tenant", ["tenant-a", "tenant-b"])
+def test_adapter_refuses_cross_tenant_action_context(policy, setup, requested_tenant):
+    request, context, path = setup
+    request = replace(request, tenant_id=requested_tenant)
+    approval = replace(context.approvals[0], tenant_id="tenant-b",
+                       payload_hash=policy.payload_hash(request, context.submitter.id))
+    guard = guard_for(policy, replace(context, tenant_id="tenant-b", approvals=(approval,)), path)
+    invoked = []
+
+    class Backend:
+        def execute_as_caller(self, tenant, caller, run):
+            return run(object())
+
+    adapter = ChangeEngineAdapter(frappe_backend=Backend(), action_policy=guard,
+                                  action_handlers={request.action_id: lambda *_: invoked.append(True)},
+                                  resolve_session_tenant=lambda session: "tenant-a" if session == "trusted-session" else None)
+    with pytest.raises(AdapterError, match="^permission_denied$") as error:
+        adapter.execute_action("trusted-session", request)
+    assert error.value.stage == "authorize"
+    assert invoked == []
+    assert guard.store.audit_log()[-1].reason == (
+        "unresolved_request" if requested_tenant == "tenant-a" else "tenant_mismatch"
+    )
+
+
+@pytest.mark.parametrize("status", ["failed", "unknown"])
+def test_adapter_uses_bound_snapshot_and_records_handler_failure(policy, setup, status):
     request, context, path = setup
     guard = guard_for(policy, context, path)
 
@@ -300,15 +377,20 @@ def test_adapter_uses_bound_snapshot_and_admits_before_effect(policy, setup):
         assert record.approvers == (context.approvals[0].approver,)
         request.payload["lines"][0]["price"] = "99.00"
         assert bound.payload["lines"][0]["price"] == "20.00"
+        if status == "failed":
+            raise policy.ActionEffectFailed("rolled back")
         raise RuntimeError("private backend details")
 
     adapter = ChangeEngineAdapter(frappe_backend=Backend(), action_policy=guard,
-                                  action_handlers={"AP-FIN-01": post_invoice})
+                                  action_handlers={"AP-FIN-01": post_invoice},
+                                  resolve_session_tenant=lambda _: "tenant-a")
     with pytest.raises(AdapterError, match="^engine_unavailable$") as error:
         adapter.execute_action("trusted-session", request)
     assert not error.value.details
     with pytest.raises(AdapterError, match="^permission_denied$"):
         adapter.execute_action("trusted-session", request)
+    outcome = guard.store.outcome_for(request.tenant_id, request.request_id)
+    assert outcome.status == status
 
 
 def test_unwritable_audit_blocks_effect(policy, setup):
@@ -334,14 +416,26 @@ def test_business_write_uses_real_backend_impersonation(policy, setup):
     tenant.rows["tabUser"][user] = {"name": user, "enabled": 1, "roles": ["finance"]}
     backend = FrappeRuntimeBackend(FrappeSiteResolver(site_map={request.tenant_id: "alpha"}),
                                    frappe_factory=lambda: runtime)
+    guard = guard_for(policy, context, path)
     seen = []
 
     def post(engine, action):
+        assert guard.store.outcome_for(request.tenant_id, request.request_id) is None
         seen.append((engine.local.site, engine.session.user, action.payload["total"]))
         return "posted"
 
-    adapter = ChangeEngineAdapter(frappe_backend=backend, action_policy=guard_for(policy, context, path),
-                                  action_handlers={request.action_id: post})
+    adapter = ChangeEngineAdapter(frappe_backend=backend, action_policy=guard,
+                                  action_handlers={request.action_id: post},
+                                  resolve_session_tenant=lambda _: "tenant-a")
     assert adapter.execute_action("trusted-session", request) == "posted"
     assert seen == [("alpha", user, "40.00")]
     assert runtime.session.user == "Administrator"
+    outcome = policy.ActionPolicyStore(path).outcome_for(request.tenant_id, request.request_id)
+    assert outcome.status == "applied"
+    assert (outcome.tenant_id, outcome.request_id) == (request.tenant_id, request.request_id)
+    with sqlite3.connect(path) as connection:
+        for sql in ("UPDATE action_policy_outcomes SET status = 'unknown'",
+                    "DELETE FROM action_policy_outcomes",
+                    "INSERT OR REPLACE INTO action_policy_outcomes SELECT * FROM action_policy_outcomes"):
+            with pytest.raises(sqlite3.IntegrityError, match="Append-only outcome"):
+                connection.execute(sql)

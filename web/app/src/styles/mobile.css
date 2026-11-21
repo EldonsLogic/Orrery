@@ -1,0 +1,26 @@
+/* Mobile base (WEB-013). Sizes and insets only; colours and fonts come from the tokens. */
+:root {
+  --touch-target: 2.75rem; /* 44px minimum touch target */
+  --safe-inline: max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  --safe-block-start: env(safe-area-inset-top, 0px);
+  --safe-block-end: env(safe-area-inset-bottom, 0px);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-inline-size: 0;
+  overflow-x: clip;
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+img,
+svg,
+video {
+  max-inline-size: 100%;
+}

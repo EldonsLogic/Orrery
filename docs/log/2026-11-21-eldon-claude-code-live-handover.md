@@ -53,4 +53,6 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 Not tracked per agent; roughly 85k to 165k tokens per subagent run.
 
 ## Next step
-Finish the in-flight rows above, ship each on its own branch, keep five agents busy. Partner: review #224 and #228, fix #202, #204, #225, #155, merge main into #221.
+- Partner (sayegh9): fix #235 (High: grant allowlist), #202 (invisible marks in codes, merge main), #229 (back-dated/repost tests, live test in CI, merge main), #204 (bench tokens, UAE neutral invoice, merge main). Review Eldon's #224 (Tier 3 line-by-line), #228, #230, #232, #234, #239, #240. Close own `doing` rows whose PRs merged (list under Results).
+- Founders: Q-543 model gateway lane; GTM-004 demo code yes/no and deadline check with the organiser; accelerator relocation or KSA residency; LEG-003 one firm or four; INF-012 dev host account; drop Arial from the print stack.
+- Eldon's agents: finish the in-flight rows, ship each on its own branch, keep five agents busy while ready work exists.

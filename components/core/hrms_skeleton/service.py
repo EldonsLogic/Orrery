@@ -176,6 +176,14 @@ class HrmsService:
         except Exception:
             raise HrmsError("operation_failed") from None
 
+    def _leave_applicant_principal(self, applicant: Mapping[str, Any] | None, values: Mapping[str, Any]) -> str:
+        """Check filing permissions and resolve the principal from the verified employee link."""
+        self._require_native("Leave Application", "create", list(values))
+        principal = (applicant or {}).get("user_id")
+        if _identity(principal) is None:
+            raise HrmsError("applicant_identity_unresolved", doctype="Leave Application")
+        return principal.strip()
+
     # -- upsert ---------------------------------------------------------------------------
     def upsert(self, doctype: str, payload: Mapping[str, Any]) -> ApplyResult:
         self._live_user()
@@ -227,14 +235,11 @@ class HrmsService:
                     row = dict(values)
                     if doctype == "Employee":
                         self._check_identity_binding(user, None, values)
-                    self._require_native(doctype, "create", list(values))
                     if doctype == "Leave Application":
-                        # The applicant principal is fixed here, from the verified employee record,
-                        # and never changes: later edits to that record cannot defeat separation of duties.
-                        principal = (applicant or {}).get("user_id")
-                        if _identity(principal) is None:
-                            raise HrmsError("applicant_identity_unresolved", doctype=doctype)
+                        principal = self._leave_applicant_principal(applicant, values)
                         row["status"] = "Open"
+                    else:
+                        self._require_native(doctype, "create", list(values))
                     try:
                         created = self._insert(doctype, row)
                     except DuplicateKeyError:
@@ -243,13 +248,14 @@ class HrmsService:
                         raise HrmsError("ambiguous_key", doctype=doctype) from None
                     if doctype == "Leave Application":
                         # Recorded once, in the protected store, never through the document payload.
-                        _guard(self._store.record_applicant_identity, doctype, created["name"], principal.strip())
+                        _guard(self._store.record_applicant_identity, doctype, created["name"], principal)
                     return ApplyResult(doctype, key, created["name"], "created", tuple(values))
-                return self._update_existing(spec, values, existing, key, user)
+                return self._update_existing(spec, values, existing, key, user, applicant)
         raise HrmsError("operation_failed")  # pragma: no cover - the loop always returns or raises
 
     def _update_existing(
-        self, spec: DocSpec, values: dict[str, Any], existing: dict[str, Any], key: dict[str, Any], user: str
+        self, spec: DocSpec, values: dict[str, Any], existing: dict[str, Any], key: dict[str, Any], user: str,
+        applicant: Mapping[str, Any] | None,
     ) -> ApplyResult:
         doctype = spec.doctype
         if doctype == "Leave Application" and existing.get("status") != "Open":
@@ -257,9 +263,16 @@ class HrmsService:
         changed = tuple(f for f, v in values.items() if not _same(spec, f, existing.get(f), v))
         if doctype == "Employee":
             self._check_identity_binding(user, existing, {f: values[f] for f in changed})
+        if changed:
+            self._require_native(doctype, "write", changed)
+        if doctype == "Leave Application":
+            filed = _guard(self._store.get_applicant_identity, doctype, existing["name"])
+            if filed in (None, ""):
+                # An earlier insert may have succeeded before the protected write failed.
+                principal = self._leave_applicant_principal(applicant, values)
+                _guard(self._store.record_applicant_identity, doctype, existing["name"], principal)
         if not changed:
             return ApplyResult(doctype, key, existing["name"], "unchanged")
-        self._require_native(doctype, "write", changed)
         _guard(self._store.update, doctype, existing["name"], {f: values[f] for f in changed})
         return ApplyResult(doctype, key, existing["name"], "updated", changed)
 

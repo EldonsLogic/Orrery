@@ -63,8 +63,8 @@ class Store(Protocol):
     def update(self, doctype: str, name: str, values: Mapping[str, Any]) -> dict[str, Any]: ...
 
     def record_applicant_identity(self, doctype: str, name: str, principal: str) -> None:
-        """Persist the applicant principal of a new leave application in a protected store, once.
+        """Persist a leave application's applicant principal in a protected store, once.
         Raises if one is already recorded. It is the only writer of that value."""
 
     def get_applicant_identity(self, doctype: str, name: str) -> Any:
-        """The recorded applicant principal, or None when none was recorded."""
+        """The recorded applicant principal, or None or an empty string when absent."""

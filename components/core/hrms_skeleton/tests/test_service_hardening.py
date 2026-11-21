@@ -6,6 +6,7 @@ from __future__ import annotations
 import decimal
 import threading
 import unittest
+from unittest.mock import patch
 
 from components.core.hrms_skeleton import HrmsError, HrmsService
 from components.core.hrms_skeleton.access import DuplicateKeyError
@@ -100,6 +101,34 @@ class ApplicantIdentityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.record_applicant_identity("Leave Application", "LEA-00001", BOSS)
         self.assertEqual(self.store.applicant_identities[APP_KEY], LINA)
+
+    def test_reapplying_after_a_failed_identity_write_allows_an_independent_decision(self):
+        application = {**APPLICATION, "to_date": "2026-03-09"}
+        filer, _, _ = make(roles=("Employee",), user=LINA, store=self.store)
+        boss, _, _ = make(roles=("HR Manager",), user=BOSS, store=self.store)
+        with patch.object(self.store, "record_applicant_identity", side_effect=RuntimeError("write failed")):
+            refused(self, "operation_failed", filer.upsert, "Leave Application", application)
+
+        refused(self, "applicant_identity_unresolved", boss.decide_leave_application, application, "approve")
+        retry = filer.upsert("Leave Application", application)
+        self.assertEqual(retry.action, "unchanged")
+        self.assertEqual(retry.name, "LEA-00002")
+        self.assertEqual(len(self.store.rows["Leave Application"]), 2)
+        self.assertEqual(boss.decide_leave_application(application, "approve").action, "approved")
+
+    def test_reapplying_preserves_an_existing_principal_even_if_the_link_changed(self):
+        self.store.rows["Employee"]["EMP-00001"]["user_id"] = BOSS
+        with patch.object(self.store, "record_applicant_identity", wraps=self.store.record_applicant_identity) as record:
+            self.assertEqual(self.hr.upsert("Leave Application", APPLICATION).action, "unchanged")
+            record.assert_not_called()
+        self.assertEqual(self.store.applicant_identities[APP_KEY], LINA)
+
+    def test_repair_requires_create_permission(self):
+        self.store.applicant_identities[APP_KEY] = None
+        filer, _, _ = make(roles=("Employee",), user=LINA, store=self.store,
+                           permissions={"Leave Application": ("write",)})
+        refused(self, "permission_denied", filer.upsert, "Leave Application", APPLICATION)
+        self.assertIsNone(self.store.applicant_identities[APP_KEY])
 
     def test_an_independent_hr_manager_can_decide_and_the_applicant_still_cannot(self):
         boss, _, _ = make(roles=("HR Manager",), user=BOSS, store=self.store)

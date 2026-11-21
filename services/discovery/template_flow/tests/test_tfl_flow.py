@@ -22,7 +22,7 @@ def eid():
 
 
 def draft():
-    return instantiate.instantiate(TEMPLATE, ANSW)
+    return instantiate.instantiate(TEMPLATE, ANSW, now="2026-01-01T00:00:00Z")
 
 
 def flow(**kw):

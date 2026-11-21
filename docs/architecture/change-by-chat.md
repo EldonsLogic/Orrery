@@ -23,5 +23,7 @@ Plan row OPR-009. Code: `services/operate/change/`. A router `change` decision b
 - A non-integer, non-float, NaN, infinite or `bool` clock gives `change_unavailable` in both propose and confirm; a non-positive or non-finite TTL refuses at construction.
 - Audit: `change.proposed`, `change.applied`, `change.apply_failed`, `change.outcome_unknown`, and `change.refused` for every confirm refusal (code, session, digest prefix). Hashes and codes only; never the turn, values or model output.
 
+- A proposal superseded mid-confirm reports `change_superseded`, not `change_replayed`. A tax token at the start or end of a flattened id (`vatrate`, `zatca_flag`) is refused like a separated one. Lowering a `maxLength` (or a non-number) is `change_needs_review`.
+
 ## Not covered here
 The real port binding, the drafter model call and a shared proposal store (Q-281); replay protection across workers relies on the port's idempotency key. Arabic texts are UNREVIEWED (ADR-0033).

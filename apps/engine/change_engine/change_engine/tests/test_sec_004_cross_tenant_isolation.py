@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sqlite3
 import sys
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from change_engine.adapter import (
     ChangeEngineAdapter,
@@ -36,6 +38,17 @@ from change_engine.guarded_apply.policy_store import PolicyStore, get_current_si
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 EXAMPLES_DIR = REPO_ROOT / "contracts" / "examples"
+
+
+_ENV_PATCH = mock.patch.dict(os.environ, {"CHANGE_ENGINE_ENV": "test"})
+
+
+def setUpModule():
+    _ENV_PATCH.start()  # ERP-027 only allows the offline DDL simulator in dev or test.
+
+
+def tearDownModule():
+    _ENV_PATCH.stop()
 
 
 def _ctx(tenant: str, *, service: str = "control_plane", who: dict | None = None, req: str = "01J00000000000000000000001") -> dict:
@@ -153,14 +166,19 @@ def _initial_trading_artifact(bp_id: str) -> dict:
 
 
 def _add_credit_days_artifact(bp_id: str, field_id: str = "credit_days") -> dict:
-    add_field = _load_example("compiled-artifact-add-field.json")
-    art = copy.deepcopy(add_field)
-    art["blueprint"]["id"] = bp_id
-    step = art["steps"][0]
-    step["subject"]["id"] = field_id
-    step["pointer"] = f"/entities/customer/fields/{field_id}"
-    step["params"]["definition"]["id"] = field_id
-    art["postConditions"][0]["pointer"] = step["pointer"]
+    art = _load_example("compiled-artifact-add-field.json")
+    original_pointer = art["steps"][0]["pointer"]
+    field_pointer = f"/entities/customer/fields/{field_id}"
+    for artifact in (art, art["inverse"]):
+        artifact["blueprint"]["id"] = bp_id
+        step = artifact["steps"][0]
+        step["subject"]["id"] = field_id
+        step["pointer"] = field_pointer
+        step["params"]["definition"]["id"] = field_id
+        step["sourceOps"] = [field_pointer]
+        for condition in artifact["postConditions"]:
+            if condition["pointer"] == original_pointer:
+                condition["pointer"] = field_pointer
     return _seal(art)
 
 
@@ -267,6 +285,7 @@ class TestAdapterCrossTenantIsolation(unittest.TestCase):
             },
         )
         self.assertTrue(ap_a1["ok"], ap_a1)
+        self.assertEqual(ap_a1["result"]["status"], "applied", ap_a1)
         adapter.data_probe("t_alpha", "/entities/customer/fields/alpha_only_col", 45)
         self.assertEqual(adapter.data_probe("t_alpha", "/entities/customer/fields/alpha_only_col"), 45)
 
@@ -317,6 +336,7 @@ class TestAdapterCrossTenantIsolation(unittest.TestCase):
         runtime = SimulatedFrappeRuntime()
         adapter = make_frappe_adapter(
             frappe_factory=lambda: runtime,
+            offline_ddl_simulator=True,
             auto_create_sites=True,
             site_resolver=FrappeSiteResolver(site_map={"t_alpha": "alpha.localhost", "t_beta": "beta.localhost"}),
             test_hooks=True,
@@ -334,6 +354,7 @@ class TestAdapterCrossTenantIsolation(unittest.TestCase):
         # Restarted adapter hydration restores each tenant into its own site record only.
         restarted = make_frappe_adapter(
             frappe_factory=lambda: runtime,
+            offline_ddl_simulator=True,
             auto_create_sites=True,
             site_resolver=FrappeSiteResolver(site_map={"t_alpha": "alpha.localhost", "t_beta": "beta.localhost"}),
             test_hooks=True,

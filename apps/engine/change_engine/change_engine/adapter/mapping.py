@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Callable
 
 from change_engine.guarded_apply.ddl_plan_gate import (
     APPROVED_DDL_REGEX,
@@ -20,6 +20,8 @@ ENTITY_TO_DOCTYPE = {
     "item": "Item",
     "sales_order": "Sales Order",
     "sales_order_line": "Sales Order Item",
+    "delivery_note": "Delivery Note",
+    "delivery_note_line": "Delivery Note Item",
     "sales_invoice": "Sales Invoice",
     "sales_invoice_line": "Sales Invoice Item",
     "general_ledger": "GL Entry",
@@ -143,11 +145,16 @@ def reviewed_grant_doctype(entity_id: Any) -> str | None:
     return ENTITY_TO_DOCTYPE[entity_id]
 
 
-def grant_plan_reason(definition: Any, blueprint_entities: set[str]) -> str | None:
+def grant_plan_reason(
+    definition: Any,
+    blueprint_entities: set[str],
+    own_allowed: Callable[[str], bool] | None = None,
+) -> str | None:
     """Plan-time allowlist check of a role.upsert definition's grant targets (ADR-0051 item 3).
 
     An entity is allowed when it is in the reviewed mapping, or when it is an unmapped entity of this Blueprint
-    (the adapter creates its document type). The apply stage checks again on the engine (FrappeRuntimeBackend)."""
+    whose derived document type is adapter-created or not yet on the engine. The apply stage checks again on the
+    engine (FrappeRuntimeBackend)."""
     perms = definition.get("permissions") if isinstance(definition, dict) else None
     if perms is not None and not isinstance(perms, list):
         return "unsupported_value_type"
@@ -156,7 +163,12 @@ def grant_plan_reason(definition: Any, blueprint_entities: set[str]) -> str | No
         if not isinstance(entity, str):
             return "unsupported_value_type"
         reviewed = reviewed_grant_doctype(entity) is not None
-        own = entity not in ENTITY_TO_DOCTYPE and entity in blueprint_entities and not is_protected_entity(entity)
+        own = (
+            entity not in ENTITY_TO_DOCTYPE
+            and entity in blueprint_entities
+            and not is_protected_entity(entity)
+            and (own_allowed is None or own_allowed(entity))
+        )
         if not (reviewed or own):
             return "protected_subject"
     return None

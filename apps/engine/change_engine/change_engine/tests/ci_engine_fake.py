@@ -30,6 +30,8 @@ ENGINE_DOCTYPES = {
     "Server Script": "Core", "User Permission": "Core", "Property Setter": "Custom", "Custom Field": "Custom",
     "Role Profile": "Core", "Has Role": "Core", "Webhook": "Integrations", "File": "Core", "Data Import": "Core",
     "Payment Entry": "Accounts", "Session": "Core", "GL Entry": "Accounts",
+    "Supplier": "Buying", "Delivery Note": "Stock", "Price List": "Stock",
+    "Purchase Order": "Buying", "Purchase Receipt": "Stock", "Purchase Invoice": "Accounts",
 }
 
 

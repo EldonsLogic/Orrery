@@ -1186,11 +1186,26 @@ class FrappeRuntimeBackend:
         name, disabled = self._managed_role(f, role_id)
         if disabled is None:
             return
-        for plan in [self._plan_rules(f, dt, name, None) for dt in sorted(self._rule_doctypes(f, name))]:
+        for plan in [self._plan_rules(f, dt, name, None, revoking=True) for dt in sorted(self._rule_doctypes(f, name))]:
             self._write_rules(f, plan)
         f.db.set_value("Role", name, "disabled", 1)
         if hasattr(f.db, "commit"):
             f.db.commit()
+
+    def can_grant_own_doctype(self, tenant_id: str, entity: str) -> bool:
+        """Plan-time check: True only when an unmapped entity's derived doctype is adapter-owned or not yet created."""
+        if is_protected_entity(entity) or entity in ENTITY_TO_DOCTYPE:
+            return False
+        doctype = entity_to_doctype(entity)
+        if not _SAFE_SQL_IDENT_RE.match(doctype):
+            return False
+        with self._site_session(tenant_id) as (f, _):
+            row = f.db.get_value("DocType", doctype, ["name", "custom", "module"])
+            if row:
+                return str(row[0]) == doctype and int(row[1] or 0) == 1 and row[2] == ADAPTER_DOCTYPE_MODULE
+            if getattr(f.db, "table_exists", None) and f.db.table_exists(doctype):
+                return False
+            return True
 
     def _role_grants(self, f: Any, defn: dict[str, Any]) -> dict[str, dict[str, Any]]:
         """ADR-0051 grant table: {doctype: {"flags", "hidden"}} for one Blueprint role; refuses or withholds, never widens."""
@@ -1263,7 +1278,15 @@ class FrappeRuntimeBackend:
             })
         return rows
 
-    def _plan_rules(self, f: Any, doctype: str, role_name: str, grant: dict[str, Any] | None) -> dict[str, Any]:
+    def _plan_rules(
+        self,
+        f: Any,
+        doctype: str,
+        role_name: str,
+        grant: dict[str, Any] | None,
+        *,
+        revoking: bool = False,
+    ) -> dict[str, Any]:
         """Target rules and field levels on one document type after this role's change (ADR-0039 item 3).
 
         Other managed roles' field visibility is read back from their rules, so the result does not depend on the
@@ -1283,9 +1306,8 @@ class FrappeRuntimeBackend:
         reads_at = {(r["role"], r["permlevel"]) for r in managed if r["read"]}
         hidden = set(grant["hidden"]) if grant else set()
         # Only fields the adapter placed may sit on a level it owns: a custom_ field it moved with a level setter.
-        # Any other field (or foreign role rule) on an owned level is drift and is never adopted or moved (fail closed).
-        if any(lvl in ours for lvl in foreign):
-            raise self._refuse("protected_subject")
+        # Any other field (or foreign role rule) on an owned level is drift and is never adopted or moved: grant and
+        # upsert paths refuse (fail closed), while revocation proceeds without touching the foreign field.
         placed = {
             (str(r.get("field_name")), int(str(r.get("value"))))
             for r in f.get_all(
@@ -1295,10 +1317,20 @@ class FrappeRuntimeBackend:
             )
             if r.get("value") is not None and str(r.get("value")).isdigit()
         }
-        if any(lvl in ours and not (fn.startswith("custom_") and (fn, lvl) in placed) for fn, lvl in level_of.items()):
+        adapter_placed = {fn for fn, lvl in level_of.items() if fn.startswith("custom_") and (fn, lvl) in placed}
+        drifted = {lvl for lvl in foreign if lvl in ours} | {
+            lvl for fn, lvl in level_of.items() if lvl in ours and fn not in adapter_placed
+        }
+        if drifted and not revoking:
             raise self._refuse("protected_subject")
-        layout = {fn for fn, lvl in level_of.items() if lvl in ours} | {fn for fn in hidden if level_of[fn] in ours | {0}}
-        reserved = {lvl for fn, lvl in level_of.items() if lvl >= 1 and fn not in layout} | {lvl for lvl in foreign if lvl >= 1}
+        layout = {fn for fn, lvl in level_of.items() if lvl in ours and fn in adapter_placed} | {
+            fn for fn in hidden if level_of[fn] in ours | {0}
+        }
+        reserved = (
+            {lvl for fn, lvl in level_of.items() if lvl >= 1 and fn not in layout}
+            | {lvl for lvl in foreign if lvl >= 1}
+            | drifted
+        )
         sig = {}
         for fn in layout:
             lvl = level_of[fn]
@@ -1307,13 +1339,29 @@ class FrappeRuntimeBackend:
         level_for: dict[tuple[str, ...], int] = {}
         groups = sorted({s for s in sig.values() if s})
         for s in groups:
-            held = sorted({level_of[fn] for fn in layout if sig[fn] == s and level_of[fn] in ours} - set(level_for.values()))
+            held = sorted(
+                {level_of[fn] for fn in layout if sig[fn] == s and level_of[fn] in ours}
+                - set(level_for.values())
+                - reserved
+            )
             if held:
                 level_for[s] = held[0]
         for s in groups:
             if s not in level_for:
                 free = [lvl for lvl in range(1, MAX_PERMLEVEL + 1) if lvl not in reserved and lvl not in level_for.values()]
                 if not free:
+                    if revoking:
+                        by_key_only: dict[tuple[str, int], list[dict[str, Any]]] = {}
+                        for r in managed:
+                            by_key_only.setdefault((r["role"], r["permlevel"]), []).append(r)
+                        return {
+                            "doctype": doctype,
+                            "custom": bool(rows),
+                            "target": {},
+                            "rows": by_key_only,
+                            "clear": [r for r in managed if r["role"] == role_name],
+                            "setters": [],
+                        }
                     raise FrappeBackendError("limit_exceeded", {"limit": "permission_levels"}, stage="execute", side_effect_free=True)
                 level_for[s] = free[0]
         target: dict[tuple[str, int], dict[str, int]] = {}

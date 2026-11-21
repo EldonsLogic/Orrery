@@ -395,6 +395,55 @@ class TestBpl032FieldLevels(_Base):
         self.assertEqual(self.rules(), rules)
         self.assertEqual(self.engine.rows("Property Setter"), setters)
 
+    def test_erpnext_upgrade_drift_on_owned_level_does_not_block_revocation(self) -> None:
+        """Review round 2, finding 5: an ERPNext upgrade adding a standard field at permlevel 2 on an owned level
+        must still refuse role.upsert/grants, must never move or adopt the foreign field, and must NOT block role.disable."""
+        for keep_other_hider in (False, True):
+            with self.subTest(keep_other_hider=keep_other_hider):
+                self.setUp()
+                self.engine.add_field("Widget", "secret_rate", permlevel=1)  # pushes adapter's cost field to permlevel 2
+                self.upsert(role("full", [grant("widget", "read", "update")]))
+                self.upsert(role("hider", [grant("widget", "read", hidden=("cost",))]))
+                if keep_other_hider:
+                    self.upsert(role("hider2", [grant("widget", "read", hidden=("cost",))]))
+                self.assertEqual(self.level("Widget", "custom_cost"), 2)
+
+                # Simulate an ERPNext upgrade adding a standard field at permlevel 2.
+                self.engine.add_field("Widget", "upgrade_std_field", permlevel=2)
+
+                # Grant and upsert paths keep refusing without side effects.
+                rules_before = self.rules()
+                setters_before = self.engine.rows("Property Setter")
+                for defn in (role("hider", [grant("widget", "read")]), role("viewer", [grant("widget", "read")])):
+                    self.refused(lambda: self.upsert(defn))
+                self.assertEqual(self.level("Widget", "upgrade_std_field"), 2)
+                self.assertEqual(self.rules(), rules_before)
+                self.assertEqual(self.engine.rows("Property Setter"), setters_before)
+
+                # Revocation (role.disable) proceeds: bp-hider's rules are zeroed and the role is disabled.
+                self.run_step(step("role.disable", "hider"))
+                self.assertEqual(self.roles()["bp-hider"]["disabled"], 1)
+                self.assertTrue(
+                    all(not any(v for k, v in row.items() if k != "if_owner") for row in self.rules("bp-hider").values())
+                )
+                # Foreign field is never moved or adopted in Property Setter.
+                self.assertEqual(self.level("Widget", "upgrade_std_field"), 2)
+                self.assertFalse(
+                    [ps for ps in self.engine.rows("Property Setter") if ps.get("field_name") == "upgrade_std_field"]
+                )
+                # No managed role retains a rule on the drifted level 2.
+                self.assertFalse(
+                    [k for k, row in self.rules(doctype="Widget").items()
+                     if k[0].startswith(ENGINE_NAME_PREFIX) and k[2] == 2 and any(v for fn, v in row.items() if fn != "if_owner")]
+                )
+                if keep_other_hider:
+                    # Adapter-placed custom_cost moves to a free level and hider2 still hides it.
+                    new_lvl = self.level("Widget", "custom_cost")
+                    self.assertNotIn(new_lvl, (0, 1, 2))
+                    self.assertEqual(self.rules("bp-hider2", "Widget")[("bp-hider2", "Widget", new_lvl)]["read"], 0)
+                else:
+                    self.assertEqual(self.level("Widget", "custom_cost"), 0)
+
     def test_unhiding_returns_fields_to_level_zero(self) -> None:
         for defn in self.ROLES:
             self.upsert(defn)
@@ -440,6 +489,55 @@ class TestBpl032FieldLevels(_Base):
                      code="limit_exceeded", reason=None)
         self.assertEqual(self.rules(), rules)
         self.assertEqual(self.engine.rows("Property Setter"), setters)
+
+    def test_erpnext_upgrade_drift_on_owned_level_does_not_block_revocation(self) -> None:
+        """Review round 2, finding 5: an ERPNext upgrade adding a standard field at permlevel 2 on an owned level
+        must still refuse role.upsert/grants, must never move or adopt the foreign field, and must NOT block role.disable."""
+        for keep_other_hider in (False, True):
+            with self.subTest(keep_other_hider=keep_other_hider):
+                self.setUp()
+                self.engine.add_field("Widget", "secret_rate", permlevel=1)  # pushes adapter's cost field to permlevel 2
+                self.upsert(role("full", [grant("widget", "read", "update")]))
+                self.upsert(role("hider", [grant("widget", "read", hidden=("cost",))]))
+                if keep_other_hider:
+                    self.upsert(role("hider2", [grant("widget", "read", hidden=("cost",))]))
+                self.assertEqual(self.level("Widget", "custom_cost"), 2)
+
+                # Simulate an ERPNext upgrade adding a standard field at permlevel 2.
+                self.engine.add_field("Widget", "upgrade_std_field", permlevel=2)
+
+                # Grant and upsert paths keep refusing without side effects.
+                rules_before = self.rules()
+                setters_before = self.engine.rows("Property Setter")
+                for defn in (role("hider", [grant("widget", "read")]), role("viewer", [grant("widget", "read")])):
+                    self.refused(lambda: self.upsert(defn))
+                self.assertEqual(self.level("Widget", "upgrade_std_field"), 2)
+                self.assertEqual(self.rules(), rules_before)
+                self.assertEqual(self.engine.rows("Property Setter"), setters_before)
+
+                # Revocation (role.disable) proceeds: bp-hider's rules are zeroed and the role is disabled.
+                self.run_step(step("role.disable", "hider"))
+                self.assertEqual(self.roles()["bp-hider"]["disabled"], 1)
+                self.assertTrue(
+                    all(not any(v for k, v in row.items() if k != "if_owner") for row in self.rules("bp-hider").values())
+                )
+                # Foreign field is never moved or adopted in Property Setter.
+                self.assertEqual(self.level("Widget", "upgrade_std_field"), 2)
+                self.assertFalse(
+                    [ps for ps in self.engine.rows("Property Setter") if ps.get("field_name") == "upgrade_std_field"]
+                )
+                # No managed role retains a rule on the drifted level 2.
+                self.assertFalse(
+                    [k for k, row in self.rules(doctype="Widget").items()
+                     if k[0].startswith(ENGINE_NAME_PREFIX) and k[2] == 2 and any(v for fn, v in row.items() if fn != "if_owner")]
+                )
+                if keep_other_hider:
+                    # Adapter-placed custom_cost moves to a free level and hider2 still hides it.
+                    new_lvl = self.level("Widget", "custom_cost")
+                    self.assertNotIn(new_lvl, (0, 1, 2))
+                    self.assertEqual(self.rules("bp-hider2", "Widget")[("bp-hider2", "Widget", new_lvl)]["read"], 0)
+                else:
+                    self.assertEqual(self.level("Widget", "custom_cost"), 0)
 
 
 
@@ -514,6 +612,109 @@ class TestSec022GrantAllowlist(_Base):
         for seq, entity in enumerate(self.REFUSED, start=4):
             self.assertEqual(got[seq], ("blocked", "protected_subject"), (seq, entity))
         self.assertEqual(res["result"]["verdict"], "rejected")
+
+    def test_delivery_note_is_in_reviewed_mapping_and_granted_at_plan_and_apply(self) -> None:
+        """Review round 2, finding 1: delivery_note and delivery_note_line map to Delivery Note / Delivery Note Item."""
+        from change_engine.adapter.mapping import reviewed_grant_doctype
+
+        self.assertEqual(reviewed_grant_doctype("delivery_note"), "Delivery Note")
+        self.assertEqual(reviewed_grant_doctype("delivery_note_line"), "Delivery Note Item")
+        self.upsert(role("clerk", [grant("delivery_note", "read", "create", "update", "submit", "export")]))
+        self.assertEqual(self.granted("bp-clerk", "Delivery Note"), {"read", "create", "write", "submit", "export"})
+
+    def test_plan_time_agrees_with_apply_time_for_unmapped_builtin_entities(self) -> None:
+        """Review round 2, finding 2: even when the Blueprint declares entity.add for supplier or price_list,
+        an unmapped built-in DocType (custom=0) must be refused at PLAN time with no write, while delivery_note
+        and a Blueprint-created custom entity are allowed."""
+        from change_engine.adapter import make_frappe_adapter
+        from change_engine.adapter import contracts_support as cs
+
+        def ctx() -> dict:
+            return {"contractVersion": "0.1.2", "requestId": "01J00000000000000000000023", "correlationId": "corr_sec022_r2_plan",
+                    "tenantId": TENANT, "caller": {"service": "control_plane", "onBehalfOf": {"kind": "user", "id": "usr_owner"}},
+                    "deadlineMs": 120000}
+
+        def st(seq: int, kind: str, sid: str, defn: dict, section: str, impact: str) -> dict:
+            return {"seq": seq, "phase": 4 if section == "entities" else 7, "kind": kind,
+                    "subject": {"kind": "entity" if section == "entities" else "role", "id": sid, "parents": []}, "pointer": f"/{section}/{sid}",
+                    "impact": impact, "ddlImpact": "additive" if section == "entities" else "none", "reversible": True,
+                    "params": {"definition": defn}, "sourceOps": [f"/{section}/{sid}"]}
+
+        def make_art(steps: list[dict], *, has_ddl: bool = True) -> dict:
+            counts = dict.fromkeys(("cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"), 0)
+            counts["data_shape"] = sum(1 for s in steps if s["kind"] == "entity.add")
+            counts["access"] = sum(1 for s in steps if s["kind"] == "role.upsert")
+            art = {"artifactSchema": "0.1.0", "kind": "forward", "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
+                   "blueprint": {"id": "bp-sec022-r2", "base": None, "target": {"hash": "sha256:" + "3" * 64, "revision": 1}, "diffHash": None},
+                   "engineTarget": {"adapter": "frappe", "versionSet": "set-example"}, "components": [], "steps": steps,
+                   "skippedOps": [], "postConditions": [],
+                   "risk": {"counts": counts, "total": len(steps), "maxImpact": "access", "needsDdlPlanGate": has_ddl,
+                            "touchesCompliance": False, "touchesAccess": True, "touchesLedgerOrTax": False,
+                            "requiresTeamReview": False, "irreversibleSteps": 0},
+                   "inverse": None}
+            digest, art_id = cs.artifact_hashes(art)
+            art.update(artifactId=art_id, integrity={"algorithm": "sha256-canonical-json-v1", "contentHash": digest, "signature": None})
+            return art
+
+        engine = CaseInsensitiveEngine(SITE)
+        adapter = make_frappe_adapter(
+            site_resolver=FrappeSiteResolver(site_map={TENANT: SITE}),
+            frappe_factory=lambda: engine,
+            offline_ddl_simulator=True,
+            test_hooks=False,
+        )
+        prov = adapter.call("provision_site", ctx(), {"idempotencyKey": "idemp_sec022_r2_prov", "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+                                                       "blueprintId": "bp-sec022-r2", "siteClass": "sandbox", "countryPack": "sa"})
+        self.assertTrue(prov["ok"], prov)
+
+        entity_defs = [
+            st(1, "entity.add", "supplier", {"id": "supplier", "labels": {"en": "Supplier", "ar": "Supplier"}, "fields": []}, "entities", "data_shape"),
+            st(2, "entity.add", "price_list", {"id": "price_list", "labels": {"en": "Price List", "ar": "Price List"}, "fields": []}, "entities", "data_shape"),
+            st(3, "entity.add", "delivery_note", {"id": "delivery_note", "labels": {"en": "Delivery Note", "ar": "Delivery Note"}, "fields": []}, "entities", "data_shape"),
+            st(4, "entity.add", "widget", {"id": "widget", "labels": {"en": "Widget", "ar": "Widget"}, "fields": []}, "entities", "data_shape"),
+        ]
+        roles_before = engine.rows("Role")
+        perms_before = engine.rows("Custom DocPerm")
+        doctypes_before = engine.rows("DocType")
+
+        # 1) supplier and price_list grants are refused at PLAN time, even with entity.add in the same Blueprint; delivery_note and widget are allowed.
+        mixed = make_art([
+            *entity_defs,
+            st(5, "role.upsert", "r_sup", role("r_sup", [grant("supplier", "read")]), "roles", "access"),
+            st(6, "role.upsert", "r_pl", role("r_pl", [grant("price_list", "read")]), "roles", "access"),
+            st(7, "role.upsert", "r_dn", role("r_dn", [grant("delivery_note", "read", "export")]), "roles", "access"),
+            st(8, "role.upsert", "r_wid", role("r_wid", [grant("widget", "read", "update")]), "roles", "access"),
+        ])
+        plan = adapter.call("plan", ctx(), {"artifact": mixed})
+        self.assertTrue(plan["ok"], plan)
+        got = {s["seq"]: (s["disposition"], s.get("reasonCode")) for s in plan["result"]["steps"]}
+        self.assertEqual(got[5], ("blocked", "protected_subject"))
+        self.assertEqual(got[6], ("blocked", "protected_subject"))
+        self.assertEqual(got[7], ("gated", "protected_subject"))
+        self.assertEqual(got[8], ("gated", "protected_subject"))
+        self.assertEqual(plan["result"]["verdict"], "rejected")
+        self.assertEqual(engine.rows("Role"), roles_before)
+        self.assertEqual(engine.rows("Custom DocPerm"), perms_before)
+        self.assertEqual(engine.rows("DocType"), doctypes_before)
+
+        # 2) Allowed artifact (delivery_note + Blueprint-created widget) plans as needs_gate_approval and applies cleanly.
+        allowed = make_art([
+            entity_defs[2],
+            entity_defs[3],
+            st(3, "role.upsert", "r_dn", role("r_dn", [grant("delivery_note", "read", "export")]), "roles", "access"),
+            st(4, "role.upsert", "r_wid", role("r_wid", [grant("widget", "read", "update")]), "roles", "access"),
+        ])
+        ok_plan = adapter.call("plan", ctx(), {"artifact": allowed})
+        self.assertTrue(ok_plan["ok"], ok_plan)
+        self.assertEqual(ok_plan["result"]["verdict"], "needs_gate_approval")
+        applied = adapter.call("apply", ctx(), {
+            "idempotencyKey": "idemp_sec022_r2_apply_ok",
+            "artifact": allowed,
+            "planToken": ok_plan["result"]["planToken"],
+            "approvals": {"changeApproved": "01J00000000000000000000001", "gateApproved": "01J00000000000000000000002"},
+        })
+        self.assertTrue(applied["ok"], applied)
+        self.assertEqual(applied["result"]["status"], "applied", applied)
 
 
 class TestSec022StepInputs(_Base):

@@ -924,8 +924,16 @@ class ChangeEngineAdapter:
         # SEC-022 (ADR-0051 item 3): role grants may target entities this Blueprint has or adds in this artifact
         blueprint_entities = {e.get("id") for e in site.config.get("entities", []) if isinstance(e, dict)}
         blueprint_entities |= {s["subject"].get("id") for s in artifact["steps"] if s["kind"] == "entity.add"}
+        own_cache: dict[str, bool] = {}
+
+        def own_allowed(entity: str) -> bool:
+            if entity not in own_cache:
+                checker = getattr(self.frappe_backend, "can_grant_own_doctype", None)
+                own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else True
+            return own_cache[entity]
+
         for step in artifact["steps"]:
-            disp, reason, ddl = self._judge(site, step, blueprint_entities)
+            disp, reason, ddl = self._judge(site, step, blueprint_entities, own_allowed)
             if ddl == "additive":
                 additive += 1
             elif ddl == "semantic":
@@ -958,7 +966,13 @@ class ChangeEngineAdapter:
             "storage": {"additive": additive, "semantic": semantic, "statementCount": additive + semantic},
         }
 
-    def _judge(self, site: SiteRecord, step: dict[str, Any], blueprint_entities: set[str]) -> tuple[str, str | None, str]:
+    def _judge(
+        self,
+        site: SiteRecord,
+        step: dict[str, Any],
+        blueprint_entities: set[str],
+        own_allowed: Callable[[str], bool] | None = None,
+    ) -> tuple[str, str | None, str]:
         kind, pointer, params = step["kind"], step["pointer"], step["params"]
         ddl = step["ddlImpact"]
         support = STEP_KINDS.get(kind, "unsupported")
@@ -976,7 +990,7 @@ class ChangeEngineAdapter:
 
         defn = params.get("definition")
         if kind == "role.upsert":
-            grant_reason = grant_plan_reason(defn, blueprint_entities)
+            grant_reason = grant_plan_reason(defn, blueprint_entities, own_allowed)
             if grant_reason:
                 return "blocked", grant_reason, ddl
         coll = self._collection(site, segs)

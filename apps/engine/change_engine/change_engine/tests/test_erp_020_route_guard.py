@@ -148,7 +148,7 @@ class InternalSurfaceTests(unittest.TestCase):
         locked = literal_assignment(GUARDRAILS_PY, "ZONE_2_LOCKED_DOCTYPES")
         protected = literal_assignment(MAPPING_PY, "PROTECTED_ENTITY_IDS")
         derived = {d for k, d in entity_map.items() if k not in protected and d not in locked
-                   and d not in {"Sales Order Item", "Sales Invoice Item"}}
+                   and d not in {"Sales Order Item", "Delivery Note Item", "Sales Invoice Item"}}
         self.assertEqual(set(rg.RESOURCE_ALLOWLIST), derived)
         self.assertNotIn("Session", rg.RESOURCE_ALLOWLIST)
 

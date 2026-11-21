@@ -291,7 +291,7 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine:.
-        run: python3 -m unittest change_engine.tests.test_cmp_005_calendar change_engine.tests.test_cmp_005_hijri_dates -v
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_cmp_005_calendar.py apps/engine/change_engine/change_engine/tests/test_cmp_005_hijri_dates.py -v
 
       - name: Apply with preview and DDL plan gate tests (BPL-007)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

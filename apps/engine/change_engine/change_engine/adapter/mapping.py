@@ -60,7 +60,7 @@ SEMANTIC_PROPS = {"/type", "/unique", "/indexed", "/precision", "/maxLength", "/
 
 _SAFE_IDENT_RE = re.compile(r"^[a-z0-9_]+$")
 _DECIMAL_ADD_RE = re.compile(
-    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` decimal\(\d+,\d+\)(?: not null default [0-9.]+)?$"
+    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` decimal\(\d+,\d+\)(?: not null default [0-9.]+)?\Z"
 )
 
 

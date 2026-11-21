@@ -928,8 +928,13 @@ class ChangeEngineAdapter:
 
         def own_allowed(entity: str) -> bool:
             if entity not in own_cache:
-                checker = getattr(self.frappe_backend, "can_grant_own_doctype", None)
-                own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else False
+                if self.frappe_backend is None:
+                    # In-memory adapter: no engine exists, so the only document types are this Blueprint's own;
+                    # grant_plan_reason already limits `entity` to unmapped, unprotected Blueprint entities.
+                    own_cache[entity] = True
+                else:
+                    checker = getattr(self.frappe_backend, "can_grant_own_doctype", None)
+                    own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else False
             return own_cache[entity]
 
         for step in artifact["steps"]:

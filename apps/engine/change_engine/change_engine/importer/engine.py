@@ -87,11 +87,22 @@ class OpeningImporter:
         """Bind rows, report, master snapshots and context to a SHA-256 plan."""
         try:
             identity = self._authorize(source)
-            tenant = identity["tenant_id"]
+            tenant, user_id = identity["tenant_id"], identity["user_id"]
+            try:
+                batch_id = text(source.get("batch_id"))
+            except ImportFailure:
+                batch_id = ""
             bounded(source)
             detached = copy.deepcopy(source)
             reauth = self._authorize(detached)
-            if reauth["tenant_id"] != tenant or detached["tenant_id"] != tenant:
+            try:
+                detached_batch_id = text(detached.get("batch_id"))
+            except ImportFailure:
+                detached_batch_id = ""
+            if (reauth["tenant_id"] != tenant
+                    or reauth["user_id"] != user_id
+                    or detached["tenant_id"] != tenant
+                    or detached_batch_id != batch_id):
                 raise ImportFailure("IMP-AUTH")
             _, result = self._prepare(detached)
             return result
@@ -114,15 +125,6 @@ class OpeningImporter:
         except ImportFailure:
             batch_id = ""
         try:
-            if (confirmed_by != user_id
-                    or not isinstance(owner_confirmed_distinct, (list, tuple, set, frozenset))
-                    or not all(isinstance(gid, str) for gid in owner_confirmed_distinct)
-                    or not isinstance(plan_hash, str)
-                    or not re.fullmatch(r"[0-9a-f]{64}", plan_hash)):
-                raise ImportFailure("IMP-CONFIRM")
-            ids = list(owner_confirmed_distinct)
-            if len(set(ids)) != len(ids):
-                raise ImportFailure("IMP-CONFIRM")
             bounded(source)
             detached = copy.deepcopy(source)
             reauth = self._authorize(detached, required_capability="opening_import_confirm")
@@ -135,6 +137,15 @@ class OpeningImporter:
                     or detached["tenant_id"] != tenant
                     or detached_batch_id != batch_id):
                 raise ImportFailure("IMP-AUTH")
+            if (confirmed_by != user_id
+                    or not isinstance(owner_confirmed_distinct, (list, tuple, set, frozenset))
+                    or not all(isinstance(gid, str) for gid in owner_confirmed_distinct)
+                    or not isinstance(plan_hash, str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", plan_hash)):
+                raise ImportFailure("IMP-CONFIRM")
+            ids = list(owner_confirmed_distinct)
+            if len(set(ids)) != len(ids):
+                raise ImportFailure("IMP-CONFIRM")
             with self.backend.transaction():
                 plan, result = self._prepare(detached, confirm_distinct=ids, pending_plan_hash=plan_hash)
                 if plan["tenant_id"] != tenant or plan["batch_id"] != batch_id:
@@ -159,19 +170,35 @@ class OpeningImporter:
         """
         identity = self._authorize(source)
         tenant, user_id = identity["tenant_id"], identity["user_id"]
-        # Detach caller-owned data before entering the transactional boundary.
-        initial, _ = self._prepare(source)
-        batch_id = initial["batch_id"]
+        try:
+            batch_id = text(source.get("batch_id"))
+        except ImportFailure:
+            batch_id = ""
+        # Detach caller-owned data and verify binding before any backend read.
         try:
             bounded(source)
             detached = copy.deepcopy(source)
             reauth = self._authorize(detached)
+            try:
+                detached_batch_id = text(detached.get("batch_id"))
+            except ImportFailure:
+                detached_batch_id = ""
             if (reauth["tenant_id"] != tenant
                     or reauth["user_id"] != user_id
                     or detached["tenant_id"] != tenant
-                    or detached["batch_id"] != batch_id
-                    or initial["tenant_id"] != tenant):
+                    or detached_batch_id != batch_id):
                 raise ImportFailure("IMP-AUTH")
+            initial, _ = self._prepare(detached)
+            if initial["tenant_id"] != tenant or initial["batch_id"] != batch_id:
+                raise ImportFailure("IMP-AUTH")
+        except ImportFailure as exc:
+            if exc.code == "IMP-AUTH":
+                self._record_failure(tenant, batch_id, plan_hash, exc.code, user_id)
+            raise
+        except Exception:
+            raise ImportFailure("IMP-SCHEMA") from None
+        batch_id = initial["batch_id"]
+        try:
             if (confirmed_by != reauth["user_id"] or not isinstance(plan_hash, str)
                     or not re.fullmatch(r"[0-9a-f]{64}", plan_hash)):
                 raise ImportFailure("IMP-CONFIRM")

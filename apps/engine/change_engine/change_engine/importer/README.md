@@ -135,29 +135,33 @@ offline budget must be reassessed before live bulk import. Text starting with `=
 NFKC detection-only normalization and leading Unicode whitespace/format/control
 removal. Embedded tabs, newlines and carriage returns fail with `IMP-SCHEMA`.
 Standard Arabic directional and joining marks (`\u200c`, `\u200d`, `\u200e`,
-`\u200f`, `\u061c`) are allowed only in name and free-text fields (and stripped
-when computing name-based master business keys). Any other `Cf` or `Cc`
-character anywhere in text — including `Cf` default-ignorables such as `U+200B`
-(ZWSP), `U+00AD` (SHY), `U+2060` (WJ), `U+FEFF` (BOM), `U+180E` and Unicode tag
-characters — is rejected with `IMP-FORMULA`. Name fields also refuse leading or
-trailing whitespace, any non-ASCII whitespace (including `U+3000`), `U+2800`
-(Braille pattern blank), non-`Cf` Unicode default-ignorable code points (such as
-`U+034F`, `U+115F`, `U+1160`, `U+3164` and variation selectors), runs of
-internal ASCII spaces, and values not already in Unicode `NFC` form
-(`IMP-SCHEMA`; refuse, never repair). Fullwidth and Arabic presentation-form
-twins in names remain a recorded residual in Q-556 (NFKC is not applied to
-names). Codes, account numbers, `warehouse_name`, link fields (including
-`customer_group`, `territory`, `supplier_group`, `item_group`, `stock_uom`,
-`parent_warehouse`, `parent_account` and opening detail links) and batch
-metadata (`tenant_id`, `company`, `batch_id`, `posting_date`, `currency`) refuse
-the five safe marks as well as leading or trailing whitespace, any non-ASCII
-whitespace, `U+2800`, non-`Cf` default-ignorable code points, and any value that
-changes under `NFKC` normalization (`IMP-SCHEMA`); it is UNVERIFIED whether the
-live engine strips whitespace on insert, and Q-556 tracks UNVERIFIED live engine
-collation behavior for visible code twins (`C1`/`c1`, `X Y`/`X  Y`, Arabic-Indic
-vs ASCII digits) and residual fullwidth/presentation-form name twins. Accepted
-source spelling is unchanged. Numeric fields follow their stricter decimal
-grammar.
+`\u200f`, `\u061c`) are allowed only in name and free-text fields. Any other `Cf`
+or `Cc` character anywhere in text — including `Cf` default-ignorables such as
+`U+200B` (ZWSP), `U+00AD` (SHY), `U+2060` (WJ), `U+FEFF` (BOM), `U+180E` and
+Unicode tag characters — is rejected with `IMP-FORMULA`. Name fields also refuse
+leading or trailing whitespace, any non-ASCII whitespace (including `U+3000`),
+`U+2800` (Braille pattern blank), non-`Cf` Unicode default-ignorable code points
+(such as `U+034F`, `U+115F`, `U+1160`, `U+3164` and variation selectors), and
+runs of internal ASCII spaces (`IMP-SCHEMA`; refuse, never repair). Names are
+**never modified** and non-`NFC` input (such as vocalised Arabic typed with
+shadda before fatha, combining hamza/madda, or NFD accents) is accepted verbatim;
+name-based master business keys strip the five safe marks and apply Unicode
+`NFC` (never `NFKC`), so canonically equivalent twins are refused as
+`IMP-DUPLICATE` both within a batch and against stored masters while the stored
+value stays byte-identical to the input. Fullwidth forms, Arabic
+presentation-form twins, and blank-rendering symbols such as `U+1D159` remain
+recorded residuals in Q-556 (NFKC is not applied to names). Codes, account
+numbers, `warehouse_name`, link fields (including `customer_group`, `territory`,
+`supplier_group`, `item_group`, `stock_uom`, `parent_warehouse`,
+`parent_account` and opening detail links) and batch metadata (`tenant_id`,
+`company`, `batch_id`, `posting_date`, `currency`) refuse the five safe marks as
+well as leading or trailing whitespace, any non-ASCII whitespace, `U+2800`,
+non-`Cf` default-ignorable code points, and any value that changes under `NFKC`
+normalization (`IMP-SCHEMA`); it is UNVERIFIED whether the live engine strips
+whitespace on insert, and Q-556 tracks UNVERIFIED live engine collation behavior
+for visible code twins (`C1`/`c1`, `X Y`/`X  Y`, Arabic-Indic vs ASCII digits)
+and residual name twins. Accepted source spelling is unchanged. Numeric fields
+follow their stricter decimal grammar.
 
 ## DSC-011 and DSC-019 integration
 

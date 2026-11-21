@@ -68,3 +68,28 @@ Addressed Eldon's Fable 5.2 review and the independent Opus review of PR #245 (`
   - `python3 scripts/scan_secrets.py`: 0 hit(s).
   - `python3 scripts/check_plan_independence.py`: Plan independence OK.
   - `python3 scripts/check_lanes.py --base origin/main --actor partner`: Lane check OK.
+
+## Fix round 2
+Addressed the Claude Opus 5.5 cross-model security re-review of `a4106ec` (PR #245, `ERP-013`, Tier 3, rigid zone: refuse twins, never repair stored values; tests first):
+1. **Medium — `apply()` binding order before any backend read (`importer/engine.py`):**
+   - Correction to the Fix round 1 log entry above: at `a4106ec`, `apply()` still ran `initial, _ = self._prepare(source)` on the caller-owned `source` **before** `bounded`, `copy.deepcopy`, re-authorization, and the tenant/batch check — so a mid-call tenant mutation still triggered `company_currency`, `master`, and `journal` reads against `tenant-b` (and leaked `IMP-CURRENCY` instead of `IMP-AUTH` when `tenant-b` had no configured currency).
+   - Reordered `apply()` so `_authorize(source)` -> capture `tenant`, `user_id`, `batch_id` -> `bounded(source)` -> `detached = copy.deepcopy(source)` -> `_authorize(detached)` -> `tenant`/`user_id`/`batch_id` match check run **before** `_prepare(detached)` or any backend call (`company_currency`, `master`, `journal`, `claim_opening`, `write`). `IMP-AUTH` failures log only to the initial authenticated `(tenant, user_id)` and close the `IMP-CURRENCY` vs `IMP-AUTH` oracle.
+   - Aligned `preview()`/`validate()` (also binding `user_id` and `batch_id`) and `confirm()` (moving detachment and re-authorization ahead of `IMP-CONFIRM` checks) to the same pre-backend-read ordering.
+   - Added spies on `company_currency`, `master`, `journal`, `claim_opening`, and `write` to every `apply` mutation test (updating `test_erp_013_review_followups.py` and adding oracle and cross-entry-point regressions in `test_erp_013_review_followups_r2.py`, listed by path in `.github/workflows/tests.yml`).
+2. **Medium — remove non-NFC refusal on names; key names on `NFC` without modifying stored values (`importer/validation.py`, `importer/README.md`):**
+   - Removed the round-1 non-NFC `IMP-SCHEMA` refusal from `text(..., allow_format_marks=True)` so vocalised Arabic (e.g. `محمَّد` typed with shadda before fatha, combining hamza/madda, tanween, kasra) and NFD Latin names (`Café`) are accepted and stored byte-identical to input. Never repairs stored values; never applies `NFKC` to names.
+   - Updated `business_key()` and `_resolve_master()` (`_key_value`) to compute name keys on `unicodedata.normalize("NFC", ...)` after stripping `SAFE_FORMAT_MARKS`, and updated `master_context()` to refuse with `IMP-DUPLICATE` when an incoming name-keyed master collides on key with a stored master whose stored spelling differs. Canonically equivalent twins are refused as `IMP-DUPLICATE` both within a batch and against stored masters.
+   - Updated `importer/README.md` to document the refuse-twins, never-repair-stored-values rule.
+3. **Low — blank-rendering glyph residual (`docs/open-questions.md`):**
+   - Recorded `U+1D159` (`Cash` + `U+1D159`, Musical Symbol Null Notehead) as a residual in the `Q-556` row only (no code change).
+
+### Fix round 2 verification
+- Tests-first before fix (`PYTHONPATH=apps/engine/change_engine:. uv run --no-project --with pytest --with "pydantic>=2" python -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_*.py -q`): **11 failed, 417 passed**.
+- After fix:
+  - `PYTHONPATH=apps/engine/change_engine:. uv run --no-project --with pytest --with "pydantic>=2" python -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_*.py -q`: **428 passed**.
+  - `uv run --no-project --with pytest python -m pytest scripts/tests -q`: **22 passed, 29 subtests passed**.
+  - `python3 scripts/check_docs.py`: 0 error(s), 0 warning(s).
+  - `python3 scripts/check_repo_hygiene.py`: Repo hygiene OK (1766 files checked).
+  - `python3 scripts/scan_secrets.py`: 0 hit(s).
+  - `python3 scripts/check_plan_independence.py`: Plan independence OK.
+  - `python3 scripts/check_lanes.py --base origin/main --actor partner`: Lane check OK.

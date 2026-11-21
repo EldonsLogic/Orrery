@@ -97,12 +97,47 @@ class TestConditionGrammar(unittest.TestCase):
                 parse_condition(expr)
 
     def test_evaluation(self):
-        doc = {"doctype": "Sales Order", "grand_total": 60000, "status": "Draft", "margin": None}
+        doc = {"doctype": "Sales Order", "grand_total": 60000, "status": "Draft"}
         self.assertTrue(evaluate_condition_expr("grand_total > 50000", doc, []))
-        self.assertFalse(evaluate_condition_expr("margin < 5", doc, []))  # missing value never triggers
         self.assertTrue(evaluate_condition_expr("status in ['Draft', 'Open']", doc, []))
         self.assertTrue(evaluate_condition_expr("has_role('Sales Manager')", doc, ["Sales Manager"]))
         self.assertTrue(evaluate_condition_expr("0 < grand_total < 70000", doc, []))
+
+    def test_unevaluable_comparisons_raise(self):
+        for expr, doc in (
+            ("amount > 5", {}),
+            ("amount < 5", {}),
+            ("amount >= 5", {}),
+            ("amount <= 5", {}),
+            ("margin < 5", {"margin": None}),
+            ("amount > 5", {"amount": "10"}),
+            ("'Draft' in statuses", {"statuses": None}),
+            ("'Draft' in statuses", {"statuses": 10}),
+            ("'Draft' not in statuses", {"statuses": None}),
+            ("not (amount > 5)", {}),
+            ("0 < 1 < amount < 5", {}),
+        ):
+            with self.subTest(expr=expr, doc=doc):
+                with self.assertRaises(PolicyExpressionError):
+                    evaluate_condition_expr(expr, doc, [])
+
+    def test_identity_comparisons_use_the_right_hand_literal(self):
+        for expr, expected in (
+            ("x is True", (True, False, False, False)),
+            ("x is False", (False, True, False, False)),
+            ("x is None", (False, False, True, False)),
+            ("x is not None", (True, True, False, True)),
+            ("x is not False", (True, False, True, True)),
+        ):
+            for x, matches in zip((True, False, None, 0), expected):
+                with self.subTest(expr=expr, x=x):
+                    self.assertIs(evaluate_condition_expr(expr, {"x": x}, []), matches)
+
+    def test_missing_field_keeps_equality_semantics(self):
+        self.assertTrue(evaluate_condition_expr("amount == None", {}, []))
+        self.assertFalse(evaluate_condition_expr("amount != None", {}, []))
+        self.assertFalse(evaluate_condition_expr("amount == 5", {}, []))
+        self.assertTrue(evaluate_condition_expr("amount != 5", {}, []))
 
     def test_invalid_stored_condition_is_a_violation(self):
         """A condition that slipped into storage unvalidated denies, never allows."""
@@ -154,6 +189,12 @@ class TestTier0Protection(unittest.TestCase):
     def test_registration_rejects_an_eval_escape(self):
         with self.assertRaises(PolicyExpressionError):
             endpoints.register_runtime_policy(_policy(condition="__import__('os')"), caller_roles=ADMIN)
+
+    def test_registration_rejects_non_singleton_identity_operands(self):
+        for condition in ("grand_total is 1", "grand_total is not 0", "grand_total is amount"):
+            with self.subTest(condition=condition):
+                with self.assertRaises(PolicyExpressionError):
+                    endpoints.register_runtime_policy(_policy(condition=condition), caller_roles=ADMIN)
 
     def test_registration_needs_an_admin(self):
         with self.assertRaises(PermissionError):
@@ -228,6 +269,25 @@ class TestFailClosed(unittest.TestCase):
         self.assertEqual(result.violated_policies, [POLICY_STORE_UNAVAILABLE])
         with self.assertRaises(RuntimePolicyViolation):
             policy_catalog.evaluate_submit(doc, user_roles=[])
+
+    def test_threshold_gate_with_missing_field_denies_validation(self):
+        doc = {"doctype": "Sales Order"}
+        for condition, role in (
+            ("grand_total > 50000", "Sales User"),
+            ("not (grand_total > 5000)", "Sales Manager"),
+        ):
+            with self.subTest(condition=condition, role=role):
+                policy = RuntimePolicy(
+                    policy_id="POLICY_ORDER_THRESHOLD",
+                    doctype="Sales Order",
+                    policy_type=PolicyType.THRESHOLD_GATE,
+                    condition_expr=condition,
+                    required_role="Sales Manager",
+                )
+                endpoints.register_runtime_policy(policy, caller_roles=ADMIN)
+                with self.assertRaises(RuntimePolicyViolation) as violation:
+                    policy_catalog.evaluate_validate(doc, user_roles=[role])
+                self.assertEqual(violation.exception.policy_id, policy.policy_id)
 
     def test_revision_does_not_restart_after_a_read_failure(self):
         store = PolicyStore(frappe_module=types.SimpleNamespace(db=_FailingDB()))

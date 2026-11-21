@@ -1,7 +1,8 @@
 """
 Change engine: Frappe app registration.
 
-Registers runtime policy enforcement and the business record outbox.
+Registers runtime policy enforcement, the business record outbox, and the
+internal-only request guard.
 No Desk UI assets, no branding, no landing-page routing (the product UI is a separate service).
 """
 
@@ -46,6 +47,10 @@ app_license = "TBD"  # see docs/legal/checklist.md (licence decision pending)
 before_install = "change_engine.patches.ce_sec_003_create_policy_tables.execute"
 
 after_install = "change_engine.patches.erp_009_create_event_outbox.execute"
+
+# ERP-020 / ADR-0016: headless engine. Deny every HTTP request unless it is on the internal
+# allowlist (Desk, /login, website routes and unlisted API calls all get a plain 404).
+before_request = ["change_engine.api.route_guard.enforce_internal_only"]
 
 # Runtime policy enforcement on supported write paths (Desk, REST, background jobs).
 # NOTE: runs for every DocType; the policy store fails closed on database errors.

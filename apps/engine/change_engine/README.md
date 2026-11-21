@@ -9,7 +9,9 @@ Frappe app that applies approved configuration changes to an engine site safely.
 |---|---|
 | `change_engine/guarded_apply/` | Deterministic apply layer: safety guardrails (protected ledger/security doctypes and fields), DDL plan gate, six-stage audited deploy with advisory locking, property-setter, workflow and report engines, soft-quarantine rollback, runtime and cross-document policies, compact schema extractor |
 | `change_engine/api/endpoints.py` | Whitelisted endpoints (apply, revert, validate proposal, policy read) and document lifecycle hooks |
-| `change_engine/hooks.py` | Frappe registration: policy enforcement hooks only |
+| `change_engine/api/route_guard.py` | ERP-020 headless guard: `before_request` allowlist that returns a plain 404 for Desk, login, website and every unlisted API route (ADR-0016); see [infra/dev/docker/HEADLESS.md](../../../infra/dev/docker/HEADLESS.md) |
+| `change_engine/wsgi.py` | ERP-020: `change_engine.wsgi:application`, the same allowlist applied before the engine sees a request (needed for `/api/method/login`) |
+| `change_engine/hooks.py` | Frappe registration: policy enforcement hooks and the route guard |
 | `change_engine/tests/` | Unit tests (standalone, mocked) and one live MariaDB test (needs the dev stack in `infra/dev/docker`) |
 
 ## Rules for this module

@@ -37,7 +37,11 @@ EOF
 # 2. Register mounted change_engine app if available
 if [ -d "${BENCH_DIR}/apps/change_engine" ]; then
     echo "Found change_engine app; installing in editable mode..."
-    if ! pip install -e "${BENCH_DIR}/apps/change_engine" --no-deps; then
+    install_options=(--no-deps)
+    if [ "${ENGINE_OFFLINE_INSTALL:-0}" = 1 ]; then
+        install_options+=(--no-build-isolation --no-index)
+    fi
+    if ! pip install -e "${BENCH_DIR}/apps/change_engine" "${install_options[@]}"; then
         echo "Cannot install change_engine app" >&2
         exit 1
     fi

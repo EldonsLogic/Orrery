@@ -3,7 +3,7 @@
 
 Used by `.github/workflows/real-bench.yml` and local developers to verify the
 change engine against real Frappe v15 / ERPNext / HRMS / MariaDB 11.4 / Redis
-services instead of mocks. Never prints database or admin passwords.
+services instead of mocks. Keeps database, admin and internal credentials out of runner logs.
 
 Startup, provisioning and tests each have a five-minute limit. The normal CI
 path's phase limits total 22.5 minutes, including diagnostics and teardown,
@@ -42,12 +42,14 @@ def _compose_env(
     *,
     db_root_password: str,
     admin_password: str,
+    internal_token: str,
     site_name: str,
     engine_port: int,
 ) -> dict[str, str]:
     env = os.environ.copy()
     env["DB_ROOT_PASSWORD"] = db_root_password
     env["ADMIN_PASSWORD"] = admin_password
+    env["ENGINE_INTERNAL_TOKEN"] = internal_token
     env["SITE_NAME"] = site_name
     env["ENGINE_PORT"] = str(engine_port)
     return env
@@ -109,7 +111,9 @@ def _wait_for_engine_ready(
                 "engine",
                 "env/bin/python",
                 "-c",
-                "import socket, redis, change_engine; "
+                "import socket, redis; "
+                "from change_engine.api.route_guard import validate_internal_tokens; "
+                "validate_internal_tokens(); "
                 "assert all(redis.Redis(host=host, socket_timeout=2).ping() for host in ('redis-cache', 'redis-queue')); "
                 "s = socket.create_connection(('127.0.0.1', 8000), timeout=2); s.close()",
                 timeout=30,
@@ -250,9 +254,14 @@ def run_real_bench_ci(
     port = engine_port if engine_port is not None else _pick_free_port()
     db_root_password = os.environ.get("DB_ROOT_PASSWORD") or secrets.token_urlsafe(24)
     admin_password = os.environ.get("ADMIN_PASSWORD") or secrets.token_urlsafe(24)
+    # A reused engine already has its credential. Fresh stacks always mint a new one.
+    internal_token = os.environ.get("ENGINE_INTERNAL_TOKEN") if reuse_project else secrets.token_urlsafe(32)
+    if not internal_token:
+        raise ValueError("Set ENGINE_INTERNAL_TOKEN to the reused engine's internal token")
     env = _compose_env(
         db_root_password=db_root_password,
         admin_password=admin_password,
+        internal_token=internal_token,
         site_name=site,
         engine_port=port,
     )
@@ -295,6 +304,8 @@ def run_real_bench_ci(
             env,
             "exec",
             "-T",
+            "-e",
+            "ENGINE_INTERNAL_TOKEN",
             "-e",
             "CE_SEC_005_REAL_BENCH=1",
             "-e",
@@ -349,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--reuse-project",
         action="store_true",
-        help="Provision and test an ephemeral site inside an already-running Compose project without tearing it down.",
+        help="Reuse a running Compose project with its existing ENGINE_INTERNAL_TOKEN supplied in the environment.",
     )
     ap.add_argument("--keep-stack", action="store_true", help="Keep containers and volumes running after exit.")
     args = ap.parse_args(argv)

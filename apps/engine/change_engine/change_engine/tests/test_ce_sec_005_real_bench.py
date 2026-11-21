@@ -636,7 +636,7 @@ class TestCeSec005RealBench(RealBenchTestCase):
             site_resolver=FrappeSiteResolver(site_map={tenant: self._site}),
             sites_path=self._sites_path,
         )
-        adapter = ChangeEngineAdapter(test_hooks=False, frappe_backend=backend)
+        adapter = ChangeEngineAdapter(environment="test", frappe_backend=backend)
 
         bp_id = "bp_ce005_init"
         prov = adapter.call(
@@ -712,7 +712,7 @@ class TestCeSec005RealBench(RealBenchTestCase):
         frappe.db.commit()
 
         # A fresh adapter must reload the applied revision from the site.
-        adapter = ChangeEngineAdapter(test_hooks=False, frappe_backend=backend)
+        adapter = ChangeEngineAdapter(environment="test", frappe_backend=backend)
         rb_res = adapter.call(
             "rollback",
             _adapter_ctx(tenant, "rb"),

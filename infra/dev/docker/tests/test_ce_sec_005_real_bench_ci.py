@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import ast
 import io
-from contextlib import redirect_stderr
+import json
+from contextlib import redirect_stderr, redirect_stdout
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import unittest
@@ -36,8 +38,12 @@ import run_real_bench_ci  # noqa: E402
 
 class TestCeSec005RealBenchCI(unittest.TestCase):
     def test_failure_diagnostics_redact_credentials(self) -> None:
-        env = {"DB_ROOT_PASSWORD": "private-root-marker", "ADMIN_PASSWORD": "private-admin-marker"}
-        result = subprocess.CompletedProcess([], 0, stdout="failure private-root-marker private-admin-marker", stderr="")
+        env = {
+            "DB_ROOT_PASSWORD": "private-root-marker",
+            "ADMIN_PASSWORD": "private-admin-marker",
+            "ENGINE_INTERNAL_TOKEN": "private-internal-marker",
+        }
+        result = subprocess.CompletedProcess([], 0, stdout="failure " + " ".join(env.values()), stderr="")
         out = io.StringIO()
         with mock.patch.object(run_real_bench_ci, "_run_compose", return_value=result), redirect_stderr(out):
             run_real_bench_ci._failure_diagnostics("ce005", Path("compose.yml"), env)
@@ -142,6 +148,51 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
         self.assertTrue(any(all(module in args for module in modules) for args in compose_ops))
         self.assertIn(("down", "-v", "--remove-orphans"), compose_ops)
         self.assertTrue(any(kind == "verify" for kind, _ in calls))
+
+    def test_orchestrator_shares_a_fresh_internal_token_without_logging_it(self) -> None:
+        engine_tokens = []
+        test_tokens = []
+        inherited_token = "inherited-credential-" * 2
+        compose_commands = []
+        run_subprocess = subprocess.run
+
+        def fake_run_compose(project, compose_file, env, *args, **kwargs):
+            compose_commands.append(args)
+            if args[0] == "up":
+                # Resolve the actual Compose file to check the engine container environment.
+                config = run_subprocess(
+                    run_real_bench_ci._compose_cmd(project, compose_file, "config", "--format", "json"),
+                    env=env, capture_output=True, text=True, timeout=30, check=False,
+                )
+                self.assertEqual(config.returncode, 0, "Bench Compose config must resolve")
+                engine_env = json.loads(config.stdout)["services"]["engine"]["environment"]
+                engine_tokens.append(engine_env.get("ENGINE_INTERNAL_TOKEN"))
+            elif "change_engine.tests.test_ce_sec_005_live_http" in args:
+                self.assertIn(("-e", "ENGINE_INTERNAL_TOKEN"), zip(args, args[1:]))
+                test_tokens.append(env.get("ENGINE_INTERNAL_TOKEN"))
+            return subprocess.CompletedProcess([], 0, stdout="engine\nmariadb\nredis-cache\nredis-queue\n", stderr="")
+
+        output = io.StringIO()
+        verified = subprocess.CompletedProcess([], 0)
+        with (
+            mock.patch.dict(os.environ, {"ENGINE_INTERNAL_TOKEN": inherited_token}),
+            mock.patch.object(run_real_bench_ci, "_run_compose", side_effect=fake_run_compose),
+            mock.patch.object(run_real_bench_ci, "_verify_http_ready"),
+            mock.patch.object(run_real_bench_ci.subprocess, "run", return_value=verified),
+            redirect_stdout(output),
+            redirect_stderr(output),
+        ):
+            for _ in range(2):
+                self.assertEqual(run_real_bench_ci.run_real_bench_ci(engine_port=18999), 0)
+
+        self.assertEqual(len(engine_tokens), 2)
+        self.assertTrue(engine_tokens == test_tokens, "Engine and test credentials must match")
+        self.assertTrue(engine_tokens[0] != engine_tokens[1], "Each new stack needs a distinct credential")
+        for token in engine_tokens:
+            self.assertTrue(re.fullmatch(r"[A-Za-z0-9_-]{32,256}", token or ""), "Invalid engine token shape")
+            self.assertTrue(token != inherited_token, "Fresh stacks must generate their own credential")
+            self.assertFalse(token in output.getvalue(), "Runner output contains the internal credential")
+            self.assertFalse(any(token in arg for args in compose_commands for arg in args), "Compose argv contains the credential")
 
     def test_provision_failure_keeps_synthetic_credentials_private(self) -> None:
         """Compose must inherit credentials by name, and failures must omit child output."""

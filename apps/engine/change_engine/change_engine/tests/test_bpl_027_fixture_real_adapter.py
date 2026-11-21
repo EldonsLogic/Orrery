@@ -24,7 +24,14 @@ from types import SimpleNamespace
 
 from change_engine.adapter import ADAPTER_ID, ChangeEngineAdapter, FrappeBackendError, FrappeSiteResolver, make_frappe_adapter
 from change_engine.adapter import contracts_support as cs
-from change_engine.adapter.mapping import BLUEPRINT_TO_FRAPPE_FIELDTYPE, _sanitize_custom_fieldname, entity_to_doctype
+from change_engine.adapter.mapping import (
+    BLUEPRINT_TO_FRAPPE_FIELDTYPE,
+    ENGINE_NAME_PREFIX,
+    _sanitize_custom_fieldname,
+    engine_role_name,
+    engine_state_name,
+    entity_to_doctype,
+)
 
 REPO_ROOT = Path(os.environ.get("PLATFORM_REPO_ROOT") or Path(__file__).resolve().parents[5]).expanduser()
 SERVICES_BP_DIR = REPO_ROOT / "services" / "blueprint"
@@ -35,6 +42,9 @@ SITES_PATH = os.path.expanduser(os.environ.get("BPL027_SITES_PATH", "~/frappe-be
 TENANT = "t_bpl027"
 # Blueprint permission action -> engine permission flag.
 ACTION_FLAG = {"read": "read", "create": "create", "update": "write", "submit": "submit", "cancel": "cancel", "delete": "delete"}
+# Engine permission flags on a rule (ADR-0039 section 2, ADR-0051).
+RULE_FLAGS = ("read", "write", "create", "delete", "submit", "cancel", "amend", "report", "export", "import", "share",
+              "print", "email", "set_user_permissions")
 # Tables whose row counts must not move on a no-op re-apply.
 FINGERPRINT_TABLES = ("Role", "Workflow", "Workflow Document State", "Workflow Transition", "Report", "Custom Field",
                       "Property Setter", "DocType", "Warehouse", "Custom DocPerm")
@@ -118,7 +128,12 @@ def seal(art: dict) -> dict:
 
 
 def expected_engine_config(bp: dict) -> dict:
-    """What a correct apply must leave on the site, derived from the Blueprint alone."""
+    """What a correct apply must leave on the site, derived from the Blueprint alone.
+
+    Role and workflow-state names are the adapter-owned names (SEC-022, ADR-0051), never the raw Blueprint ids;
+    "permissions" lists the Blueprint's own grants (what the Blueprint asks for, before ADR-0051 narrows it).
+    """
+    role = engine_role_name
     mapped = {}
     if MAPPING.exists():
         for ent in json.loads(MAPPING.read_text(encoding="utf-8"))["entities"]:
@@ -126,21 +141,22 @@ def expected_engine_config(bp: dict) -> dict:
                 if fld.get("engineField"):
                     mapped[(ent["blueprintEntity"], fld["blueprintField"])] = fld["engineField"]
     return {
-        "roles": sorted(r["id"] for r in bp["roles"]),
+        "roles": sorted(role(r["id"]) for r in bp["roles"]),
         "workflows": {
             wf["id"]: {
                 "doctype": entity_to_doctype(wf["entity"]),
-                "states": sorted(s["id"] for s in wf["states"]),
+                "states": sorted(engine_state_name(s["id"]) for s in wf["states"]),
                 "transitions": sorted(
-                    (t["from"], t.get("actionLabels", {}).get("en") or t["id"], t["to"], role)
+                    (engine_state_name(t["from"]), t.get("actionLabels", {}).get("en") or t["id"], engine_state_name(t["to"]), r)
                     for t in wf["transitions"]
-                    for role in (t.get("allowedRoles") or ["System Manager"])
+                    for r in [role(x) for x in t["allowedRoles"]]
                 ),
             }
             for wf in bp["workflows"]
         },
         "reports": {
-            r["id"]: {"doctype": entity_to_doctype(r["entity"]) if r.get("entity") else None, "roles": sorted(r.get("visibleToRoles") or ["All"])}
+            r["id"]: {"doctype": entity_to_doctype(r["entity"]) if r.get("entity") else None,
+                      "roles": sorted(role(x) for x in r["visibleToRoles"])}
             for r in bp["reports"]
         },
         "warehouses": sorted(loc["id"] for loc in bp["locations"] if loc["kind"] == "warehouse"),
@@ -159,6 +175,89 @@ def expected_engine_config(bp: dict) -> dict:
             if a in ACTION_FLAG
         ),
     }
+
+
+def _attr(obj, key: str):
+    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+
+def name_clashes(f, exp: dict) -> list[str]:
+    """Every engine role and workflow state the apply wrote must carry the adapter-owned name exactly (SEC-022).
+
+    The engine matches names without case, so a lookup of a raw Blueprint id can land on a built-in record
+    ("auditor" -> "Auditor"); this read-back fails on any such alias, on any transition or report role that is
+    not the managed one, and on a state that resolves to a differently spelled record."""
+    clashes = [f"role:{r}" for r in exp["roles"] if f.db.get_value("Role", r, "name") != r]
+    for wf_id, want in exp["workflows"].items():
+        wf = f.get_doc("Workflow", wf_id)
+        got_states = {_attr(s, "state") for s in wf.states}
+        clashes += [f"{wf_id}:state:{s}" for s in want["states"] if s not in got_states]
+        clashes += [f"{wf_id}:record:{s}" for s in want["states"] if f.db.get_value("Workflow State", s, "name") != s]
+        got = {(_attr(t, "state"), _attr(t, "action"), _attr(t, "next_state"), _attr(t, "allowed")) for t in wf.transitions}
+        clashes += [f"{wf_id}:transition:{t}" for t in want["transitions"] if t not in got]
+    for rep_id, want in exp["reports"].items():
+        got_roles = sorted(_attr(r, "role") for r in f.get_doc("Report", rep_id).roles)
+        if got_roles != want["roles"]:
+            clashes.append(f"report:{rep_id}:{got_roles}")
+    return clashes
+
+
+def expected_grants(f, bp: dict) -> dict:
+    """ADR-0051 grant table, written independently of the adapter: {(role, doctype): {"flags", "if_owner", "hidden"}}.
+
+    Fail closed: location scopes are withheld until record scoping exists; a grant without read, or hiding a field
+    the engine does not hold, is withheld; a grant that masks fields gets no create or write (ADR-0039 RM-018);
+    submit needs a submittable type and write, cancel needs submit, amend needs create and cancel."""
+    out = {}
+    for r in bp["roles"]:
+        scope = r["scope"]["type"]
+        if scope not in ("company", "own_records"):
+            continue
+        for p in r["permissions"]:
+            acts, dt = set(p["actions"]), entity_to_doctype(p["entity"])
+            meta = f.get_meta(dt)
+            names = {_attr(d, "fieldname") for d in meta.fields}
+            hidden = [_sanitize_custom_fieldname(h) for h in p.get("hiddenFields", [])]
+            if "read" not in acts or any(h not in names for h in hidden):
+                continue
+            masked = bool(p.get("hiddenFields") or p.get("readOnlyFields"))
+            flags = {"read"} | {"export"} & acts | {"delete"} & acts
+            if not masked:
+                flags |= {"create"} & acts | ({"write"} if "update" in acts else set())
+            if int(getattr(meta, "is_submittable", 0) or 0) and "write" in flags and "submit" in acts:
+                flags.add("submit")
+                if "cancel" in acts:
+                    flags.add("cancel")
+                    if "create" in flags:
+                        flags.add("amend")
+            out[(engine_role_name(r["id"]), dt)] = {"flags": flags, "if_owner": int(scope == "own_records"), "hidden": hidden}
+    return out
+
+
+def grant_gaps(f, bp: dict) -> dict:
+    """Compare managed permission rules on the site with expected_grants (BPL-032): missing, extra, field levels."""
+    exp = expected_grants(f, bp)
+    rules: dict = {}
+    for row in f.get_all("Custom DocPerm", fields=["*"]):
+        role = str(_attr(row, "role") or "")
+        if role.startswith(ENGINE_NAME_PREFIX):
+            on = {k for k in RULE_FLAGS if int(_attr(row, k) or 0)}
+            rules[(role, _attr(row, "parent"), int(_attr(row, "permlevel") or 0))] = (on, int(_attr(row, "if_owner") or 0))
+    act = {(r, dt): v for (r, dt, lvl), v in rules.items() if lvl == 0 and v[0]}
+    missing = sorted((r, dt, fl) for (r, dt), e in exp.items() for fl in e["flags"] - act.get((r, dt), (set(), 0))[0])
+    extra = sorted((r, dt, fl) for (r, dt), (on, _o) in act.items() for fl in on - exp.get((r, dt), {"flags": set()})["flags"])
+    missing += sorted((r, dt, "if_owner") for (r, dt), e in exp.items() if (r, dt) in act and act[(r, dt)][1] != e["if_owner"])
+    levels = []
+    for (r, dt), e in exp.items():
+        meta = f.get_meta(dt)
+        readers = [k for k in exp if k[1] == dt]
+        for fn in e["hidden"]:
+            lvl = int(_attr(meta.get_field(fn), "permlevel") or 0)
+            if lvl == 0 or "read" in rules.get((r, dt, lvl), (set(), 0))[0]:
+                levels.append((r, dt, fn, "visible"))
+            levels += [(o, dt, fn, "hidden") for (o, _d) in readers
+                       if fn not in exp[(o, _d)]["hidden"] and lvl and "read" not in rules.get((o, dt, lvl), (set(), 0))[0]]
+    return {"missing": missing, "extra": extra, "levels": sorted(set(levels))}
 
 
 def ctx() -> dict:
@@ -235,6 +334,92 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertEqual(exp["workflows"]["sales_order_flow"]["doctype"], "Sales Order")
         self.assertIn(("warehouse_keeper", "Delivery Note", "submit"), exp["permissions"])
 
+
+    def _apply_fixture_offline(self):
+        """Apply the fixture's entities, roles, workflows and reports through the real backend on a simulated
+        engine whose names match without case, like the bench (no compiler needed)."""
+        from change_engine.adapter import FrappeRuntimeBackend
+        from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
+
+        bp, engine = without_attachments(load_fixture()), CaseInsensitiveEngine("bpl027.localhost")
+        backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
+                                       frappe_factory=lambda: engine, offline_ddl_simulator=True)
+        auditor_before = engine.db.get_value("Role", "Auditor", ["name", "disabled"])
+        for section, kind in (("entities", "entity.add"), ("roles", "role.upsert"), ("workflows", "workflow.upsert"),
+                              ("reports", "report.upsert")):
+            for elem in bp[section]:
+                backend.execute_step(TENANT, {"seq": 1, "kind": kind, "pointer": f"/{section}/{elem['id']}",
+                                              "subject": {"kind": section[:-1], "id": elem["id"]}, "params": {"definition": elem}})
+        self.assertEqual(engine.db.get_value("Role", "Auditor", ["name", "disabled"]), auditor_before)
+        return bp, engine
+
+    def test_04b_offline_records_carry_adapter_owned_names(self) -> None:
+        """SEC-022: the same read-back as bench test_04b, on a case-insensitive simulated engine."""
+        bp, engine = self._apply_fixture_offline()
+        self.assertEqual(name_clashes(engine, expected_engine_config(bp)), [])
+
+    def test_06_offline_mapped_grants_reach_the_engine(self) -> None:
+        """BPL-032: the same read-back as bench test_06, on a case-insensitive simulated engine."""
+        bp, engine = self._apply_fixture_offline()
+        self.assertEqual(grant_gaps(engine, bp), {"missing": [], "extra": [], "levels": []})
+        granted = expected_grants(engine, bp)
+        self.assertIn(("bp-owner", "Sales Order"), granted)  # the check is not vacuous
+        self.assertEqual(granted[("bp-sales_rep", "Sales Order")]["if_owner"], 1)
+        self.assertNotIn(("bp-warehouse_keeper", "Delivery Note"), granted)  # warehouse scope: withheld
+
+    def test_06c_offline_literal_grants_and_untouched_engine_rules(self) -> None:
+        """Review round 1 (item 6): literal expectations written by hand from the fixture and the ADR-0051 table, with
+        no adapter helper; built-in roles' rules and field levels the adapter does not own stay exactly as they were."""
+        from change_engine.adapter import FrappeRuntimeBackend
+        from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
+
+        bp, engine = without_attachments(load_fixture()), CaseInsensitiveEngine("bpl027.localhost")
+        engine.add_field("Item", "valuation_secret", permlevel=2)  # an engine field on a level the adapter never owns
+        engine.add_field("Customer", "credit_hold", permlevel=1)
+        backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
+                                       frappe_factory=lambda: engine, offline_ddl_simulator=True)
+        for section, kind in (("entities", "entity.add"), ("roles", "role.upsert")):
+            for elem in bp[section]:
+                backend.execute_step(TENANT, {"seq": 1, "kind": kind, "pointer": f"/{section}/{elem['id']}",
+                                              "subject": {"kind": section[:-1], "id": elem["id"]}, "params": {"definition": elem}})
+        rules = {(r["role"], r["parent"], int(r.get("permlevel") or 0)): (
+                     {k for k in ("read", "write", "create", "delete", "submit", "cancel", "amend", "report", "export", "import",
+                                  "share", "print", "email", "set_user_permissions") if int(r.get(k) or 0)}, int(r.get("if_owner") or 0))
+                 for r in engine.rows("Custom DocPerm")}
+        self.assertEqual(rules[("bp-owner", "Sales Order", 0)], ({"read", "create", "write", "export"}, 0))
+        self.assertEqual(rules[("bp-accountant", "Sales Invoice", 0)], ({"read", "create", "write", "submit", "cancel", "amend", "export"}, 0))
+        self.assertEqual(rules[("bp-accountant", "Sales Order", 0)], ({"read", "export"}, 0))  # submit without update: dropped
+        self.assertEqual(rules[("bp-sales_rep", "Sales Order", 0)], ({"read", "create", "write", "submit", "cancel", "amend"}, 1))
+        self.assertEqual(rules[("bp-auditor", "Payment", 0)], ({"read", "export"}, 0))  # a document type the adapter made
+        self.assertNotIn(("bp-sales_rep", "Customer", 0), rules)  # hides credit_limit, which the engine does not hold
+        self.assertFalse([k for k in rules if k[0] in ("bp-warehouse_keeper", "bp-branch_sales_manager")])  # location scopes
+        self.assertFalse([k for k in rules if k[0].startswith("bp-") and k[2] != 0])  # no field level used on this fixture
+        builtin = {k: v for k, v in rules.items() if not k[0].startswith("bp-")}
+        self.assertEqual(builtin, {("Auditor", "Customer", 0): ({"read"}, 0),
+                                   ("Sales User", "Customer", 0): ({"read", "write", "create"}, 0),
+                                   ("Sales User", "Item", 0): ({"read"}, 0)})
+        levels = {fn: int(getattr(engine.get_meta(dt).get_field(fn), "permlevel", 0) or 0)
+                  for dt, fn in (("Item", "valuation_secret"), ("Customer", "credit_hold"))}
+        self.assertEqual(levels, {"valuation_secret": 2, "credit_hold": 1})
+        self.assertEqual(engine.rows("Property Setter"), [])
+
+    def test_06d_offline_grant_on_an_unreviewed_engine_document_type_is_refused(self) -> None:
+        """ADR-0051 item 3: on a real site Supplier, Price List, Delivery Note and the purchase documents are engine
+        document types outside the reviewed mapping, so the fixture roles that grant them are refused there."""
+        from change_engine.adapter import FrappeRuntimeBackend
+        from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
+
+        bp, engine = without_attachments(load_fixture()), CaseInsensitiveEngine("bpl027.localhost")
+        engine.add_doctype("Supplier", module="Buying", custom=0)
+        backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
+                                       frappe_factory=lambda: engine, offline_ddl_simulator=True)
+        owner = next(r for r in bp["roles"] if r["id"] == "owner")
+        with self.assertRaises(FrappeBackendError) as err:
+            backend.execute_step(TENANT, {"seq": 1, "kind": "role.upsert", "pointer": "/roles/owner",
+                                          "subject": {"kind": "role", "id": "owner"}, "params": {"definition": owner}})
+        self.assertEqual(err.exception.details.get("reasonCode"), "protected_subject")
+        self.assertTrue(err.exception.side_effect_free)
+        self.assertIsNone(engine.db.get_value("Role", "bp-owner", "name"))
 
     @staticmethod
     def _two_warehouse_artifact(target: dict) -> dict:
@@ -512,18 +697,15 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
             )
 
     @unittest.expectedFailure
-    def test_04b_engine_records_keep_blueprint_ids_exactly(self) -> None:
-        """KNOWN GAP (BPL-027 finding 1, security): role 'auditor' resolves to the engine's built-in 'Auditor' role
-        and state 'approved' to the built-in 'Approved' state, because the engine matches names without case. The
-        mapping contract says adapter roles are its own, never built-in ones. Remove expectedFailure once fixed."""
+    def test_04b_engine_records_carry_adapter_owned_names(self) -> None:
+        """SEC-022 (was BPL-027 finding 1): Blueprint role 'auditor' must become the managed 'bp-auditor', never the
+        built-in 'Auditor', and state 'approved' 'bp-approved', never the built-in 'Approved' (ADR-0051). Fails only
+        on a name that resolves to another record; existence of the records is checked in test_04. Kept flagged until
+        the full trading fixture applies live (the ADR-0051 allowlist refuses its unreviewed built-in engine doctypes
+        Supplier, Price List, Delivery Note and purchase documents in test_03)."""
         self.need("applied")
-        exp, clashes = self.expected, []
         with site_db() as f:
-            clashes += [r for r in exp["roles"] if f.db.get_value("Role", r, "name") != r]
-            for wf_id, want in exp["workflows"].items():
-                states = {s.state for s in f.get_doc("Workflow", wf_id).states}
-                clashes += [f"{wf_id}:{s}" for s in want["states"] if s not in states]
-        self.assertEqual(clashes, [])
+            self.assertEqual(name_clashes(f, self.expected), [])
 
     @unittest.expectedFailure
     def test_05_readback_entities_and_fields(self) -> None:
@@ -544,17 +726,13 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
 
     @unittest.expectedFailure
     def test_06_readback_role_permissions(self) -> None:
-        """KNOWN GAP (BPL-027 finding 3): role.upsert creates the role only; no Blueprint permission (actions,
-        hidden or read-only fields) reaches the engine. Needs a design and security review. Remove when fixed."""
+        """BPL-032 (was BPL-027 finding 3): every grant the ADR-0051 table derives from the Blueprint is a rule on the
+        managed role, nothing more, and hidden fields sit on levels the hiding role cannot read. Fails only on a
+        missing, extra or mis-levelled managed rule. Kept flagged until the full trading fixture applies live (the
+        ADR-0051 allowlist refuses its unreviewed built-in engine doctypes in test_03)."""
         self.need("applied")
-        missing = []
         with site_db() as f:
-            for role, dt, flag in self.expected["permissions"]:
-                rows = f.get_all("Custom DocPerm", filters={"parent": dt, "role": role, flag: 1}) or f.get_all(
-                    "DocPerm", filters={"parent": dt, "role": role, flag: 1})
-                if not rows:
-                    missing.append((role, dt, flag))
-        self.assertEqual(missing, [])
+            self.assertEqual(grant_gaps(f, self.bp), {"missing": [], "extra": [], "levels": []})
 
     def test_07_reapply_is_a_noop(self) -> None:
         self.need("applied")

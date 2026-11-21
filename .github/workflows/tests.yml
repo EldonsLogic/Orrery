@@ -348,6 +348,12 @@ jobs:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_027_fixture_real_adapter.py -q
 
+      - name: Adapter role and state namespacing and mapped grants (SEC-022, BPL-032, offline)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_sec_022_bpl_032_roles.py -q
+
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:

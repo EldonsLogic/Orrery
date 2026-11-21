@@ -18,10 +18,20 @@ import re
 from typing import Any, Callable, Iterator
 
 from change_engine.adapter.mapping import (
+    ADAPTER_DOCTYPE_MODULE,
     BLUEPRINT_TO_FRAPPE_FIELDTYPE,
+    ENGINE_NAME_PREFIX,
+    ENTITY_TO_DOCTYPE,
+    RULE_FLAGS,
     _DECIMAL_ADD_RE,
+    EngineNameError,
     _sanitize_custom_fieldname,
+    engine_role_name,
+    engine_state_name,
     entity_to_doctype,
+    is_protected_entity,
+    reviewed_grant_doctype,
+    rule_flags,
 )
 from change_engine.api.endpoints import FrappeDeploymentAdapter
 from change_engine.guarded_apply.property_setter_engine import (
@@ -67,6 +77,10 @@ _BP_PROP_TO_FRAPPE = {
     "/options": ("options", "Text"),
 }
 
+
+# BPL-032: highest engine permission level (levels 1..9 carry field masks, ADR-0039 item 3).
+MAX_PERMLEVEL = 9
+_ZERO_RULE = {**dict.fromkeys(RULE_FLAGS, 0), "if_owner": 0}
 
 ENGINE_ENV_VAR = "CHANGE_ENGINE_ENV"
 OFFLINE_SIMULATOR_ENVS = frozenset({"dev", "test"})
@@ -627,21 +641,20 @@ class FrappeRuntimeBackend:
                             dep.clear_doctype_cache(str(rep_dt))
 
                 elif kind == "role.upsert":
-                    defn = params.get("definition") or {}
-                    role_id = str(defn.get("id") or subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
-                        f.db.set_value("Role", role_id, "disabled", 0)
-                    else:
-                        f.get_doc({"doctype": "Role", "role_name": role_id, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
-                    if hasattr(f.db, "commit"):
-                        f.db.commit()
+                    defn = params.get("definition")
+                    # The gated subject, the pointer and the definition must name one role (ADR-0051).
+                    if not (
+                        isinstance(defn, dict)
+                        and isinstance(subject, dict)
+                        and segs[:1] == ["roles"]
+                        and len(segs) == 2
+                        and subject.get("id") == segs[1] == defn.get("id")
+                    ):
+                        raise self._refuse("definition_conflict")
+                    self._upsert_role(f, defn["id"], defn)
 
                 elif kind == "role.disable":
-                    role_id = str(subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
-                        f.db.set_value("Role", role_id, "disabled", 1)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
+                    self._disable_role(f, subject.get("id") or segs[-1])
 
                 elif kind == "location.upsert":
                     defn = params.get("definition") or {}
@@ -757,7 +770,7 @@ class FrappeRuntimeBackend:
             fields.append(self._to_frappe_field_def(doctype, fname, fld))
         if not fields:
             fields = [{"fieldname": "title", "fieldtype": "Data", "label": "Title"}]
-        doc = f.get_doc({"doctype": "DocType", "name": doctype, "module": "Custom", "custom": 1, "fields": fields})
+        doc = f.get_doc({"doctype": "DocType", "name": doctype, "module": ADAPTER_DOCTYPE_MODULE, "custom": 1, "fields": fields})
         doc.insert(ignore_permissions=True)
         if hasattr(f.db, "commit"):
             f.db.commit()
@@ -930,11 +943,25 @@ class FrappeRuntimeBackend:
         wf_id = str(defn.get("id") or "workflow")
         entity_id = str(defn.get("entity") or "sales_order")
         doctype = entity_to_doctype(entity_id)
-        self._ensure_doctype_exists(f, doctype, {})
-
         transitions = defn.get("transitions") or []
         states_raw = defn.get("states") or []
         draft_sources = {t.get("from") for t in transitions if isinstance(t, dict)}
+
+        # SEC-022 (ADR-0051): states and roles get adapter-owned names; refuse, before any write, a name that is not
+        # a Blueprint id or that the engine already holds under another spelling (it matches names without case).
+        state = self._managed_state_name
+        state_names = {state(s.get("id")) for s in states_raw}
+        state_names |= {state(t.get(k)) for t in transitions for k in ("from", "to")}
+        for name in sorted(state_names):  # a failed read raises: no lookup error is taken as "no collision"
+            stored = f.db.get_value("Workflow State", name, "name")
+            if stored and str(stored) != name:
+                raise self._refuse("protected_subject")
+        # Every transition names its roles (the Blueprint requires at least one); none falls back to a default.
+        if not all(isinstance(t, dict) and isinstance(t.get("allowedRoles"), list) and t["allowedRoles"] for t in transitions):
+            raise self._refuse("unsupported_value_type")
+        role = {r: self._managed_role(f, r)[0] for t in transitions for r in t["allowedRoles"]}
+
+        self._ensure_doctype_exists(f, doctype, {})
 
         # Ensure initial state is first and map doc_status cleanly without direct 0->2 jumps
         ordered_states = sorted(
@@ -964,13 +991,13 @@ class FrappeRuntimeBackend:
 
             allow_edit = "System Manager"
             for t in transitions:
-                if t.get("from") == sid and t.get("allowedRoles"):
-                    allow_edit = str(t["allowedRoles"][0])
+                if t.get("from") == sid:
+                    allow_edit = role[t["allowedRoles"][0]]
                     break
 
             wf_states.append(
                 {
-                    "state": sid,
+                    "state": state(sid),
                     "doc_status": doc_status,
                     "allow_edit": allow_edit,
                     "style": style,
@@ -987,14 +1014,13 @@ class FrappeRuntimeBackend:
                     f.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action}).insert(ignore_permissions=True)
                 except Exception:
                     pass
-            roles = t.get("allowedRoles") or ["System Manager"]
-            for role in roles:
+            for r in t["allowedRoles"]:
                 wf_transitions.append(
                     {
-                        "state": str(t["from"]),
+                        "state": state(t["from"]),
                         "action": action,
-                        "next_state": str(t["to"]),
-                        "allowed": str(role),
+                        "next_state": state(t["to"]),
+                        "allowed": role[r],
                         "allow_self_approval": False,
                     }
                 )
@@ -1021,6 +1047,8 @@ class FrappeRuntimeBackend:
         status = outcome.get("status")
         if status == "RECOVERY_REQUIRED":
             raise FrappeBackendError("recovery_required", stage="execute")
+        if outcome.get("disposition") == "WORKFLOW_STATE_NAME_COLLISION":  # a state appeared since the check above
+            raise FrappeBackendError("plan_rejected", {"reasonCode": "protected_subject"}, stage="execute")
         if status != "APPLIED":
             raise FrappeBackendError("engine_unavailable", stage="execute")
 
@@ -1028,6 +1056,11 @@ class FrappeRuntimeBackend:
         report_id = str(defn.get("id") or "report")
         entity_id = str(defn.get("entity") or "sales_order")
         doctype = entity_to_doctype(entity_id)
+        # SEC-022 (ADR-0051): validate the roles before any write; no roles is refused, never "All" (fail closed).
+        visible = defn.get("visibleToRoles")
+        if not isinstance(visible, list) or not visible:
+            raise self._refuse("unsupported_value_type")
+        roles = [self._managed_role(f, r)[0] for r in visible]
         self._ensure_doctype_exists(f, doctype, {})
 
         columns: list[dict[str, Any]] = []
@@ -1041,7 +1074,6 @@ class FrappeRuntimeBackend:
         if not columns:
             columns = [{"fieldname": "name", "label": "ID"}]
 
-        roles = [str(r) for r in (defn.get("visibleToRoles") or ["All"])]
         rep_payload = {
             "report_name": report_id,
             "ref_doctype": doctype,
@@ -1107,6 +1139,239 @@ class FrappeRuntimeBackend:
         if hasattr(f.db, "commit"):
             f.db.commit()
 
+    # ------------------------------------------------------------------ roles and permission rules (SEC-022, BPL-032)
+    @staticmethod
+    def _refuse(reason: str) -> FrappeBackendError:
+        """A step the adapter will not apply, raised before any write (plan reason code in details)."""
+        return FrappeBackendError("plan_rejected", {"reasonCode": reason}, stage="execute", side_effect_free=True)
+
+    def _managed_state_name(self, state_id: Any) -> str:
+        try:
+            return engine_state_name(state_id)
+        except EngineNameError:
+            raise self._refuse("unsupported_value_type") from None
+
+    def _managed_role(self, f: Any, role_id: Any) -> tuple[str, int | None]:
+        """(managed name, disabled flag or None when absent) for a Blueprint role id (ADR-0051).
+
+        The engine matches names without case; when its lookup returns a record under another spelling, that
+        record is not ours (a built-in or someone else's role) and the step is refused."""
+        try:
+            name = engine_role_name(role_id)
+        except EngineNameError:
+            raise self._refuse("unsupported_value_type") from None
+        row = f.db.get_value("Role", name, ["name", "disabled"])
+        if not row:
+            return name, None
+        if str(row[0]) != name:
+            raise self._refuse("protected_subject")
+        return name, int(row[1] or 0)
+
+    def _upsert_role(self, f: Any, role_id: Any, defn: dict[str, Any]) -> None:
+        """Create or re-enable the managed role and reconcile its rules; every check runs before the first write."""
+        name, disabled = self._managed_role(f, role_id)
+        grants = self._role_grants(f, defn)
+        plans = [self._plan_rules(f, dt, name, grants.get(dt)) for dt in sorted(set(grants) | self._rule_doctypes(f, name))]
+        if disabled is None:
+            f.get_doc({"doctype": "Role", "role_name": name, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
+        elif disabled:
+            f.db.set_value("Role", name, "disabled", 0)
+        for plan in plans:
+            self._write_rules(f, plan)
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
+    def _disable_role(self, f: Any, role_id: Any) -> None:
+        """A disabled role keeps its record and holds no rules (ADR-0039 RM-008)."""
+        name, disabled = self._managed_role(f, role_id)
+        if disabled is None:
+            return
+        for plan in [self._plan_rules(f, dt, name, None) for dt in sorted(self._rule_doctypes(f, name))]:
+            self._write_rules(f, plan)
+        f.db.set_value("Role", name, "disabled", 1)
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
+    def _role_grants(self, f: Any, defn: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """ADR-0051 grant table: {doctype: {"flags", "hidden"}} for one Blueprint role; refuses or withholds, never widens."""
+        scope = defn.get("scope").get("type") if isinstance(defn.get("scope"), dict) else None
+        if scope == "assigned_records":
+            raise self._refuse("unsupported_value_type")
+        perms = defn.get("permissions") or []
+        if not isinstance(perms, list) or not all(isinstance(p, dict) for p in perms):
+            raise self._refuse("unsupported_value_type")
+        resolved: dict[str, dict[str, Any]] = {}
+        for p in perms:
+            entity = p.get("entity")
+            if not isinstance(entity, str):
+                raise self._refuse("unsupported_value_type")
+            doctype = self._grant_doctype(f, entity)
+            if doctype in resolved:
+                raise self._refuse("definition_conflict")
+            resolved[doctype] = p
+        if scope not in ("company", "own_records"):
+            return {}  # branch, warehouse, department: withheld until record scoping on holders exists (ADR-0051)
+        grants: dict[str, dict[str, Any]] = {}
+        for doctype, p in resolved.items():
+            meta = f.get_meta(doctype)
+            fieldnames = {getattr(d, "fieldname", None) for d in meta.fields}
+            hidden = sorted({_sanitize_custom_fieldname(str(h)) for h in p.get("hiddenFields") or []})
+            if any(h not in fieldnames for h in hidden):
+                continue  # a hidden field the engine does not hold under the adapter's name: withhold the grant
+            flags = rule_flags(
+                p.get("actions"),
+                masked=bool(p.get("hiddenFields") or p.get("readOnlyFields")),
+                submittable=bool(int(getattr(meta, "is_submittable", 0) or 0)),
+            )
+            if flags:
+                grants[doctype] = {"flags": {**flags, "if_owner": int(scope == "own_records")}, "hidden": hidden}
+        return grants
+
+    def _grant_doctype(self, f: Any, entity: str) -> str:
+        """Allowlist (ADR-0051 item 3): the reviewed mapping minus protected entities, or a document type the adapter
+        created for an unmapped entity (custom=1 in the adapter's module, stored under exactly that name)."""
+        if is_protected_entity(entity):
+            raise self._refuse("protected_subject")
+        reviewed = reviewed_grant_doctype(entity)
+        if reviewed is not None:
+            exists = f.db.table_exists(reviewed) if hasattr(f.db, "table_exists") else f.db.exists("DocType", reviewed)
+            if not exists:
+                raise self._refuse("subject_missing")
+            return reviewed
+        doctype = entity_to_doctype(entity)
+        if entity in ENTITY_TO_DOCTYPE or not _SAFE_SQL_IDENT_RE.match(doctype):
+            raise self._refuse("protected_subject")
+        row = f.db.get_value("DocType", doctype, ["name", "custom", "module"])  # a failed read raises
+        if not row or str(row[0]) != doctype or int(row[1] or 0) != 1 or row[2] != ADAPTER_DOCTYPE_MODULE:
+            raise self._refuse("protected_subject")
+        return doctype
+
+    @staticmethod
+    def _rule_doctypes(f: Any, role_name: str) -> set[str]:
+        return {str(r.get("parent")) for r in f.get_all("Custom DocPerm", filters={"role": role_name}, fields=["parent"])}
+
+    @staticmethod
+    def _rule_rows(f: Any, doctype: str) -> list[dict[str, Any]]:
+        rows = []
+        for r in f.get_all("Custom DocPerm", filters={"parent": doctype}, fields=["name"]):
+            d = f.get_doc("Custom DocPerm", r.get("name"))
+            rows.append({
+                "name": r.get("name"),
+                "role": str(getattr(d, "role", "") or ""),
+                "permlevel": int(getattr(d, "permlevel", 0) or 0),
+                **{k: int(getattr(d, k, 0) or 0) for k in (*RULE_FLAGS, "if_owner")},
+            })
+        return rows
+
+    def _plan_rules(self, f: Any, doctype: str, role_name: str, grant: dict[str, Any] | None) -> dict[str, Any]:
+        """Target rules and field levels on one document type after this role's change (ADR-0039 item 3).
+
+        Other managed roles' field visibility is read back from their rules, so the result does not depend on the
+        order roles are applied in. Fields are grouped by the set of reading managed roles that hide them; each
+        group keeps the level it holds or takes the lowest free one. A level holding a field the adapter did not
+        place, or a rule of a role it does not own, is never used."""
+        rows = self._rule_rows(f, doctype)
+        foreign = [r["permlevel"] for r in rows if not r["role"].startswith(ENGINE_NAME_PREFIX)]
+        if not rows:
+            foreign = [int(r.get("permlevel") or 0) for r in f.get_all("DocPerm", filters={"parent": doctype}, fields=["permlevel"])]
+        managed = [r for r in rows if r["role"].startswith(ENGINE_NAME_PREFIX)]
+        level_of = {d.fieldname: int(getattr(d, "permlevel", 0) or 0) for d in f.get_meta(doctype).fields if getattr(d, "fieldname", None)}
+        ours = {r["permlevel"] for r in managed if r["permlevel"] >= 1}
+        reading = {r["role"]: (r["write"], r["if_owner"]) for r in managed if r["permlevel"] == 0 and r["read"] and r["role"] != role_name}
+        if grant:
+            reading[role_name] = (grant["flags"]["write"], grant["flags"]["if_owner"])
+        reads_at = {(r["role"], r["permlevel"]) for r in managed if r["read"]}
+        hidden = set(grant["hidden"]) if grant else set()
+        # Only fields the adapter placed may sit on a level it owns: a custom_ field it moved with a level setter.
+        # Any other field (or foreign role rule) on an owned level is drift and is never adopted or moved (fail closed).
+        if any(lvl in ours for lvl in foreign):
+            raise self._refuse("protected_subject")
+        placed = {
+            (str(r.get("field_name")), int(str(r.get("value"))))
+            for r in f.get_all(
+                "Property Setter",
+                filters={"doc_type": doctype, "property": "permlevel"},
+                fields=["field_name", "value"],
+            )
+            if r.get("value") is not None and str(r.get("value")).isdigit()
+        }
+        if any(lvl in ours and not (fn.startswith("custom_") and (fn, lvl) in placed) for fn, lvl in level_of.items()):
+            raise self._refuse("protected_subject")
+        layout = {fn for fn, lvl in level_of.items() if lvl in ours} | {fn for fn in hidden if level_of[fn] in ours | {0}}
+        reserved = {lvl for fn, lvl in level_of.items() if lvl >= 1 and fn not in layout} | {lvl for lvl in foreign if lvl >= 1}
+        sig = {}
+        for fn in layout:
+            lvl = level_of[fn]
+            hiders = {y for y in reading if y != role_name and lvl >= 1 and (y, lvl) not in reads_at}
+            sig[fn] = tuple(sorted(hiders | ({role_name} if fn in hidden else set())))
+        level_for: dict[tuple[str, ...], int] = {}
+        groups = sorted({s for s in sig.values() if s})
+        for s in groups:
+            held = sorted({level_of[fn] for fn in layout if sig[fn] == s and level_of[fn] in ours} - set(level_for.values()))
+            if held:
+                level_for[s] = held[0]
+        for s in groups:
+            if s not in level_for:
+                free = [lvl for lvl in range(1, MAX_PERMLEVEL + 1) if lvl not in reserved and lvl not in level_for.values()]
+                if not free:
+                    raise FrappeBackendError("limit_exceeded", {"limit": "permission_levels"}, stage="execute", side_effect_free=True)
+                level_for[s] = free[0]
+        target: dict[tuple[str, int], dict[str, int]] = {}
+        if grant:
+            target[(role_name, 0)] = dict(grant["flags"])
+        for s, lvl in level_for.items():
+            for y, (write, if_owner) in reading.items():
+                read = int(y not in s)
+                target[(y, lvl)] = {**_ZERO_RULE, "read": read, "write": int(read and write), "if_owner": if_owner}
+        by_key: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        for r in managed:
+            by_key.setdefault((r["role"], r["permlevel"]), []).append(r)
+        clear = [r for key, rs in by_key.items() for i, r in enumerate(rs)
+                 if key not in target and (key[0] == role_name or key[1] >= 1) or key in target and i > 0]
+        setters = sorted((fn, level_for.get(sig[fn], 0)) for fn in layout if level_for.get(sig[fn], 0) != level_of[fn])
+        return {"doctype": doctype, "custom": bool(rows), "target": target, "rows": by_key, "clear": clear, "setters": setters}
+
+    @staticmethod
+    def _set_rule(f: Any, row: dict[str, Any], values: dict[str, int]) -> None:
+        if any(int(row.get(k) or 0) != v for k, v in values.items()):
+            doc = f.get_doc("Custom DocPerm", row["name"])
+            doc.update(values)
+            doc.save(ignore_permissions=True)
+
+    def _write_rules(self, f: Any, plan: dict[str, Any]) -> None:
+        """Apply a _plan_rules result: narrow first, then move fields, then write the target rules."""
+        doctype = plan["doctype"]
+        if not (plan["target"] or plan["clear"] or plan["setters"]):
+            return
+        if not plan["custom"]:
+            # The engine ignores standard rules once a custom rule exists, so copy them first, through its own API.
+            perms_api = getattr(f, "permissions", None)
+            if perms_api is None and getattr(f, "__name__", None) == "frappe":
+                import importlib
+
+                perms_api = importlib.import_module("frappe.permissions")
+            if perms_api is not None:
+                perms_api.setup_custom_perms(doctype)
+            else:  # a runtime without that API (the offline simulator): the same copy, row by row
+                for r in f.get_all("DocPerm", filters={"parent": doctype}, fields=["name"]):
+                    d = f.get_doc("DocPerm", r.get("name"))
+                    f.get_doc({"doctype": "Custom DocPerm", "parent": doctype, "parenttype": "DocType", "parentfield": "permissions",
+                               "role": getattr(d, "role", None), "permlevel": int(getattr(d, "permlevel", 0) or 0),
+                               **{k: int(getattr(d, k, 0) or 0) for k in (*RULE_FLAGS, "if_owner")}}).insert(ignore_permissions=True)
+        for row in plan["clear"]:
+            self._set_rule(f, row, _ZERO_RULE)
+        for fieldname, level in plan["setters"]:
+            f.make_property_setter({"doctype": doctype, "fieldname": fieldname, "property": "permlevel", "value": level, "property_type": "Int"})
+        for (role_name, level), values in sorted(plan["target"].items()):
+            existing = plan["rows"].get((role_name, level))
+            if existing:
+                self._set_rule(f, existing[0], values)
+            else:
+                f.get_doc({"doctype": "Custom DocPerm", "parent": doctype, "parenttype": "DocType", "parentfield": "permissions",
+                           "role": role_name, "permlevel": level, **values}).insert(ignore_permissions=True)
+        if hasattr(f, "clear_cache"):
+            f.clear_cache(doctype=doctype)
+
     # ------------------------------------------------------------------ shadow users
     def sync_members(
         self,
@@ -1122,6 +1387,19 @@ class FrappeRuntimeBackend:
             if mode == "full":
                 target_refs |= set(listed_members.keys())
 
+            # SEC-022 (ADR-0051): every role must be an enabled adapter-owned role held under exactly its managed
+            # name; anything else changes no member (unknown_role). sync_members never creates a role.
+            engine_roles: dict[str, str] = {}
+            for ref in sorted(target_refs):
+                for r in (listed_members.get(ref) or {}).get("roleIds", []):
+                    try:
+                        name, disabled = self._managed_role(f, r)
+                    except FrappeBackendError:
+                        disabled = None
+                    if disabled != 0:
+                        raise FrappeBackendError("unknown_role", {"fields": ["/members/roleIds"]}, side_effect_free=True)
+                    engine_roles[r] = name
+
             for ref in sorted(target_refs):
                 rec = listed_members.get(ref)
                 if rec is None:
@@ -1129,11 +1407,7 @@ class FrappeRuntimeBackend:
                 email = shadow_user_email(ref)
                 label = shadow_user_label(ref)
                 enabled = 1 if rec["status"] == "active" else 0
-                roles_payload = [{"role": r} for r in rec.get("roleIds", [])]
-
-                for r in rec.get("roleIds", []):
-                    if hasattr(f.db, "exists") and not f.db.exists("Role", r):
-                        f.get_doc({"doctype": "Role", "role_name": r, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
+                roles_payload = [{"role": engine_roles[r]} for r in rec.get("roleIds", [])]
 
                 if hasattr(f.db, "exists") and f.db.exists("User", email):
                     u_doc = f.get_doc("User", email)

@@ -69,3 +69,10 @@ Merged `origin/main` (`f7f6998`, past `99f3ca8`) cleanly with `git merge --no-ff
   - `scripts/tests`: 22 passed, 29 subtests passed.
   - `check_docs`, `check_repo_hygiene`, `scan_secrets`, `check_plan_independence`, `check_lanes --actor partner`: all clean.
 - **Live check:** Not run (the throwaway `sec022fix-r2-bpl027` Compose bench failed during `bench new-site --install-app hrms` with `frappe.exceptions.DoesNotExistError: Module HR not found`, unrelated to this PR, and was torn down cleanly with `down -v`).
+
+## Round 2 review Lows (coordinator, Claude Opus 5.5)
+An Opus review of 68cba80 approved round 2 with four Lows:
+- **Fixed, low 1:** removed the duplicate `test_erpnext_upgrade_drift_on_owned_level_does_not_block_revocation` from `test_sec_022_bpl_032_roles.py`. The bodies were identical, so no coverage is lost.
+- **Fixed, low 2:** the BPL-034 skip reasons and ADR-0051 now cite contract PR #247 instead of #235.
+- **Fixed, low 3:** `test_01b` gets an inverse `skipIf(BPL027_PURCHASING_MAPPED == "1")`, so the BPL-034 follow-up must invert or remove it rather than see it fail.
+- **Accepted, low 4:** at plan time, an entity whose DocType was deleted by hand counts as "own". The apply then refuses with `protected_subject` and compensates, so it fails closed.

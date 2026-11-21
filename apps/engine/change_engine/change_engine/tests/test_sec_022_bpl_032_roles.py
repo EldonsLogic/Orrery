@@ -395,55 +395,6 @@ class TestBpl032FieldLevels(_Base):
         self.assertEqual(self.rules(), rules)
         self.assertEqual(self.engine.rows("Property Setter"), setters)
 
-    def test_erpnext_upgrade_drift_on_owned_level_does_not_block_revocation(self) -> None:
-        """Review round 2, finding 5: an ERPNext upgrade adding a standard field at permlevel 2 on an owned level
-        must still refuse role.upsert/grants, must never move or adopt the foreign field, and must NOT block role.disable."""
-        for keep_other_hider in (False, True):
-            with self.subTest(keep_other_hider=keep_other_hider):
-                self.setUp()
-                self.engine.add_field("Widget", "secret_rate", permlevel=1)  # pushes adapter's cost field to permlevel 2
-                self.upsert(role("full", [grant("widget", "read", "update")]))
-                self.upsert(role("hider", [grant("widget", "read", hidden=("cost",))]))
-                if keep_other_hider:
-                    self.upsert(role("hider2", [grant("widget", "read", hidden=("cost",))]))
-                self.assertEqual(self.level("Widget", "custom_cost"), 2)
-
-                # Simulate an ERPNext upgrade adding a standard field at permlevel 2.
-                self.engine.add_field("Widget", "upgrade_std_field", permlevel=2)
-
-                # Grant and upsert paths keep refusing without side effects.
-                rules_before = self.rules()
-                setters_before = self.engine.rows("Property Setter")
-                for defn in (role("hider", [grant("widget", "read")]), role("viewer", [grant("widget", "read")])):
-                    self.refused(lambda: self.upsert(defn))
-                self.assertEqual(self.level("Widget", "upgrade_std_field"), 2)
-                self.assertEqual(self.rules(), rules_before)
-                self.assertEqual(self.engine.rows("Property Setter"), setters_before)
-
-                # Revocation (role.disable) proceeds: bp-hider's rules are zeroed and the role is disabled.
-                self.run_step(step("role.disable", "hider"))
-                self.assertEqual(self.roles()["bp-hider"]["disabled"], 1)
-                self.assertTrue(
-                    all(not any(v for k, v in row.items() if k != "if_owner") for row in self.rules("bp-hider").values())
-                )
-                # Foreign field is never moved or adopted in Property Setter.
-                self.assertEqual(self.level("Widget", "upgrade_std_field"), 2)
-                self.assertFalse(
-                    [ps for ps in self.engine.rows("Property Setter") if ps.get("field_name") == "upgrade_std_field"]
-                )
-                # No managed role retains a rule on the drifted level 2.
-                self.assertFalse(
-                    [k for k, row in self.rules(doctype="Widget").items()
-                     if k[0].startswith(ENGINE_NAME_PREFIX) and k[2] == 2 and any(v for fn, v in row.items() if fn != "if_owner")]
-                )
-                if keep_other_hider:
-                    # Adapter-placed custom_cost moves to a free level and hider2 still hides it.
-                    new_lvl = self.level("Widget", "custom_cost")
-                    self.assertNotIn(new_lvl, (0, 1, 2))
-                    self.assertEqual(self.rules("bp-hider2", "Widget")[("bp-hider2", "Widget", new_lvl)]["read"], 0)
-                else:
-                    self.assertEqual(self.level("Widget", "custom_cost"), 0)
-
     def test_unhiding_returns_fields_to_level_zero(self) -> None:
         for defn in self.ROLES:
             self.upsert(defn)

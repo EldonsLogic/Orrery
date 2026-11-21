@@ -687,6 +687,11 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         self.assertEqual([seqs[s["seq"]] for s in bad], ["/entities/purchase_invoice"])
         self.state["provisioned"] = True
 
+    @unittest.skipIf(
+        os.environ.get("BPL027_PURCHASING_MAPPED") == "1",
+        "BPL-034 mapped: the purchasing and price-list built-ins are no longer refused; invert or remove this test "
+        "in the follow-up that adds them to ENTITY_TO_DOCTYPE",
+    )
     def test_01b_plan_refuses_unmapped_builtins_and_allows_delivery_note(self) -> None:
         """SEC-022 / BPL-032: on a real site, plan refuses role.upsert grants on unmapped built-in DocTypes
         (Supplier, Price List, Purchase Order/Receipt/Invoice, pending BPL-034) with protected_subject before
@@ -711,7 +716,7 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
 
     @unittest.skipUnless(
         os.environ.get("BPL027_PURCHASING_MAPPED") == "1",
-        "BPL-034 (purchasing and price-list engine mapping, owned by eldon; PR #235): Supplier, Price List, "
+        "BPL-034 (purchasing and price-list engine mapping, owned by eldon; contract PR #247): Supplier, Price List, "
         "Purchase Order, Purchase Receipt and Purchase Invoice lack a contract mapping, so plan refuses role.upsert",
     )
     def test_02_plan_preview_and_ddl_gate_refuses_without_gate_approval(self) -> None:
@@ -743,12 +748,12 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
 
     @unittest.skipUnless(
         os.environ.get("BPL027_PURCHASING_MAPPED") == "1",
-        "BPL-034 (purchasing and price-list engine mapping, owned by eldon; PR #235): missing contract mapping "
+        "BPL-034 (purchasing and price-list engine mapping, owned by eldon; contract PR #247): missing contract mapping "
         "for Supplier, Price List and Purchase Order/Receipt/Invoice",
     )
     def test_03_apply_through_real_adapter(self) -> None:
         """Requires BPL-034 (purchasing and price-list engine mapping, owned by eldon) covering Supplier, Price List,
-        and Purchase Order/Receipt/Invoice (PR #235). Flagged with skipUnless on BPL027_PURCHASING_MAPPED=1 so live
+        and Purchase Order/Receipt/Invoice (BPL-034, contract PR #247). Flagged with skipUnless on BPL027_PURCHASING_MAPPED=1 so live
         runs will not fail with 'unexpected success' once BPL-034 lands; unflag after BPL-034 merges."""
         self.need("plan")
         res = self.call("apply", {

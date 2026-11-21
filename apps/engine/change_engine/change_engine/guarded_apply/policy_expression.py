@@ -8,6 +8,8 @@ allow-list of node types. Nothing is ever compiled or executed. Allowed:
   or the literals True, False, None
 - literals: strings, numbers, booleans, None, and lists or tuples of those
 - comparisons: ==, !=, <, <=, >, >=, in, not in, is, is not (chains allowed)
+  Identity comparisons require a right-hand None, True or False literal. A
+  comparison that cannot be evaluated raises PolicyExpressionError.
 - boolean logic: and, or, not, parentheses; unary minus on a number
 - two helper calls, each with one string literal argument:
   is_field_changed('<field>') and has_role('<role>')
@@ -69,9 +71,10 @@ def _check(node: ast.AST) -> None:
             if not isinstance(op, _COMPARATORS):
                 raise PolicyExpressionError(f"Comparison {type(op).__name__} is not allowed")
             if isinstance(op, (ast.Is, ast.IsNot)) and not (
-                isinstance(comparator, ast.Constant) and comparator.value is None
+                isinstance(comparator, ast.Constant)
+                and (comparator.value is None or isinstance(comparator.value, bool))
             ):
-                raise PolicyExpressionError("'is' and 'is not' may only compare with None")
+                raise PolicyExpressionError("'is' and 'is not' require a None, True or False literal")
             _check_operand(comparator)
         return
     _check_operand(node)
@@ -127,9 +130,9 @@ def _compare(op: ast.cmpop, left: Any, right: Any) -> bool:
         if isinstance(op, ast.NotEq):
             return left != right
         if isinstance(op, ast.Is):
-            return left is None
+            return left is right
         if isinstance(op, ast.IsNot):
-            return left is not None
+            return left is not right
         if isinstance(op, ast.In):
             return left in right
         if isinstance(op, ast.NotIn):
@@ -142,9 +145,8 @@ def _compare(op: ast.cmpop, left: Any, right: Any) -> bool:
             return left > right
         if isinstance(op, ast.GtE):
             return left >= right
-    except TypeError:
-        # A missing or wrongly typed field (e.g. None > 50000) does not meet the condition.
-        return False
+    except TypeError as exc:
+        raise PolicyExpressionError(f"Comparison {type(op).__name__} could not be evaluated") from exc
     raise PolicyExpressionError(f"Comparison {type(op).__name__} is not allowed")
 
 

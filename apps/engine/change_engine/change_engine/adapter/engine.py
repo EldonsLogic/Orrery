@@ -992,15 +992,42 @@ class ChangeEngineAdapter:
             return "blocked", "prohibited_expression", ddl
         segs = _segs(pointer)
         if segs[:1] == ["entities"] and len(segs) > 1:
-            ids = [segs[1]]
+            ids: list[Any] = [segs[1]]
             if kind == "entity.add":
                 ids.append(step["subject"].get("id"))
+            elif kind.startswith(("field.", "relation.")):
+                parents = step["subject"].get("parents")
+                parent_id = (
+                    parents[0].get("id")
+                    if isinstance(parents, list) and parents and isinstance(parents[0], dict)
+                    else None
+                )
+                ids.append(parent_id)
             if not all(is_valid_entity_id(i) for i in ids):
                 return "blocked", "unsupported_value_type", ddl
-            if is_protected_entity(segs[1]):
+            if any(is_protected_entity(i) for i in ids):
                 return "blocked", "protected_subject", ddl
+            if len(ids) > 1 and ids[1] != ids[0]:
+                return "blocked", "definition_conflict", ddl
+        elif kind == "entity.add" or kind.startswith(("field.", "relation.")):
+            return "blocked", "unsupported_value_type", ddl
 
         defn = params.get("definition")
+        if kind == "workflow.upsert":
+            target_entity = defn.get("entity") if isinstance(defn, dict) else None
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
+        elif kind == "report.upsert":
+            if not isinstance(defn, dict):
+                return "blocked", "unsupported_value_type", ddl
+            if "entity" in defn:
+                target_entity = defn["entity"]
+                if not is_valid_entity_id(target_entity):
+                    return "blocked", "unsupported_value_type", ddl
+                if is_protected_entity(target_entity):
+                    return "blocked", "protected_subject", ddl
         if kind == "role.upsert":
             grant_reason = grant_plan_reason(defn, blueprint_entities, own_allowed)
             if grant_reason:

@@ -125,8 +125,9 @@ def entity_to_doctype(entity_id: str) -> str:
     return " ".join(part.capitalize() for part in str(entity_id).replace("-", "_").split("_") if part) or "Custom Entity"
 
 
-# The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`); an entity id outside it is refused
-# at plan time (`unsupported_value_type`), so stray whitespace never reaches a derived document type name.
+# The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
+# (`unsupported_value_type`) on `/entities/<id>` pointers, `entity.add` subject ids, `field.*` / `relation.*`
+# parent ids, `workflow.upsert` / `report.upsert` `definition.entity`, and `role.upsert` grant targets.
 ENTITY_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 
 

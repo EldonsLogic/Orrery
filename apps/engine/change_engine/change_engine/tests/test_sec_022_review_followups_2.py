@@ -99,26 +99,139 @@ class TestTrailingNewlineIdentifiers(unittest.TestCase):
         self.assertIsNone(_DECIMAL_ADD_RE.match(stmt + "\n"))
 
 
-def _artifact(steps: list[dict]) -> dict:
+def _artifact(steps: list[dict], *, base: dict | None = None, target: dict | None = None, inverse: dict | None = None) -> dict:
     counts = dict.fromkeys(("cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"), 0)
-    counts.update(data_shape=sum(s["kind"] == "entity.add" for s in steps), access=sum(s["kind"] == "role.upsert" for s in steps))
+    for s in steps:
+        counts[s["impact"]] += 1
     art = {"artifactSchema": "0.1.0", "kind": "forward", "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
-           "blueprint": {"id": "bp-f2", "base": None, "target": {"hash": "sha256:" + "5" * 64, "revision": 1}, "diffHash": None},
+           "blueprint": {"id": "bp-f2", "base": base,
+                         "target": target or {"hash": "sha256:" + "5" * 64, "revision": 1},
+                         "diffHash": ("sha256:" + "7" * 64) if base else None},
            "engineTarget": {"adapter": "frappe", "versionSet": "set-example"}, "components": [], "steps": steps,
            "skippedOps": [], "postConditions": [],
            "risk": {"counts": counts, "total": len(steps), "maxImpact": "access", "needsDdlPlanGate": True,
-                    "touchesCompliance": False, "touchesAccess": True, "touchesLedgerOrTax": False,
+                    "touchesCompliance": False, "touchesAccess": counts["access"] > 0, "touchesLedgerOrTax": False,
                     "requiresTeamReview": False, "irreversibleSteps": 0},
-           "inverse": None}
+           "inverse": inverse}
     digest, art_id = cs.artifact_hashes(art)
     art.update(artifactId=art_id, integrity={"algorithm": "sha256-canonical-json-v1", "contentHash": digest, "signature": None})
     return art
 
 
-def _entity(seq: int, eid: str) -> dict:
-    return {"seq": seq, "phase": 4, "kind": "entity.add", "subject": {"kind": "entity", "id": eid, "parents": []},
+def _inverse_for(base: dict, target: dict, steps: list[dict]) -> dict:
+    counts = dict.fromkeys(("cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"), 0)
+    for s in steps:
+        counts[s["impact"]] += 1
+    inv = {"artifactSchema": "0.1.0", "kind": "inverse", "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
+           "blueprint": {"id": "bp-f2", "base": target, "target": base, "diffHash": "sha256:" + "8" * 64},
+           "engineTarget": {"adapter": "frappe", "versionSet": "set-example"}, "components": [], "steps": steps,
+           "skippedOps": [], "postConditions": [],
+           "risk": {"counts": counts, "total": len(steps), "maxImpact": "destructive", "needsDdlPlanGate": False,
+                    "touchesCompliance": False, "touchesAccess": False, "touchesLedgerOrTax": False,
+                    "requiresTeamReview": False, "irreversibleSteps": 0},
+           "inverse": None}
+    digest, art_id = cs.artifact_hashes(inv)
+    inv.update(artifactId=art_id, integrity={"algorithm": "sha256-canonical-json-v1", "contentHash": digest, "signature": None})
+    return inv
+
+
+def _entity(seq: int, eid: str, *, subject_id: str | None = None) -> dict:
+    sid = eid if subject_id is None else subject_id
+    return {"seq": seq, "phase": 4, "kind": "entity.add", "subject": {"kind": "entity", "id": sid, "parents": []},
             "pointer": f"/entities/{eid}", "impact": "data_shape", "ddlImpact": "additive", "reversible": True,
-            "params": {"definition": {"id": eid, "labels": {"en": eid, "ar": eid}, "fields": []}}, "sourceOps": [f"/entities/{eid}"]}
+            "params": {"definition": {"id": eid, "labels": {"en": eid, "ar": eid}, "fields": [], "relations": []}},
+            "sourceOps": [f"/entities/{eid}"]}
+
+
+def _entity_quarantine(seq: int, eid: str) -> dict:
+    return {"seq": seq, "phase": 16, "kind": "entity.quarantine", "subject": {"kind": "entity", "id": eid, "parents": []},
+            "pointer": f"/entities/{eid}", "impact": "destructive", "ddlImpact": "none", "reversible": True,
+            "params": {"definition": {"id": eid, "labels": {"en": eid, "ar": eid}, "fields": []}},
+            "sourceOps": [f"/entities/{eid}"]}
+
+
+def _field_step(
+    seq: int,
+    pointer_entity: str,
+    fid: str,
+    *,
+    parent_entity: str | None = None,
+    parents: list[dict] | None = None,
+    kind: str = "field.add",
+) -> dict:
+    ps = [{"kind": "entity", "id": pointer_entity if parent_entity is None else parent_entity}] if parents is None else parents
+    pointer = f"/entities/{pointer_entity}/fields" if kind == "field.reorder" else f"/entities/{pointer_entity}/fields/{fid}"
+    if kind == "field.add":
+        phase, impact, ddl = 5, "data_shape", "additive"
+        params = {"definition": {"id": fid, "type": "string", "labels": {"en": fid, "ar": fid}}}
+    elif kind == "field.set_property":
+        phase, impact, ddl = 6, "cosmetic", "none"
+        params = {"property": "/readOnly", "before": False, "after": True}
+    elif kind == "field.reorder":
+        phase, impact, ddl = 6, "cosmetic", "none"
+        params = {"order": [fid], "previousOrder": [fid]}
+    else:  # field.quarantine
+        phase, impact, ddl = 15, "destructive", "none"
+        params = {"definition": {"id": fid, "type": "string", "labels": {"en": fid, "ar": fid}}}
+    return {"seq": seq, "phase": phase, "kind": kind, "subject": {"kind": "field", "id": fid, "parents": ps},
+            "pointer": pointer, "impact": impact, "ddlImpact": ddl, "reversible": True,
+            "params": params, "sourceOps": [pointer]}
+
+
+def _relation_step(
+    seq: int,
+    pointer_entity: str,
+    rid: str,
+    *,
+    parent_entity: str | None = None,
+    parents: list[dict] | None = None,
+    kind: str = "relation.add",
+) -> dict:
+    ps = [{"kind": "entity", "id": pointer_entity if parent_entity is None else parent_entity}] if parents is None else parents
+    pointer = f"/entities/{pointer_entity}/relations/{rid}"
+    if kind == "relation.add":
+        phase, impact, ddl = 5, "data_shape", "additive"
+        params = {"definition": {"id": rid, "target": "item", "kind": "many_to_one", "labels": {"en": rid, "ar": rid}}}
+    elif kind == "relation.set_property":
+        phase, impact, ddl = 6, "cosmetic", "none"
+        params = {"property": "/labels/en", "before": rid, "after": rid + "2"}
+    else:  # relation.quarantine
+        phase, impact, ddl = 15, "destructive", "none"
+        params = {"definition": {"id": rid, "target": "item", "kind": "many_to_one", "labels": {"en": rid, "ar": rid}}}
+    return {"seq": seq, "phase": phase, "kind": kind, "subject": {"kind": "relation", "id": rid, "parents": ps},
+            "pointer": pointer, "impact": impact, "ddlImpact": ddl, "reversible": True,
+            "params": params, "sourceOps": [pointer]}
+
+
+_OMIT = object()
+
+
+def _workflow(seq: int, wid: str, entity: object = "sales_order") -> dict:
+    defn: dict = {
+        "id": wid, "labels": {"en": wid, "ar": wid},
+        "states": [
+            {"id": "draft", "kind": "initial", "labels": {"en": "Draft", "ar": "مسودة"}},
+            {"id": "done", "kind": "final", "labels": {"en": "Done", "ar": "تم"}},
+        ],
+        "transitions": [{"id": "t_done", "from": "draft", "to": "done", "allowedRoles": ["sales_rep"]}],
+    }
+    if entity is not _OMIT:
+        defn["entity"] = entity
+    return {"seq": seq, "phase": 8, "kind": "workflow.upsert", "subject": {"kind": "workflow", "id": wid, "parents": []},
+            "pointer": f"/workflows/{wid}", "impact": "config", "ddlImpact": "none", "reversible": True,
+            "params": {"definition": defn}, "sourceOps": [f"/workflows/{wid}"]}
+
+
+def _report(seq: int, rid: str, entity: object = _OMIT) -> dict:
+    defn: dict = {
+        "id": rid, "kind": "report", "labels": {"en": rid, "ar": rid},
+        "metrics": [{"ref": "order_count"}], "visibleToRoles": ["sales_rep"],
+    }
+    if entity is not _OMIT:
+        defn["entity"] = entity
+    return {"seq": seq, "phase": 10, "kind": "report.upsert", "subject": {"kind": "report", "id": rid, "parents": []},
+            "pointer": f"/reports/{rid}", "impact": "config", "ddlImpact": "none", "reversible": True,
+            "params": {"definition": defn}, "sourceOps": [f"/reports/{rid}"]}
 
 
 def _role(seq: int, rid: str, entity: str) -> dict:
@@ -166,12 +279,12 @@ class TestOwnEntityGrantsAgreeAcrossBackends(unittest.TestCase):
         for name, adapter in self._adapters():
             with self.subTest(adapter=name):
                 result = self._plan(adapter, steps, f"idemp_f2_{name}")
-                got = {s["seq"]: s["disposition"] for s in result["steps"]}
-                self.assertEqual(got[2], "gated", result)
-                self.assertEqual(got[3], "blocked", result)
-                self.assertEqual(got[4], "gated", result)
-                self.assertEqual(result["verdict"], "rejected")
+                got = {s["seq"]: (s["disposition"], s.get("reasonCode")) for s in result["steps"]}
                 seen[name] = got
+                self.assertEqual(got[2][0], "gated", result)
+                self.assertEqual(got[3], ("blocked", "protected_subject"), result)
+                self.assertEqual(got[4][0], "gated", result)
+                self.assertEqual(result["verdict"], "rejected")
         self.assertEqual(seen["in_memory"], seen["offline_engine"])
 
     def test_own_entity_grant_alone_needs_gate_approval_on_both(self) -> None:
@@ -186,7 +299,8 @@ class TestOwnEntityGrantsAgreeAcrossBackends(unittest.TestCase):
         for name, adapter in self._adapters():
             with self.subTest(adapter=name):
                 result = self._plan(adapter, steps, f"idemp_f2_prot_{name}")
-                self.assertEqual({s["seq"]: s["disposition"] for s in result["steps"]}[2], "blocked", result)
+                by_seq = {s["seq"]: (s["disposition"], s.get("reasonCode")) for s in result["steps"]}
+                self.assertEqual(by_seq[2], ("blocked", "protected_subject"), result)
 
 
 class TestProtectedEntityIsCaseInsensitive(unittest.TestCase):
@@ -235,8 +349,8 @@ class TestCaseVariantLedgerEntityBlockedAtPlanOnBothBackends(TestOwnEntityGrants
             for name, adapter in self._adapters():
                 with self.subTest(entity=eid, adapter=name):
                     result = self._plan(adapter, steps, f"idemp_f2_l2_{eid}_{name}")
-                    got = {s["seq"]: s["disposition"] for s in result["steps"]}
-                    self.assertEqual(got, {1: "blocked", 2: "blocked"}, result)
+                    got = {s["seq"]: (s["disposition"], s.get("reasonCode")) for s in result["steps"]}
+                    self.assertEqual(got, {1: ("blocked", "protected_subject"), 2: ("blocked", "protected_subject")}, result)
                     self.assertEqual(result["verdict"], "rejected")
 
     def test_grant_alone_on_case_variant_protected_entity_blocked(self) -> None:
@@ -245,6 +359,7 @@ class TestCaseVariantLedgerEntityBlockedAtPlanOnBothBackends(TestOwnEntityGrants
             with self.subTest(adapter=name):
                 result = self._plan(adapter, steps, f"idemp_f2_l2_alone_{name}")
                 self.assertEqual(result["steps"][0]["disposition"], "blocked", result)
+                self.assertEqual(result["steps"][0].get("reasonCode"), "protected_subject", result)
 
     # inherited tests of the parent class are not repeated
     test_own_entity_grant_allowed_and_unmapped_builtin_refused_on_both = None
@@ -253,12 +368,37 @@ class TestCaseVariantLedgerEntityBlockedAtPlanOnBothBackends(TestOwnEntityGrants
 
 
 WHITESPACE_IDS = ("gl_entry ", " gl_entry", "gl _entry", "GL Entry ", "general_ledger ")
+NON_PROTECTED_INVALID_IDS = ("widget ", "widget\n", "Widget", "wid-get")
 
 
 class TestWhitespaceEntityIdsRefusedAtPlan(TestOwnEntityGrantsAgreeAcrossBackends):
-    """Review of e792eb9, finding 1: an entity id with stray whitespace is no entity id (contract pattern
-    `^[a-z][a-z0-9_]{1,63}$`), and must not slip past the protected-entity check (`Gl Entry ` is `GL Entry`
-    under the engine's PAD SPACE collation)."""
+    """Review of e792eb9 (finding 1) and re-review of 2767110 (findings 1-4): entity ids on every plan-time
+    entity path must satisfy the Blueprint id grammar `^[a-z][a-z0-9_]{1,63}$` (`unsupported_value_type`),
+    must not name a protected entity (`protected_subject`), and must agree between pointer and subject/parent."""
+
+    def _seed_customer(self, adapter: ChangeEngineAdapter, key: str) -> dict:
+        prov = adapter.call("provision_site", _ctx(), {
+            "idempotencyKey": key, "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+            "blueprintId": "bp-f2", "siteClass": "sandbox", "countryPack": "sa"})
+        self.assertTrue(prov["ok"], prov)
+        rev1 = {"hash": "sha256:" + "5" * 64, "revision": 1}
+        art1 = _artifact([_entity(1, "customer")], target=rev1)
+        pl = adapter.call("plan", _ctx(), {"artifact": art1})
+        self.assertTrue(pl["ok"] and pl["result"]["verdict"] == "auto_approved", pl)
+        ap = adapter.call("apply", _ctx(), {
+            "idempotencyKey": key + "_apply", "planToken": pl["result"]["planToken"],
+            "artifact": art1, "approvals": {"changeApproved": "01J00000000000000000000010"}})
+        self.assertTrue(ap["ok"] and ap["result"]["status"] == "applied", ap)
+        return rev1
+
+    def _plan_on_customer(self, adapter: ChangeEngineAdapter, steps: list[dict], key: str) -> dict:
+        rev1 = self._seed_customer(adapter, key)
+        rev2 = {"hash": "sha256:" + "6" * 64, "revision": 2}
+        inv = _inverse_for(rev1, rev2, [_field_step(1, "customer", "note", kind="field.quarantine")])
+        art2 = _artifact(steps, base=rev1, target=rev2, inverse=inv)
+        planned = adapter.call("plan", _ctx(), {"artifact": art2})
+        self.assertTrue(planned["ok"], planned)
+        return planned["result"]
 
     def test_protected_key_is_normalised(self) -> None:
         for eid in WHITESPACE_IDS + ("GL  Entry", "gl__entry", "Gl\tEntry", "gl-entry"):
@@ -275,10 +415,13 @@ class TestWhitespaceEntityIdsRefusedAtPlan(TestOwnEntityGrantsAgreeAcrossBackend
             for name, adapter in self._adapters():
                 with self.subTest(entity=eid, adapter=name):
                     result = self._plan(adapter, steps, f"idemp_f3_ws_{abs(hash((eid, name)))}")
-                    got = {s["seq"]: s["disposition"] for s in result["steps"]}
-                    self.assertEqual(got, {1: "blocked", 2: "blocked"}, result)
+                    got = {s["seq"]: (s["disposition"], s.get("reasonCode")) for s in result["steps"]}
+                    self.assertEqual(
+                        got,
+                        {1: ("blocked", "unsupported_value_type"), 2: ("blocked", "unsupported_value_type")},
+                        result,
+                    )
                     self.assertEqual(result["verdict"], "rejected")
-                    self.assertTrue(all(s.get("reasonCode") for s in result["steps"]), result)
 
     def test_whitespace_entity_alone_and_grant_alone_refused(self) -> None:
         for eid in WHITESPACE_IDS:
@@ -287,7 +430,157 @@ class TestWhitespaceEntityIdsRefusedAtPlan(TestOwnEntityGrantsAgreeAcrossBackend
                     with self.subTest(entity=eid, step=label, adapter=name):
                         result = self._plan(adapter, steps, f"idemp_f3_ws1_{abs(hash((eid, label, name)))}")
                         self.assertEqual(result["steps"][0]["disposition"], "blocked", result)
+                        self.assertEqual(result["steps"][0].get("reasonCode"), "unsupported_value_type", result)
                         self.assertEqual(result["verdict"], "rejected")
+
+    def test_non_protected_invalid_ids_refused_with_unsupported_value_type(self) -> None:
+        """Finding 3: pin the grammar check with non-protected invalid ids so protected-key checks cannot mask it."""
+        for eid in NON_PROTECTED_INVALID_IDS:
+            for label, steps in (("entity", [_entity(1, eid)]), ("grant", [_role(1, "r_inv", eid)])):
+                for name, adapter in self._adapters():
+                    with self.subTest(entity=eid, step=label, adapter=name):
+                        result = self._plan(adapter, steps, f"idemp_f3_inv_{abs(hash((eid, label, name)))}")
+                        self.assertEqual(result["steps"][0]["disposition"], "blocked", result)
+                        self.assertEqual(result["steps"][0].get("reasonCode"), "unsupported_value_type", result)
+                        self.assertEqual(result["verdict"], "rejected")
+
+    def test_entity_pointer_and_subject_mismatches_refused(self) -> None:
+        """Findings 3 and 4: pointer segment and subject id on entity.add must both pass grammar, be unprotected,
+        and agree; non-add entity steps still validate the pointer segment."""
+        cases = (
+            ("subject_invalid", [_entity(1, "widget", subject_id="widget ")], "unsupported_value_type"),
+            ("subject_newline", [_entity(1, "widget", subject_id="widget\n")], "unsupported_value_type"),
+            ("pointer_invalid", [_entity(1, "widget ", subject_id="widget")], "unsupported_value_type"),
+            ("pointer_newline", [_entity(1, "widget\n", subject_id="widget")], "unsupported_value_type"),
+            ("quarantine_pointer_invalid", [_entity_quarantine(1, "widget ")], "unsupported_value_type"),
+            ("subject_protected_mismatch", [_entity(1, "widget", subject_id="user")], "protected_subject"),
+            ("subject_unprotected_mismatch", [_entity(1, "widget", subject_id="customer")], "definition_conflict"),
+        )
+        for label, steps, expected_reason in cases:
+            for name, adapter in self._adapters():
+                with self.subTest(case=label, adapter=name):
+                    result = self._plan(adapter, steps, f"idemp_f3_ent_{label}_{name}")
+                    self.assertEqual(result["steps"][0]["disposition"], "blocked", result)
+                    self.assertEqual(result["steps"][0].get("reasonCode"), expected_reason, result)
+                    self.assertEqual(result["verdict"], "rejected")
+
+    def test_field_and_relation_parent_checked_at_plan_on_both_backends(self) -> None:
+        """Finding 1: field.* and relation.* steps must match subject.parents[0].id to the pointer segment,
+        pass is_valid_entity_id, and not target a protected entity."""
+        bad_cases = (
+            ("field_add_parent_user", _field_step(1, "customer", "note", parent_entity="user"), "protected_subject"),
+            ("field_add_parent_gl_ws", _field_step(1, "customer", "note", parent_entity="gl_entry "), "unsupported_value_type"),
+            ("field_add_parent_widget_nl", _field_step(1, "customer", "note", parent_entity="widget\n"), "unsupported_value_type"),
+            ("field_add_parent_mismatch", _field_step(1, "customer", "note", parent_entity="item"), "definition_conflict"),
+            ("field_add_no_parents", _field_step(1, "customer", "note", parents=[]), "unsupported_value_type"),
+            ("field_set_prop_parent_user", _field_step(1, "customer", "note", parent_entity="user", kind="field.set_property"), "protected_subject"),
+            ("field_quarantine_parent_gl_ws", _field_step(1, "customer", "note", parent_entity="gl_entry ", kind="field.quarantine"), "unsupported_value_type"),
+            ("field_reorder_parent_user", _field_step(1, "customer", "note", parent_entity="user", kind="field.reorder"), "protected_subject"),
+            ("relation_add_parent_user", _relation_step(1, "customer", "rel_a", parent_entity="user"), "protected_subject"),
+            ("relation_add_parent_gl_ws", _relation_step(1, "customer", "rel_a", parent_entity="gl_entry "), "unsupported_value_type"),
+            ("relation_set_prop_parent_user", _relation_step(1, "customer", "rel_a", parent_entity="user", kind="relation.set_property"), "protected_subject"),
+            ("relation_quarantine_parent_mismatch", _relation_step(1, "customer", "rel_a", parent_entity="item", kind="relation.quarantine"), "definition_conflict"),
+        )
+        for label, step, expected_reason in bad_cases:
+            seen = {}
+            for name, adapter in self._adapters():
+                with self.subTest(case=label, adapter=name):
+                    result = self._plan_on_customer(adapter, [step], f"idemp_f3_par_{label}_{name}")
+                    got = (result["steps"][0]["disposition"], result["steps"][0].get("reasonCode"), result["verdict"])
+                    seen[name] = got
+                    self.assertEqual(got, ("blocked", expected_reason, "rejected"), result)
+            if len(seen) == 2:
+                self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+        # Control: matching valid unprotected parent plans ok on both adapters
+        for label, step in (
+            ("field_add_ok", _field_step(1, "customer", "note")),
+            ("relation_add_ok", _relation_step(1, "customer", "rel_a")),
+        ):
+            for name, adapter in self._adapters():
+                with self.subTest(case=label, adapter=name):
+                    result = self._plan_on_customer(adapter, [step], f"idemp_f3_parok_{label}_{name}")
+                    self.assertEqual(result["steps"][0]["disposition"], "ok", result)
+                    self.assertEqual(result["verdict"], "auto_approved", result)
+
+    def test_field_and_relation_parent_refusal_writes_nothing_to_engine(self) -> None:
+        for label, step in (
+            ("field_user", _field_step(1, "customer", "note", parent_entity="user")),
+            ("field_gl_ws", _field_step(1, "customer", "note", parent_entity="gl_entry ")),
+            ("relation_user", _relation_step(1, "customer", "rel_a", parent_entity="user")),
+            ("relation_gl_ws", _relation_step(1, "customer", "rel_a", parent_entity="gl_entry ")),
+        ):
+            engine = CaseInsensitiveEngine(SITE)
+            backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: SITE}),
+                                           frappe_factory=lambda e=engine: e, offline_ddl_simulator=True)
+            adapter = ChangeEngineAdapter(test_hooks=False, environment="test", frappe_backend=backend)
+            rev1 = self._seed_customer(adapter, f"idemp_f3_pw_{label}")
+            before = repr(engine.ensure_site(SITE).rows)
+            rev2 = {"hash": "sha256:" + "6" * 64, "revision": 2}
+            inv = _inverse_for(rev1, rev2, [_field_step(1, "customer", "note", kind="field.quarantine")])
+            art2 = _artifact([step], base=rev1, target=rev2, inverse=inv)
+            with self.subTest(case=label):
+                planned = adapter.call("plan", _ctx(), {"artifact": art2})
+                self.assertTrue(planned["ok"], planned)
+                self.assertEqual(planned["result"]["verdict"], "rejected", planned)
+                self.assertEqual(repr(engine.ensure_site(SITE).rows), before)
+
+    def test_workflow_and_report_definition_entity_checked_at_plan(self) -> None:
+        """Finding 2: workflow.upsert and report.upsert check definition.entity against is_valid_entity_id
+        and is_protected_entity at plan time."""
+        bad_entities = (
+            ("gl_entry", "protected_subject"),
+            ("gl_entry ", "unsupported_value_type"),
+            ("user", "protected_subject"),
+            ("GL Entry", "unsupported_value_type"),
+            ("widget\n", "unsupported_value_type"),
+        )
+        for kind_name, builder in (("workflow", _workflow), ("report", _report)):
+            for eid, expected_reason in bad_entities:
+                seen = {}
+                for name, adapter in self._adapters():
+                    with self.subTest(kind=kind_name, entity=eid, adapter=name):
+                        result = self._plan(adapter, [builder(1, "x_bad", eid)], f"idemp_f3_def_{kind_name}_{abs(hash((eid, name)))}")
+                        got = (result["steps"][0]["disposition"], result["steps"][0].get("reasonCode"), result["verdict"])
+                        seen[name] = got
+                        self.assertEqual(got, ("blocked", expected_reason, "rejected"), result)
+                if len(seen) == 2:
+                    self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+        # Workflow requires definition.entity; report allows omitting it (optional in Blueprint schema)
+        for name, adapter in self._adapters():
+            with self.subTest(case="workflow_missing_entity", adapter=name):
+                result = self._plan(adapter, [_workflow(1, "wf_no_ent", _OMIT)], f"idemp_f3_wf_noent_{name}")
+                self.assertEqual(result["steps"][0]["disposition"], "blocked", result)
+                self.assertEqual(result["steps"][0].get("reasonCode"), "unsupported_value_type", result)
+            with self.subTest(case="workflow_valid_entity", adapter=name):
+                result = self._plan(adapter, [_workflow(1, "wf_ok", "sales_order")], f"idemp_f3_wf_ok_{name}")
+                self.assertEqual(result["steps"][0]["disposition"], "ok", result)
+            with self.subTest(case="report_valid_entity", adapter=name):
+                result = self._plan(adapter, [_report(1, "rep_ok", "sales_order")], f"idemp_f3_rep_ok_{name}")
+                self.assertEqual(result["steps"][0]["disposition"], "ok", result)
+            with self.subTest(case="report_omitted_entity", adapter=name):
+                result = self._plan(adapter, [_report(1, "rep_no_ent")], f"idemp_f3_rep_noent_{name}")
+                self.assertEqual(result["steps"][0]["disposition"], "ok", result)
+
+    def test_workflow_and_report_refusal_writes_nothing_to_engine(self) -> None:
+        for kind_name, builder in (("workflow", _workflow), ("report", _report)):
+            for eid in ("gl_entry", "gl_entry ", "user", "GL Entry", "widget\n"):
+                engine = CaseInsensitiveEngine(SITE)
+                backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: SITE}),
+                                               frappe_factory=lambda e=engine: e, offline_ddl_simulator=True)
+                adapter = ChangeEngineAdapter(test_hooks=False, environment="test", frappe_backend=backend)
+                prov = adapter.call("provision_site", _ctx(), {
+                    "idempotencyKey": f"idemp_f3_wrw_{kind_name}_{abs(hash(eid))}",
+                    "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+                    "blueprintId": "bp-f2", "siteClass": "sandbox", "countryPack": "sa"})
+                self.assertTrue(prov["ok"], prov)
+                before = repr(engine.ensure_site(SITE).rows)
+                with self.subTest(kind=kind_name, entity=eid):
+                    planned = adapter.call("plan", _ctx(), {"artifact": _artifact([builder(1, "x_bad", eid)])})
+                    self.assertTrue(planned["ok"], planned)
+                    self.assertEqual(planned["result"]["verdict"], "rejected", planned)
+                    self.assertEqual(repr(engine.ensure_site(SITE).rows), before)
 
     def test_whitespace_refusal_writes_nothing_to_the_engine(self) -> None:
         for eid in WHITESPACE_IDS:

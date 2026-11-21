@@ -14,9 +14,10 @@ posting, financial conformance, or permission behavior on a deployed engine.
 
 A batch contains `tenant_id`, `company`, `batch_id`, ISO `posting_date`, one
 supported ISO-4217 `currency` (`SAR`, `AED`, `EGP`, `QAR`, `USD`, `EUR`, `GBP`), `datasets`, and a mandatory `prevalidation` report.
-`currency_precision` defaults to 2 and accepts 0–6; production configuration must
-supply the approved currency precision. `datasets` maps an entity below to row
-dicts, or a DSC-019 `{"rows": [...], "sheet": ...}` wrapper. No unknown batch,
+The server derives the precision from `currency`. If provided, `currency_precision`
+must be an integer equal to the derived precision or the batch returns `IMP-SCHEMA`.
+`datasets` maps an entity below to row dicts or a DSC-019
+`{"rows": [...], "sheet": ...}` wrapper. No unknown batch,
 entity, row or mapping field is accepted.
 
 1. **Validate:** authenticate the backend human session and tenant/company scope
@@ -32,8 +33,8 @@ entity, row or mapping field is accepted.
    reconciliation results (`true` for a checked control, `null` only when that
    control and its details are absent), and `master_updates` (existing masters
    whose values change). SHA-256 covers version, tenant, company, batch identity,
-   date, currency, precision, canonical rows, report, referenced master state and
-   before/after master snapshots. Object keys are sorted;
+   date, currency, server-derived precision, canonical rows, report, referenced
+   master state and before/after master snapshots. Object keys are sorted;
    row order is retained and approval changes if rows are reordered. No source
    spelling or financial number is corrected.
 3. **Apply:** authenticate early using the server-owned backend session's
@@ -95,7 +96,7 @@ missing reconciliation return `IMP-RECONCILE`.
 Amounts accept plain ASCII decimal strings, integers or finite `Decimal`.
 Binary floats, booleans, exponent strings, separators, negative amounts, NaN and
 Infinity are refused. Debit, credit, AR/AP amounts and stock valuation rates
-with more decimal places than `currency_precision` return `IMP-PRECISION`,
+with more decimal places than the server-derived precision return `IMP-PRECISION`,
 including excess trailing zeroes. Stock quantity must exceed zero and supports
 up to 18 decimal places. Stock valuation rate may be zero. The comparison and
 preview sum each derived `qty * valuation_rate` using explicit `ROUND_HALF_UP`

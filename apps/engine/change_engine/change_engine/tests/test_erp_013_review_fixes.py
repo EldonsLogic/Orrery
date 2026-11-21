@@ -44,14 +44,28 @@ def opening_details(amount="100.00"):
     }
 
 
-def test_currency_precision_rejects_balanced_overprecision_and_preserves_accepted_money(backend):
+@pytest.mark.parametrize("precision_field,code", [
+    ({}, "IMP-PRECISION"),
+    ({"currency_precision": 2}, "IMP-PRECISION"),
+    ({"currency_precision": 3}, "IMP-SCHEMA"),
+    ({"currency_precision": 6}, "IMP-SCHEMA"),
+])
+def test_sar_rejects_balanced_overprecision(backend, precision_field, code):
+    refuses(OpeningImporter(backend), batch(opening_details("100.005"), **precision_field), code)
+
+
+@pytest.mark.parametrize("precision", [1, 3, 2.0, "2", None, True])
+def test_sar_refuses_nonmatching_precision_even_when_amounts_fit(backend, precision):
+    refuses(OpeningImporter(backend), batch(currency_precision=precision), "IMP-SCHEMA")
+
+
+def test_matching_currency_precision_preserves_accepted_money(backend):
     importer = OpeningImporter(backend)
-    refuses(importer, batch(opening_details("100.005"), currency_precision=2), "IMP-PRECISION")
-    assert importer.preview(batch(opening_details("100.00"), currency_precision=2))["totals"]["ar"] == "100.00"
-    source = batch(opening_details("100.005"), currency_precision=3)
+    source = batch(opening_details("100.00"), currency_precision=2)
+    assert importer.preview(source)["totals"]["ar"] == "100.00"
     assert apply(importer, source)["status"] == "applied"
     ar, = [record["row"] for record in backend.records("tenant-a", "Synthetic Trading") if record["entity"] == "AR"]
-    assert ar["amount"] == "100.005"
+    assert ar["amount"] == "100.00"
 
 
 @pytest.mark.parametrize("entity,index,field,value", [
@@ -383,9 +397,9 @@ def test_default_backend_has_no_capability():
 
 
 def test_unknown_currency_is_rejected_and_configured_iso_subset_is_allowed(backend):
-    refuses(OpeningImporter(backend), batch(currency="ZZZ"), "IMP-SCHEMA")
+    refuses(OpeningImporter(backend), batch(currency="ZZZ", currency_precision=2), "IMP-SCHEMA")
     for code in ("SAR", "AED", "EGP", "QAR", "USD", "EUR", "GBP"):
-        source = batch({"Customer": [{"customer_name": "Buyer"}]}, currency=code)
+        source = batch({"Customer": [{"customer_name": "Buyer"}]}, currency=code, currency_precision=2)
         assert OpeningImporter(backend).preview(source)["ok"]
 
 

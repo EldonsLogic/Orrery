@@ -36,8 +36,9 @@ OPENING_LINKS = {
 FORMULA = ("=", "+", "-", "@", "\t", "\r")
 ACCOUNT_TYPES = {"Receivable", "Payable", "Stock", "Other"}
 MAX_BYTES = 2_000_000
-# Explicit supported ISO-4217 subset for this offline importer, not arbitrary codes.
-CURRENCIES = frozenset({"SAR", "AED", "EGP", "QAR", "USD", "EUR", "GBP"})
+# UNVERIFIED minor units from ISO 4217 (SIX Maintenance Agency, List One).
+CURRENCY_MINOR_UNITS = {"SAR": 2, "AED": 2, "EGP": 2, "QAR": 2, "USD": 2, "EUR": 2, "GBP": 2}
+CURRENCIES = frozenset(CURRENCY_MINOR_UNITS)
 # DSC-019 accumulates findings and compares names pairwise. Bound each invocation
 # before calling it; public errors are separately fail-fast (one safe error).
 MAX_PREVALIDATION_ROWS = 250
@@ -258,8 +259,9 @@ def prepare(source, max_rows, lookup):
         fail()
     if meta["currency"] not in CURRENCIES:
         fail()
-    precision = source.get("currency_precision", 2)
-    if type(precision) is not int or not 0 <= precision <= 6:
+    precision = CURRENCY_MINOR_UNITS[meta["currency"]]
+    supplied_precision = source.get("currency_precision", precision)
+    if type(supplied_precision) is not int or supplied_precision != precision:
         fail()
     meta["currency_precision"] = precision
     datasets = source["datasets"]

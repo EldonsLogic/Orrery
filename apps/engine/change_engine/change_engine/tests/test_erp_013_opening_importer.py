@@ -189,8 +189,9 @@ def test_confirmation_hash_binding_conflict_and_master_upsert(backend):
             importer.apply(source, **confirmation)
     for key, val in (("tenant_id", "tenant-b"), ("company", "Other")):
         refuses(importer, dict(source, **{key: val}), "IMP-AUTH")
-    for key, val in (("batch_id", "other"), ("posting_date", "2026-01-02"), ("currency_precision", 3)):
+    for key, val in (("batch_id", "other"), ("posting_date", "2026-01-02"), ("currency", "AED")):
         assert importer.preview(dict(source, **{key: val}))["plan_hash"] != preview["plan_hash"]
+    assert importer.preview(dict(source, currency_precision=2))["plan_hash"] == preview["plan_hash"]
     apply(importer, source)
     mutated = batch({"Customer": [{"customer_code": "C1", "customer_name": "Two"}]})
     with pytest.raises(ImportFailure, match="IMP-CONFLICT"):
@@ -375,17 +376,17 @@ def test_multicurrency_and_inconsistent_control_classification_rejected(backend)
     refuses(OpeningImporter(backend), source, "IMP-REFERENCE")
 
 
-def test_large_exact_arithmetic_and_rounding_at_configured_precision(backend):
+def test_large_exact_arithmetic_and_rounding_at_currency_precision(backend):
     source = batch({"TrialBalance": [
-        {"account": "1", "account_type": "Other", "debit": "12345678901234567890.123", "credit": "0"},
-        {"account": "2", "account_type": "Other", "debit": "0", "credit": "12345678901234567890.123"}],
-        "Stock": [{"item_code": "I1", "warehouse": "W1", "qty": "1.5", "valuation_rate": "0.001"}],
+        {"account": "1", "account_type": "Other", "debit": "12345678901234567890.12", "credit": "0"},
+        {"account": "2", "account_type": "Other", "debit": "0", "credit": "12345678901234567890.12"}],
+        "Stock": [{"item_code": "I1", "warehouse": "W1", "qty": "1.5", "valuation_rate": "0.01"}],
         "Account": [{"account_number": "1", "account_type": "Other"}, {"account_number": "2", "account_type": "Other"},
                     {"account_number": "stock", "account_type": "Stock"}, {"account_number": "offset", "account_type": "Other"}],
-        "Item": [{"item_code": "I1"}], "Warehouse": [{"warehouse_name": "W1"}]}, currency_precision=3)
+        "Item": [{"item_code": "I1"}], "Warehouse": [{"warehouse_name": "W1"}]})
     source["datasets"]["TrialBalance"] += [
-        {"account": "stock", "account_type": "Stock", "debit": "0.002", "credit": "0"},
-        {"account": "offset", "account_type": "Other", "debit": "0", "credit": "0.002"}]
+        {"account": "stock", "account_type": "Stock", "debit": "0.02", "credit": "0"},
+        {"account": "offset", "account_type": "Other", "debit": "0", "credit": "0.02"}]
     source["prevalidation"] = report([r for rows in source["datasets"].values() for r in rows])
     with localcontext() as ctx:
         ctx.prec = 2
@@ -393,8 +394,8 @@ def test_large_exact_arithmetic_and_rounding_at_configured_precision(backend):
         ctx.traps[Inexact] = True
         result = OpeningImporter(backend).preview(source)
     assert result["ok"]
-    assert result["totals"]["debit"] == "12345678901234567890.125"
-    assert result["totals"]["stock"] == "0.002"
+    assert result["totals"]["debit"] == "12345678901234567890.14"
+    assert result["totals"]["stock"] == "0.02"
 
 
 def test_forged_information_finding_cannot_downgrade_upstream_blocker(backend):

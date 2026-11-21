@@ -327,7 +327,7 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m unittest change_engine.tests.test_erp_020_route_guard change_engine.tests.test_erp_020_wsgi_guard -v
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_020_route_guard.py apps/engine/change_engine/change_engine/tests/test_erp_020_wsgi_guard.py -v
 
       - name: Change engine configuration and policy unit tests
         if: steps.filter.outputs.engine == 'true' && !cancelled()

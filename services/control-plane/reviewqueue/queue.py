@@ -26,8 +26,12 @@ How it stays honest.
 - Time is the identity (host) clock only, never the caller's: whole seconds inside a fixed window; an act older than
   the item's last event is refused (RQ-002). Claims expire. Checklists are data (checklists.json).
 - Items hold ids, digests and flags only, never the content. Audit lines carry the note's hash and length, never text.
-- `hold` (quarantine) can be set at submit or later by the host (`hold_item`, any state); it bars approval and makes
-  evidence ineligible; only a resubmission with new content lifts it.
+- `hold` (quarantine) can be set at submit or later by a verified staff principal (`hold_item`, any state); it bars
+  approval and makes evidence ineligible. A resubmission never lifts it: only an explicit `clear_hold` by a verified
+  staff human other than the author and the involved ids does, audited.
+- Consumers (BPL-020, DSC-009) call `verify_evidence` (or `team_reviewed_evidence`) with a service principal; the queue
+  re-derives everything from its sealed log and anchors and says whether a pinned (`seq`, `headSeal`) is still current.
+  No API accepts an evidence object as authority.
 
 Trust assumptions (Q-440 to Q-446, Q-480 to Q-486): the host vouches for `submit`, `resubmit` and `hold_item` (not reviewer
 acts), the integrity key custody, and a real store must write the event, the head and the manifest in ONE atomic
@@ -56,6 +60,8 @@ STATES = ("pending", "claimed", "approved", "changes_requested", "rejected")
 HOLD_REASONS = ("injection", "scan", "compliance", "other")
 NEEDS_INVOLVED = ("component_request", "simulation_signoff")
 REVIEWER_ROLE = "team_reviewer"
+READER_ROLES = frozenset({"team_reviewer", "evidence_reader"})   # evidence_reader: proposed service role for BPL-020 and DSC-009 (Q-490)
+HOLD_ROLES = frozenset({"team_reviewer", "hold_issuer"})         # hold_issuer: proposed service role for scanners (Q-490)
 EARLIEST, LATEST = 1_577_836_800, 4_102_444_800  # 2020-01-01 .. 2100-01-01
 MIN_CLAIM, MAX_CLAIM, DEFAULT_CLAIM = 60, 86_400, 1_800
 _HERE = Path(__file__).parent
@@ -64,7 +70,7 @@ _LABELS = json.loads((_HERE / "labels.json").read_text(encoding="utf-8"))
 _EVENT_KEYS = {"schema", "item_id", "tenant_id", "seq", "prev", "type", "at", "actor", "data", "key_id", "seal"}
 _DATA_KEYS = {
     "submitted": {"kind", "subject_ref", "revision", "content_digest", "hold", "involved", "author", "checklist_version", "seq_no"},
-    "held": {"reason"},
+    "held": {"reason"}, "hold_cleared": set(),
     "claimed": {"expires_at"}, "released": set(),
     "decided": {"revision", "content_digest", "decision", "checklist", "note", "note_sha256", "note_len"},
     "resubmitted": {"revision", "content_digest", "hold", "involved"},
@@ -243,6 +249,11 @@ class ReviewQueue:
                 raise bad
             ident(actor)
             it.hold = True
+        elif typ == "hold_cleared":
+            ident(actor)
+            if not it.hold or self._conflict(it, actor):
+                raise bad
+            it.hold = False
         elif typ == "claimed":
             ident(actor)
             if it.status not in ("pending", "claimed") or live or type(d["expires_at"]) is not int \
@@ -273,13 +284,13 @@ class ReviewQueue:
         elif typ == "resubmitted":
             if not (it.status == "changes_requested" or (it.hold and it.status in ("pending", "claimed", "approved"))) \
                     or actor != it.author or d["revision"] != it.revision + 1 \
-                    or d["content_digest"] == it.digest or type(d["hold"]) is not bool or not DIGEST_RE.fullmatch(str(d["content_digest"])):
+                    or d["content_digest"] == it.digest or d["hold"] is not it.hold or not DIGEST_RE.fullmatch(str(d["content_digest"])):
                 raise bad
             added = id_list(list(d["involved"]), "involved")
             if not set(it.involved) <= set(added):  # the stored list is already the union: it may only grow
                 raise bad
             it.involved = added
-            it.revision, it.digest, it.hold, it.status, it.claim = d["revision"], d["content_digest"], d["hold"], "pending", None
+            it.revision, it.digest, it.status, it.claim = d["revision"], d["content_digest"], "pending", None
         return it
 
     @staticmethod
@@ -310,7 +321,7 @@ class ReviewQueue:
             raise ReviewError("RQ-002")
         return host
 
-    def _reviewer(self, claims, step_up):
+    def _reviewer(self, claims, step_up, roles_ok=frozenset({REVIEWER_ROLE})):
         """-> (subject, linked person ids). Fails closed on anything unexpected."""
         try:
             check_live(claims, self._idn.now())
@@ -329,7 +340,7 @@ class ReviewQueue:
             raise
         except Exception:
             raise ReviewError("RQ-003", "resolver") from None
-        if type(roles) not in (tuple, list, frozenset) or REVIEWER_ROLE not in roles or not all(type(r) is str for r in roles):
+        if type(roles) not in (tuple, list, frozenset) or not all(type(r) is str for r in roles) or not set(roles) & roles_ok:
             raise ReviewError("RQ-003", "role")
         return ident(claims.subject), linked
 
@@ -392,14 +403,14 @@ class ReviewQueue:
             raise ReviewError("RQ-001", what)
         return v
 
-    def resubmit(self, *, tenant_id, item_id, content, author, involved, linked_staff, hold=False) -> int:
+    def resubmit(self, *, tenant_id, item_id, content, author, involved, linked_staff) -> int:
         """The author answers `changes_requested` (or a hold) with new content: a new revision, back to pending. The
-        ids in `involved` and `linked_staff` are ADDED to the stored list; nobody is ever removed."""
+        ids in `involved` and `linked_staff` are ADDED to the stored list; nobody is ever removed. A resubmission never
+        changes the hold: a held item stays held until `clear_hold` (N1)."""
         def go():
             t, at = _tenant_id(tenant_id), self._now()
             it = self._fold(item_id, t)
-            if not (it.status == "changes_requested" or (it.hold and it.status in ("pending", "claimed", "approved"))) \
-                    or type(hold) is not bool:
+            if not (it.status == "changes_requested" or (it.hold and it.status in ("pending", "claimed", "approved"))):
                 raise ReviewError("RQ-005")
             if ident(author, "author") != it.author:
                 raise ReviewError("RQ-003", "author")
@@ -411,23 +422,44 @@ class ReviewQueue:
             if digest == it.digest:
                 raise ReviewError("RQ-001", "unchanged")
             self._append(item_id, t, "resubmitted", at, it.author, {"revision": it.revision + 1, "content_digest": digest,
-                                                                     "hold": hold, "involved": list(union)})
+                                                                     "hold": it.hold, "involved": list(union)})
             return it.revision + 1, f"rev={it.revision + 1} digest={digest[:12]}"
         return self._run("resubmit", tenant_id, item_id, None, go)
 
-    def hold_item(self, *, tenant_id, item_id, reason, by="host") -> None:
-        """Host quarantine at any time (an injection or scan finding after submit or approval): bars approval and makes
-        evidence ineligible until the author resubmits new content with the hold lifted."""
+    def hold_item(self, claims, *, tenant_id, item_id, reason) -> None:
+        """Quarantine at any time (an injection or scan finding after submit or approval). The actor is a verified staff
+        principal (role `team_reviewer` or the proposed `hold_issuer`), recorded and audited. Bars approval and makes
+        evidence ineligible until `clear_hold`."""
         def go():
             t, at = _tenant_id(tenant_id), self._now()
+            who, _ = self._reviewer(claims, step_up=False, roles_ok=HOLD_ROLES)
             it = self._fold(item_id, t)
-            if reason not in HOLD_REASONS or it.hold:
-                raise ReviewError("RQ-005" if reason in HOLD_REASONS else "RQ-001")
+            if reason not in HOLD_REASONS:
+                raise ReviewError("RQ-001", "reason")
+            if it.hold:
+                raise ReviewError("RQ-005")
             if at < it.last_at:
                 raise ReviewError("RQ-002", "regression")
-            self._append(item_id, t, "held", at, ident(by), {"reason": reason})
+            self._append(item_id, t, "held", at, who, {"reason": reason})
             return None, f"reason={reason}"
-        return self._run("hold", tenant_id, item_id, None, go)
+        return self._run("hold", tenant_id, item_id, claims, go)
+
+    def clear_hold(self, claims, *, tenant_id, item_id) -> dict:
+        """Lift a hold. Only an explicit act of a verified staff human (fresh step-up, role `team_reviewer`) who is not
+        the author, in `involved` or linked to them; a resubmission never lifts it. Audited."""
+        def go():
+            t, at = _tenant_id(tenant_id), self._now()
+            who, linked = self._reviewer(claims, step_up=True)
+            it = self._fold(item_id, t)
+            if at < it.last_at:
+                raise ReviewError("RQ-002", "regression")
+            if self._conflict(it, who, linked):
+                raise ReviewError("RQ-007")
+            if not it.hold:
+                raise ReviewError("RQ-005")
+            self._append(item_id, t, "hold_cleared", at, who, {})
+            return self._view(self._fold(item_id, t), at), ""
+        return self._run("clear_hold", tenant_id, item_id, claims, go)
 
     def _items(self, t):
         """Folded items of one tenant, from the sealed manifest (a deleted log raises RQ-011: fail closed)."""
@@ -513,7 +545,7 @@ class ReviewQueue:
     def get(self, claims, *, tenant_id, item_id) -> dict:
         def go():
             t, at = _tenant_id(tenant_id), self._now()
-            self._reviewer(claims, step_up=False)
+            self._reviewer(claims, step_up=False, roles_ok=READER_ROLES)
             return self._view(self._fold(item_id, t), at), ""
         return self._run("get", tenant_id, item_id, claims, go)
 
@@ -522,7 +554,7 @@ class ReviewQueue:
         a state filter keeps lapsed claims under `pending`."""
         def go():
             at = self._now()
-            self._reviewer(claims, step_up=False)
+            self._reviewer(claims, step_up=False, roles_ok=READER_ROLES)
             if tenant_id is not None:
                 _tenant_id(tenant_id)
             if state is not None and state not in STATES + ("invalid",):
@@ -560,7 +592,7 @@ class ReviewQueue:
         pin what it read. Never an instruction to promote."""
         def go():
             t, at = _tenant_id(tenant_id), self._now()
-            self._reviewer(claims, step_up=False)
+            self._reviewer(claims, step_up=False, roles_ok=READER_ROLES)
             it = self._fold(item_id, t)
             fresh = content_digest(current_content) == it.digest
             approved = it.status == "approved" and not it.hold
@@ -574,13 +606,29 @@ class ReviewQueue:
                     "checklist": last["checklist"] if approved and last else None}, f"eligible={approved and fresh}"
         return self._run("evidence", tenant_id, item_id, claims, go)
 
+    def verify_evidence(self, claims, *, tenant_id, item_id, current_content, pinned_seq=None, pinned_head=None) -> dict:
+        """For BPL-020 and DSC-009: re-derive the evidence for an item from the sealed log and its anchors (the queue
+        re-validates head and manifest seals itself) and say whether a pin the consumer holds (`seq` and `headSeal` from
+        an earlier read) is still the head. The caller is a verified staff-realm principal with `evidence_reader` (a
+        proposed service role, Q-490) or `team_reviewer`. The API takes ids, content the consumer loaded from its own
+        store and a pin; it never accepts an evidence object, so a constructed dict has no authority. `eligible` is
+        False when a pin is given and no longer current."""
+        pin = (pinned_seq, pinned_head)
+        if pin != (None, None) and (type(pinned_seq) is not int or type(pinned_head) is not str):
+            raise ReviewError("RQ-001", "pin")
+        out = self.gate_evidence(claims, tenant_id=tenant_id, item_id=item_id, current_content=current_content)
+        out["pinCurrent"] = None if pin == (None, None) else bool(pinned_seq == out["seq"] and pinned_head == out["headSeal"])
+        if out["pinCurrent"] is False:
+            out["eligible"] = False
+        return out
+
     def team_reviewed_evidence(self, claims, *, tenant_id, subject_ref, required: dict) -> dict:
         """Evidence for one subject across kinds: `required` maps kind -> the host's current content. The Blueprint
         draft is always required. The newest item per kind (by the sealed submission number, not by time) counts; a
         missing, open, rejected, held or stale item, or any broken log of the tenant, blocks."""
         def go():
             t, at = _tenant_id(tenant_id), self._now()
-            self._reviewer(claims, step_up=False)
+            self._reviewer(claims, step_up=False, roles_ok=READER_ROLES)
             ref = ident(subject_ref)
             if type(required) is not dict or "blueprint_draft" not in required or any(k not in KINDS for k in required):
                 raise ReviewError("RQ-001", "required")

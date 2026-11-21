@@ -205,12 +205,13 @@ def test_m4_hold_after_approval_makes_evidence_ineligible_until_resubmit(w):
     w.claim(iid)
     w.decide(iid)
     assert ev(w, iid)["eligible"]
-    w.q.hold_item(tenant_id="t-a", item_id=iid, reason="injection")
+    w.hold(iid, "injection")
     e = ev(w, iid)
     assert not e["eligible"] and e["hold"] and not tr(w)["eligible"]
-    assert code(lambda: w.q.hold_item(tenant_id="t-a", item_id=iid, reason="scan")) == "RQ-005"
+    assert code(lambda: w.hold(iid, "scan")) == "RQ-005"
     w.clock.t += 1
     assert w.q.resubmit(tenant_id="t-a", item_id=iid, content={**BP, "n": 9}, author="agent-1", involved=[], linked_staff=[]) == 2
+    w.clear_hold(iid)
     w.claim(iid, "s-rev2")
     assert w.decide(iid, "s-rev2", content={**BP, "n": 9})["state"] == "approved"
 
@@ -218,10 +219,10 @@ def test_m4_hold_after_approval_makes_evidence_ineligible_until_resubmit(w):
 def test_m4_hold_while_claimed_blocks_approval_and_validates_reason(w):
     iid = w.submit()
     w.claim(iid)
-    w.q.hold_item(tenant_id="t-a", item_id=iid, reason="scan")
+    w.hold(iid, "scan")
     assert code(lambda: w.decide(iid)) == "RQ-010"
-    assert code(lambda: w.q.hold_item(tenant_id="t-a", item_id=iid, reason="because")) == "RQ-001"
-    assert code(lambda: w.q.hold_item(tenant_id="t-b", item_id=iid, reason="scan")) == "RQ-004"
+    assert code(lambda: w.hold(iid, "because")) == "RQ-001"
+    assert code(lambda: w.hold(iid, "scan", tenant="t-b")) == "RQ-004"
 
 
 # ---- LOW ------------------------------------------------------------------------------------------------------------

@@ -280,7 +280,7 @@ def _c(w, t):
 def test_caller_time_is_not_a_parameter(w):
     import inspect
     from reviewqueue import ReviewQueue
-    for n in ("submit", "resubmit", "claim", "release", "decide", "get", "list_items", "gate_evidence", "team_reviewed_evidence", "hold_item"):
+    for n in ("submit", "resubmit", "claim", "release", "decide", "get", "list_items", "gate_evidence", "team_reviewed_evidence", "hold_item", "clear_hold", "verify_evidence"):
         assert "now" not in inspect.signature(getattr(ReviewQueue, n)).parameters
 
 
@@ -375,7 +375,9 @@ def test_hold_cannot_be_approved_and_is_not_eligible(w):
     ev = w.q.gate_evidence(w.claims("s-rev1"), tenant_id="t-a", item_id=iid, current_content=BP)
     assert not ev["eligible"]
     w.clock.t += 1
-    w.q.resubmit(tenant_id="t-a", item_id=iid, content={**BP, "n": 8}, author="agent-1", involved=[], linked_staff=[], hold=False)
+    w.q.resubmit(tenant_id="t-a", item_id=iid, content={**BP, "n": 8}, author="agent-1", involved=[], linked_staff=[])
+    assert w.q.get(w.claims("s-rev1"), tenant_id="t-a", item_id=iid)["hold"]  # a resubmission does not lift the hold
+    w.clear_hold(iid)
     w.claim(iid, "s-rev2")
     assert w.decide(iid, "s-rev2", kind="component_request", content={**BP, "n": 8})["state"] == "approved"
 

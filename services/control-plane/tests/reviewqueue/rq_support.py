@@ -47,11 +47,13 @@ class World:
                                    roles=CustomerRoles(), audit=self.audit, clock=self.clock)
         for t in ("t-a", "t-b"):
             self.repo.put_tenant(TenantState(t))
-        for s in ("s-rev1", "s-rev2", "s-norole", "s-author"):
+        for s in ("s-rev1", "s-rev2", "s-norole", "s-author", "s-hold", "s-svc"):
             self.repo.put_staff(StaffIdentity(s, s, mfa_enrolled=True))
         self.repo.put_staff(StaffIdentity("s-linked", "s-linked", mfa_enrolled=True, linked_person_ids=frozenset({"p-owner"})))
         for s in ("s-rev1", "s-rev2", "s-author", "s-linked"):
             self.roles.map[s] = ("team_reviewer",)
+        self.roles.map["s-hold"] = ("hold_issuer",)      # a scanner service (proposed role)
+        self.roles.map["s-svc"] = ("evidence_reader",)   # BPL-020 (proposed role)
         self.q = ReviewQueue(self.idn, self.roles, integrity_key=KEY, **kw)
 
     def claims(self, sid, auth_age=0):
@@ -64,6 +66,12 @@ class World:
             involved = ('req-1',) if kind != 'blueprint_draft' else ()
         return self.q.submit(tenant_id=tenant, kind=kind, subject_ref=ref, content=content, author=author, involved=involved,
                              linked_staff=linked_staff, **kw)
+
+    def hold(self, iid, reason="injection", sid="s-hold", tenant="t-a"):
+        return self.q.hold_item(self.claims(sid), tenant_id=tenant, item_id=iid, reason=reason)
+
+    def clear_hold(self, iid, sid="s-rev2", tenant="t-a"):
+        return self.q.clear_hold(self.claims(sid), tenant_id=tenant, item_id=iid)
 
     def claim(self, iid, sid="s-rev1", tenant="t-a"):
         return self.q.claim(self.claims(sid), tenant_id=tenant, item_id=iid)

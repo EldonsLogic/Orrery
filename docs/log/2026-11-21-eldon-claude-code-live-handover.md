@@ -54,6 +54,25 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - #248 BPL-035 opened: golden-path mapping gaps (36 unmapped fields; outstanding_amount moved to payments), ADR-0056. Opus approved; its 3 Lows are fixed in a8c93ac; CI green. Waiting on the partner's Tier 2 review.
 - Meeting/ was moved out of the repo to ~/Documents/Orrery-Meeting (Eldon approved).
 
+- **Merged after Eldon's reviews (Fable, Opus and Sonnet):**
+  - #235 SEC-022 allowlist and #252 its follow-ups;
+  - #245 ERP-013 tenancy fix;
+  - #242 INF-015 Redis auth (squash);
+  - #254 GOV-055 reviewer CI check.
+- **GOV-059 open-questions triage merged (#249, #250):**
+  - 21 closed and 16 narrowed;
+  - 116 founder decisions remain (31 due by G1, listed in #249);
+  - 206 technical items wait on named rows.
+- **#253 BPL-036 ADR-0057:**
+  - 16 design confirmations resolved, 3 decided pending (BPL-037, BPL-038), 12 left open;
+  - Fable's findings fixed;
+  - waiting on the partner's Tier 2 review (Q-54 left for him).
+- **Country packs (Tier 3):**
+  - #255 Qatar: approved on condition that the CMP-034 row exists before merge and no loader consumer lands before CMP-034.
+  - #256 Egypt and #257 KSA/UAE: changes requested. KSA has no ZATCA Phase 2; the UAE mandate is locked to not required; there are recurring `requires`, evidence and language issues.
+  - The partner is building the loader go-live gate as CMP-034.
+- Meeting/ was moved out of the repo.
+
 ## Files touched
 - AGENTS.md: session start step 5 (live session log)
 - docs/RULES.md: rule 51

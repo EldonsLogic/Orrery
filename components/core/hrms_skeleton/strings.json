@@ -144,6 +144,12 @@
       "ar": "تعذّر إكمال الإجراء. حاول مرة أخرى، فالتكرار آمن."
     }
   },
+  "fieldLabels": {
+    "applicant_account": {
+      "en": "Applicant account",
+      "ar": "حساب مقدّم الطلب"
+    }
+  },
   "doctypeLabels": {
     "Employee": {
       "en": "Employee",

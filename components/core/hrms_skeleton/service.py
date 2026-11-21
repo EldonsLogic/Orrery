@@ -185,11 +185,16 @@ class HrmsService:
         return principal.strip()
 
     # -- upsert ---------------------------------------------------------------------------
+    def _require_write_roles(self, spec: DocSpec, values: Mapping[str, Any]) -> frozenset[str]:
+        """Require the admin tier when the payload includes an admin-only field."""
+        allowed = HR_ADMIN_ROLES if spec.admin_fields.intersection(values) else spec.write_roles
+        return self._require_roles(allowed, spec.doctype)
+
     def upsert(self, doctype: str, payload: Mapping[str, Any]) -> ApplyResult:
         self._live_user()
         spec = SPECS[assert_allowed_doctype(doctype)]
         values = normalise_record(spec, payload, self.company)
-        roles = self._require_roles(spec.write_roles, doctype)
+        roles = self._require_write_roles(spec, values)
         return self._write(spec, values, roles)
 
     def apply_configuration(self, records: Sequence[Mapping[str, Any]]) -> list[ApplyResult]:
@@ -198,34 +203,35 @@ class HrmsService:
         self._live_user()
         if not isinstance(records, (list, tuple)):
             raise HrmsError("payload_invalid")
-        planned: list[tuple[DocSpec, dict[str, Any], frozenset[str]]] = []
+        planned: list[tuple[DocSpec, dict[str, Any]]] = []
         seen: set[tuple[str, tuple[Any, ...]]] = set()
         for record in records:
             if not isinstance(record, Mapping) or set(record) != {"doctype", "values"}:
                 raise HrmsError("payload_invalid")
             spec = SPECS[assert_allowed_doctype(record["doctype"])]
             values = normalise_record(spec, record["values"], self.company)
-            roles = self._require_roles(spec.write_roles, spec.doctype)
+            self._require_write_roles(spec, values)
             marker = (spec.doctype, tuple(self._key(spec, values).values()))
             if marker in seen:
                 raise HrmsError("duplicate_row", doctype=spec.doctype)
             seen.add(marker)
-            planned.append((spec, values, roles))
+            planned.append((spec, values))
         planned.sort(key=lambda item: APPLY_ORDER.index(item[0].doctype))
         # Roles are re-read for each record: a role withdrawn mid-run stops the rest of the run.
-        return [self._write(spec, values, self._require_roles(spec.write_roles, spec.doctype)) for spec, values, _ in planned]
+        return [self._write(spec, values, self._require_write_roles(spec, values)) for spec, values in planned]
 
     def _write(self, spec: DocSpec, values: dict[str, Any], roles: frozenset[str]) -> ApplyResult:
         doctype = spec.doctype
         user = self._live_user()
         applicant: dict[str, Any] | None = None
-        if spec.employee_field:
-            applicant = self._employee(values[spec.employee_field])
         if doctype == "Leave Application" and not roles & HR_SETUP_ROLES:
-            # A caller with only the self-service role may file for their own employee record.
+            # Use the same refusal for missing and non-owned employee records.
+            applicant = self._find_one("Employee", {"name": values["employee"], "company": self.company})
             owner = _identity((applicant or {}).get("user_id"))
             if owner is None or owner != user.strip().casefold():
                 raise HrmsError("role_not_permitted", doctype=doctype)
+        elif spec.employee_field:
+            applicant = self._employee(values[spec.employee_field])
         key = self._key(spec, values)
         with self._locked(spec, values):
             user = self._live_user()  # again, now that the lock is held: nothing may have drifted

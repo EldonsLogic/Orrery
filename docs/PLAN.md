@@ -76,7 +76,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-006 | Brand asset upload enforcement in storage: PNG/JPG/SVG only, size limits, SVG sanitiser, malware scan, per-tenant storage (rules from SEC-018) | Security | G2 | PLT-017,SEC-018 | partner | todo |
 | SEC-007 | Dependency and SBOM scanning for Python and Node (beyond dependabot actions) | Security | G2 | GOV-006 | eldon | done |
 | SEC-008 | Audit log integrity: append-only, hash-chained, exported off-box | Security | G2 | PLT-015 | eldon | todo |
-| SEC-009 | Rate limits and abuse controls on chat and gateway | Security | G2 | PLT-009 | eldon | todo |
+| SEC-009 | Rate limits and abuse controls on chat and gateway | Security | G2 | PLT-026 | eldon | todo |
 | SEC-010 | Sandbox and static analysis for factory-built components | Security | G2 | BPL-015 | eldon | done |
 | SEC-011 | Encryption at rest and in transit; per-tenant key management | Security | G3 | INF-005 | partner | todo |
 | SEC-012 | Security baseline checklist for paying customers | Security | G3 | SEC-004,SEC-008 | eldon | todo |
@@ -98,7 +98,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-002 | Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance | Compliance | G1 | ERP-001 | partner | done |
 | CMP-003 | ZATCA Phase 1 invoice generation (QR, mandatory fields) | Compliance | G1 | CMP-002 | partner | done |
 | CMP-004 | ZATCA Phase 2 invoice passes ZATCA sandbox (signing, hash chain, clearance and reporting) | Compliance | G1 | CMP-003,CMP-033,SEC-002 | partner | todo |
-| CMP-005 | Hijri date support in fields, display and print | Compliance | G1 | ERP-001 | partner | todo |
+| CMP-005 | Hijri date support in fields, display and print | Compliance | G1 | ERP-001 | partner | doing |
 | CMP-006 | KSA chart of accounts template and tax codes | Compliance | G1 | ERP-001 | partner | doing |
 | CMP-007 | ZATCA onboarding automation per tenant (CSID, certificates, environments) | Compliance | G2 | CMP-004,PLT-003 | partner | todo |
 | CMP-008 | ZATCA regression suite run on every engine or component change | Compliance | G2 | CMP-004,QA-001 | partner | todo |
@@ -130,7 +130,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-014 | Component certification levels and test harness | Blueprint | G1 | BPL-010 | eldon | done |
 | BPL-015 | Component factory sandbox: build and test components in isolation | Blueprint | G2 | BPL-014 | eldon | done |
 | BPL-016 | Component request pipeline: gap to AI-drafted request with spec and tests | Blueprint | G2 | BPL-014,DSC-006 | eldon | done |
-| BPL-017 | Factory: AI drafts component code and tests from a request | Blueprint | G2 | BPL-015,PLT-009 | eldon | todo |
+| BPL-017 | Factory: AI drafts component code and tests from a request | Blueprint | G2 | BPL-015,PLT-026 | eldon | todo |
 | BPL-018 | Simulator: replay a month of the owner's data on the compiled tenant | Blueprint | G2 | BPL-007,DSC-010 | eldon | done |
 | BPL-019 | Simulation report: expected versus actual, anomalies, owner sign-off view | Blueprint | G2 | BPL-018 | eldon | done |
 | BPL-020 | Build state machine draft to live, with the human gate | Blueprint | G2 | BPL-007,PLT-013 | eldon | done |
@@ -187,9 +187,9 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-010 | Chat service: sessions, streaming, Arabic and English | Operate | G2 | OPR-001 | eldon | done |
 | OPR-011 | Role-based view generation (screens and tools per role) | Operate | G2 | OPR-003,WEB-011 | eldon | todo |
 | OPR-012 | Chat transcript audit and retention | Operate | G2 | SEC-008,DAT-001 | eldon | todo |
-| OPR-013 | Scheduled agents with budgets | Operate | G3 | OPR-001,PLT-021 | eldon | todo |
+| OPR-013 | Scheduled agents with budgets | Operate | G3 | OPR-001,PLT-026 | eldon | todo |
 | OPR-014 | Per-tenant memory | Operate | G3 | OPR-001,DAT-001 | eldon | done |
-| OPR-015 | WhatsApp or push channel for the chat | Operate | G4 | OPR-010,DSC-015 | eldon | todo |
+| OPR-015 | WhatsApp or push channel for the chat | Operate | G4 | OPR-010,DSC-015 | eldon | doing |
 | PLT-001 | Tenancy ADR-0006: site per tenant on shared in-country infrastructure | Platform | G0 | GOV-015 | eldon | done |
 | PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | eldon | done |
 | PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | partner | doing |
@@ -198,9 +198,9 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-006 | Plans and entitlements model, everything unlocked at first | Platform | G2 | PLT-004 | eldon | todo |
 | PLT-007 | Usage metering for AI actions, storage, users | Platform | G2 | PLT-006,BPL-011 | eldon | todo |
 | PLT-008 | Billing and payments for our subscriptions | Platform | G3 | PLT-007,LEG-010 | eldon | todo |
-| PLT-009 | AI model gateway: routing, budgets, caching, logs | Platform | G2 | QA-003 | eldon | todo |
-| PLT-010 | Gateway regional routing and provider fallback | Platform | G3 | PLT-009,CMP-019 | eldon | todo |
-| PLT-011 | Per-tenant AI cost attribution and caps | Platform | G2 | PLT-009,PLT-007 | eldon | todo |
+| PLT-009 | AI model gateway: routing, budgets, caching, logs | Platform | G2 | QA-003 | partner | todo |
+| PLT-010 | Gateway regional routing and provider fallback | Platform | G3 | PLT-009,CMP-019 | partner | todo |
+| PLT-011 | Per-tenant AI cost attribution and caps | Platform | G2 | PLT-009,PLT-025 | partner | todo |
 | PLT-012 | Internal team console | Platform | G2 | PLT-005 | eldon | done |
 | PLT-013 | Human review queue (team_reviewed gate) | Platform | G2 | PLT-012 | eldon | done |
 | PLT-014 | Component factory review screens | Platform | G2 | PLT-012,BPL-016 | eldon | done |
@@ -210,7 +210,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-018 | Entitlement to remove the Powered-by mark | Platform | G2 | PLT-006,BRD-007 | eldon | todo |
 | PLT-019 | Audited just-in-time support access | Platform | G3 | PLT-012,SEC-008 | eldon | todo |
 | PLT-020 | Status page and tenant notifications | Platform | G3 | PLT-015 | eldon | todo |
-| PLT-021 | Per-tenant AI budget and quota enforcement | Platform | G2 | PLT-011 | eldon | todo |
+| PLT-021 | Per-tenant AI budget and quota enforcement | Platform | G2 | PLT-011 | partner | todo |
 | PLT-022 | Custom domains per tenant | Platform | G5 | PLT-017,INF-010 | partner | todo |
 | PLT-023 | Self-serve signup and plan gating switched on | Platform | G5 | PLT-008,GTM-008 | eldon | todo |
 | PLT-024 | Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016); review fixes on PR #123, live binding awaits durable audit spool and identity-bound audit records | Platform | G1 | PLT-001 | partner | doing |
@@ -222,7 +222,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | INF-006 | Container build and image scanning | Infrastructure | G2 | INF-003 | partner | todo |
 | INF-007 | Cost monitoring per tenant and per service | Infrastructure | G3 | PLT-007 | partner | todo |
 | INF-008 | Disaster recovery plan and failover test | Infrastructure | G4 | DAT-005 | partner | todo |
-| INF-009 | Decide where the isolated browser runner lives (open question) | Infrastructure | G3 | SEC-003 | partner | todo |
+| INF-009 | Decide where the isolated browser runner lives (open question) | Infrastructure | G3 | SEC-003 | partner | doing |
 | INF-010 | Capacity plan and hosting at volume | Infrastructure | G5 | ERP-002,INF-007 | partner | todo |
 | INF-011 | Asset delivery (CDN) for tenant brand assets | Infrastructure | G2 | INF-004 | partner | todo |
 | INF-012 | Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) | Infrastructure | G1 | GOV-009 | eldon | todo |
@@ -272,7 +272,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-001 | Niche decision: trading and distribution first | GTM | G0 | - | eldon | done |
 | GTM-002 | 20-30 buyer and accountant interviews in the niche | GTM | G1 | - | eldon | todo |
 | GTM-003 | Interview synthesis: ICP, pains, who vetoes, willingness to pay | GTM | G1 | GTM-002 | eldon | todo |
-| GTM-004 | Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) | GTM | G1 | - | eldon | todo |
+| GTM-004 | Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) | GTM | G1 | - | eldon | done |
 | GTM-005 | Pilot A: sign a paid pilot with the anonymised-reuse clause | GTM | G2 | LEG-013,GTM-003 | eldon | todo |
 | GTM-006 | Pilot A: run discovery to live | GTM | G2 | GTM-005,QA-009 | eldon | todo |
 | GTM-007 | Pricing tests (Van Westendorp and anchor tests) | GTM | G2 | GTM-003 | eldon | todo |
@@ -286,7 +286,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-015 | Second market (UAE) launch plan | GTM | G5 | CMP-011 | eldon | todo |
 | GTM-016 | Partner and reseller programme | GTM | G5 | GTM-014 | eldon | todo |
 | FND-001 | Investor shortlist from research/05, re-verified | Fundraising | G1 | - | eldon | done |
-| FND-002 | Accelerator evaluation (Hub71+, Antler) after the spike | Fundraising | G2 | ERP-001 | eldon | todo |
+| FND-002 | Accelerator evaluation (Hub71+, Antler) after the spike | Fundraising | G2 | ERP-001 | eldon | done |
 | FND-003 | Financial model | Fundraising | G2 | GTM-007 | eldon | todo |
 | FND-004 | Pitch deck | Fundraising | G2 | GTM-006 | eldon | todo |
 | FND-005 | Data room | Fundraising | G2 | LEG-010 | eldon | todo |
@@ -377,10 +377,13 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-033 | Decision and ADR: wrap, fork (with PROVENANCE) or rebuild the ERPGulf ZATCA app for Phase 2, using docs/compliance/zatca-erpgulf-evaluation.md (stub tests, non-transactional hash-chain writes, desk coupling); sets the constraints for CMP-004: one chain per invoicing unit, rejected invoices stay in the chain, outbox for clearance and the 24-hour reporting window, rigid-zone Tier 3 review | Compliance | G1 | CMP-002 | partner | doing |
 | OPR-016 | First pilot agent (optional, draft-only), chosen with the lead; role, tools, caps and kill switch per SEC-020 | Operate | G2 | SEC-020,OPR-001 | eldon | todo |
 | PLT-025 | Gateway token metering from the start: count tokens and cost per tenant and per call in services/gateway, so builder session cost is measured | Platform | G1 | - | partner | done |
+| PLT-026 | Model-call interface contract in contracts/ (tier and purpose, budget reservation, refusal codes, metering event) plus a fake port, so Eldon rows build against it while the partner builds the gateway (Q-127, option A) | Platform | G2 | - | eldon | todo |
 | GOV-041 | Contracts check script: every contract schema valid, examples validate, refs resolve; CI job | Governance | G0 | GOV-032 | eldon | done |
 | GOV-052 | Plan status hygiene: mark rows done whose work has merged (PLT-005, QA-008, WEB-017, OPR-019) | Governance | G0 | GOV-006 | eldon | done |
 | GOV-053 | Runbook: shipping plan rows with parallel subagents (worktrees, tiers, reviews, collisions) | Governance | G0 | GOV-006 | eldon | done |
 | GOV-054 | Partner sign-off batch on Proposed ADRs (accept ADR-0026 INDEX sync, 0028, 0034, 0036, 0037 with follow-ups; hold ADR-0027, 0029, 0030, 0043, 0044 with Q-293 to Q-301; deduplicate ADR-0043 in INDEX.md) | Governance | G0 | GOV-036 | partner | done |
 | GOV-055 | ADR-0034 enforcement: CI check that component owner.github is not in reviewedBy, and engine/apply eligibility check or compiled-artifact certification binding (Q-297) | Governance | G1 | GOV-054 | partner | todo |
+| GOV-057 | Wording follow-ups from the GOV-054 review: ADR-0028 shown Accepted in the adapter README, contracts list only ERP-026 as open | Governance | G0 | GOV-054 | eldon | done |
+| GOV-058 | Gateway lane decision (Q-127): PLT-009, PLT-010, PLT-011, PLT-021 move to the partner; Eldon rows depend on the PLT-026 contract instead | Governance | G0 | - | eldon | done |
 | INF-015 | Redis authentication (requirepass or per-bench ACLs) for redis-cache and redis-queue/redis_socketio plus network isolation from discovery/connector workloads (T18); addresses SEC-004 confirmed leak R-033 (stops unauthenticated network pivots; shared-process residual risk remains) | Infrastructure | G1 | ERP-001 | partner | todo |
 | SEC-021 | Remediate SEC-004 confirmed RQ Job prefix-matching leak (job_id.startswith(site) without :: separator, R-032) via exact site:: filter override/upstream report, gateway route blocking (PLT-024), canonical hostname validation (PLT-003: lowercase, Punycode/IDN, no trailing dot, no prefix-collision rule as defence in depth only), and combined live isolation run with headless guard (ERP-020); remove expectedFailure markers once green | Security | G1 | SEC-004,ERP-020 | partner | todo |

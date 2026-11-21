@@ -24,7 +24,11 @@ Resumed an interrupted session (rate limit): merged main into the claimed branch
 ## Checks
 - Offline (CHANGE_ENGINE_ENV unset): BPL-027 7 passed, 9 skipped (main: 5 passed, 9 skipped); SEC-022/BPL-032 33 passed; BPL-012/ERP-012 15 passed; ERP-021 7 OK; ERP-023 73 passed; BPL-008 6 passed; ERP-026 30 passed, 36 skipped; CE-SEC mocks (caller roles, CE-SEC-003, API deployment) 59 passed; SEC-004 5 passed; ERP-009 25 passed; ERP-020, ERP-003, ERP-007, CMP-006, phase 2 to 4 OK; conformance 208 passed on `make_harness` and 208 on `make_frappe_harness`. Each commit was checked on its own.
 - `scripts/tests` 22 passed; `check_docs`, `check_repo_hygiene`, `scan_secrets`, `check_plan_independence`, `check_lanes --actor partner` OK.
-- Live bench (BPL-027 class): running on a throwaway Compose project (`sec022-bpl032-bench`, engine port 127.0.0.1:18232, MariaDB not published); result follows in this log.
+- Live bench (BPL-027 class, throwaway Compose project `sec022-bpl032-bench`, engine port 127.0.0.1:18232, MariaDB not published, torn down with `down -v`): `Ran 16 tests ... OK (skipped=1, expected failures=1)`. test_04b and test_06 pass live; test_05 stays an expected failure (BPL-027 finding 2, not in scope); test_03, test_07 and test_08 pass. On the site: 68 managed rules on 6 `bp-` roles, `bp-auditor` beside an untouched `Auditor`, 12 `bp-` workflow states. No field level was used: the fixture's hidden fields are not on the engine's existing document types under the adapter's names (same cause as test_05), so those entity grants were withheld; field masking is proven offline only.
+- Bench setup notes (not code defects in this PR):
+  - `bench new-site` must wait for the engine entrypoint to finish ("Starting engine runtime"), else HRMS install fails with "Module HR not found" or change_engine is not importable.
+  - Since ERP-009 (#162) the site needs `tenant_id` in its site config (`bench --site <site> set-config tenant_id t_bpl027`), else the setup wizard's inserts fail in the record-event hook, no company is created, and apply compensates at `location.upsert` (`site_not_ready`).
+  - The README recipe for BPL-027 needs both steps; README is outside this PR's paths.
 
 ## Decisions
 - ADR-0051 (Proposed): reserved prefix `bp-`; collision refused with `protected_subject`; grants narrowed until the ADR-0039 bench gates pass (no report or print, masked entities read-only, location scopes withheld, unresolved hidden field withholds the entity grant).
@@ -38,5 +42,6 @@ Resumed an interrupted session (rate limit): merged main into the claimed branch
 Unknown.
 
 ## Next step
-- Security review by a different model and Eldon's line-by-line review (Tier 3) of the PR; then BPL-027 can close once its remaining bench gaps (test_05) are handled.
+- Security review by a different model and Eldon's line-by-line review (Tier 3) of the PR; then BPL-027 can close once its remaining bench gap (test_05) is handled.
+- Add the two bench setup steps above to the change_engine README BPL-027 section (needs a plan row).
 - ADR-0039 follow-ups: user-permission scoping for location scopes, drift fingerprint, plan-time rejection of unresolved hidden fields (DENY-07), managed-name registry in the durable adapter state.

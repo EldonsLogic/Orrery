@@ -67,6 +67,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CE-SEC-004 | Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL | Security | G0 | BPL-001 | partner | done |
 | CE-SEC-005 | Change engine: CI against a real Frappe bench instead of mocks | Security | G1 | BPL-001,ERP-001 | partner | doing |
 | CE-SEC-006 | Change engine: policy conditions fail closed (an unevaluable comparison on a missing or wrongly typed field denies instead of allowing; is/is not compare against their literal) | Security | G0 | CE-SEC-003 | partner | done |
+| CE-SEC-007 | Change engine: live MariaDB Suite B runs only on explicit opt-in with credentials from the environment (no root/admin defaults, no silent writes to a local database) | Security | G0 | CE-SEC-003 | partner | done |
 | SEC-001 | Threat model for the five parts and four contracts | Security | G1 | GOV-015 | eldon | done |
 | SEC-002 | Secrets management design (store, rotate, never in repo) | Security | G1 | SEC-001 | partner | doing |
 | SEC-003 | Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data | Security | G1 | SEC-001 | eldon | done |
@@ -97,7 +98,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-002 | Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance | Compliance | G1 | ERP-001 | partner | done |
 | CMP-003 | ZATCA Phase 1 invoice generation (QR, mandatory fields) | Compliance | G1 | CMP-002 | partner | done |
 | CMP-004 | ZATCA Phase 2 invoice passes ZATCA sandbox (signing, hash chain, clearance and reporting) | Compliance | G1 | CMP-003,CMP-033,SEC-002 | partner | todo |
-| CMP-005 | Hijri date support in fields, display and print | Compliance | G1 | ERP-001 | partner | todo |
+| CMP-005 | Hijri date support in fields, display and print | Compliance | G1 | ERP-001 | partner | doing |
 | CMP-006 | KSA chart of accounts template and tax codes | Compliance | G1 | ERP-001 | partner | doing |
 | CMP-007 | ZATCA onboarding automation per tenant (CSID, certificates, environments) | Compliance | G2 | CMP-004,PLT-003 | partner | todo |
 | CMP-008 | ZATCA regression suite run on every engine or component change | Compliance | G2 | CMP-004,QA-001 | partner | todo |
@@ -165,7 +166,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-007 | Bilingual tax invoice PDF print format | Runtime | G1 | CMP-003,ERP-006 | partner | done |
 | ERP-008 | Blueprint roles to engine roles and user permissions mapping | Runtime | G1 | BPL-002 | partner | doing |
 | ERP-009 | Engine event emitter feeding the event stream | Runtime | G1 | BPL-011 | partner | doing |
-| ERP-010 | HRMS skeleton: employees, leave, payroll structure, only what v1 needs | Runtime | G2 | ERP-005 | partner | todo |
+| ERP-010 | HRMS skeleton: employees, leave, payroll structure, only what v1 needs | Runtime | G2 | ERP-005 | partner | doing |
 | ERP-011 | Component pack v1 for trading and distribution (price lists, credit limits, rep commission) | Runtime | G2 | BPL-014,ERP-005 | partner | doing |
 | ERP-012 | Frappe implementation of the engine adapter | Runtime | G1 | BPL-012,ERP-001 | partner | done |
 | ERP-013 | Opening balances and master data importer | Runtime | G2 | DSC-011 | partner | todo |
@@ -221,7 +222,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | INF-006 | Container build and image scanning | Infrastructure | G2 | INF-003 | partner | todo |
 | INF-007 | Cost monitoring per tenant and per service | Infrastructure | G3 | PLT-007 | partner | todo |
 | INF-008 | Disaster recovery plan and failover test | Infrastructure | G4 | DAT-005 | partner | todo |
-| INF-009 | Decide where the isolated browser runner lives (open question) | Infrastructure | G3 | SEC-003 | partner | todo |
+| INF-009 | Decide where the isolated browser runner lives (open question) | Infrastructure | G3 | SEC-003 | partner | doing |
 | INF-010 | Capacity plan and hosting at volume | Infrastructure | G5 | ERP-002,INF-007 | partner | todo |
 | INF-011 | Asset delivery (CDN) for tenant brand assets | Infrastructure | G2 | INF-004 | partner | todo |
 | INF-012 | Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) | Infrastructure | G1 | GOV-009 | eldon | todo |
@@ -271,7 +272,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-001 | Niche decision: trading and distribution first | GTM | G0 | - | eldon | done |
 | GTM-002 | 20-30 buyer and accountant interviews in the niche | GTM | G1 | - | eldon | todo |
 | GTM-003 | Interview synthesis: ICP, pains, who vetoes, willingness to pay | GTM | G1 | GTM-002 | eldon | todo |
-| GTM-004 | Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) | GTM | G1 | - | eldon | todo |
+| GTM-004 | Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) | GTM | G1 | - | eldon | done |
 | GTM-005 | Pilot A: sign a paid pilot with the anonymised-reuse clause | GTM | G2 | LEG-013,GTM-003 | eldon | todo |
 | GTM-006 | Pilot A: run discovery to live | GTM | G2 | GTM-005,QA-009 | eldon | todo |
 | GTM-007 | Pricing tests (Van Westendorp and anchor tests) | GTM | G2 | GTM-003 | eldon | todo |
@@ -285,7 +286,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-015 | Second market (UAE) launch plan | GTM | G5 | CMP-011 | eldon | todo |
 | GTM-016 | Partner and reseller programme | GTM | G5 | GTM-014 | eldon | todo |
 | FND-001 | Investor shortlist from research/05, re-verified | Fundraising | G1 | - | eldon | done |
-| FND-002 | Accelerator evaluation (Hub71+, Antler) after the spike | Fundraising | G2 | ERP-001 | eldon | todo |
+| FND-002 | Accelerator evaluation (Hub71+, Antler) after the spike | Fundraising | G2 | ERP-001 | eldon | done |
 | FND-003 | Financial model | Fundraising | G2 | GTM-007 | eldon | todo |
 | FND-004 | Pitch deck | Fundraising | G2 | GTM-006 | eldon | todo |
 | FND-005 | Data room | Fundraising | G2 | LEG-010 | eldon | todo |

@@ -22,7 +22,8 @@ Tags: `[row | Q | gate]`. M = every market; KSA, UAE, EG, QA = market-specific.
 3. UAE entity serving KSA customers: may it contract and invoice Saudi customers cross-border without a Saudi entity or commercial registration? Does it need Saudi VAT registration or create a permanent establishment? What follows if KSA tenants are hosted in-Kingdom? [LEG-011 | checklist 2 | G2] KSA, UAE
 4. Same question for Egypt and Qatar customers served from a UAE (or other) entity. [LEG-010 | Q-201, E-1 | G2] EG, QA
 5. Tax position of our own subscription and setup invoices: VAT, withholding, reverse charge, invoice format and currency in each market. [LEG-010, LEG-013 | Q-402, checklist 17, E-2 | G2] M
-6. Do any of our features (payroll file generation, tax data preparation, e-invoice submission) make us a regulated service such as a tax agent or a salary-payment channel? [CMP-001 | research q11 | G1] KSA, UAE, EG, QA
+6. Do any of our features (payroll and Wage Protection System (WPS) salary file generation, tax data preparation, e-invoice submission) make us a regulated service such as a tax agent or a salary-payment channel? [CMP-001 | research q11 | G1] KSA, UAE, EG, QA
+   For WPS specifically: what each market requires of software that generates salary files (KSA Mudad, UAE WPS under CBUAE and MOHRE, Qatar WPS; Egypt if any), whether file generation needs certification or a licensed agent, and who is liable for a rejected file. [RULES principle 5, CMP-001 | G2] UNVERIFIED
 7. Founders' agreement and cap-table terms: scope only, quote separately. [FND-007 | checklist 1 | G3] M
 
 ### 3.2 Open-source licence boundary and notices

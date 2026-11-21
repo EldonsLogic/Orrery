@@ -121,6 +121,9 @@ def inspect_field_ddl(entity_id: str, field_def: dict[str, Any]) -> tuple[bool, 
         doctype=doctype,
         field_def=frappe_field_def,
         existing_columns_desc=None,
+        # Planning-time classification against synthetic standard columns (no live table):
+        # explicit offline mode. The live apply gate runs separately and fails closed.
+        offline_simulator=True,
     )
     statements = list(inspection.statements)
     if field_def.get("unique") or field_def.get("indexed"):

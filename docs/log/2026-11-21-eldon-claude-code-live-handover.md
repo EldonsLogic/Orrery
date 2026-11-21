@@ -44,7 +44,7 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - Eldon's account hit its 5-hour usage limit at about 14:30 UTC (correction: only this account, not both); the two cut-off agents were resumed after the reset.
 - Merged after Fable approval: #204 ERP-016 (bench tokens fixed, UAE neutral invoice mitigated as Q-553; 5 Lows for the partner, fix the UAE country gap before callers use branded renderers), #202 ERP-013 (M1 fixed in partner rounds 6 and 7; 3 Lows).
 - #244 PLT-026: 2 High and 4 Medium fixed (16d152e), Fable approved, 6 Lows fixed (fcdaa5d, contract 0.2.1); awaits the partner's Tier 3 review.
-- #229 ERP-015: Fable approved (back-dated and repost tests added, CI wiring split to ERP-031); conflicts with main, partner to merge main before merging.
+- #229 ERP-015: Fable approved (back-dated and repost tests added, CI wiring split to ERP-031); partner merged main (ae93956), all checks green, merged by Eldon's agent.
 - BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
 ## Files touched
@@ -60,6 +60,6 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 Not tracked per agent; roughly 85k to 165k tokens per subagent run.
 
 ## Next step
-- Partner (sayegh9): fix #235 (High: grant allowlist), #202 (invisible marks in codes, merge main), #229 (back-dated/repost tests, live test in CI, merge main), #204 (bench tokens, UAE neutral invoice, merge main). Review Eldon's #224 (Tier 3 line-by-line), #228, #230, #232, #234, #239, #240. Close own `doing` rows whose PRs merged (list under Results).
+- Partner (sayegh9): fix #235 (High: grant allowlist), #202 (invisible marks in codes, merge main), #204 (bench tokens, UAE neutral invoice, merge main). Review Eldon's #224 (Tier 3 line-by-line), #228, #230, #232, #234, #239, #240. Close own `doing` rows whose PRs merged (list under Results).
 - Founders: Q-543 model gateway lane; GTM-004 demo code yes/no and deadline check with the organiser; accelerator relocation or KSA residency; LEG-003 one firm or four; INF-012 dev host account; drop Arial from the print stack.
 - Eldon's agents: finish the in-flight rows, ship each on its own branch, keep five agents busy while ready work exists.

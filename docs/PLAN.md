@@ -211,7 +211,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-021 | Per-tenant AI budget and quota enforcement | Platform | G2 | PLT-011 | eldon | todo |
 | PLT-022 | Custom domains per tenant | Platform | G5 | PLT-017,INF-010 | partner | todo |
 | PLT-023 | Self-serve signup and plan gating switched on | Platform | G5 | PLT-008,GTM-008 | eldon | todo |
-| PLT-024 | Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016) | Platform | G1 | PLT-001 | partner | todo |
+| PLT-024 | Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016); review fixes on PR #123, live binding awaits durable audit spool and identity-bound audit records | Platform | G1 | PLT-001 | partner | doing |
 | INF-001 | Hosting decision: in-country provider shortlist and choice | Infrastructure | G1 | LEG-003,CMP-019 | partner | todo |
 | INF-002 | Infrastructure as code baseline | Infrastructure | G1 | INF-001 | partner | todo |
 | INF-003 | CI/CD for services (build, test, deploy to staging) | Infrastructure | G1 | GOV-007 | partner | todo |

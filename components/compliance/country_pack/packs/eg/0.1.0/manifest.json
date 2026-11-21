@@ -1,0 +1,69 @@
+{
+  "$schema": "../../../../../../contracts/component.manifest.schema.json",
+  "id": "country.eg",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": {
+    "ar": "حزمة دولة مصر",
+    "en": "Egypt Country Pack"
+  },
+  "description": "Draft Egypt country pack (CMP-028; pack status: draft, evidenceStatus: unverified). Supplies declarative statutory metadata and locale defaults for Egypt (EG) from docs/compliance/egypt-research.md (accessed 2026-11-18) and docs/compliance/country-matrix.md: standard 14% VAT / 5% machinery / schedule tax (UNVERIFIED), ETA eInvoicing and eReceipt references (SDK API VERIFIED; rollout and token rules UNVERIFIED), 5-year tax archive retention (UNVERIFIED), Africa/Cairo timezone with DST note (UNVERIFIED), Gregorian calendar, Sun-Thu work week (UNVERIFIED), and EGP currency. Payroll and social insurance hooks are disabled/null (out of v1 scope). Contains zero tax or e-invoicing maths (ADR-0031). Arabic labels are unreviewed machine-assisted drafts (ADR-0033).",
+  "provides": [
+    {
+      "capability": "compliance.country_pack.eg",
+      "artifacts": [
+        {
+          "type": "print_format",
+          "ref": "eg_tax_invoice_template_unverified"
+        },
+        {
+          "type": "print_format",
+          "ref": "eg_credit_note_template_unverified"
+        },
+        {
+          "type": "print_format",
+          "ref": "eg_debit_note_template_unverified"
+        }
+      ]
+    }
+  ],
+  "requires": [],
+  "parameters": [],
+  "tests": [
+    {
+      "id": "test_pack_eg_unit",
+      "kind": "unit",
+      "path": "components/compliance/country_pack/tests/test_pack_eg.py",
+      "blocking": true
+    }
+  ],
+  "certification": {
+    "level": "tested",
+    "touchesLedgerOrTax": true,
+    "reviewedBy": []
+  },
+  "engineCompatibility": {
+    "adapter": "change_engine",
+    "engineRange": ">=0.1.0 <1.0.0",
+    "testedAgainst": []
+  },
+  "licence": {
+    "spdx": "LicenseRef-Proprietary"
+  },
+  "owner": {
+    "github": "sayegh9"
+  },
+  "i18n": {
+    "locales": [
+      "ar",
+      "en"
+    ],
+    "rtlVerified": false,
+    "stringsFile": "strings.json"
+  },
+  "dataHandling": {
+    "storesPersonalData": false,
+    "sendsDataToModels": false,
+    "promotableToLibrary": true
+  }
+}

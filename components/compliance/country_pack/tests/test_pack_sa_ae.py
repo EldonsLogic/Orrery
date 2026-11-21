@@ -128,11 +128,15 @@ class TestRealPacksLoad(unittest.TestCase):
                 self.assertEqual(pinned["countryCode"], code)
                 self.assertEqual(pinned["componentId"], f"country.{code.lower()}")
 
-    def test_status_is_draft_and_unverified_and_not_test_only(self) -> None:
+    def test_status_matches_level_and_evidence_unverified(self) -> None:
         for code in PACKS:
             with self.subTest(code=code):
                 pack = load_country_pack(code, PACKS_DIR)
-                self.assertEqual(pack["status"], "draft")
+                cert = _read_json(_version_dir(code) / "manifest.json")["certification"]
+                self.assertEqual(pack["status"], cert["level"])
+                self.assertEqual(pack["status"], "tested")
+                self.assertIs(cert["touchesLedgerOrTax"], True)
+                self.assertEqual(cert["reviewedBy"], [])
                 self.assertEqual(pack["evidenceStatus"], "unverified")
                 self.assertIs(pack["testOnly"], False)
                 self.assertIn("evidence.json", pack["notes"])
@@ -276,7 +280,25 @@ class TestManifests(unittest.TestCase):
                 self.assertEqual(manifest["parameters"], [])
                 self.assertEqual(manifest["certification"]["reviewedBy"], [])
                 for test in manifest["tests"]:
-                    self.assertTrue((vdir / test["path"]).resolve().is_file(), test["path"])
+                    self.assertFalse(test["path"].startswith(("/", ".")), "test path is repo-root relative")
+                    self.assertTrue((REPO_ROOT / test["path"]).is_file(), test["path"])
+
+    def test_requires_lists_every_referenced_component(self) -> None:
+        # The compiler fails closed on unmet `requires`, so every component a pack points at,
+        # including ones that do not exist yet, must be listed there.
+        for code in PACKS:
+            vdir = _version_dir(code)
+            manifest, pack = _read_json(vdir / "manifest.json"), _read_json(vdir / "pack.json")
+            referenced = {
+                val for path, val in _leaves(pack)
+                if isinstance(val, str) and (path.endswith(".componentId") or path.endswith("calendarRef.id"))
+            }
+            referenced.update(t["componentId"] for t in pack["printFormats"]["templates"] if t.get("componentId"))
+            required = {r["component"] for r in manifest["requires"] if "component" in r}
+            with self.subTest(code=code):
+                self.assertTrue(referenced)
+                self.assertNotIn(pack["componentId"], referenced)
+                self.assertEqual(referenced, required)
 
 
 class TestEvidence(unittest.TestCase):
@@ -331,6 +353,14 @@ class TestEvidence(unittest.TestCase):
                     self.assertEqual(_get(pack, p["path"]), p["value"])
                     self.assertTrue(p["blockedBy"])
 
+    def test_uae_trade_licence_pattern_is_unsourced(self) -> None:
+        _, _, evidence = self.data["AE"]
+        facts = [f for f in evidence["facts"] if "tax.crNumberPattern" in f["paths"]]
+        self.assertEqual(len(facts), 1)
+        self.assertEqual(facts[0]["status"], "UNVERIFIED")
+        self.assertNotIn("ref", facts[0])
+        self.assertNotIn("sources", facts[0])
+
     def test_arabic_labels_marked_unreviewed(self) -> None:
         for code, (pack, manifest, evidence) in self.data.items():
             listed = {(a["file"], a["path"]): a for a in evidence["arabicLabels"]}
@@ -348,6 +378,8 @@ class TestPacksReadme(unittest.TestCase):
         text = (PACKS_DIR / "README.md").read_text(encoding="utf-8")
         self.assertTrue(text.startswith("# "))
         self.assertIn("components/compliance/country_pack/packs/", text)
+        self.assertIn("test_pack_<cc>.py", text)
+        self.assertNotIn("test_pack_sa_ae.py", text)  # generic, so other packs' tests fit
 
 
 if __name__ == "__main__":

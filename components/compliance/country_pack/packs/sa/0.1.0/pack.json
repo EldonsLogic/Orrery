@@ -5,10 +5,10 @@
   "componentId": "country.sa",
   "countryCode": "SA",
   "version": "0.1.0",
-  "status": "draft",
+  "status": "tested",
   "evidenceStatus": "unverified",
   "testOnly": false,
-  "notes": "DRAFT, not for tenants. Declarative metadata only, no tax, ledger or e-invoice maths (ADR-0031). Sources, access dates and evidence labels per fact, pending refs and the unreviewed Arabic labels (ADR-0033) are in evidence.json beside this file: the schema has no per-fact evidence field. Chart and tax codes are the CMP-006 files, referenced, not copied. Payroll and WPS are off: out of v1 scope (CMP-015).",
+  "notes": "Not for tenants: evidence unverified, no reviewer. Declarative metadata only, no tax, ledger or e-invoice maths (ADR-0031). Sources, access dates and evidence labels per fact, pending refs and the unreviewed Arabic labels (ADR-0033) are in evidence.json beside this file: the schema has no per-fact evidence field. Chart and tax codes are the CMP-006 files, referenced, not copied. Payroll and WPS are off: out of v1 scope (CMP-015).",
   "name": {
     "ar": "حزمة المملكة العربية السعودية",
     "en": "Saudi Arabia country pack"

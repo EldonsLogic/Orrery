@@ -13,4 +13,4 @@ packs/
       evidence.json       # source, access date and evidence label per fact; pending refs; Arabic label review state
 ```
 
-Packs are rigid-zone data (ADR-0031, Tier 3): declarative metadata and references only, never tax, ledger or e-invoice maths. A real pack has `testOnly: false`. `evidence.json` exists because the pack schema has no per-fact evidence field. Tests: `../tests/test_pack_sa_ae.py`.
+Packs are rigid-zone data (ADR-0031, Tier 3): declarative metadata and references only, never tax, ledger or e-invoice maths. A real pack has `testOnly: false`. `evidence.json` exists because the pack schema has no per-fact evidence field. Tests: each pack has its own test module in `../tests/`, named `test_pack_<cc>.py` or similar (one module may cover several packs), listed in that pack's `manifest.json` under `tests`.

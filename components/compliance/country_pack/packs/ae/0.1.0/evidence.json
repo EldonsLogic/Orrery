@@ -39,8 +39,7 @@
     {
       "paths": ["tax.crNumberPattern"],
       "claim": "There is no single national trade licence number format: each emirate and free zone issues its own. The pattern is deliberately permissive (letters, digits, slash and hyphen, up to 30).",
-      "status": "UNVERIFIED",
-      "ref": "docs/compliance/country-matrix.md section UAE"
+      "status": "UNVERIFIED"
     },
     {
       "paths": ["eInvoicing.mode", "eInvoicing.authority"],

@@ -205,11 +205,17 @@ def render_branded_tax_invoice_html(
     mode: str = "zatca_sa",
     branding: Any = None,
     entitlements: Mapping[str, Any] | None = None,
+    locale: dict[str, Any] | None = None,
+    compliance_profile: dict[str, Any] | None = None,
+    country_default: bool | None = False,
 ) -> str:
     """Tenant-branded bilingual tax invoice with the compliance regions locked.
 
     ``mode`` and the invoice payload are exactly those of ``render_tax_invoice_html`` (ERP-007);
     ``branding`` is a ``DocumentBranding`` or mapping (see ``resolve_document_branding``).
+    ``locale`` and ``compliance_profile`` decide the Hijri date row as in
+    ``render_tax_invoice_html`` (CMP-005); like the engine print path, it is off unless the
+    settings enable it (``country_default=None`` restores the per-mode default).
     """
     if mode not in ("zatca_sa", "neutral"):
         raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
@@ -230,7 +236,9 @@ def render_branded_tax_invoice_html(
         if mode == "zatca_sa" and checked.allocated > 0 else None
     )
     view = prepare_tax_invoice_view(checked.document, mode, discount_row=checked.discount,
-                                    included_discount_row=included)
+                                    included_discount_row=included, locale=locale,
+                                    compliance_profile=compliance_profile,
+                                    country_default=country_default)
 
     header = _header_region(
         brand,

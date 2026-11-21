@@ -98,7 +98,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-002 | Evaluate ERPGulf ZATCA app: licence, Phase 2 coverage, maintenance | Compliance | G1 | ERP-001 | partner | done |
 | CMP-003 | ZATCA Phase 1 invoice generation (QR, mandatory fields) | Compliance | G1 | CMP-002 | partner | done |
 | CMP-004 | ZATCA Phase 2 invoice passes ZATCA sandbox (signing, hash chain, clearance and reporting) | Compliance | G1 | CMP-003,CMP-033,SEC-002 | partner | todo |
-| CMP-005 | Hijri date support in fields, display and print | Compliance | G1 | ERP-001 | partner | todo |
+| CMP-005 | Hijri date support in fields, display and print | Compliance | G1 | ERP-001 | partner | doing |
 | CMP-006 | KSA chart of accounts template and tax codes | Compliance | G1 | ERP-001 | partner | doing |
 | CMP-007 | ZATCA onboarding automation per tenant (CSID, certificates, environments) | Compliance | G2 | CMP-004,PLT-003 | partner | todo |
 | CMP-008 | ZATCA regression suite run on every engine or component change | Compliance | G2 | CMP-004,QA-001 | partner | todo |
@@ -190,7 +190,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-012 | Chat transcript audit and retention | Operate | G2 | SEC-008,DAT-001 | eldon | todo |
 | OPR-013 | Scheduled agents with budgets | Operate | G3 | OPR-001,PLT-021 | eldon | todo |
 | OPR-014 | Per-tenant memory | Operate | G3 | OPR-001,DAT-001 | eldon | done |
-| OPR-015 | WhatsApp or push channel for the chat | Operate | G4 | OPR-010,DSC-015 | eldon | todo |
+| OPR-015 | WhatsApp or push channel for the chat | Operate | G4 | OPR-010,DSC-015 | eldon | doing |
 | PLT-001 | Tenancy ADR-0006: site per tenant on shared in-country infrastructure | Platform | G0 | GOV-015 | eldon | done |
 | PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | eldon | done |
 | PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | partner | doing |
@@ -223,7 +223,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | INF-006 | Container build and image scanning | Infrastructure | G2 | INF-003 | partner | todo |
 | INF-007 | Cost monitoring per tenant and per service | Infrastructure | G3 | PLT-007 | partner | todo |
 | INF-008 | Disaster recovery plan and failover test | Infrastructure | G4 | DAT-005 | partner | todo |
-| INF-009 | Decide where the isolated browser runner lives (open question) | Infrastructure | G3 | SEC-003 | partner | todo |
+| INF-009 | Decide where the isolated browser runner lives (open question) | Infrastructure | G3 | SEC-003 | partner | doing |
 | INF-010 | Capacity plan and hosting at volume | Infrastructure | G5 | ERP-002,INF-007 | partner | todo |
 | INF-011 | Asset delivery (CDN) for tenant brand assets | Infrastructure | G2 | INF-004 | partner | todo |
 | INF-012 | Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) | Infrastructure | G1 | GOV-009 | eldon | todo |
@@ -383,5 +383,6 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-053 | Runbook: shipping plan rows with parallel subagents (worktrees, tiers, reviews, collisions) | Governance | G0 | GOV-006 | eldon | done |
 | GOV-054 | Partner sign-off batch on Proposed ADRs (accept ADR-0026 INDEX sync, 0028, 0034, 0036, 0037 with follow-ups; hold ADR-0027, 0029, 0030, 0043, 0044 with Q-293 to Q-301; deduplicate ADR-0043 in INDEX.md) | Governance | G0 | GOV-036 | partner | done |
 | GOV-055 | ADR-0034 enforcement: CI check that component owner.github is not in reviewedBy, and engine/apply eligibility check or compiled-artifact certification binding (Q-297) | Governance | G1 | GOV-054 | partner | todo |
+| GOV-057 | Wording follow-ups from the GOV-054 review: ADR-0028 shown Accepted in the adapter README, contracts list only ERP-026 as open | Governance | G0 | GOV-054 | eldon | done |
 | INF-015 | Redis authentication (requirepass or per-bench ACLs) for redis-cache and redis-queue/redis_socketio plus network isolation from discovery/connector workloads (T18); addresses SEC-004 confirmed leak R-033 (stops unauthenticated network pivots; shared-process residual risk remains) | Infrastructure | G1 | ERP-001 | partner | todo |
 | SEC-021 | Remediate SEC-004 confirmed RQ Job prefix-matching leak (job_id.startswith(site) without :: separator, R-032) via exact site:: filter override/upstream report, gateway route blocking (PLT-024), canonical hostname validation (PLT-003: lowercase, Punycode/IDN, no trailing dot, no prefix-collision rule as defence in depth only), and combined live isolation run with headless guard (ERP-020); remove expectedFailure markers once green | Security | G1 | SEC-004,ERP-020 | partner | todo |

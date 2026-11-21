@@ -55,3 +55,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0048-agent-authority-propose-not-act.md](ADR-0048-agent-authority-propose-not-act.md) | Agent authority: agents propose, humans and deterministic code decide | Proposed |
 | [ADR-0049-human-review-queue.md](ADR-0049-human-review-queue.md) | Human review queue and the team_reviewed gate evidence | Proposed |
 | [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |
+| [ADR-0052-isolated-browser-runner-placement.md](ADR-0052-isolated-browser-runner-placement.md) | Isolated browser runner placement (Tier 5 connector) | Proposed |

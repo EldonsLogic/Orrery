@@ -272,7 +272,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-001 | Niche decision: trading and distribution first | GTM | G0 | - | eldon | done |
 | GTM-002 | 20-30 buyer and accountant interviews in the niche | GTM | G1 | - | eldon | todo |
 | GTM-003 | Interview synthesis: ICP, pains, who vetoes, willingness to pay | GTM | G1 | GTM-002 | eldon | todo |
-| GTM-004 | Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) | GTM | G1 | - | eldon | todo |
+| GTM-004 | Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) | GTM | G1 | - | eldon | done |
 | GTM-005 | Pilot A: sign a paid pilot with the anonymised-reuse clause | GTM | G2 | LEG-013,GTM-003 | eldon | todo |
 | GTM-006 | Pilot A: run discovery to live | GTM | G2 | GTM-005,QA-009 | eldon | todo |
 | GTM-007 | Pricing tests (Van Westendorp and anchor tests) | GTM | G2 | GTM-003 | eldon | todo |

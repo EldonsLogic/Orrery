@@ -172,7 +172,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-013 | Opening balances and master data importer | Runtime | G2 | DSC-011 | partner | todo |
 | ERP-014 | Accounting correctness property tests (ledger balances, tax, rounding) | Runtime | G1 | ERP-005,QA-001 | partner | done |
 | ERP-015 | Inventory valuation correctness tests | Runtime | G2 | ERP-014 | partner | todo |
-| ERP-016 | Tenant-branded document templates: tax invoice, quote, PO, with compliance layout locked | Runtime | G2 | BRD-006,CMP-003,ERP-007 | partner | todo |
+| ERP-016 | Tenant-branded document templates: tax invoice, quote, PO, with compliance layout locked | Runtime | G2 | BRD-006,CMP-003,ERP-007 | partner | doing |
+| ERP-030 | ERP-007 renderer cleanup: platform footer label instead of the product name, token-based styles, ERP-007's own line rows show the line discount and the document discount allocation, and the ERP-007 and ERP-016 document labels move from Python dicts to the i18n catalogue (document discounts are done in ERP-016) | Runtime | G2 | ERP-016 | partner | todo |
 | ERP-017 | Branded email templates | Runtime | G3 | ERP-016 | partner | todo |
 | ERP-018 | Component pack for a second vertical | Runtime | G4 | DSC-018 | partner | todo |
 | OPR-001 | Agent runtime: loop, tool calls, traces, budgets | Operate | G2 | PLT-025 | eldon | done |

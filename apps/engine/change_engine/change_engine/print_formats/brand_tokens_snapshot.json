@@ -1,0 +1,36 @@
+{
+  "_generated": "Generated from docs/brand/tokens/tokens.json by: PYTHONPATH=apps/engine/change_engine python3 -c \"from change_engine.print_formats.document_tokens import write_snapshot; write_snapshot()\". Never hand-edit (ADR-0014).",
+  "color": {
+    "light": {
+      "surface": {
+        "hex": "#FFFFFF"
+      },
+      "background": {
+        "hex": "#F3F4F6"
+      },
+      "text": {
+        "hex": "#12151B"
+      },
+      "primary": {
+        "hex": "#2443D0"
+      },
+      "success": {
+        "hex": "#13795B"
+      },
+      "warning": {
+        "hex": "#9E5600"
+      },
+      "danger": {
+        "hex": "#C21F3A"
+      }
+    }
+  },
+  "typography": {
+    "families": {
+      "body": {
+        "family": "Readex Pro",
+        "fallback": "system-ui, sans-serif"
+      }
+    }
+  }
+}

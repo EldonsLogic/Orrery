@@ -7,7 +7,7 @@ import re
 
 from .backend import ImportBackend
 from .errors import ImportFailure
-from .validation import MASTER_FIELDS, OPENING_FIELDS, business_key, canonical, prepare
+from .validation import MASTER_FIELDS, OPENING_FIELDS, business_key, canonical, prepare, text
 
 
 class OpeningImporter:
@@ -36,15 +36,34 @@ class OpeningImporter:
         except Exception:
             raise ImportFailure("IMP-AUTH") from None
 
+    def _record_failure(self, tenant: str, batch_id: str, plan_hash: str | None, code: str, user_id: str) -> None:
+        if code not in {"IMP-AUTH", "IMP-REFERENCE", "IMP-SCHEMA", "IMP-REPORT"}:
+            recorded_hash = plan_hash if isinstance(plan_hash, str) and re.fullmatch(r"[0-9a-f]{64}", plan_hash) else ""
+            try:
+                self.backend.record_failure(tenant, batch_id, recorded_hash, code, user_id=user_id)
+            except Exception:
+                raise ImportFailure("IMP-RECOVERY") from None
+
     def _prepare(self, source, *, confirm_distinct=None, pending_plan_hash=None):
         """Build one plan using company-scoped master reads; fail closed on errors."""
+        def _lookup_distinct(tenant_id, company, batch_id, digest, pending_hash):
+            ids = self.backend.distinct_confirmations(tenant_id, company, batch_id, digest, pending_hash)
+            if not ids:
+                previous = self.backend.journal(tenant_id, batch_id)
+                if (previous and previous["company"] == company
+                        and previous.get("source_digest") == digest
+                        and previous["status"] == "applied"
+                        and previous.get("pending_plan_hash")):
+                    ids = self.backend.distinct_confirmations(
+                        tenant_id, company, batch_id, digest, previous["pending_plan_hash"])
+            return ids
+
         try:
             plan, result = prepare(
                 source, self.max_rows,
                 lambda entity, key: self.backend.master(source["tenant_id"], source["company"], entity, key),
                 lambda tenant_id, company: self.backend.company_currency(tenant_id, company),
-                lambda tenant_id, company, batch_id, digest: self.backend.distinct_confirmations(
-                    tenant_id, company, batch_id, digest),
+                _lookup_distinct,
                 confirm_distinct=confirm_distinct,
                 pending_plan_hash=pending_plan_hash,
             )
@@ -83,24 +102,35 @@ class OpeningImporter:
                 plan_hash: str | None = None) -> dict:
         """Verify and server-record owner distinct confirmation for flagged name groups."""
         identity = self._authorize(source, required_capability="opening_import_confirm")
-        if (confirmed_by != identity["user_id"]
-                or not isinstance(owner_confirmed_distinct, (list, tuple, set, frozenset))
-                or not all(isinstance(gid, str) for gid in owner_confirmed_distinct)
-                or not isinstance(plan_hash, str)
-                or not re.fullmatch(r"[0-9a-f]{64}", plan_hash)):
-            raise ImportFailure("IMP-CONFIRM")
-        ids = list(owner_confirmed_distinct)
-        if len(set(ids)) != len(ids):
-            raise ImportFailure("IMP-CONFIRM")
-        source = copy.deepcopy(source)
-        identity = self._authorize(source, required_capability="opening_import_confirm")
-        with self.backend.transaction():
-            plan, result = self._prepare(source, confirm_distinct=ids, pending_plan_hash=plan_hash)
-            self.backend.record_distinct_confirmation(
-                plan["tenant_id"], plan["company"], plan["batch_id"],
-                plan["source_digest"], result["owner_confirmed_distinct"], identity["user_id"],
-            )
-        return result
+        tenant = source["tenant_id"]
+        try:
+            batch_id = text(source.get("batch_id"))
+        except ImportFailure:
+            batch_id = ""
+        try:
+            if (confirmed_by != identity["user_id"]
+                    or not isinstance(owner_confirmed_distinct, (list, tuple, set, frozenset))
+                    or not all(isinstance(gid, str) for gid in owner_confirmed_distinct)
+                    or not isinstance(plan_hash, str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", plan_hash)):
+                raise ImportFailure("IMP-CONFIRM")
+            ids = list(owner_confirmed_distinct)
+            if len(set(ids)) != len(ids):
+                raise ImportFailure("IMP-CONFIRM")
+            source = copy.deepcopy(source)
+            identity = self._authorize(source, required_capability="opening_import_confirm")
+            with self.backend.transaction():
+                plan, result = self._prepare(source, confirm_distinct=ids, pending_plan_hash=plan_hash)
+                self.backend.record_distinct_confirmation(
+                    plan["tenant_id"], plan["company"], plan["batch_id"],
+                    plan["source_digest"], plan["pending_plan_hash"],
+                    result["owner_confirmed_distinct"], identity["user_id"],
+                )
+            return result
+        except Exception as exc:
+            code = exc.code if isinstance(exc, ImportFailure) else "IMP-WRITE"
+            self._record_failure(tenant, batch_id, plan_hash, code, identity["user_id"])
+            raise ImportFailure(code) from None
 
     def apply(self, source: dict, *, confirmed_by: str | None = None, plan_hash: str | None = None) -> dict:
         """Confirm and atomically apply an exact plan, including prior master state.
@@ -147,10 +177,5 @@ class OpeningImporter:
             return {"status": "applied", "plan_hash": plan_hash}
         except Exception as exc:
             code = exc.code if isinstance(exc, ImportFailure) else "IMP-WRITE"
-            if code not in {"IMP-REFERENCE", "IMP-SCHEMA", "IMP-REPORT"}:
-                recorded_hash = plan_hash if isinstance(plan_hash, str) and re.fullmatch(r"[0-9a-f]{64}", plan_hash) else ""
-                try:
-                    self.backend.record_failure(tenant, batch_id, recorded_hash, code, user_id=identity["user_id"])
-                except Exception:
-                    raise ImportFailure("IMP-RECOVERY") from None
+            self._record_failure(tenant, batch_id, plan_hash, code, identity["user_id"])
             raise ImportFailure(code) from None

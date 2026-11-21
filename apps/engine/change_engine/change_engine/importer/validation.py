@@ -245,7 +245,7 @@ def master_context(rows, row_clears, lookup):
                 row["account"] = acct_master.get("account_number") or acct_master.get("account_name")
             else:
                 acct_key = None
-            resolved_key = tuple(resolved_keys)
+            resolved_key = tuple(resolved_keys) if entity == "Stock" else (*resolved_keys, acct_key)
             if resolved_key in seen:
                 fail("IMP-DUPLICATE")
             seen.add(resolved_key)
@@ -398,7 +398,8 @@ def prepare(source, max_rows, lookup, currency_lookup, distinct_lookup, *,
                     or not hmac.compare_digest(pending_plan_hash, pending_hash)):
                 fail("IMP-CONFIRM")
         else:
-            confirmed_ids = sorted(distinct_lookup(meta["tenant_id"], meta["company"], meta["batch_id"], source_digest))
+            confirmed_ids = sorted(distinct_lookup(
+                meta["tenant_id"], meta["company"], meta["batch_id"], source_digest, pending_hash))
             if confirmed_ids != expected_ids:
                 raise ImportFailure(
                     "IMP-REPORT",
@@ -418,6 +419,7 @@ def prepare(source, max_rows, lookup, currency_lookup, distinct_lookup, *,
             fail("IMP-CONFIRM")
         confirmed_ids = []
     digest = hashlib.sha256(canonical(plan).encode("utf-8")).hexdigest()
+    plan["pending_plan_hash"] = pending_hash
     return plan, {"ok": True, "errors": [], "company": meta["company"],
                   "posting_date": meta["posting_date"], "currency": meta["currency"],
                   "counts": counts, "totals": {k: format(v, "f") for k, v in totals.items()},

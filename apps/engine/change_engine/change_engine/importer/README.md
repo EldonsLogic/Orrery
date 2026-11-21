@@ -47,7 +47,7 @@ entity, row or mapping field is accepted.
    groups, an authorised human calls `confirm(batch, confirmed_by=...,
    owner_confirmed_distinct=..., plan_hash=...)` with `opening_import_confirm` capability to
    append distinct group IDs and confirmer server-side (bound to `(tenant, company, batch_id,
-   source_digest)` and verified against the pending `plan_hash`), never in the source payload. `apply` authenticates early
+   source_digest, pending_plan_hash)` and matched at `preview`/`apply`), never in the source payload. `apply` authenticates early
    using the server-owned backend session's `opening_import` capability,
    tenant/company membership and human identity. Require `confirmed_by` equal to
    that identity and the exact preview hash. Request-supplied roles/capabilities
@@ -85,9 +85,11 @@ entity, row or mapping field is accepted.
 Master keys include tenant and company in storage. Keep the same key field on
 subsequent uploads: switching a name-only record to a new code is a different
 business key and requires prior owner resolution, never an automatic merge.
-Duplicate master keys and opening details that resolve to the same master key tuple return `IMP-DUPLICATE`.
+Duplicate master keys and opening details that resolve to the same duplicate key return `IMP-DUPLICATE`.
 An opening batch may contain one trial-balance row per account, one AR row per
-customer, one AP row per supplier and one stock row per item and warehouse pair.
+customer and receivable control account, one AP row per supplier and payable
+control account, and one stock row per item and warehouse pair (live per-row
+receivable/payable posting is UNVERIFIED, tracked in Q-554).
 Opening rows may state `posting_date` and `currency`; both must equal the batch context.
 
 Every detail reference must resolve by a stable master key in the batch or the

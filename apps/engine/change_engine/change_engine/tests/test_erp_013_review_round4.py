@@ -233,7 +233,7 @@ def test_alm_allowed_in_names_and_embedded_tab_is_schema_error(backend):
     refuses(importer, batch({"Customer": [{"customer_name": "\tBuyer"}]}), "IMP-FORMULA")
 
 
-def test_stock_ar_ap_duplicate_keys_ignore_control_account(backend):
+def test_stock_ignores_control_account_while_ar_ap_key_on_party_and_account(backend):
     importer = OpeningImporter(backend)
     stock_ds = _two_control_datasets(
         "Stock", "item_code", "Item", {"item_code": "I1"},
@@ -242,18 +242,37 @@ def test_stock_ar_ap_duplicate_keys_ignore_control_account(backend):
     refuses(importer, batch(stock_ds), "IMP-DUPLICATE")
     ar_ds = _two_control_datasets(
         "AR", "customer", "Customer", {"customer_code": "C1"},
-        "1100", "1200", "Receivable", "40.00", "60.00",
+        "1100", "1110", "Receivable", "60.00", "40.00",
     )
-    refuses(importer, batch(ar_ds), "IMP-DUPLICATE")
+    ar_preview = importer.preview(batch(ar_ds))
+    assert ar_preview["ok"] and ar_preview["reconciliations"]["ar"] is True
+    ar_swapped = copy.deepcopy(ar_ds)
+    ar_swapped["AR"][0]["amount"], ar_swapped["AR"][1]["amount"] = "40.00", "60.00"
+    refuses(importer, batch(ar_swapped), "IMP-RECONCILE")
+    ar_dup = copy.deepcopy(ar_ds)
+    ar_dup["AR"] = [
+        {"customer": "C1", "account": "1100", "amount": "30.00"},
+        {"customer": "C1", "account": "1100", "amount": "30.00"},
+        {"customer": "C1", "account": "1110", "amount": "40.00"},
+    ]
+    refuses(importer, batch(ar_dup), "IMP-DUPLICATE")
     ap_ds = _two_control_datasets(
         "AP", "supplier", "Supplier", {"supplier_code": "S1"},
         "2100", "2200", "Payable", "40.00", "60.00",
     )
-    refuses(importer, batch(ap_ds), "IMP-DUPLICATE")
+    ap_preview = importer.preview(batch(ap_ds))
+    assert ap_preview["ok"] and ap_preview["reconciliations"]["ap"] is True
+    ap_dup = copy.deepcopy(ap_ds)
+    ap_dup["AP"] = [
+        {"supplier": "S1", "account": "2100", "amount": "20.00"},
+        {"supplier": "S1", "account": "2100", "amount": "20.00"},
+        {"supplier": "S1", "account": "2200", "amount": "60.00"},
+    ]
+    refuses(importer, batch(ap_dup), "IMP-DUPLICATE")
+    assert apply(importer, batch(ar_ds))["status"] == "applied"
 
 
-def test_confirm_requires_pending_hash_append_only_and_journals_confirmer(backend, monkeypatch):
-    importer = OpeningImporter(backend)
+def _near_duplicate_source():
     datasets = {
         "Customer": [
             {"customer_code": "CUST-A", "customer_name": "محمد أحمد"},
@@ -264,6 +283,12 @@ def test_confirm_requires_pending_hash_append_only_and_journals_confirmer(backen
     source["prevalidation"] = prevalidate(
         datasets["Customer"], {"required": {"*": []}, "fields": {"party": "customer_name"}},
     ).to_dict()
+    return source
+
+
+def test_confirm_requires_pending_hash_append_only_and_journals_confirmer(backend, monkeypatch):
+    importer = OpeningImporter(backend)
+    source = _near_duplicate_source()
     pending = importer.preview(source)
     assert pending["ok"] is False
     groups = [g["id"] for g in pending["name_groups"]]
@@ -352,10 +377,120 @@ def test_legacy_distinct_confirmations_and_batches_migrate(tmp_path):
     conn.close()
     with SQLiteImportBackend(path) as store:
         with store.transaction():
-            store.record_distinct_confirmation("tenant-a", "Co", "b1", "d1", ["g1"], "owner-2")
+            store.record_distinct_confirmation("tenant-a", "Co", "b1", "d1", "0" * 64, ["g1"], "owner-2")
         rows = [
             r[0] for r in store.conn.execute(
                 "SELECT confirmed_by FROM import_distinct_confirmations ORDER BY seq ASC"
             ).fetchall()
         ]
         assert rows == ["owner-1", "owner-2"]
+
+
+def test_interrupted_legacy_migration_recovers_and_failure_rolls_back(tmp_path, monkeypatch):
+    legacy_sql = """
+        CREATE TABLE import_distinct_confirmations (
+            tenant_id TEXT NOT NULL, company TEXT NOT NULL, batch_id TEXT NOT NULL,
+            source_digest TEXT NOT NULL, group_ids_json TEXT NOT NULL, confirmed_by TEXT NOT NULL,
+            PRIMARY KEY (tenant_id, company, batch_id, source_digest));
+        INSERT INTO import_distinct_confirmations VALUES ('tenant-a', 'Co', 'b1', 'd1', '["g1"]', 'owner-1');
+    """
+    # 1. Leftover _v2 table from an interrupted migration is dropped and recovery succeeds.
+    leftover = tmp_path / "leftover_v2.db"
+    with sqlite3.connect(leftover) as conn:
+        conn.executescript(legacy_sql + "CREATE TABLE import_distinct_confirmations_v2 (stale TEXT);")
+    conn.close()
+    with SQLiteImportBackend(leftover) as store:
+        tables = {r[0] for r in store.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "import_distinct_confirmations_v2" not in tables
+        rows = store.conn.execute(
+            "SELECT confirmed_by, pending_plan_hash FROM import_distinct_confirmations ORDER BY seq ASC"
+        ).fetchall()
+        assert [(r[0], r[1]) for r in rows] == [("owner-1", None)]
+
+    # 2. Failure mid-migration (at RENAME after DROP TABLE) rolls back atomically, leaving old table intact.
+    atomic = tmp_path / "atomic_fail.db"
+    with sqlite3.connect(atomic) as conn:
+        conn.executescript(legacy_sql)
+    conn.close()
+    real_connect = sqlite3.connect
+
+    def failing_connect(*args, **kwargs):
+        conn = real_connect(*args, **kwargs)
+        conn.set_authorizer(
+            lambda action, a1, a2, db, trig: sqlite3.SQLITE_DENY
+            if action == sqlite3.SQLITE_ALTER_TABLE and a2 == "import_distinct_confirmations_v2"
+            else sqlite3.SQLITE_OK
+        )
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", failing_connect)
+    with pytest.raises(sqlite3.DatabaseError):
+        SQLiteImportBackend(atomic)
+    monkeypatch.setattr(sqlite3, "connect", real_connect)
+    with sqlite3.connect(atomic) as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "import_distinct_confirmations" in tables
+        assert "import_distinct_confirmations_v2" not in tables
+        rows = conn.execute("SELECT confirmed_by FROM import_distinct_confirmations").fetchall()
+        assert [r[0] for r in rows] == ["owner-1"]
+    conn.close()
+
+
+def test_master_change_after_confirm_invalidates_distinct_confirmation(backend, monkeypatch):
+    importer = OpeningImporter(backend)
+    source = _near_duplicate_source()
+    pending = importer.preview(source)
+    assert pending["ok"] is False
+    groups = [g["id"] for g in pending["name_groups"]]
+
+    def set_user(uid, caps):
+        monkeypatch.setattr(backend, "_session", lambda: {
+            "user_id": uid, "human": True, "tenant_id": "tenant-a",
+            "companies": ["Synthetic Trading"], "capabilities": caps,
+        })
+
+    set_user("owner-1", ["opening_import", "opening_import_confirm"])
+    confirmed = importer.confirm(
+        source, confirmed_by="owner-1", owner_confirmed_distinct=groups, plan_hash=pending["plan_hash"],
+    )
+    assert confirmed["ok"] and importer.preview(source)["ok"]
+
+    # Master-only change mutates the prior state covered by the plan -> old confirmation is invalid.
+    set_user("reviewer", ["opening_import"])
+    apply(importer, batch({"Customer": [{"customer_code": "CUST-A", "territory": "Riyadh"}]}, batch_id="master-edit"))
+    after = importer.preview(source)
+    assert after["ok"] is False and after["errors"][0]["code"] == "IMP-REPORT"
+    assert after["plan_hash"] != pending["plan_hash"]
+    with pytest.raises(ImportFailure, match="IMP-REPORT"):
+        importer.apply(source, confirmed_by="reviewer", plan_hash=confirmed["plan_hash"])
+
+    # Fresh confirmation against the new pending hash succeeds and journals the new confirmer.
+    set_user("owner-2", ["opening_import", "opening_import_confirm"])
+    reconfirmed = importer.confirm(
+        source, confirmed_by="owner-2", owner_confirmed_distinct=groups, plan_hash=after["plan_hash"],
+    )
+    assert reconfirmed["ok"]
+    set_user("reviewer", ["opening_import"])
+    assert importer.apply(source, confirmed_by="reviewer", plan_hash=reconfirmed["plan_hash"])["status"] == "applied"
+    assert backend.journal("tenant-a", "opening-1")["distinct_confirmed_by"] == "owner-2"
+    assert apply(importer, source)["status"] == "already_applied"
+
+
+def test_refused_confirm_logs_failure_with_authenticated_user(backend):
+    importer = OpeningImporter(backend)
+    source = _near_duplicate_source()
+    pending = importer.preview(source)
+    groups = [g["id"] for g in pending["name_groups"]]
+    stale_hash = "0" * 64
+    with pytest.raises(ImportFailure, match="IMP-CONFIRM"):
+        importer.confirm(source, confirmed_by="reviewer", owner_confirmed_distinct=groups, plan_hash=stale_hash)
+    with pytest.raises(ImportFailure, match="IMP-CONFIRM"):
+        importer.confirm(source, confirmed_by="reviewer", owner_confirmed_distinct=["0" * 64], plan_hash=pending["plan_hash"])
+    with pytest.raises(ImportFailure, match="IMP-CONFIRM"):
+        importer.confirm(source, confirmed_by="other", owner_confirmed_distinct=groups, plan_hash=None)
+    failures = backend.failures("tenant-a")
+    assert [(f["code"], f["user_id"], f["plan_hash"]) for f in failures] == [
+        ("IMP-CONFIRM", "reviewer", stale_hash),
+        ("IMP-CONFIRM", "reviewer", pending["plan_hash"]),
+        ("IMP-CONFIRM", "reviewer", ""),
+    ]

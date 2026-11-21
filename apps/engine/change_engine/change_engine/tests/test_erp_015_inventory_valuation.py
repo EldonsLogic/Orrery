@@ -25,7 +25,8 @@ value is not a ledger figure), and rounds half away from zero to the currency pr
 * Negative stock is blocked (``Stock Settings.allow_negative_stock = 0``, trading scope section 4.3).
 * Quantities: provisioning leaves ``System Settings.float_precision`` unset; the engine's stock ledger then
   rounds the running quantity to 2 decimals while quantity fields accept 3. The seeded moves use 2 decimals;
-  ``test_7`` keeps a 3-decimal case as an expected failure until Q-514 (b) is answered.
+  ``test_7`` keeps a 3-decimal case as an expected failure until Q-514 (b) is answered; ``test_8`` pins the
+  observed engine baseline for it, so the expected failure cannot hide an unrelated one.
 
 Out of scope for v1, so not tested: FIFO and LIFO (ADR-0033 rejects FIFO; the engine default is FIFO and the
 live test asserts it is overridden), Landed Cost Voucher (hidden, deferred ERP-011 candidate in the trading
@@ -115,7 +116,7 @@ FORCED = [
     {"id": "q2", "op": "issue", "item": "E15-QTY", "wh": "W1", "qty": "12.345"},
 ]
 SALES_RETURN_RULE = "current average"  # the engine's rule; "delivery cost" is the v1 expectation (Q-514 a)
-QTY_PRECISION_ITEMS = {"E15-QTY"}  # checked only by test_7 (Q-514 b)
+QTY_PRECISION_ITEMS = {"E15-QTY"}  # checked only by test_7 and test_8 (Q-514 b)
 REJECTED = {"g7", "g12", "g14"}
 # Hand-computed from first principles (not by the oracle): rate = value / qty; value rounded half away from zero.
 FORCED_EXACT = {
@@ -561,11 +562,11 @@ class TestLiveInventoryValuation(unittest.TestCase):
 
     def test_5_cancellations_reverse_exactly(self):
         d, by_voucher = self.data, self._gl_by_voucher()
-        for oid in ("g10", "x7"):
-            rows = by_voucher[d["results"][oid]["voucher_no"]]
-            with self.subTest(oid):
-                self.assertTrue(any(Decimal(r["debit"]) or Decimal(r["credit"]) for r in rows) or oid == "x7")
-                self.assertFalse(mirror_mismatch(rows), "a cancellation reverses every GL row exactly")
+        rows = by_voucher[d["results"]["g10"]["voucher_no"]]  # receipt g10, cancelled by g11
+        self.assertTrue(any(Decimal(r["debit"]) or Decimal(r["credit"]) for r in rows), "g10 posts to the GL")
+        self.assertFalse(mirror_mismatch(rows), "a cancellation reverses every GL row exactly")
+        # x7 (cancelled by x8) moves stock between warehouses on the same account at zero difference: no GL rows.
+        self.assertEqual(by_voucher[d["results"]["x7"]["voucher_no"]], [])
 
     @unittest.expectedFailure  # Q-514 (a): the engine values a Moving Average sales return at the current average
     def test_6_sales_return_adds_back_the_delivery_cost(self):
@@ -579,6 +580,25 @@ class TestLiveInventoryValuation(unittest.TestCase):
         ops, final, results, sle, bins = subset(self.ops, self.final, self.data,
                                                 lambda item: item in QTY_PRECISION_ITEMS)
         self.assertEqual(check_run(ops, self.sim, final, results, sle, bins), [])
+
+    def test_8_three_decimal_quantities_post_at_the_engine_baseline(self):
+        """Not an expected failure, so test_7 cannot hide an unrelated one: q1 and q2 post, and the only
+        difference from the oracle is the 2-decimal running quantity of Q-514 (b), observed with float_precision
+        unset. Revisit together with test_7 when Q-514 (b) is answered."""
+        d = self.data
+        self.assertIn(d["settings"]["float_precision"], (None, ""), "baseline observed with float_precision unset")
+        observed = {"q1": ("12.345", "12.35", "9.995951417", "123.45", "123.45"),
+                    "q2": ("-12.345", "0", "9.995951417", "0", "-123.45")}
+        for oid, (moved, after, rate, value, diff) in observed.items():
+            with self.subTest(oid):
+                self.assertIsNone(d["results"][oid]["error"])
+                rows = [r for r in d["sle"] if r["voucher_no"] == d["results"][oid]["voucher_no"]]
+                self.assertEqual(len(rows), 1)
+                got = tuple(Decimal(rows[0][f]) for f in ("actual_qty", "qty_after", "rate", "value", "diff"))
+                self.assertEqual(got, tuple(map(Decimal, (moved, after, rate, value, diff))))
+        ops, final, results, sle, bins = subset(self.ops, self.final, d, lambda item: item in QTY_PRECISION_ITEMS)
+        problems = check_run(ops, self.sim, final, results, sle, bins)
+        self.assertEqual([" ".join(p.split()[:3]) for p in problems], ["q1 W1: qty", "q1 W1: rate"], problems)
 
 
 if __name__ == "__main__":

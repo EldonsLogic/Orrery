@@ -250,7 +250,7 @@ def test_permission_change_requires_second_owner_and_cannot_target_self(policy, 
 def test_handler_missing_is_audited(policy, setup):
     request, context, path = setup
     guard = guard_for(policy, context, path)
-    adapter = ChangeEngineAdapter(action_policy=guard, resolve_session_tenant=lambda _: "tenant-a")
+    adapter = ChangeEngineAdapter(environment="test", action_policy=guard, resolve_session_tenant=lambda _: "tenant-a")
     with pytest.raises(AdapterError, match="^permission_denied$"):
         adapter.execute_action("trusted-session", request)
     assert guard.store.audit_log()[-1].decision == "deny"
@@ -324,13 +324,13 @@ def test_unreviewed_and_specialized_actions_are_disabled(policy, setup, action):
 
 
 def test_unconfigured_adapter_refuses_business_action():
-    adapter = ChangeEngineAdapter()
+    adapter = ChangeEngineAdapter(environment="test")
     with pytest.raises(AdapterError, match="permission_denied"):
         adapter.execute_action("trusted-session", None)
 
 
 def test_gateway_adapter_does_not_expose_raw_callback_runner():
-    adapter = ChangeEngineAdapter()
+    adapter = ChangeEngineAdapter(environment="test")
     assert callable(adapter.execute_action)
     assert not hasattr(adapter, "execute_as_caller")
     assert not hasattr(FrappeRuntimeBackend, "execute_as_caller")
@@ -349,7 +349,7 @@ def test_adapter_refuses_cross_tenant_action_context(policy, setup, requested_te
         def _execute_as_caller(self, tenant, caller, run):
             return run(object())
 
-    adapter = ChangeEngineAdapter(frappe_backend=Backend(), action_policy=guard,
+    adapter = ChangeEngineAdapter(frappe_backend=Backend(), environment="test", action_policy=guard,
                                   action_handlers={request.action_id: lambda *_: invoked.append(True)},
                                   resolve_session_tenant=lambda session: "tenant-a" if session == "trusted-session" else None)
     with pytest.raises(AdapterError, match="^permission_denied$") as error:
@@ -382,7 +382,7 @@ def test_adapter_uses_bound_snapshot_and_records_handler_failure(policy, setup, 
             raise policy.ActionEffectFailed("rolled back")
         raise RuntimeError("private backend details")
 
-    adapter = ChangeEngineAdapter(frappe_backend=Backend(), action_policy=guard,
+    adapter = ChangeEngineAdapter(frappe_backend=Backend(), environment="test", action_policy=guard,
                                   action_handlers={"AP-FIN-01": post_invoice},
                                   resolve_session_tenant=lambda _: "tenant-a")
     with pytest.raises(AdapterError, match="^engine_unavailable$") as error:
@@ -425,7 +425,7 @@ def test_business_write_uses_real_backend_impersonation(policy, setup):
         seen.append((engine.local.site, engine.session.user, action.payload["total"]))
         return "posted"
 
-    adapter = ChangeEngineAdapter(frappe_backend=backend, action_policy=guard,
+    adapter = ChangeEngineAdapter(frappe_backend=backend, environment="test", action_policy=guard,
                                   action_handlers={request.action_id: post},
                                   resolve_session_tenant=lambda _: "tenant-a")
     assert adapter.execute_action("trusted-session", request) == "posted"

@@ -1,14 +1,18 @@
 """ChangeEngineAdapter implementing contracts/engine-adapter.md v0.1.2 (BPL-012).
 
 Bridges Blueprint compiled artifacts to change_engine guarded-apply primitives
-(ddl_plan_gate, safety_guardrails, schema_reconciler) and SQLite-backed durable
-per-tenant storage, step journaling, and additive-only non-destructive schema state.
+(ddl_plan_gate, safety_guardrails, schema_reconciler) and an AdapterStore holding the durable
+per-tenant state (MariaDB on the tenant database in production, ADR-0041; SQLite for dev and
+tests only), step journaling, and additive-only non-destructive schema state.
 """
 from __future__ import annotations
 
 import copy
 import hashlib
 import re
+import secrets
+import time
+import uuid
 from typing import Any, Callable
 
 from change_engine.adapter.contracts_support import (
@@ -28,7 +32,8 @@ from change_engine.adapter.mapping import (
     is_protected_entity,
     plan_statements_for_step,
 )
-from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord
+from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord, TenantMismatch
+from change_engine.adapter.store_api import AdapterStore, StoreRefused, assert_store_allowed, is_production
 from change_engine.guarded_apply.action_policy_enforcer import ActionPolicyEnforcer, ActionRequest, AuthorizedAction
 
 ADAPTER_ID = "frappe"
@@ -159,6 +164,11 @@ def _ulid(n: int) -> str:
     return out
 
 
+def _new_event_id() -> str:
+    """Time-ordered, collision-free across workers: 48-bit milliseconds then 80 random bits, as a ULID."""
+    return _ulid((int(time.time() * 1000) << 80) | secrets.randbits(80))
+
+
 class AdapterError(Exception):
     def __init__(
         self,
@@ -197,6 +207,10 @@ class _Missing:
 
 
 _MISSING = _Missing()
+
+
+class _LeaseLost(Exception):
+    """This worker no longer owns its operation (lease expired, or another worker recovered it): stop, write nothing."""
 
 
 class _Early(Exception):
@@ -266,30 +280,45 @@ def _prune_empty(doc: dict[str, Any]) -> None:
 
 
 class ChangeEngineAdapter:
-    """Real engine adapter backed by change_engine guarded_apply, SQLiteAdapterStore, and optional FrappeRuntimeBackend."""
+    """Real engine adapter backed by change_engine guarded_apply, an AdapterStore, and optional FrappeRuntimeBackend.
+
+    Fails closed: test hooks are off unless asked for, and are refused (like a volatile or file-based store) when the
+    environment is production or unknown (ADR-0041). `lease_seconds` is how long a worker may hold an operation before
+    another worker may recover it; keep it above the longest operation (the contract deadline is at most one hour).
+    """
 
     def __init__(
         self,
-        test_hooks: bool = True,
+        test_hooks: bool = False,
         db_path: str = ":memory:",
         frappe_backend: Any | None = None,
+        store: AdapterStore | None = None,
+        environment: str | None = None,
+        lease_seconds: int = 3900,
         *,
         action_policy: ActionPolicyEnforcer | None = None,
         action_handlers: dict[str, Callable[[Any, AuthorizedAction], Any]] | None = None,
         resolve_session_tenant: Callable[[str], str | None] | None = None,
     ) -> None:
+        production = is_production(test_hooks, environment)
+        if production and test_hooks:
+            raise StoreRefused("test hooks are refused in production (unset, empty or unknown environments count as production)")
+        if store is None and production:
+            raise StoreRefused("no adapter store given: production needs MariaDB on the tenant database (ADR-0041)")
         self.test_hooks = test_hooks
         self.db_path = db_path
-        self.store = SQLiteAdapterStore(db_path=db_path)
+        self.lease_seconds = lease_seconds
+        self.store = store if store is not None else SQLiteAdapterStore(db_path=db_path)
+        assert_store_allowed(self.store, production)
         self.frappe_backend = frappe_backend
         self._action_policy = action_policy
         self._action_handlers = dict(action_handlers or {})
         # This lookup is backed by authenticated session state and receives no request data.
         self._resolve_session_tenant = resolve_session_tenant
         self.now = 0
-        self._seq = self._initial_seq()
         self._faults: list[dict[str, Any]] = []
         self._lock_hook: Callable[[], None] | None = None
+        self.recover_interrupted()
 
     @staticmethod
     def _site_snapshot(site: SiteRecord) -> dict[str, Any]:
@@ -357,18 +386,6 @@ class ChangeEngineAdapter:
         except Exception as exc:
             code = "permission_denied" if isinstance(exc, AdapterError) and exc.code == "permission_denied" else "engine_unavailable"
             raise AdapterError(code, stage="execute") from None
-
-    def _initial_seq(self) -> int:
-        existing = self.store.audit_log()
-        if not existing:
-            return 0
-        max_num = 0
-        for rec in existing:
-            aid = rec.get("auditId", "")
-            m = re.match(r"^aud_(\d+)$", aid)
-            if m:
-                max_num = max(max_num, int(m.group(1)))
-        return max(max_num, len(existing))
 
     # ------------------------------------------------------------------ test hooks
     def _need_hooks(self) -> None:
@@ -490,18 +507,18 @@ class ChangeEngineAdapter:
     def dropped_data(self) -> list[str]:
         return list(self.store.dropped_data)
 
-    def events(self) -> list[dict[str, Any]]:
-        return self.store.events()
+    def events(self, tenant_id: str | None = None) -> list[dict[str, Any]]:
+        return self.store.events(tenant_id)
 
     def audit_log(self) -> list[dict[str, Any]]:
         return self.store.audit_log()
 
     def reset(self) -> None:
+        self._need_hooks()
         self.store.reset()
         if self.frappe_backend is not None:
             self.frappe_backend.reset_site()
         self.now = 0
-        self._seq = 0
         self._faults.clear()
         self._lock_hook = None
 
@@ -513,14 +530,14 @@ class ChangeEngineAdapter:
         return None
 
     # ------------------------------------------------------------------ envelope & authz
-    def _next(self) -> int:
-        self._seq += 1
-        return self._seq
+    @staticmethod
+    def _new_id(prefix: str) -> str:
+        """Collision-free across workers sharing one database (an in-process counter is not)."""
+        return f"{prefix}_{uuid.uuid4().hex[:24]}"
 
     def call(self, operation: str, context: Any, input: Any) -> dict[str, Any]:  # noqa: A002
-        seq = self._next()
         audit = {
-            "auditId": f"aud_{seq:012d}",
+            "auditId": self._new_id("aud"),
             "operation": operation,
             "requestId": None,
             "correlationId": None,
@@ -544,6 +561,11 @@ class ChangeEngineAdapter:
         except AdapterError as exc:
             response = {"ok": False, "error": exc.to_error(), "auditId": audit["auditId"]}
             audit["result"] = exc.code
+        except TenantMismatch:  # a store bound to another tenant (misrouted connection): it looks like an unknown tenant here
+            err = AdapterError("tenant_not_found")
+            response = {"ok": False, "error": err.to_error(), "auditId": audit["auditId"]}
+            audit["result"] = err.code
+            audit["tenant"] = None  # never write the foreign tenant id into this tenant's audit log
         except Exception as exc:
             code = getattr(exc, "code", None)
             if isinstance(code, str):
@@ -556,9 +578,9 @@ class ChangeEngineAdapter:
             self.store.update_audit(audit)
         return response
 
-    def _emit(self, etype: str, data: dict[str, Any]) -> str:
-        eid = _ulid(len(self.store.events()) + 1)
-        self.store.append_event(eid, etype, data)
+    def _emit(self, etype: str, data: dict[str, Any], tenant_id: str | None = None) -> str:
+        eid = _new_event_id()
+        self.store.append_event(eid, etype, data, tenant_id)
         return eid
 
     def _dispatch(self, op: str, context: Any, inp: Any, audit: dict[str, Any]) -> tuple[dict[str, Any], bool]:
@@ -620,6 +642,7 @@ class ChangeEngineAdapter:
             self._emit(
                 "permission.denied",
                 {"action": op, "resource": "engine_adapter", "reason_code": "service_or_caller_not_allowed"},
+                context["tenantId"],
             )
             raise AdapterError("permission_denied", stage="authorize")
 
@@ -681,18 +704,98 @@ class ChangeEngineAdapter:
             raise AdapterError("site_not_ready")
         return site
 
-    # ------------------------------------------------------------------ idempotency
-    def _idem_lookup(self, site: SiteRecord, op: str, inp: dict[str, Any]) -> dict[str, Any] | None:
-        found = self.store.idem_get(site.tenant_id, op, inp["idempotencyKey"])
-        if found is None:
-            return None
-        stored_hash, outcome = found
-        if stored_hash != sha(inp):
-            raise AdapterError("idempotency_conflict", stage="acquire")
-        return copy.deepcopy(outcome)
+    # ------------------------------------------------------------------ idempotency (ADR-0041)
+    def _acquire(
+        self,
+        tenant: str,
+        op: str,
+        inp: dict[str, Any],
+        op_id: str,
+        *,
+        lock: bool = False,
+        pending: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> tuple[str, Any]:
+        """Reserve (tenant, op, key) for this input before any effect, in the database, atomically.
 
-    def _idem_store(self, site: SiteRecord, op: str, inp: dict[str, Any], result: dict[str, Any]) -> None:
-        self.store.idem_put(site.tenant_id, op, inp["idempotencyKey"], sha(inp), result)
+        Returns ("acquired", None), ("replay", stored outcome) or ("in_progress", the pending outcome of the running
+        operation); a different input raises idempotency_conflict, a held site lock raises concurrent_change. A lock or
+        lease left behind by a dead worker is recovered once (recover_interrupted) before giving up."""
+        for attempt in (0, 1):
+            status, info = self.store.acquire_operation(
+                tenant, op, inp["idempotencyKey"], sha(inp), op_id, pending or {}, meta or {},
+                lock=lock, lease_seconds=self.lease_seconds,
+            )
+            stale = status == "locked" or (status == "in_progress" and info["expired"])
+            if stale and attempt == 0 and self.recover_interrupted():
+                continue
+            break
+        if status == "conflict":
+            raise AdapterError("idempotency_conflict", stage="acquire")
+        if status == "locked":
+            raise AdapterError("concurrent_change", stage="acquire", retry_after_ms=1000)
+        if status == "in_progress":
+            if op not in ("apply", "rollback"):  # the contract defines the in_progress outcome for apply and rollback only
+                raise AdapterError("concurrent_change", stage="acquire", retry_after_ms=1000)
+            return "in_progress", copy.deepcopy(info["outcome"])
+        return status, (copy.deepcopy(info) if info is not None else None)
+
+    def recover_interrupted(self) -> int:
+        """Close operations whose worker died (lease expired): apply and rollback end as recovery_required with the site
+        blocked and unlocked for a human (ADR-0028, never a second blind run); other operations are released to retry.
+        Safe to call from every worker at any time: each operation is closed once (compare and set)."""
+        closed = 0
+        for rec in self.store.expired_operations():
+            try:
+                if rec["operation"] in ("apply", "rollback"):
+                    err = AdapterError("recovery_required", stage="execute").to_error()
+                    pend = rec["pending"]
+                    eid = _new_event_id()
+                    final = {
+                        **pend,
+                        "status": "recovery_required",
+                        "stages": [{"stage": "acquire", "status": "done"}, {"stage": "execute", "status": "failed"}],
+                        "steps": [{"seq": st["seq"], "status": "failed"} for st in pend.get("steps", [])],
+                        "site": {**pend["site"], "state": "recovery_required", "lockedBy": None},
+                        "error": err,
+                        "eventIds": [eid],
+                    }
+                    with self.store.transaction():
+                        if not self.store.recover_operation(rec, final):
+                            continue
+                        self.store.append_event(
+                            eid,
+                            "blueprint.apply_failed",
+                            {"change_id": pend["artifactId"], "revision": rec["meta"].get("revision"), "error_code": "recovery_required"},
+                            rec["tenant"],
+                        )
+                else:
+                    if not self.store.recover_operation(rec, None):
+                        continue
+                closed += 1
+            except Exception:  # a recovery that cannot run now must not break the caller; it is retried next time
+                continue
+        return closed
+
+    def _release_on_error(self, tenant: str, op: str, inp: dict[str, Any], op_id: str) -> None:
+        self.store.idem_release(tenant, op, inp["idempotencyKey"], op_id)
+
+    def _complete_or_refuse(self, tenant: str, op: str, inp: dict[str, Any], op_id: str, result: dict[str, Any]) -> None:
+        """Store the outcome under our reservation, inside the caller's transaction. When the reservation is gone (our
+        lease was recovered and the key released), raise so the transaction rolls back: nothing is committed and the
+        caller is not told the operation is done. A retry with the same key is a correct first run."""
+        if not self.store.idem_complete(tenant, op, inp["idempotencyKey"], op_id, result):
+            raise AdapterError("concurrent_change", stage="finalize", retry_after_ms=1000)
+
+    def _lost_lease_outcome(self, tenant: str, operation: str, inp: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        """This worker lost its lease: it stops and writes nothing. Close the operation if no one has (recovery is compare
+        and set) and return the stored outcome. An apply or rollback ends recovery_required with the site blocked for a
+        human; the operation record exists, so this is ok: true (contract 5.6.1)."""
+        self.recover_interrupted()
+        found = self.store.idem_status(tenant, operation, inp["idempotencyKey"])
+        if found is None:
+            raise AdapterError("concurrent_change", stage="execute", retry_after_ms=1000)
+        return copy.deepcopy(found[1]), True
 
     # ------------------------------------------------------------------ simple operations
     def _op_capabilities(self, context, inp, site, audit):
@@ -724,30 +827,39 @@ class ChangeEngineAdapter:
             raise AdapterError("invalid_request", {"fields": ["/context/tenantId"]})
         if inp["engineTarget"]["adapter"] != ADAPTER_ID or inp["engineTarget"]["versionSet"] not in VERSION_SETS:
             raise AdapterError("unsupported_engine_target")
-        if site is not None:
-            stored = self._idem_lookup(site, "provision_site", inp)
-            if stored is not None:
-                return stored, True
-            same = all(
-                getattr(site, attr) == val
-                for attr, val in (
-                    ("engine_target", inp["engineTarget"]),
-                    ("blueprint_id", inp["blueprintId"]),
-                    ("site_class", inp["siteClass"]),
-                    ("country_pack", inp["countryPack"]),
+        op_id = self._new_id("op")
+        status, stored = self._acquire(tenant, "provision_site", inp, op_id)
+        if status == "replay":
+            return stored, True
+        try:
+            site = self.store.get_site(tenant)  # re-read now that the key is ours
+            if site is not None:
+                same = all(
+                    getattr(site, attr) == val
+                    for attr, val in (
+                        ("engine_target", inp["engineTarget"]),
+                        ("blueprint_id", inp["blueprintId"]),
+                        ("site_class", inp["siteClass"]),
+                        ("country_pack", inp["countryPack"]),
+                    )
                 )
-            )
-            if not same:
-                raise AdapterError("site_exists_different_target")
-            return site.status(), False
+                if not same:
+                    raise AdapterError("site_exists_different_target")
+                result = site.status()
+                self._complete_or_refuse(tenant, "provision_site", inp, op_id, result)
+                return result, False
 
-        candidate = SiteRecord(tenant, inp)
-        if self.frappe_backend is not None:
-            self.frappe_backend.provision_tenant_site(tenant, inp, self._site_snapshot(candidate))
-        site = self.store.create_site(tenant, inp)
-        result = site.status()
-        self._idem_store(site, "provision_site", inp, result)
-        return result, False
+            candidate = SiteRecord(tenant, inp)
+            if self.frappe_backend is not None:
+                self.frappe_backend.provision_tenant_site(tenant, inp, self._site_snapshot(candidate))
+            with self.store.transaction():
+                site = self.store.create_site(tenant, inp)
+                result = site.status()
+                self._complete_or_refuse(tenant, "provision_site", inp, op_id, result)
+            return result, False
+        except BaseException:
+            self._release_on_error(tenant, "provision_site", inp, op_id)
+            raise
 
     def _op_site_status(self, context, inp, site, audit):
         return self._need_site(site, ready=False).status(), False
@@ -1006,7 +1118,9 @@ class ChangeEngineAdapter:
         return sorted(rows, key=lambda r: (r["pointer"], r.get("property", "")))
 
     # ------------------------------------------------------------------ step execution
-    def _exec(self, site: SiteRecord, step: dict[str, Any], persist_storage: bool = True) -> None:
+    def _exec(
+        self, site: SiteRecord, step: dict[str, Any], persist_storage: bool = True, guard: Callable[[], None] | None = None
+    ) -> None:
         kind, pointer, params = step["kind"], step["pointer"], step["params"]
         segs = _segs(pointer)
         if persist_storage and self.frappe_backend is not None:
@@ -1014,6 +1128,8 @@ class ChangeEngineAdapter:
             # step never mutates or aliases in-memory state. Partial engine effects are handled
             # fail-closed in _execute_all (any exception not proven side_effect_free transitions
             # the site to recovery_required rather than hiding engine-side writes).
+            if guard is not None:
+                guard()
             self.frappe_backend.execute_step(site.tenant_id, step)
         cfg = site.config
         if kind == "settings.set":
@@ -1057,6 +1173,8 @@ class ChangeEngineAdapter:
                 coll.append(defn)
 
         if persist_storage:
+            if guard is not None and kind in ("entity.add", "field.add"):
+                guard()  # the engine step above may have run long: re-check ownership before the DDL
             if kind == "entity.add":
                 self.store.ensure_entity_table(site.tenant_id, str(segs[1] if len(segs) > 1 else "entity"))
             elif kind == "field.add" and len(segs) >= 4 and segs[0] == "entities":
@@ -1098,69 +1216,96 @@ class ChangeEngineAdapter:
         )
 
     def _run(self, context, inp, site: SiteRecord, operation: str, audit: dict[str, Any]):
-        stored = self._idem_lookup(site, operation, inp)
-        if stored is not None:
-            return stored, True
-        if site.lock is not None:
-            raise AdapterError("concurrent_change", stage="acquire", retry_after_ms=1000)
-
         forward = inp["artifact"] if operation == "apply" else inp["forwardArtifact"]
         artifact = forward if operation == "apply" else forward.get("inverse") or forward
-        op_id = f"op_{self._next():012d}"
+        op_id = self._new_id("op")
         _lock_key = bounded_site_lock_key(site.tenant_id, site.blueprint_id)
         stages: list[dict[str, str]] = []
         steps = [{"seq": s["seq"], "status": "not_run"} for s in artifact["steps"]]
         pcs: list[dict[str, Any]] = []
         state: dict[str, Any] = {"status": None, "error": None, "export_hash": None}
         timed_out = {"v": False}
+        target_rev = artifact["blueprint"]["target"]["revision"]
 
-        if site.state == "ready":
-            site.lock = op_id
-            site.state = "applying"
-            self.store.save_site(site)
+        # acquire (5.6): the key is bound to its input and the site lock taken in the database, in one committed
+        # transaction, before any effect. A second worker gets in_progress or the stored outcome, never a second run.
+        running = {
+            "operationId": op_id,
+            "operation": operation,
+            "artifactId": artifact["artifactId"],
+            "status": "in_progress",
+            "stages": [{"stage": "acquire", "status": "done"}, {"stage": "inspect", "status": "running"}],
+            "steps": [dict(st) for st in steps],
+            "postConditions": [],
+            "site": {**site.status(), "state": "applying" if site.state == "ready" else site.state, "lockedBy": op_id},
+        }
+        verdict, stored = self._acquire(
+            site.tenant_id, operation, inp, op_id, lock=True, pending=running, meta={"revision": target_rev}
+        )
+        if verdict in ("replay", "in_progress"):
+            return stored, True
+        # whether to put the site back to ready is decided by the acquire itself, in the transaction that took the lock;
+        # reading the state earlier races with a worker that finishes in between and leaves the site stuck in applying
+        ready_before = bool(stored and stored.get("ready_before"))
+        tenant = site.tenant_id
+        # the row may have changed under us (another worker, or a recovery just run): continue from what the database holds
+        site = self._need_site(self.store.get_site(tenant), ready=False)
         stages.append({"stage": "acquire", "status": "done"})
+
+        def owned() -> None:
+            """Called before every engine or DDL step: a worker whose lease expired or was recovered stops at once."""
+            if not self.store.operation_owned(tenant, operation, inp["idempotencyKey"], op_id):
+                raise _LeaseLost()
 
         def finish(status: str, error: dict[str, Any] | None = None, hash_after: str | None = None) -> None:
             state.update(status=status, error=error, export_hash=hash_after)
 
-        pre_hash = sha(self._export(site))
         try:
-            self._inspect(context, inp, site, operation, forward, artifact)
-        except _Early as early:
-            stages.append({"stage": "inspect", "status": "done" if early.status == "already_applied" else "failed"})
-            finish(early.status, early.error, pre_hash if early.status == "already_applied" else None)
-            if early.status == "already_applied":
-                steps = [{"seq": s["seq"], "status": "already_present"} for s in artifact["steps"]]
-        else:
-            stages.append({"stage": "inspect", "status": "done"})
-            self._execute_all(
-                site,
-                artifact,
-                steps,
-                pcs,
-                stages,
-                finish,
-                pre_hash,
-                timed_out,
-                op_id,
-                _lock_key,
-                operation,
-                forward if operation == "rollback" else artifact.get("inverse"),
-            )
+            pre_hash = sha(self._export(site))
+            try:
+                self._inspect(context, inp, site, operation, forward, artifact)
+            except _Early as early:
+                stages.append({"stage": "inspect", "status": "done" if early.status == "already_applied" else "failed"})
+                finish(early.status, early.error, pre_hash if early.status == "already_applied" else None)
+                if early.status == "already_applied":
+                    steps = [{"seq": s["seq"], "status": "already_present"} for s in artifact["steps"]]
+            else:
+                stages.append({"stage": "inspect", "status": "done"})
+                self._execute_all(
+                    site,
+                    artifact,
+                    steps,
+                    pcs,
+                    stages,
+                    finish,
+                    pre_hash,
+                    timed_out,
+                    op_id,
+                    _lock_key,
+                    operation,
+                    forward if operation == "rollback" else artifact.get("inverse"),
+                    guard=owned,
+                )
+        except _LeaseLost:
+            return self._lost_lease_outcome(tenant, operation, inp)
+        except Exception as exc:
+            # An unexpected error must not strand the lock until the lease ends: close the operation here. With no step
+            # run yet nothing changed (failed_clean, contract 5.6); otherwise the partial state needs a human.
+            err = exc if isinstance(exc, AdapterError) else AdapterError("engine_unavailable", stage="prepare")
+            if any(st["status"] != "not_run" for st in steps):
+                site.state = "recovery_required"
+                stages.append({"stage": "execute", "status": "failed"})
+                finish("recovery_required", AdapterError("recovery_required", stage="execute").to_error())
+            else:
+                stages.append({"stage": "prepare", "status": "failed"})
+                finish("failed_clean", err.to_error())
 
         if site.lock == op_id:
             site.lock = None
-            if site.state == "applying":
+            if ready_before and site.state == "applying":
                 site.state = "ready"
-        self.store.save_site(site)
-        if self.frappe_backend is not None:
-            try:
-                self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
-            except Exception:
-                pass
 
         status, error = state["status"], state["error"]
-        target_rev = artifact["blueprint"]["target"]["revision"]
         outcome: dict[str, Any] = {
             "operationId": op_id,
             "operation": operation,
@@ -1175,13 +1320,32 @@ class ChangeEngineAdapter:
             outcome["exportHash"] = state["export_hash"]
         if error:
             outcome["error"] = error
+        event: tuple[str, str, dict[str, Any]] | None = None
         if status != "already_applied":
             event_art = forward if operation == "rollback" and status == "applied" else artifact
             etype, data = self._event_data(operation, status, event_art, target_rev, error)
             if operation == "rollback" and status == "applied":
                 data["revision"] = forward["blueprint"]["base"]["revision"] if forward["blueprint"]["base"] else target_rev
-            outcome["eventIds"] = [self._emit(etype, data)]
-        self._idem_store(site, operation, inp, outcome)
+            event = (_new_event_id(), etype, data)
+            outcome["eventIds"] = [event[0]]
+
+        # finalize (5.6): the stored outcome, the site state and the event commit together or not at all. The outcome
+        # write goes first and is compare-and-set on our reservation: a worker whose lease was recovered by another
+        # one writes nothing (its site and event writes roll back with the transaction).
+        try:
+            with self.store.transaction():
+                if not self.store.idem_complete(site.tenant_id, operation, inp["idempotencyKey"], op_id, outcome):
+                    raise _LeaseLost()  # rolls the site and event writes back with the transaction
+                self.store.save_site(site)
+                if event is not None:
+                    self.store.append_event(*event, tenant_id=site.tenant_id)
+        except _LeaseLost:
+            return self._lost_lease_outcome(site.tenant_id, operation, inp)
+        if self.frappe_backend is not None:
+            try:
+                self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
+            except Exception:
+                pass
         if timed_out["v"]:
             raise AdapterError("timeout", stage="execute")
         return outcome, False
@@ -1247,6 +1411,7 @@ class ChangeEngineAdapter:
         lock_key: str,
         operation: str = "apply",
         counterpart: dict[str, Any] | None = None,
+        guard: Callable[[], None] | None = None,
     ) -> None:
         if self._take_fault("prepare"):
             stages.append({"stage": "prepare", "status": "failed"})
@@ -1286,9 +1451,13 @@ class ChangeEngineAdapter:
                 failure = AdapterError("engine_unavailable", {"stepSeq": seq}, stage="execute")
                 comp_fault = bool(fault["comp"])
                 break
+            if guard is not None:
+                guard()  # before the journal entry: a step that never ran must not appear as run
             self.store.append_journal(site.tenant_id, artifact["artifactId"], seq, "execute")
             try:
-                self._exec(site, step, persist_storage=True)
+                self._exec(site, step, persist_storage=True, guard=guard)
+            except _LeaseLost:
+                raise
             except Exception as exc:
                 entry["status"] = "failed"
                 err_code = getattr(exc, "code", None)
@@ -1323,7 +1492,7 @@ class ChangeEngineAdapter:
             stages.append({"stage": "reconcile", "status": "failed" if failure else "done"})
 
         if failure:
-            self._compensate(site, steps, stages, finish, journal, pre_hash, failure, comp_fault, counterpart)
+            self._compensate(site, steps, stages, finish, journal, pre_hash, failure, comp_fault, counterpart, guard)
             return
 
         if self._take_fault("finalize"):
@@ -1387,6 +1556,7 @@ class ChangeEngineAdapter:
         failure: AdapterError,
         comp_fault: bool,
         counterpart: dict[str, Any] | None,
+        guard: Callable[[], None] | None = None,
     ) -> None:
         used: set[int] = set()
         try:
@@ -1395,13 +1565,17 @@ class ChangeEngineAdapter:
                     raise RuntimeError("compensation fault")
                 status = next(s for s in steps if s["seq"] == entry["seq"])
                 if entry["executed"]:
+                    if guard is not None:
+                        guard()
                     self.store.append_journal(site.tenant_id, entry["artifactId"], entry["seq"], "compensate")
-                    self._exec(site, self._undo_for(entry, counterpart, used), persist_storage=True)
+                    self._exec(site, self._undo_for(entry, counterpart, used), persist_storage=True, guard=guard)
                     status["status"] = "compensated"
                 else:
                     status["status"] = "failed"
             if sha(self._export(site)) != pre_hash:
                 raise RuntimeError("compensated state differs from pre-apply export")
+        except _LeaseLost:
+            raise
         except Exception:
             site.state = "recovery_required"
             stages.append({"stage": "compensate", "status": "failed"})
@@ -1414,66 +1588,80 @@ class ChangeEngineAdapter:
     # ------------------------------------------------------------------ members
     def _op_sync_members(self, context, inp, site, audit):
         site = self._need_site(site)
-        stored = self._idem_lookup(site, "sync_members", inp)
-        if stored is not None:
+        tenant = site.tenant_id
+        op_id = self._new_id("op")
+        status, stored = self._acquire(tenant, "sync_members", inp, op_id)
+        if status == "replay":
             return stored, True
-        if inp["syncVersion"] <= site.sync_version:
-            raise AdapterError("stale_sync_version")
+        try:
+            # One sync per tenant at a time: the row lock on the site is held until the commit, and the members are read
+            # after it. Two calls with different keys therefore cannot both start from the same snapshot, and a later
+            # one cannot overwrite (for example re-enable) what an earlier one committed.
+            with self.store.transaction():
+                self.store.lock_site_row(tenant)
+                site = self._need_site(self.store.get_site(tenant))  # re-read now that the key and the row lock are ours
+                if inp["syncVersion"] <= site.sync_version:
+                    raise AdapterError("stale_sync_version")
 
-        active_roles = {e["id"] for e in site.config["roles"]}
-        unknown = sorted({r for m in inp["members"] for r in m["roleIds"] if r not in active_roles})
-        if unknown:
-            raise AdapterError("unknown_role", {"fields": ["/members/roleIds"]})
+                active_roles = {e["id"] for e in site.config["roles"]}
+                unknown = sorted({r for m in inp["members"] for r in m["roleIds"] if r not in active_roles})
+                if unknown:
+                    raise AdapterError("unknown_role", {"fields": ["/members/roleIds"]})
 
-        members = self.store.get_members(site.tenant_id)
-        created = updated = disabled = unchanged = 0
-        listed: set[str] = set()
-        for m in inp["members"]:
-            listed.add(m["memberRef"])
-            new = {
-                "status": m["status"],
-                "roleIds": sorted(m["roleIds"]),
-                "displayName": m.get("displayName"),
-                "canAuthenticate": False,
-                "emailSent": False,
-            }
-            old = members.get(m["memberRef"])
-            if old is None:
-                created += 1
-            elif (
-                old["status"] == new["status"]
-                and old["roleIds"] == new["roleIds"]
-                and old["displayName"] == new["displayName"]
-            ):
-                unchanged += 1
-            else:
-                updated += 1
-                disabled += int(old["status"] == "active" and new["status"] == "disabled")
-            members[m["memberRef"]] = new
+                members = self.store.get_members(tenant)
+                created = updated = disabled = unchanged = 0
+                listed: set[str] = set()
+                for m in inp["members"]:
+                    listed.add(m["memberRef"])
+                    new = {
+                        "status": m["status"],
+                        "roleIds": sorted(m["roleIds"]),
+                        "displayName": m.get("displayName"),
+                        "canAuthenticate": False,
+                        "emailSent": False,
+                    }
+                    old = members.get(m["memberRef"])
+                    if old is None:
+                        created += 1
+                    elif (
+                        old["status"] == new["status"]
+                        and old["roleIds"] == new["roleIds"]
+                        and old["displayName"] == new["displayName"]
+                    ):
+                        unchanged += 1
+                    else:
+                        updated += 1
+                        disabled += int(old["status"] == "active" and new["status"] == "disabled")
+                    members[m["memberRef"]] = new
 
-        if inp["mode"] == "full":
-            for ref, member in members.items():
-                if ref not in listed and member["status"] == "active":
-                    member["status"] = "disabled"
-                    disabled += 1
+                if inp["mode"] == "full":
+                    for ref, member in members.items():
+                        if ref not in listed and member["status"] == "active":
+                            member["status"] = "disabled"
+                            disabled += 1
 
-        if self.frappe_backend is not None:
-            self.frappe_backend.sync_members(site.tenant_id, inp["members"], inp["mode"], members)
+                if self.frappe_backend is not None:
+                    self.frappe_backend.sync_members(tenant, inp["members"], inp["mode"], members)
 
-        self.store.replace_members(site.tenant_id, members)
-        site.sync_version = inp["syncVersion"]
-        self.store.save_site(site)
-        if self.frappe_backend is not None:
-            self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
-        result = {
-            "syncVersion": site.sync_version,
-            "created": created,
-            "updated": updated,
-            "disabled": disabled,
-            "unchanged": unchanged,
-        }
-        self._idem_store(site, "sync_members", inp, result)
-        return result, False
+                result = {
+                    "syncVersion": inp["syncVersion"],
+                    "created": created,
+                    "updated": updated,
+                    "disabled": disabled,
+                    "unchanged": unchanged,
+                }
+                # version (compare and set), members and key commit together; a lost key rolls all three back
+                self._complete_or_refuse(tenant, "sync_members", inp, op_id, result)
+                if not self.store.set_sync_version(tenant, inp["syncVersion"]):
+                    raise AdapterError("stale_sync_version")
+                self.store.replace_members(tenant, members)
+            site.sync_version = inp["syncVersion"]
+            if self.frappe_backend is not None:
+                self.frappe_backend.persist_site_state(tenant, self._site_snapshot(site))
+            return result, False
+        except BaseException:
+            self._release_on_error(tenant, "sync_members", inp, op_id)
+            raise
 
 
 __all__ = [

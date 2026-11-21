@@ -1,0 +1,27 @@
+{
+  "status": "draft",
+  "version": "0.1.0",
+  "review": "unreviewed",
+  "defaults": {
+    "default_cash_account": "1110",
+    "default_bank_account": "1120",
+    "default_receivable_account": "1130",
+    "default_payable_account": "2110",
+    "default_inventory_account": "1140",
+    "stock_received_but_not_billed": "2120",
+    "default_income_account": "4100",
+    "default_expense_account": "5110",
+    "stock_adjustment_account": "5120",
+    "expenses_included_in_valuation": "5130",
+    "round_off_account": "5310",
+    "round_off_for_opening": "2170",
+    "accumulated_depreciation_account": "1220",
+    "depreciation_expense_account": "5230",
+    "capital_work_in_progress_account": "1230",
+    "asset_received_but_not_billed": "2130",
+    "expenses_included_in_asset_valuation": "5260",
+    "write_off_account": "5330",
+    "exchange_gain_loss_account": "5340",
+    "disposal_account": "5270"
+  }
+}

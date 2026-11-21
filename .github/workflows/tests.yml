@@ -88,7 +88,7 @@ jobs:
             case "$path" in
               */test_*.py|*/tests.py|*/tests/*_test.py)
                 case "$path" in
-                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*) continue ;;
+                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/core/hrms_skeleton/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*) continue ;;
                   components/sales/trading/tests/*) continue ;;
                   services/discovery/accountant_view/tests/*|services/discovery/gap_analysis/tests/*|services/discovery/quote/tests/*|services/discovery/template_flow/tests/*|services/operate/memory/tests/*) continue ;;
                 esac
@@ -259,7 +259,7 @@ jobs:
       # --- apps/engine ---
       - name: Install dependencies (apps/engine)
         if: steps.filter.outputs.engine == 'true'
-        run: pip install -r services/blueprint/requirements.txt "pydantic>=2" "werkzeug==3.1.3" "hijridate==2.6.0"
+        run: pip install -r services/blueprint/requirements.txt "pydantic>=2" "werkzeug==3.1.3" "pymysql>=1.1" "hijridate==2.6.0"
 
       - name: Lint (apps/engine)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -269,7 +269,7 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_caller_roles.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_security.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_policy_persistence.py apps/engine/change_engine/change_engine/tests/test_api_deployment.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_caller_roles.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_security.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_policy_persistence.py apps/engine/change_engine/change_engine/tests/test_api_deployment.py apps/engine/change_engine/change_engine/tests/test_ce_sec_007_live_suite_opt_in.py -q
 
       # Live-only CE-SEC-005 suites run in real-bench.yml:
       # apps/engine/change_engine/change_engine/tests/test_ce_sec_005_real_bench.py
@@ -446,6 +446,10 @@ jobs:
         run: |
           python3 -m unittest discover -s components/compliance/zatca_sa/tests -t . -v
           python3 -m unittest apps/engine/change_engine/change_engine/tests/test_zatca_phase1_engine.py -v
+
+      - name: HR skeleton component tests (ERP-010)
+        if: steps.filter.outputs.components == 'true' && !cancelled()
+        run: python3 -m unittest discover -s components/core/hrms_skeleton/tests -t . -v
 
       - name: Country pack framework tests (CMP-021)
         if: steps.filter.outputs.components == 'true' && !cancelled()

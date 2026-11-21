@@ -67,6 +67,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CE-SEC-004 | Change engine: LLM test-connection endpoint must not accept client-supplied API key or base URL | Security | G0 | BPL-001 | partner | done |
 | CE-SEC-005 | Change engine: CI against a real Frappe bench instead of mocks | Security | G1 | BPL-001,ERP-001 | partner | doing |
 | CE-SEC-006 | Change engine: policy conditions fail closed (an unevaluable comparison on a missing or wrongly typed field denies instead of allowing; is/is not compare against their literal) | Security | G0 | CE-SEC-003 | partner | done |
+| CE-SEC-007 | Change engine: live MariaDB Suite B runs only on explicit opt-in with credentials from the environment (no root/admin defaults, no silent writes to a local database) | Security | G0 | CE-SEC-003 | partner | done |
 | SEC-001 | Threat model for the five parts and four contracts | Security | G1 | GOV-015 | eldon | done |
 | SEC-002 | Secrets management design (store, rotate, never in repo) | Security | G1 | SEC-001 | partner | doing |
 | SEC-003 | Prompt-injection defence design: untrusted-content tagging, tool allowlists, no instruction following from data | Security | G1 | SEC-001 | eldon | done |
@@ -165,7 +166,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-007 | Bilingual tax invoice PDF print format | Runtime | G1 | CMP-003,ERP-006 | partner | done |
 | ERP-008 | Blueprint roles to engine roles and user permissions mapping | Runtime | G1 | BPL-002 | partner | doing |
 | ERP-009 | Engine event emitter feeding the event stream | Runtime | G1 | BPL-011 | partner | doing |
-| ERP-010 | HRMS skeleton: employees, leave, payroll structure, only what v1 needs | Runtime | G2 | ERP-005 | partner | todo |
+| ERP-010 | HRMS skeleton: employees, leave, payroll structure, only what v1 needs | Runtime | G2 | ERP-005 | partner | doing |
 | ERP-011 | Component pack v1 for trading and distribution (price lists, credit limits, rep commission) | Runtime | G2 | BPL-014,ERP-005 | partner | doing |
 | ERP-012 | Frappe implementation of the engine adapter | Runtime | G1 | BPL-012,ERP-001 | partner | done |
 | ERP-013 | Opening balances and master data importer | Runtime | G2 | DSC-011 | partner | todo |
@@ -265,7 +266,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-009 | End-to-end rehearsal: discovery to simulated Blueprint to live on synthetic data | Quality | G2 | BPL-020,DSC-009,OPR-010 | eldon | todo |
 | QA-010 | Eval thresholds enforced in CI as release gate | Quality | G2 | QA-005,QA-002 | eldon | done |
 | QA-011 | Simulator accuracy test against known outcomes | Quality | G2 | BPL-018 | eldon | done |
-| QA-012 | Release checklist | Quality | G2 | QA-010 | eldon | todo |
+| QA-012 | Release checklist | Quality | G2 | QA-010 | eldon | done |
 | QA-013 | Load and soak tests | Quality | G3 | ERP-002,INF-005 | partner | todo |
 | QA-014 | Accessibility audit (WCAG AA) | Quality | G3 | WEB-013 | eldon | todo |
 | GTM-001 | Niche decision: trading and distribution first | GTM | G0 | - | eldon | done |
@@ -284,7 +285,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-014 | Customer success playbook | GTM | G4 | GTM-011 | eldon | todo |
 | GTM-015 | Second market (UAE) launch plan | GTM | G5 | CMP-011 | eldon | todo |
 | GTM-016 | Partner and reseller programme | GTM | G5 | GTM-014 | eldon | todo |
-| FND-001 | Investor shortlist from research/05, re-verified | Fundraising | G1 | - | eldon | todo |
+| FND-001 | Investor shortlist from research/05, re-verified | Fundraising | G1 | - | eldon | done |
 | FND-002 | Accelerator evaluation (Hub71+, Antler) after the spike | Fundraising | G2 | ERP-001 | eldon | todo |
 | FND-003 | Financial model | Fundraising | G2 | GTM-007 | eldon | todo |
 | FND-004 | Pitch deck | Fundraising | G2 | GTM-006 | eldon | todo |
@@ -379,5 +380,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-041 | Contracts check script: every contract schema valid, examples validate, refs resolve; CI job | Governance | G0 | GOV-032 | eldon | done |
 | GOV-052 | Plan status hygiene: mark rows done whose work has merged (PLT-005, QA-008, WEB-017, OPR-019) | Governance | G0 | GOV-006 | eldon | done |
 | GOV-053 | Runbook: shipping plan rows with parallel subagents (worktrees, tiers, reviews, collisions) | Governance | G0 | GOV-006 | eldon | done |
+| GOV-054 | Partner sign-off batch on Proposed ADRs (accept ADR-0026 INDEX sync, 0028, 0034, 0036, 0037 with follow-ups; hold ADR-0027, 0029, 0030, 0043, 0044 with Q-293 to Q-301; deduplicate ADR-0043 in INDEX.md) | Governance | G0 | GOV-036 | partner | done |
+| GOV-055 | ADR-0034 enforcement: CI check that component owner.github is not in reviewedBy, and engine/apply eligibility check or compiled-artifact certification binding (Q-297) | Governance | G1 | GOV-054 | partner | todo |
 | INF-015 | Redis authentication (requirepass or per-bench ACLs) for redis-cache and redis-queue/redis_socketio plus network isolation from discovery/connector workloads (T18); addresses SEC-004 confirmed leak R-033 (stops unauthenticated network pivots; shared-process residual risk remains) | Infrastructure | G1 | ERP-001 | partner | todo |
 | SEC-021 | Remediate SEC-004 confirmed RQ Job prefix-matching leak (job_id.startswith(site) without :: separator, R-032) via exact site:: filter override/upstream report, gateway route blocking (PLT-024), canonical hostname validation (PLT-003: lowercase, Punycode/IDN, no trailing dot, no prefix-collision rule as defence in depth only), and combined live isolation run with headless guard (ERP-020); remove expectedFailure markers once green | Security | G1 | SEC-004,ERP-020 | partner | todo |

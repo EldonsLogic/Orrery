@@ -222,7 +222,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | INF-006 | Container build and image scanning | Infrastructure | G2 | INF-003 | partner | todo |
 | INF-007 | Cost monitoring per tenant and per service | Infrastructure | G3 | PLT-007 | partner | todo |
 | INF-008 | Disaster recovery plan and failover test | Infrastructure | G4 | DAT-005 | partner | todo |
-| INF-009 | Decide where the isolated browser runner lives (open question) | Infrastructure | G3 | SEC-003 | partner | todo |
+| INF-009 | Decide where the isolated browser runner lives (open question) | Infrastructure | G3 | SEC-003 | partner | doing |
 | INF-010 | Capacity plan and hosting at volume | Infrastructure | G5 | ERP-002,INF-007 | partner | todo |
 | INF-011 | Asset delivery (CDN) for tenant brand assets | Infrastructure | G2 | INF-004 | partner | todo |
 | INF-012 | Dev server and access: one small shared dev host for the engine and our services using infra/dev/docker, behind a login; founders create the account, project and access (ADR-0018) | Infrastructure | G1 | GOV-009 | eldon | todo |
@@ -272,7 +272,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-001 | Niche decision: trading and distribution first | GTM | G0 | - | eldon | done |
 | GTM-002 | 20-30 buyer and accountant interviews in the niche | GTM | G1 | - | eldon | todo |
 | GTM-003 | Interview synthesis: ICP, pains, who vetoes, willingness to pay | GTM | G1 | GTM-002 | eldon | todo |
-| GTM-004 | Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) | GTM | G1 | - | eldon | todo |
+| GTM-004 | Dubai Create AI Agents Championship: choose the narrow agent and plan (dates UNVERIFIED) | GTM | G1 | - | eldon | done |
 | GTM-005 | Pilot A: sign a paid pilot with the anonymised-reuse clause | GTM | G2 | LEG-013,GTM-003 | eldon | todo |
 | GTM-006 | Pilot A: run discovery to live | GTM | G2 | GTM-005,QA-009 | eldon | todo |
 | GTM-007 | Pricing tests (Van Westendorp and anchor tests) | GTM | G2 | GTM-003 | eldon | todo |
@@ -286,7 +286,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-015 | Second market (UAE) launch plan | GTM | G5 | CMP-011 | eldon | todo |
 | GTM-016 | Partner and reseller programme | GTM | G5 | GTM-014 | eldon | todo |
 | FND-001 | Investor shortlist from research/05, re-verified | Fundraising | G1 | - | eldon | done |
-| FND-002 | Accelerator evaluation (Hub71+, Antler) after the spike | Fundraising | G2 | ERP-001 | eldon | todo |
+| FND-002 | Accelerator evaluation (Hub71+, Antler) after the spike | Fundraising | G2 | ERP-001 | eldon | done |
 | FND-003 | Financial model | Fundraising | G2 | GTM-007 | eldon | todo |
 | FND-004 | Pitch deck | Fundraising | G2 | GTM-006 | eldon | todo |
 | FND-005 | Data room | Fundraising | G2 | LEG-010 | eldon | todo |

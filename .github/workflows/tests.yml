@@ -341,6 +341,12 @@ jobs:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_021_phase0_proofs.py -v
 
+      - name: Engine action-policy tests (ERP-023)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_023_action_policy.py -q
+
       - name: Headless request guard tests (ERP-020)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
@@ -362,7 +368,7 @@ jobs:
           PYTHONPATH: apps/engine/change_engine:.
         run: |
           if [ -f apps/engine/change_engine/change_engine/tests/test_erp_009_record_events.py ]; then
-            PYTHONPATH=apps/engine/change_engine:services/blueprint/events:. python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_009_record_events.py -v
+            PYTHONPATH=apps/engine/change_engine:services/blueprint/events:. python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_009_record_events.py -q
           fi
           if [ -f apps/engine/change_engine/change_engine/tests/test_cmp_006_ksa_accounts.py ]; then
             env -u PYTHONPATH python3 -m unittest apps/engine/change_engine/change_engine/tests/test_cmp_006_ksa_accounts.py -v

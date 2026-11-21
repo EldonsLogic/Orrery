@@ -20,8 +20,6 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 ## In flight (dispatched, no result yet)
 | Plan ID | Model | Scope | Allowed paths | Branch |
 |---|---|---|---|---|
-| DSC-009 | fable-5.2 | Re-review the #224 security fixes (5c37939, a0ffd87) | none (review text) | - |
-| QA-014 | sonnet-5.5 | A-12 dark and light contrast pairs in the existing contrast test | web/ tests, docs/specs/qa-014-accessibility-audit.md | qa-014-accessibility-audit (PR #228) |
 | - | watcher | Background script exits on any new sayegh9 comment, review or new PR | - | - |
 
 ## Results
@@ -38,6 +36,9 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - DSC-009 fixes (opus, worktree) pushed to #224: H1, H2, M4, M5, L7 to L9 fixed with 13 tests first (discovery tests 589 passed); M3 deferred as Q-544, L6 stays Q-524.
 - #235 SEC-022/BPL-032 security review (fable): request changes, High: grants can target any engine doctype outside a denylist (Server Script, User Permission, Payment Entry reproduced); Medium: foreign field moved to level 0, no live evidence for flipped tripwires, test mirrors implementation.
 - QA-014 second pass pushed to #228 (css-vars lint, A-06 to A-09, A-11). BRD-007 pipeline PR #239 (row done), LEG-003 counsel scope draft PR #240 (row doing). Merged Tier 1: #237 OPR-015, #238 GOV-057.
+- QA-014 A-12 contrast pairs (sonnet) pushed to #228: 52 pairs in light and dark, no token pair fails; control borders raised to 3:1.
+- #224: Fable re-review (1 Medium N1, 3 Low) then Opus fixes a5a3f05 pushed; discovery tests 601 passed. Awaits the partner's Tier 3 review.
+- GOV-058 PR #241: Eldon decided Q-127 option A (PLT-009, 010, 011, 021 to the partner; Eldon builds the PLT-026 model-call contract). Needs the partner's agreement; not claimed.
 - BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
 ## Files touched

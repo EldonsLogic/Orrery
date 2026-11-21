@@ -1247,13 +1247,16 @@ class FrappeRuntimeBackend:
                 raise FrappeBackendError("permission_denied", stage="authorize")
         return email
 
-    def execute_as_caller(
+    def _execute_as_caller(
         self,
         tenant_id: str,
         caller: dict[str, Any] | None,
         fn: Callable[[Any], Any],
     ) -> Any:
-        """Run ``fn(frappe)`` inside tenant site with ``frappe.set_user`` bound to caller's real User (T36)."""
+        """Run ``fn(frappe)`` inside tenant site with ``frappe.set_user`` bound to caller's real User (T36).
+
+        Private: callers go through ChangeEngineAdapter.execute_action.
+        """
         user_email = self.resolve_frappe_user(tenant_id, caller)
         with self._site_session(tenant_id) as (f, _):
             prev_user = getattr(getattr(f, "session", None), "user", None)

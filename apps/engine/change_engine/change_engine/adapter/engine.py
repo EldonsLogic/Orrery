@@ -317,7 +317,7 @@ class ChangeEngineAdapter:
         if self.frappe_backend is None:
             raise AdapterError("engine_unavailable", stage="execute")
         try:
-            return self.frappe_backend.execute_as_caller(tenant_id, caller, fn)
+            return self.frappe_backend._execute_as_caller(tenant_id, caller, fn)
         except AdapterError:
             raise
         except Exception as exc:

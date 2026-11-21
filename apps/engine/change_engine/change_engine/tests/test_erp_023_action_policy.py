@@ -9,7 +9,7 @@ import pytest
 
 from change_engine.adapter import AdapterError, ChangeEngineAdapter, FrappeRuntimeBackend, FrappeSiteResolver
 from change_engine.adapter import SimulatedFrappeRuntime
-from change_engine.adapter.frappe_backend import shadow_user_email
+from change_engine.adapter.frappe_backend import FrappeRuntimeBackend, shadow_user_email
 
 NOW = datetime(2026, 11, 19, tzinfo=timezone.utc)
 
@@ -333,6 +333,7 @@ def test_gateway_adapter_does_not_expose_raw_callback_runner():
     adapter = ChangeEngineAdapter()
     assert callable(adapter.execute_action)
     assert not hasattr(adapter, "execute_as_caller")
+    assert not hasattr(FrappeRuntimeBackend, "execute_as_caller")
 
 
 @pytest.mark.parametrize("requested_tenant", ["tenant-a", "tenant-b"])
@@ -345,7 +346,7 @@ def test_adapter_refuses_cross_tenant_action_context(policy, setup, requested_te
     invoked = []
 
     class Backend:
-        def execute_as_caller(self, tenant, caller, run):
+        def _execute_as_caller(self, tenant, caller, run):
             return run(object())
 
     adapter = ChangeEngineAdapter(frappe_backend=Backend(), action_policy=guard,
@@ -366,7 +367,7 @@ def test_adapter_uses_bound_snapshot_and_records_handler_failure(policy, setup, 
     guard = guard_for(policy, context, path)
 
     class Backend:
-        def execute_as_caller(self, tenant, caller, run):
+        def _execute_as_caller(self, tenant, caller, run):
             assert tenant == "tenant-a"
             assert caller == {"service": "operate_gateway", "onBehalfOf": {"kind": "user", "id": "finance-a"}}
             return run(object())

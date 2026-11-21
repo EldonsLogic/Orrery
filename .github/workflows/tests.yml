@@ -89,6 +89,7 @@ jobs:
               */test_*.py|*/tests.py|*/tests/*_test.py)
                 case "$path" in
                   docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*) continue ;;
+                  components/sales/trading/tests/*) continue ;;
                   services/discovery/accountant_view/tests/*|services/discovery/gap_analysis/tests/*|services/discovery/quote/tests/*|services/discovery/template_flow/tests/*|services/operate/memory/tests/*) continue ;;
                 esac
                 if ! grep -Fq -- "$path" .github/workflows/tests.yml; then
@@ -427,6 +428,14 @@ jobs:
       - name: Country pack framework tests (CMP-021)
         if: steps.filter.outputs.components == 'true' && !cancelled()
         run: python3 -m unittest discover -s components/compliance/country_pack/tests -t . -v
+
+      - name: Trading and distribution pack unit and factory sandbox checks (ERP-011)
+        if: steps.filter.outputs.components == 'true' && !cancelled()
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          PYTHONPATH=components/sales/trading python3 -m pytest components/sales/trading/tests -q
+          PYTHONPATH=services/blueprint python3 -m factory check components/sales/trading --run-tests --trusted-source --out /tmp/erp011-factory.json
 
   deploy-staging:
     name: Deploy to staging (disabled)

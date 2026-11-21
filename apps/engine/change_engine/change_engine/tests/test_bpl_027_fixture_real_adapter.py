@@ -367,6 +367,60 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertEqual(granted[("bp-sales_rep", "Sales Order")]["if_owner"], 1)
         self.assertNotIn(("bp-warehouse_keeper", "Delivery Note"), granted)  # warehouse scope: withheld
 
+    def test_06c_offline_literal_grants_and_untouched_engine_rules(self) -> None:
+        """Review round 1 (item 6): literal expectations written by hand from the fixture and the ADR-0051 table, with
+        no adapter helper; built-in roles' rules and field levels the adapter does not own stay exactly as they were."""
+        from change_engine.adapter import FrappeRuntimeBackend
+        from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
+
+        bp, engine = without_attachments(load_fixture()), CaseInsensitiveEngine("bpl027.localhost")
+        engine.add_field("Item", "valuation_secret", permlevel=2)  # an engine field on a level the adapter never owns
+        engine.add_field("Customer", "credit_hold", permlevel=1)
+        backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
+                                       frappe_factory=lambda: engine, offline_ddl_simulator=True)
+        for section, kind in (("entities", "entity.add"), ("roles", "role.upsert")):
+            for elem in bp[section]:
+                backend.execute_step(TENANT, {"seq": 1, "kind": kind, "pointer": f"/{section}/{elem['id']}",
+                                              "subject": {"kind": section[:-1], "id": elem["id"]}, "params": {"definition": elem}})
+        rules = {(r["role"], r["parent"], int(r.get("permlevel") or 0)): (
+                     {k for k in ("read", "write", "create", "delete", "submit", "cancel", "amend", "report", "export", "import",
+                                  "share", "print", "email", "set_user_permissions") if int(r.get(k) or 0)}, int(r.get("if_owner") or 0))
+                 for r in engine.rows("Custom DocPerm")}
+        self.assertEqual(rules[("bp-owner", "Sales Order", 0)], ({"read", "create", "write", "export"}, 0))
+        self.assertEqual(rules[("bp-accountant", "Sales Invoice", 0)], ({"read", "create", "write", "submit", "cancel", "amend", "export"}, 0))
+        self.assertEqual(rules[("bp-accountant", "Sales Order", 0)], ({"read", "export"}, 0))  # submit without update: dropped
+        self.assertEqual(rules[("bp-sales_rep", "Sales Order", 0)], ({"read", "create", "write", "submit", "cancel", "amend"}, 1))
+        self.assertEqual(rules[("bp-auditor", "Payment", 0)], ({"read", "export"}, 0))  # a document type the adapter made
+        self.assertNotIn(("bp-sales_rep", "Customer", 0), rules)  # hides credit_limit, which the engine does not hold
+        self.assertFalse([k for k in rules if k[0] in ("bp-warehouse_keeper", "bp-branch_sales_manager")])  # location scopes
+        self.assertFalse([k for k in rules if k[0].startswith("bp-") and k[2] != 0])  # no field level used on this fixture
+        builtin = {k: v for k, v in rules.items() if not k[0].startswith("bp-")}
+        self.assertEqual(builtin, {("Auditor", "Customer", 0): ({"read"}, 0),
+                                   ("Sales User", "Customer", 0): ({"read", "write", "create"}, 0),
+                                   ("Sales User", "Item", 0): ({"read"}, 0)})
+        levels = {fn: int(getattr(engine.get_meta(dt).get_field(fn), "permlevel", 0) or 0)
+                  for dt, fn in (("Item", "valuation_secret"), ("Customer", "credit_hold"))}
+        self.assertEqual(levels, {"valuation_secret": 2, "credit_hold": 1})
+        self.assertEqual(engine.rows("Property Setter"), [])
+
+    def test_06d_offline_grant_on_an_unreviewed_engine_document_type_is_refused(self) -> None:
+        """ADR-0051 item 3: on a real site Supplier, Price List, Delivery Note and the purchase documents are engine
+        document types outside the reviewed mapping, so the fixture roles that grant them are refused there."""
+        from change_engine.adapter import FrappeRuntimeBackend
+        from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
+
+        bp, engine = without_attachments(load_fixture()), CaseInsensitiveEngine("bpl027.localhost")
+        engine.add_doctype("Supplier", module="Buying", custom=0)
+        backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
+                                       frappe_factory=lambda: engine, offline_ddl_simulator=True)
+        owner = next(r for r in bp["roles"] if r["id"] == "owner")
+        with self.assertRaises(FrappeBackendError) as err:
+            backend.execute_step(TENANT, {"seq": 1, "kind": "role.upsert", "pointer": "/roles/owner",
+                                          "subject": {"kind": "role", "id": "owner"}, "params": {"definition": owner}})
+        self.assertEqual(err.exception.details.get("reasonCode"), "protected_subject")
+        self.assertTrue(err.exception.side_effect_free)
+        self.assertIsNone(engine.db.get_value("Role", "bp-owner", "name"))
+
     @staticmethod
     def _two_warehouse_artifact(target: dict) -> dict:
         steps = [

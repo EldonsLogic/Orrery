@@ -27,6 +27,7 @@ from change_engine.adapter.mapping import (
     SEMANTIC_PROPS,
     SUPPORTED_BLUEPRINT_TYPES,
     bounded_site_lock_key,
+    grant_plan_reason,
     has_prohibited_expression,
     inspect_field_ddl,
     is_protected_entity,
@@ -920,8 +921,11 @@ class ChangeEngineAdapter:
 
     def _evaluate(self, site: SiteRecord, artifact: dict[str, Any]) -> dict[str, Any]:
         steps, additive, semantic = [], 0, 0
+        # SEC-022 (ADR-0051 item 3): role grants may target entities this Blueprint has or adds in this artifact
+        blueprint_entities = {e.get("id") for e in site.config.get("entities", []) if isinstance(e, dict)}
+        blueprint_entities |= {s["subject"].get("id") for s in artifact["steps"] if s["kind"] == "entity.add"}
         for step in artifact["steps"]:
-            disp, reason, ddl = self._judge(site, step)
+            disp, reason, ddl = self._judge(site, step, blueprint_entities)
             if ddl == "additive":
                 additive += 1
             elif ddl == "semantic":
@@ -954,7 +958,7 @@ class ChangeEngineAdapter:
             "storage": {"additive": additive, "semantic": semantic, "statementCount": additive + semantic},
         }
 
-    def _judge(self, site: SiteRecord, step: dict[str, Any]) -> tuple[str, str | None, str]:
+    def _judge(self, site: SiteRecord, step: dict[str, Any], blueprint_entities: set[str]) -> tuple[str, str | None, str]:
         kind, pointer, params = step["kind"], step["pointer"], step["params"]
         ddl = step["ddlImpact"]
         support = STEP_KINDS.get(kind, "unsupported")
@@ -971,6 +975,10 @@ class ChangeEngineAdapter:
             return "blocked", "protected_subject", ddl
 
         defn = params.get("definition")
+        if kind == "role.upsert":
+            grant_reason = grant_plan_reason(defn, blueprint_entities)
+            if grant_reason:
+                return "blocked", grant_reason, ddl
         coll = self._collection(site, segs)
         elem = _walk(site.config, _cfg_segs(pointer))
         if kind.endswith((".add", ".upsert", ".enable")):

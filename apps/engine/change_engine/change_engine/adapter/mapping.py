@@ -130,6 +130,36 @@ def is_protected_entity(entity_id: str) -> bool:
     return doctype in ZONE_2_LOCKED_DOCTYPES
 
 
+# SEC-022 / ADR-0051 item 3: the document types a Blueprint role may get permission rules on are an allowlist:
+# the reviewed mapping above (minus protected entities), plus document types the adapter created itself for an
+# unmapped Blueprint entity (custom=1 in this module, see _ensure_doctype_exists). Everything else is refused.
+ADAPTER_DOCTYPE_MODULE = "Custom"
+
+
+def reviewed_grant_doctype(entity_id: Any) -> str | None:
+    """Engine document type of a reviewed, unprotected mapped entity; None for any other entity."""
+    if not isinstance(entity_id, str) or entity_id not in ENTITY_TO_DOCTYPE or is_protected_entity(entity_id):
+        return None
+    return ENTITY_TO_DOCTYPE[entity_id]
+
+
+def grant_plan_reason(definition: Any, blueprint_entities: set[str]) -> str | None:
+    """Plan-time allowlist check of a role.upsert definition's grant targets (ADR-0051 item 3).
+
+    An entity is allowed when it is in the reviewed mapping, or when it is an unmapped entity of this Blueprint
+    (the adapter creates its document type). The apply stage checks again on the engine (FrappeRuntimeBackend)."""
+    perms = definition.get("permissions") if isinstance(definition, dict) else None
+    for p in perms if isinstance(perms, list) else []:
+        entity = p.get("entity") if isinstance(p, dict) else None
+        if not isinstance(entity, str):
+            return "unsupported_value_type"
+        reviewed = reviewed_grant_doctype(entity) is not None
+        own = entity not in ENTITY_TO_DOCTYPE and entity in blueprint_entities and not is_protected_entity(entity)
+        if not (reviewed or own):
+            return "protected_subject"
+    return None
+
+
 def has_prohibited_expression(value: Any) -> bool:
     """Enforce PRD-001 / safety_guardrails no-generated-code invariant recursively."""
     if isinstance(value, str):

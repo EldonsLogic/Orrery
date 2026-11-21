@@ -23,6 +23,14 @@ STANDARD_PERMS = (
     {"parent": "Item", "role": "Sales User", "permlevel": 0, "read": 1},
 )
 SUBMITTABLE = frozenset({"Sales Order", "Sales Invoice", "Delivery Note", "Purchase Order", "Purchase Receipt", "Purchase Invoice"})
+# Engine document types that exist on every real site (custom=0) and are outside the reviewed mapping: a
+# Blueprint grant on any of them must be refused (ADR-0051 item 3). Property Setter and Custom Field sit in the
+# engine's own "Custom" module, so the module alone never makes a document type the adapter's.
+ENGINE_DOCTYPES = {
+    "Server Script": "Core", "User Permission": "Core", "Property Setter": "Custom", "Custom Field": "Custom",
+    "Role Profile": "Core", "Has Role": "Core", "Webhook": "Integrations", "File": "Core", "Data Import": "Core",
+    "Payment Entry": "Accounts", "GL Entry": "Accounts",
+}
 
 
 class DuplicateEntryError(Exception):
@@ -85,6 +93,8 @@ class CaseInsensitiveEngine(SimulatedFrappeRuntime):
         site.rows.setdefault("tabCustom DocPerm", {})
         for i, perm in enumerate(STANDARD_PERMS):
             site.rows["tabDocPerm"][f"std{i}"] = {"doctype": "DocPerm", "name": f"std{i}", **perm}
+        for dt, module in ENGINE_DOCTYPES.items():
+            self.add_doctype(dt, module=module, custom=0)
 
     def get_doc(self, arg1: Any, arg2: str | None = None) -> Any:
         if not isinstance(arg1, dict) and arg2 is not None:
@@ -119,5 +129,13 @@ class CaseInsensitiveEngine(SimulatedFrappeRuntime):
         spec = self.current_site_db().doctype_meta.setdefault(doctype, {"issingle": 0, "fields": [], "perms": {}})
         spec["fields"].append({"fieldname": fieldname, "fieldtype": "Data", "permlevel": permlevel})
 
+    def add_doctype(self, doctype: str, *, module: str, custom: int) -> None:
+        """A document type the adapter did not create (an engine one, or one made by hand in the desk)."""
+        site = self.current_site_db()
+        site.rows["tabDocType"][doctype] = {"doctype": "DocType", "name": doctype, "module": module, "custom": custom}
+        site.table_columns.setdefault(f"tab{doctype}", [])
+        site.rows.setdefault(f"tab{doctype}", {})
 
-__all__ = ["BUILTIN_ROLES", "BUILTIN_STATES", "CaseInsensitiveEngine", "DuplicateEntryError", "STANDARD_PERMS", "SUBMITTABLE"]
+
+__all__ = ["BUILTIN_ROLES", "BUILTIN_STATES", "CaseInsensitiveEngine", "DuplicateEntryError", "ENGINE_DOCTYPES", "STANDARD_PERMS",
+           "SUBMITTABLE"]

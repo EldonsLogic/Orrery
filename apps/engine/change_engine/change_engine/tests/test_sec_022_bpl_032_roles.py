@@ -295,7 +295,8 @@ class TestBpl032RoleGrants(_Base):
         self.refused(lambda: self.upsert(role("r_assigned", [grant("sales_order", "read")], scope="assigned_records")),
                      reason="unsupported_value_type")
         self.refused(lambda: self.upsert(role("r_ledger", [grant("general_ledger", "read")])))
-        self.refused(lambda: self.upsert(role("r_ghost", [grant("no_such_thing", "read")])), reason="subject_missing")
+        # An entity outside the reviewed mapping that the adapter did not create is not on the allowlist (ADR-0051).
+        self.refused(lambda: self.upsert(role("r_ghost", [grant("no_such_thing", "read")])))
         self.assertNotIn("bp-r_assigned", self.roles())
 
     def test_masked_grant_withholds_create_and_write(self) -> None:
@@ -411,6 +412,24 @@ class TestBpl032FieldLevels(_Base):
         self.assertEqual(self.level("Widget", "secret_rate"), 1)
         self.assertEqual(self.visibility(), self.expected_visibility())
 
+    def test_a_foreign_field_on_an_owned_level_is_refused_and_never_moved(self) -> None:
+        """Review round 1, finding 2: the reviewers' probe. 'hider' hides cost on a level the adapter owns, a field the
+        adapter did not place appears on that level, then 'hider' stops hiding: the step is refused, nothing moves."""
+        for foreign in ("secret_rate", "custom_secret_rate"):  # a plain field, and one made in the desk (custom_ prefix)
+            with self.subTest(foreign=foreign):
+                self.setUp()
+                self.upsert(role("hider", [grant("widget", "read", hidden=("cost",))]))
+                owned = self.level("Widget", "custom_cost")
+                self.assertGreaterEqual(owned, 1)
+                self.engine.add_field("Widget", foreign, permlevel=owned)
+                rules, setters = self.rules(), self.engine.rows("Property Setter")
+                for defn in (role("hider", [grant("widget", "read")]), role("viewer", [grant("widget", "read")])):
+                    self.refused(lambda: self.upsert(defn))
+                self.assertEqual(self.level("Widget", foreign), owned)
+                self.assertEqual(self.level("Widget", "custom_cost"), owned)
+                self.assertEqual(self.rules(), rules)
+                self.assertEqual(self.engine.rows("Property Setter"), setters)
+
     def test_more_than_nine_signatures_is_refused_without_a_write(self) -> None:
         fields = [f"f{i}" for i in range(10)]
         self.add_entity("gadget", *fields)
@@ -421,6 +440,157 @@ class TestBpl032FieldLevels(_Base):
                      code="limit_exceeded", reason=None)
         self.assertEqual(self.rules(), rules)
         self.assertEqual(self.engine.rows("Property Setter"), setters)
+
+
+
+class TestSec022GrantAllowlist(_Base):
+    """Review round 1, finding 1 (High): grants reach only the reviewed mapping and document types the adapter made."""
+
+    REFUSED = ("server_script", "user_permission", "property_setter", "custom_field", "role_profile", "has_role", "webhook",
+               "file", "data_import", "payment_entry", "session", "gl_entry")
+
+    def test_engine_document_types_outside_the_allowlist_are_refused_before_any_write(self) -> None:
+        for entity in self.REFUSED:
+            before = self.engine.rows("Custom DocPerm")
+            self.refused(lambda: self.upsert(role("clerk", [grant("customer", "read"), grant(entity, "read", "create", "update", "delete")])))
+            self.assertNotIn("bp-clerk", self.roles(), entity)
+            self.assertEqual(self.engine.rows("Custom DocPerm"), before, entity)
+
+    def test_reviewed_mapping_and_adapter_created_document_types_are_granted(self) -> None:
+        self.add_entity("widget", "cost")
+        self.upsert(role("clerk", [grant("customer", "read"), grant("sales_order", "read", "update"), grant("widget", "read", "update")]))
+        self.assertEqual(self.granted("bp-clerk", "Customer"), {"read"})
+        self.assertEqual(self.granted("bp-clerk", "Sales Order"), {"read", "write"})
+        self.assertEqual(self.granted("bp-clerk", "Widget"), {"read", "write"})
+
+    def test_a_custom_document_type_the_adapter_did_not_make_is_refused(self) -> None:
+        self.engine.add_doctype("Gizmo", module="Selling", custom=1)  # made by hand in the desk, another module
+        self.engine.add_doctype("Supplier", module="Buying", custom=0)  # an engine document type outside the mapping
+        for entity in ("gizmo", "supplier"):
+            self.refused(lambda: self.upsert(role("clerk", [grant(entity, "read")])))
+        self.assertNotIn("bp-clerk", self.roles())
+
+    def test_plan_refuses_grant_targets_outside_the_allowlist(self) -> None:
+        from change_engine.adapter import make_frappe_adapter
+        from change_engine.adapter import contracts_support as cs
+
+        def ctx() -> dict:
+            return {"contractVersion": "0.1.2", "requestId": "01J00000000000000000000022", "correlationId": "corr_sec022_plan",
+                    "tenantId": TENANT, "caller": {"service": "control_plane", "onBehalfOf": {"kind": "user", "id": "usr_owner"}},
+                    "deadlineMs": 120000}
+
+        def st(seq: int, kind: str, sid: str, defn: dict, section: str, impact: str) -> dict:
+            return {"seq": seq, "phase": 4 if section == "entities" else 7, "kind": kind,
+                    "subject": {"kind": "entity" if section == "entities" else "role", "id": sid, "parents": []}, "pointer": f"/{section}/{sid}",
+                    "impact": impact, "ddlImpact": "additive" if section == "entities" else "none", "reversible": True,
+                    "params": {"definition": defn}, "sourceOps": [f"/{section}/{sid}"]}
+
+        widget = {"id": "widget", "labels": {"en": "Widget", "ar": "Widget"}, "fields": []}
+        steps = [st(1, "entity.add", "widget", widget, "entities", "data_shape")]
+        for i, entity in enumerate(("customer", "widget", "server_script", "general_ledger", "payment_entry"), start=2):
+            steps.append(st(i, "role.upsert", f"r{i}", role(f"r{i}", [grant(entity, "read")]), "roles", "access"))
+        counts = dict.fromkeys(("cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"), 0)
+        counts.update(data_shape=1, access=len(steps) - 1)
+        art = {"artifactSchema": "0.1.0", "kind": "forward", "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
+               "blueprint": {"id": "bp-sec022", "base": None, "target": {"hash": "sha256:" + "2" * 64, "revision": 1}, "diffHash": None},
+               "engineTarget": {"adapter": "frappe", "versionSet": "set-example"}, "components": [], "steps": steps,
+               "skippedOps": [], "postConditions": [],
+               "risk": {"counts": counts, "total": len(steps), "maxImpact": "access", "needsDdlPlanGate": True,
+                        "touchesCompliance": False, "touchesAccess": True, "touchesLedgerOrTax": False,
+                        "requiresTeamReview": False, "irreversibleSteps": 0},
+               "inverse": None}
+        digest, art_id = cs.artifact_hashes(art)
+        art.update(artifactId=art_id, integrity={"algorithm": "sha256-canonical-json-v1", "contentHash": digest, "signature": None})
+        adapter = make_frappe_adapter(simulated=True, test_hooks=False)
+        prov = adapter.call("provision_site", ctx(), {"idempotencyKey": "idemp_sec022_prov", "engineTarget": art["engineTarget"],
+                                                       "blueprintId": "bp-sec022", "siteClass": "sandbox", "countryPack": "sa"})
+        self.assertTrue(prov["ok"], prov)
+        res = adapter.call("plan", ctx(), {"artifact": art})
+        self.assertTrue(res["ok"], res)
+        got = {s["seq"]: (s["disposition"], s.get("reasonCode")) for s in res["result"]["steps"]}
+        self.assertEqual(got[2], ("gated", "protected_subject"))  # reviewed mapping: role.upsert stays gated
+        self.assertEqual(got[3], ("gated", "protected_subject"))  # an entity this Blueprint adds
+        for seq in (4, 5, 6):
+            self.assertEqual(got[seq], ("blocked", "protected_subject"), seq)
+        self.assertEqual(res["result"]["verdict"], "rejected")
+
+
+class TestSec022StepInputs(_Base):
+    """Review round 1: ids agree, report and workflow roles are validated before any write, no fail-open defaults."""
+
+    def test_definition_subject_and_pointer_ids_must_agree(self) -> None:
+        defn = role("owner", [grant("customer", "read", "update")])
+        bad = [
+            {**step("role.upsert", "viewer", defn), "subject": {"kind": "role", "id": "viewer"}},  # pointer and subject viewer
+            {**step("role.upsert", "owner", defn), "subject": {"kind": "role", "id": "viewer"}},   # subject differs
+            {**step("role.upsert", "owner", defn), "pointer": "/roles/viewer"},                    # pointer differs
+            step("role.upsert", "owner", {k: v for k, v in defn.items() if k != "id"}),            # no definition id
+        ]
+        for st in bad:
+            self.refused(lambda: self.run_step(st), reason="definition_conflict")
+        self.assertFalse({"bp-owner", "bp-viewer"} & set(self.roles()))
+
+    def test_report_refusal_happens_before_the_document_type_is_created(self) -> None:
+        site = self.engine.current_site_db()
+        site.rows["tabRole"]["BP-Owner"] = {"doctype": "Role", "name": "BP-Owner", "role_name": "BP-Owner", "disabled": 0}
+        doctypes = set(site.rows.get("tabDocType", {}))
+        for roles, reason in ((["owner"], "protected_subject"), (["Owner"], "unsupported_value_type"),
+                              ([], "unsupported_value_type"), (None, "unsupported_value_type")):
+            defn = {"id": "gizmo_overview", "entity": "gizmo"}
+            if roles is not None:
+                defn["visibleToRoles"] = roles
+            self.refused(lambda: self.run_step(step("report.upsert", "gizmo_overview", defn, section="reports")), reason=reason)
+            self.assertEqual(set(site.rows.get("tabDocType", {})), doctypes, roles)
+            self.assertFalse(self.engine.db.table_exists("Gizmo"), roles)
+            self.assertEqual(self.engine.rows("Report"), [], roles)
+
+    def test_transition_without_allowed_roles_is_refused_before_any_write(self) -> None:
+        site = self.engine.current_site_db()
+        before = {t: len(site.rows.get(t, {})) for t in ("tabDocType", "tabWorkflow", "tabWorkflow State", "tabWorkflow Action Master")}
+        for allowed in (None, [], "owner", ["owner", 7]):
+            t = {"id": "finish", "from": "draft", "to": "done", "actionLabels": {"en": "Finish"}}
+            if allowed is not None:
+                t["allowedRoles"] = allowed
+            self.refused(lambda: self.run_step(step("workflow.upsert", "gizmo_flow", {
+                "id": "gizmo_flow", "entity": "gizmo", "states": [{"id": "draft", "kind": "initial"}, {"id": "done", "kind": "final"}],
+                "transitions": [t]}, section="workflows")), reason="unsupported_value_type")
+            self.assertEqual({t: len(site.rows.get(t, {})) for t in before}, before, allowed)
+            self.assertFalse(self.engine.db.table_exists("Gizmo"), allowed)
+
+
+class TestSec022LookupErrorsFailClosed(unittest.TestCase):
+    """Review round 1: a failed workflow-state lookup raises; it is never read as "no collision"."""
+
+    def test_collision_check_propagates_a_failed_lookup(self) -> None:
+        from change_engine.guarded_apply.workflow_engine import find_workflow_state_collisions
+
+        db = mock.MagicMock()
+        db.get_workflow_state.side_effect = RuntimeError("lookup failed")
+        with self.assertRaises(RuntimeError):
+            find_workflow_state_collisions(db, ["bp-draft"])
+        with self.assertRaises(RuntimeError):
+            execute_workflow_deployment(db, "dep3", TENANT, "Sales Order", {
+                "workflow_name": "wf", "document_type": "Sales Order",
+                "states": [{"state": "bp-draft", "doc_status": 0, "allow_edit": "System Manager"},
+                           {"state": "bp-done", "doc_status": 1, "allow_edit": "System Manager", "is_terminal": True}],
+                "transitions": [{"state": "bp-draft", "action": "Go", "next_state": "bp-done", "allowed": "System Manager"}]},
+                user_roles=["System Manager"])
+        db.acquire_advisory_lock.assert_not_called()
+
+    def test_collision_check_without_a_lookup_fails_closed(self) -> None:
+        from change_engine.guarded_apply import workflow_engine
+
+        with mock.patch.object(workflow_engine, "frappe", None), self.assertRaises(RuntimeError):
+            workflow_engine.find_workflow_state_collisions(object(), ["bp-draft"])
+
+    def test_deployment_adapter_get_workflow_state_propagates_a_failed_read(self) -> None:
+        from change_engine.api.endpoints import FrappeDeploymentAdapter
+
+        fake = mock.MagicMock()
+        fake.db.get_value.side_effect = RuntimeError("db down")
+        dep = FrappeDeploymentAdapter(frappe_module=fake, in_memory=False)
+        with self.assertRaises(RuntimeError):
+            dep.get_workflow_state("bp-draft")
 
 
 if __name__ == "__main__":

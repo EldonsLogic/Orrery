@@ -382,7 +382,8 @@ def find_workflow_state_collisions(db: Any, state_names: List[str]) -> List[str]
 
     The engine matches record names without case (MariaDB), so ensuring state 'approved' would silently reuse a
     built-in 'Approved'. A lookup that returns a record whose stored name differs from the requested one is a
-    collision; the caller refuses the deployment before any write."""
+    collision; the caller refuses the deployment before any write. A failed lookup raises, and so does a database
+    without any lookup: neither is ever read as "no collision" (fail closed)."""
     collisions: List[str] = []
     for name in state_names:
         getter = getattr(db, "get_workflow_state", None)
@@ -391,7 +392,7 @@ def find_workflow_state_collisions(db: Any, state_names: List[str]) -> List[str]
         elif frappe and hasattr(frappe, "db") and hasattr(frappe.db, "get_value"):
             rec = frappe.db.get_value("Workflow State", name, ["name"], as_dict=True)
         else:
-            rec = None
+            raise RuntimeError("workflow state lookup unavailable")
         stored = rec.get("name") if isinstance(rec, dict) else None
         if stored is not None and str(stored) != name:
             collisions.append(name)

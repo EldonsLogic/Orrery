@@ -164,7 +164,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-006 | Arabic and RTL translation completion for in-scope modules | Runtime | G1 | ERP-005 | partner | done |
 | ERP-007 | Bilingual tax invoice PDF print format | Runtime | G1 | CMP-003,ERP-006 | partner | done |
 | ERP-008 | Blueprint roles to engine roles and user permissions mapping | Runtime | G1 | BPL-002 | partner | doing |
-| ERP-009 | Engine event emitter feeding the event stream | Runtime | G1 | BPL-011 | partner | todo |
+| ERP-009 | Engine event emitter feeding the event stream | Runtime | G1 | BPL-011 | partner | doing |
 | ERP-010 | HRMS skeleton: employees, leave, payroll structure, only what v1 needs | Runtime | G2 | ERP-005 | partner | todo |
 | ERP-011 | Component pack v1 for trading and distribution (price lists, credit limits, rep commission) | Runtime | G2 | BPL-014,ERP-005 | partner | doing |
 | ERP-012 | Frappe implementation of the engine adapter | Runtime | G1 | BPL-012,ERP-001 | partner | done |

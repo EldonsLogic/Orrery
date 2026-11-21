@@ -1,8 +1,8 @@
 """CE-SEC-005: live security regressions over real HTTP RPC against the pinned bench.
 
-HTTP assertions go through the running Gunicorn worker (``/api/method/...``) with a
-low-privilege user's API token, so Frappe's own request handling, session and
-whitelist dispatch are exercised, not an in-process shortcut. Same skip and
+HTTP assertions go through the running Gunicorn worker (``/api/method/...``) with
+the internal gateway credential and a user API token, exercising the route guard,
+Frappe's request handling, session and whitelist dispatch. Same skip and
 fail-closed rules as ``test_ce_sec_005_real_bench`` (``CE_SEC_005_REAL_BENCH=1``).
 """
 from __future__ import annotations
@@ -62,7 +62,10 @@ class TestCeSec005LiveHttp(RealBenchTestCase):
         cls._tokens[label] = f"token {api_key}:{api_secret}"
         return cls._tokens[label]
 
-    def _rpc(self, method: str, auth: Optional[str], **kwargs: Any) -> Tuple[int, Dict[str, Any]]:
+    def _rpc(
+        self, method: str, auth: Optional[str], *, with_internal_token: bool = True, **kwargs: Any
+    ) -> Tuple[int, Dict[str, Any]]:
+        """Send an adapter RPC with the gateway credential unless testing ingress denial."""
         port = os.environ.get("ENGINE_PORT", "8000")
         headers = {"Host": self._site, "Content-Type": "application/json", "Accept": "application/json"}
         if auth:
@@ -73,6 +76,8 @@ class TestCeSec005LiveHttp(RealBenchTestCase):
             headers=headers,
             method="POST",
         )
+        if with_internal_token:
+            req.add_unredirected_header("X-Internal-Token", os.environ["ENGINE_INTERNAL_TOKEN"])
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 return resp.status, json.loads(resp.read() or b"{}")
@@ -104,6 +109,11 @@ class TestCeSec005LiveHttp(RealBenchTestCase):
         return out
 
     # ------------------------------------------------------------------ CE-SEC-001 / 002 over HTTP
+    def test_adapter_method_requires_the_internal_token(self) -> None:
+        status, body = self._rpc(METHOD + "get_runtime_policies", self._admin(), with_internal_token=False)
+        self.assertEqual(status, 404, body)
+        self.assertEqual(body, {"raw": "Not Found"})
+
     def test_01_token_auth_positive_control(self) -> None:
         status, body = self._rpc(METHOD + "get_runtime_policies", self._admin())
         self.assertEqual(status, 200, body)
@@ -225,7 +235,6 @@ class TestCeSec005LiveHttp(RealBenchTestCase):
         v1 = self._policy("V1")
         v2 = dict(v1, condition_expr="description == 'CE005_V2'")
         other = self._policy("OTHERSITE")
-        created = []
         try:
             endpoints.register_runtime_policy(v1)
             endpoints.register_runtime_policy(v2)  # revision 2 replaces revision 1
@@ -238,15 +247,16 @@ class TestCeSec005LiveHttp(RealBenchTestCase):
             frappe.db.commit()
             policy_catalog.reset()
 
-            # The live HTTP worker (another process) enforces revision 2 from MariaDB.
-            status, body = self._rpc("frappe.client.insert", self._admin(), doc={"doctype": "ToDo", "description": "CE005_V2"})
-            self.assertNotEqual(status, 200, body)
-            self.assertIn(f"[{v1['policy_id']}]", json.dumps(body))
-            # Revision 1's condition no longer applies; nor does the other site's policy.
-            for desc in ("CE005_V1", "CE005_OTHERSITE"):
-                status, body = self._rpc("frappe.client.insert", self._admin(), doc={"doctype": "ToDo", "description": desc})
-                self.assertEqual(status, 200, body)
-                created.append(body["message"]["name"])
+            # The HTTP worker reads revision 2 from MariaDB through the policy evaluation RPC.
+            for description, allowed in (("CE005_V2", False), ("CE005_V1", True), ("CE005_OTHERSITE", True)):
+                with self.subTest(description=description):
+                    status, body = self._rpc(
+                        METHOD + "evaluate_document_policies", self._admin(),
+                        doctype="ToDo", doc={"description": description},
+                    )
+                    self.assertEqual(status, 200, body)
+                    self.assertIs(body["message"]["allowed"], allowed, body)
+                    self.assertEqual(body["message"]["violated_policies"], [] if allowed else [v1["policy_id"]])
         finally:
             frappe.db.sql(
                 "DELETE FROM `tabChange Engine Policy` WHERE site_id = %s AND policy_id = %s",
@@ -254,8 +264,6 @@ class TestCeSec005LiveHttp(RealBenchTestCase):
             )
             frappe.db.commit()
             endpoints.unregister_runtime_policy(v1["policy_id"], doctype="ToDo")
-            for name in created:
-                frappe.delete_doc("ToDo", name, ignore_permissions=True, force=True)
             frappe.db.commit()
 
     # ------------------------------------------------------------------ CE-SEC-002 holes (fixed)

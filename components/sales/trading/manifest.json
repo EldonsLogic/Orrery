@@ -1,0 +1,107 @@
+{
+  "$schema": "../../../contracts/component.manifest.schema.json",
+  "id": "sales.trading_distribution",
+  "version": "0.1.0",
+  "kind": "configurable",
+  "name": {
+    "ar": "حزمة التجارة والتوزيع",
+    "en": "Trading and distribution pack"
+  },
+  "description": "Permission-preserving native selling price lists, item prices, volume discounts, company credit limits and draft sales-rep attribution. No financial postings or commission settlement. Internal library; no generated tools or automatic deployment.",
+  "provides": [
+    {
+      "capability": "sales.pricing.configure",
+      "artifacts": [
+        {
+          "type": "function",
+          "ref": "trading.TradingPack.enforce_price_lists"
+        },
+        {
+          "type": "function",
+          "ref": "trading.TradingPack.create_price_list"
+        },
+        {
+          "type": "function",
+          "ref": "trading.TradingPack.create_item_price"
+        },
+        {
+          "type": "function",
+          "ref": "trading.TradingPack.create_volume_discount"
+        }
+      ]
+    },
+    {
+      "capability": "sales.credit.configure",
+      "artifacts": [
+        {
+          "type": "function",
+          "ref": "trading.TradingPack.set_credit_limit"
+        }
+      ]
+    },
+    {
+      "capability": "sales.commission.configure",
+      "artifacts": [
+        {
+          "type": "function",
+          "ref": "trading.TradingPack.set_commission_rate"
+        },
+        {
+          "type": "function",
+          "ref": "trading.TradingPack.set_sales_team"
+        }
+      ]
+    }
+  ],
+  "requires": [],
+  "parameters": [],
+  "tests": [
+    {
+      "id": "native_boundary",
+      "kind": "unit",
+      "path": "tests/test_trading.py",
+      "blocking": true
+    }
+  ],
+  "certification": {
+    "level": "tested",
+    "touchesLedgerOrTax": true,
+    "reviewedBy": []
+  },
+  "engineCompatibility": {
+    "adapter": "change_engine",
+    "engineRange": ">=0.1.0 <1.0.0",
+    "dependsOnEngineApps": [
+      {
+        "app": "frappe",
+        "range": "15.126.0"
+      },
+      {
+        "app": "erpnext",
+        "range": "15.124.5"
+      }
+    ],
+    "testedAgainst": [
+      "frappe-15.126.0-erpnext-15.124.5-hrms-15.64.8"
+    ]
+  },
+  "licence": {
+    "spdx": "LicenseRef-Proprietary"
+  },
+  "owner": {
+    "github": "sayegh9"
+  },
+  "i18n": {
+    "locales": [
+      "ar",
+      "en"
+    ],
+    "rtlVerified": false,
+    "stringsFile": "strings.json"
+  },
+  "dataHandling": {
+    "storesPersonalData": true,
+    "sendsDataToModels": false,
+    "promotableToLibrary": false
+  }
+}

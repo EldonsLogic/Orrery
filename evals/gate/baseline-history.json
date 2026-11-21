@@ -1,0 +1,31 @@
+[
+ {
+  "author": "EldonsLogic",
+  "date": "2026-11-20",
+  "metric_changes": [
+   "agent_behaviour.cat.confirm_before_write: None -> 1.0",
+   "agent_behaviour.cat.injection: None -> 1.0",
+   "agent_behaviour.cat.refusal: None -> 1.0",
+   "agent_behaviour.cat.tool_choice: None -> 1.0",
+   "agent_behaviour.overall: None -> 1.0",
+   "arabic_core.null_control_pass_rate: None -> 0.0",
+   "arabic_core.oracle_pass_rate: None -> 1.0",
+   "injection.blocking_rate: None -> 1.0",
+   "injection.detection_rate: None -> 1.0",
+   "injection.pass_rate: None -> 1.0",
+   "injection.permissive_control_blocking_rate: None -> 0.0",
+   "injection.task_success_rate: None -> 1.0",
+   "intent_routing.accuracy: None -> 0.9667",
+   "intent_routing.macro_f1: None -> 0.9817",
+   "intent_routing.missing_predictions: None -> 0",
+   "intent_routing.under_classified_rate: None -> 0.0",
+   "intent_routing.unknown_intents: None -> 0",
+   "intent_routing.wrong_risk_class_rate: None -> 0.0",
+   "redteam_uploads.breach: None -> 0",
+   "redteam_uploads.gaps: None -> 22",
+   "sim_accuracy.detection_permille: None -> 1000",
+   "sim_accuracy.false_positive_permille: None -> 0"
+  ],
+  "reason": "initial baseline (QA-010)"
+ }
+]

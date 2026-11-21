@@ -131,6 +131,7 @@ jobs:
           # - ERP-003 and ERP-021 use the dev bench; its tests discover ERP-014 in apps/engine.
           # - ERP-013 uses the Discovery prevalidation contract and tabular connector.
           # - Components are also used by discovery, studio and the engine.
+          # - ERP-016 print documents read docs/brand/tokens/tokens.json, so it selects the engine suite.
           echo "brand=$(check_path '^docs/brand/(tools|tokens)/')" >> "$GITHUB_OUTPUT"
           echo "blueprint=$(check_path '^(services/(blueprint|discovery/templates)/|components/|docs/brand/(tools|tokens)/)')" >> "$GITHUB_OUTPUT"
           echo "control_plane=$(check_path '^services/control-plane/')" >> "$GITHUB_OUTPUT"
@@ -139,7 +140,7 @@ jobs:
           echo "gateway=$(check_path '^(services/gateway/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
           echo "operate=$(check_path '^(services/(operate|blueprint|control-plane|gateway)/)')" >> "$GITHUB_OUTPUT"
           echo "studio=$(check_path '^(services/studio/|services/blueprint/|services/datasets/|components/)')" >> "$GITHUB_OUTPUT"
-          echo "engine=$(check_path '^(apps/engine/|services/blueprint/|services/discovery/(prevalidate|connectors)/|components/|infra/dev/docker/)')" >> "$GITHUB_OUTPUT"
+          echo "engine=$(check_path '^(apps/engine/|services/blueprint/|services/discovery/(prevalidate|connectors)/|components/|infra/dev/docker/|docs/brand/tokens/tokens\.json$)')" >> "$GITHUB_OUTPUT"
           echo "evals=$(check_path '^(evals/|services/(blueprint|discovery|operate)/)')" >> "$GITHUB_OUTPUT"
           echo "scripts=$(check_path '^scripts/')" >> "$GITHUB_OUTPUT"
           echo "infra=$(check_path '^(infra/|apps/engine/)')" >> "$GITHUB_OUTPUT"
@@ -294,6 +295,12 @@ jobs:
         env:
           PYTHONPATH: apps/engine/change_engine:.
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_cmp_005_calendar.py apps/engine/change_engine/change_engine/tests/test_cmp_005_hijri_dates.py -v
+
+      - name: Tenant-branded document templates tests (ERP-016)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine:.
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_016_branded_templates.py -v
 
       - name: Apply with preview and DDL plan gate tests (BPL-007)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

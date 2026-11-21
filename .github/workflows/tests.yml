@@ -258,7 +258,7 @@ jobs:
       # --- apps/engine ---
       - name: Install dependencies (apps/engine)
         if: steps.filter.outputs.engine == 'true'
-        run: pip install -r services/blueprint/requirements.txt "pydantic>=2"
+        run: pip install -r services/blueprint/requirements.txt "pydantic>=2" "werkzeug==3.1.3"
 
       - name: Lint (apps/engine)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -322,6 +322,12 @@ jobs:
         env:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_021_phase0_proofs.py -v
+
+      - name: Headless request guard tests (ERP-020)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_020_route_guard.py apps/engine/change_engine/change_engine/tests/test_erp_020_wsgi_guard.py -v
 
       - name: Change engine configuration and policy unit tests
         if: steps.filter.outputs.engine == 'true' && !cancelled()

@@ -16,6 +16,10 @@ app_license = "TBD"  # see docs/legal/checklist.md (licence decision pending)
 # before app model synchronization invokes document validation hooks.
 before_install = "change_engine.patches.ce_sec_003_create_policy_tables.execute"
 
+# ERP-020 / ADR-0016: headless engine. Deny every HTTP request unless it is on the internal
+# allowlist (Desk, /login, website routes and unlisted API calls all get a plain 404).
+before_request = ["change_engine.api.route_guard.enforce_internal_only"]
+
 # Runtime policy enforcement on supported write paths (Desk, REST, background jobs).
 # NOTE: runs for every DocType; the policy store fails closed on database errors.
 doc_events = {

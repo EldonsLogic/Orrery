@@ -17,6 +17,7 @@ The contracts are the source of truth for how the five parts of the platform tal
 | - | Engine adapter (operations, errors, conformance; schemas in [engine-adapter/](engine-adapter/)) | [engine-adapter.md](engine-adapter.md) | 0.1.2 |
 | - | Compiled artifact | [compiled-artifact.schema.json](compiled-artifact.schema.json) | 0.1.0 |
 | - | Blueprint-to-engine mapping (draft, ADR-0030 Proposed) | [engine-mapping.md](engine-mapping.md), [schema](engine-mapping.schema.json) | 0.1.0 |
+| - | Model-call interface (draft, ADR-0054 Proposed; examples `examples/model-call-*.json`) | [model-call.md](model-call.md), [schema](model-call.schema.json) | 0.2.0 |
 
 Examples: [examples/blueprint-trading-minimal.json](examples/blueprint-trading-minimal.json) and [examples/engine-mapping-golden-path.json](examples/engine-mapping-golden-path.json) (fictional data; must always validate against their schemas).
 Compiled-artifact samples: [examples/compiled-artifact-add-field.json](examples/compiled-artifact-add-field.json), [examples/compiled-artifact-add-workflow-state.json](examples/compiled-artifact-add-workflow-state.json), [examples/compiled-artifact-remove-field.json](examples/compiled-artifact-remove-field.json) (fictional; built from the example Blueprint with bpdiff hashes).

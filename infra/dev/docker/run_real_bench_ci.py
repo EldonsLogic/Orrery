@@ -30,6 +30,9 @@ DOCKER_DIR = Path(__file__).resolve().parent
 DEFAULT_COMPOSE_FILE = DOCKER_DIR / "docker-compose.dev.yml"
 SAFE_PROJECT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 SAFE_SITE_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*\.localhost$")
+SECRET_KEY_PARTS = ("PASSWORD", "SECRET", "TOKEN", "API_KEY")
+# INF-015: the bench's Redis URLs carry the password as redis://:<password>@host.
+REDIS_URL_CREDENTIAL_RE = re.compile(r"(rediss?://[^:@/\s]*:)[^@\s]+@")
 
 
 def _pick_free_port() -> int:
@@ -43,6 +46,7 @@ def _compose_env(
     db_root_password: str,
     admin_password: str,
     internal_token: str,
+    redis_password: str,
     site_name: str,
     engine_port: int,
 ) -> dict[str, str]:
@@ -50,6 +54,7 @@ def _compose_env(
     env["DB_ROOT_PASSWORD"] = db_root_password
     env["ADMIN_PASSWORD"] = admin_password
     env["ENGINE_INTERNAL_TOKEN"] = internal_token
+    env["REDIS_PASSWORD"] = redis_password
     env["SITE_NAME"] = site_name
     env["ENGINE_PORT"] = str(engine_port)
     return env
@@ -111,10 +116,13 @@ def _wait_for_engine_ready(
                 "engine",
                 "env/bin/python",
                 "-c",
-                "import socket, redis; "
+                "import json, socket, redis; "
                 "from change_engine.api.route_guard import validate_internal_tokens; "
                 "validate_internal_tokens(); "
-                "assert all(redis.Redis(host=host, socket_timeout=2).ping() for host in ('redis-cache', 'redis-queue')); "
+                # INF-015: authenticate with the URLs the bench itself uses (they carry the password).
+                "conf = json.load(open('sites/common_site_config.json')); "
+                "assert all(redis.Redis.from_url(conf[key], socket_timeout=2).ping() "
+                "for key in ('redis_cache', 'redis_queue')); "
                 "s = socket.create_connection(('127.0.0.1', 8000), timeout=2); s.close()",
                 timeout=30,
             )
@@ -219,14 +227,19 @@ def _verify_http_ready(site_name: str, engine_port: int, timeout_seconds: int = 
     raise RuntimeError(f"Engine HTTP endpoint did not respond on 127.0.0.1:{engine_port} for {site_name}")
 
 
+def redact(text: str, env: dict[str, str]) -> str:
+    """Hide the stack's credentials, and any credential in a redis:// URL, before printing child output."""
+    for key, value in env.items():
+        if value and any(part in key.upper() for part in SECRET_KEY_PARTS):
+            text = text.replace(value, "<REDACTED>")
+    return REDIS_URL_CREDENTIAL_RE.sub(r"\1<REDACTED>@", text)
+
+
 def _failure_diagnostics(project: str, compose_file: Path, env: dict[str, str]) -> None:
     """Collect bounded synthetic-stack diagnostics before teardown, without its credentials."""
     try:
         result = _run_compose(project, compose_file, env, "logs", "--no-color", "--tail", "80", timeout=30)
-        output = (result.stdout or "") + (result.stderr or "")
-        for key, value in env.items():
-            if value and any(part in key.upper() for part in ("PASSWORD", "SECRET", "TOKEN", "API_KEY")):
-                output = output.replace(value, "<REDACTED>")
+        output = redact((result.stdout or "") + (result.stderr or ""), env)
         print(output[-12000:], file=sys.stderr)
     except Exception:
         print("Could not collect bench failure diagnostics.", file=sys.stderr)
@@ -258,10 +271,16 @@ def run_real_bench_ci(
     internal_token = os.environ.get("ENGINE_INTERNAL_TOKEN") if reuse_project else secrets.token_urlsafe(32)
     if not internal_token:
         raise ValueError("Set ENGINE_INTERNAL_TOKEN to the reused engine's internal token")
+    # INF-015: every fresh stack mints its own Redis password. A reused stack keeps the one it started
+    # with, supplied in the environment like the internal token, so redaction covers the real value.
+    redis_password = os.environ.get("REDIS_PASSWORD") if reuse_project else secrets.token_urlsafe(32)
+    if not redis_password:
+        raise ValueError("Set REDIS_PASSWORD to the reused stack's Redis password")
     env = _compose_env(
         db_root_password=db_root_password,
         admin_password=admin_password,
         internal_token=internal_token,
+        redis_password=redis_password,
         site_name=site,
         engine_port=port,
     )
@@ -292,7 +311,13 @@ def run_real_bench_ci(
             env={**env, "COMPOSE_PROJECT_NAME": project_name, "SITE_NAME": site, "ENGINE_PORT": str(port)},
             timeout=120,
             check=False,
+            capture_output=True,
+            text=True,
         )
+        # The verifier's child output can carry the bench's Redis URLs: print it redacted.
+        verifier_output = redact((verify_res.stdout or "") + (verify_res.stderr or ""), env)
+        if verifier_output:
+            print(verifier_output.rstrip("\n"), file=sys.stdout if verify_res.returncode == 0 else sys.stderr)
         if verify_res.returncode != 0:
             print("Pinned bench verification failed.", file=sys.stderr)
             return verify_res.returncode
@@ -360,7 +385,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--reuse-project",
         action="store_true",
-        help="Reuse a running Compose project with its existing ENGINE_INTERNAL_TOKEN supplied in the environment.",
+        help="Reuse a running Compose project with its existing ENGINE_INTERNAL_TOKEN and REDIS_PASSWORD "
+        "supplied in the environment.",
     )
     ap.add_argument("--keep-stack", action="store_true", help="Keep containers and volumes running after exit.")
     args = ap.parse_args(argv)

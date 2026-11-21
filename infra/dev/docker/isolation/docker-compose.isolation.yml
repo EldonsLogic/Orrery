@@ -18,9 +18,11 @@ services:
       - DB_PORT=3306
       - REDIS_CACHE_HOST=redis-cache
       - REDIS_QUEUE_HOST=redis-queue
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
     volumes:
       - ../../../apps/engine/change_engine:/home/frappe/frappe-bench/apps/change_engine:rw
       - sites_data:/home/frappe/frappe-bench/sites
       - logs_data:/home/frappe/frappe-bench/logs
+    networks: [default, redis_internal]

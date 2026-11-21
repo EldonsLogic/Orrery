@@ -9,6 +9,10 @@ dependencies = [
     "pydantic>=2",
 ]
 
+[project.optional-dependencies]
+# MariaDB adapter state store (ERP-026); the bench already ships pymysql
+mariadb = ["pymysql>=1.1"]
+
 [build-system]
 requires = ["flit_core >=3.4,<5"]
 build-backend = "flit_core.buildapi"

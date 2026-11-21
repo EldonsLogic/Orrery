@@ -1197,7 +1197,7 @@ class FrappeRuntimeBackend:
         if is_protected_entity(entity) or entity in ENTITY_TO_DOCTYPE:
             return False
         doctype = entity_to_doctype(entity)
-        if not _SAFE_SQL_IDENT_RE.match(doctype):
+        if not _SAFE_SQL_IDENT_RE.fullmatch(doctype):
             return False
         with self._site_session(tenant_id) as (f, _):
             row = f.db.get_value("DocType", doctype, ["name", "custom", "module"])
@@ -1254,7 +1254,7 @@ class FrappeRuntimeBackend:
                 raise self._refuse("subject_missing")
             return reviewed
         doctype = entity_to_doctype(entity)
-        if entity in ENTITY_TO_DOCTYPE or not _SAFE_SQL_IDENT_RE.match(doctype):
+        if entity in ENTITY_TO_DOCTYPE or not _SAFE_SQL_IDENT_RE.fullmatch(doctype):
             raise self._refuse("protected_subject")
         row = f.db.get_value("DocType", doctype, ["name", "custom", "module"])  # a failed read raises
         if not row or str(row[0]) != doctype or int(row[1] or 0) != 1 or row[2] != ADAPTER_DOCTYPE_MODULE:
@@ -1493,7 +1493,7 @@ class FrappeRuntimeBackend:
         entity_id = segs[1] if segs[:1] == ["entities"] and len(segs) >= 2 else "entity"
         field_id = segs[3] if len(segs) >= 4 and segs[2] == "fields" else segs[-1]
         doctype = entity_to_doctype(entity_id)
-        if not _SAFE_SQL_IDENT_RE.match(doctype):
+        if not _SAFE_SQL_IDENT_RE.fullmatch(doctype):
             raise FrappeBackendError("invalid_request", stage="validate")
         col = _sanitize_custom_fieldname(field_id)
         table = f"tab{doctype}"

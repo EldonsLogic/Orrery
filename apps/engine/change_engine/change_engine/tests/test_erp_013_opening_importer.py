@@ -49,9 +49,13 @@ def batch(datasets=None, **changes):
 def backend(monkeypatch):
     """Trusted server session; roles are never an importer request argument."""
     monkeypatch.setenv("CHANGE_ENGINE_ENV", "test")
-    store = SQLiteImportBackend(session=lambda: {
-        "user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
-        "companies": ["Synthetic Trading"], "roles": ["Accounts Manager"]})
+    store = SQLiteImportBackend(
+        session=lambda: {
+            "user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
+            "companies": ["Synthetic Trading"], "roles": ["Accounts Manager"],
+        },
+        company_currencies={("tenant-a", "Synthetic Trading"): "SAR"},
+    )
     yield store
     store.close()
 
@@ -236,14 +240,17 @@ def test_durable_journal_restart_and_competing_connections(tmp_path):
     path = str(tmp_path / "import.db")
     session = lambda: {"user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
                        "companies": ["Synthetic Trading"], "capabilities": ["opening_import"]}
-    with SQLiteImportBackend(path, session=session) as store:
+    with SQLiteImportBackend(path, session=session,
+                             company_currencies={("tenant-a", "Synthetic Trading"): "SAR"}) as store:
         apply(OpeningImporter(store), batch())
-    with SQLiteImportBackend(path, session=session) as store:
+    with SQLiteImportBackend(path, session=session,
+                             company_currencies={("tenant-a", "Synthetic Trading"): "SAR"}) as store:
         assert apply(OpeningImporter(store), batch())["status"] == "already_applied"
     source = batch({"Customer": [{"customer_code": "C2", "customer_name": "Different buyer"}]}, batch_id="competing")
 
     def competing(_):
-        with SQLiteImportBackend(path, session=session) as store:
+        with SQLiteImportBackend(path, session=session,
+                             company_currencies={("tenant-a", "Synthetic Trading"): "SAR"}) as store:
             return apply(OpeningImporter(store), source)["status"]
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -334,7 +341,15 @@ def test_report_is_bound_to_plan_and_wrapped_datasets(backend):
 def test_separate_tenants_and_companies_have_independent_masters(tmp_path):
     session = {"user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
                "companies": ["Synthetic Trading"], "capabilities": ["opening_import"]}
-    with SQLiteImportBackend(str(tmp_path / "scope.db"), session=lambda: session) as store:
+    with SQLiteImportBackend(
+        str(tmp_path / "scope.db"),
+        session=lambda: session,
+        company_currencies={
+            ("tenant-a", "Synthetic Trading"): "SAR",
+            ("tenant-b", "Synthetic Trading"): "SAR",
+            ("tenant-b", "Other"): "SAR",
+        },
+    ) as store:
         importer = OpeningImporter(store)
         source = batch({"Customer": [{"customer_name": "Buyer"}]})
         apply(importer, source)

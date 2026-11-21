@@ -323,7 +323,7 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine:.
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_opening_importer.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_fixes.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_opening_importer.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_fixes.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_round4.py -q
 
       - name: Durable adapter state and production guard tests (ERP-026, offline)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

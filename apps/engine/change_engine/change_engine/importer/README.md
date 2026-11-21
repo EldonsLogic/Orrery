@@ -3,7 +3,7 @@
 Status: implemented for offline verification; Tier 3 review pending.
 Owner: partner. Plan: ERP-013.
 
-`OpeningImporter(backend)` exposes `validate(batch)`, `preview(batch)`, `confirm(batch, confirmed_by=..., owner_confirmed_distinct=...)` and
+`OpeningImporter(backend)` exposes `validate(batch)`, `preview(batch)`, `confirm(batch, confirmed_by=..., owner_confirmed_distinct=..., plan_hash=...)` and
 `apply(batch, confirmed_by=..., plan_hash=...)`. It has no public endpoint or
 implicit backend. The supplied `SQLiteImportBackend` is a transactional reference
 store for synthetic runs, including file-backed restart tests. Its records are
@@ -45,29 +45,28 @@ entity, row or mapping field is accepted.
    financial number is corrected.
 3. **Confirm & Apply:** when master name fields trigger near-duplicate name
    groups, an authorised human calls `confirm(batch, confirmed_by=...,
-   owner_confirmed_distinct=...)` with `opening_import_confirm` capability to
-   record distinct group IDs server-side (bound to `(tenant, company, batch_id,
-   source_digest)`), never in the source payload. `apply` authenticates early
+   owner_confirmed_distinct=..., plan_hash=...)` with `opening_import_confirm` capability to
+   append distinct group IDs and confirmer server-side (bound to `(tenant, company, batch_id,
+   source_digest)` and verified against the pending `plan_hash`), never in the source payload. `apply` authenticates early
    using the server-owned backend session's `opening_import` capability,
    tenant/company membership and human identity. Require `confirmed_by` equal to
    that identity and the exact preview hash. Request-supplied roles/capabilities
    are forbidden. Within one transaction, recompute validation and master
    snapshots, claim the company opening, merge and write masters (omitted fields
    are preserved; explicit `""` or `None` clears optional fields) before details,
-   and journal the hash, source digest, approver and before/after snapshots. A
+   and journal the hash, source digest, approver, distinct confirmer and before/after snapshots. A
    changed master requires a new preview approval. An identical committed batch
    returns `already_applied` using its original hash and source digest; an
    altered batch returns `IMP-CONFLICT`. A different batch with any opening rows
    for the same `(tenant, company)` returns `IMP-OPENING-CONFLICT`, including
    legacy reference records without a claim. There is no supersede/reversal
    path; master-only batches remain possible. Write/journal failure and
-   transactional `IMP-CONFIRM` hash mismatches roll back inserts **and
+   confirmation (`IMP-CONFIRM`) failures roll back inserts **and
    prior-record updates** and record a sanitized failed attempt with the
    authenticated user ID. The offline failure log is append-only per tenant and
    has no retention cap. Older records without an actor keep a null user ID.
-   Rollback or failure-log errors require recovery (`IMP-RECOVERY`). Auth,
-   pre-transaction confirmation checks, and initial validation refusals do not
-   write a failure record.
+   Rollback or failure-log errors require recovery (`IMP-RECOVERY`). Auth and
+   initial validation refusals do not write a failure record.
 
 ## Entities and invariants
 
@@ -127,12 +126,15 @@ input string bytes including report, 200,000 nodes and 12 nesting levels. Becaus
 DSC-019 accumulates findings and compares names pairwise, each entity dataset is
 also capped at 250 rows and a conservative two-million-cell pairwise name
 comparison budget before its invocation (`IMP-LIMIT`); this conservative
-offline budget must be reassessed before live bulk import. Text starting with `=`, `+`, `-`, `@`, tab or carriage return is rejected after
+offline budget must be reassessed before live bulk import. Text starting with `=`, `+`, `-`, `@`, tab or carriage return is rejected (`IMP-FORMULA`) after
 NFKC detection-only normalization and leading Unicode whitespace/format/control
-removal. Any `Cf` or `Cc` character other than standard Arabic directional and
-joining marks (`\u200c`, `\u200d`, `\u200e`, `\u200f`) anywhere in text is also
-rejected. Accepted source spelling is unchanged. Numeric fields follow their
-stricter decimal grammar.
+removal. Embedded tabs, newlines and carriage returns fail with `IMP-SCHEMA`.
+Standard Arabic directional and joining marks (`\u200c`, `\u200d`, `\u200e`,
+`\u200f`, `\u061c`) are allowed only in name and free-text fields (and stripped
+when computing name-based master business keys) and refused with `IMP-SCHEMA` in
+codes, account numbers, link fields and batch metadata. Any other `Cf` or `Cc`
+character anywhere in text is rejected (`IMP-FORMULA`). Accepted source
+spelling is unchanged. Numeric fields follow their stricter decimal grammar.
 
 ## DSC-011 and DSC-019 integration
 

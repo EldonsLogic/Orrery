@@ -3,15 +3,14 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import hmac
 import json
 import re
 import unicodedata
-from collections import Counter
 from decimal import Context, Decimal, ROUND_HALF_UP, localcontext
 
-from services.discovery.prevalidate import PrevalidationError, prevalidate
-
 from .errors import ImportFailure
+from .upstream import MAX_PREVALIDATION_ROWS, check_report as _check_report, verify_upstream as _verify_upstream
 
 MASTER_FIELDS = {
     "Customer": {"customer_code", "customer_name", "customer_type", "customer_group", "territory", "tax_id"},
@@ -36,15 +35,17 @@ OPENING_LINKS = {
     "Stock": (("item_code", "Item"), ("warehouse", "Warehouse")),
 }
 FORMULA = ("=", "+", "-", "@", "\t", "\r")
-SAFE_FORMAT_MARKS = frozenset({"\u200c", "\u200d", "\u200e", "\u200f"})
+SAFE_FORMAT_MARKS = frozenset({"\u200c", "\u200d", "\u200e", "\u200f", "\u061c"})
+NAME_TEXT_FIELDS = frozenset({
+    "customer_name", "customer_type", "customer_group", "territory",
+    "supplier_name", "supplier_type", "supplier_group",
+    "item_name", "item_group", "warehouse_name", "account_name",
+})
 ACCOUNT_TYPES = {"Receivable", "Payable", "Stock", "Other"}
 MAX_BYTES = 2_000_000
 # UNVERIFIED minor units from ISO 4217 (SIX Maintenance Agency, List One).
 CURRENCY_MINOR_UNITS = {"SAR": 2, "AED": 2, "EGP": 2, "QAR": 2, "USD": 2, "EUR": 2, "GBP": 2}
 CURRENCIES = frozenset(CURRENCY_MINOR_UNITS)
-# DSC-019 accumulates findings and compares names pairwise. Bound each invocation
-# before calling it; public errors are separately fail-fast (one safe error).
-MAX_PREVALIDATION_ROWS = 250
 
 
 def fail(code="IMP-SCHEMA"):
@@ -87,8 +88,8 @@ def bounded(value, *, depth=0, budget=None):
         fail("IMP-LIMIT")
 
 
-def text(value):
-    """Reject formula prefixes even after whitespace; retain exact spelling."""
+def text(value, *, allow_format_marks: bool = False):
+    """Reject formula prefixes and disallowed control/format marks; retain exact spelling."""
     if not isinstance(value, str) or not value or not value.strip():
         fail()
     if not any(not c.isspace() and c not in SAFE_FORMAT_MARKS for c in value):
@@ -98,9 +99,16 @@ def text(value):
     # Normalize only a detection copy. Preserve accepted source spelling verbatim.
     probe = unicodedata.normalize("NFKC", value)
     probe = probe.lstrip("".join(c for c in probe if c.isspace() or unicodedata.category(c) in {"Cf", "Cc"}))
-    if (probe.startswith(FORMULA) or value.startswith(FORMULA)
-            or any(unicodedata.category(c) in {"Cf", "Cc"} and c not in SAFE_FORMAT_MARKS for c in value)):
+    if probe.startswith(FORMULA) or value.startswith(FORMULA):
         fail("IMP-FORMULA")
+    for ch in value:
+        if ch in SAFE_FORMAT_MARKS:
+            if not allow_format_marks:
+                fail("IMP-SCHEMA")
+        elif ch in ("\t", "\n", "\r"):
+            fail("IMP-SCHEMA")
+        elif unicodedata.category(ch) in {"Cf", "Cc"}:
+            fail("IMP-FORMULA")
     return value
 
 
@@ -129,122 +137,27 @@ def number(value, *, positive=False, currency_precision=None):
 
 
 def business_key(entity, row):
-    """Prefer stable codes; names are fallback keys, without renaming/normalising."""
+    """Prefer stable codes; names are fallback keys, stripping invisible marks from keys."""
     for field in KEYS[entity]:
         if row.get(field):
-            return canonical([field, row[field]])
+            val = row[field]
+            if field in NAME_TEXT_FIELDS:
+                val = "".join(c for c in val if c not in SAFE_FORMAT_MARKS)
+            return canonical([field, val])
     fail()
 
 
-def _valid_name_group(group) -> bool:
-    return (isinstance(group, dict)
-            and set(group) == {"canonical", "members", "keys", "rule", "needs_owner_confirmation"}
-            and isinstance(group["canonical"], str) and isinstance(group["rule"], str)
-            and group["needs_owner_confirmation"] is True
-            and isinstance(group["keys"], list) and all(isinstance(k, str) for k in group["keys"])
-            and isinstance(group["members"], list) and len(group["members"]) >= 2
-            and all(isinstance(m, dict) and isinstance(m.get("name"), str) for m in group["members"]))
-
-
 def check_report(report, source_rows, *, allow_name_groups: bool = False):
-    """Consume DSC-019 v1 without adopting suggestions or dropping quarantine.
-
-    Matching row multisets detect a report reused for different data, including
-    missing quarantined rows. When allow_name_groups is True, unblocked PRE-801/
-    PRE-802 name-group findings are accepted structurally for downstream server
-    verification and owner confirmation checking.
-    """
-    try:
-        if isinstance(report, str):
-            report = json.loads(report, parse_float=Decimal)
-        required = {"version", "summary", "counts", "findings", "accepted", "quarantine", "owner_review", "name_groups"}
-        if not isinstance(report, dict) or set(report) != required or type(report["version"]) is not int or report["version"] != 1:
-            fail("IMP-REPORT")
-        bounded(report)
-        for key in ("findings", "accepted", "quarantine", "owner_review"):
-            if not isinstance(report[key], list):
-                fail("IMP-REPORT")
-        if (not isinstance(report["name_groups"], dict) or set(report["name_groups"]) != {"party", "item"}
-                or any(not isinstance(g, list) for g in report["name_groups"].values())):
-            fail("IMP-REPORT")
-        counts_summary = {
-            "quarantined": len(report["quarantine"]), "owner_review": len(report["owner_review"]),
-            "findings": len(report["findings"]),
-            "duplicate_groups": sum(len(g) if isinstance(g, list) else 1 for g in report["name_groups"].values()),
-        }
-        if report["quarantine"]:
-            raise ImportFailure("IMP-REPORT", report_counts=counts_summary)
-        if not allow_name_groups:
-            if report["owner_review"] or any(report["name_groups"].values()) or report["findings"]:
-                raise ImportFailure("IMP-REPORT", report_counts=counts_summary)
-        else:
-            expected_owner = set()
-            for finding in report["findings"]:
-                if (not isinstance(finding, dict) or finding.get("code") not in {"PRE-801", "PRE-802"}
-                        or finding.get("severity") != "needs_owner" or finding.get("quarantined") is not False
-                        or not isinstance(finding.get("rows"), list)
-                        or not all(isinstance(ptr, dict) for ptr in finding["rows"])):
-                    raise ImportFailure("IMP-REPORT", report_counts=counts_summary)
-                expected_owner.update(canonical(ptr) for ptr in finding["rows"])
-            if (not all(isinstance(ptr, dict) for ptr in report["owner_review"])
-                    or Counter(canonical(ptr) for ptr in report["owner_review"]) != Counter(expected_owner)
-                    or any(not _valid_name_group(g) for lst in report["name_groups"].values() for g in lst)):
-                raise ImportFailure("IMP-REPORT", report_counts=counts_summary)
-            if report["findings"] and not any(report["name_groups"].values()):
-                raise ImportFailure("IMP-REPORT", report_counts=counts_summary)
-        expected = {"rows": len(source_rows), "accepted": len(source_rows), "quarantined": 0,
-                    "owner_review": len(report["owner_review"]), "findings": len(report["findings"])}
-        if (report["summary"] != expected or any(type(v) is not int for v in report["summary"].values())
-                or report["counts"] != dict(Counter(f["code"] for f in report["findings"]))
-                or Counter(canonical(r) for r in report["accepted"]) != Counter(canonical(r) for r in source_rows)):
-            fail("IMP-REPORT")
-        return report
-    except (TypeError, ValueError, KeyError, RecursionError):
-        fail("IMP-REPORT")
+    """Consume DSC-019 v1 without adopting suggestions or dropping quarantine."""
+    return _check_report(
+        report, source_rows, allow_name_groups=allow_name_groups,
+        bounded_fn=bounded, canonical_fn=canonical, fail_fn=fail,
+    )
 
 
 def verify_upstream(datasets, meta):
-    """Re-run DSC-019 on submitted rows with server-owned master name mappings.
-
-    Near-duplicate checks run on master name fields only, never detail links or
-    codes. Returns detected name groups for server-verified owner confirmation.
-    """
-    mappings = {"Customer": {"party": "customer_name"}, "Supplier": {"party": "supplier_name"},
-                "Item": {"item": "item_name"}}
-    detected_groups = []
-    try:
-        with localcontext(Context(prec=128)):
-            for entity, dataset in sorted(datasets.items()):
-                raw = dataset["rows"] if isinstance(dataset, dict) else dataset
-                if len(raw) > MAX_PREVALIDATION_ROWS:
-                    fail("IMP-LIMIT")
-                config = {"required": {"*": []}, "fields": {"date": "posting_date", **mappings.get(entity, {})},
-                          "max_rows": MAX_PREVALIDATION_ROWS}
-                # Upper-bound pairwise edit-distance work before the upstream API
-                # allocates groups/findings. Raw name lengths are conservative.
-                work = 0
-                for field in (config["fields"].get("party", "party"), config["fields"].get("item", "item")):
-                    lengths = [len(name) for name in {r.get(field) for r in raw} if isinstance(name, str)]
-                    work += (sum(lengths) ** 2 - sum(n * n for n in lengths)) // 2
-                if work > 2_000_000:
-                    fail("IMP-LIMIT")
-                # Missing per-row date/currency inherits the validated batch context.
-                rows = [{"posting_date": meta["posting_date"], "currency": meta["currency"], **r} for r in raw]
-                generated = prevalidate(rows, config).to_dict()
-                check_report(generated, rows, allow_name_groups=True)
-                for kind in ("party", "item"):
-                    for grp in generated["name_groups"][kind]:
-                        members = sorted(m["name"] for m in grp["members"])
-                        gid = hashlib.sha256(
-                            canonical({"entity": entity, "rule": grp["rule"], "members": members}).encode("utf-8")
-                        ).hexdigest()
-                        detected_groups.append({
-                            "id": gid, "entity": entity, "kind": kind,
-                            "rule": grp["rule"], "members": members,
-                        })
-        return detected_groups
-    except PrevalidationError:
-        fail("IMP-REPORT")
+    """Re-run DSC-019 on submitted rows with server-owned master name mappings."""
+    return _verify_upstream(datasets, meta, bounded_fn=bounded, canonical_fn=canonical, fail_fn=fail)
 
 
 def _resolve_master(target, value, incoming, lookup, references):
@@ -332,7 +245,7 @@ def master_context(rows, row_clears, lookup):
                 row["account"] = acct_master.get("account_number") or acct_master.get("account_name")
             else:
                 acct_key = None
-            resolved_key = (*resolved_keys, acct_key)
+            resolved_key = tuple(resolved_keys)
             if resolved_key in seen:
                 fail("IMP-DUPLICATE")
             seen.add(resolved_key)
@@ -379,7 +292,8 @@ def _reconcile_controls(rows, tb_account_keys, detail_accounts, precision):
         return totals, reconciliations
 
 
-def prepare(source, max_rows, lookup, currency_lookup, distinct_lookup, *, confirm_distinct=None):
+def prepare(source, max_rows, lookup, currency_lookup, distinct_lookup, *,
+            confirm_distinct=None, pending_plan_hash=None):
     """Validate a complete batch and return canonical plan material plus totals."""
     bounded(source)
     required = {"tenant_id", "company", "batch_id", "posting_date", "currency", "datasets", "prevalidation"}
@@ -430,7 +344,7 @@ def prepare(source, max_rows, lookup, currency_lookup, distinct_lookup, *, confi
                             fail()
                         clears.add(k)
                     else:
-                        row[k] = text(v)
+                        row[k] = text(v, allow_format_marks=k in NAME_TEXT_FIELDS)
                 if not row:
                     fail()
                 key = business_key(entity, row)
@@ -475,16 +389,17 @@ def prepare(source, max_rows, lookup, currency_lookup, distinct_lookup, *, confi
     source_digest = hashlib.sha256(canonical(source_material).encode("utf-8")).hexdigest()
     plan = {**meta, "datasets": rows, "prevalidation": report, "version": 2,
             "master_changes": changes, "references": references, "source_digest": source_digest}
+    pending_hash = hashlib.sha256(canonical(plan).encode("utf-8")).hexdigest()
     if detected_groups:
         expected_ids = sorted(g["id"] for g in detected_groups)
         if confirm_distinct is not None:
             confirmed_ids = sorted(confirm_distinct)
-            if confirmed_ids != expected_ids:
+            if (confirmed_ids != expected_ids or not isinstance(pending_plan_hash, str)
+                    or not hmac.compare_digest(pending_plan_hash, pending_hash)):
                 fail("IMP-CONFIRM")
         else:
             confirmed_ids = sorted(distinct_lookup(meta["tenant_id"], meta["company"], meta["batch_id"], source_digest))
             if confirmed_ids != expected_ids:
-                pending_hash = hashlib.sha256(canonical(plan).encode("utf-8")).hexdigest()
                 raise ImportFailure(
                     "IMP-REPORT",
                     report_counts={

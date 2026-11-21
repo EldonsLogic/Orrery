@@ -30,7 +30,7 @@ class ImportBackend(Protocol):
     """
 
     def identity(self) -> dict: ...
-    def company_currency(self, tenant_id: str, company: str) -> str: ...
+    def company_currency(self, tenant_id: str, company: str) -> str | None: ...
     def master(self, tenant_id: str, company: str, entity: str, key: str) -> dict | None: ...
     def distinct_confirmations(self, tenant_id: str, company: str, batch_id: str, source_digest: str) -> list[str]: ...
     def record_distinct_confirmation(self, tenant_id: str, company: str, batch_id: str,
@@ -53,7 +53,7 @@ class SQLiteImportBackend:
 
     def __init__(self, path: str = ":memory:", *, session: Callable[[], dict] | None = None,
                  company_currencies: dict[tuple[str, str], str] | None = None,
-                 default_currency: str = "SAR"):
+                 default_currency: str | None = None):
         self._session = session
         self._default_currency = default_currency
         self._lock = threading.RLock()
@@ -79,9 +79,9 @@ class SQLiteImportBackend:
                 business_key TEXT NOT NULL, before_json TEXT NOT NULL, after_json TEXT NOT NULL,
                 PRIMARY KEY (tenant_id, batch_id, entity, business_key));
             CREATE TABLE IF NOT EXISTS import_distinct_confirmations (
+                seq INTEGER PRIMARY KEY,
                 tenant_id TEXT NOT NULL, company TEXT NOT NULL, batch_id TEXT NOT NULL,
-                source_digest TEXT NOT NULL, group_ids_json TEXT NOT NULL, confirmed_by TEXT NOT NULL,
-                PRIMARY KEY (tenant_id, company, batch_id, source_digest));
+                source_digest TEXT NOT NULL, group_ids_json TEXT NOT NULL, confirmed_by TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS import_failures (
                 seq INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, batch_id TEXT NOT NULL,
                 plan_hash TEXT NOT NULL, code TEXT NOT NULL, user_id TEXT NOT NULL);
@@ -89,8 +89,24 @@ class SQLiteImportBackend:
         # Older offline databases keep their journal; missing source evidence fails
         # closed on retries. Existing opening records are checked by claim_opening.
         with self.transaction():
-            if "source_digest" not in {r[1] for r in self.conn.execute("PRAGMA table_info(import_batches)")}:
+            batch_cols = {r[1] for r in self.conn.execute("PRAGMA table_info(import_batches)")}
+            if "source_digest" not in batch_cols:
                 self.conn.execute("ALTER TABLE import_batches ADD COLUMN source_digest TEXT")
+            if "distinct_confirmed_by" not in batch_cols:
+                self.conn.execute("ALTER TABLE import_batches ADD COLUMN distinct_confirmed_by TEXT")
+            if "seq" not in {r[1] for r in self.conn.execute("PRAGMA table_info(import_distinct_confirmations)")}:
+                self.conn.executescript("""
+                    CREATE TABLE import_distinct_confirmations_v2 (
+                        seq INTEGER PRIMARY KEY,
+                        tenant_id TEXT NOT NULL, company TEXT NOT NULL, batch_id TEXT NOT NULL,
+                        source_digest TEXT NOT NULL, group_ids_json TEXT NOT NULL, confirmed_by TEXT NOT NULL);
+                    INSERT INTO import_distinct_confirmations_v2
+                        (tenant_id, company, batch_id, source_digest, group_ids_json, confirmed_by)
+                    SELECT tenant_id, company, batch_id, source_digest, group_ids_json, confirmed_by
+                    FROM import_distinct_confirmations;
+                    DROP TABLE import_distinct_confirmations;
+                    ALTER TABLE import_distinct_confirmations_v2 RENAME TO import_distinct_confirmations;
+                """)
             if "user_id" not in {r[1] for r in self.conn.execute("PRAGMA table_info(import_failures)")}:
                 # Keep historical failures whose actor was never captured.
                 self.conn.execute("ALTER TABLE import_failures ADD COLUMN user_id TEXT")
@@ -130,8 +146,8 @@ class SQLiteImportBackend:
                 (tenant_id, company, currency),
             )
 
-    def company_currency(self, tenant_id: str, company: str) -> str:
-        """Return the company's configured functional currency."""
+    def company_currency(self, tenant_id: str, company: str) -> str | None:
+        """Return the company's configured functional currency, or None if unconfigured."""
         with self._lock:
             row = self.conn.execute(
                 "SELECT currency FROM import_companies WHERE tenant_id=? AND company=?",
@@ -144,18 +160,19 @@ class SQLiteImportBackend:
         with self._lock:
             row = self.conn.execute(
                 """SELECT group_ids_json FROM import_distinct_confirmations
-                   WHERE tenant_id=? AND company=? AND batch_id=? AND source_digest=?""",
+                   WHERE tenant_id=? AND company=? AND batch_id=? AND source_digest=?
+                   ORDER BY seq ASC LIMIT 1""",
                 (tenant_id, company, batch_id, source_digest),
             ).fetchone()
         return json.loads(row[0]) if row else []
 
     def record_distinct_confirmation(self, tenant_id: str, company: str, batch_id: str,
                                      source_digest: str, group_ids: list[str], user_id: str) -> None:
-        """Record owner confirmation of near-duplicate name groups inside a transaction."""
+        """Append owner confirmation of near-duplicate name groups inside a transaction."""
         self.conn.execute(
-            """INSERT INTO import_distinct_confirmations VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT(tenant_id, company, batch_id, source_digest) DO UPDATE
-               SET group_ids_json=excluded.group_ids_json, confirmed_by=excluded.confirmed_by""",
+            """INSERT INTO import_distinct_confirmations
+               (tenant_id, company, batch_id, source_digest, group_ids_json, confirmed_by)
+               VALUES (?, ?, ?, ?, ?, ?)""",
             (tenant_id, company, batch_id, source_digest, canonical(sorted(group_ids)), user_id),
         )
 
@@ -222,9 +239,20 @@ class SQLiteImportBackend:
 
     def commit_batch(self, plan: dict, plan_hash: str, user_id: str) -> None:
         """Journal confirmation in the SAME transaction as the business writes."""
+        distinct_confirmed_by = None
+        if plan.get("owner_confirmed_distinct"):
+            row = self.conn.execute(
+                """SELECT confirmed_by FROM import_distinct_confirmations
+                   WHERE tenant_id=? AND company=? AND batch_id=? AND source_digest=?
+                   ORDER BY seq ASC LIMIT 1""",
+                (plan["tenant_id"], plan["company"], plan["batch_id"], plan["source_digest"]),
+            ).fetchone()
+            distinct_confirmed_by = row[0] if row else None
         self.conn.execute("""INSERT INTO import_batches
-            (tenant_id,batch_id,company,plan_hash,confirmed_by,status,source_digest) VALUES (?, ?, ?, ?, ?, 'applied', ?)""",
-                          (plan["tenant_id"], plan["batch_id"], plan["company"], plan_hash, user_id, plan["source_digest"]))
+            (tenant_id,batch_id,company,plan_hash,confirmed_by,status,source_digest,distinct_confirmed_by)
+            VALUES (?, ?, ?, ?, ?, 'applied', ?, ?)""",
+                          (plan["tenant_id"], plan["batch_id"], plan["company"],
+                           plan_hash, user_id, plan["source_digest"], distinct_confirmed_by))
         for change in plan["master_changes"]:
             self.conn.execute("INSERT INTO import_master_changes VALUES (?,?,?,?,?,?)",
                               (plan["tenant_id"], plan["batch_id"], change["entity"], change["key"],

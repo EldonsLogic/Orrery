@@ -36,7 +36,7 @@ class OpeningImporter:
         except Exception:
             raise ImportFailure("IMP-AUTH") from None
 
-    def _prepare(self, source, *, confirm_distinct=None):
+    def _prepare(self, source, *, confirm_distinct=None, pending_plan_hash=None):
         """Build one plan using company-scoped master reads; fail closed on errors."""
         try:
             plan, result = prepare(
@@ -46,6 +46,7 @@ class OpeningImporter:
                 lambda tenant_id, company, batch_id, digest: self.backend.distinct_confirmations(
                     tenant_id, company, batch_id, digest),
                 confirm_distinct=confirm_distinct,
+                pending_plan_hash=pending_plan_hash,
             )
             previous = self.backend.journal(plan["tenant_id"], plan["batch_id"])
             if (previous and previous["company"] == plan["company"]
@@ -78,12 +79,15 @@ class OpeningImporter:
             return payload
 
     def confirm(self, source: dict, *, confirmed_by: str | None = None,
-                owner_confirmed_distinct: list[str] | tuple[str, ...] | None = None) -> dict:
+                owner_confirmed_distinct: list[str] | tuple[str, ...] | None = None,
+                plan_hash: str | None = None) -> dict:
         """Verify and server-record owner distinct confirmation for flagged name groups."""
         identity = self._authorize(source, required_capability="opening_import_confirm")
         if (confirmed_by != identity["user_id"]
                 or not isinstance(owner_confirmed_distinct, (list, tuple, set, frozenset))
-                or not all(isinstance(gid, str) for gid in owner_confirmed_distinct)):
+                or not all(isinstance(gid, str) for gid in owner_confirmed_distinct)
+                or not isinstance(plan_hash, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", plan_hash)):
             raise ImportFailure("IMP-CONFIRM")
         ids = list(owner_confirmed_distinct)
         if len(set(ids)) != len(ids):
@@ -91,7 +95,7 @@ class OpeningImporter:
         source = copy.deepcopy(source)
         identity = self._authorize(source, required_capability="opening_import_confirm")
         with self.backend.transaction():
-            plan, result = self._prepare(source, confirm_distinct=ids)
+            plan, result = self._prepare(source, confirm_distinct=ids, pending_plan_hash=plan_hash)
             self.backend.record_distinct_confirmation(
                 plan["tenant_id"], plan["company"], plan["batch_id"],
                 plan["source_digest"], result["owner_confirmed_distinct"], identity["user_id"],
@@ -111,10 +115,10 @@ class OpeningImporter:
         source = copy.deepcopy(source)
         identity = self._authorize(source)
         tenant, batch_id = source["tenant_id"], source["batch_id"]
-        if (confirmed_by != identity["user_id"] or not isinstance(plan_hash, str)
-                or not re.fullmatch(r"[0-9a-f]{64}", plan_hash)):
-            raise ImportFailure("IMP-CONFIRM")
         try:
+            if (confirmed_by != identity["user_id"] or not isinstance(plan_hash, str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", plan_hash)):
+                raise ImportFailure("IMP-CONFIRM")
             with self.backend.transaction():
                 previous = self.backend.journal(tenant, batch_id)
                 if previous:
@@ -144,8 +148,9 @@ class OpeningImporter:
         except Exception as exc:
             code = exc.code if isinstance(exc, ImportFailure) else "IMP-WRITE"
             if code not in {"IMP-REFERENCE", "IMP-SCHEMA", "IMP-REPORT"}:
+                recorded_hash = plan_hash if isinstance(plan_hash, str) and re.fullmatch(r"[0-9a-f]{64}", plan_hash) else ""
                 try:
-                    self.backend.record_failure(tenant, batch_id, plan_hash, code, user_id=identity["user_id"])
+                    self.backend.record_failure(tenant, batch_id, recorded_hash, code, user_id=identity["user_id"])
                 except Exception:
                     raise ImportFailure("IMP-RECOVERY") from None
             raise ImportFailure(code) from None

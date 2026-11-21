@@ -42,7 +42,7 @@ PING_PATH = "/api/method/ping"
 
 # Only top-level business records used by the adapter. A mapping change requires review
 # before it can expose another type. Writes use the guarded adapter methods.
-RESOURCE_ALLOWLIST = {name: ("GET",) for name in ("Customer", "Item", "Sales Order", "Sales Invoice")}
+RESOURCE_ALLOWLIST = {name: ("GET",) for name in ("Customer", "Item", "Sales Order", "Delivery Note", "Sales Invoice")}
 _RESOURCE = re.compile(r"/api/resource/([^/]+)(?:/[A-Za-z0-9](?:[A-Za-z0-9 _.:\-]*[A-Za-z0-9_:\-])?)?")
 _ADAPTER_METHOD_PATHS = frozenset(METHOD_PREFIX + name for name in ADAPTER_METHODS)
 

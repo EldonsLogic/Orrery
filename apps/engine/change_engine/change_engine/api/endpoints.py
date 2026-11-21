@@ -1305,17 +1305,14 @@ class FrappeDeploymentAdapter:
         if self.in_memory:
             return self.workflow_states.get(state_name)
         if hasattr(self._frappe, "db") and hasattr(self._frappe.db, "get_value"):
-            try:
-                res = self._frappe.db.get_value(
-                    "Workflow State",
-                    state_name,
-                    ["name", "workflow_state_name", "style"],
-                    as_dict=True,
-                )
-                return res
-            except Exception:
-                return None
-        return None
+            # SEC-022 (ADR-0051): a failed read raises; the state-collision gate never reads it as "no such state".
+            return self._frappe.db.get_value(
+                "Workflow State",
+                state_name,
+                ["name", "workflow_state_name", "style"],
+                as_dict=True,
+            )
+        raise RuntimeError("workflow state lookup unavailable")
 
     def get_active_workflow(self, doctype: str) -> Optional[Dict[str, Any]]:
         if self.in_memory:

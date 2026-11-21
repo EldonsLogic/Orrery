@@ -3,7 +3,7 @@
   "$id": "urn:platform:contract:engine-mapping",
   "title": "Blueprint-to-engine mapping",
   "description": "Draft contract (BPL-029, proposed in ADR-0030). A versioned mapping from Blueprint entities, fields, roles and operations to the pinned engine's document types, fields, roles and actions. The compiler and the engine adapter both read it; the real-engine proof (ERP-021, ERP-022) checks it on the bench. Every engine-side name is UNVERIFIED until a bench run confirms it. The engine's own totals are authoritative: a mapped computed field names how the engine derives it, it does not ask the platform to recompute it.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "object",
   "required": ["version", "mappingId", "status", "blueprintRef", "engine", "entities", "roles", "operations"],
   "additionalProperties": false,

@@ -1,0 +1,346 @@
+{
+  "$schema": "../engine-mapping.schema.json",
+  "version": "0.1.0",
+  "mappingId": "purchasing-trading",
+  "status": "draft",
+  "verification": {
+    "benchRun": "none",
+    "notes": "Every engine-side name here is UNVERIFIED until a bench run on the pinned engine confirms it (BPL-034)."
+  },
+  "blueprintRef": {
+    "contract": "0.1.0",
+    "fixture": "services/blueprint/fixtures/trading-distribution.blueprint.json"
+  },
+  "engine": {
+    "adapter": "change_engine",
+    "versionSet": "UNVERIFIED: not pinned yet (ERP-001, ERP-004)"
+  },
+  "entities": [
+    {
+      "blueprintEntity": "supplier",
+      "engineDocType": "Supplier",
+      "kind": "master",
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {"blueprintField": "supplier_name", "blueprintType": "string", "engineField": "supplier_name", "engineType": "Data"},
+        {"blueprintField": "supplier_type", "blueprintType": "select", "engineField": "supplier_group", "engineType": "Link", "engineLinkDoctype": "Supplier Group", "notes": "Blueprint options (local, importer, manufacturer) become adapter-created supplier groups; the engine's own supplier type is company or individual."},
+        {"blueprintField": "vat_number", "blueprintType": "string", "engineField": "tax_id", "engineType": "Data"}
+      ]
+    },
+    {
+      "blueprintEntity": "price_list",
+      "engineDocType": "Price List",
+      "kind": "master",
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {"blueprintField": "price_list_name", "blueprintType": "string", "engineField": "price_list_name", "engineType": "Data", "notes": "The adapter sets the engine's selling flag on lists created from this entity."}
+      ]
+    },
+    {
+      "blueprintEntity": "price_list_item",
+      "engineDocType": "Item Price",
+      "kind": "master",
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {"blueprintField": "item", "blueprintType": "link", "engineField": "item_code", "engineType": "Link", "engineLinkDoctype": "Item", "notes": "Item Price is a separate engine document keyed by price list and item, not a child table, so this Blueprint child maps as a master; the adapter writes one Item Price per line with price_list set to the parent."},
+        {"blueprintField": "rate", "blueprintType": "money", "engineField": "price_list_rate", "engineType": "Currency"}
+      ]
+    },
+    {
+      "blueprintEntity": "purchase_order",
+      "engineDocType": "Purchase Order",
+      "kind": "document",
+      "submittable": true,
+      "ledgerEffect": "none",
+      "fields": [
+        {"blueprintField": "supplier", "blueprintType": "link", "engineField": "supplier", "engineType": "Link", "engineLinkDoctype": "Supplier"},
+        {"blueprintField": "order_date", "blueprintType": "date", "engineField": "transaction_date", "engineType": "Date"},
+        {"blueprintField": "expected_date", "blueprintType": "date", "engineField": "schedule_date", "engineType": "Date"},
+        {"blueprintField": "warehouse", "blueprintType": "select", "engineField": "set_warehouse", "engineType": "Link", "engineLinkDoctype": "Warehouse"},
+        {"blueprintField": "discount_percent", "blueprintType": "percent", "engineField": "additional_discount_percentage", "engineType": "Percent"},
+        {"blueprintField": "subtotal", "blueprintType": "money", "engineField": "total", "engineType": "Currency", "computed": {"authority": "engine", "expression": "sum of line_total", "inputs": ["line_total"], "aggregation": {"over": "lines", "function": "sum", "field": "line_total"}, "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["line_changed", "line_added", "line_removed"]}},
+        {"blueprintField": "vat_amount", "blueprintType": "money", "engineField": "total_taxes_and_charges", "engineType": "Currency", "computed": {"authority": "engine", "expression": "0 until the tax path is mapped; the tax variant is a later path", "inputs": ["subtotal"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["subtotal_changed", "tax_changed"]}},
+        {"blueprintField": "total_amount", "blueprintType": "money", "engineField": "grand_total", "engineType": "Currency", "computed": {"authority": "engine", "expression": "subtotal * (1 - discount_percent / 100) + vat_amount", "inputs": ["subtotal", "discount_percent", "vat_amount"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["subtotal_changed", "discount_changed", "tax_changed"]}}
+      ]
+    },
+    {
+      "blueprintEntity": "purchase_order_line",
+      "engineDocType": "Purchase Order Item",
+      "kind": "child",
+      "parent": {
+        "blueprintEntity": "purchase_order",
+        "relation": "lines",
+        "engineField": "items"
+      },
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {"blueprintField": "item", "blueprintType": "link", "engineField": "item_code", "engineType": "Link", "engineLinkDoctype": "Item"},
+        {"blueprintField": "quantity", "blueprintType": "decimal", "engineField": "qty", "engineType": "Float"},
+        {"blueprintField": "unit_cost", "blueprintType": "money", "engineField": "rate", "engineType": "Currency"},
+        {"blueprintField": "discount_percent", "blueprintType": "percent", "engineField": "discount_percentage", "engineType": "Percent"},
+        {"blueprintField": "line_total", "blueprintType": "money", "engineField": "amount", "engineType": "Currency", "computed": {"authority": "engine", "expression": "quantity * unit_cost * (1 - discount_percent / 100)", "inputs": ["quantity", "unit_cost", "discount_percent"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["quantity", "unit_cost", "discount_percent"]}}
+      ]
+    },
+    {
+      "blueprintEntity": "purchase_receipt",
+      "engineDocType": "Purchase Receipt",
+      "kind": "document",
+      "submittable": true,
+      "ledgerEffect": "stock_and_gl",
+      "fields": [
+        {"blueprintField": "purchase_order", "blueprintType": "link", "engineField": null, "engineType": "Link", "engineLinkDoctype": "Purchase Order", "notes": "The engine links the order on each line (purchase_order and its row), not on the header."},
+        {"blueprintField": "supplier", "blueprintType": "link", "engineField": "supplier", "engineType": "Link", "engineLinkDoctype": "Supplier"},
+        {"blueprintField": "receipt_date", "blueprintType": "date", "engineField": "posting_date", "engineType": "Date"},
+        {"blueprintField": "warehouse", "blueprintType": "select", "engineField": "set_warehouse", "engineType": "Link", "engineLinkDoctype": "Warehouse"},
+        {"blueprintField": "supplier_delivery_ref", "blueprintType": "string", "engineField": "supplier_delivery_note", "engineType": "Data"}
+      ]
+    },
+    {
+      "blueprintEntity": "purchase_receipt_line",
+      "engineDocType": "Purchase Receipt Item",
+      "kind": "child",
+      "parent": {
+        "blueprintEntity": "purchase_receipt",
+        "relation": "lines",
+        "engineField": "items"
+      },
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {"blueprintField": "item", "blueprintType": "link", "engineField": "item_code", "engineType": "Link", "engineLinkDoctype": "Item"},
+        {"blueprintField": "quantity", "blueprintType": "decimal", "engineField": "qty", "engineType": "Float", "notes": "Accepted quantity."},
+        {"blueprintField": "rejected_quantity", "blueprintType": "decimal", "engineField": "rejected_qty", "engineType": "Float"}
+      ]
+    },
+    {
+      "blueprintEntity": "purchase_invoice",
+      "engineDocType": "Purchase Invoice",
+      "kind": "document",
+      "submittable": true,
+      "ledgerEffect": "gl",
+      "fields": [
+        {"blueprintField": "supplier", "blueprintType": "link", "engineField": "supplier", "engineType": "Link", "engineLinkDoctype": "Supplier"},
+        {"blueprintField": "purchase_order", "blueprintType": "link", "engineField": null, "engineType": "Link", "engineLinkDoctype": "Purchase Order", "notes": "The engine links the order on each line, not on the header."},
+        {"blueprintField": "supplier_invoice_number", "blueprintType": "string", "engineField": "bill_no", "engineType": "Data"},
+        {"blueprintField": "invoice_date", "blueprintType": "date", "engineField": "posting_date", "engineType": "Date"},
+        {"blueprintField": "due_date", "blueprintType": "date", "engineField": "due_date", "engineType": "Date"},
+        {"blueprintField": "discount_percent", "blueprintType": "percent", "engineField": "additional_discount_percentage", "engineType": "Percent"},
+        {"blueprintField": "subtotal", "blueprintType": "money", "engineField": "total", "engineType": "Currency", "computed": {"authority": "engine", "expression": "sum of line_total", "inputs": ["line_total"], "aggregation": {"over": "lines", "function": "sum", "field": "line_total"}, "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["line_changed", "line_added", "line_removed"]}},
+        {"blueprintField": "vat_amount", "blueprintType": "money", "engineField": "total_taxes_and_charges", "engineType": "Currency", "computed": {"authority": "engine", "expression": "0 until the tax path is mapped; the tax variant is a later path", "inputs": ["subtotal"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["subtotal_changed", "tax_changed"]}},
+        {"blueprintField": "total_amount", "blueprintType": "money", "engineField": "grand_total", "engineType": "Currency", "computed": {"authority": "engine", "expression": "subtotal * (1 - discount_percent / 100) + vat_amount", "inputs": ["subtotal", "discount_percent", "vat_amount"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["subtotal_changed", "discount_changed", "tax_changed"]}},
+        {"blueprintField": "outstanding_amount", "blueprintType": "money", "engineField": "outstanding_amount", "engineType": "Currency", "notes": "Engine-maintained; changes only through payments, which are not mapped yet."}
+      ]
+    },
+    {
+      "blueprintEntity": "purchase_invoice_line",
+      "engineDocType": "Purchase Invoice Item",
+      "kind": "child",
+      "parent": {
+        "blueprintEntity": "purchase_invoice",
+        "relation": "lines",
+        "engineField": "items"
+      },
+      "submittable": false,
+      "ledgerEffect": "none",
+      "fields": [
+        {"blueprintField": "item", "blueprintType": "link", "engineField": "item_code", "engineType": "Link", "engineLinkDoctype": "Item"},
+        {"blueprintField": "quantity", "blueprintType": "decimal", "engineField": "qty", "engineType": "Float"},
+        {"blueprintField": "unit_cost", "blueprintType": "money", "engineField": "rate", "engineType": "Currency"},
+        {"blueprintField": "discount_percent", "blueprintType": "percent", "engineField": "discount_percentage", "engineType": "Percent"},
+        {"blueprintField": "line_total", "blueprintType": "money", "engineField": "amount", "engineType": "Currency", "computed": {"authority": "engine", "expression": "quantity * unit_cost * (1 - discount_percent / 100)", "inputs": ["quantity", "unit_cost", "discount_percent"], "rounding": {"precision": 2, "mode": "half_away_from_zero"}, "recalculateOn": ["quantity", "unit_cost", "discount_percent"]}}
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "blueprintRole": "owner",
+      "engineRole": "platform_owner",
+      "grants": [
+        {"blueprintEntity": "supplier", "actions": ["read", "create", "update", "export"]},
+        {"blueprintEntity": "price_list", "actions": ["read", "create", "update", "export"]},
+        {"blueprintEntity": "purchase_order", "actions": ["read", "create", "update", "cancel", "approve", "export"]},
+        {"blueprintEntity": "purchase_receipt", "actions": ["read", "export"]},
+        {"blueprintEntity": "purchase_invoice", "actions": ["read", "export"]}
+      ]
+    },
+    {
+      "blueprintRole": "general_manager",
+      "engineRole": "platform_general_manager",
+      "grants": [
+        {"blueprintEntity": "supplier", "actions": ["read", "update", "export"]},
+        {"blueprintEntity": "price_list", "actions": ["read", "update", "export"]},
+        {"blueprintEntity": "purchase_order", "actions": ["read", "update", "cancel", "approve", "export"]},
+        {"blueprintEntity": "purchase_receipt", "actions": ["read", "export"]},
+        {"blueprintEntity": "purchase_invoice", "actions": ["read", "export"]}
+      ]
+    },
+    {
+      "blueprintRole": "accountant",
+      "engineRole": "platform_accountant",
+      "grants": [
+        {"blueprintEntity": "supplier", "actions": ["read", "export"]},
+        {"blueprintEntity": "price_list", "actions": ["read"]},
+        {"blueprintEntity": "purchase_order", "actions": ["read", "submit", "export"]},
+        {"blueprintEntity": "purchase_receipt", "actions": ["read", "export"]},
+        {"blueprintEntity": "purchase_invoice", "actions": ["read", "create", "update", "submit", "export"]}
+      ]
+    },
+    {
+      "blueprintRole": "sales_rep",
+      "engineRole": "platform_sales_rep",
+      "grants": [
+        {"blueprintEntity": "price_list", "actions": ["read"]}
+      ]
+    },
+    {
+      "blueprintRole": "branch_sales_manager",
+      "engineRole": "platform_branch_sales_manager",
+      "grants": [
+        {"blueprintEntity": "price_list", "actions": ["read"]}
+      ]
+    },
+    {
+      "blueprintRole": "purchasing_officer",
+      "engineRole": "platform_purchasing_officer",
+      "grants": [
+        {"blueprintEntity": "supplier", "actions": ["read", "create", "update"]},
+        {"blueprintEntity": "purchase_order", "actions": ["read", "create", "update", "submit", "cancel", "export"]},
+        {"blueprintEntity": "purchase_receipt", "actions": ["read"]},
+        {"blueprintEntity": "purchase_invoice", "actions": ["read"]}
+      ]
+    },
+    {
+      "blueprintRole": "warehouse_keeper",
+      "engineRole": "platform_warehouse_keeper",
+      "grants": [
+        {"blueprintEntity": "purchase_order", "actions": ["read", "submit"]},
+        {"blueprintEntity": "purchase_receipt", "actions": ["read", "create", "update", "submit"]}
+      ]
+    },
+    {
+      "blueprintRole": "auditor",
+      "engineRole": "platform_auditor",
+      "grants": [
+        {"blueprintEntity": "supplier", "actions": ["read", "export"]},
+        {"blueprintEntity": "price_list", "actions": ["read", "export"]},
+        {"blueprintEntity": "purchase_order", "actions": ["read", "export"]},
+        {"blueprintEntity": "purchase_receipt", "actions": ["read", "export"]},
+        {"blueprintEntity": "purchase_invoice", "actions": ["read", "export"]}
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "id": "create_purchase_order",
+      "description": "Purchasing creates a draft purchase order",
+      "blueprintAction": "create",
+      "toEntity": "purchase_order",
+      "engineMethod": "insert a draft Purchase Order through the document API",
+      "idempotencyKeyParts": ["tenant", "mapping_version", "client_request_id"],
+      "humanFloor": false
+    },
+    {
+      "id": "submit_purchase_order",
+      "description": "Submit the purchase order to the supplier; no posting",
+      "blueprintAction": "submit",
+      "toEntity": "purchase_order",
+      "engineMethod": "submit the Purchase Order document",
+      "idempotencyKeyParts": ["tenant", "purchase_order", "purchase_order_revision"],
+      "preconditions": ["order has at least one line", "supplier and items exist", "purchase_order_flow reached ordered (approval when its guard asks for it)"],
+      "humanFloor": false
+    },
+    {
+      "id": "create_receipt_draft_from_order",
+      "description": "Warehouse creates the receipt draft from the order",
+      "blueprintAction": "create",
+      "fromEntity": "purchase_order",
+      "toEntity": "purchase_receipt",
+      "engineMethod": "mapped document: make a Purchase Receipt from the Purchase Order",
+      "idempotencyKeyParts": ["tenant", "purchase_order", "purchase_order_revision"],
+      "preconditions": ["purchase order is submitted", "received quantity does not exceed the ordered remaining quantity"],
+      "humanFloor": false
+    },
+    {
+      "id": "submit_receipt",
+      "description": "Warehouse submits the receipt; the engine posts the stock movement and the received-not-billed entry",
+      "blueprintAction": "submit",
+      "toEntity": "purchase_receipt",
+      "engineMethod": "submit the Purchase Receipt document",
+      "idempotencyKeyParts": ["tenant", "purchase_receipt", "purchase_receipt_revision"],
+      "preconditions": ["a repeat submit creates no second movement"],
+      "humanFloor": true
+    },
+    {
+      "id": "create_purchase_invoice_draft_from_receipt",
+      "description": "Finance creates the supplier invoice draft from the receipt",
+      "blueprintAction": "create",
+      "fromEntity": "purchase_receipt",
+      "toEntity": "purchase_invoice",
+      "engineMethod": "mapped document: make a Purchase Invoice from the Purchase Receipt, with stock update switched off",
+      "idempotencyKeyParts": ["tenant", "purchase_receipt", "purchase_receipt_revision"],
+      "preconditions": ["the invoice must not move stock again", "invoiced quantity does not exceed received quantity"],
+      "humanFloor": false
+    },
+    {
+      "id": "post_purchase_invoice",
+      "description": "Finance posts the supplier invoice to the ledger",
+      "blueprintAction": "submit",
+      "toEntity": "purchase_invoice",
+      "engineMethod": "submit the Purchase Invoice document",
+      "idempotencyKeyParts": ["tenant", "purchase_invoice", "purchase_invoice_revision"],
+      "preconditions": ["supplier invoice number is unique per supplier", "a repeat submit creates no second posting"],
+      "humanFloor": true
+    }
+  ],
+  "unmapped": [
+    {
+      "blueprintEntity": "supplier",
+      "blueprintField": "payment_terms_days",
+      "reason": "the engine uses a payment terms template; mapped with payments"
+    },
+    {
+      "blueprintEntity": "supplier",
+      "blueprintField": "bank_iban",
+      "reason": "bank details live on a separate engine document; mapped with payments"
+    },
+    {
+      "blueprintEntity": "price_list",
+      "blueprintField": "customer_group",
+      "reason": "the engine links price lists from the customer group, not the other way; later path"
+    },
+    {
+      "blueprintEntity": "price_list",
+      "blueprintField": "valid_from",
+      "reason": "validity lives on each Item Price row in the engine; later path"
+    },
+    {
+      "blueprintEntity": "price_list",
+      "blueprintField": "valid_to",
+      "reason": "validity lives on each Item Price row in the engine; later path"
+    },
+    {
+      "blueprintEntity": "price_list",
+      "blueprintField": "is_default",
+      "reason": "the default list is an engine setting, not a list field; later path"
+    },
+    {
+      "blueprintEntity": "price_list_item",
+      "blueprintField": "min_quantity",
+      "reason": "quantity breaks need pricing rules in the engine; later path"
+    },
+    {
+      "blueprintEntity": "purchase_invoice",
+      "blueprintField": "paid_amount",
+      "reason": "derived from payments, which are not mapped yet"
+    },
+    {
+      "blueprintEntity": "purchase_invoice",
+      "blueprintField": "invoice_scan",
+      "reason": "attachment support is open (BPL-033)"
+    }
+  ]
+}

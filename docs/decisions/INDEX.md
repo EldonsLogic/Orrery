@@ -58,3 +58,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0049-human-review-queue.md](ADR-0049-human-review-queue.md) | Human review queue and the team_reviewed gate evidence | Proposed |
 | [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |
 | [ADR-0052-isolated-browser-runner-placement.md](ADR-0052-isolated-browser-runner-placement.md) | Isolated browser runner placement (Tier 5 connector) | Proposed |
+| [ADR-0055-purchasing-engine-mapping.md](ADR-0055-purchasing-engine-mapping.md) | Purchasing and price-list engine mapping (contract 0.2.0) | Proposed |

@@ -18,7 +18,7 @@ Added a draft purchasing and price-list mapping (supplier, price list and its li
 - Separate example file rather than growing the golden-path one; one entity is mapped in only one example (tested).
 - Purchase receipt is `stock_and_gl`, not `stock`: the golden path sets perpetual inventory, the same reason the delivery note is `stock_and_gl`. UNVERIFIED until the bench run.
 - Blueprint `price_list_item` (a child) maps to the engine's separate item price document as a master, since the engine has no price-list child table. UNVERIFIED.
-- No new ADR: the schema structure is unchanged and ADR-0030 (Proposed) already plans per-path mappings ("They get their own mappings as the paths are agreed"). If the reviewer reads contracts/README.md rule 2 as needing one for a minor bump, add a short ADR that supersedes nothing and links this diff.
+- ADR-0055 added (contracts/README.md rule 2 requires an ADR for any contract change); contracts/README.md now lists engine-mapping 0.2.0 and the purchasing example.
 
 ## Tokens or cost
 Unknown.

@@ -327,7 +327,7 @@ def validate_mutation_safety(payload: Dict[str, Any]) -> Dict[str, Any]:
                     f"in custom field proposal. Only {sorted(ALLOWED_CUSTOM_FIELD_KEYS)} are permitted."
                 )
 
-            if not VALID_FIELDNAME_RE.match(raw_fieldname):
+            if not VALID_FIELDNAME_RE.fullmatch(raw_fieldname):
                 raise ZoneSafetyViolation(
                     f"Canonical Fieldname Violation (§5.1): '{raw_fieldname}' must match '^custom_[a-z][a-z0-9_]{{1,50}}$'."
                 )

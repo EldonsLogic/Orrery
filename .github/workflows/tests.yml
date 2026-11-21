@@ -353,6 +353,12 @@ jobs:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_023_action_policy.py -q
 
+      - name: Inventory valuation correctness tests (ERP-015; live layer skips without a bench)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_015_inventory_valuation.py -v
+
       - name: Headless request guard tests (ERP-020)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:

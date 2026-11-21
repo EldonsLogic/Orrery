@@ -284,7 +284,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GTM-014 | Customer success playbook | GTM | G4 | GTM-011 | eldon | todo |
 | GTM-015 | Second market (UAE) launch plan | GTM | G5 | CMP-011 | eldon | todo |
 | GTM-016 | Partner and reseller programme | GTM | G5 | GTM-014 | eldon | todo |
-| FND-001 | Investor shortlist from research/05, re-verified | Fundraising | G1 | - | eldon | todo |
+| FND-001 | Investor shortlist from research/05, re-verified | Fundraising | G1 | - | eldon | done |
 | FND-002 | Accelerator evaluation (Hub71+, Antler) after the spike | Fundraising | G2 | ERP-001 | eldon | todo |
 | FND-003 | Financial model | Fundraising | G2 | GTM-007 | eldon | todo |
 | FND-004 | Pitch deck | Fundraising | G2 | GTM-006 | eldon | todo |

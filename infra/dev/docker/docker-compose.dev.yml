@@ -20,7 +20,9 @@ services:
 
   # INF-015: Redis requires the per-run REDIS_PASSWORD (minted by the runners, never committed) and
   # sits only on the internal redis_internal network shared with engine services. The password goes
-  # into an owner-only config file, not argv; an empty or non-URL-safe value stops the container.
+  # into an owner-only config file, not argv; an empty, short (under 32) or non-URL-safe value stops
+  # the container. The old file is removed first: a restart cannot overwrite the redis-owned file in
+  # sticky /tmp where fs.protected_regular is set.
   redis-cache:
     image: redis:7.2.7-alpine@sha256:ddd16a9b1575a774c7e62956be8daa1de5b32cfb5c25b7a216aefed8e0919f9b
     restart: unless-stopped
@@ -33,7 +35,9 @@ services:
       - >-
         test -n "$$REDIS_PASSWORD" || { echo "REDIS_PASSWORD is required (INF-015)" >&2; exit 1; };
         case "$$REDIS_PASSWORD" in *[!A-Za-z0-9_-]*) echo "REDIS_PASSWORD must be URL-safe" >&2; exit 1;; esac;
+        test "$${#REDIS_PASSWORD}" -ge 32 || { echo "REDIS_PASSWORD must be at least 32 characters" >&2; exit 1; };
         umask 077;
+        rm -f /tmp/redis.conf;
         printf 'requirepass %s\nprotected-mode yes\n' "$$REDIS_PASSWORD" > /tmp/redis.conf;
         chown redis:redis /tmp/redis.conf;
         exec docker-entrypoint.sh redis-server /tmp/redis.conf

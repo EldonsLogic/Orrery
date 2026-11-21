@@ -2,9 +2,10 @@
 
 Starts the stack from docker-compose.headless.yml, creates one synthetic site with the
 change engine app, then checks from a sidecar container on the internal network that Desk,
-login and website routes are blocked while the allowlisted internal calls work. Tears down
+login and website routes are blocked while the allowlisted internal calls work, and that the
+sidecar cannot reach either Redis service while the engine can (INF-015). Tears down
 only the project it started (volumes included). Synthetic data only; secrets are generated
-in memory and never printed.
+in memory and never printed; captured child output is redacted before it is printed.
 
     python3 infra/dev/docker/smoke_headless_engine.py [--keep]
 """
@@ -18,11 +19,28 @@ import subprocess
 import sys
 import time
 
+import run_real_bench_ci
+
 DOCKER_DIR = Path(__file__).resolve().parent
 PROJECT = "erp020-headless-smoke-" + secrets.token_hex(4)
 SITE = "headless-smoke.localhost"
 FILES = ("docker-compose.headless.yml",)
-SIDECAR = r'''
+# INF-015: classify one TCP reachability attempt. Only "dns" (name not resolvable on this network)
+# and "refused" count as unreachable; a timeout or other error proves nothing.
+REACH_PROBE = r'''
+import socket
+def reach(host, port):
+    try:
+        socket.create_connection((host, port), timeout=5).close()
+        return "connected"
+    except socket.gaierror:
+        return "dns"
+    except ConnectionRefusedError:
+        return "refused"
+    except OSError as exc:
+        return type(exc).__name__
+'''
+SIDECAR = REACH_PROBE + r'''
 import json, sys, urllib.request, urllib.error
 cfg = json.load(sys.stdin)
 def call(method, path, headers=None, body=None):
@@ -77,8 +95,30 @@ s, _, b = call("POST", "/api/method/change_engine.api.endpoints.get_runtime_poli
 out["internal"]["adapter method token+auth"] = {"status": s, "not_guard_404": s != 404}
 out["internal"]["adapter method auth only"] = call(
     "POST", "/api/method/change_engine.api.endpoints.get_runtime_policies", auth)[0]
+out["redis"] = {host: reach(host, 6379) for host in ("redis-cache", "redis-queue")}
+out["engine"] = reach("engine", 8000)  # positive control: the same probe reaches the engine
 print(json.dumps(out))
 '''
+# INF-015 positive control from the engine: both Redis services answer with the bench's own URLs.
+ENGINE_REDIS_PING = (
+    "import json, redis; conf = json.load(open('sites/common_site_config.json')); "
+    "print(all(redis.Redis.from_url(conf[key], socket_timeout=5).ping() for key in ('redis_cache', 'redis_queue')))"
+)
+
+
+def cross_network_checks(result, engine_ping):
+    """Checks that engine_internal cannot reach Redis, with positive controls for both probes."""
+    redis = result.get("redis", {})
+    checks = [(f"{host} unreachable from engine_internal (got {redis.get(host)})", redis.get(host) in ("dns", "refused"))
+              for host in ("redis-cache", "redis-queue")]
+    checks.append((f"sidecar probe reaches the engine (got {result.get('engine')})", result.get("engine") == "connected"))
+    checks.append(("engine answers an authenticated Redis PING on both services", engine_ping == "True"))
+    return checks
+
+
+def redact(text, env):
+    """Hide this run's credentials and any redis:// URL credential before printing child output."""
+    return run_real_bench_ci.redact(text or "", env)
 
 
 def compose(env, *args, stdin=None, timeout=900):
@@ -107,7 +147,7 @@ def main():
     try:
         up = compose(env, "up", "-d", "--build")
         if up.returncode != 0:
-            print(up.stderr[-2000:], file=sys.stderr)
+            print(redact(up.stderr, env)[-2000:], file=sys.stderr)
             return 2
         # The entrypoint installs the mounted app at start; wait until it is importable.
         for _ in range(60):
@@ -119,7 +159,7 @@ def main():
                        '--db-root-password "$DB_ROOT_PASSWORD" --admin-password "$ADMIN_PASSWORD" '
                        '--install-app erpnext --install-app change_engine')
         if site.returncode != 0:
-            print("site creation failed:", (site.stdout + site.stderr)[-2500:], file=sys.stderr)
+            print("site creation failed:", redact(site.stdout + site.stderr, env)[-2500:], file=sys.stderr)
             return 2
         keys = compose(env, "exec", "-T", "engine", "sh", "-ec",
                        f'bench --site {SITE} execute frappe.core.doctype.user.user.generate_keys '
@@ -144,7 +184,7 @@ def main():
                               image_ref, "-c", SIDECAR], input=payload, capture_output=True, text=True,
                              timeout=300, check=False)
         if run.returncode != 0:
-            print(run.stderr[-1500:], file=sys.stderr)
+            print(redact(run.stderr, env)[-1500:], file=sys.stderr)
             return 2
         result = json.loads(run.stdout.strip().splitlines()[-1])
 
@@ -159,6 +199,10 @@ def main():
         check("record API blocked with the token but no engine auth", i["resource token only"] in (401, 403))
         check("adapter method reaches the engine with token and auth", i["adapter method token+auth"]["not_guard_404"])
         check("adapter method blocked without the token", i["adapter method auth only"] == 404)
+        ping = compose(env, "exec", "-T", "engine", "env/bin/python", "-c", ENGINE_REDIS_PING, timeout=60)
+        engine_ping = (ping.stdout.strip().splitlines() or [""])[-1] if ping.returncode == 0 else ""
+        for name, condition in cross_network_checks(result, engine_ping):
+            check(name, condition)
 
         ports = compose(env, "ps", "--format", "json").stdout
         rows = [json.loads(x) for x in ports.splitlines() if x.strip()] if ports.strip().startswith("{") else json.loads(ports or "[]")

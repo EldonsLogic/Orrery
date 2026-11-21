@@ -14,7 +14,8 @@ REDIS_CACHE_HOST="${REDIS_CACHE_HOST:-redis-cache}"
 REDIS_QUEUE_HOST="${REDIS_QUEUE_HOST:-redis-queue}"
 
 # INF-015: Redis requires the per-run password the runner passes in REDIS_PASSWORD. Fail closed
-# without it, and accept only URL-safe characters so it can sit in the redis:// URLs unencoded.
+# without it, require at least 32 characters, and accept only URL-safe characters so it can sit
+# in the redis:// URLs unencoded.
 if [ -z "${REDIS_PASSWORD:-}" ]; then
     echo "REDIS_PASSWORD is required (INF-015)" >&2
     exit 1
@@ -22,6 +23,10 @@ fi
 case "${REDIS_PASSWORD}" in
     *[!A-Za-z0-9_-]*) echo "REDIS_PASSWORD must be URL-safe ([A-Za-z0-9_-])" >&2; exit 1 ;;
 esac
+if [ "${#REDIS_PASSWORD}" -lt 32 ]; then
+    echo "REDIS_PASSWORD must be at least 32 characters (INF-015)" >&2
+    exit 1
+fi
 
 echo "=== Initializing the platform engine dev environment (Frappe/ERPNext/HRMS v15) ==="
 

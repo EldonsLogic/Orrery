@@ -33,6 +33,10 @@ from pathlib import Path
 DOCKER_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = DOCKER_DIR.parents[2]
 COMPOSE_FILES = [DOCKER_DIR / "docker-compose.dev.yml", DOCKER_DIR / "isolation" / "docker-compose.isolation.yml"]
+if str(DOCKER_DIR) not in sys.path:
+    sys.path.insert(0, str(DOCKER_DIR))
+from run_real_bench_ci import redact  # noqa: E402  INF-015: same redaction as the real-bench runner
+
 SUITE = REPO_ROOT / "apps/engine/change_engine/change_engine/tests/live_sec_004_bench_attacks.py"
 PROJECT_RE = re.compile(r"^(?=[a-z0-9])[a-z0-9_-]*sec004[a-z0-9_-]*$")
 TENANTS = {
@@ -75,7 +79,7 @@ def provision(project: str, key: str, spec: dict, creds_dir: Path, env: dict) ->
     child_env.pop("ADMIN_PASSWORD", None)  # each tenant gets its own random admin password
     res = subprocess.run(cmd, env=child_env, text=True, capture_output=True, timeout=3600)
     if res.returncode != 0:
-        raise SystemExit(f"provisioning {key} failed:\n{res.stderr[-3000:]}")
+        raise SystemExit(f"provisioning {key} failed:\n{redact(res.stderr or '', env)[-3000:]}")
     data = json.loads(creds.read_text(encoding="utf-8"))
     return {"site": data["site_name"], "admin_password": data["admin_password"],
             "db_name": data["db_name"], "db_user": data["db_user"], "db_password": data["db_password"]}

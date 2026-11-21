@@ -10,7 +10,8 @@ silently skips live attacks and reports green. When `CI_REQUIRE_LIVE_SEC004=1` i
 without a usable `SEC004_CONTEXT`, setUpClass fails closed instead of skipping.
 
 Known leaks are `unittest.expectedFailure` tracked by plan rows and `docs/risks.md`
-(SEC-021 / R-032 for RQ Job prefix matching; INF-015 / R-033 for Redis auth). Once a
+(SEC-021 / R-032 for RQ Job prefix matching). The Redis auth leak (INF-015 / R-033) is fixed
+and now a plain check. Once a
 leak is fixed, unittest reports `unexpected success` as a loud failure so the marker
 must be removed. Combined testing with the headless guard (ERP-020) is tracked in SEC-021.
 """
@@ -477,12 +478,15 @@ class CrossTenantIsolation(unittest.TestCase):
         self.assertNotEqual(raw_b, self.probe(self.A, "cache_key_bytes", key=key))
 
     def test_shared_cache_keys_hold_no_tenant_data(self):
-        """Unprefixed keys in redis-cache and non-B keys in redis-queue must not carry B's data or DB password."""
+        """Unprefixed keys in redis-cache and non-B keys in redis-queue must not carry B's data or DB password.
+
+        Connects with the bench's own authenticated URLs (INF-015), so a refused login fails the test."""
         inspector = (
             "import gzip, json, pickle, redis, sys, zlib\n"
-            "host, mark_b, pwd_b, prefixes_json = sys.argv[1:5]\n"
+            "key, mark_b, pwd_b, prefixes_json = sys.argv[1:5]\n"
             "prefixes = tuple(json.loads(prefixes_json))\n"
-            "r = redis.Redis(host=host)\n"
+            "r = redis.Redis.from_url(json.load(open('sites/common_site_config.json'))[key])\n"
+            "r.ping()\n"
             "leaks = []\n"
             "for k in r.scan_iter(count=200):\n"
             "    ks = k.decode('utf-8', 'replace')\n"
@@ -520,28 +524,39 @@ class CrossTenantIsolation(unittest.TestCase):
         )
         cache_prefixes = [f"{t['db_name']}|" for t in (self.A, self.B, self.T)]
         queue_prefixes = [f"{self.B['db_name']}|", f"rq:job:{self.B['site']}::"]
-        for host, prefixes in (("redis-cache", cache_prefixes), ("redis-queue", queue_prefixes)):
-            with self.subTest(service=host):
+        for key, prefixes in (("redis_cache", cache_prefixes), ("redis_queue", queue_prefixes)):
+            with self.subTest(config_key=key):
                 res = self.compose(
                     "exec", "-T", "engine", "env/bin/python", "-c", inspector,
-                    host, self.mark_b, self.B["db_password"], json.dumps(prefixes),
+                    key, self.mark_b, self.B["db_password"], json.dumps(prefixes),
                 )
                 self.assertEqual(res.returncode, 0, res.stderr)
                 leaks = json.loads(res.stdout.strip().splitlines()[-1])
-                self.assertEqual(leaks, [], f"{host} shared/unprefixed keys leaked B data: {leaks}")
+                self.assertEqual(leaks, [], f"{key} shared/unprefixed keys leaked B data: {leaks}")
 
     def test_redis_requires_authentication(self):
-        """CONFIRMED LEAK (HIGH defence-in-depth; tracked by INF-015 & docs/risks.md R-033):
-        redis-cache and redis-queue (also backing redis_socketio) accept unauthenticated clients.
-        Isolation is key-prefix convention only, so any SSRF (T18), sidecar, or code reaching the
-        engine network can read all tenant sessions and enqueue arbitrary jobs for any site.
-        Note: shared-bench requirepass stops unauthenticated network pivots (T18) but not
-        compromised code inside the shared engine/worker process. Once INF-015 is implemented,
-        unittest reports `unexpected success` loudly so this marker must be removed."""
-        for service in ("redis-cache", "redis-queue"):
-            res = self.compose("exec", "-T", "engine", "python", "-c",
-                               f"import redis;print(redis.Redis(host='{service}').ping())")
-            self.assertNotIn("True", res.stdout, f"{service} answered an unauthenticated PING")
+        """INF-015 / R-033 (fixed): redis-cache and redis-queue (also backing redis_socketio) refuse
+        unauthenticated clients with NOAUTH, while the bench's own password URLs still answer.
+        Residual: code inside the shared engine or worker holds the password (key-prefix isolation)."""
+        checker = (
+            "import json, redis, sys\n"
+            "service, key = sys.argv[1:3]\n"
+            "conf = json.load(open('sites/common_site_config.json'))\n"
+            "out = {'authed': redis.Redis.from_url(conf[key], socket_timeout=5).ping()}\n"
+            "try:\n"
+            "    out['anonymous'] = repr(redis.Redis(host=service, socket_timeout=5).ping())\n"
+            "except Exception as exc:\n"
+            "    out['anonymous'] = type(exc).__name__\n"
+            "print(json.dumps(out))\n"
+        )
+        for service, key in (("redis-cache", "redis_cache"), ("redis-queue", "redis_queue")):
+            with self.subTest(service=service):
+                res = self.compose("exec", "-T", "engine", "env/bin/python", "-c", checker, service, key)
+                self.assertEqual(res.returncode, 0, res.stderr[-2000:])
+                out = json.loads(res.stdout.strip().splitlines()[-1])
+                self.assertIs(out["authed"], True, f"{service} did not answer the bench's password (control)")
+                self.assertEqual(out["anonymous"], "AuthenticationError",
+                                 f"{service} did not refuse an unauthenticated PING with NOAUTH")
 
     # ---------- 8. Background job context & RQ Job API ----------
     def test_job_enqueued_by_a_runs_in_a_only(self):

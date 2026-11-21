@@ -75,9 +75,10 @@ def redis_requires_auth(project):
         if authed is None or authed.returncode != 0 or authed.stdout.strip() != "PONG":
             print(f"{service} is not responding to an authenticated client.", file=sys.stderr)
             return False
+        # Only Redis's own NOAUTH refusal counts: an exec error, DNS miss or empty reply proves nothing.
         anonymous = compose(project, "exec", "-T", service, "redis-cli", "ping")
-        if anonymous is None or anonymous.stdout.strip() == "PONG":
-            print(f"{service} answered an unauthenticated client (or could not be checked).", file=sys.stderr)
+        if anonymous is None or not anonymous.stdout.strip().startswith("NOAUTH"):
+            print(f"{service} did not refuse an unauthenticated client with NOAUTH.", file=sys.stderr)
             return False
     return True
 

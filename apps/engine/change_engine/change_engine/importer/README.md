@@ -133,16 +133,17 @@ NFKC detection-only normalization and leading Unicode whitespace/format/control
 removal. Embedded tabs, newlines and carriage returns fail with `IMP-SCHEMA`.
 Standard Arabic directional and joining marks (`\u200c`, `\u200d`, `\u200e`,
 `\u200f`, `\u061c`) are allowed only in name and free-text fields (and stripped
-when computing name-based master business keys). Codes, account numbers, link
-fields (including `customer_group`, `territory`, `supplier_group`, `item_group`,
-`stock_uom`, `parent_warehouse`, `parent_account` and opening detail links) and
-batch metadata (`tenant_id`, `company`, `batch_id`, `posting_date`, `currency`)
-refuse those marks as well as leading or trailing whitespace, any non-ASCII
-whitespace, any Unicode default-ignorable code point, and any value that changes
-under `NFKC` normalization (`IMP-SCHEMA`); it is UNVERIFIED whether the live
-engine strips whitespace on insert. Any other `Cf` or `Cc` character anywhere in
-text is rejected (`IMP-FORMULA`). Accepted source spelling is unchanged. Numeric
-fields follow their stricter decimal grammar.
+when computing name-based master business keys). Codes, account numbers,
+`warehouse_name`, link fields (including `customer_group`, `territory`,
+`supplier_group`, `item_group`, `stock_uom`, `parent_warehouse`,
+`parent_account` and opening detail links) and batch metadata (`tenant_id`,
+`company`, `batch_id`, `posting_date`, `currency`) refuse those marks as well
+as leading or trailing whitespace, any non-ASCII whitespace, any Unicode
+default-ignorable code point, and any value that changes under `NFKC`
+normalization (`IMP-SCHEMA`); it is UNVERIFIED whether the live engine strips
+whitespace on insert. Any other `Cf` or `Cc` character anywhere in text is
+rejected (`IMP-FORMULA`). Accepted source spelling is unchanged. Numeric fields
+follow their stricter decimal grammar.
 
 ## DSC-011 and DSC-019 integration
 

@@ -195,3 +195,48 @@ def test_ordinary_ascii_codes_clean_links_and_arabic_names_still_pass(backend):
         {"customer_name": "شركة الفجر"},
         {"customer_name": "شركة الفجر\u200f"},
     ]}), "IMP-DUPLICATE")
+
+
+@pytest.mark.parametrize("twin", [
+    "W1 ",
+    "W1\u00a0",
+    "W1\u3164",
+    "\uff37\uff11",
+    "W1\u034f",
+])
+def test_warehouse_name_refuses_whitespace_ignorable_and_non_nfkc_twins(backend, twin):
+    importer = OpeningImporter(backend)
+    datasets = {
+        "Warehouse": [
+            {"warehouse_name": "W1"},
+            {"warehouse_name": twin},
+        ],
+    }
+    refuses(importer, batch(datasets), "IMP-SCHEMA")
+    assert backend.records("tenant-a", "Synthetic Trading") == []
+
+
+@pytest.mark.parametrize("warehouse_name", [
+    "Main Warehouse 01",
+    "المستودع الرئيسي",
+])
+def test_warehouse_name_accepts_ordinary_ascii_and_clean_arabic(backend, warehouse_name):
+    importer = OpeningImporter(backend)
+    datasets = {
+        "Account": [
+            {"account_number": "1300", "account_type": "Stock"},
+            {"account_number": "3000", "account_type": "Other"},
+        ],
+        "TrialBalance": [
+            {"account": "1300", "account_type": "Stock", "debit": "100.00", "credit": "0"},
+            {"account": "3000", "account_type": "Other", "debit": "0", "credit": "100.00"},
+        ],
+        "Item": [{"item_code": "I1"}],
+        "Warehouse": [{"warehouse_name": warehouse_name}],
+        "Stock": [{"item_code": "I1", "warehouse": warehouse_name, "qty": "1", "valuation_rate": "100.00"}],
+    }
+    source = batch(datasets)
+    assert importer.preview(source)["ok"]
+    assert apply(importer, source)["status"] == "applied"
+    stored = [r["row"] for r in backend.records("tenant-a", "Synthetic Trading") if r["entity"] == "Warehouse"]
+    assert stored == [{"warehouse_name": warehouse_name}]

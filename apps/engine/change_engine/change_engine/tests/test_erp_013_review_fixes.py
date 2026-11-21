@@ -133,11 +133,11 @@ def test_opening_details_reject_links_to_same_master(backend, monkeypatch, entit
 
 def test_stock_openings_allow_distinct_resolved_item_and_warehouse_pairs(backend):
     datasets = opening_details()
-    datasets["Warehouse"].append({"warehouse_name": "w1"})
+    datasets["Warehouse"].append({"warehouse_name": "W2"})
     datasets["Item"].append({"item_code": "Packaging"})
     row = datasets["Stock"][0]
     row["qty"] = "0.5"
-    datasets["Stock"].extend([dict(row, warehouse="w1", qty="0.25"),
+    datasets["Stock"].extend([dict(row, warehouse="W2", qty="0.25"),
                               dict(row, item_code="Packaging", qty="0.25")])
     assert OpeningImporter(backend).preview(batch(datasets))["ok"]
 

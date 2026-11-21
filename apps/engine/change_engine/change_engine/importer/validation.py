@@ -59,7 +59,7 @@ DEFAULT_IGNORABLE_RANGES = (
 NAME_TEXT_FIELDS = frozenset({
     "customer_name", "customer_type",
     "supplier_name", "supplier_type",
-    "item_name", "warehouse_name", "account_name",
+    "item_name", "account_name",
 })
 ACCOUNT_TYPES = {"Receivable", "Payable", "Stock", "Other"}
 MAX_BYTES = 2_000_000

@@ -22,6 +22,9 @@
 
 .sort {
   all: unset;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--touch-target);
   cursor: pointer;
   text-decoration: underline;
 }

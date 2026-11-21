@@ -3,7 +3,10 @@
   place-items: center;
   box-sizing: border-box;
   min-block-size: 100vh;
+  min-block-size: 100dvh;
   padding: calc(var(--space-unit) * 3);
+  padding-inline: max(calc(var(--space-unit) * 3), var(--safe-inline));
+  padding-block: max(calc(var(--space-unit) * 3), var(--safe-block-start)) max(calc(var(--space-unit) * 3), var(--safe-block-end));
   background: var(--color-background);
   color: var(--color-text);
   font-family: var(--font-body);

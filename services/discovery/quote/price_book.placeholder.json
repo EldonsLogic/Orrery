@@ -1,0 +1,30 @@
+{
+ "schema": "price-book/0.1.0",
+ "id": "placeholder-v0",
+ "status": "placeholder",
+ "validity_days": 30,
+ "markets": {
+  "SA": {"currency": "SAR", "tax": {"rate_bp": 1500}},
+  "AE": {"currency": "AED", "tax": {"rate_bp": 500}},
+  "EG": {"currency": "EGP", "tax": {"rate_bp": 1400}},
+  "QA": {"currency": "QAR", "tax": {"rate_bp": 0}}
+ },
+ "currencies": {
+  "SAR": {"base_platform_monthly": 200000, "module_default_monthly": 30000, "configuration_one_off": 150000,
+          "build_one_off": {"configurable": 800000, "rigid": 2000000},
+          "allowances": {"ai_actions_monthly": 1000, "overage_pack_size": 500, "overage_pack_price": 40000},
+          "components": {}},
+  "AED": {"base_platform_monthly": 195000, "module_default_monthly": 29000, "configuration_one_off": 145000,
+          "build_one_off": {"configurable": 780000, "rigid": 1950000},
+          "allowances": {"ai_actions_monthly": 1000, "overage_pack_size": 500, "overage_pack_price": 39000},
+          "components": {}},
+  "EGP": {"base_platform_monthly": 2000000, "module_default_monthly": 300000, "configuration_one_off": 1500000,
+          "build_one_off": {"configurable": 8000000, "rigid": 20000000},
+          "allowances": {"ai_actions_monthly": 1000, "overage_pack_size": 500, "overage_pack_price": 400000},
+          "components": {}},
+  "QAR": {"base_platform_monthly": 195000, "module_default_monthly": 29000, "configuration_one_off": 145000,
+          "build_one_off": {"configurable": 780000, "rigid": 1950000},
+          "allowances": {"ai_actions_monthly": 1000, "overage_pack_size": 500, "overage_pack_price": 39000},
+          "components": {}}
+ }
+}

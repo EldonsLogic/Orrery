@@ -538,7 +538,7 @@ class TestErp012FrappeAdapter(unittest.TestCase):
         self.assertNotIn("Bob Disabled", user_dump)
 
         # T36 caller impersonation: active sales_rep sees permitted fields but valuation_rate (permlevel=1) is stripped
-        rows = adapter.execute_as_caller(
+        rows = adapter._execute_as_caller(
             "t_alpha",
             {"service": "operate_gateway", "onBehalfOf": {"kind": "user", "id": "m_sales001"}},
             lambda f: f.get_list("Item", fields=["item_code", "standard_rate", "valuation_rate"]),
@@ -549,7 +549,7 @@ class TestErp012FrappeAdapter(unittest.TestCase):
 
         # T36: sales_rep cannot read GL Entry -> permission_denied (no Administrator fallback)
         with self.assertRaises(Exception) as gl_exc:
-            adapter.execute_as_caller(
+            adapter._execute_as_caller(
                 "t_alpha",
                 {"service": "operate_gateway", "onBehalfOf": {"kind": "user", "id": "m_sales001"}},
                 lambda f: f.get_list("GL Entry", fields=["account", "debit"]),
@@ -564,7 +564,7 @@ class TestErp012FrappeAdapter(unittest.TestCase):
             {"service": "operate_gateway", "onBehalfOf": {"kind": "user", "id": "m_locked01"}},
         ):
             with self.assertRaises(Exception) as bad_exc:
-                adapter.execute_as_caller("t_alpha", bad_caller, lambda f: f.get_list("Item"))
+                adapter._execute_as_caller("t_alpha", bad_caller, lambda f: f.get_list("Item"))
             self.assertEqual(getattr(bad_exc.exception, "code", None), "permission_denied")
 
     def test_multi_tenant_isolation_and_stale_prepared_health(self):

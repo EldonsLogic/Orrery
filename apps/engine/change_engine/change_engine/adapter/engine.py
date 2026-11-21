@@ -34,6 +34,7 @@ from change_engine.adapter.mapping import (
 )
 from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord, TenantMismatch
 from change_engine.adapter.store_api import AdapterStore, StoreRefused, assert_store_allowed, is_production
+from change_engine.guarded_apply.action_policy_enforcer import ActionPolicyEnforcer, ActionRequest, AuthorizedAction
 
 ADAPTER_ID = "frappe"
 ADAPTER_VERSION = "0.1.0"
@@ -294,6 +295,10 @@ class ChangeEngineAdapter:
         store: AdapterStore | None = None,
         environment: str | None = None,
         lease_seconds: int = 3900,
+        *,
+        action_policy: ActionPolicyEnforcer | None = None,
+        action_handlers: dict[str, Callable[[Any, AuthorizedAction], Any]] | None = None,
+        resolve_session_tenant: Callable[[str], str | None] | None = None,
     ) -> None:
         production = is_production(test_hooks, environment)
         if production and test_hooks:
@@ -306,6 +311,10 @@ class ChangeEngineAdapter:
         self.store = store if store is not None else SQLiteAdapterStore(db_path=db_path)
         assert_store_allowed(self.store, production)
         self.frappe_backend = frappe_backend
+        self._action_policy = action_policy
+        self._action_handlers = dict(action_handlers or {})
+        # This lookup is backed by authenticated session state and receives no request data.
+        self._resolve_session_tenant = resolve_session_tenant
         self.now = 0
         self._faults: list[dict[str, Any]] = []
         self._lock_hook: Callable[[], None] | None = None
@@ -327,17 +336,17 @@ class ChangeEngineAdapter:
             "retained": site.retained,
         }
 
-    def execute_as_caller(
+    def _execute_as_caller(
         self,
         tenant_id: str,
         caller: dict[str, Any] | None,
         fn: Callable[[Any], Any],
     ) -> Any:
-        """Execute a tenant operation under caller's own Frappe User permissions (T36)."""
+        """Run a trusted internal callback under the caller's Frappe User permissions (T36)."""
         if self.frappe_backend is None:
             raise AdapterError("engine_unavailable", stage="execute")
         try:
-            return self.frappe_backend.execute_as_caller(tenant_id, caller, fn)
+            return self.frappe_backend._execute_as_caller(tenant_id, caller, fn)
         except AdapterError:
             raise
         except Exception as exc:
@@ -345,6 +354,38 @@ class ChangeEngineAdapter:
             details = getattr(exc, "details", {})
             stage = getattr(exc, "stage", "execute")
             raise AdapterError(code, details, stage=stage) from None
+
+    def execute_action(self, session: str, request: ActionRequest) -> Any:
+        """Dispatch a business write to its server-registered handler after policy admission.
+
+        Handlers run with the resolved human's engine permissions. They must apply
+        the admitted snapshot, verify target revisions in the effect transaction,
+        and return only after a durable effect.
+        """
+        if self._action_policy is None:
+            raise AdapterError("permission_denied", stage="authorize")
+        tenant_id = None
+        if self._resolve_session_tenant is not None and type(session) is str:
+            try:
+                tenant_id = self._resolve_session_tenant(session)
+            except Exception:
+                pass  # The enforcer records the missing binding as a refusal.
+        action_id = request.action_id if type(request) is ActionRequest else None
+        handler = self._action_handlers.get(action_id) if type(action_id) is str else None
+        action = self._action_policy.authorize(
+            session, request, session_tenant_id=tenant_id,
+            handler_available=callable(handler) and self.frappe_backend is not None,
+        )
+        if action is None or handler is None or tenant_id is None:
+            raise AdapterError("permission_denied", stage="authorize")
+        caller = {"service": "operate_gateway", "onBehalfOf": {"kind": "user", "id": action.submitter_id}}
+        try:
+            return self._action_policy.execute_admitted(
+                action, lambda run: self._execute_as_caller(tenant_id, caller, run), handler,
+            )
+        except Exception as exc:
+            code = "permission_denied" if isinstance(exc, AdapterError) and exc.code == "permission_denied" else "engine_unavailable"
+            raise AdapterError(code, stage="execute") from None
 
     # ------------------------------------------------------------------ test hooks
     def _need_hooks(self) -> None:

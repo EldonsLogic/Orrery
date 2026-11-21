@@ -22,12 +22,11 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 |---|---|---|---|---|
 | DSC-009 | fable-5.2 | Different-model Tier 3 security review of #224 (owner approval flow), read-only | none (review text returned) | dsc-009-owner-approval |
 | PLT-009 | opus-5.5 | Model gateway design: home within lanes, routing, budgets, caching, logs, residency; ADR Proposed | docs/architecture/model-gateway.md, one new ADR | plt-009-model-gateway (to create) |
-| GTM-004 | sonnet-5.5 | Dubai AI Agents Championship: official terms, one narrow agent, gate plan | docs/gtm/dubai-ai-agents-championship.md | gtm-004-championship (to create) |
-| FND-002 | sonnet-5.5 | Accelerator evaluation: Hub71+, Antler, up to 3 alternatives | docs/fundraising/accelerator-evaluation.md | fnd-002-accelerators (to create) |
-| BRD-011 | haiku-5.5 | Font licence and Arabic coverage check | docs/brand/font-licence-check.md, docs/legal/licence-register.md | brd-011-font-licence (to create) |
 
 ## Results
-- (appended as each task returns)
+- FND-002 (sonnet): docs/fundraising/accelerator-evaluation.md. Hub71+ wait (relocation, SAFE terms UNVERIFIED), Antler skip, Sanabil/500 wait for MVP, Flat6Labs Riyadh wait (KSA residency), QSTP skip. Hub71 deadline still UNVERIFIED (page 403). Branch fnd-002-accelerators.
+- GTM-004 (sonnet): docs/gtm/dubai-ai-agents-championship.md. Recommends an Owner Interview agent (draft Blueprint, human approves). Registration Jan 2027 per official page, Dec 2026 per press: treat Dec 2026 as binding until confirmed. Needs a Dubai trade licence to receive funds; IP stays ours. Founder decisions listed in the file. Branch gtm-004-championship.
+- BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
 ## Files touched
 - AGENTS.md: session start step 5 (live session log)

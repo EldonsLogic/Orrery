@@ -32,15 +32,15 @@
 }
 
 .toggle {
-  min-inline-size: var(--button-height);
-  min-block-size: var(--button-height);
+  min-inline-size: max(var(--button-height), var(--touch-target));
+  min-block-size: max(var(--button-height), var(--touch-target));
   border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
   background: var(--color-surface);
 }
 
 .nav {
-  min-inline-size: var(--button-height);
-  min-block-size: var(--button-height);
+  min-inline-size: max(var(--button-height), var(--touch-target));
+  min-block-size: max(var(--button-height), var(--touch-target));
 }
 
 .toggle:hover:not(:disabled),
@@ -125,8 +125,8 @@
 }
 
 .day {
-  inline-size: var(--button-height);
-  block-size: var(--button-height);
+  inline-size: max(var(--button-height), var(--touch-target));
+  block-size: max(var(--button-height), var(--touch-target));
   font-variant-numeric: tabular-nums;
 }
 

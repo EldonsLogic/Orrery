@@ -142,3 +142,23 @@ class MemoryChatStore:
     def raw_snapshot(self) -> dict:  # test helper: what is at rest
         with self._lock:
             return copy.deepcopy({"entries": self._entries, "messages": self._messages})
+
+
+class MemoryPendingStore:
+    """One pending confirmation per tenant, user and session. Set only by the chat service after a preview was shown."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._items: dict = {}
+
+    def set(self, tenant_id: str, user_id: str, session_id: str, pending) -> None:
+        with self._lock:
+            self._items[(tenant_id, user_id, session_id)] = pending
+
+    def get(self, tenant_id: str, user_id: str, session_id: str):
+        with self._lock:
+            return self._items.get((tenant_id, user_id, session_id))
+
+    def clear(self, tenant_id: str, user_id: str, session_id: str) -> None:
+        with self._lock:
+            self._items.pop((tenant_id, user_id, session_id), None)

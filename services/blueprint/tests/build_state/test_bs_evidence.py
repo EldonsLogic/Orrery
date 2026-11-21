@@ -115,10 +115,74 @@ def test_h2_changed_content_same_revision_invalidates_everything():
     w.set_content(revision=4, extra_module={"payroll": "new"})
     w.m.revise("author", **w.args()); w.approve(); w.review(); w.sandbox()
     assert code(w.simulated) == "BS-006"                  # revision-3 report does not fit revision 4
-    w.report["blueprintRevision"] = 4                     # a report forged to claim revision 4 has another digest, no sign-off
+    w.report["blueprintRevision"] = 4                     # claims revision 4 but is bound to the old content
     w.sims.put(w.report)
-    w.simulated(); w.cutover()
-    assert code(w.live) == "BS-006"                       # the owner signed the revision-3 report, not this one
+    assert code(w.simulated) == "BS-008"
+
+
+def test_r1_same_revision_other_content_with_a_signed_report_fails():
+    """A report of revision 4 simulated from OTHER content, signed by the owner, cannot carry this build to live."""
+    w = World().to("draft")
+    w.set_content(revision=4, module="a")
+    w.m.roll_back("owner", **w.args(to_state="draft", reason="other")) if False else None
+    w.m.revise("author", **w.args()); w.approve(); w.review(); w.sandbox()
+    other = w.new_report(4, "other")
+    from build_state import content_digest
+    other["blueprintDigest"] = content_digest({"meta": {"id": BP, "revision": 4}, "module": "b"})   # simulated from content b
+    w.sims.put(other)
+    w.sim_id = other["simulationId"]
+    assert code(w.simulated) == "BS-008"
+    other["blueprintId"] = "bp-other"                     # or from another Blueprint of the tenant
+    other["blueprintDigest"] = content_digest(w.bps.d[(T, BP)])
+    w.sims.put(other)
+    assert code(w.simulated) == "BS-008"
+    assert w.state() == "built_in_sandbox"
+
+
+@pytest.mark.parametrize("strip", [("blueprintId", "blueprintDigest"), ("blueprintDigest",), ("blueprintId",)])
+def test_r1_old_report_without_the_binding_is_refused_with_a_coded_error(strip):
+    w = World().to("built_in_sandbox")
+    rep = copy.deepcopy(w.report)
+    for k in strip:
+        rep.pop(k)
+    w.sims.d[(T, w.sim_id)] = rep
+    try:
+        w.simulated()
+    except Exception as e:
+        assert (e.code, e.detail) == ("BS-006", "report_unbound")
+    else:
+        raise AssertionError("accepted")
+
+
+def test_r1_the_binding_is_part_of_the_digest_that_signoff_binds():
+    from simulator import review
+    w = World()
+    other = copy.deepcopy(w.report)
+    other["blueprintDigest"] = "f" * 64
+    assert review.report_digest(other) != review.report_digest(w.report)
+    legacy = {k: v for k, v in w.report.items() if k not in ("blueprintId", "blueprintDigest")}
+    assert review.report_digest(legacy) != review.report_digest(w.report)
+
+
+def test_r1_content_change_after_simulated_with_a_signed_report_blocks_go_live():
+    w = World().to("cutover"); w.sign()
+    w.set_content(late=True)                              # same revision, other content
+    assert code(w.live) == "BS-008"
+
+
+# ---------- R5: a rejected simulation stays rejected ----------
+def test_r5_rejected_report_cannot_be_confirmed_again_by_a_second_reviewer():
+    w = World().to("simulated")
+    w.m.roll_back("rev", **w.args(to_state="draft", reason="simulation_rejected"))
+    w.approve(); w.review(); w.sandbox()
+    assert code(w.simulated, "rev2") == "BS-006"          # same content, same report: refused
+    assert w.state() == "built_in_sandbox"
+    w.set_content(revision=4)
+    # a rollback for another reason does not reject the report
+    w2 = World().to("simulated")
+    w2.m.roll_back("rev", **w2.args(to_state="draft", reason="other"))
+    w2.approve(); w2.review(); w2.sandbox()
+    assert code(w2.simulated, "rev2") is None
 
 
 # ---------- M1: the queue item is derived, not chosen ----------
@@ -272,3 +336,17 @@ def test_ledger_needs_a_key():
     w.ledger._log._keys.clear()                                          # key custody lost: fail closed, never sha256
     assert code(w.ledger.records, T, w.sim_id) == "BS-011"
     assert code(w.live) == "BS-011"
+
+
+def test_simulator_binding_arguments_are_both_or_neither_and_checked():
+    from simulator import SimulatorError
+    good = "a" * 64
+    for kw in ({"blueprint_id": BP}, {"blueprint_digest": good}, {"blueprint_id": BP, "blueprint_digest": "xyz"},
+               {"blueprint_id": "", "blueprint_digest": good}, {"blueprint_id": 5, "blueprint_digest": good},
+               {"blueprint_id": BP, "blueprint_digest": "A" * 64}):
+        with pytest.raises(SimulatorError):
+            h.run(**kw)
+    r = h.run()[0]
+    assert "blueprintId" not in r and "blueprintDigest" not in r        # an unbound run keeps its old shape
+    b = h.run(blueprint_id=BP, blueprint_digest=good)[0]
+    assert (b["blueprintId"], b["blueprintDigest"]) == (BP, good)

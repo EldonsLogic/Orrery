@@ -43,6 +43,7 @@ How it stays honest (the PLT-013 and BPL-019 lessons, applied):
 """
 from __future__ import annotations
 
+import contextvars
 import copy
 import hashlib
 from dataclasses import dataclass, field
@@ -55,6 +56,7 @@ from .ledger import SignOffLedger
 from .ports import KINDS, OWNER, REALMS, REVIEWER, ROLE_REALM, RUNNER, Principal
 from .sealed import SealedLog
 
+_WHO = contextvars.ContextVar("build_state_who", default=None)   # per-call actor for audit, never on the instance
 STATES = ("draft", "owner_approved", "team_reviewed", "built_in_sandbox", "simulated", "live")
 _IDX = {s: i for i, s in enumerate(STATES)}
 AUTHOR = "author"
@@ -85,6 +87,7 @@ class _B:
     bp: str
     state: str = "draft"
     pending: object = None          # {"kind", "key", "outcome", "at"}; outcome None (applying) or "unknown"
+    rejected_reports: set = field(default_factory=set)   # report digests of a simulation a reviewer rejected (rollback)
     recovery: object = None         # {"kind", "key"}: a live apply failed; the site may need recovery (human clears)
     digest: str = ""
     revision: int = 0
@@ -121,7 +124,6 @@ class BuildStateMachine:
         self._idn, self._bps, self._validate, self._reviews, self._sims = identity, blueprints, validator, reviews, simulations
         self._ledger, self._engine, self._clock, self._audit_cb = signoffs, engine, clock, audit
         self._policy = roles
-        self._who = None
 
     # ----- host clock, audit, actor --------------------------------------------------------------------------
     def _now(self) -> int:
@@ -142,21 +144,24 @@ class BuildStateMachine:
             pass
 
     def _run(self, action, tenant_id, bp, claims, fn):
-        self._who = None
+        tok = _WHO.set(None)
         subject = getattr(claims, "subject", None) if not isinstance(claims, (str, bytes, dict)) else None
+        t = tenant_id if isinstance(tenant_id, str) else None
+        b = bp if isinstance(bp, str) else None
         try:
             out = fn()
-            subject = self._who
         except BuildStateError as e:
-            subject = self._who or (subject if isinstance(subject, str) else None)
-            self._audit(action, e.code, subject, tenant_id if isinstance(tenant_id, str) else None, bp if isinstance(bp, str) else None)
+            who = _WHO.get() or (subject if isinstance(subject, str) else None)
+            self._audit(action, e.code, who, t, b)
             raise
         except Exception:
-            subject = self._who
-            self._audit(action, "BS-001", subject, tenant_id if isinstance(tenant_id, str) else None, bp if isinstance(bp, str) else None)
+            self._audit(action, "BS-001", _WHO.get(), t, b)
             raise BuildStateError("BS-001", "unexpected") from None
-        self._audit(action, "OK", subject, tenant_id, bp)
-        return out
+        else:
+            self._audit(action, "OK", _WHO.get(), tenant_id, bp)
+            return out
+        finally:
+            _WHO.reset(tok)
 
     def _actor(self, claims, t, roles, *, gate):
         try:
@@ -170,7 +175,7 @@ class BuildStateMachine:
             raise BuildStateError("BS-003", "principal")
         if not ID_RE_OK(p.subject):
             raise BuildStateError("BS-003", "principal")
-        self._who = p.subject
+        _WHO.set(p.subject)
         if p.kind not in KINDS or p.realm not in REALMS:
             raise BuildStateError("BS-003", "principal")
         if p.realm == "tenant":
@@ -275,6 +280,8 @@ class BuildStateMachine:
                 raise BuildStateError("BS-010")
             if d["digest"] != n.digest:
                 raise BuildStateError("BS-008")
+            if d["reason"] == "simulation_rejected" and "sim" in n.att:
+                n.rejected_reports.add(n.att["sim"]["reportDigest"])   # a rejected simulation stays rejected
             n.state = d["to"]
             n.att = {k: v for k, v in n.att.items() if _STAGE[k] <= _IDX[d["to"]]}
         elif typ == "apply_started":
@@ -316,11 +323,14 @@ class BuildStateMachine:
         elif typ == "recovery_cleared":
             if not n.recovery or (d["kind"], d["key"]) != (n.recovery["kind"], n.recovery["key"]) or d["digest"] != n.digest:
                 raise BuildStateError("BS-005")
+            self._sod(n, a, a["role"])
             n.recovery = None
         elif typ == "simulated":
             if S != "built_in_sandbox" or d["verdict"] not in PASSING_VERDICTS or d["revision"] != n.revision:
                 raise BuildStateError("BS-005")
             ident(d["simulationId"], "simulation"); _digest(d["reportDigest"])
+            if d["reportDigest"] in n.rejected_reports:
+                raise BuildStateError("BS-006", "report_rejected")
             self._sod(n, a, REVIEWER)
             n.state = "simulated"
             n.att["sim"] = {"actor": a["subject"], "simulationId": d["simulationId"], "reportDigest": d["reportDigest"], "revision": d["revision"]}
@@ -451,7 +461,7 @@ class BuildStateMachine:
                 raise BuildStateError("BS-006", "review")
             self._review(t, bp, content, r["pinSeq"], r["pinHead"], r)
 
-    def _report(self, t, sim_id, revision):
+    def _report(self, t, bp, sim_id, revision, digest):
         try:
             report = self._sims.load(t, sim_id)
         except Exception:
@@ -463,6 +473,10 @@ class BuildStateMachine:
         if report.get("tenantId") != t or report.get("simulationId") != sim_id or report.get("status") != "completed" \
                 or view["verdict"] not in PASSING_VERDICTS or report.get("blueprintRevision") != revision or report.get("inDoubt"):
             raise BuildStateError("BS-006", "report")
+        if report.get("blueprintId") is None or report.get("blueprintDigest") is None:
+            raise BuildStateError("BS-006", "report_unbound")    # an old report that names no Blueprint content is refused
+        if report["blueprintId"] != bp or report["blueprintDigest"] != digest:
+            raise BuildStateError("BS-008", "report_content")    # simulated from other content (or another Blueprint)
         return report, view["reportDigest"]
 
     def _signoff(self, t, report, sim_id, recorded):
@@ -609,7 +623,7 @@ class BuildStateMachine:
             self._need(b, "built_in_sandbox")
             content, dg, rev = self._content(t, bp)
             self._upstream(t, bp, b, content, dg, _IDX["team_reviewed"])
-            report, rd = self._report(t, sim, rev)
+            report, rd = self._report(t, bp, sim, rev, dg)
             self._write(b, t, bp, p, role, at, "simulated", {"digest": dg, "simulationId": sim, "reportDigest": rd, "revision": rev,
                                                             "verdict": review.build_view(report, required_roles=self._policy)["verdict"]})
             return self.status(t, bp)
@@ -626,7 +640,7 @@ class BuildStateMachine:
             sim = b.att.get("sim")
             if b.state != "simulated" or not sim:
                 raise BuildStateError("BS-005")
-            _, rd = self._report(t, sim["simulationId"], rev)
+            _, rd = self._report(t, bp, sim["simulationId"], rev, dg)
             if rd != sim["reportDigest"]:
                 raise BuildStateError("BS-008")
             if type(checks) not in (list, tuple) or tuple(sorted(checks)) != CUTOVER_CHECKS:
@@ -646,19 +660,26 @@ class BuildStateMachine:
             at, b = self._now(), self._load(t, bp)
             content, dg, rev = self._content(t, bp)
             self._upstream(t, bp, b, content, dg, _IDX["team_reviewed"])
-            sim = b.att.get("sim")
-            if b.state != "simulated" or not sim or "cutover" not in b.att:
-                raise BuildStateError("BS-005")
-            report, rd = self._report(t, sim["simulationId"], rev)
-            if rd != sim["reportDigest"]:
-                raise BuildStateError("BS-008")
-            self._signoff(t, report, sim["simulationId"], rd)
+            sim, rd = self._live_checks(t, bp, b, dg, rev)
             n = b.attempts.get("live", 0) + 1
             self._write(b, t, bp, p, role, at, "apply_started", {"kind": "live", "key": idempotency_key(t, bp, "live", dg, n), "digest": dg,
                                                                  "attempt": n, "simulationId": sim["simulationId"], "reportDigest": rd})
             self._apply(t, bp, "live", p, role, dg)
             return self.status(t, bp)
         return self._run("go_live", tenant_id, blueprint_id, claims, go)
+
+    def _live_checks(self, t, bp, b, dg, rev):
+        """Everything go-live needs besides the actor: the cutover, the report (bound to this content) and its sign-off
+        from the sealed ledger. Also re-run before any re-issue of a live apply, so a non-human can never start the
+        first real production apply on stale approval."""
+        sim = b.att.get("sim")
+        if b.state != "simulated" or not sim or "cutover" not in b.att:
+            raise BuildStateError("BS-005")
+        report, rd = self._report(t, bp, sim["simulationId"], rev, dg)
+        if rd != sim["reportDigest"]:
+            raise BuildStateError("BS-008")
+        self._signoff(t, report, sim["simulationId"], rd)
+        return sim, rd
 
     def reconcile_apply(self, claims, *, tenant_id, blueprint_id):
         """A pending apply with no recorded outcome (a crash, a lost reply) past its lease (host clock) becomes
@@ -697,8 +718,10 @@ class BuildStateMachine:
             except Exception:
                 out = "unknown"
             if out != "confirmed" and b.pending:
-                _, dg, _ = self._content(t, bp)
-                self._fresh(b, dg)
+                content, dg, rev = self._content(t, bp)       # every go-live check again, then the same key
+                self._upstream(t, bp, b, content, dg, _IDX["team_reviewed"])
+                if cur["kind"] == "live":
+                    self._live_checks(t, bp, b, dg, rev)
                 try:
                     out = self._norm(self._engine.apply(t, cur["kind"], cur["key"], dg))
                 except Exception:
@@ -721,6 +744,7 @@ class BuildStateMachine:
             at, b = self._now(), self._load(t, bp)
             if not b.recovery:
                 raise BuildStateError("BS-005")
+            self._sod(b, {"subject": p.subject}, role)
             try:
                 out = self._norm(self._engine.status(t, b.recovery["key"]))
             except Exception:

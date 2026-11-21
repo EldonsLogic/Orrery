@@ -1,4 +1,5 @@
 """Build state machine, draft to live, with the human gates (BPL-020, Tier 3). See machine.py."""
+from .canon import content_digest
 from .errors import CODES, BuildStateError
 from .ledger import SignOffLedger
 from .machine import (AUTHOR, CONFIRMATIONS, CUTOVER_CHECKS, REASONS, STATES, BuildStateMachine, idempotency_key)
@@ -25,4 +26,4 @@ def label_keys() -> set:
 
 
 __all__ = ["AUTHOR", "BuildStateError", "BuildStateMachine", "CODES", "CONFIRMATIONS", "CUTOVER_CHECKS", "OWNER", "Principal",
-           "REASONS", "REVIEWER", "RUNNER", "STATES", "SealedLog", "SignOffLedger", "idempotency_key", "label", "label_keys"]
+           "REASONS", "REVIEWER", "RUNNER", "STATES", "SealedLog", "SignOffLedger", "content_digest", "idempotency_key", "label", "label_keys"]

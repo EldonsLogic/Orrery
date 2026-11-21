@@ -6,7 +6,7 @@ import json
 from dataclasses import replace
 
 import sim_helpers as h
-from build_state import (BuildStateError, BuildStateMachine, Principal, SignOffLedger)
+from build_state import (BuildStateError, BuildStateMachine, Principal, SignOffLedger, content_digest)
 from simulator import review, signoff
 
 T = h.TENANT
@@ -151,7 +151,7 @@ class World:
         self.m = BuildStateMachine(identity=self.idn, blueprints=self.bps, validator=lambda c: list(self.errors), reviews=self.rev,
                                    simulations=self.sims, signoffs=self.ledger, engine=self.engine, clock=self.clock,
                                    integrity_keys=keys, key_id="k1", required_signoff_roles=roles, audit=self.audit.append)
-        self.report = copy.deepcopy(h.run()[0])
+        self.report = copy.deepcopy(h.run(blueprint_id=BP, blueprint_digest=content_digest(content()))[0])
         self.sims.put(self.report)
         self.sim_id = self.report["simulationId"]
 
@@ -170,6 +170,7 @@ class World:
         import re
         r = copy.deepcopy(self.report)
         r["blueprintRevision"] = revision
+        r["blueprintDigest"] = content_digest(self.bps.d[(T, BP)])
         r["simulationId"] = hashlib.sha256(f"{tag}{revision}".encode()).hexdigest()
         self.sims.put(r)
         return r

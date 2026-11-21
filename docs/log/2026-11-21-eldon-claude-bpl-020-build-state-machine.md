@@ -22,3 +22,5 @@ Unknown.
 Other-founder line-by-line review and a different-model security review (Tier 3). Then host adapters for the identity, review and engine ports (Q-505), DSC-009 on top, QA-009 rehearsal. Not verified: no integration test through the real ReviewQueue (needs wiring, Q-432).
 
 Review round 1 (Opus): fixed H1 (tests under the CI-mapped path), H2 (revision plus digest binding), H3 (single-flight applies, lease, reconcile), M1 (queue item derived), M2 (rollback to draft only), M3 (recovery), M4 (reconcile), M5 (audit actor), L1, L4, L5 partly. Q-510 to Q-513 added.
+
+Review round 2 (Opus): R1 (report bound to Blueprint id and content digest, Q-510 resolved), R2 (re-issue re-runs go-live checks), R4, R5, R6 fixed; tests and mutations in services/blueprint/tests/build_state.

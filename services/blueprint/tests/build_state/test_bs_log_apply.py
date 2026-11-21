@@ -314,3 +314,77 @@ def test_status_pending_labels():
     code(w.live)
     p = w.status()["pending"]
     assert p["kindKey"] in label_keys() and p["statusKey"] in label_keys()
+
+
+# ---------- R2: a re-issued live apply re-runs every go-live check ----------
+def crash_live(w):
+    w.engine.script = [SystemExit()]
+    try:
+        w.live()
+    except BaseException as e:
+        assert isinstance(e, SystemExit)
+    w.clock.value = w.clock.t + LEASE + 1
+    assert w.m.reconcile_apply("runner", **w.args())["pending"]["status"] == "unknown"
+    w.clock.value += 1
+    n = len(w.engine.calls)
+    return n
+
+
+def test_r2_hold_added_after_go_live_blocks_the_reissue():
+    w = World().to("cutover"); w.sign()
+    n = crash_live(w)
+    w.rev.hold = True                                    # an injection hold after go_live, before the recovery
+    assert code(w.m.resolve_apply, "runner", **w.args()) == "BS-006"
+    assert len(w.engine.calls) == n and w.state() == "simulated"     # the adapter was not called again
+    w.rev.hold = False
+    assert w.m.resolve_apply("runner", **w.args())["state"] == "live"
+
+
+@pytest.mark.parametrize("change", ["content", "signoff", "review_pin", "report"])
+def test_r2_every_other_go_live_check_blocks_the_reissue(change):
+    w = World().to("cutover"); w.sign()
+    n = crash_live(w)
+    if change == "content":
+        w.set_content(late=1)
+    elif change == "signoff":
+        w.ledger._log._logs.clear()                      # the sealed sign-off vanished: no evidence
+    elif change == "review_pin":
+        w.rev.seq += 1
+    else:
+        w.sims.d.clear()
+    assert code(w.m.resolve_apply, "runner", **w.args()) is not None
+    assert len(w.engine.calls) == n and w.state() == "simulated"
+
+
+# ---------- R4: clear_recovery separation of duties ----------
+def test_r4_clear_recovery_needs_separation_step_up_and_audit():
+    w = World().to("cutover"); w.sign()
+    w.idn.table["authorrev"] = P("u-author", "human", "staff", ["team_reviewer"])   # the author's own reviewer account
+    w.engine.script = ["failed"]
+    code(w.live)
+    w.engine.status_script = ["failed", "failed", "failed"]
+    assert code(w.m.clear_recovery, "authorrev", **w.args()) == "BS-007"
+    from dataclasses import replace
+    w.idn.table["rev2"] = replace(w.idn.table["rev2"], step_up=False)
+    assert code(w.m.clear_recovery, "rev2", **w.args()) == "BS-003"
+    w.idn.table["rev2"] = replace(w.idn.table["rev2"], step_up=True)
+    assert w.m.clear_recovery("rev2", **w.args())["recovery"] is None
+    last = w.audit[-1]
+    assert (last["action"], last["code"], last["subject"]) == ("build.clear_recovery", "OK", "u-rev2")
+    assert ("build.clear_recovery", "BS-007", "u-author") in [(a["action"], a["code"], a["subject"]) for a in w.audit]
+
+
+# ---------- R6: the audit actor is per call, never shared state ----------
+def test_r6_interleaved_calls_log_the_right_user():
+    w = World().to("team_reviewed")
+    w.bps.d[(T, "bp-two")] = {"meta": {"id": "bp-two", "revision": 3}}
+    orig = w.engine.apply
+    def apply(t, kind, key, dg):
+        w.m.create("author", tenant_id=T, blueprint_id="bp-two")      # another user's call inside this one
+        code(w.m.approve_owner, "agent", tenant_id=T, blueprint_id="bp-two", confirmations=[])
+        return orig(t, kind, key, dg)
+    w.engine.apply = apply
+    w.sandbox("runner")
+    rows = [(a["action"], a["subject"], a["code"]) for a in w.audit[-3:]]
+    assert rows == [("build.create", "u-author", "OK"), ("build.owner_approve", "agent-1", "BS-003"), ("build.build_sandbox", "svc-run", "OK")]
+    assert not hasattr(w.m, "_who")

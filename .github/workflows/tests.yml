@@ -352,7 +352,10 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_sec_022_bpl_032_roles.py -q
+        run: >
+          python3 -m pytest -q
+          apps/engine/change_engine/change_engine/tests/test_sec_022_bpl_032_roles.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_2.py
 
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

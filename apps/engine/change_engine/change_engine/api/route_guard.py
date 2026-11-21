@@ -40,7 +40,7 @@ ADAPTER_METHODS = (
 
 PING_PATH = "/api/method/ping"
 
-# Explicit, reviewed set of top-level business records with an active read consumer.
+# Explicit, reviewed set of top-level business records that may be read through the guard.
 # Adding grant entities to ENTITY_TO_DOCTYPE does not widen this set; writes use guarded adapter methods.
 READ_ROUTE_DOCTYPES = ("Customer", "Item", "Sales Order", "Sales Invoice")
 RESOURCE_ALLOWLIST = {name: ("GET",) for name in READ_ROUTE_DOCTYPES}

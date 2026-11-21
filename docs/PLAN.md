@@ -190,7 +190,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-015 | WhatsApp or push channel for the chat | Operate | G4 | OPR-010,DSC-015 | eldon | todo |
 | PLT-001 | Tenancy ADR-0006: site per tenant on shared in-country infrastructure | Platform | G0 | GOV-015 | eldon | done |
 | PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | eldon | done |
-| PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | partner | todo |
+| PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | partner | doing |
 | PLT-004 | Tenant lifecycle states: trial, active, suspended, exported, deleted | Platform | G1 | PLT-003 | partner | todo |
 | PLT-005 | Identity service (users, sessions, per-tenant roles) | Platform | G2 | PLT-002 | eldon | done |
 | PLT-006 | Plans and entitlements model, everything unlocked at first | Platform | G2 | PLT-004 | eldon | todo |
@@ -200,10 +200,10 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-010 | Gateway regional routing and provider fallback | Platform | G3 | PLT-009,CMP-019 | eldon | todo |
 | PLT-011 | Per-tenant AI cost attribution and caps | Platform | G2 | PLT-009,PLT-007 | eldon | todo |
 | PLT-012 | Internal team console | Platform | G2 | PLT-005 | eldon | done |
-| PLT-013 | Human review queue (team_reviewed gate) | Platform | G2 | PLT-012 | eldon | todo |
+| PLT-013 | Human review queue (team_reviewed gate) | Platform | G2 | PLT-012 | eldon | done |
 | PLT-014 | Component factory review screens | Platform | G2 | PLT-012,BPL-016 | eldon | done |
 | PLT-015 | Observability: logs, metrics, traces, alerts | Platform | G1 | INF-004 | partner | todo |
-| PLT-016 | Feature flags | Platform | G2 | PLT-012 | eldon | todo |
+| PLT-016 | Feature flags | Platform | G2 | PLT-012 | eldon | done |
 | PLT-017 | Per-tenant brand asset storage | Platform | G2 | PLT-003,INF-011 | partner | todo |
 | PLT-018 | Entitlement to remove the Powered-by mark | Platform | G2 | PLT-006,BRD-007 | eldon | todo |
 | PLT-019 | Audited just-in-time support access | Platform | G3 | PLT-012,SEC-008 | eldon | todo |

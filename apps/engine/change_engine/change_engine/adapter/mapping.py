@@ -126,10 +126,10 @@ def entity_to_doctype(entity_id: str) -> str:
 
 
 def is_protected_entity(entity_id: str) -> bool:
-    if entity_id in PROTECTED_ENTITY_IDS:
+    """Case-insensitive: the engine folds case in names (`gl_entry` derives `Gl Entry`, which is `GL Entry`)."""
+    if str(entity_id).casefold() in {i.casefold() for i in PROTECTED_ENTITY_IDS}:
         return True
-    doctype = entity_to_doctype(entity_id)
-    return doctype in ZONE_2_LOCKED_DOCTYPES
+    return entity_to_doctype(entity_id).casefold() in {d.casefold() for d in ZONE_2_LOCKED_DOCTYPES}
 
 
 # SEC-022 / ADR-0051 item 3: the document types a Blueprint role may get permission rules on are an allowlist:

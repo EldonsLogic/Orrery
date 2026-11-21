@@ -12,9 +12,10 @@ from unittest import mock
 
 from change_engine.adapter import ChangeEngineAdapter, FrappeRuntimeBackend, FrappeSiteResolver
 from change_engine.adapter import contracts_support as cs
-from change_engine.adapter.mapping import _DECIMAL_ADD_RE
+from change_engine.adapter.mapping import _DECIMAL_ADD_RE, entity_to_doctype, is_protected_entity
 from change_engine.guarded_apply.safety_guardrails import (
     VALID_FIELDNAME_RE,
+    ZONE_2_LOCKED_DOCTYPES,
     ZoneSafetyViolation,
     validate_mutation_safety,
 )
@@ -186,6 +187,69 @@ class TestOwnEntityGrantsAgreeAcrossBackends(unittest.TestCase):
             with self.subTest(adapter=name):
                 result = self._plan(adapter, steps, f"idemp_f2_prot_{name}")
                 self.assertEqual({s["seq"]: s["disposition"] for s in result["steps"]}[2], "blocked", result)
+
+
+class TestProtectedEntityIsCaseInsensitive(unittest.TestCase):
+    """Review Low L2 (pre-existing): `gl_entry` derives `Gl Entry`, which the engine (MariaDB collation) treats as
+    `GL Entry`; the protected check must not be case-sensitive."""
+
+    def test_gl_entry_spellings_are_protected(self) -> None:
+        for eid in ("gl_entry", "GL_ENTRY", "Gl Entry", "GL Entry", "gl-entry"):
+            with self.subTest(entity=eid):
+                self.assertTrue(is_protected_entity(eid))
+
+    def test_every_zone_2_doctype_is_protected_under_its_derived_spellings(self) -> None:
+        checked = 0
+        for doctype in ZONE_2_LOCKED_DOCTYPES:
+            for eid in (doctype.replace(" ", "_").lower(), doctype.replace(" ", "_").upper(), doctype.replace(" ", "_")):
+                if entity_to_doctype(eid).casefold() != doctype.casefold():
+                    continue  # derives a different name (e.g. `doc_perm` is `Doc Perm`, not `DocPerm`)
+                checked += 1
+                with self.subTest(doctype=doctype, entity=eid):
+                    self.assertTrue(is_protected_entity(eid))
+        self.assertGreater(checked, len(ZONE_2_LOCKED_DOCTYPES))
+
+    def test_mixed_case_acronym_names_are_protected(self) -> None:
+        for eid in ("docperm", "DOCPERM", "docshare", "custom_docperm", "Custom_DocPerm"):
+            with self.subTest(entity=eid):
+                self.assertTrue(is_protected_entity(eid))
+
+    def test_protected_ids_are_case_insensitive(self) -> None:
+        for eid in ("general_ledger", "General_Ledger", "AUDIT_LOG", "Tax_Ledger"):
+            with self.subTest(entity=eid):
+                self.assertTrue(is_protected_entity(eid))
+
+    def test_ordinary_entities_stay_unprotected(self) -> None:
+        for eid in ("widget", "customer", "sales_order", "supplier", "payment_entry", "server_script", "has_role"):
+            with self.subTest(entity=eid):
+                self.assertFalse(is_protected_entity(eid))
+
+
+class TestCaseVariantLedgerEntityBlockedAtPlanOnBothBackends(TestOwnEntityGrantsAgreeAcrossBackends):
+    """L2 at plan time: `entity.add gl_entry` and a grant on it are blocked on the in-memory adapter and on the
+    offline engine-backed adapter alike."""
+
+    def test_case_variant_protected_entity_and_grant_blocked(self) -> None:
+        for eid in ("gl_entry", "payment_ledger_entry", "docperm"):
+            steps = [_entity(1, eid), _role(2, "r_gl", eid)]
+            for name, adapter in self._adapters():
+                with self.subTest(entity=eid, adapter=name):
+                    result = self._plan(adapter, steps, f"idemp_f2_l2_{eid}_{name}")
+                    got = {s["seq"]: s["disposition"] for s in result["steps"]}
+                    self.assertEqual(got, {1: "blocked", 2: "blocked"}, result)
+                    self.assertEqual(result["verdict"], "rejected")
+
+    def test_grant_alone_on_case_variant_protected_entity_blocked(self) -> None:
+        steps = [_role(1, "r_gl", "gl_entry")]
+        for name, adapter in self._adapters():
+            with self.subTest(adapter=name):
+                result = self._plan(adapter, steps, f"idemp_f2_l2_alone_{name}")
+                self.assertEqual(result["steps"][0]["disposition"], "blocked", result)
+
+    # inherited tests of the parent class are not repeated
+    test_own_entity_grant_allowed_and_unmapped_builtin_refused_on_both = None
+    test_own_entity_grant_alone_needs_gate_approval_on_both = None
+    test_protected_own_entity_stays_refused_in_memory = None
 
 
 if __name__ == "__main__":

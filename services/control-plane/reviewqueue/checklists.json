@@ -1,0 +1,8 @@
+{
+  "version": "1",
+  "kinds": {
+    "blueprint_draft": ["compliance_profile", "rigid_components", "new_component_requests", "data_mapping", "permissions", "branding_assets"],
+    "component_request": ["scope_is_plain", "spec_matches_need", "tests_are_blocking", "no_customer_data", "i18n_keys_ar_en"],
+    "simulation_signoff": ["report_digest_matches", "signed_by_verified_owner", "warnings_acknowledged", "anomalies_triaged"]
+  }
+}

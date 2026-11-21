@@ -27,7 +27,7 @@ def test_full_path_to_live():
 
 OPS = {
     "create": lambda w: w.create(),
-    "revise": lambda w: (w.set_content(x=1), w.m.revise("author", **w.args()))[1],
+    "revise": lambda w: (w.set_content(revision=w.status()["revision"] + 1, x=1), w.m.revise("author", **w.args()))[1],
     "approve": lambda w: w.approve(),
     "review": lambda w: w.review(),
     "sandbox": lambda w: w.sandbox(),
@@ -188,19 +188,19 @@ def test_input_checks():
     assert code(w.m.status, "t_other", BP) == "BS-004"   # another tenant cannot see the build
 
 
-def test_rollback_has_its_own_gate_and_voids_approvals():
+def test_rollback_goes_to_draft_only_with_its_own_gate_and_voids_approvals():
     w = World().to("team_reviewed")
     assert code(lambda: w.m.roll_back("agent", **w.args(to_state="draft", reason="other"))) == "BS-003"
-    assert code(lambda: w.m.roll_back("rev", **w.args(to_state="team_reviewed", reason="other"))) == "BS-016"   # not earlier
-    assert code(lambda: w.m.roll_back("rev", **w.args(to_state="simulated", reason="other"))) == "BS-016"
+    for to in ("owner_approved", "team_reviewed", "built_in_sandbox", "simulated", "live", "nowhere"):
+        assert code(lambda: w.m.roll_back("rev", **w.args(to_state=to, reason="other"))) in ("BS-016", "BS-001")   # M2: the contract allows draft only
     assert code(lambda: w.m.roll_back("rev", **w.args(to_state="draft", reason="because"))) == "BS-001"
-    assert code(lambda: w.m.roll_back("rev", **w.args(to_state="nowhere", reason="other"))) == "BS-001"
-    assert w.m.roll_back("rev", **w.args(to_state="owner_approved", reason="rejected"))["state"] == "owner_approved"
-    assert code(w.sandbox) == "BS-005"
-    w.review()                                           # the review gate again, fresh evidence
-    w.m.roll_back("owner", **w.args(to_state="draft", reason="owner_reopened"))
+    assert w.state() == "team_reviewed"
+    assert w.m.roll_back("rev", **w.args(to_state="draft", reason="rejected"))["state"] == "draft"
     assert w.status()["approvals"] == []
     assert code(w.review) == "BS-005"
+    assert code(lambda: w.m.roll_back("owner", **w.args(to_state="draft", reason="other"))) == "BS-016"   # already draft
+    w.approve(); w.review(); w.sandbox(); w.simulated()
+    w.m.roll_back("owner", **w.args(to_state="draft", reason="owner_reopened"))
     w.approve(); w.review(); w.sandbox(); w.simulated()
     assert w.state() == "simulated"
 
@@ -210,6 +210,6 @@ def test_nothing_after_live():
     assert code(lambda: w.m.roll_back("owner", **w.args(to_state="draft", reason="other"))) == "BS-016"
     for op in ("approve", "review", "sandbox", "simulated", "cutover", "live"):
         assert code(getattr(w, op)) is not None
-    w.set_content(changed=True)
+    w.set_content(revision=9, changed=True)
     assert code(lambda: w.m.revise("author", **w.args())) == "BS-005"
     assert w.state() == "live"

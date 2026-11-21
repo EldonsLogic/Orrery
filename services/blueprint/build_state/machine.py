@@ -51,6 +51,7 @@ from simulator import review, signoff
 
 from .canon import DIGEST_RE, content_digest, digest as _digest, ident, id_list, tenant as _tenant
 from .errors import BuildStateError
+from .ledger import SignOffLedger
 from .ports import KINDS, OWNER, REALMS, REVIEWER, ROLE_REALM, RUNNER, Principal
 from .sealed import SealedLog
 
@@ -59,6 +60,7 @@ _IDX = {s: i for i, s in enumerate(STATES)}
 AUTHOR = "author"
 CONFIRMATIONS = ("gaps", "quote", "summary")
 CUTOVER_CHECKS = ("backups_verified", "compliance_onboarding", "opening_balances")
+APPLY_LEASE = 900  # seconds an apply may stay in flight before it can be reconciled to unknown
 REASONS = ("rejected", "owner_reopened", "content_changed", "sandbox_failed", "simulation_rejected", "other")
 OUTCOMES = ("confirmed", "failed", "unknown")
 PASSING_VERDICTS = ("pass", "pass_with_warnings")
@@ -68,7 +70,7 @@ _DATA = {
     "created": {"digest", "revision", "involved"}, "revised": {"digest", "revision", "involved"},
     "owner_approved": {"digest", "confirmations"},
     "team_reviewed": {"digest", "itemId", "pinSeq", "pinHead", "reviewDigest", "approvedBy"},
-    "rolled_back": {"from", "to", "reason", "digest"},
+    "rolled_back": {"from", "to", "reason", "digest"}, "recovery_cleared": {"kind", "key", "digest"},
     "apply_started": {"kind", "key", "digest", "attempt", "simulationId", "reportDigest"},
     "apply_outcome": {"kind", "key", "outcome"},
     "simulated": {"digest", "simulationId", "reportDigest", "revision", "verdict"},
@@ -82,7 +84,8 @@ class _B:
     tenant: str
     bp: str
     state: str = "draft"
-    pending: object = None          # {"kind", "key", "outcome"}; outcome None (applying) or "unknown"
+    pending: object = None          # {"kind", "key", "outcome", "at"}; outcome None (applying) or "unknown"
+    recovery: object = None         # {"kind", "key"}: a live apply failed; the site may need recovery (human clears)
     digest: str = ""
     revision: int = 0
     authors: dict = field(default_factory=dict)       # subject -> realm
@@ -110,12 +113,15 @@ class BuildStateMachine:
         roles = tuple(required_signoff_roles) if type(required_signoff_roles) in (tuple, list) else ()
         if not roles or len(set(roles)) != len(roles) or any(r not in review.ROLES for r in roles) or "owner" not in roles:
             raise BuildStateError("BS-001", "required_signoff_roles")
+        if not isinstance(signoffs, SignOffLedger):
+            raise BuildStateError("BS-001", "signoffs")
         if any(p is None for p in (identity, blueprints, validator, reviews, simulations, signoffs, engine, clock)):
             raise BuildStateError("BS-001", "ports")
         self._log = SealedLog(keys, key_id if key_id is not None else (list(keys)[-1] if keys else ""), "orrery.buildstate.log.v1")
         self._idn, self._bps, self._validate, self._reviews, self._sims = identity, blueprints, validator, reviews, simulations
         self._ledger, self._engine, self._clock, self._audit_cb = signoffs, engine, clock, audit
         self._policy = roles
+        self._who = None
 
     # ----- host clock, audit, actor --------------------------------------------------------------------------
     def _now(self) -> int:
@@ -136,16 +142,20 @@ class BuildStateMachine:
             pass
 
     def _run(self, action, tenant_id, bp, claims, fn):
-        subject = None
+        self._who = None
+        subject = getattr(claims, "subject", None) if not isinstance(claims, (str, bytes, dict)) else None
         try:
             out = fn()
+            subject = self._who
         except BuildStateError as e:
+            subject = self._who or (subject if isinstance(subject, str) else None)
             self._audit(action, e.code, subject, tenant_id if isinstance(tenant_id, str) else None, bp if isinstance(bp, str) else None)
             raise
         except Exception:
+            subject = self._who
             self._audit(action, "BS-001", subject, tenant_id if isinstance(tenant_id, str) else None, bp if isinstance(bp, str) else None)
             raise BuildStateError("BS-001", "unexpected") from None
-        self._audit(action, "OK", None, tenant_id, bp)
+        self._audit(action, "OK", subject, tenant_id, bp)
         return out
 
     def _actor(self, claims, t, roles, *, gate):
@@ -160,6 +170,7 @@ class BuildStateMachine:
             raise BuildStateError("BS-003", "principal")
         if not ID_RE_OK(p.subject):
             raise BuildStateError("BS-003", "principal")
+        self._who = p.subject
         if p.kind not in KINDS or p.realm not in REALMS:
             raise BuildStateError("BS-003", "principal")
         if p.realm == "tenant":
@@ -186,7 +197,7 @@ class BuildStateMachine:
         if gate:
             if kind != "human" or role != gate or realm != ROLE_REALM[gate]:
                 raise BuildStateError("BS-003", "gate_actor")
-        elif typ == "rolled_back":
+        elif typ in ("rolled_back", "recovery_cleared"):
             if kind != "human" or role not in (OWNER, REVIEWER) or realm != ROLE_REALM[role]:
                 raise BuildStateError("BS-003", "gate_actor")
         elif typ == "apply_started":  # sandbox
@@ -197,7 +208,7 @@ class BuildStateMachine:
                 raise BuildStateError("BS-003", "actor")
         elif role != AUTHOR:
             raise BuildStateError("BS-003", "actor")
-        return gate or (role if typ == "rolled_back" else None)
+        return gate or (role if typ in ("rolled_back", "recovery_cleared") else None)
 
     def _sod(self, b, a, role):
         s = a["subject"]
@@ -205,7 +216,7 @@ class BuildStateMachine:
             if s in b.authors or s in b.involved or s in b.gate_actors[OWNER]:
                 raise BuildStateError("BS-007")
         elif role == OWNER:
-            if b.authors.get(s) == "staff" or s in b.gate_actors[REVIEWER]:
+            if "staff" in b.authors.get(s, ()) or s in b.gate_actors[REVIEWER]:
                 raise BuildStateError("BS-007")
 
     def _step(self, b, body, t, bp):
@@ -226,14 +237,17 @@ class BuildStateMachine:
             _digest(d["digest"])
             if type(d["revision"]) is not int or d["revision"] < 1 or type(d["involved"]) is not list:
                 raise _bad()
-            if typ == "revised" and (S != "draft" or n.pending):
-                raise BuildStateError("BS-005")
+            if typ == "revised":
+                if S != "draft" or n.pending or n.recovery:
+                    raise BuildStateError("BS-005")
+                if d["revision"] <= n.revision or d["digest"] == n.digest:   # a new content digest AND a higher revision
+                    raise BuildStateError("BS-008", "revision")
             n.digest, n.revision = d["digest"], d["revision"]
-            n.authors[a["subject"]] = a["realm"]
+            n.authors.setdefault(a["subject"], set()).add(a["realm"])
             n.involved |= set(id_list(d["involved"], "involved"))
             n.att = {}
             return n
-        if n.pending and typ != "apply_outcome":
+        if (n.pending or n.recovery) and typ not in ("apply_outcome", "recovery_cleared"):
             raise BuildStateError("BS-010")
         if typ not in ("apply_outcome", "rolled_back") and d.get("digest") != n.digest:
             raise BuildStateError("BS-008")
@@ -255,7 +269,7 @@ class BuildStateMachine:
             n.state = "team_reviewed"
             n.att["review"] = {k: d[k] for k in ("itemId", "pinSeq", "pinHead", "reviewDigest", "approvedBy")}
         elif typ == "rolled_back":
-            if S == "live" or d["from"] != S or d["to"] not in _IDX or _IDX[d["to"]] >= _IDX[S] or d["reason"] not in REASONS:
+            if S == "live" or d["from"] != S or d["to"] != "draft" or S == "draft" or d["reason"] not in REASONS:
                 raise BuildStateError("BS-016")
             if n.pending:
                 raise BuildStateError("BS-010")
@@ -281,22 +295,30 @@ class BuildStateMachine:
                 n.gate_actors[OWNER].add(a["subject"])
             elif (d["simulationId"], d["reportDigest"]) != (None, None):
                 raise _bad()
-            n.pending = {"kind": kind, "key": d["key"], "outcome": None}
+            n.pending = {"kind": kind, "key": d["key"], "outcome": None, "at": at}
         elif typ == "apply_outcome":
-            p = n.pending
+            p = n.pending or n.recovery
             if not p or d["kind"] != p["kind"] or d["key"] != p["key"] or d["outcome"] not in OUTCOMES:
                 raise BuildStateError("BS-005")
+            if n.recovery and not n.pending and d["outcome"] != "confirmed":
+                raise BuildStateError("BS-005")   # after a failed mark only a confirmation can reconcile
             if d["outcome"] == "confirmed":
                 n.state = "built_in_sandbox" if p["kind"] == "sandbox" else "live"
                 if p["kind"] == "sandbox":
                     n.att["sandbox"] = {"key": p["key"]}
-                n.pending = None
+                n.pending = n.recovery = None
             elif d["outcome"] == "failed":
                 n.pending = None
+                if p["kind"] == "live":
+                    n.recovery = {"kind": "live", "key": p["key"]}   # never treated as clean (contract, Rollback rule 4)
             else:
                 n.pending = {**p, "outcome": "unknown"}
+        elif typ == "recovery_cleared":
+            if not n.recovery or (d["kind"], d["key"]) != (n.recovery["kind"], n.recovery["key"]) or d["digest"] != n.digest:
+                raise BuildStateError("BS-005")
+            n.recovery = None
         elif typ == "simulated":
-            if S != "built_in_sandbox" or d["verdict"] not in PASSING_VERDICTS or type(d["revision"]) is not int:
+            if S != "built_in_sandbox" or d["verdict"] not in PASSING_VERDICTS or d["revision"] != n.revision:
                 raise BuildStateError("BS-005")
             ident(d["simulationId"], "simulation"); _digest(d["reportDigest"])
             self._sod(n, a, REVIEWER)
@@ -341,13 +363,13 @@ class BuildStateMachine:
             raise BuildStateError("BS-004")
         return self._fold(t, bp, recs)
 
-    def _write(self, b, t, bp, p, role, at, typ, data):
+    def _write(self, b, t, bp, p, role, at, typ, data, strict=True):
         body = {"type": typ, "at": at, "actor": {"subject": p.subject, "kind": p.kind, "realm": p.realm, "role": role}, "data": data}
 
         def check(existing):
             cur = self._fold(t, bp, existing) if existing else None
             seen = (cur.head_seq, cur.head_seal) if cur else (0, "")
-            if seen != ((b.head_seq, b.head_seal) if b else (0, "")):
+            if strict and seen != ((b.head_seq, b.head_seal) if b else (0, "")):
                 raise BuildStateError("BS-005", "concurrent")
             self._step(cur, body, t, bp)  # the same rules as a read-time fold
         self._log.append(t, bp, body, check)
@@ -384,9 +406,26 @@ class BuildStateMachine:
         if dg != b.digest:
             raise BuildStateError("BS-008")
 
-    def _review(self, t, bp, content, item_id, pin_seq, pin_head, expect_digest=None):
+    def _review(self, t, bp, content, pin_seq, pin_head, recorded=None):
+        """Re-derive the team review. The item is never chosen by the caller: the queue's newest `blueprint_draft`
+        item for this Blueprint and content (`newest`) must be eligible, and its sequence and head must be the pin the
+        reviewer saw (or the recorded one at later gates). A newer held, rejected or open item blocks. Then that item is
+        verified (`verify`) for hold, staleness, digest and approver."""
         if type(pin_seq) is not int or isinstance(pin_seq, bool) or pin_seq < 1 or type(pin_head) is not str or not pin_head:
             raise BuildStateError("BS-001", "pin")
+        try:
+            nw = self._reviews.newest(t, bp, copy.deepcopy(content))
+        except Exception:
+            raise BuildStateError("BS-006", "review_port") from None
+        items = nw.get("items") if type(nw) is dict else None
+        it = items.get("blueprint_draft") if type(items) is dict else None
+        ok = type(nw) is dict and nw.get("gate") == "team_reviewed" and nw.get("evidenceOnly") is True and nw.get("tenantId") == t \
+            and nw.get("subjectRef") == bp and nw.get("eligible") is True and nw.get("missing") == [] and type(it) is dict \
+            and it.get("eligible") is True and it.get("stale") is False and it.get("state") == "approved" \
+            and type(it.get("itemId")) is str and ID_RE_OK(it["itemId"]) and it.get("seq") == pin_seq and it.get("headSeal") == pin_head
+        if not ok or (recorded is not None and recorded["itemId"] != it["itemId"]):
+            raise BuildStateError("BS-006", "review_newest")
+        item_id = it["itemId"]
         try:
             ev = self._reviews.verify(t, item_id, copy.deepcopy(content), pin_seq, pin_head)
         except Exception:
@@ -397,9 +436,9 @@ class BuildStateMachine:
             and ev.get("state") == "approved" and ev.get("pinCurrent") is True and ev.get("seq") == pin_seq \
             and ev.get("headSeal") == pin_head and type(ev.get("contentDigest")) is str and DIGEST_RE.fullmatch(ev["contentDigest"]) \
             and type(ev.get("approvedBy")) is str and ID_RE_OK(ev["approvedBy"])
-        if not ok or (expect_digest is not None and ev["contentDigest"] != expect_digest):
+        if not ok or (recorded is not None and ev["contentDigest"] != recorded["reviewDigest"]):
             raise BuildStateError("BS-006", "review")
-        return ev
+        return {**ev, "itemId": item_id}
 
     def _upstream(self, t, bp, b, content, dg, through):
         """Re-derive every approval below `through` that the current state implies (owner, team review)."""
@@ -410,7 +449,7 @@ class BuildStateMachine:
             r = b.att.get("review")
             if not r:
                 raise BuildStateError("BS-006", "review")
-            self._review(t, bp, content, r["itemId"], r["pinSeq"], r["pinHead"], r["reviewDigest"])
+            self._review(t, bp, content, r["pinSeq"], r["pinHead"], r)
 
     def _report(self, t, sim_id, revision):
         try:
@@ -447,6 +486,25 @@ class BuildStateMachine:
     def _norm(v):
         return v if type(v) is str and v in OUTCOMES else "unknown"
 
+    def _record_outcome(self, t, bp, kind, key, p, role, out, target):
+        """Record a definite or unknown outcome. Allowed while pending (the only record allowed then) even if the head
+        moved; if another path already recorded it (state moved by this key) the result is read back, not refused."""
+        try:
+            self._write(self._load(t, bp), t, bp, p, role, self._now(), "apply_outcome", {"kind": kind, "key": key, "outcome": out}, strict=False)
+        except BuildStateError as e:
+            if e.code != "BS-005":
+                raise
+            b = self._load(t, bp)
+            if not (out == "confirmed" and b.state == target and not b.pending):
+                raise
+        return self._load(t, bp)
+
+    def _finish(self, t, bp, out):
+        if out == "failed":
+            raise BuildStateError("BS-015")
+        if out == "unknown":
+            raise BuildStateError("BS-010", "unknown")
+
     def _apply(self, t, bp, kind, p, role, dg):
         b = self._load(t, bp)
         pend = b.pending
@@ -454,11 +512,9 @@ class BuildStateMachine:
             out = self._norm(self._engine.apply(t, kind, pend["key"], dg))
         except Exception:
             out = "unknown"
-        b = self._write(b, t, bp, p, role, self._now(), "apply_outcome", {"kind": kind, "key": pend["key"], "outcome": out})
-        if out == "failed":
-            raise BuildStateError("BS-015")
-        if out == "unknown":
-            raise BuildStateError("BS-010", "unknown")
+        target = "built_in_sandbox" if kind == "sandbox" else "live"
+        b = self._record_outcome(t, bp, kind, pend["key"], p, role, out, target)
+        self._finish(t, bp, out)
         return b
 
     # ----- public operations ----------------------------------------------------------------------------------------
@@ -507,21 +563,20 @@ class BuildStateMachine:
             return self.status(t, bp)
         return self._run("owner_approve", tenant_id, blueprint_id, claims, go)
 
-    def pass_team_review(self, claims, *, tenant_id, blueprint_id, review_item_id, pinned_seq, pinned_head):
+    def pass_team_review(self, claims, *, tenant_id, blueprint_id, pinned_seq, pinned_head):
         """owner_approved -> team_reviewed. GATE: a named team reviewer (human, step-up) who read the queue evidence
-        (`pinned_seq`, `pinned_head` are what they saw); the evidence is re-derived here through the review port."""
+        (`pinned_seq`, `pinned_head` are what they saw of the newest queue item for this Blueprint); the item is derived and the evidence re-derived here through the review port."""
         def go():
             t, bp = _tenant(tenant_id), ident(blueprint_id, "blueprint")
-            item = ident(review_item_id, "item")
             p, role = self._actor(claims, t, (REVIEWER,), gate=True)
             at, b = self._now(), self._load(t, bp)
             self._need(b, "owner_approved")
             content, dg, _ = self._content(t, bp)
             self._upstream(t, bp, b, content, dg, _IDX["owner_approved"])
-            ev = self._review(t, bp, content, item, pinned_seq, pinned_head)
-            if ev["approvedBy"] in b.authors or ev["approvedBy"] in b.involved:
+            ev = self._review(t, bp, content, pinned_seq, pinned_head)
+            if ev["approvedBy"] in b.authors or ev["approvedBy"] in b.involved or ev["approvedBy"] in b.gate_actors[OWNER]:
                 raise BuildStateError("BS-007")
-            self._write(b, t, bp, p, role, at, "team_reviewed", {"digest": dg, "itemId": item, "pinSeq": pinned_seq,
+            self._write(b, t, bp, p, role, at, "team_reviewed", {"digest": dg, "itemId": ev["itemId"], "pinSeq": pinned_seq,
                                                                  "pinHead": pinned_head, "reviewDigest": ev["contentDigest"],
                                                                  "approvedBy": ev["approvedBy"]})
             return self.status(t, bp)
@@ -605,36 +660,84 @@ class BuildStateMachine:
             return self.status(t, bp)
         return self._run("go_live", tenant_id, blueprint_id, claims, go)
 
+    def reconcile_apply(self, claims, *, tenant_id, blueprint_id):
+        """A pending apply with no recorded outcome (a crash, a lost reply) past its lease (host clock) becomes
+        `unknown`, so a human or the adapter confirmation can resolve it. Before the lease it is refused: the apply
+        may still be running, and nothing may start or mark anything meanwhile."""
+        def go():
+            t, bp = _tenant(tenant_id), ident(blueprint_id, "blueprint")
+            p, role = self._actor(claims, t, (RUNNER, REVIEWER, OWNER), gate=False)
+            b, now = self._load(t, bp), self._now()
+            pend = b.pending
+            if not pend:
+                raise BuildStateError("BS-005")
+            if pend["outcome"] is None:
+                if now < pend["at"] + APPLY_LEASE:
+                    raise BuildStateError("BS-010", "in_flight")
+                self._record_outcome(t, bp, pend["kind"], pend["key"], p, role, "unknown", None)
+            return self.status(t, bp)
+        return self._run("reconcile_apply", tenant_id, blueprint_id, claims, go)
+
     def resolve_apply(self, claims, *, tenant_id, blueprint_id):
-        """Ask the engine port for the definite outcome of the pending apply (by its idempotency key). Not a
-        promotion decision: the human gate already started it. Only `confirmed` moves the state."""
+        """Settle an `unknown` apply (or reconcile a live apply after a failed mark): ask the adapter for the outcome by
+        its idempotency key and, if it is not confirmed, re-issue the SAME apply (idempotent by key and input), whose
+        definite answer is recorded. Never allowed while the apply may still be in flight (before the lease), never
+        with a new key. A runner can only record what the adapter answered; a `failed` live apply is not clean: it
+        becomes `recovery` and only a human clears it."""
         def go():
             t, bp = _tenant(tenant_id), ident(blueprint_id, "blueprint")
             p, role = self._actor(claims, t, (RUNNER, REVIEWER, OWNER), gate=False)
             b = self._load(t, bp)
-            if not b.pending:
-                raise BuildStateError("BS-005")
-            pend = b.pending
+            cur = b.pending or b.recovery
+            if not cur or (b.pending and b.pending["outcome"] is None):
+                raise BuildStateError("BS-005" if not cur else "BS-010", "in_flight")
+            target = "built_in_sandbox" if cur["kind"] == "sandbox" else "live"
             try:
-                out = self._norm(self._engine.status(t, pend["key"]))
+                out = self._norm(self._engine.status(t, cur["key"]))
             except Exception:
                 out = "unknown"
-            if out == "unknown" and pend["outcome"] == "unknown":
+            if out != "confirmed" and b.pending:
+                _, dg, _ = self._content(t, bp)
+                self._fresh(b, dg)
+                try:
+                    out = self._norm(self._engine.apply(t, cur["kind"], cur["key"], dg))
+                except Exception:
+                    out = "unknown"
+            if out != "confirmed" and not b.pending:
+                raise BuildStateError("BS-010", "recovery")
+            if out == "unknown" and b.pending["outcome"] == "unknown":
                 raise BuildStateError("BS-010", "unknown")
-            b = self._write(b, t, bp, p, role, self._now(), "apply_outcome", {"kind": pend["kind"], "key": pend["key"], "outcome": out})
-            if out == "failed":
-                raise BuildStateError("BS-015")
-            if out == "unknown":
-                raise BuildStateError("BS-010", "unknown")
+            self._record_outcome(t, bp, cur["kind"], cur["key"], p, role, out, target)
+            self._finish(t, bp, out)
             return self.status(t, bp)
         return self._run("resolve_apply", tenant_id, blueprint_id, claims, go)
 
-    def roll_back(self, claims, *, tenant_id, blueprint_id, to_state, reason):
-        """Any state before live -> an earlier state. GATE: the owner or a team reviewer (human, step-up). Approvals
-        above the target are void; the build must pass those gates again with fresh evidence. Not possible while an
-        apply is pending or after live."""
+    def clear_recovery(self, claims, *, tenant_id, blueprint_id):
+        """GATE: after a live apply failed, a human (owner or team reviewer, step-up) clears the recovery block once the
+        adapter says the key definitely failed. Only then can a new go-live (a new key) start."""
         def go():
             t, bp = _tenant(tenant_id), ident(blueprint_id, "blueprint")
+            p, role = self._actor(claims, t, (REVIEWER, OWNER), gate=True)
+            at, b = self._now(), self._load(t, bp)
+            if not b.recovery:
+                raise BuildStateError("BS-005")
+            try:
+                out = self._norm(self._engine.status(t, b.recovery["key"]))
+            except Exception:
+                out = "unknown"
+            if out != "failed":
+                raise BuildStateError("BS-010", "recovery")
+            self._write(b, t, bp, p, role, at, "recovery_cleared", {"kind": "live", "key": b.recovery["key"], "digest": b.digest})
+            return self.status(t, bp)
+        return self._run("clear_recovery", tenant_id, blueprint_id, claims, go)
+
+    def roll_back(self, claims, *, tenant_id, blueprint_id, to_state, reason):
+        """Any state before live -> draft (the contract's only rollback). GATE: the owner or a team reviewer (human,
+        step-up). All approvals are void. Not possible while an apply is pending, in recovery, or after live."""
+        def go():
+            t, bp = _tenant(tenant_id), ident(blueprint_id, "blueprint")
+            if to_state != "draft":
+                raise BuildStateError("BS-016")
             if type(to_state) is not str or to_state not in _IDX or type(reason) is not str or reason not in REASONS:
                 raise BuildStateError("BS-001", "rollback")
             p, role = self._actor(claims, t, (REVIEWER, OWNER), gate=True)
@@ -660,7 +763,7 @@ class BuildStateMachine:
                 "pending": None if not pend else {"kind": pend["kind"], "status": "unknown" if pend["outcome"] == "unknown" else "applying",
                                                   "kindKey": f"bs.pending.{pend['kind']}",
                                                   "statusKey": f"bs.pending.{'unknown' if pend['outcome'] == 'unknown' else 'applying'}"},
-                "cutoverStarted": "cutover" in b.att, "approvals": sorted(b.att)}
+                "recovery": None if not b.recovery else {"kind": b.recovery["kind"], "needsRecovery": True}, "cutoverStarted": "cutover" in b.att, "approvals": sorted(b.att)}
 
     def verify_tenant(self, tenant_id) -> list:
         """(blueprint id, code) for every build of the tenant whose log fails; an unreadable manifest raises BS-011."""

@@ -64,10 +64,22 @@ class Reviews:
         self.approved = None
         self.item, self.seq, self.head, self.by = "item-1", 7, "head-seal-1", "u-reviewer-x"
         self.hold, self.patch, self.raises, self.override = False, {}, False, None
+        self.newest_override, self.newest_item, self.newest_patch = None, None, {}
         self.calls = []
 
     def approve(self, c):
         self.approved = qdigest(c)
+
+    def newest(self, t, ref, c):
+        """Mimics `team_reviewed_evidence`: the newest blueprint_draft item for the subject."""
+        self.newest_calls = getattr(self, "newest_calls", 0) + 1
+        if self.newest_override is not None:
+            return self.newest_override
+        part = {"itemId": self.newest_item or self.item, "state": "approved", "stale": qdigest(c) != self.approved, "seq": self.seq,
+                "headSeal": self.head, "eligible": self.approved is not None and qdigest(c) == self.approved and not self.hold}
+        part.update(self.newest_patch)
+        return {"gate": "team_reviewed", "consumer": "BPL-020", "evidenceOnly": True, "tenantId": t, "subjectRef": ref,
+                "items": {"blueprint_draft": part}, "missing": [], "eligible": part["eligible"]}
 
     def verify(self, t, item, c, pin_seq, pin_head):
         self.calls.append((t, item, pin_seq, pin_head))
@@ -80,6 +92,8 @@ class Reviews:
               "seq": self.seq, "headSeal": self.head, "hold": self.hold, "state": "approved", "stale": qdigest(c) != self.approved,
               "eligible": self.approved is not None and qdigest(c) == self.approved and not self.hold,
               "approvedBy": self.by, "decidedAt": 1, "checklist": {}}
+        if item != self.item:
+            ev.update(state="pending", eligible=False)
         ev["pinCurrent"] = (pin_seq, pin_head) == (self.seq, self.head)
         if not ev["pinCurrent"]:
             ev["eligible"] = False
@@ -105,13 +119,13 @@ class Engine:
     def apply(self, t, kind, key, digest):
         self.calls.append((t, kind, key, digest))
         r = self.script.pop(0) if self.script else "confirmed"
-        if isinstance(r, Exception):
+        if isinstance(r, BaseException):
             raise r
         return r
 
     def status(self, t, key):
         r = self.status_script.pop(0) if self.status_script else "unknown"
-        if isinstance(r, Exception):
+        if isinstance(r, BaseException):
             raise r
         return r
 
@@ -145,8 +159,20 @@ class World:
     def args(self, **kw):
         return {"tenant_id": T, "blueprint_id": BP, **kw}
 
-    def set_content(self, **extra):
-        self.bps.d[(T, BP)] = content(**extra)
+    def set_content(self, revision=None, **extra):
+        c = content(**extra)
+        if revision:
+            c["meta"]["revision"] = revision
+        self.bps.d[(T, BP)] = c
+
+    def new_report(self, revision, tag="r"):
+        """A report for another Blueprint revision (a different simulation, so a different digest)."""
+        import re
+        r = copy.deepcopy(self.report)
+        r["blueprintRevision"] = revision
+        r["simulationId"] = hashlib.sha256(f"{tag}{revision}".encode()).hexdigest()
+        self.sims.put(r)
+        return r
 
     def create(self, who="author", **kw):
         return self.m.create(who, **self.args(**kw))
@@ -156,7 +182,7 @@ class World:
 
     def review(self, who="rev"):
         self.rev.approve(self.bps.d[(T, BP)])
-        return self.m.pass_team_review(who, **self.args(review_item_id=self.rev.item, pinned_seq=self.rev.seq, pinned_head=self.rev.head))
+        return self.m.pass_team_review(who, **self.args(pinned_seq=self.rev.seq, pinned_head=self.rev.head))
 
     def sandbox(self, who="runner"):
         return self.m.build_sandbox(who, **self.args())

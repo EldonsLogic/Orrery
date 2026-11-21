@@ -39,7 +39,8 @@ class SignOffLedger:
         def check(existing):
             for e in existing:
                 old = _rec(e["body"]["record"])
-                if (old.report_digest, old.role) == (record.report_digest, record.role):
+                if (old.report_digest, old.role) == (record.report_digest, record.role) \
+                        or (old.report_digest, old.user_id) == (record.report_digest, record.user_id):
                     raise BuildStateError("BS-014")  # the unique key (simulation, digest, role)
         self._log.append(t, sim, {"type": "signoff", "record": _row(record)}, check)
 

@@ -31,7 +31,7 @@ def test_review_port_garbage_is_refused(override):
     w = World().to("owner_approved")
     w.rev.approve(w.bps.d[(T, BP)])
     w.rev.override = override if override is not None else {"gate": "team_reviewed"}
-    assert code(w.m.pass_team_review, "rev", **w.args(review_item_id="item-1", pinned_seq=7, pinned_head="head-seal-1")) == "BS-006"
+    assert code(w.m.pass_team_review, "rev", **w.args(pinned_seq=7, pinned_head="head-seal-1")) == "BS-006"
     w.rev.override = None
     w.rev.raises = True
     assert code(w.review) == "BS-006"
@@ -40,11 +40,10 @@ def test_review_port_garbage_is_refused(override):
 
 def test_review_never_approved_or_pin_not_what_the_reviewer_saw():
     w = World().to("owner_approved")
-    assert code(w.m.pass_team_review, "rev", **w.args(review_item_id="item-1", pinned_seq=7, pinned_head="head-seal-1")) == "BS-006"  # no approval
+    assert code(w.m.pass_team_review, "rev", **w.args(pinned_seq=7, pinned_head="head-seal-1")) == "BS-006"  # no approval
     w.rev.approve(w.bps.d[(T, BP)])
     for seq, head in ((8, "head-seal-1"), (7, "stale-head"), (True, "head-seal-1"), (7.0, "head-seal-1"), (7, None), (0, "h")):
-        assert code(w.m.pass_team_review, "rev", **w.args(review_item_id="item-1", pinned_seq=seq, pinned_head=head)) in ("BS-006", "BS-001")
-    assert code(w.m.pass_team_review, "rev", **w.args(review_item_id="bad id", pinned_seq=7, pinned_head="head-seal-1")) == "BS-001"
+        assert code(w.m.pass_team_review, "rev", **w.args(pinned_seq=seq, pinned_head=head)) in ("BS-006", "BS-001")
     assert w.state() == "owner_approved"
 
 
@@ -92,11 +91,60 @@ def test_changed_after_signoff_blocks_go_live_and_revise_only_in_draft():
     assert code(w.live) == "BS-008"
     assert code(lambda: w.m.revise("author", **w.args())) == "BS-005"
     w.m.roll_back("rev", **w.args(to_state="draft", reason="content_changed"))
+    assert code(lambda: w.m.revise("author", **w.args())) == "BS-008"      # same revision: refused (H2)
+    w.set_content(revision=4, edit="late")
     w.m.revise("author", **w.args())
     assert w.status()["contentChanged"] is False and w.state() == "draft"
     assert code(w.review) == "BS-005"
     w.approve(); w.review(); w.sandbox()
-    assert code(w.simulated) is None  # the report is still bound to revision 3
+    assert code(w.simulated) == "BS-006"              # the old report is for revision 3
+    w.sim_id = w.new_report(4)["simulationId"]
+    assert code(w.simulated) is None
+
+
+def test_h2_changed_content_same_revision_invalidates_everything():
+    """Probe P1: simulate A, sign off A's report, change content with the same revision number: never live."""
+    w = World().to("simulated"); w.sign()
+    w.m.roll_back("owner", **w.args(to_state="draft", reason="other"))
+    w.set_content(extra_module={"payroll": "new"})        # new content, meta.revision still 3
+    assert code(lambda: w.m.revise("author", **w.args())) == "BS-008"
+    assert w.state() == "draft" and w.status()["contentChanged"] is True
+    assert code(w.approve) == "BS-008"                   # and nothing can be approved on it either
+    w.set_content(revision=2, extra_module={"payroll": "new"})
+    assert code(lambda: w.m.revise("author", **w.args())) == "BS-008"      # a lower revision is refused too
+    w.set_content(revision=4, extra_module={"payroll": "new"})
+    w.m.revise("author", **w.args()); w.approve(); w.review(); w.sandbox()
+    assert code(w.simulated) == "BS-006"                  # revision-3 report does not fit revision 4
+    w.report["blueprintRevision"] = 4                     # a report forged to claim revision 4 has another digest, no sign-off
+    w.sims.put(w.report)
+    w.simulated(); w.cutover()
+    assert code(w.live) == "BS-006"                       # the owner signed the revision-3 report, not this one
+
+
+# ---------- M1: the queue item is derived, not chosen ----------
+def test_newest_queue_item_is_used_and_newer_held_or_rejected_blocks():
+    w = World().to("owner_approved")
+    w.rev.approve(w.bps.d[(T, BP)])
+    w.rev.newest_patch = {"eligible": False, "state": "rejected"}          # a newer item for the same Blueprint was rejected
+    assert code(w.review) == "BS-006"
+    w.rev.newest_patch = {"itemId": "item-9"}                                # newest is another item than the one approved
+    w.rev.newest_item = "item-9"
+    assert code(w.review) == "BS-006"                                        # verify() of that item says it is not approved
+    w.rev.newest_item = None
+    w.rev.newest_patch = {}
+    w.review()
+    w.rev.newest_patch = {"eligible": False, "state": "pending"}            # after the gate a newer item appears
+    assert code(w.sandbox) == "BS-006"
+    w.rev.newest_patch = {"itemId": "item-2"}
+    assert code(w.sandbox) == "BS-006"                                       # a different newest item than the recorded one
+    for bad in ({"items": {}}, {"missing": ["blueprint_draft"]}, {"eligible": False}, {"tenantId": "t_other"}, {"subjectRef": "x"}):
+        w.rev.newest_patch = {}
+        w.rev.newest_override = {**w.rev.newest(T, BP, w.bps.d[(T, BP)]), **bad}
+        assert code(w.sandbox) == "BS-006", bad
+    w.rev.newest_override = "garbage"
+    assert code(w.sandbox) == "BS-006"
+    w.rev.newest_override = None
+    assert w.sandbox()["state"] == "built_in_sandbox"
 
 
 def test_blueprint_store_failure_is_refused():

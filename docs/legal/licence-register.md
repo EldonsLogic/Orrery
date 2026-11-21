@@ -46,6 +46,17 @@ Recorded ahead of first use under ADR-0044 (Proposed). Not in any lockfile yet; 
 
 ## 4. Verification and maintenance
 
+ERP-020 headless build dependency: `flit_core` 3.12.0, BSD-3-Clause. This is the
+app's existing PEP 517 build backend, preinstalled by immutable wheel hash so
+startup can install the mounted app with no package index or build isolation.
+Source and licence: [PyPI release metadata](https://pypi.org/project/flit-core/3.12.0/),
+accessed 2026-11-19. No upstream source is copied into this repository.
+
+ERP-020 CI dependency: Werkzeug 3.1.3, BSD-3-Clause (package metadata).
+The engine already uses Werkzeug; the standalone guard tests install it explicitly.
+Source: [PyPI release metadata](https://pypi.org/project/Werkzeug/3.1.3/),
+accessed 2026-11-19. No source is copied into this repository.
+
 1. Version pins are tested in `infra/dev/docker` (ERP-001) before promotion to production.
 2. Any newly adopted Frappe app or Python/Node library must be added to this register before merging to `main`.
 3. GPL boundaries are reviewed by counsel under LEG-006 to ensure SaaS API boundaries remain clean and non-derivative.

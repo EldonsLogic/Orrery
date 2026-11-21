@@ -49,7 +49,10 @@ COUNTRY_DEFAULTS: dict[str, dict[str, str]] = {
 
 GOVERNANCE_ACTOR_ROLES = ["System Manager"]
 
-_SAFE_TENANT_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$")
+# Canonical tenantId grammar (contracts/engine-adapter/common.schema.json):
+# lowercase t_<alnum_underscore>, 5..63 chars (valid RFC 1123 label when '_' -> '-').
+# Forbidding '.', '-', uppercase, and trailing '_' makes tenant -> site resolution strictly 1-to-1.
+_SAFE_TENANT_RE = re.compile(r"^t_[a-z0-9][a-z0-9_]{1,59}[a-z0-9]$")
 _SAFE_SQL_IDENT_RE = re.compile(r"^[A-Za-z0-9_ ]+$")
 
 _BP_PROP_TO_FRAPPE = {
@@ -88,7 +91,7 @@ class FrappeBackendError(Exception):
 
 
 class FrappeSiteResolver:
-    """Maps opaque Blueprint tenant IDs to isolated Frappe site names safely."""
+    """Maps opaque Blueprint tenant IDs to isolated Frappe site names injectively."""
 
     def __init__(
         self,
@@ -96,10 +99,16 @@ class FrappeSiteResolver:
         default_domain: str = "localhost",
     ) -> None:
         self.site_map = dict(site_map or {})
+        seen_sites: dict[str, str] = {}
+        for tid, site in self.site_map.items():
+            norm_site = site.strip().rstrip(".").lower()
+            if not norm_site or norm_site in seen_sites and seen_sites[norm_site] != tid:
+                raise FrappeBackendError("invalid_request", {"fields": ["/site_map"]}, stage="validate")
+            seen_sites[norm_site] = tid
         self.default_domain = default_domain
 
     def resolve(self, tenant_id: str) -> str:
-        if not tenant_id or not _SAFE_TENANT_RE.match(tenant_id) or ".." in tenant_id:
+        if not isinstance(tenant_id, str) or not _SAFE_TENANT_RE.fullmatch(tenant_id):
             raise FrappeBackendError(
                 "invalid_request",
                 {"fields": ["/context/tenantId"]},
@@ -108,7 +117,9 @@ class FrappeSiteResolver:
             )
         if tenant_id in self.site_map:
             return self.site_map[tenant_id]
-        slug = re.sub(r"[^a-zA-Z0-9-]", "-", tenant_id.lower()).strip("-") or "tenant"
+        # Strictly injective: _SAFE_TENANT_RE forbids '-', '.', uppercase, and trailing '_',
+        # so '_' -> '-' cannot collapse distinct tenant IDs onto the same site name.
+        slug = tenant_id.replace("_", "-")
         return f"{slug}.{self.default_domain}"
 
 

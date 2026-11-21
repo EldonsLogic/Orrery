@@ -34,10 +34,16 @@ Cross-model review (Claude Opus 5.5) of 3cd19b7 asked for changes. Fixed:
 - High, false manifest declaration: `manifest.json` now has `touchesLedgerOrTax: true` and `certification.level: tested`, as `zatca_sa` does. `pack.json` `status` is `tested` and `evidenceStatus` stays `unverified`. `SOURCES.md` now says not to promote past `tested` before Arabic sign-off. The earlier "Manifest touchesLedgerOrTax is false" decision above is superseded. Test updated first: it asserts `touchesLedgerOrTax` is true, the level is not above `tested`, and `evidenceStatus` is `unverified`.
 - Medium, placeholder ids: `finance.coa_qa_unresolved` and `sales.invoice_print_qa_unresolved` are listed in the manifest `requires`, so the compiler refuses the pack until real components exist. New test asserts both are listed.
 - Low, `mandatoryLanguages`: `en` dropped (no source). `SOURCES.md` notes the Arabic requirement is UNVERIFIED for invoices (the source covers financial statements). New test asserts `["ar"]`.
-- Tests: 25 pass (23 before, 2 added, 1 renamed and 1 extended).
-- Not changed, per the review: the CR number pattern stays unsourced and flagged UNVERIFIED.
+- Eldon Medium 2 (touchesLedgerOrTax false on a rigid pack): resolved by the manifest fix above (`tested` plus `touchesLedgerOrTax: true`, no schema exception needed).
+- Eldon Medium 3 (`SOURCES.md` overstated evidence): the e-invoicing row now says only the GTA home page was read, so "VERIFIED" is limited to that page; the KPMG and vatupdate URLs are marked "search excerpt only", and the header no longer claims every URL was accessed as a page.
+- Eldon Medium 4: same as the `mandatoryLanguages` fix above (`["ar"]`).
+- Eldon Low 6: the traceability test now checks every locked field with a value against a `SOURCES.md` row (field named, and a URL or an explicit "no source" note). It found two gaps, now fixed: the `vatNumberPattern` row said "same as above", and `printFormats.legalLayoutPrecedence` had no row. A new test covers a Ramadan `reducedPeriods` company override (applied, and an end-before-start period refused).
+- Eldon Low 5: the CR pattern, week start, timezone and currency stay labelled "UNVERIFIED, no source"; sourcing them is a follow-up (below).
+- Eldon High (loader go-live gate): not changed here; the coordinator handles it in a separate PR.
+- Tests: 27 pass (23 before, 4 added, 1 renamed and 1 extended).
 
 Next step (follow-ups for the coordinator to turn into plan rows; none added here):
 - The loader or registry refuses `draft` packs outside sandbox, and unknown component ids fail closed (today `resolve_country_pack("QA")` returns the placeholders quietly).
 - An `invoice` print kind in `pack.schema.json` for countries without VAT (Tier 3, its own PR); then replace the `tax_invoice` stand-in.
 - `vatNumberPattern` may be `null` when VAT is unsupported, replacing the `^(?!)$` workaround.
+- Source the CR number pattern, week start (`sun`), timezone and currency before the pack leaves `tested`.

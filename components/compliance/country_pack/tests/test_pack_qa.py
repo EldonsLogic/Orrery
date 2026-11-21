@@ -101,6 +101,44 @@ class TestQatarPack(unittest.TestCase):
         self.assertIn("https://www.gta.gov.qa/en", sources)
         self.assertIn("UNVERIFIED", sources)
 
+    def test_every_locked_field_with_a_value_has_a_sources_row(self) -> None:
+        """Per-field traceability: a SOURCES.md row names the field and has a URL or an explicit no-source note."""
+        rows = []
+        for line in (QA_DIR / "SOURCES.md").read_text(encoding="utf-8").splitlines():
+            if line.startswith("| `"):
+                cells = [c.strip() for c in line.strip().strip("|").split("|")]
+                rows.append((re.findall(r"`([^`]+)`", cells[0]), line))
+        self.assertTrue(rows)
+
+        def leaves(node: object, path: str):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    yield from leaves(value, f"{path}.{key}" if path else key)
+            elif node not in (None, [], ""):
+                yield path
+
+        def row_matches(token: str, path: str) -> bool:
+            if token.endswith(".*"):
+                return path.startswith(token[:-1])
+            return path == token or path.startswith(token + ".") or path.endswith("." + token)
+
+        locked = {k: self.pack[k] for k in ("coaTemplate", "tax", "eInvoicing", "formats", "payrollHooks", "printFormats")}
+        locked["localeDefaults"] = {
+            "currency": self.pack["localeDefaults"]["currency"],
+            "holidays": {"calendarRef": self.pack["localeDefaults"]["holidays"]["calendarRef"]},
+        }
+        checked = 0
+        for path in leaves(locked, ""):
+            matching = [line for tokens, line in rows if any(row_matches(t, path) for t in tokens)]
+            with self.subTest(path=path):
+                self.assertTrue(matching, f"no SOURCES.md row for {path}")
+                self.assertTrue(
+                    any("http" in line or "no source" in line or "Platform default" in line for line in matching),
+                    f"row for {path} has neither a URL nor an explicit 'no source' note",
+                )
+            checked += 1
+        self.assertGreater(checked, 20)
+
     def test_locked_areas_cover_every_non_locale_area(self) -> None:
         locked = set(self.pack["overridesPolicy"]["lockedPaths"])
         for area in ("coaTemplate", "tax", "eInvoicing", "formats", "payrollHooks", "printFormats",
@@ -147,6 +185,34 @@ class TestQatarPack(unittest.TestCase):
         self.assertEqual(resolved["locked"]["tax"], self.pack["tax"])
         self.assertFalse(resolved["locked"]["eInvoicing"]["required"])
         self.assertIn("week.weekendDays", resolved["appliedOverrides"])
+
+    def test_ramadan_reduced_period_override(self) -> None:
+        resolved = resolve_country_pack(
+            "QA",
+            PACKS_DIR,
+            company_overrides={
+                "workingTime": {
+                    "reducedPeriods": [{
+                        "id": "ramadan",
+                        "labels": {"ar": "ساعات رمضان", "en": "Ramadan hours"},
+                        "rule": "ramadan",
+                        "hours": {"from": "09:00", "to": "13:00"},
+                    }],
+                },
+            },
+            version="0.1.0",
+        )
+        period = resolved["locale"]["workingTime"]["reducedPeriods"][0]
+        self.assertEqual(period["hours"], {"from": "09:00", "to": "13:00"})
+        self.assertIn("workingTime.reducedPeriods", resolved["appliedOverrides"])
+        # An invalid reduced period (end before start) is refused.
+        with self.assertRaises(OverrideRejectedError):
+            apply_company_overrides(self.pack, {"workingTime": {"reducedPeriods": [{
+                "id": "ramadan",
+                "labels": {"ar": "ساعات رمضان", "en": "Ramadan hours"},
+                "rule": "ramadan",
+                "hours": {"from": "14:00", "to": "08:00"},
+            }]}})
 
     def test_invalid_company_overrides_rejected(self) -> None:
         for override in (

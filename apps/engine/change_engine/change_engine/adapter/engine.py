@@ -929,7 +929,7 @@ class ChangeEngineAdapter:
         def own_allowed(entity: str) -> bool:
             if entity not in own_cache:
                 checker = getattr(self.frappe_backend, "can_grant_own_doctype", None)
-                own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else True
+                own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else False
             return own_cache[entity]
 
         for step in artifact["steps"]:

@@ -1,0 +1,13 @@
+# Test-only override for the BPL-027 integration test (compile the trading fixture and apply it
+# through the real engine adapter). Layer it on docker-compose.dev.yml under its own project name:
+#   docker compose -p bpl027-fixture --env-file /dev/null \
+#     -f infra/dev/docker/docker-compose.dev.yml -f infra/dev/docker/docker-compose.bpl027-test.yml up -d
+# It adds read-only mounts of the Blueprint compiler and contracts so the test can compile the
+# fixture inside the bench. Synthetic data only. See apps/engine/change_engine/README.md (BPL-027).
+services:
+  engine:
+    environment:
+      - PLATFORM_REPO_ROOT=~/frappe-bench/platform-repo  # expanded by the test (expanduser)
+    volumes:
+      - ../../../services/blueprint:/home/frappe/frappe-bench/platform-repo/services/blueprint:ro
+      - ../../../contracts:/home/frappe/frappe-bench/platform-repo/contracts:ro

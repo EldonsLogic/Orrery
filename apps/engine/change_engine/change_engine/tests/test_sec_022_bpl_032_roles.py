@@ -668,7 +668,7 @@ class TestSec022GrantAllowlist(_Base):
         self.assertEqual(applied["result"]["status"], "applied", applied)
 
     def test_plan_fails_closed_when_backend_lacks_can_grant_own_doctype(self) -> None:
-        """Review follow-up 4: a backend without can_grant_own_doctype defaults to False at plan time, refusing
+        """Review follow-up 4: an engine backend without can_grant_own_doctype defaults to False at plan time, refusing
         unmapped Blueprint entity grants with protected_subject while still allowing reviewed mapped entities."""
         from types import SimpleNamespace
         from change_engine.adapter import ChangeEngineAdapter
@@ -710,7 +710,9 @@ class TestSec022GrantAllowlist(_Base):
             load_site_state=lambda *a, **k: None,
             inspect_step_plan=lambda *a, **k: None,
         )
-        for backend in (None, bare_backend):
+        # Only a backend that exists but lacks the checker fails closed; the in-memory adapter (no backend) is covered
+        # by test_sec_022_review_followups_2 (own-entity grants agree with the offline engine path).
+        for backend in (bare_backend,):
             with self.subTest(has_backend=backend is not None):
                 adapter = ChangeEngineAdapter(test_hooks=False, environment="test", frappe_backend=backend)
                 prov = adapter.call("provision_site", ctx(), {

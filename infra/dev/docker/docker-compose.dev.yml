@@ -45,6 +45,7 @@ services:
       - REDIS_QUEUE_HOST=redis-queue
       - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD in the environment}
+      - ENGINE_INTERNAL_TOKEN=${ENGINE_INTERNAL_TOKEN:-}
       - SITE_NAME=${SITE_NAME:-dev.localhost}
     volumes:
       - ../../../apps/engine/change_engine:/home/frappe/frappe-bench/apps/change_engine:rw

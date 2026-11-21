@@ -470,8 +470,14 @@ class TaxInvoiceView:
     thead_cells: str
 
 
-def prepare_tax_invoice_view(invoice_data: Mapping[str, Any], mode: str) -> TaxInvoiceView:
-    """Validate the invoice (fail closed) and build the escaped HTML fragments both layouts use."""
+def prepare_tax_invoice_view(invoice_data: Mapping[str, Any], mode: str, *,
+                             discount_row: Decimal | None = None) -> TaxInvoiceView:
+    """Validate the invoice (fail closed) and build the escaped HTML fragments both layouts use.
+
+    ``discount_row`` is a document discount already reconciled by the caller (ERP-016); when it
+    is above zero a Discount row is printed first in the totals. Nothing is derived from the
+    payload here, so ERP-007's own print is unchanged without it.
+    """
     raw_dict = dict(invoice_data)
     qr_tlv: str | None = None
 
@@ -657,9 +663,22 @@ def prepare_tax_invoice_view(invoice_data: Mapping[str, Any], mode: str) -> TaxI
     lbl_vat = BILINGUAL_LABELS["total_vat_amount"]
     lbl_grand = BILINGUAL_LABELS["grand_total"]
 
+    discount_html = ""
+    if discount_row is not None and discount_row > _ZERO:
+        lbl_discount = BILINGUAL_LABELS["discount"]
+        discount_str = _fmt_money(discount_row, "discount")
+        discount_html = (
+            "<tr>"
+            f'<th class="tot-ar">{_esc(lbl_discount[0])}</th>'
+            f'<td class="tot-val">{_ltr(f"{discount_str} {currency}")}</td>'
+            f'<th class="tot-en">{_esc(lbl_discount[1])}</th>'
+            "</tr>"
+        )
+
     totals_html = (
         '<table class="totals-table">'
-        "<tr>"
+        + discount_html
+        + "<tr>"
         f'<th class="tot-ar">{_esc(lbl_taxable[0])}</th>'
         f'<td class="tot-val">{_ltr(f"{taxable_str} {currency}")}</td>'
         f'<th class="tot-en">{_esc(lbl_taxable[1])}</th>'
@@ -1405,6 +1424,15 @@ def _doc_num_to_dec(val: Any, field_name: str) -> Decimal:
     return _to_dec(val, field_name)
 
 
+def _optional_engine_amount(source: Any, name: str, negate_return: bool) -> Decimal | None:
+    """An engine amount that is absent (None) or zero on most documents, as a magnitude."""
+    raw = _get_attr_or_key(source, name)
+    if raw in (None, ""):
+        return None
+    value = _doc_num_to_dec(raw, name)
+    return abs(value) if negate_return and value < _ZERO else value
+
+
 def _extract_doc_tax_rate(doc: Any) -> Decimal | None:
     taxes = _get_attr_or_key(doc, "taxes") or []
     for row in taxes:
@@ -1638,7 +1666,21 @@ def sales_invoice_to_zatca_dict(
         }
         if line_amount_dec is not None:
             line_dict["line_net_amount"] = _fmt_engine_total(line_amount_dec)
+        # The engine's spread of a document discount onto this line, passed through as it is
+        # (the line_net_amount above already carries it); absent when there is none.
+        allocated_dec = _optional_engine_amount(item, "distributed_discount_amount", negate_return)
+        if allocated_dec:
+            line_dict["distributed_discount_amount"] = _fmt_engine_total(allocated_dec)
         lines.append(line_dict)
+
+    totals_dict: dict[str, str] = {
+        "total_taxable_amount": _fmt_engine_total(net_total),
+        "total_vat_amount": _fmt_engine_total(tax_total),
+        "grand_total": _fmt_engine_total(grand_total),
+    }
+    document_discount = _optional_engine_amount(doc, "discount_amount", negate_return)
+    if document_discount:
+        totals_dict["discount_amount"] = _fmt_engine_total(document_discount)
 
     invoice_dict: dict[str, Any] = {
         "invoice_id": str(_get_attr_or_key(doc, "name") or "").strip(),
@@ -1651,11 +1693,7 @@ def sales_invoice_to_zatca_dict(
         "seller": seller_dict,
         "buyer": buyer_dict,
         "lines": lines,
-        "totals": {
-            "total_taxable_amount": _fmt_engine_total(net_total),
-            "total_vat_amount": _fmt_engine_total(tax_total),
-            "grand_total": _fmt_engine_total(grand_total),
-        },
+        "totals": totals_dict,
         "preceding_invoice_reference": _get_attr_or_key(doc, "return_against"),
         "amendment_reason": (
             _get_attr_or_key(doc, "custom_amendment_reason")

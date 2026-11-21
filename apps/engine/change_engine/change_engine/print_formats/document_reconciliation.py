@@ -12,14 +12,18 @@ it never replaces a supplied amount to make a document pass. What it checks:
   away from zero, ADR-0033); a line with no supplied amount prints that same value;
 * the line amounts equal ``total_taxable_amount``;
 * line discounts are never negative (a discount is not a surcharge; ZATCA refuses it too);
-* DOCUMENT-LEVEL DISCOUNTS ARE REFUSED (founder decision, ERP-016 round 3). Printing one needs a
-  payload builder that emits the discount fields and a reconciled discount row, which is ERP-030.
-  Until then a document discount, or any per-line allocation of one, is refused (fail closed)
-  rather than printed with amounts that do not add up.
+* DOCUMENT DISCOUNTS (round 4). The engine's document discount is ``discount_amount`` (top level
+  or in totals; both must agree) and its per-line spread is ``distributed_discount_amount``,
+  which must come with the engine's net line amount. A line must equal quantity x unit_price -
+  line discount - its allocation; the allocations never exceed the document discount; and the
+  line amounts less the part of the document discount the lines do NOT carry (the unallocated
+  remainder, which the Discount row prints) must equal ``total_taxable_amount``. Any other
+  discount field name, a mismatch or a wrong allocation is refused, never corrected.
 
 The renderers print only from the snapshot built here. ``snapshot_document`` copies the caller's
 input once (every nested mapping and list, each value read once, so a later change to the caller's
-objects cannot reach a printed figure) and ``check_amounts`` returns the numbers it checked as
+objects cannot reach a printed figure; every number becomes an exact built-in ``Decimal``, ``int``
+or ``float`` through the base class's own methods, so a subclass is never asked anything) and ``check_amounts`` returns the numbers it checked as
 ``Decimal`` values together with that snapshot, whose checked numeric fields are those same
 ``Decimal`` values. All arithmetic runs in explicit local contexts, never the caller's.
 """
@@ -44,14 +48,16 @@ MAX_PRICE_DECIMALS = 6
 # refused, never guessed at (a wrong grid would print a wrong amount).
 CURRENCY_PLACES = {"SAR": 2, "AED": 2, "EGP": 2, "QAR": 2, "KWD": 3, "BHD": 3, "OMR": 3,
                    "USD": 2, "EUR": 2}
-# Names the engine and ERPNext use for a document-level discount and for its per-line spread.
-DOCUMENT_DISCOUNT_FIELDS = ("discount_amount", "additional_discount_amount",
-                            "additional_discount_percentage")
-LINE_ALLOCATION_FIELDS = ("distributed_discount_amount", "allocated_discount_amount",
-                          "discount_allocation")
+# The engine's names for a document-level discount and for its per-line spread.
+DOCUMENT_DISCOUNT_FIELD = "discount_amount"
+LINE_ALLOCATION_FIELD = "distributed_discount_amount"
+# Other names a discount can arrive under. Not read, so refused when they carry a value.
+OTHER_DOCUMENT_DISCOUNT_FIELDS = ("additional_discount_amount", "additional_discount_percentage")
+OTHER_LINE_ALLOCATION_FIELDS = ("allocated_discount_amount", "discount_allocation")
 _PRECISION_RE = re.compile(r"[0-9]")
-_MAX_DIGITS = 30  # of any supplied number; 30 x 30 digits is exact in the 80 digit context
-_MAX_ADJUSTED = 30
+_MAX_DIGITS = 30  # coefficient digits of any supplied number; 30 x 30 is exact in the 80 digits
+_MAX_INTEGER_DIGITS = 30  # digits before the decimal point (adjusted exponent + 1)
+_MAX_LEADING_ZEROS = 30  # the smallest magnitude, as an adjusted exponent: 1E-30
 _MAX_DEPTH = 10
 # 80 digits keeps quantity x price exact for every number that passes ``_number``; ROUND_HALF_UP
 # is half away from zero for Decimal, the commercial rounding ADR-0033 fixes for every tenant.
@@ -80,6 +86,12 @@ class CheckedLine:
     discount: Decimal
     vat_rate: Decimal | None
     amount: Decimal  # the supplied engine amount, else the commercially rounded computed one
+    allocated: Decimal = _ZERO  # the part of the document discount the engine spread onto it
+
+    @property
+    def shown_discount(self) -> Decimal:
+        """What the line's Discount column prints: its own discount plus its allocation."""
+        return self.discount + self.allocated
 
 
 @dataclass(frozen=True)
@@ -89,6 +101,8 @@ class CheckedAmounts:
     taxable: Decimal
     vat: Decimal
     grand: Decimal
+    # The Discount row: the part of the document discount the printed line amounts do not carry.
+    discount: Decimal
     # The private snapshot the renderers print from: the checked numeric fields are the Decimal
     # values above. Nothing the caller holds can reach it.
     document: dict[str, Any]
@@ -107,8 +121,16 @@ def _freeze(value: Any, depth: int) -> Any:
         return out
     if isinstance(value, (list, tuple)):
         return [_freeze(item, depth + 1) for item in value]
-    if value is None or isinstance(value, (bool, int, float, Decimal)):
+    if value is None or type(value) is bool:
         return value
+    # Exact built-in copies made with the base class's own methods: a subclass (whose methods
+    # could answer differently later) is never called, and nothing the caller holds is kept.
+    if isinstance(value, int):
+        return int.__int__(value)
+    if isinstance(value, float):
+        return float.__float__(value)
+    if isinstance(value, Decimal):
+        return Decimal(Decimal.as_tuple(value))
     if isinstance(value, str):
         return str.__str__(value)  # an exact str, whatever a subclass would answer
     raise ValueError(f"document data contains an unsupported value of type {type(value).__name__}")
@@ -206,8 +228,9 @@ def _number(value: Any, label: str, errors: list[str]) -> Decimal | None:
     except ValueError as exc:
         errors.append(str(exc))
         return None
+    # Integer digits are the adjusted exponent + 1 (9E+30 has 31), not the coefficient's digits.
     if (len(number.as_tuple().digits) > _MAX_DIGITS
-            or not -_MAX_ADJUSTED <= number.adjusted() <= _MAX_ADJUSTED):
+            or not -_MAX_LEADING_ZEROS <= number.adjusted() < _MAX_INTEGER_DIGITS):
         errors.append(f"{label} is out of range")
         return None
     return number
@@ -226,20 +249,45 @@ def _discount(value: Any, label: str, places: int, errors: list[str]) -> Decimal
     return number
 
 
-def _refuse_discounts(container: Mapping[str, Any], names: tuple[str, ...], where: str,
-                      errors: list[str]) -> None:
-    """Refuse a document-level discount or a per-line allocation of one (see the module note)."""
+def _blank(raw: Any) -> bool:
+    return raw is None or (isinstance(raw, str) and not raw.strip())
+
+
+def _refuse_other_names(container: Mapping[str, Any], names: tuple[str, ...], where: str,
+                        engine_name: str, errors: list[str]) -> None:
+    """Refuse a discount that arrives under a name this print does not read (never guessed)."""
     for name in names:
         raw = container.get(name)
-        if raw is None or (isinstance(raw, str) and not raw.strip()):
+        if _blank(raw):
             continue
         try:
             if _to_dec(raw, name) == _ZERO:
                 continue  # an explicit zero discounts nothing; there is nothing to print
         except ValueError:
             pass  # not a number: still a discount field the print cannot honour
-        errors.append(f"{where}{name} is refused: document-level discount printing is not "
-                      f"supported yet (ERP-030); amounts are never recomputed to make it fit")
+        errors.append(f"{where}{name} is not supported (the engine's name is {engine_name}); "
+                      f"amounts are never recomputed to make a discount fit")
+
+
+def _document_discount(data: Mapping[str, Any], totals: Mapping[str, Any], places: int,
+                       errors: list[str]) -> Decimal:
+    """The engine's document discount, read at the top level and/or in totals (they must agree)."""
+    for container, where in ((data, "Document "), (totals, "Document totals ")):
+        _refuse_other_names(container, OTHER_DOCUMENT_DISCOUNT_FIELDS, where,
+                            DOCUMENT_DISCOUNT_FIELD, errors)
+    found: list[Decimal] = []
+    for container, label in ((data, DOCUMENT_DISCOUNT_FIELD),
+                             (totals, f"totals {DOCUMENT_DISCOUNT_FIELD}")):
+        raw = container.get(DOCUMENT_DISCOUNT_FIELD)
+        if _blank(raw):
+            continue
+        number = _discount(raw, label, places, errors)
+        if number is not None:
+            found.append(number)
+    if len(set(found)) > 1:
+        errors.append(f"{DOCUMENT_DISCOUNT_FIELD} differs between the document ({found[0]}) and "
+                      f"its totals ({found[1]})")
+    return found[0] if found else _ZERO
 
 
 def check_amounts(data: Mapping[str, Any], errors: list[str], *, tax_invoice: bool = False
@@ -265,8 +313,7 @@ def check_amounts(data: Mapping[str, Any], errors: list[str], *, tax_invoice: bo
         return None
     assert isinstance(lines, list) and isinstance(totals, Mapping)
 
-    _refuse_discounts(data, DOCUMENT_DISCOUNT_FIELDS, "Document ", errors)
-    _refuse_discounts(totals, DOCUMENT_DISCOUNT_FIELDS, "Document totals ", errors)
+    document_discount = _document_discount(data, totals, places, errors)
 
     amounts: dict[str, Decimal] = {}
     for key, label in (("total_taxable_amount", "Total taxable amount"),
@@ -286,28 +333,43 @@ def check_amounts(data: Mapping[str, Any], errors: list[str], *, tax_invoice: bo
     if len(errors) > before or len(amounts) != 3:
         return None
 
-    running = _ZERO
+    running = allocated = _ZERO
     for row in checked:
         running = _CTX.add(running, row.amount)
-    if running != amounts["total_taxable_amount"]:
-        errors.append(f"Lines total {running} != total_taxable_amount "
-                      f"{amounts['total_taxable_amount']}")
+        allocated = _CTX.add(allocated, row.allocated)
+    if allocated > document_discount:
+        errors.append(f"The lines carry {allocated} of the document discount but "
+                      f"{DOCUMENT_DISCOUNT_FIELD} is {document_discount}")
+        return None
+    # The part of the document discount the printed line amounts do not already carry.
+    remainder = _CTX.subtract(document_discount, allocated)
+    expected = _CTX.subtract(running, remainder)
+    if expected != amounts["total_taxable_amount"]:
+        errors.append(
+            f"Lines total {running} != total_taxable_amount {amounts['total_taxable_amount']}"
+            if remainder == _ZERO else
+            f"Lines total {running} less the document discount not in the lines {remainder} = "
+            f"{expected} != total_taxable_amount {amounts['total_taxable_amount']}")
         return None
     return CheckedAmounts(places, tuple(checked), amounts["total_taxable_amount"],
-                          amounts["total_vat_amount"], amounts["grand_total"],
+                          amounts["total_vat_amount"], amounts["grand_total"], remainder,
                           _checked_document(data, lines, checked, amounts))
 
 
 def _checked_document(data: Mapping[str, Any], lines: list[Any], checked: list[CheckedLine],
                       amounts: dict[str, Decimal]) -> dict[str, Any]:
-    """The snapshot with each checked numeric field replaced by the Decimal the check used."""
+    """The snapshot with each checked numeric field replaced by the Decimal the check used.
+
+    A line's ``discount`` becomes what its Discount column prints (its discount plus its
+    allocation) so every printed line reads quantity x unit price - discount = amount.
+    """
     document = dict(data)
     document["totals"] = {**data["totals"], **amounts}
     out_lines = []
     for line, row in zip(lines, checked):
         patched = dict(line)
         for key, value in (("quantity", row.quantity), ("unit_price", row.unit_price),
-                           ("discount", row.discount), ("vat_rate", row.vat_rate)):
+                           ("discount", row.shown_discount), ("vat_rate", row.vat_rate)):
             if key in patched and value is not None:
                 patched[key] = value
         for name in AMOUNT_FIELDS:
@@ -325,7 +387,8 @@ def _check_line(idx: int, line: Any, places: int, tax_invoice: bool, errors: lis
         errors.append(f"{pre}: must be a mapping")
         return None
     before = len(errors)
-    _refuse_discounts(line, LINE_ALLOCATION_FIELDS, f"{pre} ", errors)
+    _refuse_other_names(line, OTHER_LINE_ALLOCATION_FIELDS, f"{pre} ", LINE_ALLOCATION_FIELD,
+                        errors)
     qty = _number(line.get("quantity"), f"{pre} quantity", errors)
     price = _number(line.get("unit_price"), f"{pre} unit_price", errors)
     if price is not None:
@@ -340,6 +403,9 @@ def _check_line(idx: int, line: Any, places: int, tax_invoice: bool, errors: lis
     raw_discount = line.get("discount")
     discount = _discount("0" if raw_discount in (None, "") else raw_discount,
                          f"{pre} discount", places, errors)
+    raw_allocation = line.get(LINE_ALLOCATION_FIELD)
+    allocated = (_ZERO if _blank(raw_allocation) else
+                 _discount(raw_allocation, f"{pre} {LINE_ALLOCATION_FIELD}", places, errors))
     vat_rate = None
     if line.get("vat_rate") not in (None, ""):
         vat_rate = _number(line["vat_rate"], f"{pre} vat_rate", errors)
@@ -358,24 +424,30 @@ def _check_line(idx: int, line: Any, places: int, tax_invoice: bool, errors: lis
     if len({number for _, number in supplied}) > 1:
         errors.append(f"{pre}: line_total and line_net_amount disagree: "
                       + " vs ".join(f"{name} {number}" for name, number in supplied))
-    if len(errors) > before or qty is None or price is None or discount is None:
+    if (allocated or _ZERO) > _ZERO and not supplied:
+        errors.append(f"{pre}: {LINE_ALLOCATION_FIELD} {allocated} needs the engine's "
+                      f"line_net_amount (the net of the allocation); it is never computed here")
+    if (len(errors) > before or qty is None or price is None or discount is None
+            or allocated is None):
         return None
 
-    exact = _CTX.subtract(_CTX.multiply(qty, price), discount)
+    exact = _CTX.subtract(_CTX.subtract(_CTX.multiply(qty, price), discount), allocated)
     try:
         expected = round_amount(exact, places)
     except InvalidOperation:
         errors.append(f"{pre}: amount is out of range")
         return None
     if expected < _ZERO:
-        errors.append(f"{pre}: discount {discount} exceeds the line amount "
+        errors.append(f"{pre}: discount {_CTX.add(discount, allocated)} exceeds the line amount "
                       f"{_CTX.multiply(qty, price)}")
         return None
     if supplied:
         name, amount = supplied[0]
         if amount != expected:
             errors.append(f"{pre}: {name} {amount} != quantity {qty} x unit_price {price} "
-                          f"- discount {discount} = {expected}")
+                          f"- discount {discount}"
+                          + (f" - {LINE_ALLOCATION_FIELD} {allocated}" if allocated else "")
+                          + f" = {expected}")
             return None
     else:
         amount = expected
@@ -383,4 +455,4 @@ def _check_line(idx: int, line: Any, places: int, tax_invoice: bool, errors: lis
             errors.append(f"{pre}: amount {exact} needs rounding, which the invoice print would "
                           f"do half-even; supply the engine's line_net_amount")
             return None
-    return CheckedLine(qty, price, discount, vat_rate, amount)
+    return CheckedLine(qty, price, discount, vat_rate, amount, allocated)

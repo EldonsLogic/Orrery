@@ -136,9 +136,14 @@ def _lines_head(keys: list[str]) -> str:
 
 def _totals_table(checked: CheckedAmounts, currency: str) -> str:
     rows = []
-    for key, value, cls in (("total_taxable_amount", checked.taxable, ""),
-                            ("total_vat_amount", checked.vat, ""),
-                            ("grand_total", checked.grand, ' class="grand-row"')):
+    entries = [("total_taxable_amount", checked.taxable, ""),
+               ("total_vat_amount", checked.vat, ""),
+               ("grand_total", checked.grand, ' class="grand-row"')]
+    if checked.discount > 0:
+        # Only the part of the document discount the printed line amounts do not carry, so the
+        # printed lines less this row equal the taxable total.
+        entries.insert(0, ("discount", checked.discount, ""))
+    for key, value, cls in entries:
         ar, en = BILINGUAL_LABELS[key]
         amount = format_amount(value, checked.precision)
         rows.append(
@@ -194,7 +199,7 @@ def render_branded_tax_invoice_html(
     checked = check_amounts(snapshot_document(invoice_data), errors, tax_invoice=True)
     if errors or checked is None:
         raise ValueError("; ".join(errors))
-    view = prepare_tax_invoice_view(checked.document, mode)
+    view = prepare_tax_invoice_view(checked.document, mode, discount_row=checked.discount)
 
     header = _header_region(
         brand,
@@ -335,7 +340,7 @@ def _lines_region(lines: list[Mapping[str, Any]], checked: CheckedAmounts) -> st
             f'<td class="desc-col">{desc}</td>'
             f'<td class="num-col">{_ltr(_fmt_qty(row.quantity))}</td>'
             f'<td class="num-col">{_ltr(format_unit_price(row.unit_price, places))}</td>'
-            f'<td class="num-col">{_ltr(format_amount(row.discount, places))}</td>'
+            f'<td class="num-col">{_ltr(format_amount(row.shown_discount, places))}</td>'
             f'<td class="num-col">{_ltr(_fmt_pct(row.vat_rate if row.vat_rate is not None else 0))}</td>'
             f'<td class="num-col">{_ltr(format_amount(row.amount, places))}</td>'
             "</tr>"

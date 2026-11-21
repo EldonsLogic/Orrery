@@ -14,6 +14,7 @@ import struct
 import tempfile
 import unittest
 import zlib
+from decimal import Decimal
 from html.parser import HTMLParser
 from pathlib import Path
 from unittest import mock
@@ -1288,68 +1289,246 @@ class TestLineInputShape(unittest.TestCase):
         self.assertIsInstance(data["lines"], tuple)
 
 
-class TestDocumentDiscountRefused(unittest.TestCase):
-    """Round 3 (founder decision): document-level discounts are out of scope for ERP-016.
+_DISCOUNT_TOTALS = {"total_taxable_amount": "180.00", "total_vat_amount": "27.00",
+                    "grand_total": "207.00"}
 
-    Printing one needs a payload builder that emits the discount fields and a reconciled discount
-    row (ERP-030). Until then any document discount is refused, fail closed, in every document;
-    a line discount (``qty x price - discount``) still reconciles.
+
+def _printed_lines(doc: str) -> list[dict]:
+    """Quantity, unit price, discount and amount of each line, parsed from the printed HTML."""
+    table = re.search(r'<table class="lines-table".*?</table>', doc, re.S).group(0)
+    rows = []
+    for row in re.findall(r"<tr>(.*?)</tr>", table.split("</thead>", 1)[1], re.S):
+        cells = re.findall(r'<td class="num-col"><bdi dir="ltr">(.*?)</bdi></td>', row)
+        # num-col cells in every document: no, quantity, unit price, discount, vat rate, amount
+        rows.append({"qty": Decimal(cells[1]), "price": Decimal(cells[2].replace(",", "")),
+                     "discount": Decimal(cells[3].replace(",", "")),
+                     "amount": Decimal(cells[5].replace(",", ""))})
+    return rows
+
+
+def _printed_totals(doc: str) -> dict[str, Decimal]:
+    """The English label -> amount of each totals row, parsed from the printed HTML."""
+    table = re.search(r'<table class="totals-table">.*?</table>', doc, re.S).group(0)
+    out = {}
+    for amount, label in re.findall(
+            r'<td class="tot-val"><bdi dir="ltr">([-0-9.,]+) [A-Z]{3}</bdi></td>'
+            r'<th class="tot-en">(.*?)</th>', table):
+        out[label] = Decimal(amount.replace(",", ""))
+    return out
+
+
+def _assert_printed_numbers_add_up(test, doc: str, *, taxable: str, discount_row: str | None):
+    """Sum the PRINTED numbers: lines - discount row = taxable, taxable + VAT = grand total."""
+    lines, totals = _printed_lines(doc), _printed_totals(doc)
+    for line in lines:  # each printed line adds up on its own too
+        test.assertEqual(line["qty"] * line["price"] - line["discount"], line["amount"])
+    shown = totals.get("Discount")
+    test.assertEqual(None if shown is None else f"{shown:.2f}", discount_row)
+    test.assertEqual(sum(line["amount"] for line in lines) - (shown or Decimal(0)),
+                     totals["Total Taxable Amount"])
+    test.assertEqual(f"{totals['Total Taxable Amount']:.2f}", taxable)
+    test.assertEqual(totals["Total Taxable Amount"] + totals["Total VAT"], totals["Grand Total"])
+
+
+class TestDocumentDiscountPrinting(unittest.TestCase):
+    """Round 4: a document discount is printed end to end and the printed numbers add up.
+
+    The engine's document discount is ``discount_amount`` (top level or in totals; both must
+    agree). Its per-line spread is ``distributed_discount_amount``, which comes with the engine's
+    net line amount. The line amount column prints that engine amount (gross less the line
+    discount less the allocation; the line's Discount column shows both), and the totals' Discount
+    row prints exactly the part of the document discount the lines do not already carry.
+    Everything is compared and refused on a mismatch, never recomputed.
     """
 
-    REASON = r"not supported yet.*ERP-030"
+    def _doc(self, kind, *, doc_discount="20.00", where="totals", alloc=None, net=None,
+             totals=None):
+        line = {}
+        if alloc is not None:
+            line["distributed_discount_amount"] = alloc
+        if net is not None:
+            line["line_net_amount"] = net
+        data = _build(kind, line=line, totals=totals or _DISCOUNT_TOTALS)
+        if doc_discount is not None:
+            if where in ("totals", "both"):
+                data["totals"]["discount_amount"] = doc_discount
+            if where in ("top", "both"):
+                data["discount_amount"] = doc_discount
+        return data
 
-    def _line_allocation(self, data):
-        data["lines"][0].update(distributed_discount_amount="12.00", line_net_amount="188.00")
+    def test_unallocated_discount_prints_a_discount_row_that_adds_up(self):
+        for kind in _KINDS:
+            for where in ("totals", "top", "both"):
+                with self.subTest(kind=kind, where=where):
+                    doc = _go(kind, self._doc(kind, where=where, net="200.00"))
+                    _assert_printed_numbers_add_up(self, doc, taxable="180.00",
+                                                   discount_row="20.00")
+                    self.assertEqual([line["amount"] for line in _printed_lines(doc)],
+                                     [Decimal("200.00")])
 
-    def test_every_document_refuses_a_document_discount(self):
+    def test_unallocated_discount_without_a_supplied_line_amount(self):
+        for kind in ("quote", "po", "neutral"):  # tax mode prints a computed amount half-even
+            with self.subTest(kind):
+                _assert_printed_numbers_add_up(self, _go(kind, self._doc(kind)),
+                                               taxable="180.00", discount_row="20.00")
+
+    def test_fully_allocated_discount_is_in_the_lines_and_prints_no_remainder_row(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                doc = _go(kind, self._doc(kind, alloc="20.00", net="180.00"))
+                _assert_printed_numbers_add_up(self, doc, taxable="180.00", discount_row=None)
+                line = _printed_lines(doc)[0]
+                self.assertEqual((line["discount"], line["amount"]),
+                                 (Decimal("20.00"), Decimal("180.00")))
+
+    def test_partly_allocated_discount_prints_only_the_remainder(self):
+        for kind in _KINDS:
+            for where in ("totals", "top"):
+                with self.subTest(kind=kind, where=where):
+                    doc = _go(kind, self._doc(kind, where=where, alloc="12.00", net="188.00"))
+                    _assert_printed_numbers_add_up(self, doc, taxable="180.00",
+                                                   discount_row="8.00")
+                    line = _printed_lines(doc)[0]
+                    self.assertEqual((line["discount"], line["amount"]),
+                                     (Decimal("12.00"), Decimal("188.00")))
+
+    def test_line_discount_and_allocation_and_remainder_all_reconcile(self):
+        # 200.00 gross - 10.00 line discount - 12.00 allocated = 178.00; 8.00 left = 170.00.
+        totals = {"total_taxable_amount": "170.00", "total_vat_amount": "25.50",
+                  "grand_total": "195.50"}
+        for kind in _KINDS:
+            with self.subTest(kind):
+                data = self._doc(kind, alloc="12.00", net="178.00", totals=totals)
+                data["lines"][0]["discount"] = "10.00"
+                doc = _go(kind, data)
+                _assert_printed_numbers_add_up(self, doc, taxable="170.00", discount_row="8.00")
+                self.assertEqual(_printed_lines(doc)[0]["discount"], Decimal("22.00"))
+
+    def test_two_lines_share_one_document_discount(self):
+        totals = {"total_taxable_amount": "270.00", "total_vat_amount": "40.50",
+                  "grand_total": "310.50"}
+        for kind in _KINDS:
+            with self.subTest(kind):
+                data = self._doc(kind, doc_discount="30.00", alloc="20.00", net="180.00",
+                                 totals=totals)
+                data["lines"].append({**data["lines"][0], "item_code": "ITEM-002",
+                                      "distributed_discount_amount": "10.00",
+                                      "line_net_amount": "90.00", "quantity": "1",
+                                      "unit_price": "100.00"})
+                doc = _go(kind, data)
+                _assert_printed_numbers_add_up(self, doc, taxable="270.00", discount_row=None)
+
+    def test_wrong_allocations_and_discounts_are_refused_never_corrected(self):
         cases = {
-            "totals.discount_amount": lambda d: d["totals"].update(discount_amount="20.00"),
-            "top-level discount_amount": lambda d: d.update(discount_amount="20.00"),
-            "negative totals discount": lambda d: d["totals"].update(discount_amount="-20.00"),
+            "net does not carry the allocation": (
+                dict(alloc="12.00", net="200.00"), r"Line 1: line_net_amount 200\.00 != .*188\.00"),
+            "net carries more than the allocation": (
+                dict(alloc="12.00", net="180.00"), r"Line 1: line_net_amount 180\.00 != .*188\.00"),
+            "allocation without the engine's net amount": (
+                dict(alloc="12.00"), r"Line 1: distributed_discount_amount 12\.00 needs"),
+            "allocation larger than the document discount": (
+                dict(alloc="25.00", net="175.00"), r"carry 25\.00 of the document discount"),
+            "allocation without a document discount": (
+                dict(doc_discount=None, alloc="12.00", net="188.00"),
+                r"carry 12\.00 of the document discount"),
+            "document discount does not reach the taxable total": (
+                dict(doc_discount="15.00", net="200.00"), r"Lines total 200\.00 less.*15\.00"),
+            "document discount larger than the lines": (
+                dict(doc_discount="250.00", net="200.00"), r"Lines total 200\.00 less.*250\.00"),
+            "negative document discount": (
+                dict(doc_discount="-20.00", net="200.00"), r"discount_amount -20\.00 cannot be neg"),
+            "negative allocation": (
+                dict(alloc="-12.00", net="212.00"), r"distributed_discount_amount -12\.00 cannot"),
+            "document discount beyond the currency precision": (
+                dict(doc_discount="20.001", net="200.00"), r"more than 2 decimals"),
+            "boolean document discount": (
+                dict(doc_discount=True, net="200.00"), r"discount_amount must be Decimal"),
+            "unparsable document discount": (
+                dict(doc_discount="ten", net="200.00"), r"discount_amount 'ten' is not a valid"),
+        }
+        for kind in _KINDS:
+            for name, (params, reason) in cases.items():
+                with self.subTest(kind=kind, case=name):
+                    with self.assertRaisesRegex(ValueError, reason):
+                        _go(kind, self._doc(kind, **params))
+
+    def test_top_level_and_totals_discount_must_agree(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                data = self._doc(kind, net="200.00")
+                data["discount_amount"] = "19.00"
+                with self.assertRaisesRegex(ValueError, r"discount_amount.*(disagree|differ)"):
+                    _go(kind, data)
+                data["discount_amount"] = "20.0"  # the same number written differently
+                self.assertIn("180.00", _go(kind, data))
+
+    def test_other_discount_names_are_refused_not_guessed(self):
+        cases = {
             "additional_discount_amount": lambda d: d["totals"].update(
                 additional_discount_amount="20.00"),
             "additional_discount_percentage": lambda d: d.update(
                 additional_discount_percentage="10"),
-            "distributed_discount_amount": self._line_allocation,
             "allocated_discount_amount": lambda d: d["lines"][0].update(
                 allocated_discount_amount="12.00"),
             "discount_allocation": lambda d: d["lines"][0].update(discount_allocation="12.00"),
-            "unparsable discount": lambda d: d["totals"].update(discount_amount="ten"),
-            "boolean discount": lambda d: d["totals"].update(discount_amount=True),
         }
         for kind in _KINDS:
             for name, mutate in cases.items():
                 with self.subTest(kind=kind, case=name):
-                    data = _build(kind)
+                    data = self._doc(kind, net="200.00")
                     mutate(data)
-                    with self.assertRaisesRegex(ValueError, self.REASON):
+                    with self.assertRaisesRegex(ValueError, rf"{name}.*discount_amount"):
                         _go(kind, data)
 
-    def test_the_ten_percent_discount_document_is_refused_not_reconciled(self):
-        # 200.00 gross, 20.00 discount, 180.00 taxable used to be accepted in round 2.
-        for kind in _KINDS:
-            with self.subTest(kind):
-                with self.assertRaisesRegex(ValueError, self.REASON):
-                    _go(kind, _build(kind, totals={
-                        "total_taxable_amount": "180.00", "total_vat_amount": "27.00",
-                        "grand_total": "207.00", "discount_amount": "20.00"}))
-
-    def test_a_zero_or_empty_document_discount_is_not_a_discount(self):
+    def test_a_zero_or_empty_discount_is_not_a_discount(self):
         for kind in _KINDS:
             for value in (None, "", "0", "0.00", 0):
                 with self.subTest(kind=kind, value=value):
                     data = _build(kind)
                     data["totals"]["discount_amount"] = value
                     data["lines"][0]["distributed_discount_amount"] = value
-                    self.assertIn("230.00", _go(kind, data))
+                    doc = _go(kind, data)
+                    self.assertIn("230.00", doc)
+                    self.assertNotIn("Discount</th>", doc.split('class="totals-table"', 1)[1])
 
-    def test_no_synthesised_discount_row_is_printed(self):
-        for kind in ("quote", "po"):
+    def test_no_discount_row_without_a_document_discount(self):
+        for kind in _KINDS:
             with self.subTest(kind):
-                doc = _go(kind, _build(kind))
-                totals = re.search(r'<table class="totals-table">.*?</table>', doc, re.S).group(0)
+                totals = _printed_totals(_go(kind, _build(kind)))
                 self.assertNotIn("Discount", totals)
-                self.assertNotIn("الخصم", totals)
+
+    def test_the_ten_percent_discount_document_agrees_in_every_document(self):
+        printed = {}
+        for kind in _KINDS:
+            doc = _go(kind, self._doc(kind, net="200.00"))
+            totals = _printed_totals(doc)
+            printed[kind] = (totals["Total Taxable Amount"], totals["Total VAT"],
+                             totals["Grand Total"])
+        self.assertEqual(set(printed.values()),
+                         {(Decimal("180.00"), Decimal("27.00"), Decimal("207.00"))})
+
+    def test_the_discount_row_label_is_bilingual_and_reuses_the_reviewed_discount_label(self):
+        from change_engine.print_formats import BILINGUAL_LABELS
+
+        ar, en = BILINGUAL_LABELS["discount"]
+        for kind in _KINDS:
+            with self.subTest(kind):
+                totals = _go(kind, self._doc(kind, net="200.00")).split(
+                    'class="totals-table"', 1)[1]
+                self.assertIn(f'<th class="tot-ar">{ar}</th>', totals)
+                self.assertIn(f'<th class="tot-en">{en}</th>', totals)
+
+    def test_the_caller_amounts_are_never_replaced_to_make_a_document_pass(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                data = self._doc(kind, alloc="12.00", net="188.00")
+                snapshot = json.dumps(data, sort_keys=True)
+                _go(kind, data)
+                self.assertEqual(json.dumps(data, sort_keys=True), snapshot)
+
+
+class TestLineDiscountsStillReconcile(unittest.TestCase):
+    """Line discounts (``qty x price - discount``) reconcile in every document."""
 
     def test_line_discounts_still_reconcile_in_every_document(self):
         totals = {"total_taxable_amount": "190.00", "total_vat_amount": "28.50",
@@ -1709,6 +1888,264 @@ class TestPrintBoundaryPrecision(unittest.TestCase):
                     data["totals"][field] = False
                     with self.assertRaises(ValueError):
                         _go(kind, data)
+
+
+class TestExactNumbersAtTheSnapshotBoundary(unittest.TestCase):
+    """Round 4: a numeric subclass cannot reach the printer; every number is a built-in copy."""
+
+    class EvilDecimal(Decimal):
+        armed = False
+
+        def normalize(self, *args, **kwargs):
+            return Decimal(9) if type(self).armed else Decimal.normalize(self, *args, **kwargs)
+
+        def __str__(self):
+            return "9" if type(self).armed else Decimal.__str__(self)
+
+        def __format__(self, spec):
+            return "9" if type(self).armed else Decimal.__format__(self, spec)
+
+    class EvilInt(int):
+        armed = False
+
+        def __str__(self):
+            return "9" if type(self).armed else int.__str__(self)
+
+        def __int__(self):
+            return 9 if type(self).armed else int.__int__(self)
+
+    @classmethod
+    def _wrap(cls, data, factory):
+        """The same document with every number of the checked lines and totals subclassed."""
+        for line in data["lines"]:
+            for field in ("quantity", "unit_price", "discount", "vat_rate", "line_net_amount",
+                          "distributed_discount_amount"):
+                if line.get(field) not in (None, ""):
+                    line[field] = factory(line[field])
+        for field, value in list(data["totals"].items()):
+            data["totals"][field] = factory(value)
+        return data
+
+    def test_a_decimal_subclass_that_changes_after_validation_prints_the_checked_value(self):
+        from change_engine.print_formats import branded_documents
+
+        evil = self.EvilDecimal
+        for kind in _KINDS:
+            with self.subTest(kind):
+                expected = _go(kind, _build(kind, qty="2.50", price="80.00",
+                                            totals=_DISCOUNT_TOTALS | {
+                                                "total_taxable_amount": "200.00",
+                                                "total_vat_amount": "30.00",
+                                                "grand_total": "230.00"}))
+                data = self._wrap(_build(kind, qty="2.50", price="80.00", totals={
+                    "total_taxable_amount": "200.00", "total_vat_amount": "30.00",
+                    "grand_total": "230.00"}), evil)
+                real = branded_documents.check_amounts
+
+                def arm_after_check(*args, **kwargs):
+                    result = real(*args, **kwargs)
+                    evil.armed = True  # the subclass starts lying once validation has passed
+                    return result
+
+                try:
+                    with mock.patch.object(branded_documents, "check_amounts", arm_after_check):
+                        printed = _go(kind, data)
+                finally:
+                    evil.armed = False
+                self.assertEqual(printed, expected)
+                self.assertIn("2.5", printed)
+
+    def test_the_subclass_is_never_asked_anything_even_from_the_start(self):
+        for subclass_kind, evil in (("decimal", self.EvilDecimal), ("int", self.EvilInt)):
+            for kind in _KINDS:
+                with self.subTest(number=subclass_kind, kind=kind):
+                    expected = _go(kind, _build(kind))
+                    data = _build(kind)
+                    if subclass_kind == "decimal":
+                        data["lines"][0]["quantity"] = evil("2")
+                        data["lines"][0]["unit_price"] = evil("100.00")
+                        data["totals"] = {k: evil(v) for k, v in data["totals"].items()}
+                    else:
+                        data["lines"][0]["quantity"] = evil(2)
+                        data["lines"][0]["unit_price"] = evil(100)
+                        data["totals"] = {"total_taxable_amount": evil(200),
+                                          "total_vat_amount": evil(30), "grand_total": evil(230)}
+                    evil.armed = True
+                    try:
+                        printed = _go(kind, data)
+                    finally:
+                        evil.armed = False
+                    self.assertEqual(printed, expected)
+
+    def test_snapshot_numbers_are_exact_builtin_types(self):
+        from change_engine.print_formats.document_reconciliation import snapshot_document
+
+        data = _build("quote")
+        data["lines"][0]["quantity"] = self.EvilDecimal("2")
+        data["lines"][0]["discount"] = self.EvilInt(0)
+        snap = snapshot_document(data)
+        self.assertIs(type(snap["lines"][0]["quantity"]), Decimal)
+        self.assertIs(type(snap["lines"][0]["discount"]), int)
+        self.assertEqual(snap["lines"][0]["quantity"], Decimal("2"))
+
+    def test_non_finite_and_float_values_stay_refused(self):
+        for kind in _KINDS:
+            for bad in (Decimal("NaN"), Decimal("Infinity"), 2.0):
+                with self.subTest(kind=kind, bad=bad):
+                    data = _build(kind)
+                    data["lines"][0]["quantity"] = bad
+                    with self.assertRaises(ValueError):
+                        _go(kind, data)
+
+
+class TestIntegerDigitCap(unittest.TestCase):
+    def test_a_number_with_more_than_thirty_integer_digits_is_refused(self):
+        for kind in _KINDS:
+            for field, value in (("quantity", "9E+30"), ("quantity", Decimal("9E+30")),
+                                 ("unit_price", "9E+30"), ("line_net_amount", "9E+30"),
+                                 ("quantity", "9" * 31)):
+                with self.subTest(kind=kind, field=field, value=value):
+                    data = _build(kind, totals=_ZERO_TOTALS)
+                    data["lines"][0].update(quantity="1", unit_price="0")
+                    data["lines"][0][field] = value
+                    with self.assertRaisesRegex(ValueError, r"out of range"):
+                        _go(kind, data)
+            for total in ("total_taxable_amount", "total_vat_amount", "grand_total"):
+                with self.subTest(kind=kind, total=total):
+                    data = _build(kind, qty="1", price="0", totals=_ZERO_TOTALS)
+                    data["totals"][total] = "9E+30"
+                    with self.assertRaisesRegex(ValueError, r"out of range"):
+                        _go(kind, data)
+
+    def test_the_largest_amounts_that_fit_both_caps_are_still_accepted(self):
+        # 28 integer digits + 2 decimals = 30 coefficient digits.
+        for kind in ("quote", "po"):
+            with self.subTest(kind):
+                big = "9" * 28 + ".00"
+                doc = _go(kind, _build(kind, qty="1", price=big, totals={
+                    "total_taxable_amount": big, "total_vat_amount": "0.00", "grand_total": big}))
+                self.assertIn("9,999,999,999,999,999,999,999,999,999.00", doc)
+
+    def test_the_cap_counts_integer_digits_of_the_value(self):
+        from change_engine.print_formats.document_reconciliation import _number
+
+        for text, ok in (("9" * 30, True), ("9" * 31, False), ("9E+29", True), ("9E+30", False),
+                         ("1E+30", False), ("0.000001", True), ("1E-31", False),
+                         ("0E+40", False)):
+            with self.subTest(text):
+                errors: list[str] = []
+                result = _number(text, "x", errors)
+                self.assertEqual(result is not None, ok, (result, errors))
+
+
+class TestAdapterEmitsDiscountFields(unittest.TestCase):
+    """The ERP-007 adapter passes the engine's discount through; nothing is lost or recomputed."""
+
+    def _env(self):
+        from change_engine.tests import test_erp_007_bilingual_tax_invoice as erp007
+
+        case = erp007.TestFrappeSalesInvoiceIntegration("test_ksa_sales_invoice_maps_and_renders_with_qr")
+        return case._mock_ksa_frappe_env()[0]
+
+    @staticmethod
+    def _invoice(*, discount=True, allocated=True):
+        from types import SimpleNamespace
+        import json as _json
+
+        item = dict(
+            item_code="ITEM-001", item_name="Office Desk Chair", custom_item_name_ar="كرسي مكتب",
+            qty=2, rate=Decimal("100.00"), discount_amount=Decimal("0.00"),
+            amount=Decimal("200.00"),
+            net_amount=Decimal("180.00") if discount and allocated else Decimal("200.00"),
+            item_tax_rate=_json.dumps({"VAT 15%": 15.0}))
+        if discount and allocated:
+            item["distributed_discount_amount"] = Decimal("20.00")
+        return SimpleNamespace(
+            name="ACC-SINV-2026-0009", company="Al-Noor Trading Est",
+            company_address="ADDR-COMP-1", customer="CUST-GULF",
+            customer_name="Gulf Enterprises LLC", customer_address="ADDR-CUST-1",
+            posting_date=__import__("datetime").date(2026, 11, 17),
+            posting_time=__import__("datetime").timedelta(hours=14, minutes=30),
+            currency="SAR", is_pos=0, is_return=0, is_debit_note=0,
+            discount_amount=Decimal("20.00") if discount else Decimal("0.00"),
+            net_total=Decimal("180.00") if discount else Decimal("200.00"),
+            total_taxes_and_charges=Decimal("27.00") if discount else Decimal("30.00"),
+            grand_total=Decimal("207.00") if discount else Decimal("230.00"),
+            taxes=[SimpleNamespace(rate=15.0)], items=[SimpleNamespace(**item)])
+
+    def test_discount_fields_are_emitted_in_the_names_the_branded_check_reads(self):
+        from change_engine.print_formats import sales_invoice_to_zatca_dict
+
+        payload, mode = sales_invoice_to_zatca_dict(self._invoice(), frappe_module=self._env())
+        self.assertEqual(mode, "zatca_sa")
+        self.assertEqual(payload["totals"]["discount_amount"], "20.00")
+        line = payload["lines"][0]
+        self.assertEqual(line["distributed_discount_amount"], "20.00")
+        self.assertEqual(line["line_net_amount"], "180.00")
+        self.assertEqual((line["quantity"], line["unit_price"]), ("2", "100.00"))
+
+    def test_an_undiscounted_invoice_payload_is_unchanged(self):
+        from change_engine.print_formats import sales_invoice_to_zatca_dict
+
+        payload, _ = sales_invoice_to_zatca_dict(self._invoice(discount=False),
+                                                 frappe_module=self._env())
+        self.assertNotIn("discount_amount", payload["totals"])
+        self.assertNotIn("discount_amount", payload)
+        self.assertNotIn("distributed_discount_amount", payload["lines"][0])
+        self.assertEqual(sorted(payload["totals"]),
+                         ["grand_total", "total_taxable_amount", "total_vat_amount"])
+
+    def test_a_ten_percent_document_discount_agrees_in_erp_007_and_both_branded_modes(self):
+        from change_engine.print_formats import (
+            render_tax_invoice_html, sales_invoice_to_zatca_dict)
+
+        for allocated in (True, False):
+            with self.subTest(allocated=allocated):
+                payload, _ = sales_invoice_to_zatca_dict(
+                    self._invoice(allocated=allocated), frappe_module=self._env())
+                renders = {
+                    "erp-007 zatca": render_tax_invoice_html(payload, mode="zatca_sa"),
+                    "erp-007 neutral": render_tax_invoice_html(payload, mode="neutral"),
+                    "branded zatca": render_branded_tax_invoice_html(payload, mode="zatca_sa"),
+                    "branded neutral": render_branded_tax_invoice_html(payload, mode="neutral"),
+                }
+                seen = set()
+                for name, doc in renders.items():
+                    totals = _printed_totals(doc)
+                    seen.add((totals["Total Taxable Amount"], totals["Total VAT"],
+                              totals["Grand Total"]))
+                    with self.subTest(document=name):
+                        if name.startswith("branded"):
+                            _assert_printed_numbers_add_up(
+                                self, doc, taxable="180.00",
+                                discount_row=None if allocated else "20.00")
+                self.assertEqual(seen, {(Decimal("180.00"), Decimal("27.00"), Decimal("207.00"))})
+
+    def test_the_engine_net_amount_that_does_not_carry_its_allocation_is_refused(self):
+        from change_engine.print_formats import sales_invoice_to_zatca_dict
+
+        payload, _ = sales_invoice_to_zatca_dict(self._invoice(), frappe_module=self._env())
+        payload["lines"][0]["line_net_amount"] = "200.00"
+        for mode in ("zatca_sa", "neutral"):
+            with self.subTest(mode), self.assertRaisesRegex(ValueError, r"Line 1"):
+                render_branded_tax_invoice_html(payload, mode=mode)
+
+    def test_a_credit_note_keeps_the_discount_fields_as_positive_magnitudes(self):
+        from change_engine.print_formats import sales_invoice_to_zatca_dict
+
+        inv = self._invoice()
+        inv.is_return = 1
+        inv.return_against = "ACC-SINV-2026-0001"
+        inv.net_total, inv.total_taxes_and_charges, inv.grand_total = (
+            Decimal("-180.00"), Decimal("-27.00"), Decimal("-207.00"))
+        inv.discount_amount = Decimal("-20.00")
+        item = inv.items[0]
+        item.qty, item.amount, item.net_amount = -2, Decimal("-200.00"), Decimal("-180.00")
+        item.distributed_discount_amount = Decimal("-20.00")
+        payload, _ = sales_invoice_to_zatca_dict(inv, frappe_module=self._env())
+        self.assertEqual(payload["totals"]["discount_amount"], "20.00")
+        self.assertEqual(payload["lines"][0]["distributed_discount_amount"], "20.00")
+        self.assertEqual(payload["lines"][0]["line_net_amount"], "180.00")
 
 
 def _po_with(**line):

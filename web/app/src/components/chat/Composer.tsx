@@ -20,7 +20,7 @@ export function Composer({ mode, running, onMode, onSend, onCancel }: ComposerPr
   const tm = useTranslations('chat.mode');
   const [text, setText] = useState('');
   const submit = () => {
-    if (onSend(text)) setText('');
+    if (!running && onSend(text)) setText('');
   };
   return (
     <form
@@ -38,7 +38,8 @@ export function Composer({ mode, running, onMode, onSend, onCancel }: ComposerPr
         rows={3}
         value={text}
         maxLength={MAX_MESSAGE_LENGTH}
-        disabled={running}
+        readOnly={running}
+        aria-disabled={running || undefined}
         placeholder={t('placeholder')}
         aria-describedby="chat-input-hint"
         onChange={(e) => setText(e.target.value)}
@@ -55,8 +56,10 @@ export function Composer({ mode, running, onMode, onSend, onCancel }: ComposerPr
           label={tm('label')}
           hint={tm('hint')}
           value={mode}
-          disabled={running}
-          onChange={(e) => onMode(e.target.value as ChatMode)}
+          aria-disabled={running || undefined}
+          onChange={(e) => {
+            if (!running) onMode(e.target.value as ChatMode);
+          }}
         >
           {MODES.map((m) => (
             <option key={m} value={m}>{tm(`${m}.name`)}</option>

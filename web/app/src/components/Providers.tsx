@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
+import { RouteTitle } from './RouteTitle';
 import { defaultLocale, directionOf, isLocale, messages, type Direction, type Locale } from '../i18n';
 
 const STORAGE_KEY = 'platform.locale.v1'; // the user's language setting (fixture until settings exist)
@@ -47,6 +48,7 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <SettingsContext.Provider value={{ locale, setLocale, direction, setDirection: setOverride }}>
       <NextIntlClientProvider locale={locale} messages={messages[locale]} timeZone="UTC">
+        <RouteTitle />
         {children}
       </NextIntlClientProvider>
     </SettingsContext.Provider>

@@ -6,7 +6,15 @@ previous seal and bound to its tenant and stream, so editing, dropping, reorderi
 stream or tenant fails closed. A cut tail or a deleted stream is caught by a sealed per-tenant manifest (every stream
 with its seq and head, plus a counter) written in the same step as every append and checked on every read. No key,
 no log: there is no unsealed fallback. Rolling back records and manifest together needs an external anchor (Q-521).
-A real store must write record and manifest in ONE atomic transaction with a unique key on (tenant, stream, seq)."""
+
+Storage is a port (`store`); `MemoryStore` is for tests and local runs only and loses everything on restart.
+store.records(tenant, stream) -> list   the stored records of one stream, in seq order ([] when none).
+store.manifest(tenant) -> dict | None   the stored sealed manifest of a tenant.
+store.has_records(tenant) -> bool       True when any stream of the tenant has records (so a lost manifest is caught).
+store.commit(tenant, stream, record, manifest)
+                                        write record and manifest in ONE atomic transaction with a unique key on
+                                        (tenant, stream, seq); raise on any conflict or failure.
+A store error on read is OA-009 (fail closed); on commit it is OA-004 and nothing counts as written."""
 from __future__ import annotations
 
 import copy
@@ -43,8 +51,31 @@ def _plain(v, depth=0):
     raise OwnerApprovalError("OA-001", "type")  # floats, sets, iterators, objects
 
 
+class MemoryStore:
+    """In-process store (tests, local runs). Not durable: a restart forgets every decision, rejections included."""
+    def __init__(self):
+        self._logs: dict = {}
+        self._manifests: dict = {}
+
+    def records(self, tenant, stream):
+        return self._logs.get((tenant, stream), [])
+
+    def manifest(self, tenant):
+        return self._manifests.get(tenant)
+
+    def has_records(self, tenant):
+        return any(t == tenant for t, _ in self._logs)
+
+    def commit(self, tenant, stream, record, manifest):
+        log = self._logs.get((tenant, stream), [])
+        if record["seq"] != len(log) + 1:
+            raise ValueError("seq")
+        self._logs[(tenant, stream)] = list(log) + [record]
+        self._manifests[tenant] = manifest
+
+
 class SealedLog:
-    def __init__(self, integrity_keys, key_id, domain="orrery.ownerapproval.log.v1"):
+    def __init__(self, integrity_keys, key_id, domain="orrery.ownerapproval.log.v1", store=None):
         if type(integrity_keys) is not dict or not integrity_keys or type(key_id) is not str:
             raise OwnerApprovalError("OA-010")
         if any(type(k) is not str or type(v) is not bytes or len(v) < 32 for k, v in integrity_keys.items()):
@@ -52,8 +83,21 @@ class SealedLog:
         if key_id not in integrity_keys:
             raise OwnerApprovalError("OA-010")
         self._keys, self._active, self._domain = dict(integrity_keys), key_id, domain.encode()
-        self._logs: dict = {}
-        self._manifests: dict = {}
+        self._store = store if store is not None else MemoryStore()
+
+    @property
+    def _logs(self):        # direct access to a MemoryStore (tests)
+        return self._store._logs
+
+    @property
+    def _manifests(self):
+        return self._store._manifests
+
+    def _get(self, fn, *a):
+        try:
+            return copy.deepcopy(fn(*a))
+        except Exception:
+            raise OwnerApprovalError("OA-009", "store") from None
 
     def _mac(self, rec: dict, purpose: bytes) -> str:
         master = self._keys.get(rec.get("key_id")) if type(rec.get("key_id")) is str else None
@@ -69,9 +113,9 @@ class SealedLog:
         return rec
 
     def _manifest(self, tenant: str) -> dict:
-        m = self._manifests.get(tenant)
+        m = self._get(self._store.manifest, tenant)
         if m is None:
-            if any(t == tenant for t, _ in self._logs):
+            if self._get(self._store.has_records, tenant) is not False:
                 raise OwnerApprovalError("OA-009", "manifest")
             return {}
         try:
@@ -94,7 +138,9 @@ class SealedLog:
         """The verified records of one stream (deep copies); () when the stream does not exist."""
         mf = self._manifest(tenant)
         key = (tenant, stream)
-        entry, log = mf.get(stream), self._logs.get(key)
+        entry, log = mf.get(stream), self._get(self._store.records, *key)
+        if type(log) is not list:
+            raise OwnerApprovalError("OA-009", "store")
         if entry is None:
             if log:
                 raise OwnerApprovalError("OA-009", "unanchored")
@@ -115,7 +161,7 @@ class SealedLog:
             raise
         except Exception:
             raise OwnerApprovalError("OA-009", "shape") from None
-        return tuple(copy.deepcopy(log))
+        return tuple(log)
 
     def append(self, tenant: str, stream: str, body: dict, check=None) -> dict:
         """Verify, run `check(existing_records)` (it raises to refuse), then seal and store record and manifest together."""
@@ -128,9 +174,11 @@ class SealedLog:
                "prev": existing[-1]["seal"] if existing else "", "body": body, "key_id": self._active}
         rec["seal"] = self._mac(rec, b"record")
         mf[stream] = (rec["seq"], rec["seal"])
-        old = self._manifests.get(tenant)
+        old = self._get(self._store.manifest, tenant)
         manifest = self._seal({"schema": "1", "tenant_id": tenant, "n": (old["n"] if old else 0) + 1,
                                "streams": [[k, *mf[k]] for k in sorted(mf)]}, b"manifest")
-        self._logs[(tenant, stream)] = list(self._logs.get((tenant, stream), [])) + [rec]
-        self._manifests[tenant] = manifest
+        try:
+            self._store.commit(tenant, stream, copy.deepcopy(rec), manifest)
+        except Exception:
+            raise OwnerApprovalError("OA-004", "store") from None
         return copy.deepcopy(rec)

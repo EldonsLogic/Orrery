@@ -11,7 +11,10 @@ from quote.money import EXPONENT, MAX_MINOR, money, mul_bp
 from .errors import OwnerApprovalError
 from .text import clean, clean_cut
 
-MAX_ITEMS = 25
+MAX_ITEMS = 200     # per collection; anything past it is counted in moreItems and blocks approval (the screen is complete)
+MAX_DETAIL = 64     # per list inside an item's details; overflow counts in moreItems too
+DETAIL_FIELDS = ("admin", "chatActions", "permissions", "entity", "action", "selfApproval", "steps", "connector", "direction",
+                 "roles", "tools")
 COLLECTIONS = (("entities", "entity"), ("workflows", "workflow"), ("reports", "report"), ("roles", "role"), ("components", "component"),
                ("approvals", "approval"), ("integrations", "integration"), ("assistants", "assistant"), ("locations", "location"))
 # Parts of the Blueprint that the approval digest covers but this screen does not list item by item (shown as a notice).
@@ -44,15 +47,53 @@ def _labels(item) -> dict:
     return {"ar": ar, "en": en, "cut": c1 or c2}
 
 
+def _list(v):
+    return v if type(v) is list else []
+
+
+def _d(v):
+    return v if type(v) is dict else {}
+
+
+def _details(kind, it):
+    """What a role, approval rule, integration or assistant allows: ids and enums only, bounded. (details, hidden)."""
+    cut = lambda arr: (arr[:MAX_DETAIL], max(0, len(arr) - MAX_DETAIL))  # noqa: E731
+    if kind == "role":
+        perms, hidden = cut(_list(it.get("permissions")))
+        rows = []
+        for pm in perms:
+            acts, h = cut(_list(_d(pm).get("actions")))
+            hidden += h
+            rows.append({"entity": clean(_d(pm).get("entity"), 80), "actions": [clean(a, 40) for a in acts]})
+        return {"admin": it.get("isAdmin") is True, "chatActions": it.get("canUseChatActions") is not False, "permissions": rows}, hidden
+    if kind == "approval":
+        steps, hidden = cut(_list(it.get("steps")))
+        ap = _d(it.get("appliesTo"))
+        return {"entity": clean(ap.get("entity"), 80), "action": clean(ap.get("action"), 40), "selfApproval": it.get("selfApproval") is True,
+                "steps": [{"order": _d(s).get("order") if type(_d(s).get("order")) is int else None,
+                           "approverRole": clean(_d(s).get("approverRole"), 80), "mode": clean(_d(s).get("mode"), 40)} for s in steps]}, hidden
+    if kind == "integration":
+        return {"connector": clean(it.get("connector"), 120), "direction": clean(it.get("direction"), 8)}, 0
+    if kind == "assistant":
+        roles, h1 = cut(_list(it.get("roles")))
+        tools, h2 = cut(_list(it.get("tools")))
+        return {"roles": [clean(r, 80) for r in roles], "tools": [clean(_d(x).get("tool"), 130) for x in tools]}, h1 + h2
+    return None, 0
+
+
 def summary_section(content: dict) -> dict:
-    counts, items = {}, []
+    counts, items, hidden = {}, [], 0
     for coll, kind in COLLECTIONS:
         arr = content.get(coll)
         arr = arr if type(arr) is list else []
         counts[kind] = len(arr)
         for it in arr[:MAX_ITEMS]:
             if type(it) is dict:
-                items.append({"kind": kind, "kindKey": f"oa.kind.{kind}", "id": clean(it.get("id"), 80), "labels": _labels(it), "untrustedText": True})
+                row = {"kind": kind, "kindKey": f"oa.kind.{kind}", "id": clean(it.get("id"), 80), "labels": _labels(it), "untrustedText": True}
+                det, h = _details(kind, it)
+                if det is not None:
+                    row["details"], hidden = det, hidden + h
+                items.append(row)   # a non-dict item is not listed, so it counts in moreItems below
     company = content.get("company") if type(content.get("company")) is dict else {}
     comp = content.get("compliance") if type(content.get("compliance")) is dict else {}
     vat = comp.get("vat") if type(comp.get("vat")) is dict else {}
@@ -63,7 +104,8 @@ def summary_section(content: dict) -> dict:
             "compliance": compliance, "notShown": [{"key": k, "labelKey": f"oa.summary.not_shown.{k}"} for k in NOT_SHOWN],
             "notShownNoticeKey": "oa.summary.not_shown",
             "company": {"labels": _labels(company), "country": clean(company.get("country"), 2), "untrustedText": True},
-            "items": items, "moreItems": max(0, sum(counts.values()) - len(items))}
+            "detailLabels": [{"key": f, "labelKey": f"oa.detail.{f}"} for f in DETAIL_FIELDS],
+            "items": items, "moreItems": max(0, sum(counts.values()) - len(items)) + hidden}
 
 
 def check_quote(quote, content: dict, gap: dict, bp_id: str, now_dt) -> str:

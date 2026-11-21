@@ -54,6 +54,7 @@ CODE_RE = re.compile(r"^[A-Z]{2,4}-[0-9]{3}$")
 SCHEMA = "owner_approval/1"
 _WHO = contextvars.ContextVar("owner_approval_who", default=None)
 MAX_SKEW = 300  # seconds a record may be behind the newest one (host clock steps), per record
+MAX_TRIES = 5   # decisions one owner may seal on one version (refused approvals included)
 _DATA = {"decision": {"decision", "reason", "note", "bpDigest", "quoteDigest", "gapDigest", "forward"},
          "forward_outcome": {"decisionSeq", "outcome", "code"}}
 
@@ -80,13 +81,20 @@ def _corrupt(why="record"):
     return OwnerApprovalError("OA-009", why)
 
 
+class _Settled(Exception):
+    """Internal: the decision already has an outcome (another call settled it first)."""
+
+
 class OwnerApproval:
     def __init__(self, *, identity, blueprints, quotes, gaps, holds, gate, content_digest, clock,
-                 integrity_keys=None, key_id=None, audit=None):
+                 integrity_keys=None, key_id=None, audit=None, store=None, ephemeral=False):
         if any(p is None for p in (identity, blueprints, quotes, gaps, holds, gate, content_digest, clock)):
             raise OwnerApprovalError("OA-001", "ports")
+        if store is None and ephemeral is not True:   # no durable store, no service: a restart must not forget a rejection
+            raise OwnerApprovalError("OA-010", "store")
         keys = integrity_keys if integrity_keys is not None else {}
-        self._log = SealedLog(keys, key_id if key_id is not None else (list(keys)[-1] if type(keys) is dict and keys else ""))
+        self._log = SealedLog(keys, key_id if key_id is not None else (list(keys)[-1] if type(keys) is dict and keys else ""),
+                              store=store)
         self._idn, self._bps, self._quotes, self._gaps, self._holds = identity, blueprints, quotes, gaps, holds
         self._gate, self._digest, self._clock, self._audit_cb = gate, content_digest, clock, audit
 
@@ -255,6 +263,7 @@ class OwnerApproval:
                 blockers.append("quote")
         except OwnerApprovalError:
             blockers.append("quote")
+            qstate = None          # a quote or gap report that does not check out has no state at all
             try:
                 gaps = gaps_section(gap)
             except OwnerApprovalError:
@@ -278,7 +287,11 @@ class OwnerApproval:
             raise OwnerApprovalError("OA-013", "holds") from None
         if held is not False:          # True, or anything unexpected, blocks
             blockers.append("held")
-        return {"content": content, "bpDigest": dg, "quote": quote, "quoteDigest": quote["digest"] if cost else None,
+        summary = summary_section(content)
+        if summary["moreItems"] or (gaps and gaps["moreItems"]) or (cost and cost["unpricedCount"] > len(cost["unpriced"])):
+            blockers.append("too_large")   # never let the owner approve what the screen does not list in full
+        return {"content": content, "summary": summary, "quoteState": qstate if cost else None,
+                "bpDigest": dg, "quote": quote, "quoteDigest": quote["digest"] if cost else None,
                 "gapDigest": quote.get("inputs", {}).get("gap_report_digest") if cost else None, "cost": cost, "gaps": gaps,
                 "machine": st["state"], "machineOwner": owner, "blockers": blockers}
 
@@ -308,9 +321,9 @@ class OwnerApproval:
                 blockers.append("state")
             if mine:
                 blockers.append("already_decided")
-            base = set(blockers) - {"rejected", "changes_requested", "already_decided", "state"}
+            base = set(blockers) - {"rejected", "changes_requested", "already_decided", "state", "too_large", "quote"}
             can_approve = not blockers and m == "draft"
-            can_change = not base and not mine and m != "live" and "quote" not in blockers
+            can_change = not base and not mine and m != "live" and ctx["quoteState"] in ("valid", "expired")
             if m != "draft" and eff not in ("approved", "integrity_error", "pending"):
                 eff = "out_of_sync"     # the machine is past draft without a current approval of THIS version
             elif m == "draft" and eff == "approved":
@@ -320,7 +333,7 @@ class OwnerApproval:
                 "revision": ctx["content"]["meta"]["revision"], "blueprintDigest": ctx["bpDigest"], "quoteDigest": ctx["quoteDigest"],
                 "buildState": m, "buildStateKey": f"oa.build.{m}",
                 "state": {"value": eff, "labelKey": f"oa.state.{eff}"},
-                "sections": [summary_section(ctx["content"]), ctx["cost"], ctx["gaps"], simulation_section()],
+                "sections": [ctx["summary"], ctx["cost"], ctx["gaps"], simulation_section()],
                 "confirmations": [{"key": c, "labelKey": f"oa.confirm.{c}"} for c in CONFIRMATIONS],
                 "decisions": [{"key": d, "labelKey": f"oa.decision.{d}", "noteRequired": False,
                                "reasons": [{"value": r, "labelKey": f"oa.reason.{d}.{r}"} for r in REASONS[d]],
@@ -366,12 +379,16 @@ class OwnerApproval:
             cd, qd, who = _dig(content_digest, "digest"), _dig(quote_digest, "quote_digest"), _ident(subject, "subject")
             ctx = self._context(t, bp, self._now())
             _, folded = self._records(t, bp)
-            same = ctx["bpDigest"] == cd
+            same, past_draft = ctx["bpDigest"] == cd, ctx["machine"] != "draft"
+            # a confirmed approval moved the machine once; back at draft it is spent (a rollback happened since)
             ok = same and any(d["subject"] == who and d["decision"] == "approve" and d["bpDigest"] == cd and d["quoteDigest"] == qd
-                              and d["outcome"] in (None, "confirmed") for d in folded["decisions"])
+                              and (d["outcome"] is None or (d["outcome"] == "confirmed" and past_draft)) for d in folded["decisions"])
             blocked = cd in folded["rejected"] or (cd, qd) in folded["changes"] or "held" in ctx["blockers"]
+            # validity counts at approval time only: past draft, the same quote (bound to this content and gap report,
+            # arithmetic re-derived) stays current after it expires; at draft it must be valid now
+            quote_ok = ctx["quoteState"] == "valid" or (past_draft and ctx["quoteState"] == "expired")
             return {"tenantId": t, "blueprintId": bp, "contentDigest": cd, "quoteDigest": qd, "approvedBy": who if ok else None,
-                    "blocked": blocked, "quoteCurrent": same and ctx["quoteDigest"] == qd and "quote" not in ctx["blockers"]}
+                    "blocked": blocked, "quoteCurrent": same and ctx["quoteDigest"] == qd and quote_ok}
         return self._run("verify", tenant_id, blueprint_id, go)
 
     # ----- the decision ---------------------------------------------------------------------------------
@@ -392,8 +409,10 @@ class OwnerApproval:
             p = self._actor(claims, t, gate=False)
             at = self._now()
             ctx = self._context(t, bp, at)
-            for code, key in (("OA-013", "held"), ("OA-012", "quote"), ("OA-006", "stale")):
-                if key in ctx["blockers"]:
+            for code, key in (("OA-013", "held"), ("OA-012", "quote"), ("OA-006", "stale"), ("OA-017", "too_large")):
+                # an expired quote or a plan too large to list stops an approval only; the owner may still say no
+                if key in ctx["blockers"] and (decision == "approve" or key not in ("quote", "too_large")
+                                               or (key == "quote" and ctx["quoteState"] != "expired")):
                     raise OwnerApprovalError(code)
             if ctx["bpDigest"] != seen_b or ctx["quoteDigest"] != seen_q:
                 raise OwnerApprovalError("OA-006")
@@ -416,6 +435,9 @@ class OwnerApproval:
                 prev = folded["latest"].get((p.subject, data["bpDigest"], data["quoteDigest"]))
                 if prev is not None and not (prev["decision"] == "approve" and prev["outcome"] == "refused"):
                     raise OwnerApprovalError("OA-007")
+                if sum(1 for x in folded["decisions"] if x["subject"] == p.subject and x["bpDigest"] == data["bpDigest"]
+                       and x["quoteDigest"] == data["quoteDigest"]) >= MAX_TRIES:
+                    raise OwnerApprovalError("OA-007", "tries")   # bounded log growth from refused approvals
                 if decision == "approve":
                     if data["bpDigest"] in folded["rejected"]:
                         raise OwnerApprovalError("OA-008")
@@ -431,10 +453,28 @@ class OwnerApproval:
         s = self.status(t, bp)
         return {k: s[k] for k in ("state", "buildState", "blueprintDigest", "quoteDigest")}
 
-    def _outcome(self, t, bp, p, seq, outcome, code):
+    def _outcome(self, t, bp, p, seq, outcome, code) -> str:
+        """Seal the outcome of decision `seq` under the same fold rules as a decision (skew, one outcome per decision);
+        return the outcome now on record. A second outcome (a racing reconcile) is refused, never appended."""
         actor = {"subject": p.subject, "role": OWNER, "kind": "human", "realm": "tenant"}
-        self._log.append(t, bp, {"type": "forward_outcome", "at": self._now(), "actor": actor,
-                                 "data": {"decisionSeq": seq, "outcome": outcome, "code": code}})
+        at, settled = self._now(), []
+
+        def check(existing):
+            folded = self._fold(t, bp, existing)
+            if at < folded["max_at"] - MAX_SKEW:
+                raise OwnerApprovalError("OA-002", "order")
+            ref = next((x for x in folded["decisions"] if x["seq"] == seq), None)
+            if ref is None or ref["forward"] != "gate" or ref["subject"] != p.subject:
+                raise OwnerApprovalError("OA-001", "outcome")
+            if ref["outcome"] is not None:
+                settled.append(ref["outcome"])
+                raise _Settled()
+        try:
+            self._log.append(t, bp, {"type": "forward_outcome", "at": at, "actor": actor,
+                                     "data": {"decisionSeq": seq, "outcome": outcome, "code": code}}, check)
+        except _Settled:
+            return settled[0]
+        return outcome
 
     @staticmethod
     def _owner_matches(st, subject, bp_digest, quote_digest) -> bool:
@@ -467,11 +507,13 @@ class OwnerApproval:
             except Exception:
                 st = None
             if decision == "approve" and st is not None and self._owner_matches(st, p.subject, ctx["bpDigest"], ctx["quoteDigest"]):
-                self._outcome(t, bp, p, seq, "confirmed", "")
+                if self._outcome(t, bp, p, seq, "confirmed", "") != "confirmed":
+                    raise OwnerApprovalError("OA-015", "settled") from None
                 return
             self._outcome(t, bp, p, seq, "refused", code)
             raise OwnerApprovalError("OA-015", code) from None
-        self._outcome(t, bp, p, seq, "confirmed", "")
+        if self._outcome(t, bp, p, seq, "confirmed", "") != "confirmed":
+            raise OwnerApprovalError("OA-015", "settled")   # a reconcile sealed it refused first: fail closed
 
     def reconcile(self, claims, *, tenant_id, blueprint_id) -> dict:
         """After a crash between a sealed decision and its outcome: settle each pending forwarded decision of THIS owner from

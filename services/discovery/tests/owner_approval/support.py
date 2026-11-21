@@ -157,7 +157,7 @@ def build(w=None, **over):
     ident = Identity()
     gate = Gate(w, ident)
     kw = dict(identity=ident, blueprints=Store(w, "bp"), quotes=Store(w, "quote"), gaps=Store(w, "gap"), holds=Holds(w),
-              gate=gate, content_digest=cdigest, clock=lambda: w.t, integrity_keys=dict(KEYS), key_id="k1")
+              gate=gate, content_digest=cdigest, clock=lambda: w.t, integrity_keys=dict(KEYS), key_id="k1", ephemeral=True)
     kw.update(over)
     svc = OwnerApproval(**kw)
     gate.svc = svc

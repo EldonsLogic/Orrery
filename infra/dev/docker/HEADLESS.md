@@ -29,7 +29,7 @@ The allowlist lives in `apps/engine/change_engine/change_engine/api/route_guard.
 | Caller | Allowed |
 |---|---|
 | Anyone | `GET /api/method/ping` (liveness) |
-| Holder of the internal token (header `X-Internal-Token`) | `POST /api/method/change_engine.api.endpoints.<adapter method>` (twelve whitelisted methods) and read-only `GET /api/resource/<DocType>[/<name>]` for Customer, Item, Sales Order and Sales Invoice. Writes use guarded adapter endpoints; all other DocTypes are denied |
+| Holder of the internal token (header `X-Internal-Token`) | `POST /api/method/change_engine.api.endpoints.<adapter method>` (twelve whitelisted methods) and read-only `GET /api/resource/<DocType>[/<name>]` for the explicit read-route set (`READ_ROUTE_DOCTYPES`: `Customer`, `Item`, `Sales Order` and `Sales Invoice`). Writes use guarded adapter endpoints; all other DocTypes (including mapped grant entities with no read consumer, such as `Delivery Note`) are denied |
 | Everyone | Nothing else: `/`, `/app`, `/desk`, `/login`, `/api/method/login`, other `/api/method/*`, file upload, `/assets`, `/files`, `/private/files`, `/backups`, website pages, the legacy `cmd` RPC |
 
 The environment token is an interim G1 internal service credential, not the final SEC-002 workload identity or a tenant identity. It admits requests to the engine's own user permission checks. `ENGINE_INTERNAL_TOKEN` must contain 32–256 URL-safe characters; generate it from secure random bytes, not a memorable string. The startup validator refuses malformed or absent current credentials before opening the listener. Missing/invalid credentials also fail closed in each request guard. No credential values are logged.

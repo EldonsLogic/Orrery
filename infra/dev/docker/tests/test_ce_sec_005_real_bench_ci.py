@@ -204,6 +204,8 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
         for secret in env.values():
             self.assertNotIn(secret, str(error.exception))
             self.assertFalse(any(secret in str(arg) for arg in compose.call_args.args[3:]))
+        self.assertTrue(any("set-config tenant_id" in str(arg) for arg in compose.call_args.args[3:]))
+        self.assertIn("t_ce005", compose.call_args.args[3:])
 
     def test_drop_failure_is_reported(self) -> None:
         """A reused stack must expose site cleanup failures."""

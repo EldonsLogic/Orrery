@@ -38,5 +38,5 @@
 }
 
 .control::placeholder {
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }

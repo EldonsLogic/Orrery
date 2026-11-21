@@ -267,7 +267,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-011 | Simulator accuracy test against known outcomes | Quality | G2 | BPL-018 | eldon | done |
 | QA-012 | Release checklist | Quality | G2 | QA-010 | eldon | todo |
 | QA-013 | Load and soak tests | Quality | G3 | ERP-002,INF-005 | partner | todo |
-| QA-014 | Accessibility audit (WCAG AA) | Quality | G3 | WEB-013 | eldon | todo |
+| QA-014 | Accessibility audit (WCAG AA) | Quality | G3 | WEB-013 | eldon | done |
 | GTM-001 | Niche decision: trading and distribution first | GTM | G0 | - | eldon | done |
 | GTM-002 | 20-30 buyer and accountant interviews in the niche | GTM | G1 | - | eldon | todo |
 | GTM-003 | Interview synthesis: ICP, pains, who vetoes, willingness to pay | GTM | G1 | GTM-002 | eldon | todo |

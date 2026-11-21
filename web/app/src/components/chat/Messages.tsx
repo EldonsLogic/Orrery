@@ -12,7 +12,7 @@ import styles from './Chat.module.css';
 export function MessageList({ messages }: { messages: ReadonlyArray<ChatMessage> }) {
   const t = useTranslations('chat.roles');
   return (
-    <ol className={styles.log} aria-label={t('log')} aria-live="polite" aria-relevant="additions text">
+    <ol className={styles.log} aria-label={t('log')} aria-live="polite" aria-relevant="additions text" aria-busy={messages.some((m) => m.streaming) || undefined}>
       {messages.map((m) => (
         <li key={m.id} className={`${styles.row} ${m.role === 'user' ? styles.rowUser : ''}`} data-role={m.role}>
           <div className={`${styles.bubble} ${styles[m.role]}`} dir="auto">

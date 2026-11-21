@@ -28,7 +28,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from change_engine.api.endpoints import FrappeDeploymentAdapter  # noqa: E402
+from change_engine.api import endpoints  # noqa: E402
+from change_engine.api.endpoints import FrappeDeploymentAdapter, RevisionHashError  # noqa: E402
 from change_engine.guarded_apply.ddl_plan_gate import (  # noqa: E402
     MARIADB_TYPE_MAP,
     REASON_EXISTING_COLUMNS_MISSING,
@@ -42,8 +43,12 @@ from change_engine.guarded_apply.ddl_plan_gate import (  # noqa: E402
     _canonical_column_type,
     _col_with,
     _inspect_with_frappe_mariadb_table,
+    _normalize_sql,
+    _split_alter_clauses,
     assess_applied_ddl,
     inspect_frappe_ddl_plan,
+    new_column_matches_plan,
+    noop_modify_allowlist,
     validate_ddl_plan,
 )
 
@@ -478,150 +483,549 @@ class TestColumnCopyKeepsExtraKeys(unittest.TestCase):
 
 _T = "ALTER TABLE `tabItem` "
 _ADD = "ADD COLUMN `custom_x` varchar(140)"
-_SCHEMA = {
-    "columns": {"name": ("varchar(140)", "NO", "None", "PRI"), "total": ("decimal(21,9)", "NO", "0.000000000", "")},
-    "indexes": {("PRIMARY", "name", "0", "1")},
-}
+_PHANTOM = "MODIFY `total` decimal(21,9) not null default 0"
 
 
-def _after(**changes):
-    cols = dict(_SCHEMA["columns"])
-    cols["custom_x"] = ("varchar(140)", "YES", "None", "")
-    idx = set(_SCHEMA["indexes"])
-    cols.update(changes.pop("cols", {}))
-    idx |= changes.pop("add_idx", set())
-    return {"columns": cols, "indexes": idx}
+def _col(type_="varchar(140)", nullable="YES", default="None", key="", charset="utf8mb4",
+         collation="utf8mb4_unicode_ci", extra="", comment="", generation="None"):
+    return {"type": type_, "nullable": nullable, "default": default, "key": key, "charset": charset,
+            "collation": collation, "extra": extra, "comment": comment, "generation": generation}
+
+
+def _before():
+    cols = {
+        "name": _col(nullable="NO", key="PRI"),
+        "total": _col("decimal(21,9)", "NO", "0.000000000", charset="None", collation="None"),
+        "note": _col(),
+    }
+    return {
+        "columns": cols,
+        "order": list(cols),
+        "indexes": {("PRIMARY", "name", "0", "1", "None", "BTREE")},
+        "constraints": {("PRIMARY", "PRIMARY KEY")},
+        "checks": set(),
+        "triggers": set(),
+        "table": ("InnoDB", "utf8mb4_unicode_ci", "Dynamic"),
+    }
+
+
+def _after(mutate=None, *, field="custom_x", field_col=None):
+    schema = _before()
+    schema["columns"][field] = field_col or _col()
+    schema["order"].append(field)
+    if mutate:
+        mutate(schema)
+    return schema
+
+
+class TestQuoteAwareSplitter(unittest.TestCase):
+    """Re-review H1 (3): a quoted ``(`` or backtick must never hide a trailing clause."""
+
+    def test_quoted_paren_does_not_keep_trailing_clauses_attached(self) -> None:
+        stmt = _T + "MODIFY `note` varchar(140) default ':(', ADD CONSTRAINT c CHECK (a > 1), FORCE"
+        table, clauses = _split_alter_clauses(stmt)
+        self.assertEqual(table, "`tabItem`")
+        self.assertEqual(clauses, ["MODIFY `note` varchar(140) default ':('", "ADD CONSTRAINT c CHECK (a > 1)", "FORCE"])
+
+    def test_close_paren_in_literal_and_backtick_identifier(self) -> None:
+        _, clauses = _split_alter_clauses(_T + "MODIFY `a)b` int default ')', DROP FOREIGN KEY `f(1`")
+        self.assertEqual(clauses, ["MODIFY `a)b` int default ')'", "DROP FOREIGN KEY `f(1`"])
+
+    def test_commas_inside_literals_and_decimals_do_not_split(self) -> None:
+        _, clauses = _split_alter_clauses(_T + "ADD COLUMN `c` decimal(21,9) default 'a,b', MODIFY `d` int")
+        self.assertEqual(len(clauses), 2)
+
+    def test_escaped_and_doubled_quotes(self) -> None:
+        stmt = _T + "MODIFY `n` varchar(9) default 'it\\'s (', MODIFY `m` varchar(9) default 'a''(', FORCE"
+        _, clauses = _split_alter_clauses(stmt)
+        self.assertEqual(len(clauses), 3)
+
+    def test_unparseable_statements_raise(self) -> None:
+        for bad in (
+            "MODIFY `n` int /*! , DROP COLUMN `total` */",
+            "MODIFY `n` int -- , DROP COLUMN total",
+            "MODIFY `n` int # x",
+            "MODIFY `n` int; DROP TABLE `tabItem`",
+            "MODIFY `n` varchar(9) default 'unterminated",
+            "MODIFY `n` int ((",
+            "MODIFY `n` int )",
+        ):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    _split_alter_clauses(_T + bad)
+
+    def test_not_an_alter_table_is_empty(self) -> None:
+        self.assertEqual(_split_alter_clauses("DROP TABLE `tabItem`"), ("", []))
+
+    def test_normalisation_keeps_literals_and_identifiers_verbatim(self) -> None:
+        a = _normalize_sql("MODIFY  `Total`  DECIMAL(21, 9)  NOT NULL  DEFAULT 0")
+        self.assertEqual(a, _normalize_sql("modify `Total` decimal(21,9) not null default 0"))
+        self.assertNotEqual(_normalize_sql("MODIFY `a` varchar(9) default 'X'"), _normalize_sql("MODIFY `a` varchar(9) default 'x'"))
+        self.assertNotEqual(_normalize_sql("MODIFY `A` int"), _normalize_sql("MODIFY `a` int"))
+
+
+class TestNoopModifyAllowList(unittest.TestCase):
+    """Re-review H1: the allow-list is regenerated deterministically from the BEFORE snapshot."""
+
+    def test_zero_default_not_null_decimal_has_exactly_the_phantom_clause(self) -> None:
+        allowed = noop_modify_allowlist(_before())
+        self.assertEqual(allowed, {"total": {_normalize_sql(_PHANTOM)}})
+
+    def test_nullable_or_non_zero_default_decimals_are_not_listed(self) -> None:
+        for nullable, default in (("YES", "0.000000000"), ("NO", "5.000000000"), ("NO", "None")):
+            with self.subTest(nullable=nullable, default=default):
+                before = _before()
+                before["columns"]["total"] = _col("decimal(21,9)", nullable, default)
+                self.assertEqual(noop_modify_allowlist(before), {})
+
+    def test_non_canonical_type_spelling_lists_the_restatement_only(self) -> None:
+        before = _before()
+        before["columns"]["note"] = _col("VARCHAR(140)", "NO", "'x'")
+        allowed = noop_modify_allowlist(before)
+        self.assertEqual(allowed["note"], {_normalize_sql("MODIFY `note` varchar(140) not null default 'x'")})
+
+    def test_generation_is_deterministic(self) -> None:
+        self.assertEqual(noop_modify_allowlist(_before()), noop_modify_allowlist(_before()))
 
 
 class TestAssessAppliedDdl(unittest.TestCase):
-    """H1/M1: the statements that actually ran are compared with the approved plan."""
+    """Re-review H1/M1: what ran is compared with the approved plan and the allow-list."""
 
-    def assess(self, executed, after=None, approved=None):
+    def assess(self, executed, after=None, approved=None, before=None):
         return assess_applied_ddl(
-            "Item", "custom_x", approved if approved is not None else [_T + _ADD],
-            executed, _SCHEMA, after if after is not None else _after(),
+            "Item", "custom_x", approved if approved is not None else [_T + _ADD], executed,
+            before if before is not None else _before(), after if after is not None else _after(),
         )
 
+    def assertRejected(self, result, needle=None):
+        self.assertTrue(result[0], f"expected an unapproved side effect, got {result}")
+        if needle:
+            self.assertIn(needle, result[1])
+
+    # normal cases ---------------------------------------------------------------------
     def test_executed_equals_approved(self) -> None:
         self.assertEqual(self.assess([_T + _ADD]), (False, None))
 
-    def test_phantom_noop_modify_tolerated_only_when_schema_unchanged(self) -> None:
-        executed = [_T + _ADD + ", MODIFY `total` decimal(21,9) not null default 0"]
-        self.assertEqual(self.assess(executed), (False, None))
+    def test_phantom_noop_modify_from_the_allow_list_passes(self) -> None:
+        self.assertEqual(self.assess([_T + _ADD + ", " + _PHANTOM]), (False, None))
 
-    def test_modify_that_changes_an_existing_column_is_a_side_effect(self) -> None:
-        executed = [_T + _ADD + ", MODIFY `total` decimal(21,9)"]
-        after = _after(cols={"total": ("decimal(21,9)", "YES", "None", "")})
-        unapproved, why = self.assess(executed, after)
-        self.assertTrue(unapproved)
-        self.assertIn("total", why)
+    def test_phantom_modify_in_a_separate_statement_or_other_spelling_passes(self) -> None:
+        self.assertEqual(self.assess([_T + _ADD, _T + _PHANTOM]), (False, None))
+        spelled = _T + "ADD  COLUMN `custom_x` VARCHAR(140),  MODIFY `total`  DECIMAL(21, 9) NOT NULL DEFAULT 0"
+        self.assertEqual(self.assess([spelled]), (False, None))
 
-    def test_index_change_is_a_side_effect(self) -> None:
-        unapproved, _ = self.assess([_T + _ADD], _after(add_idx={("idx_x", "total", "1", "1")}))
-        self.assertTrue(unapproved)
+    def test_clean_failure_nothing_ran_nothing_changed(self) -> None:
+        self.assertEqual(self.assess([], after=_before()), (False, None))
 
+    def test_json_field_with_its_own_json_valid_check_passes(self) -> None:
+        def mutate(s):
+            s["checks"].add(("custom_x", "json_valid(`custom_x`)"))
+            s["constraints"].add(("custom_x", "CHECK"))
+
+        after = _after(mutate, field_col=_col("longtext", collation="utf8mb4_bin"))
+        add = "ADD COLUMN `custom_x` json"
+        self.assertEqual(self.assess([_T + add], after, approved=[_T + add]), (False, None))
+
+    def test_json_allowance_does_not_cover_a_different_check(self) -> None:
+        def mutate(s):
+            s["checks"].add(("evil", "`total` > 0"))
+            s["constraints"].add(("evil", "CHECK"))
+
+        add = "ADD COLUMN `custom_x` json"
+        self.assertRejected(self.assess([_T + add], _after(mutate), approved=[_T + add]), "changed during apply")
+
+    # re-review bypass 1: properties invisible to the old 4-tuple -----------------------
+    def test_modify_that_changes_charset_is_rejected(self) -> None:
+        def mutate(s):
+            s["columns"]["note"] = _col(charset="latin1", collation="latin1_swedish_ci")
+
+        executed = [_T + _ADD + ", MODIFY `note` varchar(140) CHARACTER SET latin1"]
+        self.assertRejected(self.assess(executed, _after(mutate)), "not in the allow-list")
+
+    def test_modify_with_collate_extra_first_after_check_comment_is_rejected(self) -> None:
+        for suffix in (
+            " COLLATE utf8mb4_bin", " AUTO_INCREMENT", " ON UPDATE CURRENT_TIMESTAMP", " FIRST",
+            " AFTER `name`", " CHECK (`total` > 0)", " COMMENT 'x'", " unique",
+        ):
+            with self.subTest(suffix=suffix):
+                executed = [_T + _ADD + ", " + _PHANTOM + suffix]
+                self.assertRejected(self.assess(executed), "not in the allow-list")
+
+    def test_fingerprint_detects_a_change_to_every_column_attribute(self) -> None:
+        for attr, value in (
+            ("type", "decimal(18,2)"), ("nullable", "YES"), ("default", "5"), ("key", "MUL"),
+            ("charset", "latin1"), ("collation", "latin1_bin"), ("extra", "on update current_timestamp()"),
+            ("comment", "x"), ("generation", "total * 2"),
+        ):
+            with self.subTest(attr=attr):
+                def mutate(s, attr=attr, value=value):
+                    s["columns"]["total"][attr] = value
+
+                self.assertRejected(self.assess([_T + _ADD], _after(mutate)), "total")
+
+    def test_fingerprint_detects_column_order_change(self) -> None:
+        def mutate(s):
+            s["order"] = ["total", "name", "note", "custom_x"]
+
+        self.assertRejected(self.assess([_T + _ADD], _after(mutate)), "order")
+
+    def test_fingerprint_detects_check_constraint_trigger_index_table_changes(self) -> None:
+        mutations = {
+            "check": lambda s: s["checks"].add(("c", "`total` > 0")),
+            "constraint": lambda s: s["constraints"].add(("fk", "FOREIGN KEY")),
+            "constraint dropped": lambda s: s["constraints"].clear(),
+            "trigger": lambda s: s["triggers"].add(("t", "INSERT", "BEFORE", "h")),
+            "index": lambda s: s["indexes"].add(("i", "total", "1", "1", "None", "BTREE")),
+            "index dropped": lambda s: s["indexes"].clear(),
+            "engine": lambda s: s.update(table=("MyISAM", "utf8mb4_unicode_ci", "Dynamic")),
+            "table collation": lambda s: s.update(table=("InnoDB", "latin1_swedish_ci", "Dynamic")),
+            "row format": lambda s: s.update(table=("InnoDB", "utf8mb4_unicode_ci", "Compact")),
+            "column dropped": lambda s: (s["columns"].pop("note"), s["order"].remove("note")),
+            "second column added": lambda s: (s["columns"].update(extra=_col()), s["order"].append("extra")),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                self.assertRejected(self.assess([_T + _ADD], _after(mutate)))
+
+    # re-review bypass 2: lossy MODIFY then restore -------------------------------------
+    def test_shrink_then_restore_in_one_statement_is_rejected(self) -> None:
+        executed = [_T + _ADD + ", MODIFY `total` decimal(10,0), " + _PHANTOM]
+        self.assertRejected(self.assess(executed), "not in the allow-list")
+
+    def test_shrink_then_restore_across_two_statements_is_rejected(self) -> None:
+        executed = [_T + _ADD, _T + "MODIFY `total` decimal(10,0)", _T + _PHANTOM]
+        self.assertRejected(self.assess(executed), "not in the allow-list")
+
+    def test_nullability_and_charset_round_trips_are_rejected(self) -> None:
+        for lossy in (
+            "MODIFY `note` varchar(140) not null default ''",
+            "MODIFY `note` varchar(140) CHARACTER SET ascii",
+            "MODIFY `note` varchar(140)",  # a no-op restatement that is not in the allow-list
+        ):
+            with self.subTest(lossy=lossy):
+                self.assertRejected(self.assess([_T + _ADD, _T + lossy, _T + "MODIFY `note` varchar(140)"]))
+
+    def test_the_same_allow_listed_modify_twice_is_rejected(self) -> None:
+        self.assertRejected(self.assess([_T + _ADD + ", " + _PHANTOM + ", " + _PHANTOM]), "more than once")
+        self.assertRejected(self.assess([_T + _ADD + ", " + _PHANTOM, _T + _PHANTOM]), "more than once")
+
+    def test_modify_not_in_the_allow_list_is_rejected_even_when_the_schema_is_unchanged(self) -> None:
+        # the previous rule tolerated every MODIFY whose before/after fingerprint matched
+        self.assertRejected(self.assess([_T + _ADD + ", MODIFY `total` decimal(21,9)"]), "not in the allow-list")
+        self.assertRejected(self.assess([_T + _ADD + ", MODIFY `note` varchar(140)"]), "not in the allow-list")
+
+    def test_phantom_modify_on_a_nullable_decimal_is_rejected(self) -> None:
+        before = _before()
+        before["columns"]["total"]["nullable"] = "YES"
+        after = _after()
+        after["columns"]["total"]["nullable"] = "YES"
+        self.assertRejected(self.assess([_T + _ADD + ", " + _PHANTOM], after, before=before), "not in the allow-list")
+
+    # re-review bypass 3: quote-blind splitting -----------------------------------------
+    def test_trailing_clause_smuggled_after_a_quoted_paren_is_rejected(self) -> None:
+        for smuggled in (
+            "ADD CONSTRAINT chk CHECK (`total` > 0)", "DROP FOREIGN KEY `f`", "ENGINE=MyISAM", "FORCE",
+            "CONVERT TO CHARACTER SET latin1",
+        ):
+            with self.subTest(smuggled=smuggled):
+                executed = [_T + _ADD + ", MODIFY `note` varchar(140) default ':(', " + smuggled]
+                self.assertRejected(self.assess(executed))
+
+    def test_comment_separator_and_unterminated_quote_statements_fail_closed(self) -> None:
+        for tail in ("/*! , ENGINE=MyISAM */", "-- , FORCE", "; DROP TABLE `tabItem`", " default 'x"):
+            with self.subTest(tail=tail):
+                self.assertRejected(self.assess([_T + _ADD + ", " + _PHANTOM + tail]), "parsed")
+
+    # other clause kinds, tables and unknown input --------------------------------------
     def test_other_clause_kinds_are_side_effects(self) -> None:
         for extra in ("DROP COLUMN `total`", "ADD INDEX `i` (`total`)", "ADD UNIQUE `u` (`total`)"):
             with self.subTest(extra=extra):
-                self.assertTrue(self.assess([_T + _ADD + ", " + extra])[0])
+                self.assertRejected(self.assess([_T + _ADD + ", " + extra]))
 
     def test_other_table_or_other_ddl_is_a_side_effect(self) -> None:
-        self.assertTrue(self.assess([_T + _ADD, "ALTER TABLE `tabCustomer` ADD COLUMN `a` int"])[0])
-        self.assertTrue(self.assess([_T + _ADD, "CREATE INDEX i ON `tabItem` (`total`)"])[0])
+        self.assertRejected(self.assess([_T + _ADD, "ALTER TABLE `tabCustomer` ADD COLUMN `a` int"]))
+        self.assertRejected(self.assess([_T + _ADD, "CREATE INDEX i ON `tabItem` (`total`)"]))
 
     def test_different_add_column_than_approved_is_a_side_effect(self) -> None:
-        self.assertTrue(self.assess([_T + "ADD COLUMN `custom_x` text"])[0])
-        self.assertTrue(self.assess([_T + _ADD + ", ADD COLUMN `custom_y` int"])[0])
+        self.assertRejected(self.assess([_T + "ADD COLUMN `custom_x` text"]))
+        self.assertRejected(self.assess([_T + _ADD + ", ADD COLUMN `custom_y` int"]))
 
-    def test_unknown_inputs_fail_closed(self) -> None:
-        self.assertTrue(assess_applied_ddl("Item", "custom_x", None, [_T + _ADD], _SCHEMA, _after())[0])
-        self.assertTrue(assess_applied_ddl("Item", "custom_x", [_T + _ADD], None, _SCHEMA, _after())[0])
-        self.assertTrue(assess_applied_ddl("Item", "custom_x", [_T + _ADD], [_T + _ADD], None, _after())[0])
-
-    def test_clean_failure_nothing_ran_nothing_changed(self) -> None:
-        self.assertEqual(assess_applied_ddl("Item", "custom_x", [_T + _ADD], [], _SCHEMA, _SCHEMA), (False, None))
+    def test_unknown_or_incomplete_inputs_fail_closed(self) -> None:
+        b, a = _before(), _after()
+        self.assertRejected(assess_applied_ddl("Item", "custom_x", None, [_T + _ADD], b, a))
+        self.assertRejected(assess_applied_ddl("Item", "custom_x", [_T + _ADD], None, b, a))
+        self.assertRejected(assess_applied_ddl("Item", "custom_x", [_T + _ADD], [_T + _ADD], None, a))
+        old_shape = {"columns": {"name": ("varchar(140)", "NO", "None", "PRI")}, "indexes": set()}
+        self.assertRejected(assess_applied_ddl("Item", "custom_x", [_T + _ADD], [_T + _ADD], old_shape, old_shape))
+        self.assertRejected(self.assess([_T + _ADD], approved=["ALTER TABLE `tabItem` DROP COLUMN `note`"]))
 
     def test_ran_nothing_recorded_but_schema_changed_is_a_side_effect(self) -> None:
-        self.assertTrue(assess_applied_ddl("Item", "custom_x", [_T + _ADD], [], _SCHEMA, _after())[0])
+        self.assertRejected(self.assess([]))
+
+
+class TestNewColumnMatchesPlan(unittest.TestCase):
+    def test_matching_type_and_nullability(self) -> None:
+        self.assertTrue(new_column_matches_plan("custom_x", [_T + _ADD], _after()))
+
+    def test_different_type_or_missing_column_or_unknown_input(self) -> None:
+        self.assertFalse(new_column_matches_plan("custom_x", [_T + _ADD], _after(field_col=_col("text"))))
+        self.assertFalse(new_column_matches_plan("custom_x", [_T + _ADD], _after(field_col=_col(nullable="NO"))))
+        self.assertFalse(new_column_matches_plan("custom_x", [_T + _ADD], _before()))
+        self.assertFalse(new_column_matches_plan("custom_x", None, _after()))
+        self.assertFalse(new_column_matches_plan("custom_x", [_T + _ADD], None))
+
+    def test_json_is_reported_as_longtext_and_not_null_is_read_from_the_plan(self) -> None:
+        self.assertTrue(new_column_matches_plan(
+            "custom_x", [_T + "ADD COLUMN `custom_x` json"], _after(field_col=_col("longtext"))))
+        self.assertTrue(new_column_matches_plan(
+            "custom_x", [_T + "ADD COLUMN `custom_x` int(11) not null default 0"],
+            _after(field_col=_col("int(11)", "NO", "0"))))
 
 
 class _LiveDb:
-    """Minimal live-mode frappe.db double for the adapter's after-snapshot."""
+    """Live-mode frappe.db double: information_schema answers come from a mutable schema."""
 
-    def __init__(self, executed_plan, after_changes=None):
-        self.executed_plan = executed_plan
-        self.after_changes = after_changes or {}
-        self.inserted = False
+    def __init__(self, *, fail_columns=False, fail_schema=False):
+        self.schema = _before()
+        self.inserted = set()
+        self.fail_columns = fail_columns
+        self.fail_schema = fail_schema
         self.ddl_log = []
+        self.sql_log = []
+
+    def _cols(self):
+        attrs = ("type", "nullable", "default", "key", "charset", "collation", "extra", "comment", "generation")
+        return [(n, *(self.schema["columns"][n][a] for a in attrs)) for n in self.schema["order"]]
 
     def sql(self, query, values=None):
+        self.sql_log.append(query)
         q = " ".join(query.upper().split())
-        if "FROM `TABCUSTOM FIELD`" in q:
-            return (("Item-custom_x", "Data"),) if self.inserted else ()
-        if "FROM INFORMATION_SCHEMA.STATISTICS" in q:
-            return tuple(self._schema()["indexes"])
-        if "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY" in q:
-            return tuple((n, *d) for n, d in self._schema()["columns"].items())
-        if "COLUMN_NAME = %S" in q:
-            return (("custom_x", "varchar(140)"),) if self.inserted else ()
-        if "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT" in q:
+        if q.startswith(("ALTER", "CREATE", "DROP")):
             return ()
+        if "FROM `TABCUSTOM FIELD`" in q:
+            return (("Item-" + values[1], "Data"),) if values[1] in self.inserted else ()
+        if "COLUMN_NAME = %S" in q:
+            return ((values[1], "varchar(140)"),) if values[1] in self.inserted else ()
+        if self.fail_schema and "INFORMATION_SCHEMA.STATISTICS" in q:
+            raise RuntimeError("information_schema unavailable")
+        if "INFORMATION_SCHEMA.STATISTICS" in q:
+            return tuple(self.schema["indexes"])
+        if "INFORMATION_SCHEMA.TABLE_CONSTRAINTS" in q:
+            return tuple(self.schema["constraints"])
+        if "INFORMATION_SCHEMA.CHECK_CONSTRAINTS" in q:
+            return tuple(self.schema["checks"])
+        if "INFORMATION_SCHEMA.TRIGGERS" in q:
+            return ()
+        if "INFORMATION_SCHEMA.TABLES" in q:
+            return (self.schema["table"],)
+        if self.fail_columns and "INFORMATION_SCHEMA.COLUMNS" in q:
+            raise RuntimeError("information_schema unavailable")
+        if "SELECT COLUMN_NAME, IS_NULLABLE" in q:
+            return tuple((r[0], r[2]) for r in self._cols())
+        if ", COLUMN_KEY" in q:
+            return tuple(self._cols())
+        if "COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT" in q:
+            return tuple(r[:4] for r in self._cols())
+        if "COLUMN_NAME, COLUMN_TYPE, COLUMN_DEFAULT" in q:
+            return tuple((r[0], r[1], r[3]) for r in self._cols())
         return ()
-
-    def _schema(self):
-        return _after(**{"cols": self.after_changes}) if self.inserted else _SCHEMA
 
     def sql_ddl(self, query):
         self.ddl_log.append(query)
+        self.sql(query)  # Frappe's sql_ddl runs the statement through self.sql
 
     def commit(self):
         pass
 
 
+class _AdapterHarness:
+    def __init__(self, executed_by_field, *, mutate=None, via="sql_ddl", db=None, approved=None):
+        self.db = db or _LiveDb()
+        self.module = types.SimpleNamespace(db=self.db, clear_cache=lambda **kw: None)
+        self.executed_by_field = executed_by_field
+        self.mutate = mutate or {}
+        self.via = via
+        self.approved = approved
+        self.adapter = FrappeDeploymentAdapter(frappe_module=self.module, in_memory=False)
+        self.module.get_doc = self._get_doc
+
+    def _get_doc(self, args):
+        field = args["fieldname"]
+
+        def insert(ignore_permissions=True):
+            for stmt in self.executed_by_field[field]:
+                getattr(self.module.db, self.via)(stmt)  # goes through the adapter's recorder
+            schema = self.db.schema
+            schema["columns"][field] = _col()
+            schema["order"].append(field)
+            if field in self.mutate:
+                self.mutate[field](schema)
+            self.db.inserted.add(field)
+
+        return types.SimpleNamespace(insert=insert)
+
+    def deploy(self, field="custom_x", dep="dep1"):
+        planned = self.approved if self.approved is not None else [_T + f"ADD COLUMN `{field}` varchar(140)"]
+        before = self.adapter.take_snapshot("Item", field, dep)
+        self.adapter._approved_ddl[dep] = planned
+        self.adapter.apply_native_custom_field(dep, "Item", {"fieldname": field, "fieldtype": "Data"})
+        after = self.adapter.take_snapshot("Item", field, dep)
+        return before, after
+
+
 class TestAdapterAfterSnapshotIsNotHardCoded(unittest.TestCase):
-    def _run(self, executed, after_changes=None):
-        db = _LiveDb(executed, after_changes)
-        module = types.SimpleNamespace(db=db, clear_cache=lambda **kw: None)
-
-        def get_doc(args):
-            def insert(ignore_permissions=True):
-                for stmt in executed:
-                    module.db.sql_ddl(stmt)  # goes through the adapter's recording wrapper
-                db.inserted = True
-
-            return types.SimpleNamespace(insert=insert)
-
-        module.get_doc = get_doc
-        adapter = FrappeDeploymentAdapter(frappe_module=module, in_memory=False)
-        before = adapter.take_snapshot("Item", "custom_x", "dep1")
-        adapter._approved_ddl["dep1"] = [_T + _ADD]
-        adapter.apply_native_custom_field("dep1", "Item", {"fieldname": "custom_x", "fieldtype": "Data"})
-        after = adapter.take_snapshot("Item", "custom_x", "dep1")
-        return before, after, db
-
     def test_approved_statement_only_is_clean(self) -> None:
-        _, after, db = self._run([_T + _ADD])
+        h = _AdapterHarness({"custom_x": [_T + _ADD]})
+        _, after = h.deploy()
         self.assertFalse(after.unapproved_side_effects)
         self.assertTrue(after.indexes_unchanged)
-        self.assertEqual(db.ddl_log, [_T + _ADD], "recorded statements are still executed")
+        self.assertTrue(after.definition_matches)
+        self.assertEqual(h.db.ddl_log, [_T + _ADD], "recorded statements are still executed")
+
+    def test_allow_listed_phantom_modify_is_clean(self) -> None:
+        h = _AdapterHarness({"custom_x": [_T + _ADD + ", " + _PHANTOM]})
+        _, after = h.deploy()
+        self.assertFalse(after.unapproved_side_effects)
 
     def test_unplanned_statement_is_an_unapproved_side_effect(self) -> None:
-        _, after, _ = self._run([_T + _ADD, "ALTER TABLE `tabItem` DROP COLUMN `total`"])
-        self.assertTrue(after.unapproved_side_effects)
+        h = _AdapterHarness({"custom_x": [_T + _ADD, "ALTER TABLE `tabItem` DROP COLUMN `total`"]})
+        self.assertTrue(h.deploy()[1].unapproved_side_effects)
 
     def test_executed_modify_that_changed_a_column_is_an_unapproved_side_effect(self) -> None:
-        executed = [_T + _ADD + ", MODIFY `total` decimal(21,9)"]
-        _, after, _ = self._run(executed, {"total": ("decimal(21,9)", "YES", "None", "")})
+        def mutate(s):
+            s["columns"]["note"] = _col(charset="latin1", collation="latin1_swedish_ci")
+
+        h = _AdapterHarness({"custom_x": [_T + _ADD + ", MODIFY `note` varchar(140) CHARACTER SET latin1"]},
+                            mutate={"custom_x": mutate})
+        self.assertTrue(h.deploy()[1].unapproved_side_effects)
+
+    def test_ddl_sent_through_db_sql_is_recorded_not_only_sql_ddl(self) -> None:
+        """Re-review H1 (4): a hook that alters the table through db.sql is not invisible."""
+        h = _AdapterHarness({"custom_x": [_T + _ADD, _T + "ADD CONSTRAINT chk CHECK (`total` > 0)"]}, via="sql")
+        _, after = h.deploy()
         self.assertTrue(after.unapproved_side_effects)
+        self.assertIn(_T + "ADD CONSTRAINT chk CHECK (`total` > 0)", h.adapter._executed_ddl["dep1"])
+
+    def test_sql_ddl_is_recorded_once_even_though_it_runs_through_db_sql(self) -> None:
+        h = _AdapterHarness({"custom_x": [_T + _ADD]})
+        h.deploy()
+        self.assertEqual(h.adapter._executed_ddl["dep1"], [_T + _ADD])
+
+    def test_recorders_are_removed_after_the_apply(self) -> None:
+        h = _AdapterHarness({"custom_x": [_T + _ADD]})
+        original = (h.db.sql, h.db.sql_ddl)
+        h.deploy()
+        self.assertEqual((h.db.sql, h.db.sql_ddl), original)
+
+    def test_definition_matches_is_computed_not_hard_coded(self) -> None:
+        def mutate(s):
+            s["columns"]["custom_x"] = _col("text")
+
+        h = _AdapterHarness({"custom_x": [_T + _ADD]}, mutate={"custom_x": mutate})
+        self.assertFalse(h.deploy()[1].definition_matches)
 
     def test_missing_approved_plan_fails_closed(self) -> None:
-        db = _LiveDb([])
-        module = types.SimpleNamespace(db=db, clear_cache=lambda **kw: None)
-        adapter = FrappeDeploymentAdapter(frappe_module=module, in_memory=False)
-        adapter.take_snapshot("Item", "custom_x", "dep1")
-        adapter.apply_called = True
-        after = adapter.take_snapshot("Item", "custom_x", "dep1")
-        self.assertTrue(after.unapproved_side_effects)
+        h = _AdapterHarness({"custom_x": [_T + _ADD]})
+        h.adapter.take_snapshot("Item", "custom_x", "dep1")
+        h.adapter._applied_deployments.add("dep1")
+        self.assertTrue(h.adapter.take_snapshot("Item", "custom_x", "dep1").unapproved_side_effects)
+
+    def test_unreadable_before_schema_fails_closed(self) -> None:
+        h = _AdapterHarness({"custom_x": [_T + _ADD]}, db=_LiveDb(fail_schema=True))
+        snap = h.adapter.take_snapshot("Item", "custom_x", "dep1")
+        self.assertTrue(snap.unapproved_side_effects)
+        self.assertEqual(snap.revision_hash, "rev_error")
+
+    def test_applied_state_is_per_deployment_so_the_adapter_can_be_reused(self) -> None:
+        """Re-review L: the second deployment on a reused live adapter is not failed closed."""
+        h = _AdapterHarness({"custom_x": [_T + _ADD], "custom_y": [_T + "ADD COLUMN `custom_y` varchar(140)"]})
+        _, first = h.deploy("custom_x", "dep1")
+        before2, second = h.deploy("custom_y", "dep2")
+        self.assertFalse(first.unapproved_side_effects)
+        self.assertFalse(before2.unapproved_side_effects)
+        self.assertIn(("Item", "dep2"), h.adapter._before_schema)
+        self.assertFalse(second.unapproved_side_effects, "second deployment must not fail closed")
+        self.assertTrue(second.has_col)
+
+
+class TestLiveCallersNeverFallBackToTheSimulator(unittest.TestCase):
+    """Re-review H2 (callers) and M1 (swallowed exceptions)."""
+
+    FIELD = {"fieldname": "custom_live", "fieldtype": "Data", "label": "Live"}
+
+    def _frappe(self, db):
+        module = _fake_frappe_modules([], [], db_connected=False)["frappe"]
+        module.db = db
+        module.session = types.SimpleNamespace(user="Administrator")
+        return module
+
+    def test_adapter_is_in_memory_only_when_frappe_is_not_importable(self) -> None:
+        with mock.patch.object(endpoints, "frappe", None):
+            self.assertTrue(FrappeDeploymentAdapter().in_memory)
+        for db in (None, types.SimpleNamespace()):
+            with self.subTest(db=db):
+                self.assertFalse(FrappeDeploymentAdapter(frappe_module=self._frappe(db)).in_memory)
+        self.assertTrue(FrappeDeploymentAdapter(frappe_module=self._frappe(None), in_memory=True).in_memory)
+
+    def test_propose_with_frappe_present_and_db_missing_is_rejected_not_simulated(self) -> None:
+        proposal = {"intent": "add_custom_fields", "changes": [dict(self.FIELD)]}
+        frappe = self._frappe(None)
+        modules = _fake_frappe_modules([], [], db_connected=False)
+        with mock.patch.object(endpoints, "frappe", frappe), mock.patch.dict(sys.modules, modules):
+            result = endpoints.propose_configuration_change("Item", proposal, user_roles=["System Manager"])
+        self.assertEqual(result["status"], "REJECTED")
+        self.assertFalse(result["success"])
+        self.assertTrue(
+            (result.get("ddl_plan") and not result["ddl_plan"]["inspectable"])
+            or result.get("disposition") == "REVISION_HASH_UNAVAILABLE",
+            result,
+        )
+
+    def test_apply_with_frappe_present_and_db_missing_is_rejected_not_simulated(self) -> None:
+        frappe = self._frappe(None)
+        modules = _fake_frappe_modules([], [], db_connected=False)
+        with mock.patch.object(endpoints, "frappe", frappe), mock.patch.dict(sys.modules, modules):
+            try:
+                result = endpoints.apply_configuration_change(
+                    doctype="Item", deployment_id="dep_x", field_def=dict(self.FIELD),
+                    user_roles=["System Manager"])
+            except Exception as exc:  # a loud failure is also fail-closed
+                result = {"status": "ERROR", "success": False, "exc": exc}
+        self.assertNotEqual(result.get("status"), "APPLIED", result)
+        self.assertFalse(result.get("success"))
+
+    def test_column_read_failure_in_live_mode_returns_none_not_synthetic_columns(self) -> None:
+        h = _AdapterHarness({}, db=_LiveDb(fail_columns=True))
+        self.assertIsNone(h.adapter.get_table_columns_description("Item"))
+
+    def test_column_read_failure_makes_the_gate_reject_with_a_coded_reason(self) -> None:
+        docfields, live = _core_table()
+        h = _AdapterHarness({}, db=_LiveDb(fail_columns=True))
+        with mock.patch.dict(sys.modules, _fake_frappe_modules(docfields, live)):
+            plan = h.adapter.inspect_ddl_plan("Item", dict(self.FIELD))
+        self.assertFalse(plan.inspectable)
+        self.assertEqual(plan.reason_code, REASON_EXISTING_COLUMNS_MISSING)
+
+    def test_revision_hash_failure_raises_instead_of_a_stand_in(self) -> None:
+        h = _AdapterHarness({}, db=_LiveDb(fail_columns=True))
+        with self.assertRaises(RevisionHashError):
+            h.adapter.get_doctype_revision_hash("Item")
+
+    def test_propose_rejects_when_the_revision_hash_cannot_be_read(self) -> None:
+        h = _AdapterHarness({}, db=_LiveDb(fail_columns=True))
+        proposal = {"intent": "add_custom_fields", "changes": [dict(self.FIELD)]}
+        result = endpoints.propose_configuration_change(
+            "Item", proposal, adapter=h.adapter, user_roles=["System Manager"])
+        self.assertEqual(result["status"], "REJECTED")
+        self.assertEqual(result["disposition"], "REVISION_HASH_UNAVAILABLE")
+
+    def test_apply_rejects_when_the_revision_hash_cannot_be_read(self) -> None:
+        h = _AdapterHarness({}, db=_LiveDb(fail_columns=True))
+        result = endpoints.apply_configuration_change(
+            doctype="Item", deployment_id="dep_x", field_def=dict(self.FIELD), adapter=h.adapter,
+            user_roles=["System Manager"])
+        self.assertEqual(result["status"], "REJECTED")
+        self.assertEqual(result["disposition"], "REVISION_HASH_UNAVAILABLE")
 
 
 if __name__ == "__main__":

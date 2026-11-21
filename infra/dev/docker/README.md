@@ -13,7 +13,7 @@ The environment stands up:
 2. **Database**: MariaDB 11.4 configured with `utf8mb4` and InnoDB.
 3. **Cache and queue**: two Redis 7.2.7-alpine services. The licence review remains open (Q-15).
 
-Compose project names scope containers and volumes. Database and Redis publish no host ports; the engine binds only to IPv4 loopback for local verification. It must not be exposed to customers or the internet (ADR-0016).
+Compose project names scope containers and volumes. Database and Redis publish no host ports; the engine binds only to IPv4 loopback for local verification. It must not be exposed to customers or the internet (ADR-0016). The internal-only shape with no host port, and the engine's route guard, are in [HEADLESS.md](HEADLESS.md) (ERP-020).
 
 ---
 

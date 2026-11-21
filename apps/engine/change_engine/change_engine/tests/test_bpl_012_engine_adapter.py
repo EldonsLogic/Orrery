@@ -152,7 +152,7 @@ class TestBpl012EngineAdapter(unittest.TestCase):
         self.assertTrue(has_prohibited_expression({"client_script": "alert(1)"}))
         self.assertFalse(has_prohibited_expression({"definition": {"id": "note", "type": "string"}}))
 
-        adapter = ChangeEngineAdapter()
+        adapter = ChangeEngineAdapter(test_hooks=True)
         prov = adapter.call(
             "provision_site",
             _ctx(),

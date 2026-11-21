@@ -1,0 +1,30 @@
+name: SEC-004 live cross-tenant isolation
+
+# Weekly scheduled and manual live Docker Compose cross-tenant attack suite (SEC-004).
+# Provisions three throwaway synthetic sites (A, B, and prefix-twin T) and fails closed if
+# SEC004_CONTEXT is missing (CI_REQUIRE_LIVE_SEC004=1). Kept separate from PR CI for cost control.
+on:
+  schedule:
+    - cron: "23 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sec-004-live-isolation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  live-cross-tenant-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Run live three-site cross-tenant isolation suite (SEC-004)
+        env:
+          CI_REQUIRE_LIVE_SEC004: "1"
+        run: python3 infra/dev/docker/isolation/run_isolation_suite.py --project sec004-ci-isolation --port 18404

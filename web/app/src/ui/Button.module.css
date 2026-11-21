@@ -4,7 +4,7 @@
   justify-content: center;
   gap: var(--space-unit);
   box-sizing: border-box;
-  min-block-size: var(--button-height);
+  min-block-size: max(var(--button-height), var(--touch-target));
   padding-inline: calc(var(--space-unit) * 2);
   border: 1px solid transparent;
   border-radius: var(--radius-control);
@@ -37,7 +37,7 @@
 }
 
 .sm {
-  min-block-size: calc(var(--button-height) * 0.8);
+  min-block-size: var(--touch-target);
   padding-inline: calc(var(--space-unit) * 1.5);
   font-size: var(--text-small-size);
   line-height: var(--text-small-line);

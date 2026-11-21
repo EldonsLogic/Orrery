@@ -270,3 +270,40 @@ def test_nfkc_not_applied_to_names(backend):
     assert apply(importer, batch(datasets, batch_id="nfkc-names"))["status"] == "applied"
     names = {r["row"]["account_name"] for r in backend.records("tenant-a", "Synthetic Trading")}
     assert names == {"Cash", "\uff23\uff41\uff53\uff48"}
+
+
+class _ShiftyDict(dict):
+    """A dict subclass that names another tenant on a later read (Opus review of e20d02b, Low 1)."""
+
+    def __getitem__(self, key):
+        if key == "tenant_id" and getattr(self, "_reads", 0) >= 1:
+            return "tenant-b"
+        self._reads = getattr(self, "_reads", 0) + (key == "tenant_id")
+        return dict.__getitem__(self, key)
+
+
+class _PlainSubDict(dict):
+    pass
+
+
+class _PlainSubStr(str):
+    pass
+
+
+@pytest.mark.parametrize("make", [
+    lambda src: _PlainSubDict(src),
+    lambda src: dict(src, company=_PlainSubStr(src["company"])),
+])
+def test_input_subclasses_are_refused_with_imp_schema(backend, make):
+    refuses(OpeningImporter(backend), make(batch()), "IMP-SCHEMA")
+    assert backend.records("tenant-a", "Synthetic Trading") == []
+
+
+def test_a_dict_subclass_naming_another_tenant_never_writes_either_tenant(backend):
+    importer = OpeningImporter(backend)
+    assert not importer.preview(_ShiftyDict(batch()))["ok"]
+    with pytest.raises(ImportFailure) as err:
+        importer.apply(_ShiftyDict(batch()), confirmed_by="reviewer", plan_hash="0" * 64)
+    assert err.value.code in {"IMP-AUTH", "IMP-SCHEMA"}
+    assert backend.records("tenant-a", "Synthetic Trading") == []
+    assert backend.records("tenant-b", "Synthetic Trading") == []

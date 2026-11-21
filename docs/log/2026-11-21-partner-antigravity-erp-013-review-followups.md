@@ -93,3 +93,11 @@ Addressed the Claude Opus 5.5 cross-model security re-review of `a4106ec` (PR #2
   - `python3 scripts/scan_secrets.py`: 0 hit(s).
   - `python3 scripts/check_plan_independence.py`: Plan independence OK.
   - `python3 scripts/check_lanes.py --base origin/main --actor partner`: Lane check OK.
+
+## Round 2 review Lows (coordinator, Claude Opus 5.5)
+An Opus re-review of e20d02b approved round 2. Its proof of concept made 56 runs, and none called the backend for tenant-b. It left three Lows:
+- **Fixed, low 1 (pre-existing):** a dict subclass could answer `tenant_id` differently on a later read. `copy.deepcopy` keeps a subclass's `__getitem__`. `bounded()` now accepts only exact built-in types (`_PLAIN_TYPES`) and refuses any subclass with `IMP-SCHEMA` before the copy.
+  - Tests in `test_erp_013_review_followups_r2.py`: a plain dict subclass and a str subclass are refused, and a tenant-shifting dict subclass writes to neither tenant.
+  - Before the fix, 2 of these failed. After it, all 431 ERP-013 tests pass.
+- **Documented, low 2:** a reference to a master whose name was typed in non-NFC form must be given in NFC. The as-typed spelling is refused with `IMP-SCHEMA` (fails closed). This is now in the README.
+- **Accepted, low 3:** U+1D159 is recorded in Q-556.

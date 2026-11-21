@@ -79,12 +79,17 @@ def canonical(value) -> str:
                       default=lambda v: format(v, "f") if isinstance(v, Decimal) else fail(), allow_nan=False)
 
 
+_PLAIN_TYPES = frozenset({str, dict, list, tuple, Decimal, int, float, bool, type(None)})
+
+
 def bounded(value, *, depth=0, budget=None):
     """Bound depth, node count, and bytes before copying or hashing input."""
     budget = [0, 0] if budget is None else budget
     budget[0] += 1
     if depth > 12 or budget[0] > 200_000:
         fail("IMP-LIMIT")
+    if type(value) not in _PLAIN_TYPES:
+        fail()  # exact built-in types only: a subclass could answer differently on a later read
     if isinstance(value, str):
         budget[1] += len(value.encode("utf-8"))
     elif isinstance(value, dict):

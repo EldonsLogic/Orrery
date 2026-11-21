@@ -150,7 +150,13 @@ name-based master business keys strip the five safe marks and apply Unicode
 `IMP-DUPLICATE` both within a batch and against stored masters while the stored
 value stays byte-identical to the input. Fullwidth forms, Arabic
 presentation-form twins, and blank-rendering symbols such as `U+1D159` remain
-recorded residuals in Q-556 (NFKC is not applied to names). Codes, account
+recorded residuals in Q-556 (NFKC is not applied to names). Link fields keep
+the strict rule below, so a reference to a master whose name was typed in
+non-`NFC` form must be given in `NFC`; the as-typed spelling is refused with
+`IMP-SCHEMA` (fails closed). The importer accepts only exact built-in JSON
+types (`dict`, `list`, `str`, numbers, `None`); any subclass is refused with
+`IMP-SCHEMA` before it is copied, so a value cannot answer differently on a
+later read. Codes, account
 numbers, `warehouse_name`, link fields (including `customer_group`, `territory`,
 `supplier_group`, `item_group`, `stock_uom`, `parent_warehouse`,
 `parent_account` and opening detail links) and batch metadata (`tenant_id`,

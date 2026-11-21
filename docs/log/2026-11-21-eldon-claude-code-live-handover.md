@@ -21,10 +21,10 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 | Plan ID | Model | Scope | Allowed paths | Branch |
 |---|---|---|---|---|
 | DSC-009 | opus-5.5 (worktree) | Fix #224 security findings H1, H2, M3 to M5 with tests first | DSC-009 package and tests | dsc-009-fixes (local), then pushed to dsc-009-owner-approval |
-| ERP-013, ERP-015 | fable-5.2 | Re-review partner #202 at new head; review #229 | none (review text) | - |
 | SEC-022, BPL-032 | fable-5.2 | Tier 3 security review of partner #235 (role namespacing) | none (review text) | - |
-| ERP-010 | opus-5.5 | Review partner #236 (follow-ups from #201) | none (review text) | - |
 | QA-014 | sonnet-5.5 | Undefined CSS var lint plus A-06 to A-11 fixes | web/scripts, web/app, docs/specs/qa-014-accessibility-audit.md | qa-014-accessibility-audit (PR #228) |
+| BRD-007 | sonnet-5.5 | Deterministic brand asset script (logo variants, derived dark, sizes, --check) | scripts/build_brand_assets.py, its test, docs/brand | brd-007-brand-assets (to create) |
+| LEG-003 | sonnet-5.5 | Counsel scope of work draft for KSA, UAE, Egypt, Qatar | docs/legal/counsel-scope-of-work.md | leg-003-counsel-scope (to create) |
 | - | watcher | Background script exits on any new sayegh9 comment, review or PR | - | - |
 
 ## Results
@@ -36,6 +36,8 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - PRs opened: #231 FND-002, #233 GTM-004, #234 BRD-011, #232 PLT-009.
 - Re-reviews posted: #225 approved and merged; #204 request changes (Medium 2 bench tokens and 3 UAE neutral invoice still open, branch conflicts); #155 approved and merged (all findings fixed, CI green).
 - OPR-015 design shipped as PR #237 (row doing); GOV-057 wording fixes as PR #238. #231 FND-002 and #233 GTM-004 merged (Tier 1).
+- Reviews posted: #202 request changes (H1, M2, M4 fixed; new Medium: invisible marks allowed in code and link fields bypass the duplicate guard; conflict with main); #229 request changes (no back-dated or repost tests; no live valuation test in CI; conflict); #236 approved and merged.
+- For the partner (plan hygiene scan, partner rows, partner decides): rows still `doing` whose PRs merged: CE-SEC-005 (#134), SEC-004 (#131), ERP-009 (#162), CMP-006 (#161), CMP-021 (#158), ERP-020 (#148), ERP-027 (#125), ERP-023 (#203), PLT-024 (#123), ERP-026 (#126), CMP-033 (#124); check each against its full row text before marking done (BPL-027 stays doing until BPL-031 to BPL-033).
 - BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
 ## Files touched

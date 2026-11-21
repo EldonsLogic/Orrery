@@ -28,10 +28,11 @@ def batch(datasets=None, **changes):
     datasets = datasets if datasets is not None else {
         "Customer": [{"customer_code": "C1", "customer_name": "Synthetic buyer"}],
         "Account": [{"account_number": "1100", "account_type": "Receivable"},
+                    {"account_number": "1200", "account_type": "Receivable"},
                     {"account_number": "3000", "account_type": "Other"}],
         "TrialBalance": [
             {"account": "1100", "account_type": "Receivable", "debit": "0.1", "credit": "0"},
-            {"account": "1100", "account_type": "Receivable", "debit": "0.2", "credit": "0"},
+            {"account": "1200", "account_type": "Receivable", "debit": "0.2", "credit": "0"},
             {"account": "3000", "account_type": "Other", "debit": "0", "credit": "0.3"}],
         "AR": [{"customer": "C1", "amount": "0.3"}],
     }
@@ -43,8 +44,9 @@ def batch(datasets=None, **changes):
 
 
 @pytest.fixture
-def backend():
+def backend(monkeypatch):
     """Trusted server session; roles are never an importer request argument."""
+    monkeypatch.setenv("CHANGE_ENGINE_ENV", "test")
     store = SQLiteImportBackend(session=lambda: {
         "user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
         "companies": ["Synthetic Trading"], "roles": ["Accounts Manager"]})
@@ -104,7 +106,7 @@ def test_subledger_and_stock_reconciliation(backend, kind):
                               "Stock": ("item_code", "Stock", "1.01")}[kind]
     side, other = ("credit", "debit") if kind == "AP" else ("debit", "credit")
     line = {field: "KEY", "amount": amount} if kind != "Stock" else {
-        "item_code": "KEY", "warehouse": "W1", "qty": "1", "valuation_rate": "1.005"}
+        "item_code": "KEY", "warehouse": "W1", "qty": "1.005", "valuation_rate": "1.00"}
     source = batch({"TrialBalance": [dict(account="control", account_type=control, **{side: amount, other: "0"}),
                                     dict(account="offset", account_type="Other", **{side: "0", other: amount})],
                     kind: [line],
@@ -169,7 +171,8 @@ def test_default_deny_caps_dates_currency_and_duplicate_keys(backend):
     *[{"user_id": "reviewer", "human": True, "tenant_id": "tenant-a", "companies": ["Synthetic Trading"], "roles": [r]}
       for r in ("HR", "Sales", "Guest")],
     {"user_id": "reviewer", "human": True, "tenant_id": "tenant-b", "companies": ["Synthetic Trading"], "roles": ["System Manager"]}])
-def test_backend_authentication_and_tenant_scope(session):
+def test_backend_authentication_and_tenant_scope(monkeypatch, session):
+    monkeypatch.setenv("CHANGE_ENGINE_ENV", "test")
     with SQLiteImportBackend(session=lambda: session) as store:
         importer, source = OpeningImporter(store), batch()
         with pytest.raises(ImportFailure, match="IMP-AUTH"):
@@ -226,7 +229,7 @@ def test_rollback_preserves_prior_records_and_retry(backend):
 def test_durable_journal_restart_and_competing_connections(tmp_path):
     path = str(tmp_path / "import.db")
     session = lambda: {"user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
-                       "companies": ["Synthetic Trading"], "roles": ["System Manager"]}
+                       "companies": ["Synthetic Trading"], "capabilities": ["opening_import"]}
     with SQLiteImportBackend(path, session=session) as store:
         apply(OpeningImporter(store), batch())
     with SQLiteImportBackend(path, session=session) as store:
@@ -324,7 +327,7 @@ def test_report_is_bound_to_plan_and_wrapped_datasets(backend):
 
 def test_separate_tenants_and_companies_have_independent_masters(tmp_path):
     session = {"user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
-               "companies": ["Synthetic Trading"], "roles": ["System Manager"]}
+               "companies": ["Synthetic Trading"], "capabilities": ["opening_import"]}
     with SQLiteImportBackend(str(tmp_path / "scope.db"), session=lambda: session) as store:
         importer = OpeningImporter(store)
         source = batch({"Customer": [{"customer_name": "Buyer"}]})
@@ -374,9 +377,9 @@ def test_multicurrency_and_inconsistent_control_classification_rejected(backend)
 
 def test_large_exact_arithmetic_and_rounding_at_configured_precision(backend):
     source = batch({"TrialBalance": [
-        {"account": "1", "account_type": "Other", "debit": "12345678901234567890.123456789", "credit": "0"},
-        {"account": "2", "account_type": "Other", "debit": "0", "credit": "12345678901234567890.123456789"}],
-        "Stock": [{"item_code": "I1", "warehouse": "W1", "qty": "3", "valuation_rate": "0.0005"}],
+        {"account": "1", "account_type": "Other", "debit": "12345678901234567890.123", "credit": "0"},
+        {"account": "2", "account_type": "Other", "debit": "0", "credit": "12345678901234567890.123"}],
+        "Stock": [{"item_code": "I1", "warehouse": "W1", "qty": "1.5", "valuation_rate": "0.001"}],
         "Account": [{"account_number": "1", "account_type": "Other"}, {"account_number": "2", "account_type": "Other"},
                     {"account_number": "stock", "account_type": "Stock"}, {"account_number": "offset", "account_type": "Other"}],
         "Item": [{"item_code": "I1"}], "Warehouse": [{"warehouse_name": "W1"}]}, currency_precision=3)
@@ -390,7 +393,7 @@ def test_large_exact_arithmetic_and_rounding_at_configured_precision(backend):
         ctx.traps[Inexact] = True
         result = OpeningImporter(backend).preview(source)
     assert result["ok"]
-    assert result["totals"]["debit"] == "12345678901234567890.125456789"
+    assert result["totals"]["debit"] == "12345678901234567890.125"
     assert result["totals"]["stock"] == "0.002"
 
 

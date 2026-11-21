@@ -1,9 +1,11 @@
 """Adversarial PR #202 regressions against real validation and SQLite transactions."""
 import copy
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from services.discovery.prevalidate import PrevalidationError, prevalidate
 from change_engine.importer import ImportFailure, OpeningImporter, SQLiteImportBackend
 from change_engine.tests.test_erp_013_opening_importer import apply, backend, batch, refuses
 
@@ -17,6 +19,78 @@ def forged_clean(source):
         "summary": {"rows": len(rows), "accepted": len(rows), "quarantined": 0,
                     "owner_review": 0, "findings": 0}}
     return source
+
+
+def opening_details(amount="100.00"):
+    """Build a balanced batch with one detail for each control account."""
+    return {
+        "Account": [{"account_number": key, "account_type": kind}
+                    for key, kind in (("ar", "Receivable"), ("ap", "Payable"),
+                                      ("stock", "Stock"), ("offset", "Other"))],
+        "TrialBalance": [
+            {"account": "ar", "account_type": "Receivable", "debit": amount, "credit": "0"},
+            {"account": "ap", "account_type": "Payable", "debit": "0", "credit": amount},
+            {"account": "stock", "account_type": "Stock", "debit": "100.00", "credit": "0"},
+            {"account": "offset", "account_type": "Other", "debit": "0", "credit": "100.00"},
+        ],
+        "Customer": [{"customer_code": "C1"}],
+        "Supplier": [{"supplier_code": "S1"}],
+        "Item": [{"item_code": "I1"}],
+        "Warehouse": [{"warehouse_name": "W1"}],
+        "AR": [{"customer": "C1", "amount": amount}],
+        "AP": [{"supplier": "S1", "amount": amount}],
+        "Stock": [{"item_code": "I1", "warehouse": "W1", "qty": "1", "valuation_rate": "100.00"}],
+    }
+
+
+def test_currency_precision_rejects_balanced_overprecision_and_preserves_accepted_money(backend):
+    importer = OpeningImporter(backend)
+    refuses(importer, batch(opening_details("100.005"), currency_precision=2), "IMP-PRECISION")
+    assert importer.preview(batch(opening_details("100.00"), currency_precision=2))["totals"]["ar"] == "100.00"
+    source = batch(opening_details("100.005"), currency_precision=3)
+    assert apply(importer, source)["status"] == "applied"
+    ar, = [record["row"] for record in backend.records("tenant-a", "Synthetic Trading") if record["entity"] == "AR"]
+    assert ar["amount"] == "100.005"
+
+
+@pytest.mark.parametrize("entity,index,field,value", [
+    ("TrialBalance", 0, "debit", "100.005"),
+    ("TrialBalance", 1, "credit", "100.005"),
+    ("AR", 0, "amount", "100.005"),
+    ("AP", 0, "amount", "100.005"),
+    ("Stock", 0, "valuation_rate", "100.005"),
+    ("AR", 0, "amount", "100.000"),
+])
+def test_each_money_field_enforces_currency_precision(backend, entity, index, field, value):
+    datasets = opening_details()
+    datasets[entity][index][field] = value
+    refuses(OpeningImporter(backend), batch(datasets), "IMP-PRECISION")
+
+
+@pytest.mark.parametrize("entity,field,first,second", [
+    ("TrialBalance", "debit", "40", "60"),
+    ("AR", "amount", "40", "60"),
+    ("AP", "amount", "40", "60"),
+    ("Stock", "qty", "0.4", "0.6"),
+])
+def test_duplicate_opening_detail_keys_are_rejected(backend, entity, field, first, second):
+    datasets = opening_details()
+    row = datasets[entity][0]
+    datasets[entity].append(dict(row, **{field: second}))
+    row[field] = first
+    refuses(OpeningImporter(backend), forged_clean(batch(datasets)), "IMP-DUPLICATE")
+
+
+def test_discovery_prevalidation_contract():
+    rows = [{"posting_date": "2026-01-01", "currency": "SAR", "customer_name": "Synthetic Buyer"}]
+    config = {"required": {"*": []}, "fields": {"date": "posting_date", "party": "customer_name"}, "max_rows": 1}
+    assert prevalidate(rows, config).to_dict() == {
+        "version": 1, "summary": {"rows": 1, "accepted": 1, "quarantined": 0, "owner_review": 0, "findings": 0},
+        "counts": {}, "findings": [], "accepted": rows, "quarantine": [], "owner_review": [],
+        "name_groups": {"party": [], "item": []},
+    }
+    with pytest.raises(PrevalidationError):
+        prevalidate(rows * 2, config)
 
 
 @pytest.mark.parametrize("entity,field", [("Customer", "customer_name"), ("Supplier", "supplier_name"),
@@ -50,7 +124,7 @@ def test_second_batch_id_cannot_post_company_opening_again(backend):
 
 def test_different_batch_ids_compete_for_one_company_opening(tmp_path):
     session = lambda: {"user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
-                       "companies": ["Synthetic Trading"], "roles": ["Accounts Manager"]}
+                       "companies": ["Synthetic Trading"], "capabilities": ["opening_import"]}
     path = str(tmp_path / "opening.db")
     with SQLiteImportBackend(path, session=session):
         pass
@@ -122,14 +196,16 @@ def test_control_without_subledger_or_subledger_without_control_is_rejected(back
         source["datasets"]["Item"] = [{"item_code": "I1"}]
         source["datasets"]["Warehouse"] = [{"warehouse_name": "W1"}]
         for row in source["datasets"]["TrialBalance"]:
-            if row["account"] == "1100":
+            if row["account_type"] == "Receivable":
                 row["account_type"] = "Payable" if kind == "AP" else "Stock"
                 if kind == "AP":
                     row["debit"], row["credit"] = row["credit"], row["debit"]
             elif kind == "AP":
                 row["debit"], row["credit"] = row["credit"], row["debit"]
         source["datasets"].pop("AR")
-        source["datasets"]["Account"][0]["account_type"] = "Payable" if kind == "AP" else "Stock"
+        for row in source["datasets"]["Account"]:
+            if row["account_type"] == "Receivable":
+                row["account_type"] = "Payable" if kind == "AP" else "Stock"
     no_details = copy.deepcopy(source)
     no_details["datasets"].pop(kind)
     for candidate in (no_details, dict(source, datasets={k: v for k, v in source["datasets"].items() if k != "TrialBalance"})):
@@ -199,11 +275,65 @@ def test_all_stages_authenticate_before_reading_payload(session):
         assert store.failures("tenant-a") == []
 
 
-def test_failure_audit_is_bounded_per_tenant(backend):
+def test_failure_audit_retains_old_entries_per_tenant(backend):
+    importer = OpeningImporter(backend)
+    apply(importer, batch())
     for i in range(300):
-        backend.record_failure("tenant-a", f"failure-{i}", "0" * 64, "IMP-WRITE")
-    assert len(backend.failures("tenant-a")) <= 256
-    assert backend.failures("tenant-a")[-1]["batch_id"] == "failure-299"
+        with pytest.raises(ImportFailure, match="IMP-OPENING-CONFLICT"):
+            apply(importer, batch(batch_id=f"failure-{i}"))
+    assert [row["batch_id"] for row in backend.failures("tenant-a")] == [f"failure-{i}" for i in range(300)]
+    assert backend.failures("tenant-b") == []
+
+
+def test_failure_audit_records_authenticated_user_after_rollback(backend):
+    importer = OpeningImporter(backend)
+    apply(importer, batch())
+    source = batch(batch_id="retry")
+    preview = importer.preview(source)
+    with pytest.raises(ImportFailure, match="IMP-CONFIRM"):
+        importer.apply(source, confirmed_by="another-user", plan_hash=preview["plan_hash"])
+    assert backend.failures("tenant-a") == []
+    with pytest.raises(ImportFailure, match="IMP-OPENING-CONFLICT"):
+        importer.apply(source, confirmed_by="reviewer", plan_hash=preview["plan_hash"])
+    failure, = backend.failures("tenant-a")
+    assert failure["user_id"] == "reviewer"
+
+
+def test_legacy_failure_audit_preserves_rows_without_inventing_actor(tmp_path):
+    path = tmp_path / "legacy.db"
+    with sqlite3.connect(path) as conn:
+        conn.executescript("""
+            CREATE TABLE import_failures (
+                seq INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, batch_id TEXT NOT NULL,
+                plan_hash TEXT NOT NULL, code TEXT NOT NULL);
+            INSERT INTO import_failures VALUES (1, 'tenant-a', 'legacy', 'legacy-hash', 'IMP-WRITE');
+        """)
+    conn.close()
+    with SQLiteImportBackend(path) as store:
+        assert store.failures("tenant-a") == [
+            {"seq": 1, "tenant_id": "tenant-a", "batch_id": "legacy", "plan_hash": "legacy-hash",
+             "code": "IMP-WRITE", "user_id": None},
+        ]
+
+
+@pytest.mark.parametrize("role", ["Accounts Manager", "System Manager"])
+@pytest.mark.parametrize("env", [None, "production"])
+def test_offline_role_mapping_is_disabled_in_production(monkeypatch, role, env):
+    if env is None:
+        monkeypatch.delenv("CHANGE_ENGINE_ENV", raising=False)
+    else:
+        monkeypatch.setenv("CHANGE_ENGINE_ENV", env)
+    session = {"user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
+               "companies": ["Synthetic Trading"], "roles": [role]}
+    with SQLiteImportBackend(session=lambda: session) as store:
+        assert store.identity()["capabilities"] == []
+        refuses(OpeningImporter(store), batch(), "IMP-AUTH")
+
+
+def test_default_backend_has_no_capability():
+    with SQLiteImportBackend() as store:
+        assert store.identity()["capabilities"] == []
+        refuses(OpeningImporter(store), batch(), "IMP-AUTH")
 
 
 def test_unknown_currency_is_rejected_and_configured_iso_subset_is_allowed(backend):
@@ -231,9 +361,10 @@ def test_existing_control_master_cannot_be_reclassified_to_bypass_reconciliation
 
 
 def test_offsetting_nonzero_control_lines_still_require_details(backend):
-    source = batch({"Account": [{"account_number": "1100", "account_type": "Receivable"}],
+    source = batch({"Account": [{"account_number": account, "account_type": "Receivable"}
+                                for account in ("1100", "1200")],
                     "TrialBalance": [{"account": "1100", "account_type": "Receivable", "debit": "1", "credit": "0"},
-                                     {"account": "1100", "account_type": "Receivable", "debit": "0", "credit": "1"}]})
+                                     {"account": "1200", "account_type": "Receivable", "debit": "0", "credit": "1"}]})
     refuses(OpeningImporter(backend), source, "IMP-RECONCILE")
 
 

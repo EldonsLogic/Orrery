@@ -7,6 +7,7 @@ DDL, external sends, and independently committing posting methods are forbidden.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -35,7 +36,7 @@ class ImportBackend(Protocol):
     def journal(self, tenant_id: str, batch_id: str) -> dict | None: ...
     def write(self, tenant_id: str, company: str, entity: str, key: str, row: dict) -> None: ...
     def commit_batch(self, plan: dict, plan_hash: str, user_id: str) -> None: ...
-    def record_failure(self, tenant_id: str, batch_id: str, plan_hash: str, code: str) -> None: ...
+    def record_failure(self, tenant_id: str, batch_id: str, plan_hash: str, code: str, *, user_id: str) -> None: ...
 
 
 class SQLiteImportBackend:
@@ -69,12 +70,16 @@ class SQLiteImportBackend:
                 PRIMARY KEY (tenant_id, batch_id, entity, business_key));
             CREATE TABLE IF NOT EXISTS import_failures (
                 seq INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, batch_id TEXT NOT NULL,
-                plan_hash TEXT NOT NULL, code TEXT NOT NULL);
+                plan_hash TEXT NOT NULL, code TEXT NOT NULL, user_id TEXT NOT NULL);
         """)
         # Older offline databases keep their journal; missing source evidence fails
         # closed on retries. Existing opening records are checked by claim_opening.
-        if "source_digest" not in {r[1] for r in self.conn.execute("PRAGMA table_info(import_batches)")}:
-            self.conn.execute("ALTER TABLE import_batches ADD COLUMN source_digest TEXT")
+        with self.transaction():
+            if "source_digest" not in {r[1] for r in self.conn.execute("PRAGMA table_info(import_batches)")}:
+                self.conn.execute("ALTER TABLE import_batches ADD COLUMN source_digest TEXT")
+            if "user_id" not in {r[1] for r in self.conn.execute("PRAGMA table_info(import_failures)")}:
+                # Keep historical failures whose actor was never captured.
+                self.conn.execute("ALTER TABLE import_failures ADD COLUMN user_id TEXT")
 
     def identity(self) -> dict:
         """Resolve the trusted session; callback errors never grant permissions."""
@@ -87,8 +92,11 @@ class SQLiteImportBackend:
             # ADR-0039 verification; no role/capability is accepted from payloads.
             roles = identity.get("roles", ())
             if "capabilities" not in identity:
-                identity["capabilities"] = (["opening_import"] if isinstance(roles, (list, tuple, set, frozenset))
-                                             and {"Accounts Manager", "System Manager"}.intersection(roles) else [])
+                identity["capabilities"] = []
+                if (os.environ.get("CHANGE_ENGINE_ENV") in {"dev", "test"}
+                        and isinstance(roles, (list, tuple, set, frozenset))
+                        and {"Accounts Manager", "System Manager"}.intersection(roles)):
+                    identity["capabilities"] = ["opening_import"]
             return identity
         except Exception:
             raise ImportFailure("IMP-AUTH") from None
@@ -164,15 +172,12 @@ class SQLiteImportBackend:
                               (plan["tenant_id"], plan["batch_id"], change["entity"], change["key"],
                                canonical(change["before"]), canonical(change["after"])))
 
-    def record_failure(self, tenant_id: str, batch_id: str, plan_hash: str, code: str) -> None:
-        """Persist a sanitized failed-attempt record after successful rollback."""
+    def record_failure(self, tenant_id: str, batch_id: str, plan_hash: str, code: str, *, user_id: str) -> None:
+        """Append a sanitized failed-attempt record with the authenticated actor."""
         with self.transaction():
-            self.conn.execute("INSERT INTO import_failures(tenant_id,batch_id,plan_hash,code) VALUES(?,?,?,?)",
-                              (tenant_id, batch_id, plan_hash, code))
-            # Bounded ring per tenant; validation/auth refusals never reach here.
-            self.conn.execute("""DELETE FROM import_failures WHERE tenant_id=? AND seq NOT IN
-                (SELECT seq FROM import_failures WHERE tenant_id=? ORDER BY seq DESC LIMIT 256)""",
-                              (tenant_id, tenant_id))
+            self.conn.execute(
+                "INSERT INTO import_failures(tenant_id,batch_id,plan_hash,code,user_id) VALUES(?,?,?,?,?)",
+                (tenant_id, batch_id, plan_hash, code, user_id))
 
     def records(self, tenant_id: str, company: str) -> list:
         """Internal, tenant-filtered probe for the offline conformance harness."""

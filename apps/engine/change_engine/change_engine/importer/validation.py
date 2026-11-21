@@ -27,6 +27,12 @@ OPENING_FIELDS = {
     "AR": {"customer", "amount"}, "AP": {"supplier", "amount"},
     "Stock": {"item_code", "warehouse", "qty", "valuation_rate"},
 }
+OPENING_LINKS = {
+    "TrialBalance": (("account", "Account"),),
+    "AR": (("customer", "Customer"),),
+    "AP": (("supplier", "Supplier"),),
+    "Stock": (("item_code", "Item"), ("warehouse", "Warehouse")),
+}
 FORMULA = ("=", "+", "-", "@", "\t", "\r")
 ACCOUNT_TYPES = {"Receivable", "Payable", "Stock", "Other"}
 MAX_BYTES = 2_000_000
@@ -92,11 +98,11 @@ def text(value):
     return value
 
 
-def number(value, *, positive=False):
+def number(value, *, positive=False, currency_precision=None):
     """Nonnegative bounded Decimal; reject binary floats and nonfinite values.
 
     38 significant digits and 18 decimal places bound exact arithmetic work.
-    Strings intentionally use plain ASCII decimal notation, without separators.
+    Money must also fit the configured scale. Retain the input scale exactly.
     """
     if isinstance(value, bool) or not isinstance(value, (str, int, Decimal)):
         fail("IMP-NUMBER")
@@ -106,7 +112,12 @@ def number(value, *, positive=False):
         fail("IMP-NUMBER")
     n = Decimal(value)
     if (not n.is_finite() or n < 0 or (positive and n == 0) or len(n.as_tuple().digits) > 38
-            or n.as_tuple().exponent < -18 or n.adjusted() > 37):
+            or n.adjusted() > 37):
+        fail("IMP-NUMBER")
+    places = -n.as_tuple().exponent
+    if currency_precision is not None and places > currency_precision:
+        fail("IMP-PRECISION")
+    if places > 18:
         fail("IMP-NUMBER")
     return n
 
@@ -206,9 +217,7 @@ def master_context(rows, lookup):
                 and change["before"].get("account_type") != change["after"].get("account_type")):
             fail("IMP-REFERENCE")
     references = {}
-    links = {"TrialBalance": (("account", "Account"),), "AR": (("customer", "Customer"),),
-             "AP": (("supplier", "Supplier"),), "Stock": (("item_code", "Item"), ("warehouse", "Warehouse"))}
-    for entity, fields in links.items():
+    for entity, fields in OPENING_LINKS.items():
         for row in rows.get(entity, []):
             for field, target in fields:
                 candidates = []
@@ -266,7 +275,8 @@ def prepare(source, max_rows, lookup):
             if not isinstance(raw, dict) or not raw or raw.keys() - allowed:
                 fail()
             numeric = {"debit", "credit", "amount", "qty", "valuation_rate"} if entity in OPENING_FIELDS else set()
-            row = {k: number(v, positive=k == "qty") if k in numeric else text(v) for k, v in raw.items()}
+            row = {k: number(v, positive=k == "qty", currency_precision=None if k == "qty" else precision)
+                   if k in numeric else text(v) for k, v in raw.items()}
             if entity in MASTER_FIELDS:
                 key = business_key(entity, row)
                 if key in seen:
@@ -275,6 +285,10 @@ def prepare(source, max_rows, lookup):
             else:
                 if fields - row.keys():
                     fail()
+                key = tuple(row[field] for field, _ in OPENING_LINKS[entity])
+                if key in seen:
+                    fail("IMP-DUPLICATE")
+                seen.add(key)
                 for key in ("currency", "posting_date"):
                     if row.get(key, meta[key]) != meta[key]:
                         fail()
@@ -291,10 +305,9 @@ def prepare(source, max_rows, lookup):
         # Do not inherit the caller's exponent limits or rounding traps.
         totals = {k: Decimal(0) for k in ("debit", "credit", "ar", "ap", "stock")}
         controls = {k: Decimal(0) for k in ("ar", "ap", "stock")}
-        present, required_details, account_types = set(), set(), {}
+        present, required_details = set(), set()
         for row in rows.get("TrialBalance", []):
-            prior = account_types.setdefault(row["account"], row["account_type"])
-            if prior != row["account_type"] or (row["debit"] and row["credit"]):
+            if row["debit"] and row["credit"]:
                 fail()
             totals["debit"] += row["debit"]
             totals["credit"] += row["credit"]

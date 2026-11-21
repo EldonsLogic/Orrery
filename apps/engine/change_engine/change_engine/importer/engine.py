@@ -111,7 +111,7 @@ class OpeningImporter:
             code = exc.code if isinstance(exc, ImportFailure) else "IMP-WRITE"
             if code not in {"IMP-CONFIRM", "IMP-REFERENCE", "IMP-SCHEMA", "IMP-REPORT"}:
                 try:
-                    self.backend.record_failure(tenant, batch_id, plan_hash, code)
+                    self.backend.record_failure(tenant, batch_id, plan_hash, code, user_id=identity["user_id"])
                 except Exception:
                     raise ImportFailure("IMP-RECOVERY") from None
             raise ImportFailure(code) from None

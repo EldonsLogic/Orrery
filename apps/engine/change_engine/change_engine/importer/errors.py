@@ -2,6 +2,7 @@
 MESSAGES = {
     "IMP-SCHEMA": ("Invalid import schema or field mapping.", "مخطط الاستيراد أو ربط الحقول غير صالح."),
     "IMP-NUMBER": ("Invalid exact amount or quantity.", "المبلغ الدقيق أو الكمية غير صالحين."),
+    "IMP-PRECISION": ("An amount exceeds the currency precision.", "يتجاوز المبلغ الدقة العشرية للعملة."),
     "IMP-LIMIT": ("Import size limit exceeded.", "تم تجاوز حد حجم الاستيراد."),
     "IMP-FORMULA": ("Spreadsheet formula content is blocked.", "تم حظر محتوى صيغ جدول البيانات."),
     "IMP-DUPLICATE": ("Duplicate business key requires review.", "يتطلب مفتاح العمل المكرر مراجعة."),

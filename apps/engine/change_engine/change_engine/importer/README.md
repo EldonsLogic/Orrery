@@ -49,10 +49,11 @@ entity, row or mapping field is accepted.
    `IMP-OPENING-CONFLICT`, including legacy reference records without a claim.
    There is no supersede/reversal path; master-only batches remain possible.
    Write/journal failure rolls back inserts **and prior-record updates** and
-   records a sanitized failed attempt. Rollback or failure-log errors require
-   recovery (`IMP-RECOVERY`), never a blind successful retry. Failure history is
-   capped at the most recent 256 sanitized attempts per tenant; auth/initial
-   validation refusals do not write a failure record.
+   records a sanitized failed attempt with the authenticated user ID. The
+   offline failure log is append-only per tenant and has no retention cap.
+   Older records without an actor keep a null user ID. Rollback or failure-log
+   errors require recovery (`IMP-RECOVERY`). Auth and initial validation
+   refusals do not write a failure record.
 
 ## Entities and invariants
 
@@ -71,8 +72,10 @@ entity, row or mapping field is accepted.
 Master keys include tenant and company in storage. Keep the same key field on
 subsequent uploads: switching a name-only record to a new code is a different
 business key and requires prior owner resolution, never an automatic merge.
-Duplicate master keys within a batch are refused. Opening rows may additionally
-state `posting_date` and `currency`; both must equal the batch context.
+Duplicate master keys and duplicate opening details return `IMP-DUPLICATE`.
+An opening batch may contain one trial-balance row per account, one AR row per
+customer, one AP row per supplier and one stock row per item and warehouse pair.
+Opening rows may state `posting_date` and `currency`; both must equal the batch context.
 
 Every detail reference must resolve by a stable master key in the batch or the
 existing backend records for the exact tenant/company: trial balance to Account,
@@ -89,13 +92,16 @@ even if their amount is zero. Compare AR to receivable debit minus credit, AP to
 payable credit minus debit, and stock to stock debit minus credit; mismatches or
 missing reconciliation return `IMP-RECONCILE`.
 
-All amounts accept plain ASCII decimal strings, integers or finite `Decimal`;
-binary floats, booleans, exponent strings, separators, negative amounts, NaN and
-Infinity are refused. Stock qty must exceed zero; rate may be zero. Sum each
-`qty * valuation_rate` rounded with explicit `ROUND_HALF_UP` to currency precision
-for comparison/preview only; source qty/rate are preserved. Arithmetic uses an
-independent bounded Decimal context (38 significant input digits, up to 18 places,
-128-digit computation), regardless of the caller's context or traps. No tax,
+Amounts accept plain ASCII decimal strings, integers or finite `Decimal`.
+Binary floats, booleans, exponent strings, separators, negative amounts, NaN and
+Infinity are refused. Debit, credit, AR/AP amounts and stock valuation rates
+with more decimal places than `currency_precision` return `IMP-PRECISION`,
+including excess trailing zeroes. Stock quantity must exceed zero and supports
+up to 18 decimal places. Stock valuation rate may be zero. The comparison and
+preview sum each derived `qty * valuation_rate` using explicit `ROUND_HALF_UP`
+at currency precision. Source quantities and rates are preserved. Arithmetic
+uses up to 38 significant input digits and an independent 128-digit Decimal
+context. Q-478 tracks how to import negative opening balances. No tax,
 exchange conversion or ledger-entry generation is implemented here.
 
 Caps: 10,000 rows (server may lower), 1,024 characters per text cell, two million
@@ -146,11 +152,13 @@ Native stock/subledger posting must avoid duplicating control-account effects;
 the SQLite reference store makes no native GL changes. Live integration must
 prove that behavior before it is exposed to customer traffic. [Q-303](../../../../../docs/open-questions.md)
 tracks the UNVERIFIED Opening Invoice Creation Tool / Journal Entry / Stock
-Reconciliation wiring and role mapping. The SQLite backend alone maps trusted
-`Accounts Manager` / `System Manager` sessions to `opening_import`; a live backend
-must supply a verified mapping. ADR-0039 is the requested role-mapping reference,
+Reconciliation wiring and role mapping. The SQLite backend maps trusted
+`Accounts Manager` / `System Manager` sessions to `opening_import` only when
+`CHANGE_ENGINE_ENV` is `dev` or `test`. A live backend must supply a verified
+mapping. ADR-0039 is the requested role-mapping reference,
 but that record is absent from the checked `origin/main`; its existence and
 applicability must be resolved under Q-303 before production wiring.
+Production audit durability and integrity are tracked in ERP-026 and SEC-008.
 
 Before merge: a different model reviews the patch; Eldon records line-by-line
 human review (ADR-0031/0035); security reviews the session, tenant, hash and

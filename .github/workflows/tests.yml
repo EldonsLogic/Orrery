@@ -260,7 +260,7 @@ jobs:
       # --- apps/engine ---
       - name: Install dependencies (apps/engine)
         if: steps.filter.outputs.engine == 'true'
-        run: pip install -r services/blueprint/requirements.txt "pydantic>=2" "werkzeug==3.1.3" "pymysql>=1.1"
+        run: pip install -r services/blueprint/requirements.txt "pydantic>=2" "werkzeug==3.1.3" "pymysql>=1.1" "hijridate==2.6.0"
 
       - name: Lint (apps/engine)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -288,6 +288,12 @@ jobs:
         env:
           PYTHONPATH: apps/engine/change_engine:.
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_007_bilingual_tax_invoice.py -v
+
+      - name: Umm al-Qura entry, companion fields and print tests (CMP-005)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine:.
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_cmp_005_calendar.py apps/engine/change_engine/change_engine/tests/test_cmp_005_hijri_dates.py -v
 
       - name: Apply with preview and DDL plan gate tests (BPL-007)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

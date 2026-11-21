@@ -7,7 +7,7 @@
     "ar": "حزمة المملكة العربية السعودية",
     "en": "Saudi Arabia country pack"
   },
-  "description": "Saudi Arabia country pack (CMP-029): declarative locale defaults, formats, override policy and references to the CMP-006 chart of accounts and VAT treatments, the ZATCA Phase 1 component and the ZATCA print layouts. It holds no tax, ledger or e-invoice maths (ADR-0031). Pack status and level are both tested, not draft, because the manifest contract forbids draft when touchesLedgerOrTax is true. Evidence is unverified and reviewedBy is empty, so it is not for tenants. Facts and sources: evidence.json. Arabic labels unreviewed (ADR-0033).",
+  "description": "Saudi Arabia country pack (CMP-029): declarative locale defaults, formats, override policy and references to the CMP-006 chart of accounts and VAT treatments, the ZATCA Phase 1 component and the ZATCA print layouts. ZATCA Phase 2 (clearance and reporting) is required as an unresolvable capability: a go-live blocker until CMP-004 and Q-559. It holds no tax, ledger or e-invoice maths (ADR-0031). Pack status and level are both tested, not draft, because the manifest contract forbids draft when touchesLedgerOrTax is true. Evidence is unverified and reviewedBy is empty, so it is not for tenants. Facts and sources: evidence.json. Arabic labels unreviewed (ADR-0033).",
   "provides": [
     {
       "capability": "country.sa.pack_metadata",
@@ -25,8 +25,20 @@
       "versionRange": ">=0.1.0 <0.2.0"
     },
     {
+      "component": "finance.vat_sa_treatments",
+      "versionRange": ">=0.1.0 <0.2.0"
+    },
+    {
       "component": "compliance.zatca_sa",
-      "versionRange": ">=0.1.0 <1.0.0"
+      "versionRange": ">=0.1.0 <0.2.0"
+    },
+    {
+      "capability": "compliance.zatca_sa.phase2_clearance_reporting",
+      "versionRange": ">=0.1.0 <0.2.0"
+    },
+    {
+      "component": "documents.zatca_sa_layouts",
+      "versionRange": ">=0.1.0 <0.2.0"
     },
     {
       "component": "sa.holidays",

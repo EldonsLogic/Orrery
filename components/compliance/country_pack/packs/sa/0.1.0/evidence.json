@@ -14,7 +14,7 @@
     },
     {
       "paths": ["tax.vatSupported", "tax.taxCodesRef"],
-      "claim": "VAT applies in KSA (15% from 2020-07-01). The rate and the seven treatments live in the CMP-006 file vat_treatments.json, referenced here; the pack holds no rate.",
+      "claim": "VAT applies in KSA (15% from 2020-07-01). The rate and the seven treatments live in the CMP-006 file vat_treatments.json, referenced here; the pack holds no rate. The accountant-reviewed VAT workflows are still open (Q-267), and no component manifest wraps the file yet (goLiveBlockers).",
       "status": "SECONDARY",
       "ref": "docs/compliance/ksa-coa-and-tax-codes.md",
       "sources": [
@@ -27,7 +27,7 @@
       "status": "UNVERIFIED",
       "ref": "docs/compliance/country-matrix.md row K5",
       "sources": [
-        {"url": "https://zatca.gov.sa/en/RulesRegulations/Taxes/Pages/default.aspx", "accessed": "2026-11-04", "note": "not fetched in the research"}
+        {"url": "https://zatca.gov.sa/en/RulesRegulations/Taxes/Pages/default.aspx", "note": "not fetched in the research"}
       ]
     },
     {
@@ -42,7 +42,7 @@
       "status": "UNVERIFIED",
       "ref": "contracts/blueprint.schema.json company.vatNumber",
       "sources": [
-        {"url": "https://www.zatca.gov.sa/ar/E-Invoicing/SystemsDevelopers/Documents/20230519_ZATCA_Electronic_Invoice_XML_Implementation_Standard_%20vF.pdf", "accessed": "2026-11-18", "note": "XML standard cited by CMP-006; the VAT number rule in it was not read"}
+        {"url": "https://www.zatca.gov.sa/ar/E-Invoicing/SystemsDevelopers/Documents/20230519_ZATCA_Electronic_Invoice_XML_Implementation_Standard_%20vF.pdf", "accessed": "2026-11-18", "note": "XML standard cited by CMP-006; the VAT number rule in it is unread"}
       ]
     },
     {
@@ -52,18 +52,29 @@
       "ref": "contracts/blueprint.schema.json company.crNumber"
     },
     {
-      "paths": ["eInvoicing.required", "eInvoicing.mode", "eInvoicing.authority", "eInvoicing.componentId"],
-      "claim": "ZATCA e-invoicing Phase 1 (generation) has applied to all taxpayers since 2021-12-04; the pack uses the existing compliance.zatca_sa Phase 1 component. Phase 2 integration applies by wave and is a per-customer setting (country-matrix K3), not a pack default.",
+      "paths": ["eInvoicing.required", "eInvoicing.authority"],
+      "claim": "ZATCA e-invoicing Phase 1 (generation) has applied to all taxpayers since 2021-12-04, so e-invoicing is required; ZATCA is the authority.",
       "status": "VERIFIED-OFFICIAL",
-      "ref": "docs/compliance/country-matrix.md rows K1 and K3",
+      "ref": "docs/compliance/country-matrix.md row K1",
       "sources": [
-        {"url": "https://zatca.gov.sa/en/E-Invoicing/Introduction/Pages/Roll-out-phases.aspx", "accessed": "2026-11-04"},
-        {"url": "https://zatca.gov.sa/en/MediaCenter/News/Pages/Wave25-E-invoicing.aspx", "accessed": "2026-11-04", "note": "wave 25 thresholds and dates"}
+        {"url": "https://zatca.gov.sa/en/E-Invoicing/Introduction/Pages/Roll-out-phases.aspx", "accessed": "2026-11-04"}
       ]
     },
     {
+      "paths": ["eInvoicing.mode"],
+      "claim": "Design choice, not an official fact: the pack locks the Phase 1 baseline that binds every taxpayer. Phase 2 (clearance and reporting) is not a pack default; it is a go-live blocker in goLiveBlockers, and whether the pack or the Blueprint (zatca_phase2 per tenant) decides the mode is open (Q-559).",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/open-questions.md Q-559; docs/decisions/ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md"
+    },
+    {
+      "paths": ["eInvoicing.componentId"],
+      "claim": "Design choice: the pack points at the existing compliance.zatca_sa component, whose manifest provides only Phase 1 generation (compliance.zatca_sa.phase1_generation).",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "components/compliance/zatca_sa/manifest.json"
+    },
+    {
       "paths": ["eInvoicing.mandatoryDocumentLanguages", "printFormats.mandatoryLanguages"],
-      "claim": "A tax invoice must carry its details in Arabic and may be bilingual. Printing English as well is a platform default (Arabic and English equal, principle 4), not a legal requirement.",
+      "claim": "A tax invoice must carry its details in Arabic and may be bilingual, so Arabic is the only mandatory language. English is a template option, not a legal requirement, and is not locked.",
       "status": "SECONDARY",
       "ref": "docs/compliance/country-matrix.md row K7",
       "sources": [
@@ -72,11 +83,11 @@
     },
     {
       "paths": ["eInvoicing.archiveRetentionYears"],
-      "claim": "Six-year retention is commonly cited; do not rely on it until the resolution is read.",
+      "claim": "Six-year retention is commonly cited. The number is locked but UNVERIFIED: do not rely on it until the resolution is read and counsel confirms it.",
       "status": "UNVERIFIED",
       "ref": "docs/compliance/country-matrix.md row K9",
       "sources": [
-        {"url": "https://zatca.gov.sa/en/E-Invoicing/Introduction/LawsAndRegulations/Documents/E-Invoicing%20Implementation%20Resolution_EN.pdf", "accessed": "2026-11-04", "note": "not read in the research"}
+        {"url": "https://zatca.gov.sa/en/E-Invoicing/Introduction/LawsAndRegulations/Documents/E-Invoicing%20Implementation%20Resolution_EN.pdf", "note": "not read in the research"}
       ]
     },
     {
@@ -103,7 +114,7 @@
       "status": "PLATFORM-DEFAULT",
       "ref": "docs/architecture/calendars-and-locale.md",
       "sources": [
-        {"url": "https://laws.boe.gov.sa", "accessed": "2026-11-04", "note": "Labour Law, not fetched (country-matrix K15)"}
+        {"url": "https://laws.boe.gov.sa", "note": "Labour Law, not fetched (country-matrix K15)"}
       ]
     },
     {
@@ -112,7 +123,7 @@
       "status": "UNVERIFIED",
       "ref": "docs/compliance/country-matrix.md row K15",
       "sources": [
-        {"url": "https://laws.boe.gov.sa", "accessed": "2026-11-04", "note": "not fetched"}
+        {"url": "https://laws.boe.gov.sa", "note": "not fetched"}
       ]
     },
     {
@@ -145,20 +156,52 @@
       "status": "UNVERIFIED",
       "ref": "docs/specs/core-module-scope-trading.md section 4",
       "sources": [
-        {"url": "https://mudad.com.sa", "accessed": "2026-11-04", "note": "WPS, not fetched (K13)"},
-        {"url": "https://www.gosi.gov.sa", "accessed": "2026-11-04", "note": "GOSI, not fetched (K12)"}
+        {"url": "https://mudad.com.sa", "note": "WPS, not fetched (K13)"},
+        {"url": "https://www.gosi.gov.sa", "note": "GOSI, not fetched (K12)"}
       ]
     },
     {
       "paths": ["printFormats.legalLayoutPrecedence", "printFormats.templates"],
-      "claim": "The tax invoice and simplified invoice use the locked ZATCA layouts of the ERP-007 print formats; the legal layout always wins over tenant branding.",
+      "claim": "The tax invoice and simplified invoice use the locked ZATCA layouts in branded_documents.py (ERP-016, built on ERP-007); compliance.zatca_sa provides no print formats. No component manifest wraps the layouts yet, so documents.zatca_sa_layouts is a pending placeholder id. The legal layout always wins over tenant branding.",
       "status": "PLATFORM-DEFAULT",
       "ref": "docs/decisions/ADR-0014-theming-and-tenant-branding.md"
     }
   ],
   "pendingRefs": [
     {"path": "coaTemplate.componentId", "value": "finance.coa_sa_trading", "blockedBy": "No component manifest wraps the CMP-006 chart yet; artifactRef points at the real file."},
-    {"path": "localeDefaults.holidays.calendarRef.id", "value": "sa.holidays", "blockedBy": "CMP-024 holiday calendars"}
+    {"path": "localeDefaults.holidays.calendarRef.id", "value": "sa.holidays", "blockedBy": "CMP-024 holiday calendars"},
+    {"path": "printFormats.templates[0].componentId", "value": "documents.zatca_sa_layouts", "blockedBy": "No component manifest wraps the ZATCA layouts in branded_documents.py (owner ERP-016); the id is a placeholder."},
+    {"path": "printFormats.templates[1].componentId", "value": "documents.zatca_sa_layouts", "blockedBy": "Same placeholder as the tax invoice layout."}
+  ],
+  "goLiveBlockers": [
+    {
+      "id": "zatca_phase2",
+      "backs": "eInvoicing",
+      "requires": {"capability": "compliance.zatca_sa.phase2_clearance_reporting", "versionRange": ">=0.1.0 <0.2.0"},
+      "claim": "ZATCA Phase 2 integration (FATOORA clearance and reporting) applies by wave. Wave 25 brings taxpayers with revenue above SAR 187,500 in any of 2022 to 2025 into integration by 2027-02-01; later waves are notified at least six months ahead.",
+      "status": "VERIFIED-OFFICIAL",
+      "blockedBy": "No component provides Phase 2 yet (CMP-004, ADR-0042), so the manifest requires it as an unresolvable capability. Whether the pack or the Blueprint decides the mode is Q-559. No reporting window is stated: none is sourced here.",
+      "refs": ["docs/compliance/country-matrix.md row K3", "docs/decisions/ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md", "Q-559"],
+      "sources": [
+        {"url": "https://zatca.gov.sa/en/MediaCenter/News/Pages/Wave25-E-invoicing.aspx", "accessed": "2026-11-04", "note": "wave 25 thresholds and dates"}
+      ]
+    },
+    {
+      "id": "vat_treatments_component",
+      "backs": "tax.taxCodesRef",
+      "requires": {"component": "finance.vat_sa_treatments", "versionRange": ">=0.1.0 <0.2.0"},
+      "claim": "No component manifest wraps the CMP-006 VAT treatments yet; finance.vat_sa_treatments is a placeholder id. The accountant-reviewed VAT workflows are open.",
+      "status": "UNVERIFIED",
+      "blockedBy": "A component manifest for vat_treatments.json and the accountant review in Q-267.",
+      "refs": ["Q-267", "docs/compliance/ksa-coa-and-tax-codes.md"]
+    },
+    {
+      "id": "immutable_ledger",
+      "claim": "Go-live needs the immutable ledger confirmed for v1 tenants, and the repost job's rewriting of GL rows settled.",
+      "status": "UNVERIFIED",
+      "blockedBy": "Q-23 (enable_immutable_ledger) and Q-555.",
+      "refs": ["Q-23", "Q-555"]
+    }
   ],
   "arabicLabels": [
     {"file": "pack.json", "path": "name.ar", "text": "حزمة المملكة العربية السعودية", "review": "unreviewed", "rule": "ADR-0033"},

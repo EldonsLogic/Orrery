@@ -34,3 +34,27 @@ Fixes the five findings of the cross-model review (Gemini 4 Hydrogen) of a39a593
 - Low: the UAE `tax.crNumberPattern` fact is UNVERIFIED with no ref and no sources. The country matrix says nothing about trade-licence formats. A test pins this.
 - Low: the manifests' `tests[0].path` is now repo-root relative, as in packs/qa and packs/eg. The test resolves it from the repo root and rejects `.` or `/` prefixes.
 - Low: packs/README.md describes test modules generically (`test_pack_<cc>.py` or similar). A test checks this.
+
+## Fix round 2 (Eldon)
+Fixes Eldon's cross-model review (Fable 5.2) of a39a593 on PR #257, checked against f4cd70b. Merged origin/main first (no conflicts). Tests were written first and failed (11 failures, 5 errors), then the data was fixed; the pack suite now passes (44 tests in the country pack folder). Session date 2026-11-22.
+
+Already fixed in round 1 (f4cd70b): item 2 in part (the chart requirement was listed) and item 11 (status equals the manifest level, asserted).
+
+Fixed now:
+1. KSA ZATCA Phase 2: a new `goLiveBlockers` list in `evidence.json` holds `zatca_phase2` (K3, Wave 25, VERIFIED-OFFICIAL), and the manifest requires the unresolvable capability `compliance.zatca_sa.phase2_clearance_reporting`. No reporting window is stated. Q-559 asks whether the pack or the Blueprint decides the mode, linking ADR-0042.
+2. KSA manifest: the `compliance.zatca_sa` range is now `>=0.1.0 <0.2.0`; the tax codes are required as the placeholder `finance.vat_sa_treatments`.
+3. KSA templates now name the placeholder `documents.zatca_sa_layouts` (owner ERP-016, `branded_documents.py`), listed in `requires` and `pendingRefs`.
+4. The KSA e-invoicing entry is split: required and authority (K1, VERIFIED-OFFICIAL); mode and componentId are separate PLATFORM-DEFAULT design choices.
+5. KSA cites Q-267 (tax codes) and records Q-23 and Q-555 as the `immutable_ledger` go-live blocker.
+6. UAE e-invoicing: the `uae_e_invoicing` blocker (AED 50m+ by 2027-01-01, VERIFIED-OFFICIAL) requires `compliance.pint_ae`, now also `eInvoicing.componentId`. `required` stays false (the date has not passed); no threshold is computed. The tax codes are `pending:ae_vat_treatments`, required as `finance.vat_ae_treatments`. New test: while any pending ref or blocker exists, neither the pack status nor the manifest level may be above `tested`.
+7. UAE `authority` is now UNVERIFIED, split from the mode fact.
+8. UAE mode is the Blueprint value `uae_e_invoicing` (the pack schema pattern allows it); a test checks both modes against the Blueprint enum.
+9. UAE cites Q-210, Q-211 and Q-213 (blocker); retention cites Q-213; the language entry cites U7.
+10. `printFormats.mandatoryLanguages` is `["ar"]` in both. KSA: K7 (SECONDARY). UAE: no source (U7), UNVERIFIED, Arabic kept as the minimal list the schema needs.
+12. The rate test now rejects digits in locked strings unless the path is a known id format (semver, version range, HH:MM, anchored id pattern, Blueprint mode), and retention outside 1 to 10 years. A mutation test proves `vat:0.15`, `standard_15_pct` and a 15-year retention fail.
+13. Sources marked "not fetched" or "not read" no longer carry access dates (a test enforces it); both retention numbers stay locked and UNVERIFIED with a note.
+
+Stopped:
+14. The duplicate loader function stays: the manifest contract needs at least one `provides` artifact, and no artifact type fits pack data. A test pins the single shared ref. `country-pack-framework.md` was not edited (a later convention PR documents `evidence.json`).
+
+New open question: Q-559 (number assigned by the coordinator; Q-558 and Q-560 belong to #260 and #259).

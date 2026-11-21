@@ -8,7 +8,7 @@
   "status": "tested",
   "evidenceStatus": "unverified",
   "testOnly": false,
-  "notes": "Not for tenants: evidence unverified, no reviewer. Declarative metadata only, no tax, ledger or e-invoice maths (ADR-0031). Sources, access dates and evidence labels per fact, pending refs and the unreviewed Arabic labels (ADR-0033) are in evidence.json beside this file: the schema has no per-fact evidence field. No UAE chart, tax codes, invoice mode or e-invoicing component exists yet: those refs are pending. Payroll and WPS are off: out of v1 scope (CMP-015).",
+  "notes": "Not for tenants: evidence unverified, no reviewer. Declarative metadata only, no tax, ledger or e-invoice maths (ADR-0031). Sources, access dates and evidence labels per fact, pending refs and the unreviewed Arabic labels (ADR-0033) are in evidence.json beside this file: the schema has no per-fact evidence field. No UAE chart, tax codes, invoice mode or e-invoicing component exists yet: those refs are pending; e-invoicing blocks go-live. Payroll and WPS are off: out of v1 scope (CMP-015).",
   "name": {
     "ar": "حزمة الإمارات العربية المتحدة",
     "en": "United Arab Emirates country pack"
@@ -20,7 +20,7 @@
   },
   "tax": {
     "vatSupported": true,
-    "taxCodesRef": null,
+    "taxCodesRef": "pending:ae_vat_treatments",
     "filingPeriods": [
       "quarterly",
       "monthly"
@@ -31,9 +31,9 @@
   },
   "eInvoicing": {
     "required": false,
-    "mode": "pint_ae_via_asp",
+    "mode": "uae_e_invoicing",
     "authority": "UAE Ministry of Finance and Federal Tax Authority",
-    "componentId": null,
+    "componentId": "compliance.pint_ae",
     "mandatoryDocumentLanguages": [],
     "archiveRetentionYears": 5
   },
@@ -109,8 +109,7 @@
   "printFormats": {
     "legalLayoutPrecedence": true,
     "mandatoryLanguages": [
-      "ar",
-      "en"
+      "ar"
     ],
     "templates": [
       {

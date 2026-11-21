@@ -61,7 +61,21 @@ class ProductionGuardTable(unittest.TestCase):
             ChangeEngineAdapter(test_hooks=True, store=_FakeDurable())
         with _Env("dev"), self.assertRaises(StoreRefused):  # empty argument beats the variable
             ChangeEngineAdapter(test_hooks=True, environment="", store=_FakeDurable())
-        ChangeEngineAdapter(test_hooks=False, environment="production", store=_FakeDurable())  # hooks off is fine
+        ChangeEngineAdapter(environment="production", store=_FakeDurable(tenant_id="t_alpha"))
+
+    def test_production_refuses_unbound_production_grade_store(self):
+        for arg, var in (("production", None), ("", "dev"), (None, ""), (None, None)):
+            with self.subTest(environment=arg, environment_variable=var), _Env(var):
+                with self.assertRaisesRegex(StoreRefused, "tenant-bound"):
+                    ChangeEngineAdapter(environment=arg, store=_FakeDurable())
+
+    def test_production_accepts_bound_production_grade_store(self):
+        store = _FakeDurable(tenant_id="t_alpha")
+        self.assertIs(ChangeEngineAdapter(environment="production", store=store).store, store)
+
+    def test_test_environment_accepts_unbound_store(self):
+        store = _FakeDurable()
+        self.assertIs(ChangeEngineAdapter(environment="test", store=store).store, store)
 
     def test_reset_needs_hooks(self):
         a = ChangeEngineAdapter(test_hooks=False, environment="dev")
@@ -76,8 +90,8 @@ class _FakeDurable(SQLiteAdapterStore):
     """A durable, production-grade stand-in so the guard tests reach the hooks check."""
     production_grade = True
 
-    def __init__(self):
-        super().__init__(":memory:")
+    def __init__(self, tenant_id=None):
+        super().__init__(":memory:", tenant_id=tenant_id)
         self.volatile = False
 
 

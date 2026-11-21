@@ -16,6 +16,7 @@ An apply or rollback that dies, loses its lease, or cannot undo its own steps en
 1. Confirm nothing is running. In the tenant database both queries must return no row for the tenant (a running apply holds the lock; wait for its lease, 3900 s by default, to end and be recovered, never clear around it):
    `SELECT lock_id FROM adapter_sites WHERE tenant_id = :t AND lock_id IS NOT NULL;`
    `SELECT operation, idempotency_key FROM adapter_idempotency WHERE tenant_id = :t AND status = 'in_progress';`
+   A `BaseException` or a failed finalize transaction can leave the lock held until the lease expires, so let a healthy adapter recover the expired operation at startup, confirm both queries return no rows, and follow the remaining steps to clear `recovery_required`.
 2. Read what happened (read only): `SELECT state, applied_json FROM adapter_sites WHERE tenant_id = :t;`, the stored outcome of the failed key in `adapter_idempotency` (`outcome_json`: `stages`, `steps`, `error.stage`), the rows of `adapter_execution_journal` for the artifact (phase `execute` or `compensate`, per step), and the `adapter_events` rows for the tenant. This tells you which steps ran.
 3. Take the live configuration from the engine with `export_config` (read only) and its hash. Take the base revision (`applied_json`) and the artifact's target revision from the plan.
 4. Compare, and have the second person confirm. Exactly one case holds:

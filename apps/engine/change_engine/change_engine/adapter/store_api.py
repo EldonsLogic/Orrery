@@ -8,7 +8,7 @@ DEV_ENVIRONMENTS = {"dev", "development", "test"}
 
 
 class StoreRefused(RuntimeError):
-    """Raised at construction when production would run with test hooks, a volatile store or a non-production store."""
+    """Raised when production would run with test hooks or without a durable, production-grade, tenant-bound store."""
 
 
 @runtime_checkable
@@ -68,6 +68,7 @@ def is_production(test_hooks: bool, environment: str | None = None) -> bool:
 
 
 def assert_store_allowed(store: AdapterStore, production: bool) -> None:
+    """Require a durable store inside the tenant database boundary in production."""
     if not production:
         return
     if store.volatile:
@@ -80,3 +81,5 @@ def assert_store_allowed(store: AdapterStore, production: bool) -> None:
             "this adapter store is for dev and tests only: production keeps adapter state in the tenant MariaDB "
             "database, inside its backup and restore boundary (ADR-0041)"
         )
+    if getattr(store, "bound_tenant", None) is None:
+        raise StoreRefused("production requires a tenant-bound adapter store (ADR-0041)")

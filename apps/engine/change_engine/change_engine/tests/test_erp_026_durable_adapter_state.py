@@ -230,8 +230,9 @@ class MariaDBConformance(MariaDBBase, StoreConformance):
         self.assertIsNone(s.idem_get("t", "apply", "k"))
         self.assertEqual(s.events(), [])
 
-    def test_production_accepts_mariadb_store(self):
-        ChangeEngineAdapter(test_hooks=False, store=self.make_store())
+    def test_production_accepts_bound_mariadb_store(self):
+        store = MariaDBAdapterStore(self._connect(self.db), tenant_id="t_alpha")
+        self.assertIs(ChangeEngineAdapter(environment="production", store=store).store, store)
 
     @container_only
     def test_dump_and_restore_of_tenant_database_keeps_keys_and_effects_consistent(self):

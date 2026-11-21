@@ -72,7 +72,7 @@ entity, row or mapping field is accepted.
 Master keys include tenant and company in storage. Keep the same key field on
 subsequent uploads: switching a name-only record to a new code is a different
 business key and requires prior owner resolution, never an automatic merge.
-Duplicate master keys and duplicate opening details return `IMP-DUPLICATE`.
+Duplicate master keys and opening details that resolve to the same master key tuple return `IMP-DUPLICATE`.
 An opening batch may contain one trial-balance row per account, one AR row per
 customer, one AP row per supplier and one stock row per item and warehouse pair.
 Opening rows may state `posting_date` and `currency`; both must equal the batch context.

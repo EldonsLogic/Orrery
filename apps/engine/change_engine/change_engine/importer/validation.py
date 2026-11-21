@@ -203,10 +203,10 @@ def verify_upstream(datasets, meta):
 
 
 def master_context(rows, lookup):
-    """Resolve exact tenant/company master keys and capture approval/audit state.
+    """Resolve tenant/company masters, reject duplicate details, and capture audit state.
 
-    Codes take precedence over names. A reference must use the master's stable
-    business key. Account classifications come from masters, never detail labels.
+    Incoming and stored masters use the same stable business key. Account
+    classifications come from masters, never detail labels.
     """
     incoming = {entity: {business_key(entity, row): row for row in rows.get(entity, [])}
                 for entity in MASTER_FIELDS}
@@ -218,7 +218,9 @@ def master_context(rows, lookup):
             fail("IMP-REFERENCE")
     references = {}
     for entity, fields in OPENING_LINKS.items():
+        seen = set()
         for row in rows.get(entity, []):
+            resolved_keys = []
             for field, target in fields:
                 candidates = []
                 for key_field in KEYS[target]:
@@ -231,8 +233,14 @@ def master_context(rows, lookup):
                         references[canonical([target, key])] = master
                 if len(candidates) != 1:
                     fail("IMP-REFERENCE")
-                if entity == "TrialBalance" and candidates[0].get("account_type") != row["account_type"]:
+                master = candidates[0]
+                if entity == "TrialBalance" and master.get("account_type") != row["account_type"]:
                     fail("IMP-REFERENCE")
+                resolved_keys.append(business_key(target, master))
+            resolved_key = tuple(resolved_keys)
+            if resolved_key in seen:
+                fail("IMP-DUPLICATE")
+            seen.add(resolved_key)
     return changes, references
 
 
@@ -285,10 +293,6 @@ def prepare(source, max_rows, lookup):
             else:
                 if fields - row.keys():
                     fail()
-                key = tuple(row[field] for field, _ in OPENING_LINKS[entity])
-                if key in seen:
-                    fail("IMP-DUPLICATE")
-                seen.add(key)
                 for key in ("currency", "posting_date"):
                     if row.get(key, meta[key]) != meta[key]:
                         fail()

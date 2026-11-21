@@ -7,6 +7,7 @@ import pytest
 
 from services.discovery.prevalidate import PrevalidationError, prevalidate
 from change_engine.importer import ImportFailure, OpeningImporter, SQLiteImportBackend
+from change_engine.importer.validation import canonical
 from change_engine.tests.test_erp_013_opening_importer import apply, backend, batch, refuses
 
 
@@ -79,6 +80,51 @@ def test_duplicate_opening_detail_keys_are_rejected(backend, entity, field, firs
     datasets[entity].append(dict(row, **{field: second}))
     row[field] = first
     refuses(OpeningImporter(backend), forged_clean(batch(datasets)), "IMP-DUPLICATE")
+
+
+@pytest.mark.parametrize("entity,link,target,key_field,stored,value_field,first,second", [
+    ("AR", "customer", "Customer", "customer_code", "C1", "amount", "40", "60"),
+    ("Stock", "item_code", "Item", "item_code", "I1", "qty", "0.4", "0.6"),
+    ("Stock", "warehouse", "Warehouse", "warehouse_name", "W1", "qty", "0.4", "0.6"),
+])
+@pytest.mark.parametrize("variant", ["case", "whitespace", "alias"])
+def test_opening_details_reject_links_to_same_master(backend, monkeypatch, entity, link, target,
+                                                    key_field, stored, value_field, first, second, variant):
+    importer = OpeningImporter(backend)
+    datasets = opening_details()
+    apply(importer, batch({target: datasets[target]}, batch_id="existing-master"))
+    # The alias case also covers an incoming update and a backend lookup for the same master.
+    if variant == "alias":
+        update_field = {"Customer": "customer_name", "Item": "item_name", "Warehouse": "parent_warehouse"}[target]
+        datasets[target][0][update_field] = "Updated master"
+    else:
+        datasets.pop(target)
+    alternate = {"case": stored.lower(), "whitespace": f" {stored} ", "alias": "Legacy reference"}[variant]
+    master = backend.master
+    alternate_key = canonical([key_field, alternate])
+    stored_key = canonical([key_field, stored])
+
+    def resolve_alias(tenant, company, doctype, key):
+        if doctype == target and key == alternate_key:
+            key = stored_key
+        return master(tenant, company, doctype, key)
+
+    monkeypatch.setattr(backend, "master", resolve_alias)
+    row = datasets[entity][0]
+    row[value_field] = first
+    datasets[entity].append(dict(row, **{link: alternate, value_field: second}))
+    refuses(importer, forged_clean(batch(datasets)), "IMP-DUPLICATE")
+
+
+def test_stock_openings_allow_distinct_resolved_item_and_warehouse_pairs(backend):
+    datasets = opening_details()
+    datasets["Warehouse"].append({"warehouse_name": "w1 "})
+    datasets["Item"].append({"item_code": "Packaging"})
+    row = datasets["Stock"][0]
+    row["qty"] = "0.5"
+    datasets["Stock"].extend([dict(row, warehouse="w1 ", qty="0.25"),
+                              dict(row, item_code="Packaging", qty="0.25")])
+    assert OpeningImporter(backend).preview(batch(datasets))["ok"]
 
 
 def test_discovery_prevalidation_contract():

@@ -2,16 +2,23 @@
 
 Printed documents take every colour and the font from ``docs/brand/tokens/tokens.json`` (the
 generated token source, read-only here); nothing in the layout module is a literal. The file is
-read on first use, not at import: the engine app is also mounted where ``docs/`` does not exist
-(the dev bench), and the ERP-007 print hook must keep importing there. A missing or malformed file
-raises ``DocumentTokenError``, so a branded document is never rendered with invented values.
+read on first use, not at import, and a missing or malformed file raises ``DocumentTokenError``,
+so a branded document is never rendered with invented values.
 
-``BRAND_TOKENS_PATH`` names the file for deployments that ship it elsewhere (operator setting,
-never tenant input). Without it the file is found by walking up from this package to the repo root.
+Where the tokens come from, first match wins:
+
+1. ``BRAND_TOKENS_PATH`` (operator setting, never tenant input). When set it is the only source:
+   a missing file there refuses, it never falls back.
+2. ``docs/brand/tokens/tokens.json``, found by walking up from this package (the repository).
+3. ``brand_tokens_snapshot.json`` next to this module: a generated copy of only the values the
+   layout reads, for the engine bench, which mounts the app without ``docs/`` (round 6). A test
+   fails when it drifts from the token source; regenerate it with ``SNAPSHOT_COMMAND`` from the
+   repository root and never hand-edit it (ADR-0014).
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 import json
@@ -21,6 +28,11 @@ import re
 
 ENV_TOKENS_PATH = "BRAND_TOKENS_PATH"
 _RELATIVE = Path("docs") / "brand" / "tokens" / "tokens.json"
+SNAPSHOT_PATH = Path(__file__).with_name("brand_tokens_snapshot.json")
+SNAPSHOT_COMMAND = (
+    "PYTHONPATH=apps/engine/change_engine python3 -c \"from change_engine.print_formats."
+    "document_tokens import write_snapshot; write_snapshot()\""
+)
 _HEX_RE = re.compile(r"#[0-9a-fA-F]{6}")
 # One font name: words of letters, digits, "_" and "-", starting with a letter, single spaces
 # between words. That is a valid unquoted CSS family (or generic) name, so nothing can end a
@@ -85,20 +97,53 @@ def _font_names(family: object, fallback: object) -> list[str]:
     return names
 
 
+def snapshot_of(tokens: Mapping) -> dict:
+    """The part of the token source the layout reads, in the same shape (the packaged snapshot)."""
+    light = tokens["color"]["light"]
+    body = tokens["typography"]["families"]["body"]
+    return {
+        "_generated": (f"Generated from {_RELATIVE.as_posix()} by: {SNAPSHOT_COMMAND}. "
+                       "Never hand-edit (ADR-0014)."),
+        "color": {"light": {key: {"hex": light[key]["hex"]} for key in _COLOUR_KEYS}},
+        "typography": {"families": {"body": {"family": body["family"],
+                                             "fallback": body["fallback"]}}},
+    }
+
+
+def write_snapshot() -> Path:
+    """Regenerate ``brand_tokens_snapshot.json`` from the repository token source."""
+    source = next((path for path in _candidate_paths() if path.is_file()), None)
+    if source is None:
+        raise DocumentTokenError(f"{_RELATIVE.as_posix()} not found; run from the repository")
+    load_document_tokens(source)  # never snapshot a source the loader would refuse
+    tokens = json.loads(source.read_text(encoding="utf-8"))
+    SNAPSHOT_PATH.write_text(json.dumps(snapshot_of(tokens), indent=2, ensure_ascii=False) + "\n",
+                             encoding="utf-8")
+    return SNAPSHOT_PATH
+
+
 def _candidate_paths() -> list[Path]:
-    override = os.environ.get(ENV_TOKENS_PATH)
-    if override:
-        return [Path(override)]
     here = Path(__file__).resolve()
     return [parent / _RELATIVE for parent in here.parents]
 
 
-@lru_cache(maxsize=1)
-def document_tokens() -> DocumentTokens:
-    """The cached light-theme tokens; raises ``DocumentTokenError`` when the file is absent."""
+def _token_source() -> Path:
+    override = os.environ.get(ENV_TOKENS_PATH)
+    if override:
+        return Path(override)
     for path in _candidate_paths():
         if path.is_file():
-            return load_document_tokens(path)
-    raise DocumentTokenError(
-        f"brand token file not found (set {ENV_TOKENS_PATH} or run from the repository)"
-    )
+            return path
+    return SNAPSHOT_PATH
+
+
+@lru_cache(maxsize=1)
+def document_tokens() -> DocumentTokens:
+    """The cached light-theme tokens; raises ``DocumentTokenError`` when no source is readable."""
+    path = _token_source()
+    if not path.is_file():
+        raise DocumentTokenError(
+            f"brand token file not found at '{path}' (set {ENV_TOKENS_PATH} or run from the "
+            "repository)"
+        )
+    return load_document_tokens(path)

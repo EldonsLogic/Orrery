@@ -22,11 +22,12 @@ from .brand_tokens import (
     resolve_document_branding,
 )
 from .branded_documents import (
+    UaeTaxInvoiceModeUnavailable,
     render_branded_purchase_order_html,
     render_branded_quote_html,
     render_branded_tax_invoice_html,
 )
-from .document_labels import UNREVIEWED_ARABIC_LABELS
+from .document_labels import UNREVIEWED_ARABIC_LABELS, UnreviewedArabicLabelError
 from .document_layout import (
     LockedLayoutViolation,
     assert_locked_layout,
@@ -55,6 +56,8 @@ __all__ = [
     "ResolvedDocumentBranding",
     "SanitizedLogo",
     "UNREVIEWED_ARABIC_LABELS",
+    "UaeTaxInvoiceModeUnavailable",
+    "UnreviewedArabicLabelError",
     "assert_locked_layout",
     "contrast_ratio",
     "render_branded_purchase_order_html",

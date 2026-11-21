@@ -5,11 +5,31 @@ new in ERP-016. Their Arabic wording was drafted without a native-speaker review
 UNREVIEWED under ADR-0033 (a native Arabic speaker must review the document set before any
 customer sees it). Every key here is listed in ``UNREVIEWED_ARABIC_LABELS``; a reviewer removes a
 key from that set only after approving its wording.
+
+Renderers read every label through ``label_pair``. Outside dev and test (``CHANGE_ENGINE_ENV`` not
+``dev`` or ``test``; unset counts as production, as in ERP-027) a document that needs an
+unreviewed Arabic label is refused with ``UnreviewedArabicLabelError`` (round 6, fail closed).
 """
 
 from __future__ import annotations
 
+import os
+
 from .bilingual_tax_invoice import BILINGUAL_LABELS
+
+ENGINE_ENV_VAR = "CHANGE_ENGINE_ENV"
+REVIEW_EXEMPT_ENVS = frozenset({"dev", "test"})
+
+
+class UnreviewedArabicLabelError(RuntimeError):
+    """A document needs an Arabic label no native speaker has approved yet (ADR-0033)."""
+
+    code = "unreviewed_arabic_label"
+
+    def __init__(self, key: str) -> None:
+        super().__init__(f"{self.code}: label '{key}' needs a native Arabic review before it "
+                         "can print outside dev and test")
+        self.key = key
 
 DOCUMENT_LABELS: dict[str, tuple[str, str]] = {
     "quote_title": ("عرض سعر", "Quotation"),
@@ -44,6 +64,14 @@ if _overlap:  # pragma: no cover - import-time guard against silently shadowing 
     raise RuntimeError(f"ERP-016 labels shadow reviewed ERP-007 labels: {sorted(_overlap)}")
 
 ALL_LABELS: dict[str, tuple[str, str]] = {**BILINGUAL_LABELS, **DOCUMENT_LABELS}
+
+
+def label_pair(key: str) -> tuple[str, str]:
+    """(Arabic, English) for ``key``; refuses an unreviewed Arabic label outside dev and test."""
+    if key in UNREVIEWED_ARABIC_LABELS and \
+            os.environ.get(ENGINE_ENV_VAR, "").strip().lower() not in REVIEW_EXEMPT_ENVS:
+        raise UnreviewedArabicLabelError(key)
+    return ALL_LABELS[key]
 
 # Quote status -> (fixed status token, icon). Colour is never the only signal (rule 40).
 QUOTE_STATUSES: dict[str, tuple[str, str, str]] = {

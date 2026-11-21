@@ -31,7 +31,7 @@ from .bilingual_tax_invoice import (
     prepare_tax_invoice_view,
 )
 from .brand_tokens import ResolvedDocumentBranding, resolve_document_branding
-from .document_labels import ALL_LABELS, DOCUMENT_LABELS, QUOTE_STATUSES
+from .document_labels import DOCUMENT_LABELS, QUOTE_STATUSES, label_pair
 from .document_reconciliation import (
     CheckedAmounts,
     check_amounts,
@@ -44,11 +44,32 @@ from .document_layout import assert_locked_layout, render_document_shell, render
 
 _MAX_TERMS = 50
 _MAX_TERM_CHARS = 1000
+# Supplier country values and the currency that make a neutral invoice a UAE one (round 6).
+_UAE_COUNTRIES = frozenset({"AE", "ARE", "UNITED ARAB EMIRATES"})
+_UAE_CURRENCY = "AED"
+# ZATCA invoice type -> locked layout kind; anything else is refused.
+_ZATCA_KINDS = {"standard": "tax_invoice_zatca_sa_standard",
+                "simplified": "tax_invoice_zatca_sa_simplified"}
+
+
+class UaeTaxInvoiceModeUnavailable(ValueError):
+    """Neutral mode cannot print a UAE tax invoice; there is no UAE mode yet (Q-523).
+
+    UNVERIFIED: Cabinet Decision 52/2017 Art. 59(1) (https://tax.gov.ae/en/legislation.aspx,
+    accessed 2026-11-21) asks for the words "Tax Invoice", the supplier TRN (and the recipient's
+    when registered) and the tax in AED; the neutral layout guarantees none of them.
+    """
+
+    code = "uae_tax_invoice_mode_unavailable"
+
+    def __init__(self) -> None:
+        super().__init__(f"{self.code}: a UAE supplier or an AED invoice needs a UAE tax invoice "
+                         "mode, which does not exist yet")
 
 
 # ------------------------------------------------------------------ shared fragments
 def _pair(key: str) -> tuple[str, str]:
-    return ALL_LABELS[key]
+    return label_pair(key)
 
 
 def _bi(key: str, *, strong: bool = False) -> str:
@@ -195,14 +216,17 @@ def render_branded_tax_invoice_html(
     brand = resolve_document_branding(branding, entitlements=entitlements)
     # Snapshot once, check that copy, and print from the checked snapshot (its checked numeric
     # fields are the Decimal values the check used): the caller's objects are never read again.
+    snapshot = snapshot_document(invoice_data)
+    if mode == "neutral" and _is_uae_invoice(snapshot):
+        raise UaeTaxInvoiceModeUnavailable()
     errors: list[str] = []
-    checked = check_amounts(snapshot_document(invoice_data), errors, tax_invoice=True)
+    checked = check_amounts(snapshot, errors, tax_invoice=True)
     if errors or checked is None:
         raise ValueError("; ".join(errors))
     # ZATCA lists line and invoice discounts separately (UNVERIFIED, Q-520): in tax invoice mode
     # the invoice discount already spread into the lines is also shown on an informational row.
     included = (
-        (DOCUMENT_LABELS["invoice_discount_included"], checked.allocated)
+        (_pair("invoice_discount_included"), checked.allocated)
         if mode == "zatca_sa" and checked.allocated > 0 else None
     )
     view = prepare_tax_invoice_view(checked.document, mode, discount_row=checked.discount,
@@ -219,10 +243,12 @@ def render_branded_tax_invoice_html(
         view.meta_rows_html,
     )
     has_qr = bool(view.qr_html)
-    kind = (
-        "tax_invoice_zatca_sa" if mode == "zatca_sa"
-        else "tax_invoice_neutral_qr" if has_qr else "tax_invoice_neutral"
-    )
+    if mode == "zatca_sa":
+        kind = _ZATCA_KINDS.get(view.invoice_type)
+        if kind is None:
+            raise ValueError(f"Unsupported ZATCA invoice type '{view.invoice_type}'")
+    else:
+        kind = "tax_invoice_neutral_qr" if has_qr else "tax_invoice_neutral"
     body = (
         header
         + '<div class="parties-grid">'
@@ -244,6 +270,24 @@ def render_branded_tax_invoice_html(
         + _footer_region(brand, view.invoice_id)
     )
     return _shell(kind, (view.title_ar, view.title_en), view.invoice_id, brand, body)
+
+
+def _country(value: Any) -> str:
+    return value.strip().upper() if isinstance(value, str) else ""
+
+
+def _is_uae_invoice(data: Mapping[str, Any]) -> bool:
+    """True when the supplier is in the UAE or the invoice is in AED (any spelling we accept)."""
+    if _country(data.get("currency")) == _UAE_CURRENCY:
+        return True
+    seller = data.get("seller")
+    if not isinstance(seller, Mapping):
+        return False
+    address = seller.get("address")
+    countries = [seller.get("country_code"), seller.get("country")]
+    if isinstance(address, Mapping):
+        countries += [address.get("country_code"), address.get("country")]
+    return any(_country(value) in _UAE_COUNTRIES for value in countries)
 
 
 # ------------------------------------------------------------------ quote and purchase order
@@ -285,6 +329,10 @@ def _check_lines(data: Mapping[str, Any], errors: list[str]) -> None:
             continue
         if not str(line.get("description") or "").strip():
             errors.append(f"Line {idx}: description is required")
+        # A line without its rate would print 0% while the totals carry VAT (round 6).
+        rate = line.get("vat_rate")
+        if rate is None or (isinstance(rate, str) and not rate.strip()):
+            errors.append(f"Line {idx}: vat_rate is required")
         for field, minimum_exclusive in (("quantity", True), ("unit_price", False)):
             try:
                 number = _to_dec(line.get(field), f"Line {idx} {field}")
@@ -348,7 +396,7 @@ def _lines_region(lines: list[Mapping[str, Any]], checked: CheckedAmounts) -> st
             f'<td class="num-col">{_ltr(_fmt_qty(row.quantity))}</td>'
             f'<td class="num-col">{_ltr(format_unit_price(row.unit_price, places))}</td>'
             f'<td class="num-col">{_ltr(format_amount(row.shown_discount, places))}</td>'
-            f'<td class="num-col">{_ltr(_fmt_pct(row.vat_rate if row.vat_rate is not None else 0))}</td>'
+            f'<td class="num-col">{_ltr(_fmt_pct(row.vat_rate))}</td>'
             f'<td class="num-col">{_ltr(format_amount(row.amount, places))}</td>'
             "</tr>"
         )
@@ -505,6 +553,7 @@ def render_branded_purchase_order_html(
 
 __all__ = [
     "DOCUMENT_LABELS",
+    "UaeTaxInvoiceModeUnavailable",
     "render_branded_purchase_order_html",
     "render_branded_quote_html",
     "render_branded_tax_invoice_html",

@@ -290,13 +290,16 @@ class _Spec:
     labels: dict[str, tuple[str, ...]]
 
 
-def _tax_spec(zatca: bool, qr: bool) -> _Spec:
+def _tax_spec(zatca: bool, qr: bool, standard: bool = False) -> _Spec:
+    """ZATCA mode also needs the issue time; a standard (B2B) invoice the buyer's VAT number and
+    address (round 6, UNVERIFIED against the ZATCA rules)."""
     regions = ("header", "seller", "buyer", "lines", "totals") + (("qr",) if qr else ()) + (
         "footer",)
     labels = {
-        "header": _ar("invoice_number", "issue_date", "currency"),
+        "header": _ar("invoice_number", "issue_date", "currency")
+        + (_ar("issue_time") if zatca else ()),
         "seller": _ar("seller") + (_ar("vat_number") if zatca else ()),
-        "buyer": _ar("customer"),
+        "buyer": _ar("customer") + (_ar("vat_number", "address") if standard else ()),
         "lines": _ar(*_LINE_LABELS, "vat_category"),
         "totals": _ar(*_TOTAL_LABELS),
     }
@@ -306,7 +309,8 @@ def _tax_spec(zatca: bool, qr: bool) -> _Spec:
 
 
 DOCUMENT_KINDS: dict[str, _Spec] = {
-    "tax_invoice_zatca_sa": _tax_spec(True, True),
+    "tax_invoice_zatca_sa_standard": _tax_spec(True, True, standard=True),
+    "tax_invoice_zatca_sa_simplified": _tax_spec(True, True),
     "tax_invoice_neutral": _tax_spec(False, False),
     "tax_invoice_neutral_qr": _tax_spec(False, True),
     "quote": _Spec(

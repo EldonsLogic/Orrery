@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import struct
 import tempfile
@@ -39,6 +40,18 @@ from change_engine.print_formats import (
     verify_locked_layout,
 )
 from change_engine.print_formats.document_layout import PRINT_SURFACES, STATUS_TOKENS
+
+# Unreviewed Arabic labels render only in dev and test (ADR-0033, round 6); the suite runs as test.
+_ENV_PATCH = mock.patch.dict(os.environ, {"CHANGE_ENGINE_ENV": "test"})
+
+
+def setUpModule():
+    _ENV_PATCH.start()
+
+
+def tearDownModule():
+    _ENV_PATCH.stop()
+
 
 SVG_NS = 'xmlns="http://www.w3.org/2000/svg"'
 GOOD_SVG = (
@@ -244,7 +257,7 @@ def _render(kind: str, **kwargs) -> str:
 
 
 LAYOUT_KIND = {
-    "tax": "tax_invoice_zatca_sa", "neutral": "tax_invoice_neutral",
+    "tax": "tax_invoice_zatca_sa_standard", "neutral": "tax_invoice_neutral",
     "quote": "quote", "po": "purchase_order",
 }
 ALL_KINDS = tuple(LAYOUT_KIND)
@@ -749,14 +762,14 @@ class TestBrandedTaxInvoice(unittest.TestCase):
         doc = render_branded_tax_invoice_html(data, mode="zatca_sa")
         self.assertIn("إشعار دائن ضريبي", doc)
         self.assertIn('<bdi dir="ltr">INV-2026-0001</bdi>', doc)
-        self.assertEqual(verify_locked_layout(doc, "tax_invoice_zatca_sa"), [])
+        self.assertEqual(verify_locked_layout(doc, "tax_invoice_zatca_sa_standard"), [])
 
 
 # --------------------------------------------------------------------------------------
 # Compliance lock: tamper attempts against rendered output must be detected
 # --------------------------------------------------------------------------------------
 class TestComplianceLockTamper(unittest.TestCase):
-    KIND = "tax_invoice_zatca_sa"
+    KIND = "tax_invoice_zatca_sa_standard"
 
     def setUp(self) -> None:
         self.doc = render_branded_tax_invoice_html(_tax_invoice_data(), mode="zatca_sa",
@@ -838,11 +851,11 @@ class TestComplianceLockTamper(unittest.TestCase):
 
     def test_wrong_kind_downgrade_does_not_hide_missing_qr(self):
         no_qr = self.doc.replace('data-locked-region="qr"', 'data-x="1"')
-        self.assertTrue(verify_locked_layout(no_qr, "tax_invoice_zatca_sa"))
+        self.assertTrue(verify_locked_layout(no_qr, "tax_invoice_zatca_sa_standard"))
         # A neutral document is not a ZATCA one: claiming ZATCA mode must still need the QR,
         # and the document-kind marker in the page must match what the caller expects.
         neutral = render_branded_tax_invoice_html(_neutral_invoice_data(), mode="neutral")
-        self.assertTrue(verify_locked_layout(neutral, "tax_invoice_zatca_sa"))
+        self.assertTrue(verify_locked_layout(neutral, "tax_invoice_zatca_sa_standard"))
 
     def test_quote_and_po_locks_also_detect_tampering(self):
         quote = render_branded_quote_html(_quote_data())
@@ -1105,7 +1118,8 @@ class TestLayoutReadsTokenSource(unittest.TestCase):
         from change_engine.print_formats import document_tokens
         from change_engine.print_formats.document_tokens import DocumentTokenError
 
-        with mock.patch.object(document_tokens, "_candidate_paths", return_value=[]):
+        with mock.patch.object(document_tokens, "_candidate_paths", return_value=[]), \
+                mock.patch.object(document_tokens, "SNAPSHOT_PATH", Path("/nonexistent/x.json")):
             document_tokens.document_tokens.cache_clear()
             try:
                 with self.assertRaises(DocumentTokenError):
@@ -2509,6 +2523,240 @@ class TestAdapterFollowsTheEngineDiscounts(unittest.TestCase):
         payload, _ = sales_invoice_to_zatca_dict(inv, frappe_module=env)
         with self.assertRaisesRegex(ValueError, r"is_cash_or_non_trade_discount"):
             render_branded_tax_invoice_html(payload, mode="zatca_sa")
+
+
+
+# --------------------------------------------------------------------------------------
+# Round 6 (review of 50897f8): packaged token snapshot, no neutral UAE tax invoice, vat_rate
+# required on quote and PO lines, stricter ZATCA verifier, unreviewed Arabic guard.
+# --------------------------------------------------------------------------------------
+class _FreshTokenCaches:
+    """Clear the token and stylesheet caches on entry and exit (the loader caches its source)."""
+
+    def __enter__(self):
+        self._clear()
+        return self
+
+    def __exit__(self, *exc):
+        self._clear()
+        return False
+
+    @staticmethod
+    def _clear():
+        from change_engine.print_formats import document_layout, document_tokens
+
+        document_tokens.document_tokens.cache_clear()
+        document_layout.locked_document_css.cache_clear()
+
+
+class TestPackagedTokenSnapshot(unittest.TestCase):
+    def test_snapshot_matches_the_token_source(self):
+        from change_engine.print_formats import document_tokens as dt
+
+        snapshot = json.loads(dt.SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(
+            snapshot, dt.snapshot_of(_light_tokens()),
+            f"{dt.SNAPSHOT_PATH.name} drifted from docs/brand/tokens/tokens.json; "
+            f"regenerate with: {dt.SNAPSHOT_COMMAND}",
+        )
+        self.assertEqual(dt.load_document_tokens(dt.SNAPSHOT_PATH),
+                         dt.load_document_tokens(_TOKENS_JSON))
+
+    def test_snapshot_holds_only_the_values_the_layout_reads(self):
+        from change_engine.print_formats import document_tokens as dt
+
+        snapshot = json.loads(dt.SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(set(snapshot), {"_generated", "color", "typography"})
+        self.assertEqual(set(snapshot["color"]), {"light"})
+        self.assertEqual(set(snapshot["color"]["light"]), set(dt._COLOUR_KEYS))
+        for entry in snapshot["color"]["light"].values():
+            self.assertEqual(set(entry), {"hex"})
+        self.assertEqual(set(snapshot["typography"]), {"families"})
+        self.assertEqual(set(snapshot["typography"]["families"]), {"body"})
+        self.assertEqual(set(snapshot["typography"]["families"]["body"]), {"family", "fallback"})
+
+    def test_bench_without_the_repo_file_renders_from_the_snapshot(self):
+        from change_engine.print_formats import document_tokens as dt
+
+        expected = {kind: _render(kind) for kind in ALL_KINDS}
+        env = {k: v for k, v in os.environ.items() if k != dt.ENV_TOKENS_PATH}
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(dt, "_candidate_paths", return_value=[]), _FreshTokenCaches():
+            for kind in ALL_KINDS:
+                with self.subTest(kind):
+                    self.assertEqual(_render(kind), expected[kind])
+
+    def test_an_operator_path_never_falls_back_to_the_snapshot(self):
+        from change_engine.print_formats import document_tokens as dt
+
+        with mock.patch.dict(os.environ, {dt.ENV_TOKENS_PATH: "/nonexistent/tokens.json"}), \
+                _FreshTokenCaches():
+            with self.assertRaises(dt.DocumentTokenError):
+                _render("quote")
+
+    def test_the_repo_file_wins_over_the_snapshot(self):
+        from change_engine.print_formats import document_tokens as dt
+
+        with mock.patch.object(dt, "SNAPSHOT_PATH", Path("/nonexistent/x.json")), \
+                _FreshTokenCaches():
+            self.assertEqual(dt._token_source(), _TOKENS_JSON)
+            self.assertTrue(_render("quote"))
+
+
+def _uae_variants():
+    aed = _neutral_invoice_data()
+    aed["currency"] = "AED"
+    ae_address = _neutral_invoice_data()
+    ae_address["seller"]["address"] = {"street": "Sheikh Zayed Road", "city": "Dubai",
+                                       "country_code": " ae "}
+    ae_top = _neutral_invoice_data()
+    ae_top["seller"]["country_code"] = "AE"
+    ae_name = _neutral_invoice_data()
+    ae_name["seller"]["address"] = {"city": "Dubai", "country_code": "United Arab Emirates"}
+    aed_lower = _neutral_invoice_data()
+    aed_lower["currency"] = "aed"
+    return {"aed": aed, "ae_address": ae_address, "ae_top": ae_top, "ae_name": ae_name,
+            "aed_lower": aed_lower}
+
+
+class TestNeutralModeIsNeverAUaeTaxInvoice(unittest.TestCase):
+    # UNVERIFIED: Cabinet Decision 52/2017 Art. 59(1) (https://tax.gov.ae/en/legislation.aspx,
+    # accessed 2026-11-21) needs "Tax Invoice", supplier TRN and tax in AED; neutral mode prints
+    # none of that, so it is refused until a UAE mode exists (Q-523).
+    def test_uae_supplier_or_aed_is_refused_with_a_stable_error(self):
+        from change_engine.print_formats.branded_documents import UaeTaxInvoiceModeUnavailable
+
+        for name, data in _uae_variants().items():
+            with self.subTest(name), self.assertRaises(UaeTaxInvoiceModeUnavailable) as caught:
+                render_branded_tax_invoice_html(data, mode="neutral", branding=TENANT_BRANDING)
+            self.assertEqual(caught.exception.code, "uae_tax_invoice_mode_unavailable")
+            self.assertIn("uae_tax_invoice_mode_unavailable", str(caught.exception))
+
+    def test_other_neutral_invoices_still_render(self):
+        doc = render_branded_tax_invoice_html(_neutral_invoice_data(), mode="neutral")
+        self.assertEqual(verify_locked_layout(doc, "tax_invoice_neutral"), [])
+
+    def test_zatca_mode_is_unaffected(self):
+        self.assertTrue(_render("tax"))
+
+
+class TestCommercialLinesNeedAVatRate(unittest.TestCase):
+    def test_quote_and_po_line_without_vat_rate_is_refused(self):
+        for kind, make, render in (("quote", _quote_data, render_branded_quote_html),
+                                   ("po", _po_data, render_branded_purchase_order_html)):
+            for missing in ("drop", None, "", "  "):
+                data = make()
+                if missing == "drop":
+                    data["lines"][0].pop("vat_rate")
+                else:
+                    data["lines"][0]["vat_rate"] = missing
+                with self.subTest(kind=kind, vat_rate=missing), \
+                        self.assertRaisesRegex(ValueError, "Line 1: vat_rate is required"):
+                    render(data)
+
+    def test_zero_rated_line_still_prints_zero(self):
+        data = _quote_data()
+        data["lines"][0]["vat_rate"] = "0"
+        data["totals"] = {"total_taxable_amount": "200.00", "total_vat_amount": "0.00",
+                          "grand_total": "200.00"}
+        self.assertIn('<bdi dir="ltr">0%</bdi>', render_branded_quote_html(data))
+
+
+def _simplified_invoice_data() -> dict:
+    data = _tax_invoice_data()
+    data.update(invoice_type="simplified", transaction_type="simplified_tax_invoice")
+    data.pop("buyer")
+    return data
+
+
+def _region_text(doc: str, region: str) -> tuple[str, str, str]:
+    """(before, region markup up to the next locked region, after)."""
+    start = doc.index(f'data-locked-region="{region}"')
+    end = doc.index('data-locked-region="', start + 1)
+    return doc[:start], doc[start:end], doc[end:]
+
+
+class TestStricterZatcaVerifier(unittest.TestCase):
+    STANDARD = "tax_invoice_zatca_sa_standard"
+    SIMPLIFIED = "tax_invoice_zatca_sa_simplified"
+
+    def test_standard_and_simplified_render_as_their_own_kinds(self):
+        standard = _render("tax")
+        simplified = render_branded_tax_invoice_html(_simplified_invoice_data(), mode="zatca_sa")
+        self.assertIn(f'data-document-kind="{self.STANDARD}"', standard)
+        self.assertIn(f'data-document-kind="{self.SIMPLIFIED}"', simplified)
+        self.assertEqual(verify_locked_layout(standard, self.STANDARD), [])
+        self.assertEqual(verify_locked_layout(simplified, self.SIMPLIFIED), [])
+        # A simplified page is never accepted as a standard (B2B) one.
+        self.assertTrue(verify_locked_layout(simplified, self.STANDARD))
+
+    def test_issue_time_label_is_required_in_zatca_mode(self):
+        label = BILINGUAL_LABELS["issue_time"][0]
+        for kind, doc in ((self.STANDARD, _render("tax")),
+                          (self.SIMPLIFIED, render_branded_tax_invoice_html(
+                              _simplified_invoice_data(), mode="zatca_sa"))):
+            before, header, after = _region_text(doc, "header")
+            self.assertIn(label, header)
+            problems = verify_locked_layout(before + header.replace(label, "-") + after, kind)
+            with self.subTest(kind):
+                self.assertIn(f"region 'header' lacks the mandatory Arabic label '{label}'",
+                              problems)
+
+    def test_standard_invoice_requires_buyer_vat_number_and_address_labels(self):
+        doc = _render("tax")
+        for key in ("vat_number", "address"):
+            label = BILINGUAL_LABELS[key][0]
+            before, buyer, after = _region_text(doc, "buyer")
+            self.assertIn(label, buyer)
+            problems = verify_locked_layout(before + buyer.replace(label, "-") + after,
+                                            self.STANDARD)
+            with self.subTest(key):
+                self.assertIn(f"region 'buyer' lacks the mandatory Arabic label '{label}'",
+                              problems)
+
+    def test_standard_invoice_without_buyer_vat_number_is_refused(self):
+        # UNVERIFIED (ZATCA detail): fail closed until compliance confirms the non-registered
+        # B2B buyer case.
+        data = _tax_invoice_data()
+        data["buyer"].pop("vat_number")
+        with self.assertRaises(LockedLayoutViolation):
+            render_branded_tax_invoice_html(data, mode="zatca_sa")
+
+    def test_the_old_ambiguous_kind_is_gone(self):
+        with self.assertRaises(ValueError):
+            verify_locked_layout(_render("tax"), "tax_invoice_zatca_sa")
+
+
+class TestUnreviewedArabicGuard(unittest.TestCase):
+    def _env(self, value):
+        env = {k: v for k, v in os.environ.items() if k != "CHANGE_ENGINE_ENV"}
+        if value is not None:
+            env["CHANGE_ENGINE_ENV"] = value
+        return mock.patch.dict(os.environ, env, clear=True)
+
+    def test_outside_dev_and_test_a_document_with_unreviewed_arabic_is_refused(self):
+        from change_engine.print_formats.document_labels import UnreviewedArabicLabelError
+
+        for value in (None, "", "production", "staging", "Prod", "development"):
+            for kind in ALL_KINDS:
+                with self.subTest(env=value, kind=kind), self._env(value), \
+                        self.assertRaises(UnreviewedArabicLabelError) as caught:
+                    _render(kind)
+                self.assertEqual(caught.exception.code, "unreviewed_arabic_label")
+
+    def test_dev_and_test_render(self):
+        for value in ("dev", "test", " TEST "):
+            for kind in ALL_KINDS:
+                with self.subTest(env=value, kind=kind), self._env(value):
+                    self.assertTrue(_render(kind))
+
+    def test_an_invoice_that_uses_only_reviewed_labels_renders_everywhere(self):
+        entitled = {"branding": {"show_powered_by": False},
+                    "entitlements": {ENTITLEMENT_REMOVE_POWERED_BY: True}}
+        with self._env("production"):
+            doc = render_branded_tax_invoice_html(_tax_invoice_data(), mode="zatca_sa",
+                                                  **entitled)
+        self.assertEqual(verify_locked_layout(doc, "tax_invoice_zatca_sa_standard"), [])
 
 
 if __name__ == "__main__":

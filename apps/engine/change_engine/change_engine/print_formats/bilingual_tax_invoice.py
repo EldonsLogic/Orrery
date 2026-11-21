@@ -468,6 +468,7 @@ class TaxInvoiceView:
     seller_card: str
     buyer_card: str
     thead_cells: str
+    invoice_type: str = ""  # "standard" or "simplified" in ZATCA mode (ERP-016 verifier kind)
 
 
 def prepare_tax_invoice_view(invoice_data: Mapping[str, Any], mode: str, *,
@@ -763,6 +764,7 @@ def prepare_tax_invoice_view(invoice_data: Mapping[str, Any], mode: str, *,
         seller_card=seller_card,
         buyer_card=buyer_card,
         thead_cells=thead_cells,
+        invoice_type=invoice_type,
     )
 
 

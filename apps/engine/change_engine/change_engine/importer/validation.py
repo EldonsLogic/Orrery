@@ -134,11 +134,17 @@ def text(value, *, allow_format_marks: bool = False):
             fail("IMP-SCHEMA")
         elif unicodedata.category(ch) in {"Cf", "Cc"}:
             fail("IMP-FORMULA")
-    if not allow_format_marks:
-        if (value != value.strip()
-                or any((ch.isspace() and ch != " ") or _is_default_ignorable(ch) for ch in value)
-                or unicodedata.normalize("NFKC", value) != value):
+    if (value != value.strip()
+            or any((ch.isspace() and ch != " ")
+                   or (ch not in SAFE_FORMAT_MARKS and _is_default_ignorable(ch))
+                   for ch in value)):
+        fail("IMP-SCHEMA")
+    if allow_format_marks:
+        stripped = "".join(ch for ch in value if ch not in SAFE_FORMAT_MARKS)
+        if stripped != stripped.strip() or "  " in stripped:
             fail("IMP-SCHEMA")
+    elif unicodedata.normalize("NFKC", value) != value:
+        fail("IMP-SCHEMA")
     return value
 
 

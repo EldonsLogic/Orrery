@@ -65,8 +65,11 @@ entity, row or mapping field is accepted.
    prior-record updates** and record a sanitized failed attempt with the
    authenticated user ID. The offline failure log is append-only per tenant and
    has no retention cap. Older records without an actor keep a null user ID.
-   Rollback or failure-log errors require recovery (`IMP-RECOVERY`). Auth and
-   initial validation refusals do not write a failure record.
+   Rollback or failure-log errors require recovery (`IMP-RECOVERY`). Initial
+   entry auth and validation refusals do not write a failure record; `IMP-AUTH`
+   raised during `apply` or `confirm` after initial authorization is written to
+   the append-only failure log with the authenticated user ID (no secrets or
+   caller-supplied roles).
 
 ## Entities and invariants
 
@@ -133,7 +136,10 @@ NFKC detection-only normalization and leading Unicode whitespace/format/control
 removal. Embedded tabs, newlines and carriage returns fail with `IMP-SCHEMA`.
 Standard Arabic directional and joining marks (`\u200c`, `\u200d`, `\u200e`,
 `\u200f`, `\u061c`) are allowed only in name and free-text fields (and stripped
-when computing name-based master business keys). Codes, account numbers,
+when computing name-based master business keys). Name fields also refuse
+leading or trailing whitespace, any non-ASCII whitespace, any Unicode
+default-ignorable code point other than those five marks, and runs of internal
+ASCII spaces (`IMP-SCHEMA`; refuse, never repair). Codes, account numbers,
 `warehouse_name`, link fields (including `customer_group`, `territory`,
 `supplier_group`, `item_group`, `stock_uom`, `parent_warehouse`,
 `parent_account` and opening detail links) and batch metadata (`tenant_id`,
@@ -141,7 +147,9 @@ when computing name-based master business keys). Codes, account numbers,
 as leading or trailing whitespace, any non-ASCII whitespace, any Unicode
 default-ignorable code point, and any value that changes under `NFKC`
 normalization (`IMP-SCHEMA`); it is UNVERIFIED whether the live engine strips
-whitespace on insert. Any other `Cf` or `Cc` character anywhere in text is
+whitespace on insert, and Q-556 tracks UNVERIFIED live engine collation
+behavior for visible code twins (`C1`/`c1`, `X Y`/`X  Y`, Arabic-Indic vs
+ASCII digits). Any other `Cf` or `Cc` character anywhere in text is
 rejected (`IMP-FORMULA`). Accepted source spelling is unchanged. Numeric fields
 follow their stricter decimal grammar.
 

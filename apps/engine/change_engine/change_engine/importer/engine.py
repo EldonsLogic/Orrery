@@ -37,7 +37,7 @@ class OpeningImporter:
             raise ImportFailure("IMP-AUTH") from None
 
     def _record_failure(self, tenant: str, batch_id: str, plan_hash: str | None, code: str, user_id: str) -> None:
-        if code not in {"IMP-AUTH", "IMP-REFERENCE", "IMP-SCHEMA", "IMP-REPORT"}:
+        if code not in {"IMP-REFERENCE", "IMP-SCHEMA", "IMP-REPORT"}:
             recorded_hash = plan_hash if isinstance(plan_hash, str) and re.fullmatch(r"[0-9a-f]{64}", plan_hash) else ""
             try:
                 self.backend.record_failure(tenant, batch_id, recorded_hash, code, user_id=user_id)
@@ -102,7 +102,7 @@ class OpeningImporter:
                 plan_hash: str | None = None) -> dict:
         """Verify and server-record owner distinct confirmation for flagged name groups."""
         identity = self._authorize(source, required_capability="opening_import_confirm")
-        tenant = source["tenant_id"]
+        tenant = identity["tenant_id"]
         try:
             batch_id = text(source.get("batch_id"))
         except ImportFailure:
@@ -142,10 +142,10 @@ class OpeningImporter:
         identity = self._authorize(source)
         # Detach caller-owned data before entering the transactional boundary.
         initial, _ = self._prepare(source)
-        source = copy.deepcopy(source)
-        identity = self._authorize(source)
-        tenant, batch_id = source["tenant_id"], source["batch_id"]
+        tenant, batch_id = initial["tenant_id"], initial["batch_id"]
         try:
+            source = copy.deepcopy(source)
+            identity = self._authorize(source)
             if (confirmed_by != identity["user_id"] or not isinstance(plan_hash, str)
                     or not re.fullmatch(r"[0-9a-f]{64}", plan_hash)):
                 raise ImportFailure("IMP-CONFIRM")

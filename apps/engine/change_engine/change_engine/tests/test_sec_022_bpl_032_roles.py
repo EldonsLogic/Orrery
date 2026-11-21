@@ -667,6 +667,82 @@ class TestSec022GrantAllowlist(_Base):
         self.assertTrue(applied["ok"], applied)
         self.assertEqual(applied["result"]["status"], "applied", applied)
 
+    def test_plan_fails_closed_when_backend_lacks_can_grant_own_doctype(self) -> None:
+        """Review follow-up 4: a backend without can_grant_own_doctype defaults to False at plan time, refusing
+        unmapped Blueprint entity grants with protected_subject while still allowing reviewed mapped entities."""
+        from types import SimpleNamespace
+        from change_engine.adapter import ChangeEngineAdapter
+        from change_engine.adapter import contracts_support as cs
+
+        def ctx() -> dict:
+            return {"contractVersion": "0.1.2", "requestId": "01J00000000000000000000024", "correlationId": "corr_sec022_nochecker",
+                    "tenantId": TENANT, "caller": {"service": "control_plane", "onBehalfOf": {"kind": "user", "id": "usr_owner"}},
+                    "deadlineMs": 120000}
+
+        steps = [
+            {"seq": 1, "phase": 4, "kind": "entity.add", "subject": {"kind": "entity", "id": "widget", "parents": []},
+             "pointer": "/entities/widget", "impact": "data_shape", "ddlImpact": "additive", "reversible": True,
+             "params": {"definition": {"id": "widget", "labels": {"en": "Widget", "ar": "Widget"}, "fields": []}},
+             "sourceOps": ["/entities/widget"]},
+            {"seq": 2, "phase": 7, "kind": "role.upsert", "subject": {"kind": "role", "id": "r_cust", "parents": []},
+             "pointer": "/roles/r_cust", "impact": "access", "ddlImpact": "none", "reversible": True,
+             "params": {"definition": role("r_cust", [grant("customer", "read")])}, "sourceOps": ["/roles/r_cust"]},
+            {"seq": 3, "phase": 7, "kind": "role.upsert", "subject": {"kind": "role", "id": "r_wid", "parents": []},
+             "pointer": "/roles/r_wid", "impact": "access", "ddlImpact": "none", "reversible": True,
+             "params": {"definition": role("r_wid", [grant("widget", "read")])}, "sourceOps": ["/roles/r_wid"]},
+        ]
+        counts = dict.fromkeys(("cosmetic", "config", "data_shape", "destructive", "compliance", "access", "branding"), 0)
+        counts.update(data_shape=1, access=2)
+        art = {"artifactSchema": "0.1.0", "kind": "forward", "compiler": {"name": "bpl-compiler", "version": "0.1.0"},
+               "blueprint": {"id": "bp-nochecker", "base": None, "target": {"hash": "sha256:" + "4" * 64, "revision": 1}, "diffHash": None},
+               "engineTarget": {"adapter": "frappe", "versionSet": "set-example"}, "components": [], "steps": steps,
+               "skippedOps": [], "postConditions": [],
+               "risk": {"counts": counts, "total": 3, "maxImpact": "access", "needsDdlPlanGate": True,
+                        "touchesCompliance": False, "touchesAccess": True, "touchesLedgerOrTax": False,
+                        "requiresTeamReview": False, "irreversibleSteps": 0},
+               "inverse": None}
+        digest, art_id = cs.artifact_hashes(art)
+        art.update(artifactId=art_id, integrity={"algorithm": "sha256-canonical-json-v1", "contentHash": digest, "signature": None})
+
+        bare_backend = SimpleNamespace(
+            provision_tenant_site=lambda *a, **k: None,
+            persist_site_state=lambda *a, **k: None,
+            load_site_state=lambda *a, **k: None,
+            inspect_step_plan=lambda *a, **k: None,
+        )
+        for backend in (None, bare_backend):
+            with self.subTest(has_backend=backend is not None):
+                adapter = ChangeEngineAdapter(test_hooks=False, environment="test", frappe_backend=backend)
+                prov = adapter.call("provision_site", ctx(), {
+                    "idempotencyKey": "idemp_sec022_nochecker_prov", "engineTarget": art["engineTarget"],
+                    "blueprintId": "bp-nochecker", "siteClass": "sandbox", "countryPack": "sa",
+                })
+                self.assertTrue(prov["ok"], prov)
+                planned = adapter.call("plan", ctx(), {"artifact": art})
+                self.assertTrue(planned["ok"], planned)
+                got = {s["seq"]: (s["disposition"], s.get("reasonCode")) for s in planned["result"]["steps"]}
+                self.assertEqual(got[2], ("gated", "protected_subject"))
+                self.assertEqual(got[3], ("blocked", "protected_subject"))
+                self.assertEqual(planned["result"]["verdict"], "rejected")
+
+    def test_trailing_newline_in_doctype_name_is_refused_everywhere(self) -> None:
+        """Review follow-up 5: _SAFE_SQL_IDENT_RE uses fullmatch so a trailing newline ('Widget\\n' from 'widget\\n')
+        is refused in can_grant_own_doctype, _grant_doctype, and data_probe even if a custom DocType row exists."""
+        from change_engine.adapter.frappe_backend import _SAFE_SQL_IDENT_RE
+        from change_engine.adapter.mapping import entity_to_doctype
+
+        self.assertEqual(entity_to_doctype("widget\n"), "Widget\n")
+        self.assertIsNone(_SAFE_SQL_IDENT_RE.fullmatch("Widget\n"))
+        self.engine.add_doctype("Widget", module="Custom", custom=1)
+        self.engine.add_doctype("Widget\n", module="Custom", custom=1)
+
+        self.assertFalse(self.backend.can_grant_own_doctype(TENANT, "widget\n"))
+        self.refused(lambda: self.upsert(role("clerk", [grant("widget\n", "read")])))
+        self.assertNotIn("bp-clerk", self.roles())
+        with self.assertRaises(FrappeBackendError) as err:
+            self.backend.data_probe(TENANT, "/entities/widget\n/fields/cost")
+        self.assertEqual(err.exception.code, "invalid_request")
+
 
 class TestSec022StepInputs(_Base):
     """Review round 1: ids agree, report and workflow roles are validated before any write, no fail-open defaults."""

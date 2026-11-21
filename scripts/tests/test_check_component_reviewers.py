@@ -102,3 +102,20 @@ def test_non_string_level_fails_closed_without_crashing():
         data = manifest()
         data["certification"]["level"] = level
         assert c.check_manifest(data, "m"), level
+
+
+def test_eldon_review_bypass_cases_fail_closed():
+    # Eldon's review of e7995c6: BOM, a zero-width space mid-login, a Cyrillic lookalike and "/".
+    for bad in ["﻿sayegh9", "say​egh9", "sаyegh9", "sayegh9/"]:
+        out = c.check_manifest(manifest(reviewed_by=["eldonslogic", bad]), "m")
+        assert out and any("not a valid GitHub login" in p for p in out), repr(bad)
+
+
+def test_owner_among_several_reviewers_fails():
+    out = c.check_manifest(manifest(reviewed_by=["eldonslogic", "other", "SAYEGH9"]), "m")
+    assert len(out) == 1 and "owner.github" in out[0]
+
+
+def test_missing_components_folder_fails_closed(tmp_path, capsys):
+    assert c.run(tmp_path) == 1
+    assert "components" in capsys.readouterr().out

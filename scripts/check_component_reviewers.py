@@ -71,6 +71,9 @@ def check_manifest(data, label):
 
 def run(root=ROOT):
     root = Path(root)
+    if not (root / "components").is_dir():
+        print("FAILED: no components/ folder found; nothing to check (fail closed).")
+        return 1
     manifests = sorted((root / "components").glob("**/manifest.json"))
     problems = []
     for path in manifests:

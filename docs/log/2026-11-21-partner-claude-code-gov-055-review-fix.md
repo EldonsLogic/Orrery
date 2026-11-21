@@ -25,3 +25,9 @@ Unknown.
 
 ## Next step
 Eldon's Tier 2 review of #254.
+
+## Eldon's review of e7995c6 (Sonnet 5.5, for Eldon)
+- **High:** zero-width characters, a BOM, a Cyrillic lookalike and `/` bypassed the gate. The login charset check in 7347392 already closes it. His four cases are now explicit tests.
+- **Low 2:** added a test where the owner is one of several reviewers.
+- **Low 3:** a missing `components/` folder now fails closed (exit 1) instead of printing "OK: 0". It has a test.
+- **Tests:** before the folder fix, 1 failed and 13 passed. After it, `scripts/tests` passes 36, plus 29 subtests. The check still passes on main's 4 manifests.

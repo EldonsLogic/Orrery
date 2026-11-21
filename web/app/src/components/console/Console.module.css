@@ -1,5 +1,6 @@
 .root {
   min-block-size: 100vh;
+  min-block-size: 100dvh;
   background: var(--color-background);
   color: var(--color-text);
   font-family: var(--font-body);
@@ -17,6 +18,8 @@
   align-items: center;
   gap: calc(var(--space-unit) * 2);
   padding: var(--space-unit) calc(var(--space-unit) * 2);
+  padding-inline: max(calc(var(--space-unit) * 2), var(--safe-inline));
+  padding-block-start: max(var(--space-unit), var(--safe-block-start));
   background: var(--color-surface);
   border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
 }
@@ -33,7 +36,7 @@
 }
 
 .lang select {
-  min-block-size: var(--button-height);
+  min-block-size: max(var(--button-height), var(--touch-target));
   background: var(--color-surface);
   color: var(--color-text);
   border: 1px solid color-mix(in srgb, var(--color-text) 25%, transparent);
@@ -50,8 +53,10 @@
 }
 
 .nav a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--touch-target);
   color: var(--color-primary);
-  padding-block: var(--space-unit);
 }
 
 .main {
@@ -59,6 +64,7 @@
   flex-direction: column;
   gap: calc(var(--space-unit) * 3);
   padding: calc(var(--space-unit) * 3);
+  padding-inline: max(calc(var(--space-unit) * 3), var(--safe-inline));
   max-inline-size: 72rem;
 }
 

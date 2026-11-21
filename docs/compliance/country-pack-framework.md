@@ -60,3 +60,12 @@ Raised in [open-questions.md](../open-questions.md) (`Q-289`, owner `eldon`):
   - **Major (`X.0.0`)**: breaking regulatory or override-policy changes (new mandatory e-invoicing mode, newly locked field, CoA restructuring). `upgradePolicy.migrationRequired` must be `true` with a `migrationNote`.
 - **Pinning & rollout:** Tenants pin an exact `version` in their compiled artifact. Upgrades validate stored `company_overrides` against the target pack's `overridesPolicy` (failing closed if a previously allowed field is now locked), run through canary tenants, and apply via the change-engine diff/preview/rollback path.
 - **Regulatory evidence:** Pack facts follow [country-matrix.md](country-matrix.md) (`VERIFIED-OFFICIAL`, `SECONDARY`, or `UNVERIFIED` per `evidenceStatus`; no unverified regulatory claim is treated as verified).
+
+## 6. Go-live gate (CMP-034)
+`load_country_pack` and `resolve_country_pack` take a keyword `environment`: `"sandbox"`, `"test"` or `"production"`. The default is `"production"`, so a caller that forgets the argument gets the strict gate. Any other value is refused with `CountryPackError`.
+- **Production** refuses a pack (`PackValidationError`, naming every reason) when `status` is below `certified` (`draft`, `tested`, `reviewed`) or `evidenceStatus` is `unverified`. `certified` and `regulated` pass, the same production boundary ADR-0034 sets for components; `secondary` evidence passes.
+- **Sandbox and test** accept `draft`, `tested` and `unverified` packs, so research-stage packs stay loadable for tests and demos.
+- `allow_test_packs` is unchanged and separate: a `testOnly: true` pack is refused in every environment unless it is set, and setting it never opens the production gate.
+- An unpinned production load picks the highest non-test version and then applies the gate; it does not fall back to an older certified version past a newer draft.
+
+The compiler's registry gate covers only `blueprint.components[]`, not `compliance.countryPack`, so any production consumer of a country pack must call the loader with `environment="production"` (the default). Who may certify a pack, and on what evidence, is open: [Q-558](../open-questions.md), linked to Q-202.

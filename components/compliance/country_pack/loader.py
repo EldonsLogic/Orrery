@@ -20,6 +20,9 @@ TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 SNAKE_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 LOCALE_TAG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Go-live gate (CMP-034): mirrors ADR-0034's production boundary for components.
+ENVIRONMENTS = ("sandbox", "test", "production")
+PRODUCTION_STATUSES = frozenset({"certified", "regulated"})
 
 
 class CountryPackError(ValueError):
@@ -214,6 +217,24 @@ def validate_pack_or_raise(pack: Any, schema_path: Path | None = None) -> None:
         raise PackValidationError(f"Invalid country pack ({len(errors)} error(s)): {errors[0]}", errors=errors)
 
 
+def _check_environment(environment: Any) -> None:
+    if not isinstance(environment, str) or environment not in ENVIRONMENTS:
+        raise CountryPackError(f"Unknown environment {environment!r} (allowed: {', '.join(ENVIRONMENTS)})")
+
+
+def _check_go_live(pack: dict[str, Any], label: str, environment: str) -> None:
+    """Refuse, in production, a pack below `certified` or with unverified evidence (fail closed)."""
+    if environment != "production":
+        return
+    reasons = []
+    if pack["status"] not in PRODUCTION_STATUSES:
+        reasons.append(f"status '{pack['status']}' is below certified")
+    if pack["evidenceStatus"] == "unverified":
+        reasons.append("evidenceStatus is 'unverified'")
+    if reasons:
+        raise PackValidationError(f"Country pack {label} cannot be used in production: {'; '.join(reasons)}", errors=reasons)
+
+
 def _semver_key(version: str) -> tuple[int, int, int, int, str] | None:
     m = SEMVER_RE.match(version)
     if not m:
@@ -228,11 +249,15 @@ def load_country_pack(
     version: str | None = None,
     *,
     allow_test_packs: bool = False,
+    environment: str = "production",
 ) -> dict[str, Any]:
     """Load and validate a country pack from `<packs_dir>/<country>/<version>/pack.json`.
 
-    Packs marked `testOnly: true` are rejected unless `allow_test_packs=True`.
+    Packs marked `testOnly: true` are rejected unless `allow_test_packs=True`. In `environment="production"`
+    (the default) a pack whose `status` is below `certified` or whose `evidenceStatus` is `unverified` is
+    rejected; `"sandbox"` and `"test"` accept them. Any other environment is rejected.
     """
+    _check_environment(environment)
     if not isinstance(country_code, str) or not COUNTRY_CODE_RE.match(country_code.strip()):
         raise UnknownCountryError(f"Invalid or missing country code: {country_code!r}")
     code_upper = country_code.strip().upper()
@@ -280,6 +305,7 @@ def load_country_pack(
         raise PackValidationError(f"Pack countryCode '{pack['countryCode']}' does not match '{code_upper}'")
     if pack["version"] != chosen_version:
         raise PackValidationError(f"Pack version '{pack['version']}' does not match directory '{chosen_version}'")
+    _check_go_live(pack, f"{code_upper}@{chosen_version}", environment)
     return copy.deepcopy(pack)
 
 
@@ -464,12 +490,14 @@ def resolve_country_pack(
     *,
     allow_test_packs: bool = False,
     allow_unpinned: bool = False,
+    environment: str = "production",
 ) -> dict[str, Any]:
     """Select, validate, and resolve a country pack with company overrides from explicit inputs.
 
     Requires a pinned `version` unless `allow_unpinned=True` and rejects `testOnly: true`
-    packs unless `allow_test_packs=True`.
+    packs unless `allow_test_packs=True`. `environment` gates go-live as in `load_country_pack`.
     """
+    _check_environment(environment)
     if version is None and not allow_unpinned:
         raise PackNotFoundError(
             f"resolve_country_pack requires an explicit pinned version for country '{country_code}'"
@@ -479,6 +507,7 @@ def resolve_country_pack(
         packs_dir=packs_dir,
         version=version,
         allow_test_packs=allow_test_packs,
+        environment=environment,
     )
     if pack_id is not None and pack_id != pack["packId"]:
         raise PackValidationError(f"Requested pack_id '{pack_id}' does not match loaded pack '{pack['packId']}'")

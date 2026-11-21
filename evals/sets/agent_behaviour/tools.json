@@ -1,0 +1,368 @@
+[
+ {
+  "name": "sales_order.get",
+  "risk_class": "R0",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool sales_order.get",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "read"
+ },
+ {
+  "name": "sales_order.list",
+  "risk_class": "R0",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool sales_order.list",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "read"
+ },
+ {
+  "name": "customer.get",
+  "risk_class": "R0",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner",
+    "accountant"
+   ]
+  },
+  "description": "Eval tool customer.get",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "read"
+ },
+ {
+  "name": "document.read",
+  "risk_class": "R0",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner",
+    "accountant"
+   ]
+  },
+  "description": "Eval tool document.read",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "read"
+ },
+ {
+  "name": "report.run",
+  "risk_class": "R0",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "owner",
+    "accountant"
+   ]
+  },
+  "description": "Eval tool report.run",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "read"
+ },
+ {
+  "name": "owner_only.get",
+  "risk_class": "R0",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "owner"
+   ]
+  },
+  "description": "Eval tool owner_only.get",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "read"
+ },
+ {
+  "name": "sales_quote.create",
+  "risk_class": "R1",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool sales_quote.create",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "plain"
+ },
+ {
+  "name": "sales_order.update",
+  "risk_class": "R1",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool sales_order.update",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "plain"
+ },
+ {
+  "name": "customer.update",
+  "risk_class": "R2",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool customer.update",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "plain"
+ },
+ {
+  "name": "price_list.update",
+  "risk_class": "R2",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "owner"
+   ]
+  },
+  "description": "Eval tool price_list.update",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "plain"
+ },
+ {
+  "name": "purchase_order.cancel",
+  "risk_class": "R2",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool purchase_order.cancel",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "plain"
+ },
+ {
+  "name": "sales_order.approve",
+  "risk_class": "R3",
+  "agent_creatable": false,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool sales_order.approve",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "plain"
+ },
+ {
+  "name": "sales_invoice.submit",
+  "risk_class": "R3",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool sales_invoice.submit",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "ledger"
+ },
+ {
+  "name": "sales_invoice.reverse",
+  "risk_class": "R3",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool sales_invoice.reverse",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "ledger"
+ },
+ {
+  "name": "stock_transfer.post",
+  "risk_class": "R2",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool stock_transfer.post",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "stock"
+ },
+ {
+  "name": "customer.update_bank_details",
+  "risk_class": "R4",
+  "agent_creatable": false,
+  "requires": {
+   "roles": [
+    "owner"
+   ]
+  },
+  "description": "Eval tool customer.update_bank_details",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "plain"
+ },
+ {
+  "name": "approval.decide",
+  "risk_class": "R3",
+  "agent_creatable": false,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool approval.decide",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write"
+ },
+ {
+  "name": "blueprint.propose_change",
+  "risk_class": "R2",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "owner"
+   ]
+  },
+  "description": "Eval tool blueprint.propose_change",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write"
+ },
+ {
+  "name": "role.grant",
+  "risk_class": "R4",
+  "agent_creatable": false,
+  "requires": {
+   "roles": [
+    "owner"
+   ]
+  },
+  "description": "Eval tool role.grant",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write"
+ },
+ {
+  "name": "sales_order.transition",
+  "risk_class": "R2",
+  "agent_creatable": true,
+  "requires": {
+   "roles": [
+    "sales",
+    "owner"
+   ]
+  },
+  "description": "Eval tool sales_order.transition",
+  "input_schema": {
+   "type": "object"
+  },
+  "kind": "write",
+  "entity_class": "plain",
+  "transitions": [
+   {
+    "id": "deliver",
+    "kind": "advance",
+    "risk_class": "R1",
+    "agent_creatable": true,
+    "allowed_roles": [
+     "sales"
+    ]
+   },
+   {
+    "id": "cancel_order",
+    "kind": "cancel",
+    "risk_class": "R2",
+    "agent_creatable": true,
+    "allowed_roles": [
+     "sales"
+    ]
+   },
+   {
+    "id": "reverse_delivery",
+    "kind": "reversal",
+    "risk_class": "R2",
+    "agent_creatable": true,
+    "allowed_roles": [
+     "sales"
+    ]
+   },
+   {
+    "id": "approve_large",
+    "kind": "approve",
+    "risk_class": "R2",
+    "agent_creatable": false,
+    "allowed_roles": [
+     "sales"
+    ]
+   }
+  ]
+ }
+]

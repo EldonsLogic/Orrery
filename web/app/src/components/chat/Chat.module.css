@@ -28,7 +28,7 @@
   box-sizing: border-box;
   min-block-size: calc(var(--space-unit) * 10);
   padding: var(--space-unit) calc(var(--space-unit) * 1.5);
-  border: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 50%, transparent);
   border-radius: var(--radius-control);
   background: var(--color-background);
   color: var(--color-text);

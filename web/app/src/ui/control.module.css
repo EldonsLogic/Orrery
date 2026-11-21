@@ -4,7 +4,7 @@
   inline-size: 100%;
   min-block-size: max(var(--button-height), var(--touch-target));
   padding-inline: calc(var(--space-unit) * 1.5);
-  border: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 50%, transparent);
   border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-text);

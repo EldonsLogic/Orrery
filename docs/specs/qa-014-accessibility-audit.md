@@ -3,7 +3,7 @@
 Status: draft
 Owner: eldon
 Method: static review of `web/app/src` (ui library, shell, auth, chat, records, blueprint, factory, console). Base token contrast computed by hand (light: text on background 16.6, primary on surface 7.5, danger 5.9, warning 5.6, success 5.4; secondary text now 70% mix). No screen reader, no browser, no axe run: no a11y test dependency is installed (only vitest), and none was added.
-Result: 12 findings (0 critical, 3 high, 5 medium, 4 low). 11 fixed in this change, 1 not verified (A-12), A-10 left (label text needs a copy decision); A-09 drawer partly open.
+Result: 12 findings (0 critical, 3 high, 5 medium, 4 low). 12 fixed in this change, A-10 left (label text needs a copy decision); A-09 drawer partly open.
 
 | ID | WCAG | Where | Severity | Finding | Status / fix |
 |---|---|---|---|---|---|
@@ -18,7 +18,7 @@ Result: 12 findings (0 critical, 3 high, 5 medium, 4 low). 11 fixed in this chan
 | A-09 | 2.4.11, 4.1.2 | `ConfirmWrite.tsx`, `shell/AppShell.tsx:92` | Low | Modal and open drawer do not make the rest of the page `inert`; drawer has no focus containment or outside-click close (Escape works). Fixed header could overlap focus only if sticky, which it is not. | Fixed in part: modal makes the rest of the page `inert` (`ui/inert.ts`) and restores it on close; the open drawer makes `<main>` inert. Open: drawer focus containment and outside-click close (design decision). |
 | A-10 | 1.3.1, 2.4.7 | `blueprint/FlowDiagram.tsx:40` | Low | Focusable `role="group"` scroll container with the SVG `aria-hidden`; the text equivalent is the step list in `BlueprintView`. Acceptable, but name should say it is a visual diagram. | Open (label text only). |
 | A-11 | 3.1.2 | chat bubbles, tables | Low | `dir="auto"`/`<bdi>` handle direction, but `lang` is not set on embedded text of the other language (screen readers mispronounce). Root `lang` and `dir` are correct and follow the locale (`Providers.tsx`, `layout.tsx`). | Fixed in part: `lang` set on chat bubbles by script (`textLang`, Arabic only or Latin only; mixed text inherits) and on tool names (`en`). Tables and records not changed (value language unknown). |
-| A-12 | 1.4.3 | `Shell.module.css .navHeading` | Low | 12px headings at `opacity: .75`: about 8:1 on surface in light, fine; dark theme not computed. | Not verified in dark. |
+| A-12 | 1.4.3 | `Shell.module.css .navHeading` | Low | 12px headings at `opacity: .75`: about 8:1 on surface in light, fine; dark theme not computed. | Fixed: `web/scripts/check-contrast.test.mjs` computes 52 pairs (text, secondary text, links, on-primary/danger incl. hover, status tints, borders, focus rings, flow diagram) from the CSS modules in light and dark. Nav heading is 8.10:1 light and 8.51:1 dark. Only failure: control, secondary-button, textarea, date-toggle and flow-node borders at `--color-text` 45% on surface/background were 2.97:1 and 2.91:1 in light (need 3:1); fixed by using 50% in the CSS modules (3.45:1 light, 4.54:1 dark). No token pair fails; no known failures. Not tested: 25% borders on labelled buttons and the shell select, and 15% card or table dividers (decorative). |
 
 ## Passed (static)
 - Skip link to `#main`, one `<main>` per shell, `nav` labelled, `aria-current` on the active link, drawer `aria-expanded`/`aria-controls`.

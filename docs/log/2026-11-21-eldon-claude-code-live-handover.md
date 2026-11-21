@@ -47,6 +47,13 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - #229 ERP-015: Fable approved (back-dated and repost tests added, CI wiring split to ERP-031); partner merged main (ae93956), all checks green, merged by Eldon's agent.
 - BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
+- #229 ERP-015 merged (CI green after the partner merged main).
+- #235: Eldon decided to merge with BPL-027 test_03 flagged against BPL-034, instead of holding it; the partner fixes findings 1-5 first.
+- #245 ERP-013 follow-ups (Tier 3): Fable asked for changes (High: apply() tenant binding). The partner's re-review confirms the High is closed; fix round 2 is in progress (read before the tenant check; NFC handled via name keys, not refusal).
+- #247 BPL-034 opened: purchasing and price-list engine mapping, contract 0.2.0, ADR-0055. Fable round 1 found 4 Medium, all fixed in 424ebe0; Fable re-review approved; CI green. Waiting on the partner's Tier 2 review.
+- #248 BPL-035 opened: golden-path mapping gaps (36 unmapped fields; outstanding_amount moved to payments), ADR-0056. Opus approved; its 3 Lows are fixed in a8c93ac; CI green. Waiting on the partner's Tier 2 review.
+- Meeting/ was moved out of the repo to ~/Documents/Orrery-Meeting (Eldon approved).
+
 ## Files touched
 - AGENTS.md: session start step 5 (live session log)
 - docs/RULES.md: rule 51

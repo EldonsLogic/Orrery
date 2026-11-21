@@ -530,7 +530,6 @@ class CrossTenantIsolation(unittest.TestCase):
                 leaks = json.loads(res.stdout.strip().splitlines()[-1])
                 self.assertEqual(leaks, [], f"{host} shared/unprefixed keys leaked B data: {leaks}")
 
-    @unittest.expectedFailure
     def test_redis_requires_authentication(self):
         """CONFIRMED LEAK (HIGH defence-in-depth; tracked by INF-015 & docs/risks.md R-033):
         redis-cache and redis-queue (also backing redis_socketio) accept unauthenticated clients.

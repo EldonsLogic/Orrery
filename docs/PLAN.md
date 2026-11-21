@@ -190,7 +190,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-015 | WhatsApp or push channel for the chat | Operate | G4 | OPR-010,DSC-015 | eldon | todo |
 | PLT-001 | Tenancy ADR-0006: site per tenant on shared in-country infrastructure | Platform | G0 | GOV-015 | eldon | done |
 | PLT-002 | Identity ADR-0007: decide central identity with per-tenant roles | Platform | G0 | GOV-015 | eldon | done |
-| PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | partner | todo |
+| PLT-003 | Tenant provisioning service | Platform | G1 | ERP-003,PLT-001 | partner | doing |
 | PLT-004 | Tenant lifecycle states: trial, active, suspended, exported, deleted | Platform | G1 | PLT-003 | partner | todo |
 | PLT-005 | Identity service (users, sessions, per-tenant roles) | Platform | G2 | PLT-002 | eldon | done |
 | PLT-006 | Plans and entitlements model, everything unlocked at first | Platform | G2 | PLT-004 | eldon | todo |
@@ -320,7 +320,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-026 | Durable adapter state on the tenant database: a short ADR on where idempotency keys, plans, journal and audit records live, then a MariaDB-backed store beside the tenant data; production refuses an in-memory store; restart and restore tests | Runtime | G1 | ERP-012 | partner | doing |
 | ERP-027 | Fix false MODIFY COLUMN drift on decimal(21,9) columns in the DDL plan gate (Phase 0 finding) so customer-added fields on Customer, Sales Order, Sales Invoice and Item can apply | Runtime | G1 | ERP-021,BPL-007 | partner | doing |
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | eldon | done |
-| QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | partner | todo |
+| QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | partner | doing |
 | QA-017 | Smoke check that a preview URL loads and shows no engine markers (ADR-0016, ADR-0018) | Quality | G1 | INF-013 | eldon | todo |
 | GTM-017 | Egypt go-to-market assessment (phase-1 market; depends on verified regulations) | GTM | G2 | CMP-027 | eldon | done |
 | GTM-018 | Attach primary sources to co-founder research figures (ERP failure rate, go-live timelines, 90 pct and 75 pct targets, Egypt/KSA/UAE/Qatar compliance leads) before any external use | Go-to-market | G1 | GTM-001 | partner | done |

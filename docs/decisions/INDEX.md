@@ -45,6 +45,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0036-tool-api-domain-errors.md](ADR-0036-tool-api-domain-errors.md) | Tool API domain error codes and catalog | Proposed |
 | [ADR-0037-manifest-risk-class-and-transition-kind.md](ADR-0037-manifest-risk-class-and-transition-kind.md) | Manifest-declared entity risk class and explicit transition kind | Proposed |
 | [ADR-0038-secrets-management.md](ADR-0038-secrets-management.md) | Secrets management: one store interface, signing keys stay in the KMS, nothing secret reaches a log, the repo or a model | Proposed |
+| [ADR-0040-tenant-provisioning-service.md](ADR-0040-tenant-provisioning-service.md) | Tenant provisioning is a durable, resumable step machine that observes before it acts and never duplicates a site or a secret | Proposed |
 | [ADR-0041-durable-adapter-state-on-tenant-database.md](ADR-0041-durable-adapter-state-on-tenant-database.md) | Durable adapter state lives in the tenant database | Proposed |
 | [ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md](ADR-0042-zatca-phase-2-vendor-core-rebuild-state.md) | ZATCA Phase 2: vendor the ERPGulf pure core, rebuild state | Proposed |
 | [ADR-0043-department-assistants.md](ADR-0043-department-assistants.md) | Department-scoped assistants in the Blueprint (Blueprint 0.4.0) | Proposed |

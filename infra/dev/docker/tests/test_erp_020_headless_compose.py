@@ -84,8 +84,7 @@ class HeadlessComposeTests(unittest.TestCase):
                 build = service.get("build", {}).copy()
                 if name == "engine":
                     self.assertEqual(build.pop("target", None), "headless")
-                    for key in ("ENGINE_INTERNAL_TOKEN", "ENGINE_INTERNAL_TOKEN_PREVIOUS"):
-                        env.pop(key)
+                    env.pop("ENGINE_INTERNAL_TOKEN_PREVIOUS")
                 self.assertEqual(build, dev[name].get("build", {}))
                 self.assertEqual(env, dev[name].get("environment", {}))
                 for key in ("image", "restart", "volumes", "healthcheck", "depends_on", "command"):

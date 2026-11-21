@@ -2636,6 +2636,37 @@ class TestNeutralModeIsNeverAUaeTaxInvoice(unittest.TestCase):
         doc = render_branded_tax_invoice_html(_neutral_invoice_data(), mode="neutral")
         self.assertEqual(verify_locked_layout(doc, "tax_invoice_neutral"), [])
 
+    def test_uae_spelling_variants_with_usd_currency_refuse_neutral_mode(self):
+        from change_engine.print_formats.branded_documents import UaeTaxInvoiceModeUnavailable
+
+        spellings = ("UAE", "uae", " UAE ")
+        fields = ("country_code", "country", "address.country", "address.country_code")
+        for spelling in spellings:
+            for field in fields:
+                with self.subTest(spelling=spelling, field=field):
+                    data = _neutral_invoice_data()
+                    data["currency"] = "USD"
+                    if field == "country_code":
+                        data["seller"]["country_code"] = spelling
+                    elif field == "country":
+                        data["seller"]["country"] = spelling
+                    elif field == "address.country":
+                        data["seller"]["address"] = {"country": spelling}
+                    elif field == "address.country_code":
+                        data["seller"]["address"] = {"country_code": spelling}
+                    with self.assertRaises(UaeTaxInvoiceModeUnavailable) as caught:
+                        render_branded_tax_invoice_html(data, mode="neutral", branding=TENANT_BRANDING)
+                    self.assertEqual(caught.exception.code, "uae_tax_invoice_mode_unavailable")
+                    self.assertIn("uae_tax_invoice_mode_unavailable", str(caught.exception))
+
+    def test_non_uae_seller_with_usd_currency_renders_in_neutral_mode(self):
+        data = _neutral_invoice_data()
+        data["currency"] = "USD"
+        data["seller"]["country_code"] = "US"
+        data["seller"]["address"] = {"country": "United States"}
+        doc = render_branded_tax_invoice_html(data, mode="neutral", branding=TENANT_BRANDING)
+        self.assertEqual(verify_locked_layout(doc, "tax_invoice_neutral"), [])
+
     def test_zatca_mode_is_unaffected(self):
         self.assertTrue(_render("tax"))
 

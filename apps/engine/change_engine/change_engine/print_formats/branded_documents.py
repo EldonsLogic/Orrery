@@ -45,7 +45,7 @@ from .document_layout import assert_locked_layout, render_document_shell, render
 _MAX_TERMS = 50
 _MAX_TERM_CHARS = 1000
 # Supplier country values and the currency that make a neutral invoice a UAE one (round 6).
-_UAE_COUNTRIES = frozenset({"AE", "ARE", "UNITED ARAB EMIRATES"})
+_UAE_COUNTRIES = frozenset({"AE", "ARE", "UAE", "UNITED ARAB EMIRATES"})
 _UAE_CURRENCY = "AED"
 # ZATCA invoice type -> locked layout kind; anything else is refused.
 _ZATCA_KINDS = {"standard": "tax_invoice_zatca_sa_standard",

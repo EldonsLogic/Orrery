@@ -19,14 +19,16 @@ value is not a ledger figure), and rounds half away from zero to the currency pr
 * A transfer's destination receives exactly the cost the source books out, so the company total never moves.
   A purchase return leaves at its receipt rate. A Stock Reconciliation books qty x the new valuation rate (the
   v1 way to change a valuation rate; v1 has no landed costs).
-* A sales return: the expected v1 rule is that it adds back exactly the cost its delivery booked (a credit note
-  reverses COGS). The pinned engine values it at the current moving average instead; the main checks follow the
-  engine's rule and ``test_6`` keeps the v1 expectation as an expected failure until Q-514 (a) is answered.
+* A sales return comes back at the warehouse's CURRENT moving average (qty returned x book value / qty on
+  hand), not at the cost its delivery booked. Decided v1 behaviour (Q-514 (a), partner, 2026-11-21): in the
+  forced cases 5 units leave at 575.00 and come back at 627.94; ``test_6`` asserts it.
 * Negative stock is blocked (``Stock Settings.allow_negative_stock = 0``, trading scope section 4.3).
-* Quantities: provisioning leaves ``System Settings.float_precision`` unset; the engine's stock ledger then
-  rounds the running quantity to 2 decimals while quantity fields accept 3. The seeded moves use 2 decimals;
-  ``test_7`` keeps a 3-decimal case as an expected failure until Q-514 (b) is answered; ``test_8`` pins the
-  observed engine baseline for it, so the expected failure cannot hide an unrelated one.
+* Quantities keep the engine's default precision: provisioning leaves ``System Settings.float_precision``
+  unset, quantity fields accept 3 decimals, and the ledger stores the running quantity rounded half up to 2
+  decimals. The oracle models it as the exact sum of the moved quantities rounded half up to 2 decimals; the
+  rate is book value / that stored quantity. Decided v1 behaviour (Q-514 (b), partner, 2026-11-21): receiving
+  12.345 Kg at 10.00 stores 12.35 Kg worth 123.45, rate 9.995951417; ``test_7`` and ``test_8`` assert it. Only
+  that receipt and a full issue are observed; a partial issue of a 3-decimal quantity is not covered.
 * Back-dated entries (trading scope 2.3 keeps the engine's repost on): the oracle values the moves that are
   posted and not cancelled in POSTING order (date, then time), whatever order they were submitted in, which is
   what the engine's repost must leave behind. A cancellation removes its move from that order. An issue is
@@ -55,7 +57,6 @@ import json
 import os
 import random
 import subprocess
-import sys
 import unittest
 from collections import defaultdict
 from decimal import ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
@@ -134,8 +135,8 @@ FORCED = [
     {"id": "b5", "op": "cancel", "ref": "b4"},
     {"id": "b6", "op": "issue", "item": "E15-BACK", "wh": "W1", "qty": "3"},
 ]
-SALES_RETURN_RULE = "current average"  # the engine's rule; "delivery cost" is the v1 expectation (Q-514 a)
-QTY_PRECISION_ITEMS = {"E15-QTY"}  # checked only by test_7 and test_8 (Q-514 b)
+QTY_PLACES = 2  # the ledger's running-quantity precision with float_precision unset (Q-514 (b))
+QTY_PRECISION_ITEMS = {"E15-QTY"}  # 3-decimal quantities, checked by test_7 and test_8 (Q-514 (b))
 BACKDATED_ITEMS = {"E15-BACK"}  # checked by test_9, so a repost failure is reported on its own
 REJECTED = {"g7", "g12", "g14"}
 # Hand-computed from first principles (not by the oracle): rate = value / qty; value rounded half away from zero.
@@ -143,10 +144,8 @@ FORCED_EXACT = {
     "g1": {"value": "1000.00", "rate": "100"}, "g2": {"value": "2300.00", "rate": "115"},
     "g3": {"value": "1725.00", "diff": "-575.00", "rate": "115"},  # FIFO would issue 500.00
     "g4": {"value": "2525.00", "rate": "126.25"}, "g5": {"value": "2135.00", "diff": "-390.00"},
-    # g6 is a REGRESSION PIN of observed engine behaviour, not an independent expectation: its rule (a sales
-    # return at the current average, 5 x 2135.00 / 17) comes from the engine, which ADR-0031 does not let us
-    # change, until Q-514 (a) is answered. If (a) is answered "delivery cost", test_1 and test_2 fail by design
-    # and V1_SALES_RETURN (test_6) becomes the expectation.
+    # g6, the sales return of g3's 5 units, at the current average (Q-514 (a)): 5 x 2135.00 / 17 = 627.941...
+    # -> 627.94, not the 575.00 that g3 booked.
     "g6": {"value": "2762.94", "diff": "627.94"},
     "g8": {"value": "0.00", "diff": "-2762.94"},
     "g9": {"value": "399.96", "rate": "99.99"}, "g13": {"value": "0.00", "diff": "-399.96"},
@@ -156,7 +155,6 @@ FORCED_EXACT = {
     "r3": {"value": "111.85", "diff": "11.85", "rate": "22.37"}, "r4": {"value": "67.11", "diff": "-44.74"},
     "r5": {"value": "147.70", "diff": "80.59", "rate": "21.10"}, "r6": {"value": "0.00", "diff": "-147.70"},
 }
-V1_SALES_RETURN = {"g6": {"value": "2710.00", "diff": "575.00"}}  # adds back the 575.00 that g3 booked
 # Hand-computed in posting order b3 (5 x 80.00), b1, b2, b6, with b4 cancelled: rate 900.00 / 15 = 60.
 # Submitted order without a repost would leave b1 at 500.00 and b2 at 300.00 (-200.00).
 BACKDATED_EXACT = {
@@ -227,7 +225,7 @@ class _Short(Exception):
     """A move would leave its item and warehouse with negative stock."""
 
 
-def _replay(live, by_id, sales_return):
+def _replay(live, by_id):
     """Value ``live`` (posted, not cancelled, already in posting order) from an empty book. Returns
     ({op id: effects}, book). Raises _Short on negative stock."""
     book, out = {}, {}
@@ -251,12 +249,9 @@ def _replay(live, by_id, sales_return):
             if q >= qty:
                 raise ValueError(f"{oid}: v1 tests never return the whole stock to a supplier")
             moves = [(wh, -q, val - q * Decimal(src["rate"]))]
-        elif kind == "sales_return":
+        elif kind == "sales_return":  # at the current moving average, not the delivery's cost (Q-514 (a))
             e = out[op["ref"]][0]
-            if sales_return == "delivery cost":
-                moves = [(wh, -e["dqty"], val - e["dvalue"])]
-            else:
-                moves = [(wh, -e["dqty"], (qty - e["dqty"]) * val / qty)]
+            moves = [(wh, -e["dqty"], (qty - e["dqty"]) * val / qty)]
         elif kind == "reconcile":
             moves = [(wh, q, q * Decimal(op["rate"]))]
         else:
@@ -271,20 +266,27 @@ def _replay(live, by_id, sales_return):
             if nq == 0 and nv != 0:
                 raise ValueError(f"{oid}: stock would keep value at zero qty")
             book[(item, w)] = (nq, nv)
-            effects.append({"item": item, "wh": w, "dqty": nq - qty, "dvalue": nv - val, "qty": nq, "value": nv,
-                            "raw": raw, "reconcile": kind == "reconcile"})
+            effects.append({"item": item, "wh": w, "dqty": nq - qty, "dvalue": nv - val, "qty": stored_qty(nq),
+                            "value": nv, "raw": raw, "reconcile": kind == "reconcile"})
         out[oid] = effects
     return out, book
 
 
-def simulate(ops, sales_return=SALES_RETURN_RULE):
+def stored_qty(qty: Decimal) -> Decimal:
+    """The running quantity as the ledger and bins store it (Q-514 (b)): the exact sum of the moved quantities,
+    rounded half up to QTY_PLACES. The book keeps the exact sum, so issuing the 12.345 Kg received leaves 0."""
+    return half_away(qty, QTY_PLACES)
+
+
+def simulate(ops):
     """Moving Average on whole-cent book values, in posting order. Operations are submitted in list order;
     after each one the posted, uncancelled moves are revalued in posting order (what the engine's repost
     does), so a back-dated move or a cancellation changes the moves posted after it. Returns
     ({op id: {"effects": [...], "at", "reject", "cancels"}}, final book), where ``at`` is the op's posting
     (date, time) in the whole run (so it stays right on a subset of the ops). An effect is one (item, wh) row: dqty,
-    dvalue, qty and value after, and ``raw``, the value before rounding to the cent (used only to spot half-cent
-    ties). A cancelled move keeps the effects it had when it was last posted."""
+    dvalue, qty after (as stored, see ``stored_qty``) and value after, and ``raw``, the value before rounding to
+    the cent (used only to spot half-cent ties). A cancelled move keeps the effects it had when it was last
+    posted. The final book holds stored quantities too."""
     by_id, keys = {o["id"]: o for o in ops}, posting_keys(ops)
     live, effects, book, out = [], {}, {}, {}
     for op in ops:
@@ -295,7 +297,7 @@ def simulate(ops, sales_return=SALES_RETURN_RULE):
         else:
             trial = sorted(live + [op], key=lambda o: keys[o["id"]])
         try:
-            now, book_now = _replay(trial, by_id, sales_return)
+            now, book_now = _replay(trial, by_id)
         except _Short as short:
             if op["op"] not in ISSUES:
                 raise ValueError(f"{oid}: would leave {short} with negative stock") from None
@@ -307,7 +309,7 @@ def simulate(ops, sales_return=SALES_RETURN_RULE):
         if op["id"] not in out:
             out[op["id"]] = {"effects": effects[op["id"]]}
         out[op["id"]]["at"] = keys[op["id"]]
-    return out, book
+    return out, {k: (stored_qty(q), v) for k, (q, v) in book.items()}
 
 
 def item_of(op, ops):
@@ -467,11 +469,13 @@ class TestOracleAndChecker(unittest.TestCase):
         self.assertEqual(Decimal("1.005").quantize(CENT, ROUND_HALF_EVEN), Decimal("1.00"), "banker's would differ")
         self.assertEqual(5 * Decimal(100), Decimal("500"), "FIFO issues the oldest 100.00 layer, not 115")
         self.assertEqual({o for o, s in sim.items() if s.get("reject")}, REJECTED)
-        v1, _ = simulate(make_ops(SEED, 1), sales_return="delivery cost")
-        for oid, want in V1_SALES_RETURN.items():
-            self.assertEqual((v1[oid]["effects"][0]["value"], v1[oid]["effects"][0]["dvalue"]),
-                             (Decimal(want["value"]), Decimal(want["diff"])))
-        self.assertEqual((sim["q2"]["effects"][0]["qty"], sim["q2"]["effects"][0]["value"]), (D0, D0))
+        self.assertNotEqual(sim["g6"]["effects"][0]["dvalue"], -sim["g3"]["effects"][0]["dvalue"],
+                            "the return comes back at the current average, not at the delivery's 575.00")
+        q1, q2 = sim["q1"]["effects"][0], sim["q2"]["effects"][0]  # Q-514 (b): 12.345 Kg is stored as 12.35
+        self.assertEqual((q1["dqty"], q1["qty"], q1["value"]), (Decimal("12.345"), Decimal("12.35"), Decimal("123.45")))
+        self.assertEqual((q1["value"] / q1["qty"]).quantize(Decimal("1e-9")), Decimal("9.995951417"))
+        self.assertEqual((q2["dqty"], q2["qty"], q2["value"]), (Decimal("-12.345"), D0, D0))
+        self.assertEqual((stored_qty(Decimal("0.005")), stored_qty(Decimal("0.004"))), (CENT, D0), "half up")
         for oid, want in BACKDATED_EXACT.items():
             e = sim[oid]["effects"][0]
             got = {"value": e["value"], "diff": e["dvalue"], "rate": e["value"] / e["qty"]}
@@ -577,6 +581,9 @@ class TestOracleAndChecker(unittest.TestCase):
                 row(s, "b6").update(value="225.00", diff="-75.00", rate="50")],
             "cancelled back-dated receipt not reposted": lambda res, s, b: row(s, "b2").update(
                 value="1068.57", diff="-251.43", rate=str((Decimal("1068.57") / 11).quantize(Decimal("1e-9")))),
+            "sales return at the delivery's cost": lambda res, s, b: row(s, "g6").update(
+                value="2710.00", diff="575.00", rate=str((Decimal("2710.00") / 22).quantize(Decimal("1e-9")))),
+            "quantity stored to 3 decimals": lambda res, s, b: row(s, "q1").update(qty_after="12.345", rate="10"),
         }
         for name, mutate in cases.items():
             with self.subTest(name):
@@ -712,46 +719,33 @@ class TestLiveInventoryValuation(unittest.TestCase):
         # x7 (cancelled by x8) moves stock between warehouses on the same account at zero difference: no GL rows.
         self.assertEqual(by_voucher[d["results"]["x7"]["voucher_no"]], [])
 
-    @staticmethod
-    def _not_the_known_mismatch(reason):
-        """For the expected failures below: when the engine no longer shows the pinned figures, or the data
-        cannot be read, the test returns WITHOUT failing. unittest reports a passing ``expectedFailure`` as an
-        unexpected success, which fails the run, so the decorator only ever absorbs the known mismatch."""
-        print(f"\nERP-015 expected failure is not the known mismatch: {reason}", file=sys.stderr)
+    def test_6_sales_return_comes_back_at_the_current_moving_average(self):
+        """Q-514 (a), decided v1 behaviour: g6 returns g3's 5 units at the current average, 627.94, not at the
+        575.00 that g3 booked, and the GL moves the same 627.94 from COGS back to stock."""
+        d, res, acc = self.data, self.data["results"], self.data["accounts"]
+        self.assertEqual(forced_exact_problems(res, d["sle"], {oid: FORCED_EXACT[oid] for oid in ("g3", "g6")}), [])
+        by_voucher = self._gl_by_voucher()
+        for oid, stock in (("g3", Decimal("-575.00")), ("g6", Decimal("627.94"))):
+            with self.subTest(oid):
+                rows = [r for r in by_voucher[res[oid]["voucher_no"]] if not int(r["is_cancelled"])]
+                net = {a: sum((Decimal(r["debit"]) - Decimal(r["credit"]) for r in rows if r["account"] == a), D0)
+                       for a in (acc["stock_in_hand"], acc["cogs"])}
+                self.assertEqual((net[acc["stock_in_hand"]], net[acc["cogs"]]), (stock, -stock))
 
-    @unittest.expectedFailure  # Q-514 (a): the engine values a Moving Average sales return at the current average
-    def test_6_sales_return_adds_back_the_delivery_cost(self):
-        d, res = self.data, self.data["results"]
-        try:
-            pinned = forced_exact_problems(res, d["sle"], {"g6": FORCED_EXACT["g6"]})  # 2762.94 and 627.94
-            problems = forced_exact_problems(res, d["sle"], V1_SALES_RETURN)
-            by_voucher = self._gl_by_voucher()
-            mismatch = mirror_mismatch(by_voucher[res["g3"]["voucher_no"]] + by_voucher[res["g6"]["voucher_no"]])
-        except Exception as exc:  # noqa: BLE001 - any read error is reported, never absorbed
-            return self._not_the_known_mismatch(f"g3/g6 could not be read: {exc!r}")
-        if pinned:
-            return self._not_the_known_mismatch(f"g6 is no longer at the observed engine figures: {pinned}")
-        # The known mismatch, the only line expected to fail: a full sales return mirrors its delivery.
-        self.assertEqual((problems, mismatch), ([], {}))
-
-    @unittest.expectedFailure  # Q-514 (b): with float_precision unset the ledger rounds running qty to 2 decimals
-    def test_7_three_decimal_quantities_leave_exact_stock(self):
+    def test_7_three_decimal_quantities_are_stored_to_two_decimals(self):
+        """Q-514 (b), decided v1 behaviour: with float_precision unset (the engine default) the ledger stores
+        12.345 Kg as 12.35 at rate 9.995951417, and the oracle, which models that rounding, matches every row."""
         d = self.data
-        try:
-            q1 = [r for r in d["sle"] if r["voucher_no"] == d["results"]["q1"]["voucher_no"]]
-            observed = [(Decimal(r["qty_after"]), Decimal(r["rate"])) for r in q1]
-            ops, final, results, sle, bins = subset(self.ops, self.final, d, lambda item: item in QTY_PRECISION_ITEMS)
-            problems = check_run(ops, self.sim, final, results, sle, bins)
-        except Exception as exc:  # noqa: BLE001 - any read error is reported, never absorbed
-            return self._not_the_known_mismatch(f"q1/q2 could not be read: {exc!r}")
-        if observed != [(Decimal("12.35"), Decimal("9.995951417"))]:
-            return self._not_the_known_mismatch(f"q1 is no longer at the observed engine figures: {observed}")
-        self.assertEqual(problems, [])  # the known mismatch, the only line expected to fail
+        self.assertIn(d["settings"]["float_precision"], (None, ""), "the engine's default quantity precision")
+        q1 = [r for r in d["sle"] if r["voucher_no"] == d["results"]["q1"]["voucher_no"]]
+        self.assertEqual([(Decimal(r["qty_after"]), Decimal(r["rate"])) for r in q1],
+                         [(Decimal("12.35"), Decimal("9.995951417"))])
+        ops, final, results, sle, bins = subset(self.ops, self.final, d, lambda item: item in QTY_PRECISION_ITEMS)
+        self.assertEqual(check_run(ops, self.sim, final, results, sle, bins), [])
 
     def test_8_three_decimal_quantities_post_at_the_engine_baseline(self):
-        """Not an expected failure, so test_7 cannot hide an unrelated one: q1 and q2 post, and the only
-        difference from the oracle is the 2-decimal running quantity of Q-514 (b), observed with float_precision
-        unset. Revisit together with test_7 when Q-514 (b) is answered."""
+        """Every stored field of q1 and q2 at the figures observed with float_precision unset (Q-514 (b)): the
+        moved quantity keeps 3 decimals, the running quantity 2, and issuing the 12.345 Kg leaves exactly zero."""
         d = self.data
         self.assertIn(d["settings"]["float_precision"], (None, ""), "baseline observed with float_precision unset")
         observed = {"q1": ("12.345", "12.35", "9.995951417", "123.45", "123.45"),
@@ -763,9 +757,6 @@ class TestLiveInventoryValuation(unittest.TestCase):
                 self.assertEqual(len(rows), 1)
                 got = tuple(Decimal(rows[0][f]) for f in ("actual_qty", "qty_after", "rate", "value", "diff"))
                 self.assertEqual(got, tuple(map(Decimal, (moved, after, rate, value, diff))))
-        ops, final, results, sle, bins = subset(self.ops, self.final, d, lambda item: item in QTY_PRECISION_ITEMS)
-        problems = check_run(ops, self.sim, final, results, sle, bins)
-        self.assertEqual([" ".join(p.split()[:3]) for p in problems], ["q1 W1: qty", "q1 W1: rate"], problems)
 
     def test_9_back_dated_entries_are_reposted_in_posting_order(self):
         """b3 and b4 post the day before every other move and b5 cancels b4. After the engine's repost job the

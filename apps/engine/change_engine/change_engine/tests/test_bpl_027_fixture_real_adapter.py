@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from types import SimpleNamespace
 
@@ -37,6 +38,17 @@ ACTION_FLAG = {"read": "read", "create": "create", "update": "write", "submit": 
 # Tables whose row counts must not move on a no-op re-apply.
 FINGERPRINT_TABLES = ("Role", "Workflow", "Workflow Document State", "Workflow Transition", "Report", "Custom Field",
                       "Property Setter", "DocType", "Warehouse", "Custom DocPerm")
+
+
+_ENV_PATCH = mock.patch.dict(os.environ, {"CHANGE_ENGINE_ENV": "test"})
+
+
+def setUpModule():
+    _ENV_PATCH.start()  # ERP-027: the offline DDL simulator is refused unless CHANGE_ENGINE_ENV is dev or test
+
+
+def tearDownModule():
+    _ENV_PATCH.stop()
 
 
 def _import_compiler():

@@ -199,7 +199,14 @@ def render_branded_tax_invoice_html(
     checked = check_amounts(snapshot_document(invoice_data), errors, tax_invoice=True)
     if errors or checked is None:
         raise ValueError("; ".join(errors))
-    view = prepare_tax_invoice_view(checked.document, mode, discount_row=checked.discount)
+    # ZATCA lists line and invoice discounts separately (UNVERIFIED, Q-520): in tax invoice mode
+    # the invoice discount already spread into the lines is also shown on an informational row.
+    included = (
+        (DOCUMENT_LABELS["invoice_discount_included"], checked.allocated)
+        if mode == "zatca_sa" and checked.allocated > 0 else None
+    )
+    view = prepare_tax_invoice_view(checked.document, mode, discount_row=checked.discount,
+                                    included_discount_row=included)
 
     header = _header_region(
         brand,

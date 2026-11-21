@@ -19,6 +19,20 @@ it never replaces a supplied amount to make a document pass. What it checks:
   line amounts less the part of the document discount the lines do NOT carry (the unallocated
   remainder, which the Discount row prints) must equal ``total_taxable_amount``. Any other
   discount field name, a mismatch or a wrong allocation is refused, never corrected.
+* THE PINNED ENGINE'S DISCOUNT SEMANTICS (round 5; ERPNext ``erpnext/controllers/
+  taxes_and_totals.py`` at e5cde8c4b9e3f7f567a92ca3e65fd411402b89ce). A document discount needs
+  the engine's ``apply_discount_on`` ("Grand Total" or "Net Total"; the engine refuses a discount
+  without it, L903-906). The engine spreads it onto the lines in proportion to their net amounts
+  over the total it names (L903-959, L961-1002) and then recomputes the taxes, so grand total =
+  net total + taxes (L771-785), checked for every document. For "Net Total" the allocations are
+  the discount itself (the round-4 check above, with its unallocated remainder). For "Grand
+  Total" the discount includes VAT: the lines carry the net part (their amounts must equal
+  ``total_taxable_amount``, nothing is left over) and the rest is the VAT the recomputed taxes no
+  longer charge, so the allocations must equal discount x lines before it / (grand total +
+  discount), the engine's own quotient, within one minor unit (the engine rounds the
+  recomputed tax per row). ``additional_discount_percentage``, when given, must produce the
+  discount from that same total (L858-865), within one minor unit. A cash or non-trade discount
+  (taken off the grand total only, L86-90, L913-915) is refused.
 
 The renderers print only from the snapshot built here. ``snapshot_document`` copies the caller's
 input once (every nested mapping and list, each value read once, so a later change to the caller's
@@ -51,8 +65,14 @@ CURRENCY_PLACES = {"SAR": 2, "AED": 2, "EGP": 2, "QAR": 2, "KWD": 3, "BHD": 3, "
 # The engine's names for a document-level discount and for its per-line spread.
 DOCUMENT_DISCOUNT_FIELD = "discount_amount"
 LINE_ALLOCATION_FIELD = "distributed_discount_amount"
+# The engine's choice of the total a document discount comes off, its percentage of that total
+# and its flag for a discount that only reduces the grand total (round 5).
+APPLY_DISCOUNT_ON_FIELD = "apply_discount_on"
+GRAND_TOTAL, NET_TOTAL = "Grand Total", "Net Total"
+PERCENTAGE_FIELD = "additional_discount_percentage"
+CASH_DISCOUNT_FIELD = "is_cash_or_non_trade_discount"
 # Other names a discount can arrive under. Not read, so refused when they carry a value.
-OTHER_DOCUMENT_DISCOUNT_FIELDS = ("additional_discount_amount", "additional_discount_percentage")
+OTHER_DOCUMENT_DISCOUNT_FIELDS = ("additional_discount_amount",)
 OTHER_LINE_ALLOCATION_FIELDS = ("allocated_discount_amount", "discount_allocation")
 _PRECISION_RE = re.compile(r"[0-9]")
 _MAX_DIGITS = 30  # coefficient digits of any supplied number; 30 x 30 is exact in the 80 digits
@@ -106,6 +126,8 @@ class CheckedAmounts:
     # The private snapshot the renderers print from: the checked numeric fields are the Decimal
     # values above. Nothing the caller holds can reach it.
     document: dict[str, Any]
+    # The part of the document discount the engine spread into the line amounts (already in them).
+    allocated: Decimal = _ZERO
 
 
 # ------------------------------------------------------------------ snapshot and precision
@@ -290,6 +312,79 @@ def _document_discount(data: Mapping[str, Any], totals: Mapping[str, Any], place
     return found[0] if found else _ZERO
 
 
+def _document_values(data: Mapping[str, Any], totals: Mapping[str, Any], name: str) -> list[Any]:
+    """The non-blank values of ``name`` at the top level and in totals, in that order."""
+    return [c.get(name) for c in (data, totals) if not _blank(c.get(name))]
+
+
+def _discount_basis(data: Mapping[str, Any], totals: Mapping[str, Any], discount: Decimal,
+                    errors: list[str]) -> str | None:
+    """The engine's ``apply_discount_on``; required with a document discount (L903-906)."""
+    found: list[str] = []
+    for raw in _document_values(data, totals, APPLY_DISCOUNT_ON_FIELD):
+        if not isinstance(raw, str) or raw.strip() not in (GRAND_TOTAL, NET_TOTAL):
+            errors.append(f"{APPLY_DISCOUNT_ON_FIELD} must be '{GRAND_TOTAL}' or '{NET_TOTAL}' "
+                          f"(the engine's values), not {raw!r}")
+            return None
+        found.append(raw.strip())
+    if len(set(found)) > 1:
+        errors.append(f"{APPLY_DISCOUNT_ON_FIELD} differs between the document ({found[0]}) and "
+                      f"its totals ({found[1]})")
+        return None
+    if discount > _ZERO and not found:
+        errors.append(f"{APPLY_DISCOUNT_ON_FIELD} is required with a document discount ('"
+                      f"{GRAND_TOTAL}' or '{NET_TOTAL}'; the engine refuses a discount without it)")
+        return None
+    return found[0] if found else None
+
+
+def _discount_percentage(data: Mapping[str, Any], totals: Mapping[str, Any], discount: Decimal,
+                         errors: list[str]) -> Decimal | None:
+    """The engine's ``additional_discount_percentage`` (0 to 100), or None when not given."""
+    found: list[Decimal] = []
+    for raw in _document_values(data, totals, PERCENTAGE_FIELD):
+        number = _number(raw, PERCENTAGE_FIELD, errors)
+        if number is None:
+            return None
+        if not _ZERO <= number <= 100:
+            errors.append(f"{PERCENTAGE_FIELD} {number} must be from 0 to 100")
+            return None
+        found.append(number)
+    if len(set(found)) > 1:
+        errors.append(f"{PERCENTAGE_FIELD} differs between the document ({found[0]}) and its "
+                      f"totals ({found[1]})")
+        return None
+    if not found or found[0] == _ZERO:
+        return None
+    if discount == _ZERO:
+        errors.append(f"{PERCENTAGE_FIELD} {found[0]} needs the engine's {DOCUMENT_DISCOUNT_FIELD}"
+                      f" (the amount it produced); it is never computed here")
+        return None
+    return found[0]
+
+
+def _refuse_cash_discount(data: Mapping[str, Any], totals: Mapping[str, Any],
+                          errors: list[str]) -> None:
+    """The engine takes a cash or non-trade discount off the grand total only.
+
+    L86-90 and L913-915: it is never spread onto the lines or the VAT.
+    """
+    for raw in _document_values(data, totals, CASH_DISCOUNT_FIELD):
+        if raw in (0, False, "0"):
+            continue
+        errors.append(f"{CASH_DISCOUNT_FIELD} is not supported: the engine takes that discount "
+                      f"off the grand total without spreading it onto the lines or the VAT")
+        return
+
+
+def _within_one_unit(posted: Decimal, exact: Decimal, places: int) -> bool:
+    return abs(_CTX.subtract(posted, exact)) <= _grid(places)
+
+
+def _shown(value: Decimal, places: int) -> str:
+    return format(round_amount(value, places), "f")
+
+
 def check_amounts(data: Mapping[str, Any], errors: list[str], *, tax_invoice: bool = False
                   ) -> CheckedAmounts | None:
     """Compare lines and totals; append to ``errors`` and return None on any problem.
@@ -314,6 +409,9 @@ def check_amounts(data: Mapping[str, Any], errors: list[str], *, tax_invoice: bo
     assert isinstance(lines, list) and isinstance(totals, Mapping)
 
     document_discount = _document_discount(data, totals, places, errors)
+    basis = _discount_basis(data, totals, document_discount, errors)
+    percentage = _discount_percentage(data, totals, document_discount, errors)
+    _refuse_cash_discount(data, totals, errors)
 
     amounts: dict[str, Decimal] = {}
     for key, label in (("total_taxable_amount", "Total taxable amount"),
@@ -337,23 +435,63 @@ def check_amounts(data: Mapping[str, Any], errors: list[str], *, tax_invoice: bo
     for row in checked:
         running = _CTX.add(running, row.amount)
         allocated = _CTX.add(allocated, row.allocated)
+    # The lines before the document discount: the engine's net total before it is applied.
+    before_discount = _CTX.add(running, allocated)
+    taxable, vat, grand = (amounts[k] for k in ("total_taxable_amount", "total_vat_amount",
+                                                "grand_total"))
+    if _CTX.add(taxable, vat) != grand:
+        if tax_invoice:
+            # The ERP-007 validation every tax invoice print runs next (ZATCA Phase 1, or the
+            # neutral check) refuses exactly this with its own error type, which callers rely
+            # on; the discount relations below need these totals, so they are not checked first.
+            return CheckedAmounts(places, tuple(checked), taxable, vat, grand, _ZERO,
+                                  _checked_document(data, lines, checked, amounts), allocated)
+        # The engine posts grand total = net total + taxes (L771-785). Worded as the quote and
+        # purchase order totals check words it, so the joined message shows it once.
+        errors.append(f"Engine totals disagree: taxable {taxable} + VAT {vat} != grand total "
+                      f"{grand}")
+        return None
     if allocated > document_discount:
         errors.append(f"The lines carry {allocated} of the document discount but "
                       f"{DOCUMENT_DISCOUNT_FIELD} is {document_discount}")
         return None
-    # The part of the document discount the printed line amounts do not already carry.
-    remainder = _CTX.subtract(document_discount, allocated)
-    expected = _CTX.subtract(running, remainder)
-    if expected != amounts["total_taxable_amount"]:
-        errors.append(
-            f"Lines total {running} != total_taxable_amount {amounts['total_taxable_amount']}"
-            if remainder == _ZERO else
-            f"Lines total {running} less the document discount not in the lines {remainder} = "
-            f"{expected} != total_taxable_amount {amounts['total_taxable_amount']}")
-        return None
-    return CheckedAmounts(places, tuple(checked), amounts["total_taxable_amount"],
-                          amounts["total_vat_amount"], amounts["grand_total"], remainder,
-                          _checked_document(data, lines, checked, amounts))
+    if basis == GRAND_TOTAL:
+        # The engine spreads all of it: the lines carry the net part, nothing is left over.
+        remainder = _ZERO
+        if running != taxable:
+            errors.append(f"Lines total {running} != total_taxable_amount {taxable} (the engine "
+                          f"spreads a {GRAND_TOTAL} discount onto the lines)")
+            return None
+        base = _CTX.add(grand, document_discount)  # the grand total before the discount
+        share = (_CTX.divide(_CTX.multiply(document_discount, before_discount), base)
+                 if document_discount > _ZERO else _ZERO)
+        if not _within_one_unit(allocated, share, places):
+            errors.append(
+                f"The lines carry {allocated} of the {GRAND_TOTAL} discount {document_discount}; "
+                f"the engine spreads {document_discount} x {before_discount} / {base} = "
+                f"{_shown(share, places)} onto them")
+            return None
+    else:
+        base = before_discount
+        # The part of the document discount the printed line amounts do not already carry.
+        remainder = _CTX.subtract(document_discount, allocated)
+        expected = _CTX.subtract(running, remainder)
+        if expected != taxable:
+            errors.append(
+                f"Lines total {running} != total_taxable_amount {taxable}"
+                if remainder == _ZERO else
+                f"Lines total {running} less the document discount not in the lines {remainder} "
+                f"= {expected} != total_taxable_amount {taxable}")
+            return None
+    if percentage is not None:
+        produced = _CTX.divide(_CTX.multiply(base, percentage), Decimal(100))
+        if not _within_one_unit(document_discount, produced, places):
+            errors.append(f"{PERCENTAGE_FIELD} {percentage} of {basis} {base} is "
+                          f"{_shown(produced, places)}, not {DOCUMENT_DISCOUNT_FIELD} "
+                          f"{document_discount}")
+            return None
+    return CheckedAmounts(places, tuple(checked), taxable, vat, grand, remainder,
+                          _checked_document(data, lines, checked, amounts), allocated)
 
 
 def _checked_document(data: Mapping[str, Any], lines: list[Any], checked: list[CheckedLine],
@@ -361,7 +499,8 @@ def _checked_document(data: Mapping[str, Any], lines: list[Any], checked: list[C
     """The snapshot with each checked numeric field replaced by the Decimal the check used.
 
     A line's ``discount`` becomes what its Discount column prints (its discount plus its
-    allocation) so every printed line reads quantity x unit price - discount = amount.
+    allocation), whether or not the caller supplied the key, so every printed line reads
+    quantity x unit price - discount = amount.
     """
     document = dict(data)
     document["totals"] = {**data["totals"], **amounts}
@@ -369,9 +508,10 @@ def _checked_document(data: Mapping[str, Any], lines: list[Any], checked: list[C
     for line, row in zip(lines, checked):
         patched = dict(line)
         for key, value in (("quantity", row.quantity), ("unit_price", row.unit_price),
-                           ("discount", row.shown_discount), ("vat_rate", row.vat_rate)):
+                           ("vat_rate", row.vat_rate)):
             if key in patched and value is not None:
                 patched[key] = value
+        patched["discount"] = row.shown_discount
         for name in AMOUNT_FIELDS:
             if patched.get(name) not in (None, ""):
                 patched[name] = row.amount

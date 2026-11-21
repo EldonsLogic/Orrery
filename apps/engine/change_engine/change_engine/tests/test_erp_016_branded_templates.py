@@ -1350,6 +1350,9 @@ class TestDocumentDiscountPrinting(unittest.TestCase):
             line["line_net_amount"] = net
         data = _build(kind, line=line, totals=totals or _DISCOUNT_TOTALS)
         if doc_discount is not None:
+            # Round 5: the engine refuses a discount without apply_discount_on; these cases are
+            # the Net Total kind (the discount comes off the net, the VAT follows it).
+            data["totals"]["apply_discount_on"] = "Net Total"
             if where in ("totals", "both"):
                 data["totals"]["discount_amount"] = doc_discount
             if where in ("top", "both"):
@@ -1466,8 +1469,6 @@ class TestDocumentDiscountPrinting(unittest.TestCase):
         cases = {
             "additional_discount_amount": lambda d: d["totals"].update(
                 additional_discount_amount="20.00"),
-            "additional_discount_percentage": lambda d: d.update(
-                additional_discount_percentage="10"),
             "allocated_discount_amount": lambda d: d["lines"][0].update(
                 allocated_discount_amount="12.00"),
             "discount_allocation": lambda d: d["lines"][0].update(discount_allocation="12.00"),
@@ -2067,6 +2068,7 @@ class TestAdapterEmitsDiscountFields(unittest.TestCase):
             posting_date=__import__("datetime").date(2026, 11, 17),
             posting_time=__import__("datetime").timedelta(hours=14, minutes=30),
             currency="SAR", is_pos=0, is_return=0, is_debit_note=0,
+            apply_discount_on="Net Total",
             discount_amount=Decimal("20.00") if discount else Decimal("0.00"),
             net_total=Decimal("180.00") if discount else Decimal("200.00"),
             total_taxes_and_charges=Decimal("27.00") if discount else Decimal("30.00"),
@@ -2181,6 +2183,332 @@ class TestFooterAndArabicReview(unittest.TestCase):
         hooks = (_PRINT_FORMATS.parent / "hooks.py").read_text(encoding="utf-8")
         for name in ("branded_documents", "render_branded", "document_labels"):
             self.assertNotIn(name, hooks)  # no customer-facing hook until the Arabic is reviewed
+
+
+# --------------------------------------------------------------------------------------
+# Round 5 (re-review of f8feffe): the pinned engine's discount semantics. ERPNext
+# erpnext/controllers/taxes_and_totals.py at e5cde8c4b9e3f7f567a92ca3e65fd411402b89ce:
+# * item values (L193-268): ``rate`` is already net of the item discount (``discount_amount`` is
+#   per unit, ``price_list_rate - rate``) and ``amount = rate x qty``;
+# * document discount (L858-1002): ``discount_amount`` (from ``additional_discount_percentage`` of
+#   the total named by ``apply_discount_on``) is spread onto every line in proportion to its net
+#   amount over the Net Total, or over the Grand Total (VAT included) for "Grand Total"; each
+#   line's share is ``distributed_discount_amount`` and its ``net_amount`` carries it; then the
+#   taxes are recomputed on the discounted nets and grand total = net total + taxes (L771-785).
+# --------------------------------------------------------------------------------------
+_INFO_ROW_EN = "Invoice discount (included in line amounts)"
+
+
+def _engine_doc(kind, *, basis, doc_discount, lines, totals, percentage=None, where="totals"):
+    """A ``kind`` document shaped like the engine's: ``lines`` are (qty, price, alloc, net)."""
+    data = _KINDS[kind][0]()
+    template = data["lines"][0]
+    data["lines"] = []
+    for idx, (qty, price, alloc, net) in enumerate(lines, start=1):
+        line = {**template, "item_code": f"ITEM-{idx:03d}", "quantity": qty,
+                "unit_price": price, "discount": "0.00"}
+        if alloc is not None:
+            line["distributed_discount_amount"] = alloc
+        if net is not None:
+            line["line_net_amount"] = net
+        data["lines"].append(line)
+    data["totals"] = dict(zip(("total_taxable_amount", "total_vat_amount", "grand_total"), totals))
+    target = data["totals"] if where == "totals" else data
+    if basis is not None:
+        target["apply_discount_on"] = basis
+    if doc_discount is not None:
+        target["discount_amount"] = doc_discount
+    if percentage is not None:
+        target["additional_discount_percentage"] = percentage
+    return data
+
+
+# 200.00 + 15% VAT, 10% off: Grand Total -> 23.00 (VAT-inclusive), Net Total -> 20.00; the engine
+# spreads 20.00 onto the line either way and posts 180.00 / 27.00 / 207.00.
+_GRAND = dict(basis="Grand Total", doc_discount="23.00", percentage="10",
+              lines=[("2", "100.00", "20.00", "180.00")], totals=("180.00", "27.00", "207.00"))
+_NET = dict(basis="Net Total", doc_discount="20.00", percentage="10",
+            lines=[("2", "100.00", "20.00", "180.00")], totals=("180.00", "27.00", "207.00"))
+
+
+class TestOmittedLineDiscountStillShowsTheAllocation(unittest.TestCase):
+    """Item 1: the printed line discount is line discount + allocation, key or no key."""
+
+    def test_no_discount_key_prints_the_allocation_beside_the_net_amount(self):
+        for kind in _KINDS:
+            for alloc, net, row in (("20.00", "180.00", None), ("12.00", "188.00", "8.00")):
+                with self.subTest(kind=kind, alloc=alloc):
+                    data = _engine_doc(kind, basis="Net Total", doc_discount="20.00",
+                                       lines=[("2", "100.00", alloc, net)],
+                                       totals=("180.00", "27.00", "207.00"))
+                    del data["lines"][0]["discount"]
+                    doc = _go(kind, data)
+                    _assert_printed_numbers_add_up(self, doc, taxable="180.00", discount_row=row)
+                    line = _printed_lines(doc)[0]
+                    self.assertEqual((line["discount"], line["amount"]),
+                                     (Decimal(alloc), Decimal(net)))
+
+    def test_no_discount_key_and_no_allocation_still_prints_zero(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                data = _build(kind)
+                del data["lines"][0]["discount"]
+                self.assertEqual(_printed_lines(_go(kind, data))[0]["discount"], Decimal("0.00"))
+
+
+class TestGrandAndNetTotalDiscounts(unittest.TestCase):
+    """Item 2: ``apply_discount_on`` "Grand Total" (VAT-inclusive) and "Net Total"."""
+
+    def test_the_engine_grand_total_discount_prints_and_adds_up_in_every_document(self):
+        for kind in _KINDS:
+            for where in ("totals", "top"):
+                with self.subTest(kind=kind, where=where):
+                    doc = _go(kind, _engine_doc(kind, where=where, **_GRAND))
+                    _assert_printed_numbers_add_up(self, doc, taxable="180.00",
+                                                   discount_row=None)
+                    totals = _printed_totals(doc)
+                    self.assertEqual((totals["Total VAT"], totals["Grand Total"]),
+                                     (Decimal("27.00"), Decimal("207.00")))
+
+    def test_the_net_total_variant_prints_the_same_figures(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                grand = _printed_totals(_go(kind, _engine_doc(kind, **_GRAND)))
+                net = _printed_totals(_go(kind, _engine_doc(kind, **_NET)))
+                self.assertEqual({k: v for k, v in grand.items() if k != _INFO_ROW_EN},
+                                 {k: v for k, v in net.items() if k != _INFO_ROW_EN})
+
+    def test_a_grand_total_discount_spread_over_two_lines_with_engine_rounding(self):
+        # 100.00 + 33.33 = 133.33 net, VAT 20.00, grand 153.33; 10% = 15.33 spread as 10.00 and
+        # 3.33 (15.33 x 33.33 / 153.33 = 3.3324); nets 90.00 + 30.00; VAT 18.00; grand 138.00.
+        for kind in _KINDS:
+            with self.subTest(kind):
+                doc = _go(kind, _engine_doc(
+                    kind, basis="Grand Total", doc_discount="15.33", percentage="10",
+                    lines=[("1", "100.00", "10.00", "90.00"), ("1", "33.33", "3.33", "30.00")],
+                    totals=("120.00", "18.00", "138.00")))
+                _assert_printed_numbers_add_up(self, doc, taxable="120.00", discount_row=None)
+
+    def test_figures_that_do_not_follow_the_engine_are_refused_never_corrected(self):
+        def grand(**over):
+            return {**_GRAND, **over}
+
+        cases = {
+            "grand total discount left off the lines": (
+                grand(lines=[("2", "100.00", None, "200.00")]), r"Lines total 200\.00 != "
+                r"total_taxable_amount 180\.00.*Grand Total"),
+            "part of a grand total discount left off the lines": (
+                grand(lines=[("2", "100.00", "12.00", "188.00")]), r"Lines total 188\.00"),
+            "net total figures labelled grand total": (
+                grand(doc_discount="20.00", percentage=None),
+                r"carry 20\.00 of the Grand Total discount 20\.00.*17\.62"),
+            "VAT not recomputed after the discount": (
+                grand(totals=("180.00", "30.00", "210.00"), percentage=None),
+                r"carry 20\.00 of the Grand Total discount 23\.00"),
+            "no apply_discount_on with a discount": (
+                grand(basis=None), r"apply_discount_on is required"),
+            "unknown apply_discount_on": (
+                grand(basis="Total"), r"apply_discount_on must be 'Grand Total' or 'Net Total'"),
+            "boolean apply_discount_on": (
+                grand(basis=True), r"apply_discount_on must be"),
+            "percentage that does not give the discount": (
+                {**_NET, "percentage": "15"}, r"additional_discount_percentage 15 of Net Total "
+                r"200\.00 is 30\.00, not discount_amount 20\.00"),
+            "grand total percentage that does not give the discount": (
+                grand(percentage="5"), r"additional_discount_percentage 5 of Grand Total"),
+            "percentage over 100": (grand(percentage="150"), r"from 0 to 100"),
+            "percentage without a discount": (
+                {**_NET, "doc_discount": None, "lines": [("2", "100.00", None, "200.00")],
+                 "totals": ("200.00", "30.00", "230.00")},
+                r"additional_discount_percentage 10 needs the engine's discount_amount"),
+            "unparsable percentage": (grand(percentage="ten"), r"is not a valid"),
+        }
+        for kind in _KINDS:
+            for name, (params, reason) in cases.items():
+                with self.subTest(kind=kind, case=name):
+                    with self.assertRaisesRegex(ValueError, reason):
+                        _go(kind, _engine_doc(kind, **params))
+
+    def test_top_level_and_totals_apply_discount_on_must_agree(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                data = _engine_doc(kind, **_GRAND)
+                data["apply_discount_on"] = "Net Total"
+                with self.assertRaisesRegex(ValueError, r"apply_discount_on differs"):
+                    _go(kind, data)
+
+    def test_a_cash_or_non_trade_discount_is_refused(self):
+        # The engine takes it off the grand total only (L86-90, L913-915), never off the lines
+        # or the VAT.
+        for kind in _KINDS:
+            with self.subTest(kind):
+                data = _engine_doc(kind, **_GRAND)
+                data["is_cash_or_non_trade_discount"] = 1
+                with self.assertRaisesRegex(ValueError, r"is_cash_or_non_trade_discount"):
+                    _go(kind, data)
+
+    def test_totals_that_do_not_add_up_are_refused_with_or_without_a_discount(self):
+        # Grand total = net total + taxes (L771-785). Tax invoices keep ERP-007's own refusal
+        # (ZATCA Phase 1 or the neutral check) and its error type.
+        for kind in _KINDS:
+            for name, data in (
+                    ("no discount", _build(kind, totals={
+                        "total_taxable_amount": "200.00", "total_vat_amount": "30.00",
+                        "grand_total": "231.00"})),
+                    ("grand total discount", _engine_doc(kind, **{
+                        **_GRAND, "percentage": None,
+                        "totals": ("180.00", "27.00", "208.00")}))):
+                with self.subTest(kind=kind, case=name):
+                    error = ZatcaValidationError if kind == "tax" else ValueError
+                    with self.assertRaises(error) as caught:
+                        _go(kind, data)
+                    detail = " ".join(getattr(caught.exception, "errors", None)
+                                      or [str(caught.exception)])
+                    self.assertRegex(detail, r"\+ .*VAT.* != grand.total 2(31|08)\.00")
+
+
+class TestInvoiceDiscountInformationRow(unittest.TestCase):
+    """Item 4 (UNVERIFIED, Q-520): the allocated invoice discount is also shown on its own."""
+
+    def _row(self, doc):
+        return _printed_totals(doc).get(_INFO_ROW_EN)
+
+    def test_tax_invoice_mode_shows_the_allocated_discount_without_subtracting_it_again(self):
+        for params, label in ((_NET, "net"), (_GRAND, "grand")):
+            for invoice_type in ("standard", "simplified"):
+                with self.subTest(basis=label, invoice_type=invoice_type):
+                    data = _engine_doc("tax", **params)
+                    data["invoice_type"] = invoice_type
+                    if invoice_type == "simplified":
+                        data["transaction_type"] = "simplified_tax_invoice"
+                    doc = _go("tax", data)
+                    self.assertEqual(self._row(doc), Decimal("20.00"))
+                    _assert_printed_numbers_add_up(self, doc, taxable="180.00",
+                                                   discount_row=None)
+
+    def test_the_row_is_labelled_bilingually_and_unreviewed(self):
+        from change_engine.print_formats.document_labels import DOCUMENT_LABELS
+
+        ar, en = DOCUMENT_LABELS["invoice_discount_included"]
+        self.assertEqual(en, _INFO_ROW_EN)
+        self.assertIn("invoice_discount_included", UNREVIEWED_ARABIC_LABELS)
+        doc = _go("tax", _engine_doc("tax", **_NET))
+        totals = doc.split('class="totals-table"', 1)[1]
+        self.assertIn(f'<th class="tot-ar">{ar}</th>', totals)
+
+    def test_no_row_without_an_allocation_or_outside_tax_invoice_mode(self):
+        self.assertIsNone(self._row(_go("tax", _build("tax"))))
+        unallocated = _engine_doc("tax", basis="Net Total", doc_discount="20.00",
+                                  lines=[("2", "100.00", None, "200.00")],
+                                  totals=("180.00", "27.00", "207.00"))
+        self.assertIsNone(self._row(_go("tax", unallocated)))
+        for kind in ("neutral", "quote", "po"):
+            with self.subTest(kind):
+                self.assertIsNone(self._row(_go(kind, _engine_doc(kind, **_NET))))
+
+
+class TestAdapterFollowsTheEngineDiscounts(unittest.TestCase):
+    """Items 2 and 3 through ``sales_invoice_to_zatca_dict`` (the golden path's real adapter)."""
+
+    @staticmethod
+    def _invoice(*, basis, discount, alloc, net_line, totals, rate="100.00", list_rate="100.00",
+                 item_discount="0.00", pct="0"):
+        from types import SimpleNamespace
+        import datetime
+        import json as _json
+
+        net_total, tax, grand = (Decimal(v) for v in totals)
+        item = SimpleNamespace(
+            item_code="ITEM-001", item_name="Office Desk Chair", custom_item_name_ar="كرسي مكتب",
+            qty=2, price_list_rate=Decimal(list_rate), discount_percentage=Decimal(pct),
+            discount_amount=Decimal(item_discount), rate=Decimal(rate),
+            amount=Decimal(rate) * 2, net_amount=Decimal(net_line),
+            distributed_discount_amount=Decimal(alloc),
+            item_tax_rate=_json.dumps({"VAT 15%": 15.0}))
+        return SimpleNamespace(
+            name="ACC-SINV-2026-0010", company="Al-Noor Trading Est",
+            company_address="ADDR-COMP-1", customer="CUST-GULF",
+            customer_name="Gulf Enterprises LLC", customer_address="ADDR-CUST-1",
+            posting_date=datetime.date(2026, 11, 17),
+            posting_time=datetime.timedelta(hours=14, minutes=30),
+            currency="SAR", is_pos=0, is_return=0, is_debit_note=0,
+            apply_discount_on=basis, additional_discount_percentage=Decimal("10"),
+            discount_amount=Decimal(discount), net_total=net_total,
+            total_taxes_and_charges=tax, grand_total=grand,
+            taxes=[SimpleNamespace(rate=15.0)], items=[item])
+
+    def _renders(self, inv):
+        from change_engine.print_formats import render_tax_invoice_html, sales_invoice_to_zatca_dict
+
+        env = TestAdapterEmitsDiscountFields()._env()
+        payload, mode = sales_invoice_to_zatca_dict(inv, frappe_module=env)
+        self.assertEqual(mode, "zatca_sa")
+        return payload, {
+            "erp-007 zatca": render_tax_invoice_html(payload, mode="zatca_sa"),
+            "erp-007 neutral": render_tax_invoice_html(payload, mode="neutral"),
+            "branded zatca": render_branded_tax_invoice_html(payload, mode="zatca_sa"),
+            "branded neutral": render_branded_tax_invoice_html(payload, mode="neutral"),
+        }
+
+    def _assert_same_totals_and_branded_add_up(self, renders, taxable, vat, grand):
+        seen = set()
+        for name, doc in renders.items():
+            totals = _printed_totals(doc)
+            seen.add((totals["Total Taxable Amount"], totals["Total VAT"], totals["Grand Total"]))
+            if name.startswith("branded"):
+                with self.subTest(document=name):
+                    _assert_printed_numbers_add_up(self, doc, taxable=taxable, discount_row=None)
+        self.assertEqual(seen, {(Decimal(taxable), Decimal(vat), Decimal(grand))})
+
+    def test_a_ten_percent_grand_total_discount_renders_the_same_in_erp_007_and_branded(self):
+        payload, renders = self._renders(self._invoice(
+            basis="Grand Total", discount="23.00", alloc="20.00", net_line="180.00",
+            totals=("180.00", "27.00", "207.00")))
+        self.assertEqual((payload["totals"]["apply_discount_on"],
+                          payload["totals"]["discount_amount"]), ("Grand Total", "23.00"))
+        self._assert_same_totals_and_branded_add_up(renders, "180.00", "27.00", "207.00")
+        self.assertEqual(_printed_totals(renders["branded zatca"])[_INFO_ROW_EN],
+                         Decimal("20.00"))
+
+    def test_the_net_total_variant(self):
+        payload, renders = self._renders(self._invoice(
+            basis="Net Total", discount="20.00", alloc="20.00", net_line="180.00",
+            totals=("180.00", "27.00", "207.00")))
+        self.assertEqual(payload["totals"]["apply_discount_on"], "Net Total")
+        self._assert_same_totals_and_branded_add_up(renders, "180.00", "27.00", "207.00")
+
+    def test_a_per_unit_item_discount_is_not_subtracted_twice(self):
+        # qty 2, list 100.00, 10% item discount: rate 90.00, discount_amount 10.00 per unit,
+        # amount 180.00; a 10% Net Total discount spreads 18.00: net 162.00, VAT 24.30.
+        for basis, discount in (("Net Total", "18.00"), ("Grand Total", "20.70")):
+            with self.subTest(basis):
+                payload, renders = self._renders(self._invoice(
+                    basis=basis, discount=discount, alloc="18.00", net_line="162.00",
+                    totals=("162.00", "24.30", "186.30"), rate="90.00", item_discount="10.00",
+                    pct="10"))
+                line = payload["lines"][0]
+                # The posted rate is the ZATCA item net price (BT-146); the item discount is
+                # already in it, so the line carries no further discount of its own.
+                self.assertEqual((line["quantity"], line["unit_price"], line["discount"],
+                                  line["distributed_discount_amount"], line["line_net_amount"]),
+                                 ("2", "90.00", "0.00", "18.00", "162.00"))
+                self._assert_same_totals_and_branded_add_up(renders, "162.00", "24.30", "186.30")
+                for name in ("branded zatca", "branded neutral"):
+                    printed = _printed_lines(renders[name])[0]
+                    self.assertEqual(
+                        (printed["qty"], printed["price"], printed["discount"], printed["amount"]),
+                        (Decimal("2"), Decimal("90.00"), Decimal("18.00"), Decimal("162.00")))
+
+    def test_a_cash_or_non_trade_discount_reaches_the_check_and_is_refused(self):
+        inv = self._invoice(basis="Grand Total", discount="23.00", alloc="0", net_line="200.00",
+                            totals=("200.00", "30.00", "207.00"))
+        inv.is_cash_or_non_trade_discount = 1
+        from change_engine.print_formats import sales_invoice_to_zatca_dict
+
+        env = TestAdapterEmitsDiscountFields()._env()
+        payload, _ = sales_invoice_to_zatca_dict(inv, frappe_module=env)
+        with self.assertRaisesRegex(ValueError, r"is_cash_or_non_trade_discount"):
+            render_branded_tax_invoice_html(payload, mode="zatca_sa")
 
 
 if __name__ == "__main__":

@@ -471,12 +471,16 @@ class TaxInvoiceView:
 
 
 def prepare_tax_invoice_view(invoice_data: Mapping[str, Any], mode: str, *,
-                             discount_row: Decimal | None = None) -> TaxInvoiceView:
+                             discount_row: Decimal | None = None,
+                             included_discount_row: tuple[tuple[str, str], Decimal] | None = None,
+                             ) -> TaxInvoiceView:
     """Validate the invoice (fail closed) and build the escaped HTML fragments both layouts use.
 
     ``discount_row`` is a document discount already reconciled by the caller (ERP-016); when it
-    is above zero a Discount row is printed first in the totals. Nothing is derived from the
-    payload here, so ERP-007's own print is unchanged without it.
+    is above zero a Discount row is printed first in the totals. ``included_discount_row`` is a
+    (label pair, amount) for the reconciled invoice discount the line amounts already carry; it
+    is printed as an informational row above that and is never subtracted. Nothing is derived
+    from the payload here, so ERP-007's own print is unchanged without them.
     """
     raw_dict = dict(invoice_data)
     qr_tlv: str | None = None
@@ -675,8 +679,21 @@ def prepare_tax_invoice_view(invoice_data: Mapping[str, Any], mode: str, *,
             "</tr>"
         )
 
+    included_html = ""
+    if included_discount_row is not None and included_discount_row[1] > _ZERO:
+        (lbl_inc_ar, lbl_inc_en), included_amount = included_discount_row
+        included_str = _fmt_money(included_amount, "included discount")
+        included_html = (
+            '<tr class="info-row">'
+            f'<th class="tot-ar">{_esc(lbl_inc_ar)}</th>'
+            f'<td class="tot-val">{_ltr(f"{included_str} {currency}")}</td>'
+            f'<th class="tot-en">{_esc(lbl_inc_en)}</th>'
+            "</tr>"
+        )
+
     totals_html = (
         '<table class="totals-table">'
+        + included_html
         + discount_html
         + "<tr>"
         f'<th class="tot-ar">{_esc(lbl_taxable[0])}</th>'
@@ -1641,11 +1658,6 @@ def sales_invoice_to_zatca_dict(
         if line_amount_dec is not None and negate_return and line_amount_dec < _ZERO:
             line_amount_dec = abs(line_amount_dec)
 
-        discount_amt = _get_attr_or_key(item, "discount_amount", 0)
-        discount_dec = _doc_num_to_dec(discount_amt or 0, "item discount_amount")
-        if negate_return and discount_dec < _ZERO:
-            discount_dec = abs(discount_dec)
-
         line_dict: dict[str, Any] = {
             "item_code": str(_get_attr_or_key(item, "item_code") or "").strip(),
             "description": str(
@@ -1657,8 +1669,13 @@ def sales_invoice_to_zatca_dict(
             "description_ar": _get_attr_or_key(item, "custom_item_name_ar")
             or _get_attr_or_key(item, "item_name_ar"),
             "quantity": format(qty_dec, "f"),
+            # The engine's posted rate is already net of the item discount (its
+            # ``discount_amount`` is per unit, price_list_rate - rate) and amount = rate x qty
+            # (taxes_and_totals.py L193-268 at the pinned commit). It is the ZATCA item net
+            # price (BT-146), so the line carries no discount of its own beyond its share of a
+            # document discount below; subtracting the item discount again would count it twice.
             "unit_price": _fmt_engine_total(rate_dec),
-            "discount": _fmt_engine_total(discount_dec),
+            "discount": "0.00",
             "vat_rate": format(vat_rate, "f"),
             "vat_category": vat_cat,
             "exemption_reason_code": ex_code,
@@ -1681,6 +1698,13 @@ def sales_invoice_to_zatca_dict(
     document_discount = _optional_engine_amount(doc, "discount_amount", negate_return)
     if document_discount:
         totals_dict["discount_amount"] = _fmt_engine_total(document_discount)
+        # "Grand Total" (VAT included) or "Net Total": the total the engine spread it over.
+        apply_on = _get_attr_or_key(doc, "apply_discount_on")
+        if apply_on not in (None, ""):
+            totals_dict["apply_discount_on"] = str(apply_on).strip()
+        if _get_attr_or_key(doc, "is_cash_or_non_trade_discount"):
+            # Taken off the grand total only; passed on so the branded check refuses it.
+            totals_dict["is_cash_or_non_trade_discount"] = "1"
 
     invoice_dict: dict[str, Any] = {
         "invoice_id": str(_get_attr_or_key(doc, "name") or "").strip(),

@@ -20,7 +20,8 @@ T_TEXT = "Call customers 'clients'."
 TOOL = {"name": "sales_order.get", "description": "Read one sales order", "input_schema": {"type": "object"}}
 PRINCIPAL = {"service": "operate", "tenant_id": "t_acme", "actor_kind": "agent", "actor_id": "ag_sales_1",
              "role_ids": ["sales"], "session_id": "s1", "on_behalf_of": "u_1",
-             "agent_id": "ag_sales_1", "run_id": "run_1"}             # run_id and agent_id: from the signed run token
+             "agent_id": "ag_sales_1", "run_id": "run_1", "thread_id": "th_1",
+             "tool_grant": ["sales_order.get"]}                       # run_id, agent_id, grant: from the signed run token
 SECRET = "sk-" + "A1b2C3d4" * 4
 
 
@@ -28,7 +29,8 @@ def registry(tool_spec=None, p_text=P_TEXT):
     return {"platform": {(PV, "p_rules"): {"text": p_text, "data_class": "C0"}},
             "tenant_config": {("t_acme", "rev_7", "t_glossary"): {"text": T_TEXT, "data_class": "C1"}},
             "tools": {(PV, "sales_order.get"): tool_spec or TOOL},
-            "applied_revision": {"t_acme": "rev_7"}}
+            "applied_revision": {"t_acme": "rev_7"},
+            "active_releases": {"operate": {PV}}}
 
 
 def valid(doc):
@@ -70,7 +72,7 @@ def conv(trust="user", role="user", turn=2, text="hi", **kw):
 def test_examples_validate_and_fake_reply_matches_schema():
     for f in sorted((CONTRACTS / "examples").glob("model-call-*.json")):
         valid(json.loads(f.read_text(encoding="utf-8")))
-    assert REQ["contract_version"] == SCHEMA["version"] == "0.2.0"
+    assert REQ["contract_version"] == SCHEMA["version"] == "0.2.1"
     assert REQ["blocks"][0]["content_hash"] == content_hash(P_TEXT)
     assert REQ["blocks"][1]["content_hash"] == content_hash(T_TEXT)
     p = port()
@@ -98,8 +100,8 @@ def test_schema_is_strict():
         assert list(VALIDATOR.iter_errors(doc)), doc
     assert list(VALIDATOR.iter_errors({"kind": "refusal", "call_id": "c1", "code": "budget_refused",
                                        "reason": "engaged", "retryable": False, "reservation_released": True}))
-    assert list(VALIDATOR.iter_errors({"kind": "refusal", "call_id": "c1", "code": "budget_refused",
-                                       "reason": "exceeded", "retryable": False, "reservation_released": False}))
+    assert list(VALIDATOR.iter_errors({"kind": "refusal", "call_id": "c1", "code": "kill_switch_engaged",
+                                       "reason": "engaged", "retryable": False, "reservation_released": False}))
 
 
 # -- finding 1: trust by reference -----------------------------------------------------------------------------------
@@ -113,7 +115,7 @@ def _blk(i, **kw):
     ({"blocks": _blk(0, text="payroll C3 text")}, "ref_required"),
     ({"tools": [{"name": "sales_order.get", "description": "x", "input_schema": {"type": "object"}}]}, "ref_required"),
     ({"blocks": _blk(0, content_id="p_unknown", content_hash=None)}, "unknown_ref"),
-    ({"prompt_version": "operate.assistant.v9"}, "unknown_ref"),
+    ({"prompt_version": "operate.assistant.v9"}, "ref_mismatch"),
     ({"tools": [{"name": "payroll.export"}]}, "unknown_ref"),
     ({"blocks": _blk(0, content_hash=content_hash("other"))}, "ref_mismatch"),
     ({"blocks": _blk(0, data_class="C1")}, "ref_mismatch"),
@@ -217,7 +219,9 @@ def test_idempotency_is_namespaced_by_service_and_tenant():
     b = port(other_tenant, idem_store=store, registry=reg, reply_text="tenant b text")
     out_b = b.complete(req(caller=dict(REQ["caller"], tenant_id="t_beta"), locale="ar"))  # same key, other body
     assert out_b["text"] == "tenant b text" and not out_b["replayed"]
-    c = port(dict(PRINCIPAL, service="discovery"), idem_store=store, reply_text="svc c text")
+    reg_c = registry()
+    reg_c["active_releases"]["discovery"] = {PV}
+    c = port(dict(PRINCIPAL, service="discovery"), registry=reg_c, idem_store=store, reply_text="svc c text")
     assert c.complete(req())["text"] == "svc c text"
 
 
@@ -403,3 +407,88 @@ def test_caps_hold_across_calls():
             p.complete(req(idempotency_key=f"run_1:step_{i}:a", call_id=f"c{i}"))
             n += 1
     assert ei.value.code == "budget_refused" and n >= 1 and p.spent["run"] <= 30_000
+
+
+# -- re-review Lows (contract 0.2.1) ----------------------------------------------------------------------------------
+def test_low1_charged_fallback_ending_in_budget_refused_reports_charged():
+    probe = port(timeouts={"mid-primary"})
+    probe.complete(req())
+    amount = probe.reservations[0].amount
+    p = port(timeouts={"mid-primary"}, budgets={"tenant": 10**6, "session": 10**6, "run": amount + 500})
+    assert refused(p, req(), dispatched=True) == ("budget_refused", "exceeded")
+    assert p.spent["run"] == amount and len(p.events) == 1
+    bad = {"kind": "refusal", "call_id": "c1", "code": "budget_refused", "reason": "exceeded", "retryable": False,
+           "reservation_released": False}
+    valid(bad)                                                         # allowed after a charged attempt
+
+
+def test_low2_references_scoped_to_the_calling_service_and_run_grant():
+    reg = registry()
+    reg["active_releases"] = {"operate": {"operate.assistant.v2"}, "discovery": {PV}}   # PV retired for operate
+    assert refused(port(registry=reg), req()) == ("invalid_request", "ref_mismatch")
+    no_grant = dict(PRINCIPAL, tool_grant=[])                          # manifest has the tool, the run may not use it
+    assert refused(port(no_grant), req()) == ("invalid_request", "ref_mismatch")
+    assert refused(port(dict(PRINCIPAL, service="evals"), registry=reg), req()) == (
+        "invalid_request", "ref_mismatch")                              # no active release for this service at all
+    ok = port(dict(PRINCIPAL, tool_grant=["sales_order.get", "payroll.run"]))
+    assert ok.complete(req())["kind"] == "reply"
+
+
+def test_low3_taint_follows_thread_or_run_not_only_session():
+    clean = req(blocks=REQ["blocks"][:3], accepts_untrusted=False)
+    p = port()
+    assert p.complete(req())["tainted"] is True                         # untrusted block taints the thread
+    store = p._tainted_threads
+    new_session = dict(PRINCIPAL, session_id="s9")
+    q = port(new_session)
+    q._tainted_threads = store                                          # gateway record survives the session
+    out = q.complete(dict(clean, caller=dict(REQ["caller"], session_id="s9")))
+    assert out["tainted"] is True
+    sessionless = {k: v for k, v in PRINCIPAL.items() if k != "session_id"}
+    r = port(sessionless, budgets={"tenant": 10**6, "run": 50_000}, layers=("tenant", "run"))
+    r._tainted_threads = store
+    caller = {k: v for k, v in REQ["caller"].items() if k != "session_id"}
+    assert r.complete(dict(clean, caller=caller))["tainted"] is True
+
+
+def test_low4_user_trust_needs_a_user_principal():
+    agent_only = {k: v for k, v in PRINCIPAL.items() if k != "on_behalf_of"}
+    caller = {k: v for k, v in REQ["caller"].items() if k != "on_behalf_of"}
+    assert refused(port(agent_only), req(caller=caller)) == ("invalid_request", "caller_mismatch")
+    only_untrusted = req(caller=caller, blocks=[REQ["blocks"][0], REQ["blocks"][1], REQ["blocks"][3]])
+    assert port(agent_only).complete(only_untrusted)["kind"] == "reply"
+    user = dict(agent_only, actor_kind="user", actor_id="u_1")
+    assert port(user).complete(req(caller=dict(caller, actor_kind="user", actor_id="u_1")))["kind"] == "reply"
+
+
+def test_low5_size_cap_is_on_the_unescaped_utf8_form():
+    big = "\u0627" * 262144                                             # 512 KiB unescaped, 1.5 MiB as \uXXXX
+    p = port()
+    p._validate("c1", req(blocks=REQ["blocks"][:2] + [conv(text=big)]))  # under the cap: passes validation
+    assert refused(p, req(blocks=REQ["blocks"][:2] + [conv(text=big, turn=2), conv(text=big, turn=3,
+                                                                                  content_id="c2")])) == (
+        "invalid_request", "schema")
+
+
+def test_low6_malformed_input_is_invalid_request_not_a_crash():
+    p = port()
+    assert refused(p, req(blocks=REQ["blocks"][:2] + [conv(text="a\ud800b")])) == ("invalid_request", "schema")
+    deep = cur = {}
+    for _ in range(3000):
+        cur["a"] = {}
+        cur = cur["a"]
+    assert refused(p, req(extra=deep)) == ("invalid_request", "schema")
+    dup = req(blocks=REQ["blocks"][:2] + [conv(), conv(turn=3)])
+    dup["blocks"][-1]["content_id"] = dup["blocks"][-2]["content_id"]
+    assert refused(p, dup) == ("invalid_request", "schema")
+    assert refused(p, req(tools=[{"name": "sales_order.get"}, {"name": "sales_order.get"}])) == (
+        "invalid_request", "schema")
+
+
+def test_low6_idempotency_is_scoped_to_the_actor():
+    store = {}
+    port(idem_store=store, reply_text="actor a").complete(req())
+    other = dict(PRINCIPAL, actor_id="ag_sales_2", agent_id="ag_sales_2")
+    caller = dict(REQ["caller"], actor_id="ag_sales_2", agent_id="ag_sales_2")
+    out = port(other, idem_store=store, reply_text="actor b").complete(req(caller=caller))
+    assert out["text"] == "actor b" and not out["replayed"]

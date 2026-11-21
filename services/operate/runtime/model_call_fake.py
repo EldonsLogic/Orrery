@@ -1,4 +1,4 @@
-"""Deterministic fake of the model-call contract (contracts/model-call.md 0.2.0, PLT-026) for tests.
+"""Deterministic fake of the model-call contract (contracts/model-call.md 0.2.1, PLT-026) for tests.
 
 Eldon-lane callers build against this until the real gateway (services/gateway/, PLT-009) implements the contract.
 It makes no network call and reads no key. Requests and replies are plain dicts in the contract's JSON shape;
@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CONTRACT_VERSION = "0.2.0"
+CONTRACT_VERSION = "0.2.1"
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "contracts" / "model-call.schema.json"
 TIERS = ("small", "mid", "frontier")                    # weakest to strongest
 TRUST_ORDER = ("platform", "tenant_config", "user", "untrusted")
@@ -21,7 +21,8 @@ REF_TRUST = ("platform", "tenant_config")
 DATA_CLASSES = ("C0", "C1", "C2", "C3")
 RETRYABLE = frozenset({"model_unavailable"})
 FORBIDDEN_FIELDS = frozenset({"model", "model_id", "provider", "endpoint", "api_key", "authorization"})
-IDENTITY_FIELDS = ("tenant_id", "actor_kind", "actor_id", "session_id", "on_behalf_of", "agent_id", "run_id")
+IDENTITY_FIELDS = ("tenant_id", "actor_kind", "actor_id", "session_id", "on_behalf_of", "agent_id", "run_id",
+                   "thread_id")
 LAYER_ID = {"tenant": "tenant_id", "session": "session_id", "agent": "agent_id", "run": "run_id"}
 ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 MAX_REQUEST_BYTES = 1_048_576
@@ -131,7 +132,8 @@ class FakeModelCallPort:
         cid = request.get("call_id") if isinstance(request, dict) else None
         call_id = cid if isinstance(cid, str) and ID_RE.match(cid) else None   # never echo other caller text
         self._validate(call_id, request)
-        ns = (self.principal["service"], self.principal["tenant_id"], request["idempotency_key"])
+        ns = (self.principal["service"], self.principal["tenant_id"], self.principal["actor_kind"],
+              self.principal["actor_id"], request["idempotency_key"])
         if ns in self._inflight:
             raise ModelCallRefused(call_id, "invalid_request", "idempotency_in_flight")
         digest = _digest(request)
@@ -154,10 +156,17 @@ class FakeModelCallPort:
     # -- validation (schema first, then rules the schema cannot express) --------------------------------------------
     def _validate(self, call_id, r):
         bad = lambda reason: ModelCallRefused(call_id, "invalid_request", reason)  # noqa: E731
-        if not isinstance(r, dict) or len(_canon(r).encode("utf-8")) > MAX_REQUEST_BYTES:
-            raise bad("schema")
-        if next(_validator().iter_errors(r), None) is not None:
-            raise bad(_classify(r))
+        try:                                  # lone surrogates and absurd nesting are invalid input, not crashes
+            if not isinstance(r, dict) or len(_canon(r).encode("utf-8")) > MAX_REQUEST_BYTES:
+                raise bad("schema")
+            if next(_validator().iter_errors(r), None) is not None:
+                raise bad(_classify(r))
+        except (UnicodeError, RecursionError, ValueError):
+            raise bad("schema") from None
+        ids = [b["content_id"] for b in r["blocks"]]
+        names = [t["name"] for t in r.get("tools", [])]
+        if len(set(ids)) != len(ids) or len(set(names)) != len(names):
+            raise bad("schema")                                   # duplicate content_id or tool
         mx = r["max_output_tokens"]
         if r.get("min_output_tokens", mx) > mx:
             raise bad("limit")
@@ -168,6 +177,8 @@ class FakeModelCallPort:
                 raise bad("block_order")
             last_rank, last_turn = rank, b.get("turn", last_turn)
         c, p = r["caller"], self.principal
+        if any(b["trust"] == "user" for b in r["blocks"]) and p["actor_kind"] != "user" and not p.get("on_behalf_of"):
+            raise bad("caller_mismatch")                          # a user-trust label needs a user principal
         if ({k: c[k] for k in IDENTITY_FIELDS if k in c} != {k: p[k] for k in IDENTITY_FIELDS if p.get(k) is not None}
                 or sorted(c["role_ids"]) != sorted(p.get("role_ids", []))):
             raise bad("caller_mismatch")
@@ -177,6 +188,9 @@ class FakeModelCallPort:
         def refuse(reason):
             return ModelCallRefused(call_id, "invalid_request", reason)
         reg, pv, tenant = self.registry, r["prompt_version"], self.principal["tenant_id"]
+        if pv not in reg.get("active_releases", {}).get(self.principal["service"], ()):
+            raise refuse("ref_mismatch")                           # release not active for this service identity
+        grant = set(self.principal.get("tool_grant", ()))          # from the signed run token
         texts = {}
         for i, b in enumerate(r["blocks"]):
             if b["trust"] not in REF_TRUST:
@@ -201,6 +215,8 @@ class FakeModelCallPort:
             spec = reg["tools"].get((pv, t["name"]))
             if spec is None:
                 raise refuse("unknown_ref")
+            if t["name"] not in grant:
+                raise refuse("ref_mismatch")                       # offered = manifest tools within the run grant
             if t.get("content_hash", tool_hash(spec)) != tool_hash(spec):
                 raise refuse("ref_mismatch")
             tools.append(spec)
@@ -301,7 +317,11 @@ class FakeModelCallPort:
             raise ModelCallRefused(call_id, "region_policy_refused", "no_allowed_endpoint")
         charged = False
         for attempt, entry in enumerate(chain, 1):
-            res, limit = self._reserve(call_id, entry, r, est_in)
+            try:
+                res, limit = self._reserve(call_id, entry, r, est_in)
+            except ModelCallRefused as exc:
+                exc.reservation_released = not charged          # an earlier attempt was charged: say so
+                raise
             if entry.name in self.down:                       # provider got nothing: release, fall back
                 self.attempt_log.append((call_id, entry.name, "transport"))
                 res.state = "released"
@@ -323,11 +343,11 @@ class FakeModelCallPort:
             event_id = self._meter(r, entry, inp, out, cost)
             if self._flagged(text):                           # content withheld, cost already committed
                 raise ModelCallRefused(call_id, "filter_blocked", "flagged", reservation_released=False)
-            thread = (self.principal["tenant_id"], self.principal.get("session_id"))
-            tainted = (r["thread_tainted"] or thread in self._tainted_threads
+            keys = self._thread_keys()
+            tainted = (r["thread_tainted"] or any(k in self._tainted_threads for k in keys)
                        or any(b["trust"] == "untrusted" for b in r["blocks"]))
-            if tainted and thread[1] is not None:
-                self._tainted_threads.add(thread)             # sticky for the thread (SEC-003 2.4 rule 4)
+            if tainted:
+                self._tainted_threads.update(keys)            # sticky per thread, session and run (SEC-003 2.4 rule 4)
             return {"kind": "reply", "call_id": call_id, "idempotency_key": r["idempotency_key"],
                     "tier": entry.tier, "text": text, "tool_calls": [],
                     "stop_reason": "max_output" if wanted > limit else "end",
@@ -335,6 +355,10 @@ class FakeModelCallPort:
                     "usage": {"input_tokens": inp, "output_tokens": out, "cached_tokens": 0, "cost_micro_usd": cost},
                     "attempts": attempt, "fallback_used": attempt > 1, "meter_event_id": event_id, "replayed": False}
         raise ModelCallRefused(call_id, "model_unavailable", "chain_exhausted", reservation_released=not charged)
+
+    def _thread_keys(self):
+        p = self.principal
+        return [(p["tenant_id"], kind, p[kind + "_id"]) for kind in ("thread", "session", "run") if p.get(kind + "_id")]
 
     def _meter(self, r, entry, inp, out, cost):
         p = self.principal

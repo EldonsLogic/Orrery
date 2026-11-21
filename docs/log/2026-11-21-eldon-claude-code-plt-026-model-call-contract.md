@@ -41,3 +41,6 @@ All nine findings fixed, tests first in the fake (68 tests in `test_model_call_f
 
 The meter test imports `evstream` at module level like `test_trace_gateway.py`, so a missing package fails instead of returning. New example `contracts/examples/model-call-refusal-filter-after-dispatch.json`.
 Open (UNVERIFIED, recorded in ADR-0054): the byte bound is proven only for byte-level tokenizers; timeout-after-send billing varies by provider.
+
+## Re-review Lows (contract 0.2.1)
+Six Low findings fixed, tests first (75 tests in `test_model_call_fake.py`): (1) a charged fallback ending in `budget_refused` reports `reservation_released: false` (schema no longer fixes it true); (2) references scoped to the service (`active_releases`) and tools to the run-token grant, `ref_mismatch` otherwise; (3) taint keyed by thread, session and run (`thread_id` added to `caller`); (4) `user` blocks need a user principal (`caller_mismatch`), caller accountable for conversation labels; (5) 1 MiB cap stated on the unescaped UTF-8 form; (6) lone surrogates, deep nesting, duplicate `content_id` or tools are `schema`, idempotency also scoped to the actor. ADR-0054 decision 9 added.

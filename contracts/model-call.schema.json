@@ -1,11 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:platform:contract:model-call:0.2.0",
-  "version": "0.2.0",
+  "$id": "urn:platform:contract:model-call:0.2.1",
+  "version": "0.2.1",
   "title": "Model call",
   "description": "One model call through the gateway: a request, a reply or a refusal (contracts/model-call.md). Callers name a tier and purpose, never a model. Platform and tenant-config content travels by reference only. Rules JSON Schema cannot express are in x-validator-rules.",
   "x-validator-rules": [
-    "the serialized request is at most 1048576 UTF-8 bytes (invalid_request schema)",
+    "the serialized request, in canonical unescaped UTF-8 form (sorted keys, no \\u escapes for non-ASCII), is at most 1048576 bytes (invalid_request schema)",
+    "block content_ids are unique and tool names are unique within a request (invalid_request schema); a string with a lone surrogate or nesting too deep to serialize is invalid_request schema, never an error",
+    "a block with trust user needs a principal that is a user (actor_kind user) or acts on_behalf_of one (caller_mismatch)",
+    "prompt_version must be a release active for the calling service identity, and each tool must be in the run-token tool grant (ref_mismatch)",
     "blocks are ordered: all platform, then all tenant_config, then conversation blocks with non-decreasing turn (block_order)",
     "platform blocks and tools resolve in the release manifest of prompt_version; tenant_config blocks resolve in the tenant's applied revision revision_id; an unknown reference is unknown_ref; a content_hash or data_class that differs from the resolved entry is ref_mismatch",
     "caller is compared with the verified principal and the signed run token; any difference is caller_mismatch; the gateway never reads identity from the body",
@@ -36,7 +39,8 @@
         "session_id": { "$ref": "#/$defs/id" },
         "on_behalf_of": { "$ref": "#/$defs/id" },
         "agent_id": { "$ref": "#/$defs/id" },
-        "run_id": { "$ref": "#/$defs/id" }
+        "run_id": { "$ref": "#/$defs/id" },
+        "thread_id": { "$ref": "#/$defs/id" }
       }
     },
     "platform_block": {
@@ -121,7 +125,7 @@
       "additionalProperties": false,
       "properties": {
         "kind": { "const": "request" },
-        "contract_version": { "const": "0.2.0" },
+        "contract_version": { "const": "0.2.1" },
         "call_id": { "$ref": "#/$defs/id" },
         "idempotency_key": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{8,128}$" },
         "caller": { "$ref": "#/$defs/caller" },
@@ -189,10 +193,10 @@
         "code": { "enum": ["budget_refused", "kill_switch_engaged", "region_policy_refused", "model_unavailable", "invalid_request", "injection_tainted", "filter_blocked"] },
         "reason": { "type": "string" },
         "retryable": { "type": "boolean" },
-        "reservation_released": { "type": "boolean", "description": "true: nothing was charged. false: dispatch began, the actual cost was committed and metered, and only the content was withheld." }
+        "reservation_released": { "type": "boolean", "description": "true: nothing was charged. false: dispatch began (including an earlier fallback attempt), the actual cost was committed and metered, and only the content was withheld or a later step refused." }
       },
       "allOf": [
-        { "if": { "properties": { "code": { "const": "budget_refused" } } }, "then": { "properties": { "reason": { "enum": ["exceeded", "policy_missing", "meter_unavailable", "layer_unbound"] }, "retryable": { "const": false }, "reservation_released": { "const": true } } } },
+        { "if": { "properties": { "code": { "const": "budget_refused" } } }, "then": { "properties": { "reason": { "enum": ["exceeded", "policy_missing", "meter_unavailable", "layer_unbound"] }, "retryable": { "const": false } } } },
         { "if": { "properties": { "code": { "const": "kill_switch_engaged" } } }, "then": { "properties": { "reason": { "enum": ["engaged", "unreachable"] }, "retryable": { "const": false }, "reservation_released": { "const": true } } } },
         { "if": { "properties": { "code": { "const": "region_policy_refused" } } }, "then": { "properties": { "reason": { "enum": ["policy_missing", "data_class_not_allowed", "no_allowed_endpoint"] }, "retryable": { "const": false }, "reservation_released": { "const": true } } } },
         { "if": { "properties": { "code": { "const": "model_unavailable" } } }, "then": { "properties": { "reason": { "enum": ["chain_exhausted"] }, "retryable": { "const": true } } } },

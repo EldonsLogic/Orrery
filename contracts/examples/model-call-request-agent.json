@@ -1,6 +1,6 @@
 {
   "kind": "request",
-  "contract_version": "0.2.0",
+  "contract_version": "0.2.1",
   "call_id": "call_run_1_step_1",
   "idempotency_key": "run_1:step_1:attempt_1",
   "caller": {
@@ -12,7 +12,8 @@
     "session_id": "s1",
     "on_behalf_of": "u_1",
     "agent_id": "ag_sales_1",
-    "run_id": "run_1"
+    "run_id": "run_1",
+    "thread_id": "th_1"
   },
   "tier": "mid",
   "purpose": "agent",

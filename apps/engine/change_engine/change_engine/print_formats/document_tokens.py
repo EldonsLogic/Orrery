@@ -22,8 +22,12 @@ import re
 ENV_TOKENS_PATH = "BRAND_TOKENS_PATH"
 _RELATIVE = Path("docs") / "brand" / "tokens" / "tokens.json"
 _HEX_RE = re.compile(r"#[0-9a-fA-F]{6}")
-_FAMILY_RE = re.compile(r"[A-Za-z0-9 _-]{1,64}")
-_FALLBACK_RE = re.compile(r"[A-Za-z0-9 ,_-]{1,128}")
+# One font name: words of letters, digits, "_" and "-", starting with a letter, single spaces
+# between words. That is a valid unquoted CSS family (or generic) name, so nothing can end a
+# declaration, add a rule or leave an empty list item such as ``a,,b`` or a trailing comma.
+_FONT_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*( [A-Za-z][A-Za-z0-9_-]*)*")
+_MAX_FONT_NAME = 64
+_MAX_FALLBACKS = 6
 _COLOUR_KEYS = ("surface", "background", "text", "primary", "success", "warning", "danger")
 
 
@@ -55,10 +59,19 @@ def load_document_tokens(path: Path) -> DocumentTokens:
     for key, value in colours.items():
         if not isinstance(value, str) or not _HEX_RE.fullmatch(value):
             raise DocumentTokenError(f"brand token color.light.{key} is not #RRGGBB")
-    if not isinstance(family, str) or not _FAMILY_RE.fullmatch(family) \
-            or not isinstance(fallback, str) or not _FALLBACK_RE.fullmatch(fallback):
+    names = _font_names(family, fallback)
+    return DocumentTokens(font_stack=f"'{names[0]}', {', '.join(names[1:])}", **colours)
+
+
+def _font_names(family: object, fallback: object) -> list[str]:
+    """The body family, then each fallback name, all validated (fail closed)."""
+    if not isinstance(family, str) or not isinstance(fallback, str):
         raise DocumentTokenError("brand token body font family is not a plain font name")
-    return DocumentTokens(font_stack=f"'{family}', {fallback}", **colours)
+    names = [family.strip()] + [part.strip() for part in fallback.split(",")]
+    if len(names) < 2 or len(names) > _MAX_FALLBACKS + 1 or any(
+            len(name) > _MAX_FONT_NAME or not _FONT_NAME_RE.fullmatch(name) for name in names):
+        raise DocumentTokenError("brand token body font family is not a plain font name")
+    return names
 
 
 def _candidate_paths() -> list[Path]:

@@ -22,10 +22,8 @@ from typing import Any, Mapping
 from .bilingual_tax_invoice import (
     BILINGUAL_LABELS,
     _DATE_RE,
-    _TWO_DECIMALS,
     _ZERO,
     _esc,
-    _fmt_money,
     _fmt_pct,
     _fmt_qty,
     _ltr,
@@ -35,6 +33,13 @@ from .bilingual_tax_invoice import (
 )
 from .brand_tokens import ResolvedDocumentBranding, resolve_document_branding
 from .document_labels import ALL_LABELS, DOCUMENT_LABELS, QUOTE_STATUSES
+from .document_reconciliation import (
+    CheckedAmounts,
+    check_amounts,
+    format_amount,
+    format_unit_price,
+    normalise_document,
+)
 from .document_layout import assert_locked_layout, render_document_shell, render_token_block
 
 _MAX_TERMS = 50
@@ -129,15 +134,19 @@ def _lines_head(keys: list[str]) -> str:
     return "".join(cells)
 
 
-def _totals_table(totals: Mapping[str, Any], currency: str) -> str:
+def _totals_table(totals: Mapping[str, Any], currency: str, precision: int,
+                  document_discount: Decimal = _ZERO) -> str:
     rows = []
-    for key, field, cls in (
-        ("total_taxable_amount", "total_taxable_amount", ""),
-        ("total_vat_amount", "total_vat_amount", ""),
-        ("grand_total", "grand_total", ' class="grand-row"'),
-    ):
+    discount_label = BILINGUAL_LABELS["discount"]
+    entries: list[tuple[str, str, Decimal, str]] = []
+    if document_discount > _ZERO:
+        entries.append((discount_label[0], discount_label[1], document_discount, ""))
+    for key, cls in (("total_taxable_amount", ""), ("total_vat_amount", ""),
+                     ("grand_total", ' class="grand-row"')):
         ar, en = BILINGUAL_LABELS[key]
-        amount = _fmt_money(totals[field], field)
+        entries.append((ar, en, _to_dec(totals[key], key), cls))
+    for ar, en, value, cls in entries:
+        amount = format_amount(value, precision)
         rows.append(
             f"<tr{cls}>"
             f'<th class="tot-ar">{_esc(ar)}</th>'
@@ -184,12 +193,14 @@ def render_branded_tax_invoice_html(
     if mode not in ("zatca_sa", "neutral"):
         raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
     brand = resolve_document_branding(branding, entitlements=entitlements)
-    reconciliation: list[str] = []
-    if isinstance(invoice_data, Mapping):
-        _check_line_reconciliation(invoice_data, reconciliation, ("line_total", "line_net_amount"))
-    if reconciliation:
-        raise ValueError("; ".join(reconciliation))
-    view = prepare_tax_invoice_view(invoice_data, mode)
+    # Normalise once, check that exact copy, and render that same copy: no line is ever printed
+    # that the check did not see (a tuple of lines included).
+    invoice = normalise_document(invoice_data)
+    errors: list[str] = []
+    check_amounts(invoice, errors, tax_invoice=True)
+    if errors:
+        raise ValueError("; ".join(errors))
+    view = prepare_tax_invoice_view(invoice, mode)
 
     header = _header_region(
         brand,
@@ -294,52 +305,8 @@ def _check_totals(data: Mapping[str, Any], errors: list[str]) -> None:
                          ("Grand total", grand)):
         if value < _ZERO:
             errors.append(f"{label} cannot be negative")
-        if value != value.quantize(_TWO_DECIMALS):
-            errors.append(f"{label} '{value}' must already be rounded to 2 decimals")
     if taxable + vat != grand:
         errors.append(f"Engine totals disagree: taxable {taxable} + VAT {vat} != grand total {grand}")
-
-
-def _check_line_reconciliation(data: Mapping[str, Any], errors: list[str],
-                               amount_fields: tuple[str, ...] = ("line_total",)) -> None:
-    """Compare printed line amounts with the lines and the lines with the taxable total.
-
-    Each line must equal quantity x unit_price - discount, rounded to 2 decimals with the same
-    ``quantize`` the printed amounts use (default context, round half to even); a line with no
-    supplied amount prints that computed value. The line amounts must then sum to
-    ``total_taxable_amount``. This only compares and fails closed: a printed value is never
-    replaced or recomputed to make a document pass (ADR-0031). Malformed numbers are left to the
-    existing validators, which refuse them.
-    """
-    lines = data.get("lines")
-    totals = data.get("totals")
-    if not isinstance(lines, list) or not lines or not isinstance(totals, Mapping):
-        return
-    try:
-        taxable = _to_dec(totals.get("total_taxable_amount"), "total_taxable_amount")
-    except ValueError:
-        return
-    running = _ZERO
-    for idx, line in enumerate(lines, start=1):
-        if not isinstance(line, Mapping):
-            return
-        try:
-            qty = _to_dec(line.get("quantity"), "quantity")
-            price = _to_dec(line.get("unit_price"), "unit_price")
-            discount = _to_dec(line.get("discount", "0"), "discount")
-            field = next((f for f in amount_fields if line.get(f) not in (None, "")), None)
-            supplied = _to_dec(line[field], field) if field else None
-        except ValueError:
-            return
-        expected = (qty * price - discount).quantize(_TWO_DECIMALS)
-        if supplied is not None and supplied != expected:
-            errors.append(
-                f"Line {idx}: {field} {supplied} != quantity {qty} x unit_price {price} "
-                f"- discount {discount} = {expected}"
-            )
-        running += expected if supplied is None else supplied
-    if running != taxable:
-        errors.append(f"Lines total {running} != total_taxable_amount {taxable}")
 
 
 def _terms(data: Mapping[str, Any]) -> list[str]:
@@ -358,16 +325,10 @@ def _terms(data: Mapping[str, Any]) -> list[str]:
     return out
 
 
-def _lines_region(lines: list[Mapping[str, Any]]) -> str:
+def _lines_region(lines: list[Mapping[str, Any]], checked: CheckedAmounts) -> str:
+    places = checked.precision
     rows = []
-    for idx, line in enumerate(lines, start=1):
-        qty = _to_dec(line["quantity"], "quantity")
-        price = _to_dec(line["unit_price"], "unit_price")
-        discount = _to_dec(line.get("discount", "0"), "discount")
-        if line.get("line_total") not in (None, ""):
-            amount = _to_dec(line["line_total"], "line_total")
-        else:
-            amount = (qty * price - discount).quantize(_TWO_DECIMALS)
+    for idx, (line, row) in enumerate(zip(lines, checked.lines), start=1):
         vat_raw = line.get("vat_rate", "0")
         desc_en = str(line.get("description") or "").strip()
         desc_ar = str(line.get("description_ar") or "").strip()
@@ -379,11 +340,11 @@ def _lines_region(lines: list[Mapping[str, Any]]) -> str:
             f'<td class="num-col">{_ltr(idx)}</td>'
             f'<td class="code-col">{_ltr(str(line.get("item_code") or "").strip() or "-")}</td>'
             f'<td class="desc-col">{desc}</td>'
-            f'<td class="num-col">{_ltr(_fmt_qty(qty))}</td>'
-            f'<td class="num-col">{_ltr(_fmt_money(price, "unit_price"))}</td>'
-            f'<td class="num-col">{_ltr(_fmt_money(discount, "discount"))}</td>'
+            f'<td class="num-col">{_ltr(_fmt_qty(row.quantity))}</td>'
+            f'<td class="num-col">{_ltr(format_unit_price(row.unit_price, places))}</td>'
+            f'<td class="num-col">{_ltr(format_amount(row.discount, places))}</td>'
             f'<td class="num-col">{_ltr(_fmt_pct(vat_raw) if vat_raw not in (None, "") else "0%")}</td>'
-            f'<td class="num-col">{_ltr(_fmt_money(amount, "amount"))}</td>'
+            f'<td class="num-col">{_ltr(format_amount(row.amount, places))}</td>'
             "</tr>"
         )
     head = _lines_head(["line_no", "item_code", "description", "quantity", "unit_price",
@@ -394,10 +355,12 @@ def _lines_region(lines: list[Mapping[str, Any]]) -> str:
     )
 
 
-def _totals_region(data: Mapping[str, Any], currency: str) -> str:
+def _totals_region(data: Mapping[str, Any], currency: str, checked: CheckedAmounts) -> str:
     return (
         '<div class="summary-section"><div class="summary-totals-cell summary-wide" '
-        f'data-locked-region="totals">{_totals_table(data["totals"], currency)}</div></div>'
+        'data-locked-region="totals">'
+        f'{_totals_table(data["totals"], currency, checked.precision, checked.document_discount)}'
+        "</div></div>"
     )
 
 
@@ -419,10 +382,9 @@ def _terms_region(data: Mapping[str, Any]) -> str:
 
 
 def _validate_commercial(data: Mapping[str, Any], *, id_key: str, due_key: str,
-                         parties: tuple[str, ...]) -> tuple[str, str, str, date | None, date | None, str]:
+                         parties: tuple[str, ...]
+                         ) -> tuple[str, str, str, str, CheckedAmounts]:
     errors: list[str] = []
-    if not isinstance(data, Mapping):
-        raise ValueError("document data must be a mapping")
     doc_id = _need(data, id_key, errors)
     issue = _need(data, "issue_date", errors)
     due = _need(data, due_key, errors)
@@ -435,10 +397,10 @@ def _validate_commercial(data: Mapping[str, Any], *, id_key: str, due_key: str,
         _check_party(data, party, errors)
     _check_lines(data, errors)
     _check_totals(data, errors)
-    _check_line_reconciliation(data, errors)
-    if errors:
-        raise ValueError("; ".join(errors))
-    return doc_id, issue, due, issue_date, due_date, currency
+    checked = check_amounts(data, errors)
+    if errors or checked is None:
+        raise ValueError("; ".join(dict.fromkeys(errors)))
+    return doc_id, issue, due, currency, checked
 
 
 def render_branded_quote_html(
@@ -449,7 +411,8 @@ def render_branded_quote_html(
 ) -> str:
     """Tenant-branded bilingual quotation (not a tax invoice; no QR)."""
     brand = resolve_document_branding(branding, entitlements=entitlements)
-    quote_id, issue, valid_until, _i, _v, currency = _validate_commercial(
+    quote_data = normalise_document(quote_data)
+    quote_id, issue, valid_until, currency, checked = _validate_commercial(
         quote_data, id_key="quote_id", due_key="valid_until", parties=("seller", "buyer")
     )
     status = quote_data.get("status")
@@ -478,8 +441,8 @@ def render_branded_quote_html(
         + _party_region("seller", _render_party_card(*_pair("seller"), quote_data["seller"]))
         + _party_region("buyer", _render_party_card(*_pair("customer"), quote_data["buyer"]))
         + "</div>"
-        + _lines_region(quote_data["lines"])
-        + _totals_region(quote_data, currency)
+        + _lines_region(quote_data["lines"], checked)
+        + _totals_region(quote_data, currency, checked)
         + _terms_region(quote_data)
         + _footer_region(brand, quote_id)
     )
@@ -494,7 +457,8 @@ def render_branded_purchase_order_html(
 ) -> str:
     """Tenant-branded bilingual purchase order (not a tax invoice; no QR)."""
     brand = resolve_document_branding(branding, entitlements=entitlements)
-    po_id, issue, required_by, _i, _r, currency = _validate_commercial(
+    po_data = normalise_document(po_data)
+    po_id, issue, required_by, currency, checked = _validate_commercial(
         po_data, id_key="po_id", due_key="required_by", parties=("buyer", "supplier")
     )
     meta = [
@@ -521,8 +485,8 @@ def render_branded_purchase_order_html(
         + _party_region("supplier", _render_party_card(*_pair("supplier"), po_data["supplier"]))
         + "</div>"
         + f'<div class="delivery-box" data-locked-region="delivery">{delivery_card}</div>'
-        + _lines_region(po_data["lines"])
-        + _totals_region(po_data, currency)
+        + _lines_region(po_data["lines"], checked)
+        + _totals_region(po_data, currency, checked)
         + _terms_region(po_data)
         + _footer_region(brand, po_id)
     )

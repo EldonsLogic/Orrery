@@ -1067,12 +1067,36 @@ class TestLayoutReadsTokenSource(unittest.TestCase):
                 lambda d: d["typography"]["families"]["body"].pop("family"),
                 lambda d: d["typography"]["families"]["body"].update(family="x}"),
                 lambda d: d["typography"]["families"]["body"].update(fallback="a;b"),
+                lambda d: d["typography"]["families"]["body"].update(fallback=","),
+                lambda d: d["typography"]["families"]["body"].update(fallback=""),
+                lambda d: d["typography"]["families"]["body"].update(fallback=" "),
+                lambda d: d["typography"]["families"]["body"].update(fallback="system-ui,"),
+                lambda d: d["typography"]["families"]["body"].update(fallback=",sans-serif"),
+                lambda d: d["typography"]["families"]["body"].update(fallback="a,,b"),
+                lambda d: d["typography"]["families"]["body"].update(fallback="a, 9bad"),
+                lambda d: d["typography"]["families"]["body"].update(fallback="a b,\n"),
+                lambda d: d["typography"]["families"]["body"].update(fallback=None),
+                lambda d: d["typography"]["families"]["body"].update(family=" "),
+                lambda d: d["typography"]["families"]["body"].update(family="-"),
+                lambda d: d["typography"]["families"]["body"].update(family=""),
                 lambda d: d.pop("typography"),
             ):
                 broken = json.loads(json.dumps(good))
                 mutate(broken)
                 with self.subTest(mutate=mutate), self.assertRaises(DocumentTokenError):
                     load_document_tokens(written(tmp, broken))
+
+    def test_font_names_are_normalised_and_safe(self):
+        from change_engine.print_formats.document_tokens import load_document_tokens
+
+        good = _light_tokens()
+        good["typography"]["families"]["body"].update(
+            family="Readex Pro", fallback="system-ui,  Helvetica Neue ,sans-serif")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "tokens.json"
+            path.write_text(json.dumps(good), encoding="utf-8")
+            stack = load_document_tokens(path).font_stack
+        self.assertEqual(stack, "'Readex Pro', system-ui, Helvetica Neue, sans-serif")
 
     def test_missing_token_file_fails_render_closed_not_import(self):
         # Importing the package must keep working without the token file (the engine app is
@@ -1126,15 +1150,31 @@ class TestLineReconciliation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"Line 1.*line_total"):
             render_branded_quote_html(data)
 
-    def test_computed_amount_rounds_half_even_to_two_places_like_the_totals_check(self):
-        # 3 x 33.335 = 100.005 -> 100.00 (half-even, the quantize used for printed amounts)
-        data = self._quote(quantity="3", unit_price="33.335", line_total="100.00")
-        data["totals"] = {"total_taxable_amount": "100.00", "total_vat_amount": "15.00",
-                          "grand_total": "115.00"}
-        self.assertIn("100.00", render_branded_quote_html(data))
-        data["lines"][0]["line_total"] = "100.01"
-        with self.assertRaisesRegex(ValueError, r"Line 1.*line_total"):
+    def test_computed_amount_uses_commercial_rounding_per_adr_0033(self):
+        # 3 x 33.335 = 100.005 -> 100.01 (half away from zero), not 100.00 (half-even)
+        data = self._quote(quantity="3", unit_price="33.335", line_total="100.01")
+        data["totals"] = {"total_taxable_amount": "100.01", "total_vat_amount": "15.00",
+                          "grand_total": "115.01"}
+        self.assertIn("100.01", render_branded_quote_html(data))
+        data["lines"][0]["line_total"] = "100.00"  # the half-even answer is refused
+        with self.assertRaisesRegex(ValueError, r"Line 1.*line_total 100\.00.*100\.01"):
             render_branded_quote_html(data)
+        # no supplied amount: the printed amount is the commercially rounded one
+        del data["lines"][0]["line_total"]
+        doc = render_branded_quote_html(data)
+        self.assertIn('<bdi dir="ltr">100.01</bdi>', doc)
+        self.assertNotIn('<bdi dir="ltr">100.00</bdi>', doc)
+
+    def test_invoice_refuses_a_computed_amount_it_would_print_half_even(self):
+        # ERP-007 prints an unsupplied amount half-even; never let that differ from the check.
+        data = _neutral_invoice_data()
+        data["lines"][0].update(quantity="0.5", unit_price="200.01")  # 100.005
+        data["totals"] = {"total_taxable_amount": "100.01", "total_vat_amount": "0.00",
+                          "grand_total": "100.01"}
+        with self.assertRaisesRegex(ValueError, r"Line 1.*rounding.*line_net_amount"):
+            render_branded_tax_invoice_html(data, mode="neutral")
+        data["lines"][0]["line_net_amount"] = "100.01"  # the engine's amount is printed as given
+        self.assertIn("100.01", render_branded_tax_invoice_html(data, mode="neutral"))
 
     def test_sum_of_lines_must_equal_total_taxable_amount(self):
         data = _quote_data()  # lines sum to 200.00; totals say 300.00 / 45.00 / 345.00
@@ -1172,6 +1212,297 @@ class TestLineReconciliation(unittest.TestCase):
         zatca["lines"][0]["line_total"] = "201.00"
         with self.assertRaisesRegex(ValueError, r"Line 1.*line_total 201\.00"):
             render_branded_tax_invoice_html(zatca, mode="zatca_sa")
+
+
+# --------------------------------------------------------------------------------------
+# Round 2 (review of d29cc56): input shape, document discounts, negative discounts,
+# currency precision, unit price display. Compare and refuse; never recompute what is printed.
+# --------------------------------------------------------------------------------------
+_KINDS = {
+    "tax": (_tax_invoice_data,
+            lambda d: render_branded_tax_invoice_html(d, mode="zatca_sa")),
+    "neutral": (_neutral_invoice_data,
+                lambda d: render_branded_tax_invoice_html(d, mode="neutral")),
+    "quote": (_quote_data, render_branded_quote_html),
+    "po": (_po_data, render_branded_purchase_order_html),
+}
+_INVOICE_KINDS = ("tax", "neutral")
+_DISC_TOTALS = {"total_taxable_amount": "180.00", "total_vat_amount": "27.00",
+                "grand_total": "207.00", "discount_amount": "20.00"}
+
+
+def _build(kind, *, qty="2", price="100.00", line=None, totals=None, **top):
+    """A document of ``kind`` whose first line is ``qty x price`` (default 200.00 gross)."""
+    data = _KINDS[kind][0]()
+    data["lines"][0].update({"quantity": qty, "unit_price": price, "discount": "0.00",
+                             **(line or {})})
+    data["totals"] = dict(totals) if totals else {
+        "total_taxable_amount": "200.00", "total_vat_amount": "30.00", "grand_total": "230.00"}
+    data.update(top)
+    return data
+
+
+def _go(kind, data):
+    return _KINDS[kind][1](data)
+
+
+class TestLineInputShape(unittest.TestCase):
+    def test_tuple_lines_are_checked_not_skipped_in_every_document(self):
+        for kind in _KINDS:
+            with self.subTest(kind, case="mismatch"):
+                data = _build(kind)
+                data["lines"] = tuple([{**data["lines"][0], "line_total": "999.99"}])
+                with self.assertRaisesRegex(ValueError, r"Line 1.*line_total 999\.99"):
+                    _go(kind, data)
+            with self.subTest(kind, case="sum"):
+                data = _build(kind, totals={"total_taxable_amount": "300.00",
+                                            "total_vat_amount": "45.00", "grand_total": "345.00"})
+                data["lines"] = tuple(data["lines"])
+                with self.assertRaisesRegex(ValueError, r"Lines total 200\.00"):
+                    _go(kind, data)
+            with self.subTest(kind, case="valid tuple renders like the list"):
+                as_list = _build(kind)
+                as_tuple = _build(kind)
+                as_tuple["lines"] = tuple(as_tuple["lines"])
+                self.assertEqual(_go(kind, as_list), _go(kind, as_tuple))
+
+    def test_non_sequence_lines_are_refused(self):
+        for kind in _KINDS:
+            for bad in ((x for x in [{}]), {"a": 1}, "abc", {1}, 5, b"x"):
+                with self.subTest(kind, type=type(bad).__name__):
+                    data = _build(kind)
+                    data["lines"] = bad
+                    with self.assertRaises(ValueError):
+                        _go(kind, data)
+
+    def test_a_non_mapping_line_in_a_tuple_is_refused(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                data = _build(kind)
+                data["lines"] = ("not a mapping",)
+                with self.assertRaises(ValueError):
+                    _go(kind, data)
+
+    def test_the_caller_input_is_not_mutated_by_normalising(self):
+        data = _build("quote")
+        data["lines"] = tuple(data["lines"])
+        render_branded_quote_html(data)
+        self.assertIsInstance(data["lines"], tuple)
+
+
+class TestDocumentDiscount(unittest.TestCase):
+    """The engine's document discount carries to print; lines + allocation must reach taxable."""
+
+    def test_gross_200_with_10_percent_document_discount_is_accepted_in_every_document(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                doc = _go(kind, _build(kind, totals=_DISC_TOTALS))
+                self.assertIn("180.00", doc)
+                self.assertIn("207.00", doc)
+                # the printed line stays the gross amount; nothing is recomputed or netted
+                self.assertIn('<bdi dir="ltr">200.00</bdi>', doc)
+
+    def test_quote_and_po_print_the_document_discount_row(self):
+        for kind in ("quote", "po"):
+            with self.subTest(kind):
+                doc = _go(kind, _build(kind, totals=_DISC_TOTALS))
+                self.assertIn('<bdi dir="ltr">20.00 SAR</bdi>', doc)
+                self.assertIn("Discount", doc)
+        plain = _go("quote", _build("quote"))
+        self.assertNotIn("Discount</th>", plain.split("totals-table", 1)[1])
+
+    def test_a_wrong_allocation_is_refused_in_every_document(self):
+        wrong = (
+            # discount says 20.00 but taxable is 170.00
+            {**_DISC_TOTALS, "total_taxable_amount": "170.00", "total_vat_amount": "25.50",
+             "grand_total": "195.50"},
+            # taxable is 180.00 but the discount says 10.00
+            {**_DISC_TOTALS, "discount_amount": "10.00"},
+            # taxable is 180.00 and no discount is supplied at all
+            {k: v for k, v in _DISC_TOTALS.items() if k != "discount_amount"},
+            # a discount larger than the lines
+            {**_DISC_TOTALS, "discount_amount": "200.01"},
+        )
+        for kind in _KINDS:
+            for totals in wrong:
+                with self.subTest(kind, discount=totals.get("discount_amount"),
+                                  taxable=totals["total_taxable_amount"]):
+                    with self.assertRaisesRegex(ValueError, r"total_taxable_amount"):
+                        _go(kind, _build(kind, totals=totals))
+
+    def test_document_discount_may_also_be_a_top_level_field_but_never_disagree(self):
+        top_only = {k: v for k, v in _DISC_TOTALS.items() if k != "discount_amount"}
+        for kind in _KINDS:
+            with self.subTest(kind):
+                self.assertIn("180.00", _go(kind, _build(kind, totals=top_only,
+                                                         discount_amount="20.00")))
+                with self.assertRaisesRegex(ValueError, r"discount_amount.*disagree"):
+                    _go(kind, _build(kind, totals=_DISC_TOTALS, discount_amount="19.00"))
+
+    def test_per_line_allocation_reconciles_and_wrong_allocation_is_refused(self):
+        def two_lines(kind, totals=_DISC_TOTALS, patch=None):
+            data = _build(kind, qty="1", price="120.00", totals=totals,
+                          line={"distributed_discount_amount": "12.00",
+                                "line_net_amount": "108.00"})
+            data["lines"].append({
+                "item_code": "ITEM-002", "description": "Second", "quantity": "1",
+                "unit_price": "80.00", "discount": "0.00", "vat_rate": "0.15", "vat_category": "S",
+                "distributed_discount_amount": "8.00", "line_net_amount": "72.00"})
+            for index, value in (patch or {}).items():
+                data["lines"][index].update(value)
+            return data
+
+        for kind in _KINDS:
+            with self.subTest(kind, case="allocated, net lines"):
+                self.assertIn("180.00", _go(kind, two_lines(kind)))
+            with self.subTest(kind, case="allocation without the document field"):
+                no_doc = {k: v for k, v in _DISC_TOTALS.items() if k != "discount_amount"}
+                self.assertIn("180.00", _go(kind, two_lines(kind, totals=no_doc)))
+            with self.subTest(kind, case="net amount ignores the allocation"):
+                with self.assertRaisesRegex(ValueError, r"Line 1.*line_net_amount 120\.00"):
+                    _go(kind, two_lines(kind, patch={0: {"line_net_amount": "120.00"}}))
+            with self.subTest(kind, case="allocation total differs from the document discount"):
+                bad = {**_DISC_TOTALS, "discount_amount": "15.00"}
+                with self.assertRaisesRegex(ValueError, r"allocat"):
+                    _go(kind, two_lines(kind, totals=bad))
+            with self.subTest(kind, case="allocation needs the engine's net amount"):
+                data = two_lines(kind)
+                del data["lines"][0]["line_net_amount"]
+                with self.assertRaisesRegex(ValueError, r"Line 1.*distributed_discount_amount.*"
+                                                         r"line_net_amount"):
+                    _go(kind, data)
+
+    def test_both_amount_fields_must_agree_when_both_are_supplied(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                with self.assertRaisesRegex(ValueError, r"line_total.*line_net_amount"):
+                    _go(kind, _build(kind, line={"line_total": "200.00",
+                                                 "line_net_amount": "199.00"}))
+
+
+class TestNegativeDiscountsRefused(unittest.TestCase):
+    def test_negative_discounts_are_refused_in_every_document_type(self):
+        cases = {
+            "line discount": lambda d: d["lines"][0].update(discount="-5.00"),
+            "document discount (totals)": lambda d: d["totals"].update(discount_amount="-20.00"),
+            "document discount (top level)": lambda d: d.update(discount_amount="-20.00"),
+            "distributed discount": lambda d: d["lines"][0].update(
+                distributed_discount_amount="-1.00", line_net_amount="201.00"),
+        }
+        for kind in _KINDS:
+            for name, mutate in cases.items():
+                with self.subTest(kind=kind, case=name):
+                    data = _build(kind, totals={"total_taxable_amount": "205.00",
+                                                "total_vat_amount": "30.75",
+                                                "grand_total": "235.75"})
+                    mutate(data)
+                    with self.assertRaisesRegex(ValueError, r"discount.*negative|negative.*discount"):
+                        _go(kind, data)
+
+    def test_a_discount_larger_than_the_line_is_refused(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                data = _build(kind, line={"discount": "200.01"},
+                              totals={"total_taxable_amount": "0.00", "total_vat_amount": "0.00",
+                                      "grand_total": "0.00"})
+                with self.assertRaisesRegex(ValueError, r"Line 1"):
+                    _go(kind, data)
+
+
+class TestCurrencyPrecision(unittest.TestCase):
+    KWD_TOTALS = {"total_taxable_amount": "1.234", "total_vat_amount": "0.000",
+                  "grand_total": "1.234"}
+
+    def _kwd(self, kind, **top):
+        data = _build(kind, qty="1", price="1.234", totals=self.KWD_TOTALS, currency="KWD",
+                      line={"vat_rate": "0"}, **top)
+        return data
+
+    def test_three_decimal_currency_checks_and_prints_three_decimals(self):
+        for kind in ("quote", "po"):
+            with self.subTest(kind):
+                doc = _go(kind, self._kwd(kind, currency_precision=3))
+                self.assertIn('<bdi dir="ltr">1.234 KWD</bdi>', doc)
+                self.assertIn('<bdi dir="ltr">0.000 KWD</bdi>', doc)
+                self.assertNotIn('<bdi dir="ltr">1.23 KWD</bdi>', doc)
+
+    def test_precision_string_is_accepted(self):
+        self.assertIn("1.234 KWD", _go("quote", self._kwd("quote", currency_precision="3")))
+
+    def test_default_two_decimals_and_a_two_decimal_currency_refuse_three_decimals(self):
+        for kind in _KINDS:
+            for explicit in ({}, {"currency_precision": 2}):
+                with self.subTest(kind, explicit=bool(explicit)):
+                    with self.assertRaisesRegex(ValueError, r"2 decimals"):
+                        _go(kind, self._kwd(kind, **explicit))
+
+    def test_amounts_beyond_the_currency_precision_are_refused(self):
+        data = self._kwd("quote", currency_precision=3)
+        data["totals"] = {"total_taxable_amount": "1.2345", "total_vat_amount": "0.0000",
+                          "grand_total": "1.2345"}
+        with self.assertRaisesRegex(ValueError, r"3 decimals"):
+            render_branded_quote_html(data)
+        data = self._kwd("po", currency_precision=3)
+        data["lines"][0]["line_total"] = "1.2340001"
+        with self.assertRaises(ValueError):
+            render_branded_purchase_order_html(data)
+
+    def test_invalid_precision_is_refused(self):
+        for bad in (True, False, -1, 5, 9, "x", "", 2.5, "2.5", [], {}):
+            for kind in _KINDS:
+                with self.subTest(kind, bad=bad):
+                    with self.assertRaisesRegex(ValueError, r"currency_precision"):
+                        _go(kind, _build(kind, currency_precision=bad))
+
+    def test_tax_invoices_print_two_decimals_only_so_other_precision_is_refused(self):
+        for kind in _INVOICE_KINDS:
+            with self.subTest(kind, case="three decimals"):
+                with self.assertRaisesRegex(ValueError, r"currency_precision.*2 decimals"):
+                    _go(kind, self._kwd(kind, currency_precision=3))
+            with self.subTest(kind, case="explicit two"):
+                self.assertIn("230.00", _go(kind, _build(kind, currency_precision=2))
+                              if kind == "tax" else "230.00")
+                _go(kind, _build(kind, currency_precision="2"))
+
+
+class TestUnitPriceDisplay(unittest.TestCase):
+    """A unit price is never printed below the precision the check used (10 x 1.004)."""
+
+    TOTALS = {"total_taxable_amount": "10.04", "total_vat_amount": "1.51", "grand_total": "11.55"}
+
+    def test_quote_and_po_print_the_unit_price_at_its_supplied_precision(self):
+        for kind in ("quote", "po"):
+            with self.subTest(kind):
+                doc = _go(kind, _build(kind, qty="10", price="1.004", totals=self.TOTALS))
+                self.assertIn('<bdi dir="ltr">1.004</bdi>', doc)
+                self.assertNotIn('<bdi dir="ltr">1.00</bdi>', doc)
+                self.assertIn('<bdi dir="ltr">10.04</bdi>', doc)  # 10 x 1.004, line amount
+                # a two decimal price still prints with two decimals
+                self.assertIn('<bdi dir="ltr">1.00</bdi>',
+                              _go(kind, _build(kind, qty="10", price="1.00", totals={
+                                  "total_taxable_amount": "10.00", "total_vat_amount": "1.50",
+                                  "grand_total": "11.50"})))
+
+    def test_a_price_with_more_than_six_decimals_is_refused(self):
+        with self.assertRaisesRegex(ValueError, r"unit_price.*6 decimals"):
+            _go("quote", _build("quote", qty="1", price="1.0000001",
+                                totals={"total_taxable_amount": "1.00", "total_vat_amount": "0.15",
+                                        "grand_total": "1.15"}))
+
+    def test_tax_invoices_refuse_a_price_the_fixed_two_decimal_print_would_round(self):
+        # ERP-007 prints unit prices with two decimals and is not changed here, so 1.004 would
+        # print as 1.00 next to a 10.04 amount: refuse instead of printing a sheet that disagrees.
+        for kind in _INVOICE_KINDS:
+            with self.subTest(kind):
+                with self.assertRaisesRegex(ValueError, r"unit_price 1\.004.*2 decimals"):
+                    _go(kind, _build(kind, qty="10", price="1.004",
+                                     line={"line_total": "10.04"}, totals=self.TOTALS))
+
+    def test_a_discount_the_print_would_round_is_refused(self):
+        for kind in _KINDS:
+            with self.subTest(kind):
+                with self.assertRaisesRegex(ValueError, r"discount 5\.005.*2 decimals"):
+                    _go(kind, _build(kind, line={"discount": "5.005"}))
 
 
 def _po_with(**line):

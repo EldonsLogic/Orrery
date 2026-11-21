@@ -20,12 +20,9 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 ## In flight (dispatched, no result yet)
 | Plan ID | Model | Scope | Allowed paths | Branch |
 |---|---|---|---|---|
-| DSC-009 | opus-5.5 (worktree) | Fix #224 security findings H1, H2, M3 to M5 with tests first | DSC-009 package and tests | dsc-009-fixes (local), then pushed to dsc-009-owner-approval |
-| SEC-022, BPL-032 | fable-5.2 | Tier 3 security review of partner #235 (role namespacing) | none (review text) | - |
-| QA-014 | sonnet-5.5 | Undefined CSS var lint plus A-06 to A-11 fixes | web/scripts, web/app, docs/specs/qa-014-accessibility-audit.md | qa-014-accessibility-audit (PR #228) |
-| BRD-007 | sonnet-5.5 | Deterministic brand asset script (logo variants, derived dark, sizes, --check) | scripts/build_brand_assets.py, its test, docs/brand | brd-007-brand-assets (to create) |
-| LEG-003 | sonnet-5.5 | Counsel scope of work draft for KSA, UAE, Egypt, Qatar | docs/legal/counsel-scope-of-work.md | leg-003-counsel-scope (to create) |
-| - | watcher | Background script exits on any new sayegh9 comment, review or PR | - | - |
+| DSC-009 | fable-5.2 | Re-review the #224 security fixes (5c37939, a0ffd87) | none (review text) | - |
+| QA-014 | sonnet-5.5 | A-12 dark and light contrast pairs in the existing contrast test | web/ tests, docs/specs/qa-014-accessibility-audit.md | qa-014-accessibility-audit (PR #228) |
+| - | watcher | Background script exits on any new sayegh9 comment, review or new PR | - | - |
 
 ## Results
 - FND-002 (sonnet): docs/fundraising/accelerator-evaluation.md. Hub71+ wait (relocation, SAFE terms UNVERIFIED), Antler skip, Sanabil/500 wait for MVP, Flat6Labs Riyadh wait (KSA residency), QSTP skip. Hub71 deadline still UNVERIFIED (page 403). Branch fnd-002-accelerators.
@@ -38,6 +35,9 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - OPR-015 design shipped as PR #237 (row doing); GOV-057 wording fixes as PR #238. #231 FND-002 and #233 GTM-004 merged (Tier 1).
 - Reviews posted: #202 request changes (H1, M2, M4 fixed; new Medium: invisible marks allowed in code and link fields bypass the duplicate guard; conflict with main); #229 request changes (no back-dated or repost tests; no live valuation test in CI; conflict); #236 approved and merged.
 - For the partner (plan hygiene scan, partner rows, partner decides): rows still `doing` whose PRs merged: CE-SEC-005 (#134), SEC-004 (#131), ERP-009 (#162), CMP-006 (#161), CMP-021 (#158), ERP-020 (#148), ERP-027 (#125), ERP-023 (#203), PLT-024 (#123), ERP-026 (#126), CMP-033 (#124); check each against its full row text before marking done (BPL-027 stays doing until BPL-031 to BPL-033).
+- DSC-009 fixes (opus, worktree) pushed to #224: H1, H2, M4, M5, L7 to L9 fixed with 13 tests first (discovery tests 589 passed); M3 deferred as Q-544, L6 stays Q-524.
+- #235 SEC-022/BPL-032 security review (fable): request changes, High: grants can target any engine doctype outside a denylist (Server Script, User Permission, Payment Entry reproduced); Medium: foreign field moved to level 0, no live evidence for flipped tripwires, test mirrors implementation.
+- QA-014 second pass pushed to #228 (css-vars lint, A-06 to A-09, A-11). BRD-007 pipeline PR #239 (row done), LEG-003 counsel scope draft PR #240 (row doing). Merged Tier 1: #237 OPR-015, #238 GOV-057.
 - BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
 ## Files touched

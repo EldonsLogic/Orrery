@@ -125,11 +125,26 @@ def entity_to_doctype(entity_id: str) -> str:
     return " ".join(part.capitalize() for part in str(entity_id).replace("-", "_").split("_") if part) or "Custom Entity"
 
 
+# The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`); an entity id outside it is refused
+# at plan time (`unsupported_value_type`), so stray whitespace never reaches a derived document type name.
+ENTITY_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+
+
+def is_valid_entity_id(entity_id: Any) -> bool:
+    return isinstance(entity_id, str) and ENTITY_ID_RE.fullmatch(entity_id) is not None
+
+
+def _protected_key(name: Any) -> str:
+    """Comparison key: stripped, runs of whitespace and underscores collapsed to one `_`, case folded (defence in
+    depth; the engine folds case and pads trailing spaces in names, so `Gl Entry ` is `GL Entry`)."""
+    return re.sub(r"[\s_]+", "_", str(name).strip()).casefold()
+
+
 def is_protected_entity(entity_id: str) -> bool:
-    """Case-insensitive: the engine folds case in names (`gl_entry` derives `Gl Entry`, which is `GL Entry`)."""
-    if str(entity_id).casefold() in {i.casefold() for i in PROTECTED_ENTITY_IDS}:
+    """Compared on a normalised key: `gl_entry`, `GL Entry` and `gl_entry ` are one protected entity."""
+    if _protected_key(entity_id) in {_protected_key(i) for i in PROTECTED_ENTITY_IDS}:
         return True
-    return entity_to_doctype(entity_id).casefold() in {d.casefold() for d in ZONE_2_LOCKED_DOCTYPES}
+    return _protected_key(entity_to_doctype(entity_id)) in {_protected_key(d) for d in ZONE_2_LOCKED_DOCTYPES}
 
 
 # SEC-022 / ADR-0051 item 3: the document types a Blueprint role may get permission rules on are an allowlist:
@@ -160,7 +175,7 @@ def grant_plan_reason(
         return "unsupported_value_type"
     for p in perms or []:
         entity = p.get("entity") if isinstance(p, dict) else None
-        if not isinstance(entity, str):
+        if not is_valid_entity_id(entity):
             return "unsupported_value_type"
         reviewed = reviewed_grant_doctype(entity) is not None
         own = (

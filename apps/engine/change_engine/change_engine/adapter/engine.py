@@ -31,6 +31,7 @@ from change_engine.adapter.mapping import (
     has_prohibited_expression,
     inspect_field_ddl,
     is_protected_entity,
+    is_valid_entity_id,
     plan_statements_for_step,
 )
 from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord, TenantMismatch
@@ -990,8 +991,14 @@ class ChangeEngineAdapter:
         if has_prohibited_expression(params):
             return "blocked", "prohibited_expression", ddl
         segs = _segs(pointer)
-        if segs[:1] == ["entities"] and len(segs) > 1 and is_protected_entity(segs[1]):
-            return "blocked", "protected_subject", ddl
+        if segs[:1] == ["entities"] and len(segs) > 1:
+            ids = [segs[1]]
+            if kind == "entity.add":
+                ids.append(step["subject"].get("id"))
+            if not all(is_valid_entity_id(i) for i in ids):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(segs[1]):
+                return "blocked", "protected_subject", ddl
 
         defn = params.get("definition")
         if kind == "role.upsert":

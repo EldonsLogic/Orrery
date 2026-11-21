@@ -252,5 +252,74 @@ class TestCaseVariantLedgerEntityBlockedAtPlanOnBothBackends(TestOwnEntityGrants
     test_protected_own_entity_stays_refused_in_memory = None
 
 
+WHITESPACE_IDS = ("gl_entry ", " gl_entry", "gl _entry", "GL Entry ", "general_ledger ")
+
+
+class TestWhitespaceEntityIdsRefusedAtPlan(TestOwnEntityGrantsAgreeAcrossBackends):
+    """Review of e792eb9, finding 1: an entity id with stray whitespace is no entity id (contract pattern
+    `^[a-z][a-z0-9_]{1,63}$`), and must not slip past the protected-entity check (`Gl Entry ` is `GL Entry`
+    under the engine's PAD SPACE collation)."""
+
+    def test_protected_key_is_normalised(self) -> None:
+        for eid in WHITESPACE_IDS + ("GL  Entry", "gl__entry", "Gl\tEntry", "gl-entry"):
+            with self.subTest(entity=eid):
+                self.assertTrue(is_protected_entity(eid))
+
+    def test_ordinary_ids_stay_unprotected(self) -> None:
+        for eid in ("customer", "sales_invoice", "delivery_note"):
+            self.assertFalse(is_protected_entity(eid))
+
+    def test_whitespace_ids_refused_at_plan_on_both_backends(self) -> None:
+        for eid in WHITESPACE_IDS:
+            steps = [_entity(1, eid), _role(2, "r_ws", eid)]
+            for name, adapter in self._adapters():
+                with self.subTest(entity=eid, adapter=name):
+                    result = self._plan(adapter, steps, f"idemp_f3_ws_{abs(hash((eid, name)))}")
+                    got = {s["seq"]: s["disposition"] for s in result["steps"]}
+                    self.assertEqual(got, {1: "blocked", 2: "blocked"}, result)
+                    self.assertEqual(result["verdict"], "rejected")
+                    self.assertTrue(all(s.get("reasonCode") for s in result["steps"]), result)
+
+    def test_whitespace_entity_alone_and_grant_alone_refused(self) -> None:
+        for eid in WHITESPACE_IDS:
+            for label, steps in (("entity", [_entity(1, eid)]), ("grant", [_role(1, "r_ws", eid)])):
+                for name, adapter in self._adapters():
+                    with self.subTest(entity=eid, step=label, adapter=name):
+                        result = self._plan(adapter, steps, f"idemp_f3_ws1_{abs(hash((eid, label, name)))}")
+                        self.assertEqual(result["steps"][0]["disposition"], "blocked", result)
+                        self.assertEqual(result["verdict"], "rejected")
+
+    def test_whitespace_refusal_writes_nothing_to_the_engine(self) -> None:
+        for eid in WHITESPACE_IDS:
+            engine = CaseInsensitiveEngine(SITE)
+            backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: SITE}),
+                                           frappe_factory=lambda e=engine: e, offline_ddl_simulator=True)
+            adapter = ChangeEngineAdapter(test_hooks=False, environment="test", frappe_backend=backend)
+            prov = adapter.call("provision_site", _ctx(), {
+                "idempotencyKey": f"idemp_f3_w_{abs(hash(eid))}",
+                "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+                "blueprintId": "bp-f2", "siteClass": "sandbox", "countryPack": "sa"})
+            self.assertTrue(prov["ok"], prov)
+            before = repr(engine.ensure_site(SITE).rows)
+            with self.subTest(entity=eid):
+                planned = adapter.call("plan", _ctx(), {"artifact": _artifact([_entity(1, eid), _role(2, "r_ws", eid)])})
+                self.assertTrue(planned["ok"], planned)
+                self.assertEqual(planned["result"]["verdict"], "rejected")
+                self.assertEqual(repr(engine.ensure_site(SITE).rows), before)
+
+    def test_legitimate_ids_still_plan_on_both_backends(self) -> None:
+        for eid in ("customer", "sales_invoice", "delivery_note"):
+            for name, adapter in self._adapters():
+                with self.subTest(entity=eid, adapter=name):
+                    result = self._plan(adapter, [_role(1, "r_ok", eid)], f"idemp_f3_ok_{eid}_{name}")
+                    self.assertNotEqual(result["steps"][0].get("reasonCode"), "unsupported_value_type", result)
+                    self.assertEqual(result["steps"][0]["disposition"], "gated", result)
+
+    # inherited tests of the parent class are not repeated
+    test_own_entity_grant_allowed_and_unmapped_builtin_refused_on_both = None
+    test_own_entity_grant_alone_needs_gate_approval_on_both = None
+    test_protected_own_entity_stays_refused_in_memory = None
+
+
 if __name__ == "__main__":
     unittest.main()

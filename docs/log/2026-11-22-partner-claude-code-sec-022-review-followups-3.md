@@ -28,3 +28,8 @@ Unknown.
 
 ## Next step
 Eldon's line-by-line review (Tier 3); then the open ADR-0051 item 4 follow-ups and BPL-034.
+
+## Review fix (Gemini Hydrogen review of e792eb9)
+- Medium, whitespace bypass: `is_protected_entity` now compares a normalised key (stripped, whitespace and underscore runs collapsed, case folded). The plan stage also refuses any entity id outside the Blueprint id grammar `^[a-z][a-z0-9_]{1,63}$` (`contracts/blueprint.schema.json` `$defs/id`) with `unsupported_value_type` (no `invalid_subject` code exists in the plan reason codes, so the existing code for an id outside the grammar is used, as ADR-0051 item 1 does): pointer segment and `entity.add` subject id in `engine.py` `_judge`, role grant targets in `grant_plan_reason`. Inputs `gl_entry `, ` gl_entry`, `gl _entry`, `GL Entry ` and `general_ledger ` are blocked on the in-memory and offline engine-backed adapters; the offline fake is not written.
+- Low: the broken sentence in ADR-0051 item 3 is rewritten.
+- Tests: `test_sec_022_review_followups_2.py` has a new class for the above (32 subtests failed before the fix, all pass after).

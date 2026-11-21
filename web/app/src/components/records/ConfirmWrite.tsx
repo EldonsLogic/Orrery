@@ -3,6 +3,7 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button, Card, Stack } from '../../ui';
+import { inertOutside } from '../../ui/inert';
 import type { Change } from '../../records/actions';
 import styles from './Records.module.css';
 
@@ -25,11 +26,15 @@ export type ConfirmWriteProps = {
 export function ConfirmWrite({ actionLabel, entityLabel, recordId, risk, changes, sensitive, busy, onConfirm, onCancel }: ConfirmWriteProps) {
   const t = useTranslations('records.confirm');
   const root = useRef<HTMLDivElement>(null);
-  // Modal behaviour: move focus in, restore it on close, Escape cancels, Tab stays inside.
+  // Modal behaviour: move focus in, make the rest of the page inert, restore both on close, Escape cancels, Tab stays inside.
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;
+    const release = root.current ? inertOutside(root.current) : undefined;
     root.current?.querySelector<HTMLElement>('button')?.focus();
-    return () => before?.focus?.();
+    return () => {
+      release?.();
+      before?.focus?.();
+    };
   }, []);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape' && !busy) {

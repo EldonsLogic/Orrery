@@ -36,7 +36,7 @@
   resize: vertical;
 }
 .textarea:focus-visible { outline: var(--focus-ring-width) solid var(--color-primary); outline-offset: var(--focus-ring-offset); }
-.textarea:disabled { opacity: 0.5; cursor: not-allowed; }
+.textarea[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
 .bar { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
 .count { font-size: var(--text-caption-size); color: color-mix(in srgb, var(--color-text) 70%, transparent); }
 .hint { margin: 0; font-size: var(--text-small-size); color: color-mix(in srgb, var(--color-text) 70%, transparent); }

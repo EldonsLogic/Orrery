@@ -19,18 +19,33 @@ from three parts, none of which trusts tenant input:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from html.parser import HTMLParser
 import re
 
 from .document_labels import ALL_LABELS
+from .document_tokens import document_tokens
 
-PRINT_SURFACES: tuple[str, ...] = ("#ffffff", "#f5f7fa", "#f8fafc")
+# Every colour and the font come from the token source (``document_tokens``); print-only neutrals
+# that are not brand tokens use the closest existing light token (ADR-0014, no new tokens here).
+# The constants below are resolved on first use so importing this module never needs the file.
 
-# Status colours are fixed (ADR-0014): meaning is the same in every tenant. Always shown with an
-# icon and a label. Values follow docs/brand/tokens (light theme).
-STATUS_TOKENS: dict[str, str] = {"success": "#13795B", "warning": "#9E5600", "danger": "#C21F3A"}
 
-DEFAULT_PRIMARY = "#2443D0"
+def print_surfaces() -> tuple[str, ...]:
+    """Surfaces the primary and accent are contrast-checked against: surface, panel, subtle panel."""
+    t = document_tokens()
+    return (t.surface, t.background, t.surface)
+
+
+def status_tokens() -> dict[str, str]:
+    """Status colours are fixed (ADR-0014); always shown with an icon and a label."""
+    t = document_tokens()
+    return {"success": t.success, "warning": t.warning, "danger": t.danger}
+
+
+def default_primary() -> str:
+    return document_tokens().primary
+
 
 _TOKEN_BLOCK_RE = re.compile(
     r":root\{--brand-primary:#[0-9a-f]{6};--brand-accent:#[0-9a-f]{6};\}"
@@ -47,22 +62,25 @@ def render_token_block(primary_hex: str, accent_hex: str) -> str:
     return block
 
 
-_FIXED_ROOT = f"""\
+def _fixed_root() -> str:
+    t = document_tokens()
+    return f"""\
 :root {{
-  --doc-surface: {PRINT_SURFACES[0]};
-  --doc-panel: {PRINT_SURFACES[1]};
-  --doc-panel-subtle: {PRINT_SURFACES[2]};
-  --doc-text: #0e1117;
-  --doc-text-secondary: #1e293b;
-  --doc-text-muted: #475569;
-  --doc-border: #d5dce6;
-  --doc-border-soft: #e2e8f0;
-  --status-success: {STATUS_TOKENS["success"]};
-  --status-warning: {STATUS_TOKENS["warning"]};
-  --status-danger: {STATUS_TOKENS["danger"]};
-  --font-doc: 'Readex Pro', 'Alexandria', 'DejaVu Sans', 'Noto Sans Arabic', Arial, sans-serif;
+  --doc-surface: {t.surface};
+  --doc-panel: {t.background};
+  --doc-panel-subtle: {t.surface};
+  --doc-text: {t.text};
+  --doc-text-secondary: {t.text};
+  --doc-text-muted: {t.text};
+  --doc-border: {t.background};
+  --doc-border-soft: {t.background};
+  --status-success: {t.success};
+  --status-warning: {t.warning};
+  --status-danger: {t.danger};
+  --font-doc: {t.font_stack};
 }}
 """
+
 
 _RULES = """\
 @page {
@@ -208,7 +226,24 @@ bdi { unicode-bidi: isolate; direction: ltr; }
 .footer-brand { display: table-cell; text-align: left; direction: ltr; }
 """
 
-LOCKED_DOCUMENT_CSS = _FIXED_ROOT + _RULES
+
+@lru_cache(maxsize=1)
+def locked_document_css() -> str:
+    return _fixed_root() + _RULES
+
+
+_LAZY = {
+    "LOCKED_DOCUMENT_CSS": locked_document_css,
+    "PRINT_SURFACES": print_surfaces,
+    "STATUS_TOKENS": status_tokens,
+    "DEFAULT_PRIMARY": default_primary,
+}
+
+
+def __getattr__(name: str):  # PEP 562: the constants load the token file on first access
+    if name in _LAZY:
+        return _LAZY[name]()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def render_document_shell(*, kind: str, title_html: str, token_block: str, body_html: str) -> str:
@@ -220,7 +255,7 @@ def render_document_shell(*, kind: str, title_html: str, token_block: str, body_
         '<meta charset="utf-8"/>\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1"/>\n'
         f"<title>{title_html}</title>\n"
-        f"<style>{token_block}\n{LOCKED_DOCUMENT_CSS}</style>\n"
+        f"<style>{token_block}\n{locked_document_css()}</style>\n"
         "</head>\n"
         '<body dir="rtl">\n'
         f'<div class="document-page" data-document-kind="{kind}">\n'
@@ -413,7 +448,7 @@ def _verify(document_html: str, kind: str, spec: _Spec) -> list[str]:
         token, _, rest = styles[0].content().partition("\n")
         if not _TOKEN_BLOCK_RE.fullmatch(token):
             problems.append("tenant token block is not the allowed brand colour tokens")
-        if rest != LOCKED_DOCUMENT_CSS:
+        if rest != locked_document_css():
             problems.append("stylesheet differs from the locked document stylesheet")
 
     imgs: list[_Node] = []

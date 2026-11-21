@@ -8,11 +8,15 @@ review marking. All data is synthetic.
 from __future__ import annotations
 
 import base64
+import json
 import re
 import struct
+import tempfile
 import unittest
 import zlib
 from html.parser import HTMLParser
+from pathlib import Path
+from unittest import mock
 
 from change_engine.compliance import ZatcaValidationError, decode_phase1_tlv
 from change_engine.print_formats import (
@@ -959,6 +963,250 @@ class TestBrandedPurchaseOrder(unittest.TestCase):
         doc = render_branded_purchase_order_html(data)
         self.assertIn('data-locked-region="delivery"', doc)
         self.assertEqual(verify_locked_layout(doc, "purchase_order"), [])
+
+
+# --------------------------------------------------------------------------------------
+# Review fixes: tokens only, line reconciliation, footer wording, unreviewed Arabic
+# --------------------------------------------------------------------------------------
+_REPO_ROOT = Path(__file__).resolve().parents[5]
+_TOKENS_JSON = _REPO_ROOT / "docs" / "brand" / "tokens" / "tokens.json"
+_PRINT_FORMATS = Path(__file__).resolve().parents[1] / "print_formats"
+
+# Each print variable and the light-theme token it must equal. Print-only neutrals that are not
+# brand tokens map to the closest existing token (ERP-016 review fix, ADR-0014).
+_ROLE_TO_TOKEN = {
+    "--doc-surface": "surface",
+    "--doc-panel": "background",
+    "--doc-panel-subtle": "surface",
+    "--doc-text": "text",
+    "--doc-text-secondary": "text",
+    "--doc-text-muted": "text",
+    "--doc-border": "background",
+    "--doc-border-soft": "background",
+    "--status-success": "success",
+    "--status-warning": "warning",
+    "--status-danger": "danger",
+}
+
+
+def _light_tokens() -> dict:
+    return json.loads(_TOKENS_JSON.read_text(encoding="utf-8"))
+
+
+def _locked_root_vars(css: str) -> dict[str, str]:
+    block = re.search(r":root\s*\{([^}]*)\}", css).group(1)
+    return {k.strip(): v.strip() for k, v in re.findall(r"(--[a-z-]+)\s*:\s*([^;]+);", block)}
+
+
+class TestLayoutReadsTokenSource(unittest.TestCase):
+    def test_rendered_css_values_equal_tokens_json(self):
+        tokens = _light_tokens()
+        light = tokens["color"]["light"]
+        for kind in ALL_KINDS:
+            with self.subTest(kind):
+                # The locked block is the second :root in the document (first is the tenant one).
+                style = _style_block(_render(kind))
+                root_vars = _locked_root_vars(_css_without_first_root(style))
+                for var, token in _ROLE_TO_TOKEN.items():
+                    self.assertEqual(root_vars[var].lower(), light[token]["hex"].lower(), var)
+        body = tokens["typography"]["families"]["body"]
+        font = _locked_root_vars(LOCKED_DOCUMENT_CSS)["--font-doc"]
+        self.assertEqual(font, f"'{body['family']}', {body['fallback']}")
+
+    def test_layout_constants_follow_tokens_json(self):
+        from change_engine.print_formats import document_layout
+
+        light = _light_tokens()["color"]["light"]
+        self.assertEqual(document_layout.DEFAULT_PRIMARY.lower(), light["primary"]["hex"].lower())
+        self.assertEqual(
+            tuple(h.lower() for h in PRINT_SURFACES),
+            tuple(light[t]["hex"].lower() for t in ("surface", "background", "surface")),
+        )
+        self.assertEqual(
+            {k: v.lower() for k, v in STATUS_TOKENS.items()},
+            {k: light[k]["hex"].lower() for k in ("success", "warning", "danger")},
+        )
+
+    def test_no_colour_or_font_literals_outside_the_token_loader(self):
+        modules = ("document_layout.py", "branded_documents.py", "brand_tokens.py",
+                   "brand_assets.py", "document_labels.py")
+        font_names = ("Readex", "Alexandria", "DejaVu", "Noto", "Arial", "Helvetica", "Tahoma")
+        for name in modules:
+            with self.subTest(name):
+                src = (_PRINT_FORMATS / name).read_text(encoding="utf-8")
+                self.assertNotRegex(src, r"#[0-9a-fA-F]{3,8}\b", name)
+                self.assertNotRegex(src, r"\b(rgb|hsl)a?\(", name)
+                self.assertNotRegex(src, r"font-family\s*:[ \t]*(?![ \t]|var\()", name)  # var(--font-doc) only
+                for font in font_names:
+                    self.assertNotIn(font, src, name)
+
+    def test_loader_fails_closed(self):
+        from change_engine.print_formats.document_tokens import (
+            DocumentTokenError,
+            load_document_tokens,
+        )
+
+        good = _light_tokens()
+
+        def written(tmp, data) -> Path:
+            path = Path(tmp) / "tokens.json"
+            path.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
+            return path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(load_document_tokens(written(tmp, good)).primary.lower(),
+                             good["color"]["light"]["primary"]["hex"].lower())
+            with self.assertRaises(DocumentTokenError):
+                load_document_tokens(Path(tmp) / "missing.json")
+            with self.assertRaises(DocumentTokenError):
+                load_document_tokens(written(tmp, "{not json"))
+            for mutate in (
+                lambda d: d["color"]["light"].pop("text"),
+                lambda d: d["color"]["light"]["surface"].update(hex="white"),
+                lambda d: d["color"]["light"]["danger"].update(hex="#C21F3A; x"),
+                lambda d: d["typography"]["families"]["body"].pop("family"),
+                lambda d: d["typography"]["families"]["body"].update(family="x}"),
+                lambda d: d["typography"]["families"]["body"].update(fallback="a;b"),
+                lambda d: d.pop("typography"),
+            ):
+                broken = json.loads(json.dumps(good))
+                mutate(broken)
+                with self.subTest(mutate=mutate), self.assertRaises(DocumentTokenError):
+                    load_document_tokens(written(tmp, broken))
+
+    def test_missing_token_file_fails_render_closed_not_import(self):
+        # Importing the package must keep working without the token file (the engine app is
+        # mounted without docs/ in the dev bench); the first branded render must refuse.
+        from change_engine.print_formats import document_tokens
+        from change_engine.print_formats.document_tokens import DocumentTokenError
+
+        with mock.patch.object(document_tokens, "_candidate_paths", return_value=[]):
+            document_tokens.document_tokens.cache_clear()
+            try:
+                with self.assertRaises(DocumentTokenError):
+                    document_tokens.document_tokens()
+            finally:
+                document_tokens.document_tokens.cache_clear()
+
+
+def _css_without_first_root(css: str) -> str:
+    return re.sub(r":root\s*\{[^}]*\}", "", css, count=1)
+
+
+# --------------------------------------------------------------------------------------
+# Line amounts reconcile to totals (ADR-0031, rule 6): compare, never recompute
+# --------------------------------------------------------------------------------------
+class TestLineReconciliation(unittest.TestCase):
+    def _quote(self, **line):
+        data = _quote_data()
+        data["lines"][0].update(line)
+        return data
+
+    def test_matching_document_with_supplied_line_total_renders(self):
+        for builder, render in (
+            (lambda: self._quote(line_total="200.00"), render_branded_quote_html),
+            (lambda: _po_with(line_total="500.00"), render_branded_purchase_order_html),
+        ):
+            with self.subTest(render.__name__):
+                self.assertIn("200.00" if "quote" in render.__name__ else "500.00",
+                              render(builder()))
+
+    def test_mismatched_line_total_is_refused_not_corrected(self):
+        with self.assertRaisesRegex(ValueError, r"Line 1.*line_total 210\.00.*200\.00"):
+            render_branded_quote_html(self._quote(line_total="210.00"))
+        with self.assertRaisesRegex(ValueError, r"Line 1.*line_total"):
+            render_branded_purchase_order_html(_po_with(line_total="499.99"))
+
+    def test_discount_is_part_of_the_line_check(self):
+        data = self._quote(discount="10.00", line_total="190.00")
+        data["totals"] = {"total_taxable_amount": "190.00", "total_vat_amount": "28.50",
+                          "grand_total": "218.50"}
+        self.assertIn("190.00", render_branded_quote_html(data))
+        data["lines"][0]["line_total"] = "200.00"  # ignores the discount
+        with self.assertRaisesRegex(ValueError, r"Line 1.*line_total"):
+            render_branded_quote_html(data)
+
+    def test_computed_amount_rounds_half_even_to_two_places_like_the_totals_check(self):
+        # 3 x 33.335 = 100.005 -> 100.00 (half-even, the quantize used for printed amounts)
+        data = self._quote(quantity="3", unit_price="33.335", line_total="100.00")
+        data["totals"] = {"total_taxable_amount": "100.00", "total_vat_amount": "15.00",
+                          "grand_total": "115.00"}
+        self.assertIn("100.00", render_branded_quote_html(data))
+        data["lines"][0]["line_total"] = "100.01"
+        with self.assertRaisesRegex(ValueError, r"Line 1.*line_total"):
+            render_branded_quote_html(data)
+
+    def test_sum_of_lines_must_equal_total_taxable_amount(self):
+        data = _quote_data()  # lines sum to 200.00; totals say 300.00 / 45.00 / 345.00
+        data["totals"] = {"total_taxable_amount": "300.00", "total_vat_amount": "45.00",
+                          "grand_total": "345.00"}
+        with self.assertRaisesRegex(ValueError, r"Lines total 200\.00.*total_taxable_amount 300\.00"):
+            render_branded_quote_html(data)
+        po = _po_data()
+        po["lines"].append({"description": "Bolt", "quantity": "10", "unit_price": "1.00",
+                            "vat_rate": "0.15"})  # 500 + 10 = 510 but totals say 500
+        with self.assertRaisesRegex(ValueError, r"Lines total 510\.00"):
+            render_branded_purchase_order_html(po)
+
+    def test_multiple_lines_sum_matches(self):
+        po = _po_data()
+        po["lines"].append({"description": "Bolt", "quantity": "10", "unit_price": "1.00",
+                            "vat_rate": "0.15", "line_total": "10.00"})
+        po["totals"] = {"total_taxable_amount": "510.00", "total_vat_amount": "76.50",
+                        "grand_total": "586.50"}
+        self.assertIn("586.50", render_branded_purchase_order_html(po))
+
+    def test_tax_invoice_lines_are_reconciled_in_both_modes(self):
+        neutral = _neutral_invoice_data()
+        neutral["lines"][0]["line_total"] = "151.00"
+        with self.assertRaisesRegex(ValueError, r"Line 1.*line_total 151\.00.*150\.00"):
+            render_branded_tax_invoice_html(neutral, mode="neutral")
+        neutral["lines"][0]["line_total"] = "150.00"
+        self.assertIn("150.00", render_branded_tax_invoice_html(neutral, mode="neutral"))
+        neutral = _neutral_invoice_data()
+        neutral["totals"] = {"total_taxable_amount": "160.00", "total_vat_amount": "0.00",
+                             "grand_total": "160.00"}
+        with self.assertRaisesRegex(ValueError, r"Lines total 150\.00.*total_taxable_amount 160\.00"):
+            render_branded_tax_invoice_html(neutral, mode="neutral")
+        zatca = _tax_invoice_data()
+        zatca["lines"][0]["line_total"] = "201.00"
+        with self.assertRaisesRegex(ValueError, r"Line 1.*line_total 201\.00"):
+            render_branded_tax_invoice_html(zatca, mode="zatca_sa")
+
+
+def _po_with(**line):
+    data = _po_data()
+    data["lines"][0].update(line)
+    return data
+
+
+# --------------------------------------------------------------------------------------
+# Footer wording and Arabic review marking
+# --------------------------------------------------------------------------------------
+class TestFooterAndArabicReview(unittest.TestCase):
+    def test_footer_has_no_product_name_and_uses_the_localised_label(self):
+        from change_engine.print_formats.document_labels import DOCUMENT_LABELS
+
+        ar, en = DOCUMENT_LABELS["powered_by"]
+        for kind in ALL_KINDS:
+            with self.subTest(kind):
+                doc = _render(kind)
+                self.assertNotIn("Orrery", doc)
+                self.assertNotIn("orrery", doc.lower())
+                self.assertIn(en, doc)
+                self.assertIn(ar, doc)
+                self.assertNotIn("Orrery", _render(kind, branding=TENANT_BRANDING))
+
+    def test_footer_label_is_unreviewed_arabic(self):
+        self.assertIn("powered_by", UNREVIEWED_ARABIC_LABELS)
+
+    def test_every_new_label_is_unreviewed_and_not_wired_to_a_customer_path(self):
+        from change_engine.print_formats.document_labels import DOCUMENT_LABELS
+
+        self.assertEqual(set(UNREVIEWED_ARABIC_LABELS), set(DOCUMENT_LABELS))
+        hooks = (_PRINT_FORMATS.parent / "hooks.py").read_text(encoding="utf-8")
+        for name in ("branded_documents", "render_branded", "document_labels"):
+            self.assertNotIn(name, hooks)  # no customer-facing hook until the Arabic is reviewed
 
 
 if __name__ == "__main__":

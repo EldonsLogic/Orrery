@@ -28,12 +28,20 @@ from .branded_documents import (
 )
 from .document_labels import UNREVIEWED_ARABIC_LABELS
 from .document_layout import (
-    LOCKED_DOCUMENT_CSS,
     LockedLayoutViolation,
     assert_locked_layout,
     verify_locked_layout,
 )
 from .qr_svg import build_qr_matrix, render_qr_svg
+
+
+def __getattr__(name: str):  # LOCKED_DOCUMENT_CSS reads the token file, so it loads on first use
+    if name == "LOCKED_DOCUMENT_CSS":
+        from . import document_layout
+
+        return document_layout.LOCKED_DOCUMENT_CSS
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "BILINGUAL_LABELS",
@@ -43,7 +51,6 @@ __all__ = [
     "DocumentBranding",
     "ENTITLEMENT_REMOVE_POWERED_BY",
     "InvoiceBranding",
-    "LOCKED_DOCUMENT_CSS",
     "LockedLayoutViolation",
     "ResolvedDocumentBranding",
     "SanitizedLogo",

@@ -104,10 +104,8 @@ def _header_region(brand: ResolvedDocumentBranding, title_block: str, meta_rows:
 def _footer_region(brand: ResolvedDocumentBranding, reference: str) -> str:
     powered = ""
     if brand.show_powered_by:
-        powered = (
-            '<span class="powered-by">'
-            f'مدعوم من {_ltr("Orrery")} &nbsp;|&nbsp; Powered by {_ltr("Orrery")}</span>'
-        )
+        ar, en = _pair("powered_by")
+        powered = f'<span class="powered-by">{_esc(ar)} &nbsp;|&nbsp; {_esc(en)}</span>'
     return (
         '<div class="doc-footer" data-locked-region="footer">'
         f'<span class="footer-ref">{_ltr(reference)}</span>'
@@ -186,6 +184,11 @@ def render_branded_tax_invoice_html(
     if mode not in ("zatca_sa", "neutral"):
         raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
     brand = resolve_document_branding(branding, entitlements=entitlements)
+    reconciliation: list[str] = []
+    if isinstance(invoice_data, Mapping):
+        _check_line_reconciliation(invoice_data, reconciliation, ("line_total", "line_net_amount"))
+    if reconciliation:
+        raise ValueError("; ".join(reconciliation))
     view = prepare_tax_invoice_view(invoice_data, mode)
 
     header = _header_region(
@@ -297,6 +300,48 @@ def _check_totals(data: Mapping[str, Any], errors: list[str]) -> None:
         errors.append(f"Engine totals disagree: taxable {taxable} + VAT {vat} != grand total {grand}")
 
 
+def _check_line_reconciliation(data: Mapping[str, Any], errors: list[str],
+                               amount_fields: tuple[str, ...] = ("line_total",)) -> None:
+    """Compare printed line amounts with the lines and the lines with the taxable total.
+
+    Each line must equal quantity x unit_price - discount, rounded to 2 decimals with the same
+    ``quantize`` the printed amounts use (default context, round half to even); a line with no
+    supplied amount prints that computed value. The line amounts must then sum to
+    ``total_taxable_amount``. This only compares and fails closed: a printed value is never
+    replaced or recomputed to make a document pass (ADR-0031). Malformed numbers are left to the
+    existing validators, which refuse them.
+    """
+    lines = data.get("lines")
+    totals = data.get("totals")
+    if not isinstance(lines, list) or not lines or not isinstance(totals, Mapping):
+        return
+    try:
+        taxable = _to_dec(totals.get("total_taxable_amount"), "total_taxable_amount")
+    except ValueError:
+        return
+    running = _ZERO
+    for idx, line in enumerate(lines, start=1):
+        if not isinstance(line, Mapping):
+            return
+        try:
+            qty = _to_dec(line.get("quantity"), "quantity")
+            price = _to_dec(line.get("unit_price"), "unit_price")
+            discount = _to_dec(line.get("discount", "0"), "discount")
+            field = next((f for f in amount_fields if line.get(f) not in (None, "")), None)
+            supplied = _to_dec(line[field], field) if field else None
+        except ValueError:
+            return
+        expected = (qty * price - discount).quantize(_TWO_DECIMALS)
+        if supplied is not None and supplied != expected:
+            errors.append(
+                f"Line {idx}: {field} {supplied} != quantity {qty} x unit_price {price} "
+                f"- discount {discount} = {expected}"
+            )
+        running += expected if supplied is None else supplied
+    if running != taxable:
+        errors.append(f"Lines total {running} != total_taxable_amount {taxable}")
+
+
 def _terms(data: Mapping[str, Any]) -> list[str]:
     raw = data.get("terms")
     if raw is None or raw == "" or raw == []:
@@ -390,6 +435,7 @@ def _validate_commercial(data: Mapping[str, Any], *, id_key: str, due_key: str,
         _check_party(data, party, errors)
     _check_lines(data, errors)
     _check_totals(data, errors)
+    _check_line_reconciliation(data, errors)
     if errors:
         raise ValueError("; ".join(errors))
     return doc_id, issue, due, issue_date, due_date, currency

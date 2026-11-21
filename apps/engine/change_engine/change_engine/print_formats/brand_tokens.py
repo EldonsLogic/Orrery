@@ -18,7 +18,7 @@ from typing import Any, Mapping
 import unicodedata
 
 from .brand_assets import BrandAssetError, SanitizedLogo, sanitize_brand_logo
-from .document_layout import DEFAULT_PRIMARY, PRINT_SURFACES
+from .document_layout import default_primary, print_surfaces
 
 ENTITLEMENT_REMOVE_POWERED_BY = "branding.removePoweredBy"
 MIN_TEXT_CONTRAST = 4.5
@@ -93,7 +93,7 @@ def contrast_ratio(foreground: str, background: str) -> float:
 
 
 def _worst_surface(hex_color: str) -> tuple[str, float]:
-    return min(((s, contrast_ratio(hex_color, s)) for s in PRINT_SURFACES), key=lambda x: x[1])
+    return min(((s, contrast_ratio(hex_color, s)) for s in print_surfaces()), key=lambda x: x[1])
 
 
 def _fit_colour(raw: Any, label: str, minimum: float, policy: str) -> tuple[str, str | None]:
@@ -196,7 +196,7 @@ def resolve_document_branding(
 
     adjustments: list[str] = []
     notes: list[str] = []
-    primary_raw = values.get("primary_color") or DEFAULT_PRIMARY
+    primary_raw = values.get("primary_color") or default_primary()
     primary, note = _fit_colour(primary_raw, "primary colour", MIN_TEXT_CONTRAST, policy)
     if note:
         adjustments.append(note)

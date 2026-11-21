@@ -27,6 +27,7 @@ DOCUMENT_LABELS: dict[str, tuple[str, str]] = {
     "delivery_unspecified": ("غير محدد", "Not specified"),
     "payment_terms": ("شروط الدفع", "Payment Terms"),
     "status": ("الحالة", "Status"),
+    "powered_by": ("مدعوم من المنصة", "Powered by the platform"),
     "status_pending": ("قيد الانتظار", "Pending"),
     "status_accepted": ("مقبول", "Accepted"),
     "status_expired": ("منتهي", "Expired"),

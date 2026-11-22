@@ -39,8 +39,10 @@ ALLOWED = {"g", "defs", "path", "rect", "circle", "ellipse", "line", "polyline",
 DRAWABLE = {"path", "rect", "circle", "ellipse", "line", "polyline", "polygon"}
 TEXT_OK = {"title", "desc"}
 ALLOWED_ATTR = {"width", "height", "viewBox", "role", "d", "fill", "transform", "rx", "x", "y", "cx", "cy", "r"}
-# SEC-018 BAU-033: C0/C1 controls (except tab, LF, CR), null, bidi marks and controls
-BAD_CHARS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+# SEC-018 BAU-033: C0/C1 controls (except tab, LF, CR), null, bidi marks and controls (incl. U+061C), zero-width
+BAD_CHARS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]")
+# simple limits so a hostile or broken file fails with a clear error (full limits are SEC-006, BAU-040)
+MAX_CHARS, MAX_ELEMENTS, MAX_DEPTH = 1_000_000, 10_000, 32
 # SEC-018 BAU-036, BAU-038: checked on decoded, whitespace-stripped, case-folded values
 BAD_VALUE = ("javascript:", "vbscript:", "data:", "url(", "@import", "expression(", "href", "http", "//")
 HEX = re.compile(r"#[0-9A-Fa-f]{6}")
@@ -72,6 +74,8 @@ def load(name, text):
     """Parse and check against SEC-018 section 6; reject (never strip) anything outside the allow-list."""
     if not isinstance(text, str) or BAD_CHARS.search(text):
         fail(name, "control or bidi character")
+    if len(text) > MAX_CHARS:
+        fail(name, f"larger than {MAX_CHARS} characters")
     decl = re.match(r"\s*<\?xml\s([^?]*)\?>", text)
     if decl and re.search(r"encoding", decl.group(1)) and not re.search(r"encoding\s*=\s*[\"']utf-8[\"']", decl.group(1), re.I):
         fail(name, "encoding must be UTF-8")
@@ -83,6 +87,13 @@ def load(name, text):
         fail(name, f"not well-formed XML ({e})")
     if root.tag != f"{{{SVG_NS}}}svg":
         fail(name, "root must be <svg> in the SVG namespace")
+    count, stack = 0, [(root, 1)]   # iterative, so deep nesting cannot hit the recursion limit
+    while stack:
+        el, depth = stack.pop()
+        count += 1
+        if depth > MAX_DEPTH or count > MAX_ELEMENTS:
+            fail(name, f"nesting deeper than {MAX_DEPTH} or more than {MAX_ELEMENTS} elements")
+        stack.extend((c, depth + 1) for c in el)
     drawable = False
     for el in root.iter():
         ns, _, tag = el.tag.rpartition("}")
@@ -186,12 +197,25 @@ def build():
     return files
 
 
+def entries(files):
+    """Entries of OUT not built here; refuse symlinks anywhere so nothing outside OUT is read, written or deleted."""
+    if OUT.is_symlink() or (OUT.exists() and not OUT.is_dir()):
+        fail(str(OUT), "output folder must be a real directory, not a symlink")
+    if not OUT.exists():
+        return []
+    real = OUT.resolve()
+    for p in OUT.iterdir():
+        if p.is_symlink() or p.resolve().parent != real:
+            fail(str(OUT), f"{p.name} is a symlink; remove it by hand")
+    return sorted(p.name for p in OUT.iterdir() if p.name not in files)
+
+
 def main(argv):
     files = build()
     shown = OUT.relative_to(ROOT) if str(OUT).startswith(str(ROOT)) else OUT
-    extra = sorted(p.name for p in OUT.iterdir() if p.name not in files) if OUT.exists() else []
+    extra = entries(files)
     if "--check" in argv:
-        bad = [n for n, s in files.items() if not (OUT / n).is_file() or (OUT / n).read_text(encoding="utf-8") != s]
+        bad = [n for n, s in files.items() if not (OUT / n).is_file() or (OUT / n).read_bytes() != s.encode("utf-8")]
         if bad or extra:
             print("brand assets out of date, run scripts/build_brand_assets.py:", ", ".join(sorted(bad + extra)))
             return 1
@@ -204,7 +228,7 @@ def main(argv):
         (OUT / n).unlink()
         print(f"removed stale {n}")
     for n, s in files.items():
-        (OUT / n).write_text(s, encoding="utf-8")
+        (OUT / n).write_bytes(s.encode("utf-8"))   # bytes: no CRLF translation on any platform
     print(f"wrote {len(files)} files to {shown}")
     return 0
 

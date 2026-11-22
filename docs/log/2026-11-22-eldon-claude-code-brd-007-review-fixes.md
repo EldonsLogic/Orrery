@@ -22,3 +22,11 @@ Not tracked.
 ## Next step
 Review finding 5 (scope): BRD-007 is marked `done` in docs/PLAN.md, but tenant logo derivation from sanitised uploads (SEC-018 BAU-080) is not built. The founder decides whether to set the row back to `doing` or split it. That change is outside this session's allowed paths.
 - Finding 5: BRD-007 set back to `doing` in docs/PLAN.md until tenant upload derivation (BAU-080) is built.
+
+## Follow-up: Fable re-review of ea68596 (L1, L2, L3, L5, L6)
+- L2: write and check modes refuse a symlinked output folder or any symlinked entry, so nothing outside `docs/brand/logo/assets` is read, written or deleted.
+- L1: `--check` compares bytes (CRLF, bare CR and invalid UTF-8 now count as drift); writes use bytes.
+- L3: simple limits (1,000,000 characters, 10,000 elements, depth 32), checked iteratively before any recursion. Full BAU-040 limits stay with SEC-006.
+- L5: `BAD_CHARS` adds U+061C, U+200B to U+200F, U+2060 and U+FEFF.
+- L6: new tests kill the nothing-drawable, `<` and `"` escape, and `is_file` guard mutants (checked by mutating each).
+- Left for SEC-006: L4 numeric attribute validation, L5 title children and other characters, L7 unknown arguments.

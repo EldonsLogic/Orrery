@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -179,6 +180,82 @@ class BrandAssets(unittest.TestCase):
             b.main([])
             self.assertEqual(sorted(p.name for p in Path(d).iterdir()), sorted(FILES))
             self.assertEqual(b.main(["--check"]), 0)
+
+
+    # --- Fable re-review of ea68596 (L1, L2, L3, L5, L6) ---
+    def test_check_compares_bytes_crlf_cr_and_bad_utf8(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(b, "OUT", Path(d)):
+            b.main([])
+            f = Path(d) / "mark.svg"
+            good = f.read_bytes()
+            for drift in (good.replace(b"\n", b"\r\n"), good.replace(b"\n", b"\r"), good + b"\xff"):
+                f.write_bytes(drift)
+                self.assertEqual(b.main(["--check"]), 1)
+            b.main([])
+            self.assertEqual(f.read_bytes(), FILES["mark.svg"].encode("utf-8"))
+
+    def test_symlinked_output_folder_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            real = Path(d) / "elsewhere"
+            real.mkdir()
+            (real / "keep.txt").write_text("keep", encoding="utf-8")
+            link = Path(d) / "assets"
+            os.symlink(real, link)
+            with mock.patch.object(b, "OUT", link):
+                for argv in ([], ["--check"]):
+                    with self.subTest(argv=argv), self.assertRaises(SystemExit):
+                        b.main(argv)
+            self.assertEqual(sorted(p.name for p in real.iterdir()), ["keep.txt"])
+
+    def test_symlinked_entries_are_refused(self):
+        for name in ("mark.svg", "stale.svg"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as d:
+                out, outside = Path(d) / "assets", Path(d) / "outside.svg"
+                out.mkdir()
+                outside.write_text("outside", encoding="utf-8")
+                with mock.patch.object(b, "OUT", out):
+                    b.main([])
+                    (out / name).unlink(missing_ok=True) if name == "mark.svg" else None
+                    os.symlink(outside, out / name)
+                    for argv in ([], ["--check"]):
+                        with self.assertRaises(SystemExit):
+                            b.main(argv)
+                self.assertEqual(outside.read_text(encoding="utf-8"), "outside")
+                self.assertTrue((out / name).is_symlink())
+
+    def test_subdirectory_in_output_folder_aborts(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(b, "OUT", Path(d)):
+            (Path(d) / "sub").mkdir()
+            (Path(d) / "sub" / "x.svg").write_text("x", encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                b.main([])
+            self.assertTrue((Path(d) / "sub" / "x.svg").exists())
+
+    def test_rejects_source_with_nothing_drawable(self):
+        self.assert_rejected(BASE.replace(f'<path d="M0 0L10 10Z" fill="{P}"/>', "<g/>"))
+
+    def test_markup_characters_are_escaped_and_round_trip(self):
+        src = BASE.replace("<title>t</title>", "<title>a&lt;b&quot;c&amp;</title>").replace(
+            ' viewBox="0 0 10 10"', ' viewBox="0 0 10 10" role="x&lt;y&quot;z"')
+        out = b.serialise(light(src))
+        self.assertIn('role="x&lt;y&quot;z"', out)
+        self.assertIn("<title>a&lt;b&quot;c&amp;</title>", out)
+        self.assertEqual(b.serialise(b.load("t.svg", out)), out)
+
+    def test_deep_nesting_and_oversize_fail_closed(self):
+        deep = BASE.replace("<path ", "<g>" * 2000 + "<path ").replace("</svg>", "</g>" * 2000 + "</svg>")
+        big = BASE.replace('d="M0 0L10 10Z"', 'd="M0 0' + " L1 1" * (b.MAX_CHARS // 5) + '"')
+        many = BASE.replace("<title>t</title>", "<title>t</title>" + "<g/>" * (b.MAX_ELEMENTS + 1))
+        for bad in (deep, big, many):
+            with self.subTest(n=len(bad)):
+                with self.assertRaises(SystemExit):
+                    b.load("bad.svg", bad)
+
+    def test_rejects_arabic_letter_mark_and_zero_width_characters(self):
+        cases = [BASE.replace("<title>t</title>", f"<title>t{c}</title>") for c in
+                 ("\u061c", "\u200b", "\u200c", "\u200d", "\u200e", "\u200f", "\u2060", "\ufeff")]
+        cases.append(BASE.replace('d="M0 0L10 10Z"', 'd="java&#x200B;script:x"'))
+        self.assert_rejected(*cases)
 
 
 if __name__ == "__main__":

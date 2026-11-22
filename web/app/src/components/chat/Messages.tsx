@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { Badge, Spinner } from '../../ui';
+import { textLang } from '../../chat/text';
 import type { ActivityStep, ChatMessage, ToolOutcome } from '../../chat/types';
 import styles from './Chat.module.css';
 
@@ -12,12 +13,12 @@ import styles from './Chat.module.css';
 export function MessageList({ messages }: { messages: ReadonlyArray<ChatMessage> }) {
   const t = useTranslations('chat.roles');
   return (
-    <ol className={styles.log} aria-label={t('log')} aria-live="polite" aria-relevant="additions text">
+    <ol className={styles.log} aria-label={t('log')} aria-live="polite" aria-relevant="additions text" aria-busy={messages.some((m) => m.streaming) || undefined}>
       {messages.map((m) => (
         <li key={m.id} className={`${styles.row} ${m.role === 'user' ? styles.rowUser : ''}`} data-role={m.role}>
           <div className={`${styles.bubble} ${styles[m.role]}`} dir="auto">
             <span className={styles.meta}>{t(m.role)}</span>
-            <bdi>{m.text}</bdi>
+            <bdi lang={textLang(m.text)}>{m.text}</bdi>
             {m.streaming ? <span className={styles.cursor} aria-hidden="true"> ▍</span> : null}
           </div>
         </li>
@@ -44,7 +45,7 @@ export function ActivityList({ steps }: { steps: ReadonlyArray<ActivityStep> }) 
       <ul className={styles.steps}>
         {steps.map((s) => (
           <li key={s.callId} className={styles.step}>
-            <bdi className={styles.tool}>{s.tool}</bdi>
+            <bdi className={styles.tool} lang="en">{s.tool}</bdi>
             <Badge tone="neutral" aria-label={t('risk', { risk: s.risk })}>{s.risk}</Badge>
             <Badge tone={TONE[s.outcome]}>{t(`outcome.${s.outcome}`)}</Badge>
           </li>

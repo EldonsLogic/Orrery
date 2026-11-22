@@ -3,7 +3,7 @@
 Date: 2026-11-22
 Author: eldon
 Tool and model: claude-code (Claude Opus; the questions were prepared by Opus and Fable review agents)
-Plan IDs: GOV-061, GOV-062, GOV-063
+Plan IDs: GOV-061, GOV-062, GOV-063, GOV-064
 
 ## Summary
 Eldon answered founder questions one at a time in chat. The answers are written into `docs/open-questions.md`.

@@ -46,8 +46,8 @@ class HeadlessComposeTests(unittest.TestCase):
                 self.assertFalse(service.get("ports"), f"{name} must not publish a host port")
 
     def test_every_network_is_internal(self):
-        self.assertEqual(set(self.config["networks"]), {"data", "engine_internal"})
-        for name in ("data", "engine_internal"):
+        self.assertEqual(set(self.config["networks"]), {"data", "engine_internal", "redis_internal"})
+        for name in ("data", "engine_internal", "redis_internal"):
             with self.subTest(network=name):
                 self.assertIs(self.config["networks"][name].get("internal"), True)
 
@@ -59,10 +59,12 @@ class HeadlessComposeTests(unittest.TestCase):
                 self.assertTrue(service.get("networks"))
 
     def test_database_and_caches_are_not_on_the_gateway_facing_network(self):
-        for name in ("mariadb", "redis-cache", "redis-queue"):
+        self.assertEqual(set(self.config["services"]["mariadb"]["networks"]), {"data"})
+        for name in ("redis-cache", "redis-queue"):  # INF-015: Redis has its own network
             with self.subTest(service=name):
-                self.assertEqual(set(self.config["services"][name]["networks"]), {"data"})
-        self.assertEqual(set(self.config["services"]["engine"]["networks"]), {"data", "engine_internal"})
+                self.assertEqual(set(self.config["services"][name]["networks"]), {"redis_internal"})
+        self.assertEqual(set(self.config["services"]["engine"]["networks"]),
+                         {"data", "engine_internal", "redis_internal"})
 
     def test_engine_receives_the_internal_token(self):
         self.assertEqual(self.config["services"]["engine"]["environment"]["ENGINE_INTERNAL_TOKEN"], TOKEN)

@@ -66,6 +66,23 @@ def http_ready(site):
         return False
 
 
+def redis_requires_auth(project):
+    """INF-015: each Redis answers with its password and refuses unauthenticated clients."""
+    for service in ("redis-cache", "redis-queue"):
+        # The password stays inside the container: the shell expands it there, never on our argv.
+        authed = compose(project, "exec", "-T", service, "sh", "-c",
+                         'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping')
+        if authed is None or authed.returncode != 0 or authed.stdout.strip() != "PONG":
+            print(f"{service} is not responding to an authenticated client.", file=sys.stderr)
+            return False
+        # Only Redis's own NOAUTH refusal counts: an exec error, DNS miss or empty reply proves nothing.
+        anonymous = compose(project, "exec", "-T", service, "redis-cli", "ping")
+        if anonymous is None or not anonymous.stdout.strip().startswith("NOAUTH"):
+            print(f"{service} did not refuse an unauthenticated client with NOAUTH.", file=sys.stderr)
+            return False
+    return True
+
+
 def main():
     """Check service availability, the real site's apps, and pinned versions."""
     project = os.environ.get("COMPOSE_PROJECT_NAME", "")
@@ -128,18 +145,15 @@ def main():
         )
         return 1
 
-    for service in ("redis-cache", "redis-queue"):
-        response = compose(project, "exec", "-T", service, "redis-cli", "ping")
-        if response is None or response.returncode != 0 or response.stdout.strip() != "PONG":
-            print(f"{service} is not responding.", file=sys.stderr)
-            return 1
+    if not redis_requires_auth(project):
+        return 1
     if not http_ready(site):
         print("HTTP endpoint is not ready on 127.0.0.1 (set ENGINE_PORT to the host port).",
               file=sys.stderr)
         return 1
     print(
         f"Verified synthetic site {site} on project {project}: "
-        f"apps, versions, HRMS commit, MariaDB {actual_db_version}, Redis and HTTP."
+        f"apps, versions, HRMS commit, MariaDB {actual_db_version}, authenticated Redis and HTTP."
     )
     return 0
 

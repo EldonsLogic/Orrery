@@ -11,7 +11,7 @@ from change_engine.guarded_apply.ddl_plan_gate import (
 from change_engine.guarded_apply.safety_guardrails import (
     PROHIBITED_CODE_PROPERTIES,
     PROHIBITED_EXPRESSION_PATTERNS,
-    ZONE_2_LOCKED_DOCTYPES,
+    is_locked_doctype,
 )
 from change_engine.guarded_apply.schema_reconciler import make_bounded_lock_key
 
@@ -127,7 +127,8 @@ def entity_to_doctype(entity_id: str) -> str:
 
 # The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
 # (`unsupported_value_type`) on `/entities/<id>` pointers, `entity.add` subject ids, `field.*` / `relation.*`
-# parent ids, `workflow.upsert` / `report.upsert` `definition.entity`, and `role.upsert` grant targets.
+# parent ids (exactly one parent required), link `field.add` and `relation.*` `definition.target`,
+# `workflow.upsert` / `report.upsert` `definition.entity`, and `role.upsert` grant targets.
 ENTITY_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 
 
@@ -145,7 +146,7 @@ def is_protected_entity(entity_id: str) -> bool:
     """Compared on a normalised key: `gl_entry`, `GL Entry` and `gl_entry ` are one protected entity."""
     if _protected_key(entity_id) in {_protected_key(i) for i in PROTECTED_ENTITY_IDS}:
         return True
-    return _protected_key(entity_to_doctype(entity_id)) in {_protected_key(d) for d in ZONE_2_LOCKED_DOCTYPES}
+    return is_locked_doctype(entity_to_doctype(entity_id))
 
 
 # SEC-022 / ADR-0051 item 3: the document types a Blueprint role may get permission rules on are an allowlist:

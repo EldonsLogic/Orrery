@@ -14,7 +14,7 @@ Implements ADR-001 (Rev 2.3) Section 5 & Section 5.1:
 """
 
 import re
-from typing import Dict, Any, Set
+from typing import Dict, Any, Iterable, Optional, Set
 
 
 class ZoneSafetyViolation(Exception):
@@ -60,6 +60,22 @@ ZONE_2_LOCKED_DOCTYPES: Set[str] = {
     "System Settings",
     "Change Engine Settings",
 }
+
+
+def _normalize_doctype_name(name: str) -> str:
+    return re.sub(r"\s+", " ", name.strip()).casefold()
+
+
+def is_locked_doctype(name: Any, extra_locked: Optional[Iterable[str]] = None) -> bool:
+    """Fail-closed Tier 0 locked-DocType check: strips, collapses whitespace and casefolds both sides."""
+    if not isinstance(name, str):
+        return True
+    key = _normalize_doctype_name(name)
+    if any(key == _normalize_doctype_name(d) for d in ZONE_2_LOCKED_DOCTYPES):
+        return True
+    if extra_locked:
+        return any(key == _normalize_doctype_name(d) for d in extra_locked)
+    return False
 
 PROTECTED_STANDARD_FIELDS: Set[str] = {
     # Parent Financial & Tax Totals
@@ -274,7 +290,7 @@ def validate_mutation_safety(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"Unapproved Mutation Intent Violation (§5): Intent '{intent}' is not in the allowlist {sorted(ALLOWED_MUTATION_INTENTS)}."
         )
 
-    if target_doctype in ZONE_2_LOCKED_DOCTYPES:
+    if is_locked_doctype(target_doctype):
         raise ZoneSafetyViolation(
             f"Zone 2 Compliance Lock Violation (Tier 0 Invariant): DocType '{target_doctype}' is protected."
         )
@@ -375,7 +391,11 @@ def validate_mutation_safety(payload: Dict[str, Any]) -> Dict[str, Any]:
                 link_target = str(change.get("options", "")).strip()
                 if not link_target:
                     raise ZoneSafetyViolation(f"Invalid Link Target: '{raw_fieldname}' requires a target DocType in 'options'.")
-                if link_target in ZONE_2_LOCKED_DOCTYPES and link_target in ("GL Entry", "Payment Ledger Entry", "Change Engine Audit Log"):
+                if is_locked_doctype(link_target) and _normalize_doctype_name(link_target) in (
+                    "gl entry",
+                    "payment ledger entry",
+                    "change engine audit log",
+                ):
                     raise ZoneSafetyViolation(f"Restricted Link Target: Cannot link directly to ledger/audit table '{link_target}'.")
                 if allowed_link_doctypes and link_target not in allowed_link_doctypes:
                     raise ZoneSafetyViolation(f"Unresolved Link Target: DocType '{link_target}' is not in allowed targets.")

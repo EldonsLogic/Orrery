@@ -999,7 +999,7 @@ class ChangeEngineAdapter:
                 parents = step["subject"].get("parents")
                 parent_id = (
                     parents[0].get("id")
-                    if isinstance(parents, list) and parents and isinstance(parents[0], dict)
+                    if isinstance(parents, list) and len(parents) == 1 and isinstance(parents[0], dict)
                     else None
                 )
                 ids.append(parent_id)
@@ -1013,6 +1013,24 @@ class ChangeEngineAdapter:
             return "blocked", "unsupported_value_type", ddl
 
         defn = params.get("definition")
+        if (kind == "field.add" and isinstance(defn, dict) and defn.get("type") == "link") or kind == "relation.add":
+            target_entity = defn.get("target") if isinstance(defn, dict) else None
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
+        elif kind.startswith("relation.") and isinstance(defn, dict) and "target" in defn:
+            target_entity = defn["target"]
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
+        elif kind in ("field.set_property", "relation.set_property") and params.get("property") == "/target":
+            target_entity = params.get("after")
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
         if kind == "workflow.upsert":
             target_entity = defn.get("entity") if isinstance(defn, dict) else None
             if not is_valid_entity_id(target_entity):

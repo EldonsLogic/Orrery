@@ -126,9 +126,14 @@ def entity_to_doctype(entity_id: str) -> str:
 
 
 # The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
-# (`unsupported_value_type`) on `/entities/<id>` pointers, `entity.add` subject ids, `field.*` / `relation.*`
-# parent ids (exactly one parent required), link `field.add` and `relation.*` `definition.target`,
-# `workflow.upsert` / `report.upsert` `definition.entity`, and `role.upsert` grant targets.
+# (`unsupported_value_type`, and `protected_subject` for protected entities) on `/entities/<id>` pointers,
+# `entity.add` subject ids and inline `definition.fields[]` / `definition.relations[]` targets,
+# `field.*` / `relation.*` parent ids (exactly one parent required), link `field.add` and `relation.*`
+# `definition.target`, `field.set_property` / `relation.set_property` `/target` (config-only; backend does
+# not map `/target`), `workflow.upsert` / `report.upsert` `definition.entity`, and `role.upsert` grant
+# targets. `/options` on `relation.set_property` and on `field.set_property` for link or non-proven-non-link
+# fields is refused at plan time (`protected_subject` when the offered value names a protected/locked target,
+# else `unsupported_value_type`); only fields proven non-link in site config may set `/options`.
 ENTITY_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 
 

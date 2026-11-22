@@ -16,7 +16,13 @@ from unittest import mock
 from change_engine.adapter import ChangeEngineAdapter, FrappeRuntimeBackend, FrappeSiteResolver
 from change_engine.adapter import contracts_support as cs
 from change_engine.adapter.mapping import is_protected_entity
+from change_engine.api.endpoints import (
+    FrappeDeploymentAdapter,
+    apply_configuration_change,
+    apply_property_setter_change,
+)
 from change_engine.guarded_apply import safety_guardrails
+from change_engine.guarded_apply.property_setter_engine import execute_property_setter_deployment
 from change_engine.guarded_apply.report_engine import (
     ReportColumn,
     ReportDefinition,
@@ -39,6 +45,17 @@ SITE = "ci.localhost"
 ULID = "01J00000000000000000000044"
 _OMIT = object()
 
+UNICODE_LOCKED_VARIANTS = (
+    "GL Entry\u200b",  # zero-width space (Cf)
+    "\uff27\uff2c Entry",  # full-width "ＧＬ Entry"
+    "GL \u00c9ntry",  # accented Latin letter "GL Éntry"
+    "GL Entr\u0443",  # Cyrillic small letter u (U+0443)
+    "GL E\u0301ntry",  # combining acute accent (Mn)
+    "G\u0301L Entry",  # uncomposed combining mark (Mn)
+    "\ufeffGL Entry",  # BOM (Cf)
+    "GL \u200cEntry",  # ZWNJ (Cf)
+)
+
 LOCKED_VARIANTS = (
     "GL Entry",
     "Gl Entry",
@@ -52,8 +69,8 @@ LOCKED_VARIANTS = (
     "Account ",
     " Account",
     "ver\u017fion",  # Latin small letter long s -> casefolds to "version"
-)
-ALLOWED_DOCTYPES = ("Customer", "Sales Invoice", "Item", "Delivery Note")
+) + UNICODE_LOCKED_VARIANTS
+ALLOWED_DOCTYPES = ("Customer", "Sales Invoice", "Item", "Delivery Note", "Payment Entry", "Accounts")
 
 
 def _ctx(**over: object) -> dict:
@@ -150,7 +167,14 @@ def _inverse_for(base: dict, target: dict, steps: list[dict]) -> dict:
     return inv
 
 
-def _entity(seq: int, eid: str, *, pointer: str | None = None) -> dict:
+def _entity(
+    seq: int,
+    eid: str,
+    *,
+    pointer: str | None = None,
+    fields: list[dict] | None = None,
+    relations: list[dict] | None = None,
+) -> dict:
     ptr = f"/entities/{eid}" if pointer is None else pointer
     return {
         "seq": seq,
@@ -161,7 +185,14 @@ def _entity(seq: int, eid: str, *, pointer: str | None = None) -> dict:
         "impact": "data_shape",
         "ddlImpact": "additive",
         "reversible": True,
-        "params": {"definition": {"id": eid, "labels": {"en": eid, "ar": eid}, "fields": [], "relations": []}},
+        "params": {
+            "definition": {
+                "id": eid,
+                "labels": {"en": eid, "ar": eid},
+                "fields": [] if fields is None else fields,
+                "relations": [] if relations is None else relations,
+            }
+        },
         "sourceOps": [ptr],
     }
 
@@ -598,6 +629,489 @@ class TestExtraParentsRefused(_AdapterPlanBase):
                 self.assertTrue(planned["ok"], planned)
                 self.assertEqual(planned["result"]["verdict"], "rejected", planned)
                 self.assertEqual(repr(engine.ensure_site(SITE).rows), before)
+
+
+class TestRestrictedLinkTargetSite(unittest.TestCase):
+    """Pins safety_guardrails restricted-link check and direct-path property_setter_engine options rule."""
+
+    RESTRICTED_LINK_VARIANTS = (
+        "GL Entry",
+        "gl entry",
+        " Gl  Entry",
+        "GL\tEntry",
+        "Payment Ledger Entry",
+        "payment  ledger entry ",
+        "Change Engine Audit Log",
+        "change engine audit log",
+    ) + UNICODE_LOCKED_VARIANTS
+
+    def setUp(self) -> None:
+        FrappeDeploymentAdapter.reset_in_memory_state()
+
+    def tearDown(self) -> None:
+        FrappeDeploymentAdapter.reset_in_memory_state()
+
+    def test_add_custom_fields_restricted_link_variants_refused(self) -> None:
+        for opt in self.RESTRICTED_LINK_VARIANTS:
+            with self.subTest(options=opt):
+                with self.assertRaises(ZoneSafetyViolation) as ctx:
+                    validate_mutation_safety({
+                        "intent": "add_custom_fields",
+                        "target_doctype": "Customer",
+                        "user_roles": ["System Manager"],
+                        "changes": [
+                            {
+                                "fieldname": "custom_ref_probe",
+                                "fieldtype": "Link",
+                                "label": "Ref Probe",
+                                "options": opt,
+                            }
+                        ],
+                    })
+                self.assertIn("Restricted Link Target", str(ctx.exception))
+
+        for bad in (None, "", "   ", 123):
+            with self.subTest(invalid_options=bad):
+                with self.assertRaises(ZoneSafetyViolation) as ctx:
+                    validate_mutation_safety({
+                        "intent": "add_custom_fields",
+                        "target_doctype": "Customer",
+                        "user_roles": ["System Manager"],
+                        "changes": [
+                            {
+                                "fieldname": "custom_ref_probe",
+                                "fieldtype": "Link",
+                                "label": "Ref Probe",
+                                "options": bad,
+                            }
+                        ],
+                    })
+                self.assertIn("Invalid Link Target", str(ctx.exception))
+
+        for allowed in ("Customer", "Item", "User"):
+            with self.subTest(allowed=allowed):
+                res = validate_mutation_safety({
+                    "intent": "add_custom_fields",
+                    "target_doctype": "Customer",
+                    "user_roles": ["System Manager"],
+                    "changes": [
+                        {
+                            "fieldname": "custom_ref_probe",
+                            "fieldtype": "Link",
+                            "label": "Ref Probe",
+                            "options": allowed,
+                        }
+                    ],
+                })
+                self.assertEqual(res["status"], "approved")
+
+    def _direct_adapters(self):
+        FrappeDeploymentAdapter.reset_in_memory_state()
+        in_mem = FrappeDeploymentAdapter()
+        yield "in_memory", in_mem, None
+
+        engine = CaseInsensitiveEngine(SITE)
+        sim = FrappeDeploymentAdapter(frappe_module=engine, offline_ddl_simulator=True)
+        yield "simulated_engine", sim, engine
+
+    def test_direct_property_setter_options_refuses_restricted_link_and_allows_select(self) -> None:
+        for mode, dep, _engine in self._direct_adapters():
+            # Seed one Link field and one Select field on Customer.
+            link_cf = apply_configuration_change(
+                doctype="Customer",
+                deployment_id=f"dep_cf_link_{mode}",
+                field_def={
+                    "fieldname": "custom_ref_link",
+                    "label": "Ref Link",
+                    "fieldtype": "Link",
+                    "options": "Item",
+                },
+                adapter=dep,
+                user_roles=["System Manager"],
+            )
+            self.assertTrue(link_cf["success"], (mode, link_cf))
+            sel_cf = apply_configuration_change(
+                doctype="Customer",
+                deployment_id=f"dep_cf_sel_{mode}",
+                field_def={
+                    "fieldname": "custom_tier",
+                    "label": "Tier",
+                    "fieldtype": "Select",
+                    "options": "Gold\nSilver",
+                },
+                adapter=dep,
+                user_roles=["System Manager"],
+            )
+            self.assertTrue(sel_cf["success"], (mode, sel_cf))
+
+            for idx, target in enumerate(self.RESTRICTED_LINK_VARIANTS):
+                with self.subTest(mode=mode, via="api", target=target):
+                    res = apply_property_setter_change(
+                        doctype="Customer",
+                        deployment_id=f"dep_ps_bad_api_{mode}_{idx}",
+                        fieldname="custom_ref_link",
+                        property_name="options",
+                        value=target,
+                        property_type="Text",
+                        user_roles=["System Manager"],
+                        adapter=dep,
+                    )
+                    self.assertFalse(res["success"], res)
+                    self.assertEqual(res["status"], "REJECTED", res)
+                    self.assertEqual(res["disposition"], "ZONE_SAFETY_VIOLATION", res)
+                    self.assertIn("Restricted Link Target", res["reason"])
+                    self.assertIsNone(dep.get_property_setter("Customer", "custom_ref_link", "options"))
+
+                with self.subTest(mode=mode, via="engine", target=target):
+                    res = execute_property_setter_deployment(
+                        db=dep,
+                        deployment_id=f"dep_ps_bad_eng_{mode}_{idx}",
+                        site_id=SITE,
+                        doctype="Customer",
+                        fieldname="custom_ref_link",
+                        property_name="options",
+                        value=target,
+                        property_type="Text",
+                        user_roles=["System Manager"],
+                    )
+                    self.assertFalse(res["success"], res)
+                    self.assertEqual(res["status"], "REJECTED", res)
+                    self.assertEqual(res["disposition"], "ZONE_SAFETY_VIOLATION", res)
+                    self.assertIsNone(dep.get_property_setter("Customer", "custom_ref_link", "options"))
+
+            # Empty options on Link field is also refused.
+            with self.subTest(mode=mode, target="empty_link"):
+                res_empty = apply_property_setter_change(
+                    doctype="Customer",
+                    deployment_id=f"dep_ps_empty_{mode}",
+                    fieldname="custom_ref_link",
+                    property_name="options",
+                    value="",
+                    property_type="Text",
+                    user_roles=["System Manager"],
+                    adapter=dep,
+                )
+                self.assertFalse(res_empty["success"], res_empty)
+                self.assertEqual(res_empty["status"], "REJECTED", res_empty)
+                self.assertIsNone(dep.get_property_setter("Customer", "custom_ref_link", "options"))
+
+            # Unknown-fieldtype fail-closed: restricted targets refused even if metadata has no field entry.
+            for idx, target in enumerate(("GL Entry", "gl entry", " Gl  Entry")):
+                with self.subTest(mode=mode, unknown_field=True, target=target):
+                    res_unk = apply_property_setter_change(
+                        doctype="Customer",
+                        deployment_id=f"dep_ps_unk_{mode}_{idx}",
+                        fieldname="custom_unregistered_field",
+                        property_name="options",
+                        value=target,
+                        property_type="Text",
+                        user_roles=["System Manager"],
+                        adapter=dep,
+                    )
+                    self.assertFalse(res_unk["success"], res_unk)
+                    self.assertEqual(res_unk["status"], "REJECTED", res_unk)
+                    self.assertIsNone(dep.get_property_setter("Customer", "custom_unregistered_field", "options"))
+
+            # Control: ordinary Link target still applies.
+            with self.subTest(mode=mode, control="link_customer"):
+                res_ok = apply_property_setter_change(
+                    doctype="Customer",
+                    deployment_id=f"dep_ps_ok_link_{mode}",
+                    fieldname="custom_ref_link",
+                    property_name="options",
+                    value="Customer",
+                    property_type="Text",
+                    user_roles=["System Manager"],
+                    adapter=dep,
+                )
+                self.assertTrue(res_ok["success"], res_ok)
+                self.assertEqual(res_ok["status"], "APPLIED", res_ok)
+
+            # Control: Select options (ASCII and Arabic) still apply.
+            for label, opts in (("ascii", "Gold\nSilver\nPlatinum"), ("arabic", "\u0630\u0647\u0628\u064a\n\u0641\u0636\u064a")):
+                with self.subTest(mode=mode, control=f"select_{label}"):
+                    res_sel = apply_property_setter_change(
+                        doctype="Customer",
+                        deployment_id=f"dep_ps_ok_sel_{mode}_{label}",
+                        fieldname="custom_tier",
+                        property_name="options",
+                        value=opts,
+                        property_type="Text",
+                        user_roles=["System Manager"],
+                        adapter=dep,
+                    )
+                    self.assertTrue(res_sel["success"], res_sel)
+                    self.assertEqual(res_sel["status"], "APPLIED", res_sel)
+                    ps = dep.get_property_setter("Customer", "custom_tier", "options")
+                    self.assertIsNotNone(ps)
+                    self.assertEqual(ps["value"], opts)
+
+
+class TestPlanOptionsOnLinkAndRelation(_AdapterPlanBase):
+    """Review fix round item 1: `/options` on link fields, relations, and unproven fields is refused at plan time."""
+
+    def _seed_customer_with_fields(self, adapter: ChangeEngineAdapter, key: str) -> dict:
+        rev1 = self._seed_customer(adapter, key)
+        rev2 = {"hash": "sha256:" + "a" * 64, "revision": 2}
+        select_step = _field_step(2, "customer", "tier", kind="field.add", field_type="select")
+        select_step["params"]["definition"]["options"] = [
+            {"value": "gold", "labels": {"en": "Gold", "ar": "\u0630\u0647\u0628\u064a"}},
+        ]
+        steps = [
+            _field_step(1, "customer", "ref_link", kind="field.add", field_type="link", target="item"),
+            select_step,
+            _relation_step(3, "customer", "rel_item", kind="relation.add", target="item"),
+        ]
+        inv = _inverse_for(
+            rev1,
+            rev2,
+            [
+                _field_step(1, "customer", "ref_link", kind="field.quarantine"),
+                _field_step(2, "customer", "tier", kind="field.quarantine"),
+                _relation_step(3, "customer", "rel_item", kind="relation.quarantine"),
+            ],
+        )
+        art2 = _artifact(steps, base=rev1, target=rev2, inverse=inv)
+        pl = adapter.call("plan", _ctx(), {"artifact": art2})
+        self.assertTrue(pl["ok"] and pl["result"]["verdict"] == "auto_approved", pl)
+        ap = adapter.call("apply", _ctx(), {
+            "idempotencyKey": key + "_apply_fields",
+            "planToken": pl["result"]["planToken"],
+            "artifact": art2,
+            "approvals": {"changeApproved": "01J00000000000000000000011"},
+        })
+        self.assertTrue(ap["ok"] and ap["result"]["status"] == "applied", ap)
+        return rev2
+
+    def test_reviewer_repro_link_options_gl_entry_refused_on_both_adapters_with_zero_writes(self) -> None:
+        step = {
+            **_field_step(1, "customer", "ref_link", kind="field.set_property"),
+            "params": {"property": "/options", "before": "Item", "after": "GL Entry"},
+        }
+        seen = {}
+        for name, adapter in self._adapters():
+            with self.subTest(adapter=name):
+                rev2 = self._seed_customer_with_fields(adapter, f"idemp_repro_{name}")
+                engine = adapter.frappe_backend._frappe_factory() if adapter.frappe_backend else None
+                before_rows = repr(engine.ensure_site(SITE).rows) if engine else None
+                rev3 = {"hash": "sha256:" + "b" * 64, "revision": 3}
+                inv = _inverse_for(rev2, rev3, [_field_step(1, "customer", "ref_link", kind="field.set_property")])
+                art3 = _artifact([step], base=rev2, target=rev3, inverse=inv)
+                planned = adapter.call("plan", _ctx(), {"artifact": art3})
+                self.assertTrue(planned["ok"], planned)
+                res = planned["result"]
+                got = (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"])
+                seen[name] = got
+                self.assertEqual(got, ("blocked", "protected_subject", "rejected"), res)
+                ap = adapter.call("apply", _ctx(), {
+                    "idempotencyKey": f"idemp_repro_apply_{name}",
+                    "planToken": res["planToken"],
+                    "artifact": art3,
+                    "approvals": {"changeApproved": "01J00000000000000000000012"},
+                })
+                self.assertTrue(ap["ok"], ap)
+                self.assertEqual(ap["result"]["status"], "rejected", ap)
+                if engine is not None:
+                    self.assertEqual(repr(engine.ensure_site(SITE).rows), before_rows)
+                    ps_rows = engine.rows("Property Setter")
+                    self.assertFalse(
+                        any(r.get("field_name") == "custom_ref_link" and r.get("property") == "options" for r in ps_rows),
+                        ps_rows,
+                    )
+        self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+    def test_link_and_relation_options_refused_for_all_values_and_select_allowed(self) -> None:
+        bad_options = (
+            ("GL Entry", "protected_subject"),
+            ("User", "protected_subject"),
+            ("gl_entry", "protected_subject"),
+            ("user", "protected_subject"),
+            ("gl entry", "protected_subject"),
+            (["GL Entry"], "protected_subject"),
+            ([{"value": "GL Entry"}], "protected_subject"),
+            ("GL Entry\u200b", "protected_subject"),
+            ("\uff27\uff2c Entry", "protected_subject"),
+            ("GL \u00c9ntry", "protected_subject"),
+            ("GL Entr\u0443", "protected_subject"),
+            ("Item", "unsupported_value_type"),
+            ("item", "unsupported_value_type"),
+            ("Server Script", "unsupported_value_type"),
+            (None, "unsupported_value_type"),
+            (_OMIT, "unsupported_value_type"),
+        )
+        for idx, (after_val, expected_reason) in enumerate(bad_options):
+            params: dict = {"property": "/options", "before": "Item"}
+            if after_val is not _OMIT:
+                params["after"] = after_val
+            steps_by_kind = (
+                ("field_link", {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": params}),
+                (
+                    "relation",
+                    _relation_step(1, "customer", "rel_item", kind="relation.set_property", params_override=params),
+                ),
+            )
+            for label, step in steps_by_kind:
+                seen = {}
+                for name, adapter in self._adapters():
+                    with self.subTest(case=label, after=after_val, adapter=name):
+                        rev2 = self._seed_customer_with_fields(adapter, f"idemp_opt_{label}_{idx}_{name}")
+                        rev3 = {"hash": "sha256:" + "c" * 64, "revision": 3}
+                        inv = _inverse_for(rev2, rev3, [_field_step(1, "customer", "ref_link", kind="field.set_property")])
+                        art3 = _artifact([step], base=rev2, target=rev3, inverse=inv)
+                        planned = adapter.call("plan", _ctx(), {"artifact": art3})
+                        self.assertTrue(planned["ok"], planned)
+                        res = planned["result"]
+                        got = (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"])
+                        seen[name] = got
+                        self.assertEqual(got, ("blocked", expected_reason, "rejected"), res)
+                self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+        # Unknown / missing field cannot be proven non-link -> refused on /options.
+        unk_step = {
+            **_field_step(1, "customer", "unknown_fld", kind="field.set_property"),
+            "params": {"property": "/options", "before": "Item", "after": "Customer"},
+        }
+        for name, adapter in self._adapters():
+            with self.subTest(case="unknown_field", adapter=name):
+                res = self._plan_on_customer(adapter, [unk_step], f"idemp_opt_unk_{name}")
+                self.assertEqual(
+                    (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"]),
+                    ("blocked", "unsupported_value_type", "rejected"),
+                    res,
+                )
+
+        # Two-step combo: changing /type to link in the same artifact prevents /options on that field.
+        combo_steps = [
+            {
+                **_field_step(1, "customer", "tier", kind="field.set_property"),
+                "params": {"property": "/type", "before": "select", "after": "link"},
+            },
+            {
+                **_field_step(2, "customer", "tier", kind="field.set_property"),
+                "params": {"property": "/options", "before": [], "after": "GL Entry"},
+            },
+        ]
+        for name, adapter in self._adapters():
+            with self.subTest(case="type_then_options_combo", adapter=name):
+                rev2 = self._seed_customer_with_fields(adapter, f"idemp_opt_combo_{name}")
+                rev3 = {"hash": "sha256:" + "d" * 64, "revision": 3}
+                inv = _inverse_for(rev2, rev3, [_field_step(1, "customer", "tier", kind="field.set_property")])
+                art3 = _artifact(combo_steps, base=rev2, target=rev3, inverse=inv)
+                planned = adapter.call("plan", _ctx(), {"artifact": art3})
+                self.assertTrue(planned["ok"], planned)
+                res = planned["result"]
+                self.assertEqual(res["verdict"], "rejected", res)
+                self.assertEqual(res["steps"][1]["disposition"], "blocked", res)
+                self.assertEqual(res["steps"][1].get("reasonCode"), "protected_subject", res)
+
+        # Positive control: proven Select field `/options` still plans ok.
+        sel_step = {
+            **_field_step(1, "customer", "tier", kind="field.set_property"),
+            "params": {
+                "property": "/options",
+                "before": [{"value": "gold", "labels": {"en": "Gold", "ar": "\u0630\u0647\u0628\u064a"}}],
+                "after": [
+                    {"value": "gold", "labels": {"en": "Gold", "ar": "\u0630\u0647\u0628\u064a"}},
+                    {"value": "silver", "labels": {"en": "Silver", "ar": "\u0641\u0636\u064a"}},
+                ],
+            },
+        }
+        for name, adapter in self._adapters():
+            with self.subTest(case="select_options_ok", adapter=name):
+                rev2 = self._seed_customer_with_fields(adapter, f"idemp_opt_sel_ok_{name}")
+                rev3 = {"hash": "sha256:" + "e" * 64, "revision": 3}
+                inv = _inverse_for(rev2, rev3, [_field_step(1, "customer", "tier", kind="field.set_property")])
+                art3 = _artifact([sel_step], base=rev2, target=rev3, inverse=inv)
+                planned = adapter.call("plan", _ctx(), {"artifact": art3})
+                self.assertTrue(planned["ok"], planned)
+                self.assertEqual(planned["result"]["steps"][0]["disposition"], "ok", planned)
+                self.assertEqual(planned["result"]["verdict"], "auto_approved", planned)
+
+
+class TestEntityAddInlineTargets(_AdapterPlanBase):
+    """Review fix round item 2: `entity.add` inline `definition.fields[]` and `relations[]` targets checked at plan."""
+
+    BAD_INLINE = (
+        ("user", "protected_subject"),
+        ("gl_entry", "protected_subject"),
+        ("GL Entry", "unsupported_value_type"),
+        ("gl_entry ", "unsupported_value_type"),
+        ("widget\n", "unsupported_value_type"),
+        (_OMIT, "unsupported_value_type"),
+        (None, "unsupported_value_type"),
+        (123, "unsupported_value_type"),
+    )
+
+    def test_entity_add_inline_field_link_targets_refused_with_zero_writes(self) -> None:
+        for idx, (target, expected_reason) in enumerate(self.BAD_INLINE):
+            fld: dict = {"id": "ref_bad", "type": "link", "labels": {"en": "Ref Bad", "ar": "Ref Bad"}}
+            if target is not _OMIT:
+                fld["target"] = target
+            step = _entity(1, "widget", fields=[fld])
+            seen = {}
+            for name, adapter in self._adapters():
+                with self.subTest(target=target, adapter=name):
+                    engine = adapter.frappe_backend._frappe_factory() if adapter.frappe_backend else None
+                    rev1 = self._seed_customer(adapter, f"idemp_ent_fld_{idx}_{name}")
+                    before_rows = repr(engine.ensure_site(SITE).rows) if engine else None
+                    rev2 = {"hash": "sha256:" + "6" * 64, "revision": 2}
+                    inv = _inverse_for(rev1, rev2, [_entity(1, "widget")])
+                    art2 = _artifact([step], base=rev1, target=rev2, inverse=inv)
+                    planned = adapter.call("plan", _ctx(), {"artifact": art2})
+                    self.assertTrue(planned["ok"], planned)
+                    res = planned["result"]
+                    got = (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"])
+                    seen[name] = got
+                    self.assertEqual(got, ("blocked", expected_reason, "rejected"), res)
+                    ap = adapter.call("apply", _ctx(), {
+                        "idempotencyKey": f"idemp_ent_fld_ap_{idx}_{name}",
+                        "planToken": res["planToken"],
+                        "artifact": art2,
+                        "approvals": {"changeApproved": "01J00000000000000000000013"},
+                    })
+                    self.assertTrue(ap["ok"], ap)
+                    self.assertEqual(ap["result"]["status"], "rejected", ap)
+                    if engine is not None:
+                        self.assertEqual(repr(engine.ensure_site(SITE).rows), before_rows)
+            self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+    def test_entity_add_inline_relation_targets_refused_and_valid_inline_allowed(self) -> None:
+        for idx, (target, expected_reason) in enumerate((
+            ("user", "protected_subject"),
+            ("gl_entry", "protected_subject"),
+            ("GL Entry", "unsupported_value_type"),
+            (_OMIT, "unsupported_value_type"),
+        )):
+            rel: dict = {"id": "rel_bad", "kind": "many_to_one", "labels": {"en": "Rel Bad", "ar": "Rel Bad"}}
+            if target is not _OMIT:
+                rel["target"] = target
+            step = _entity(1, "widget", relations=[rel])
+            for name, adapter in self._adapters():
+                with self.subTest(rel_target=target, adapter=name):
+                    res = self._plan_on_customer(adapter, [step], f"idemp_ent_rel_{idx}_{name}")
+                    self.assertEqual(
+                        (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"]),
+                        ("blocked", expected_reason, "rejected"),
+                        res,
+                    )
+
+        # Positive control: entity.add with valid inline link field, string field, and relation plans ok.
+        good = _entity(
+            1,
+            "widget",
+            fields=[
+                {"id": "ref_item", "type": "link", "target": "item", "labels": {"en": "Item", "ar": "Item"}},
+                {"id": "note", "type": "string", "labels": {"en": "Note", "ar": "Note"}},
+            ],
+            relations=[
+                {"id": "rel_cust", "target": "customer", "kind": "many_to_one", "labels": {"en": "Cust", "ar": "Cust"}},
+            ],
+        )
+        for name, adapter in self._adapters():
+            with self.subTest(control="valid_inline", adapter=name):
+                res = self._plan_on_customer(adapter, [good], f"idemp_ent_ok_{name}")
+                self.assertEqual(res["steps"][0]["disposition"], "ok", res)
+                self.assertEqual(res["verdict"], "auto_approved", res)
 
 
 if __name__ == "__main__":

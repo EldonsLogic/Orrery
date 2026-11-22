@@ -21,6 +21,7 @@ Found why the weekly live isolation workflow died in `setUpClass` with `login ..
   1. `X-Frappe-Site-Name` is the engine's site selector and overrides Host (`frappe/app.py` `init_request`). The old assertions assumed it is ignored. That is why the guard refuses the header and why the gateway must strip it (PLT-024). The test now pins the behaviour and keeps what matters: credentials stay bound to the site the header names, B's credentials fail there, and A's credentials never return B's marker. `X-Forwarded-Host` keeps the original strict assertions.
   2. The adapter refuses with the builtin `PermissionError`, which the engine reports as HTTP 500 with a traceback. `assert_refused` accepts `DENIED` or a 500 whose body contains `PermissionError: Not permitted`; any other 500 still fails. The no-leak checks are unchanged.
   3. Public file controls needed the `/files` serving above.
+  4. Found by CI run 45083756451 (24 of 25 passed; the known-leak test showed `unexpected success`, reproduced on a fresh local stack): the engine's RQ Job list ignores `limit_page_length` and `start` and returns one fixed page of 20 jobs in queue and status order, so a site's own background jobs push the twin's job (and B's positive-control job) off the page. The twin leak check, B's positive control and A's no-leak check now scan every (queue, status) bucket through the `filters` parameter; the twin check fails, rather than passes, if a bucket is full.
 
 ## Decisions
 - Test the raw engine without the ERP-020 hook here; the run with the hook on stays SEC-021 (already its scope). Founders: confirm or say you want the opposite.
@@ -32,8 +33,8 @@ Found why the weekly live isolation workflow died in `setUpClass` with `login ..
 3. Keep this suite on the raw engine, or add a second guard-on pass now rather than in SEC-021?
 
 ## Verification
-- Local, full fresh path was not run in one go: the stack was provisioned once by the runner (`--keep`) and the suite run against it with `--reuse` after each fix. Last local run: `Ran 25 tests ... OK (expected failures=1)`. One earlier run failed `test_b_jobs_invisible_to_a_rq_job_api` with "RQ Job list never showed marker" right after an engine restart and passed on the next two runs: possible flake, unexplained.
-- CI: see below.
+- Local, full fresh path was not run in one go: the stack was provisioned once by the runner (`--keep`) and the suite run against it with `--reuse` after each fix. Last local run: `Ran 25 tests ... OK (expected failures=1)`. `test_b_jobs_invisible_to_a_rq_job_api` failed twice on the reused stack with "RQ Job list never showed marker": the same 20-row page cause (item 4), fixed; four later runs on that stack passed.
+- CI run 45083756451 (first push of this branch): 24 of 25 passed, `test_prefix_twin_jobs_invisible_to_a` showed unexpected success (item 4 above). Result of the rerun after that fix: see the PR.
 
 ## Tokens or cost
 Unknown.

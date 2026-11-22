@@ -599,23 +599,30 @@ class CrossTenantIsolation(unittest.TestCase):
         self.assertTrue(ran.startswith(f"sec004_job_{token}|{self.A['site']}|Administrator|"), ran)
         self.assertIsNone(self.probe(self.B, "get_job_record", token=token)["value"])
 
-    def rq_jobs_as(self, tenant, sid):
-        path = "/api/resource/RQ%20Job?" + urlencode(
-            {"fields": '["*"]', "limit_page_length": 500, "order_by": "creation desc"})
-        resp = self.http("GET", path, tenant["site"], sid=sid)
-        self.assertEqual(resp[0], 200, "RQ Job list must answer, or the leak checks are vacuous")
-        return resp
+    RQ_QUEUES = ("default", "long", "short")
+    RQ_STATUSES = ("queued", "started", "failed", "finished", "deferred", "scheduled", "canceled")
+    RQ_PAGE = 20  # the engine's RQ Job list ignores limit_page_length and start: one fixed page of 20
+
+    def rq_job_buckets_as(self, tenant, sid, queues=RQ_QUEUES):
+        """One RQ Job list per (queue, status) bucket, so site background jobs cannot push a row off the page."""
+        for queue in queues:
+            for status in self.RQ_STATUSES:
+                filters = json.dumps([["RQ Job", "queue", "=", queue], ["RQ Job", "status", "=", status]])
+                path = "/api/resource/RQ%20Job?" + urlencode(
+                    {"fields": '["*"]', "filters": filters, "order_by": "creation desc"})
+                resp = self.http("GET", path, tenant["site"], sid=sid)
+                self.assertEqual(resp[0], 200, f"RQ Job list {queue}/{status} must answer, or the leak check is vacuous")
+                yield queue, status, resp
 
     def wait_for_rq_job_marker(self, tenant, sid, marker, timeout=30):
+        """Poll the `short` queue buckets (where the probe enqueues) until a job carries the marker."""
         deadline = time.time() + timeout
-        last_body = b""
         while time.time() < deadline:
-            _, body, _ = self.rq_jobs_as(tenant, sid)
-            last_body = body
-            if marker.encode() in body:
-                return body
+            for _, _, resp in self.rq_job_buckets_as(tenant, sid, queues=("short",)):
+                if marker.encode() in resp[1]:
+                    return resp[1]
             time.sleep(0.5)
-        self.fail(f"positive control failed: {tenant['site']} RQ Job list never showed {marker} ({len(last_body)}B)")
+        self.fail(f"positive control failed: {tenant['site']} RQ Job list never showed {marker}")
 
     def test_b_jobs_invisible_to_a_rq_job_api(self):
         job_id = self.probe(self.B, "enqueue_marker_job", marker=self.mark_b)
@@ -627,7 +634,8 @@ class CrossTenantIsolation(unittest.TestCase):
         self.assertEqual(ctrl[0], 200)
         self.assertIn(self.mark_b.encode(), ctrl[1])
 
-        self.assert_no_leak(self.rq_jobs_as(self.A, self.sid_a), self.mark_b, "RQ Job list as A")
+        for queue, status, resp in self.rq_job_buckets_as(self.A, self.sid_a):
+            self.assert_no_leak(resp, self.mark_b, f"RQ Job list as A ({queue}/{status})")
         resp = self.http("GET", job_path, self.A["site"], sid=self.sid_a)
         self.assertIn(resp[0], DENIED)
         self.assert_no_leak(resp, self.mark_b, "RQ Job by id as A")
@@ -643,7 +651,12 @@ class CrossTenantIsolation(unittest.TestCase):
         unittest reports `unexpected success` loudly so this marker must be removed."""
         self.probe(self.T, "enqueue_marker_job", marker=self.mark_t)
         self.wait_for_rq_job_marker(self.T, self.sid_t, self.mark_t)  # positive control on T
-        self.assert_no_leak(self.rq_jobs_as(self.A, self.sid_a), self.mark_t, "twin-site RQ Job list as A")
+        # The default list shows only the first 20 matched jobs, in queue and status order, so A's own
+        # background jobs can hide the twin's: scan every bucket, and fail (never pass) if one is full.
+        for queue, status, resp in self.rq_job_buckets_as(self.A, self.sid_a):
+            rows = json.loads(resp[1]).get("data", [])
+            self.assertLess(len(rows), self.RQ_PAGE, f"A's {queue}/{status} bucket is full: leak check inconclusive")
+            self.assert_no_leak(resp, self.mark_t, f"twin-site RQ Job list as A ({queue}/{status})")
 
     # ---------- 9. Backups and restore paths (DB, site_config, file tarballs) ----------
     def backup(self, tenant):

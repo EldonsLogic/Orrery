@@ -7,8 +7,10 @@ a fact's label; production requires usable coverage and refuses UNVERIFIED locke
 from datetime import date
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 EVIDENCE_LABELS = {"VERIFIED-OFFICIAL", "SECONDARY", "UNVERIFIED", "PLATFORM-DEFAULT"}
+SOURCED_LABELS = {"VERIFIED-OFFICIAL", "SECONDARY"}
 
 MINIMUM_LOCKED_PATHS = ("tax", "eInvoicing", "payrollHooks")
 
@@ -48,7 +50,14 @@ def source_violations(src: dict, today: str) -> list[str]:
     bad = []
     if not isinstance(src, dict):
         return ["source must be an object"]
-    if not isinstance(src.get("url"), str) or not src["url"].startswith("https://"):
+    url = src.get("url")
+    try:
+        parsed = urlsplit(url) if isinstance(url, str) else None
+        valid_url = (parsed is not None and parsed.scheme == "https" and bool(parsed.hostname)
+                     and not any(char.isspace() for char in url))
+    except ValueError:
+        valid_url = False
+    if not valid_url:
         bad.append(f"{src.get('url')!r}: not an https URL")
     label = src.get("url")
     if "read" in src and src["read"] is not False:
@@ -59,25 +68,34 @@ def source_violations(src: dict, today: str) -> list[str]:
         if not src.get("note"):
             bad.append(f"{label}: unread source needs a note saying why")
         return bad
-    if not ISO_DATE.match(str(src.get("accessed", ""))):
+    accessed = src.get("accessed")
+    if not isinstance(accessed, str) or not ISO_DATE.fullmatch(accessed):
         bad.append(f"{label}: read source needs an ISO access date (or read: false)")
-    elif src["accessed"] > today:
-        bad.append(f"{label}: access date in the future")
+    else:
+        try:
+            date.fromisoformat(accessed)
+        except ValueError:
+            bad.append(f"{label}: read source needs a valid ISO access date")
+        else:
+            if accessed > today:
+                bad.append(f"{label}: access date in the future")
     if UNREAD_NOTE.search(str(src.get("note", ""))):
         bad.append(f"{label}: note says unread but the source is not marked read: false")
     return bad
 
 
 def fact_source_violations(fact: dict, today: str) -> list[str]:
-    """Share source validation and the read-source requirement between shipped tests and runtime."""
+    """Share source, read-source and platform-reference rules between shipped tests and runtime."""
     sources = fact.get("sources", [])
     if not isinstance(sources, list):
         return ["sources must be a list"]
     bad = [reason for source in sources for reason in source_violations(source, today)]
-    if fact["status"] in ("VERIFIED-OFFICIAL", "SECONDARY") and not any(
+    if fact["status"] in SOURCED_LABELS and not any(
         isinstance(source, dict) and "accessed" in source for source in sources
     ):
         bad.append(f"{fact['status']} needs a read source with an access date")
+    if fact["status"] == "PLATFORM-DEFAULT" and not fact.get("ref"):
+        bad.append("PLATFORM-DEFAULT needs a ref")
     return bad
 
 
@@ -131,7 +149,6 @@ def locked_fact_refusals(pack: dict[str, Any], evidence: dict[str, Any]) -> list
         if not isinstance(status, str) or status not in EVIDENCE_LABELS:
             reasons.append(f"{prefix}.status: must be a known evidence label")
             continue
-        overlaps_locked = False
         for path in paths:
             try:
                 get(pack, path)
@@ -140,18 +157,18 @@ def locked_fact_refusals(pack: dict[str, Any], evidence: dict[str, Any]) -> list
                 continue
             # A whole-area fact can back a locked descendant; check both overlap directions.
             if covered(path, locked) or any(covered(p, [path]) for p in locked):
-                overlaps_locked = True
                 if status == "UNVERIFIED":
                     reasons.append(f"{prefix}: UNVERIFIED fact on locked path {path}")
             if status != "UNVERIFIED":
                 evidenced.append(path)
-        if status == "SECONDARY" and overlaps_locked:
+        if status in SOURCED_LABELS or status == "PLATFORM-DEFAULT":
             reasons.extend(f"{prefix}: {reason}" for reason in fact_source_violations(fact, date.today().isoformat()))
     for path in locked:
         try:
             value = get(pack, path)
         except KeyError:
-            continue  # Only locked paths present in this validated pack need coverage.
+            reasons.append(f"overridesPolicy.lockedPaths: locked path {path} does not exist")
+            continue
         for leaf, _ in leaves(value, path):
             if not covered(leaf, evidenced):
                 reasons.append(f"evidence.json.facts: locked leaf {leaf} has no non-UNVERIFIED evidence coverage")

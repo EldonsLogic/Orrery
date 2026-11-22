@@ -2,7 +2,7 @@
 
 Date: 2026-11-22
 Author: eldon
-Tool and model: claude-code
+Tool and model: claude-code (Sonnet 5.5)
 Plan IDs: GOV-064
 
 ## Summary
@@ -20,7 +20,9 @@ Applied Eldon's Q-41, Q-42, Q-43 answers to the action-policy table and RULES 21
 - Q-41, Q-42, Q-43, Q-70 applied as answered; ADR-0027 is the source.
 
 ## Tokens or cost
-Unknown or approximate, if known.
+Not measured; one Sonnet session with two short follow-ups (web wiring, review fixes).
 
 ## Next step
 None for GOV-064. Checks run: web lint, typecheck, test, node --test scripts; services/blueprint tokens tests; brand tools.
+
+Review fixes (PR #268): break-glass list marked Proposed again; sole-owner rule reworded (role holding, not availability); RULES 21 and 23 wording; Q-563 added for Q-41 with Q-42; agent-least-privilege Q-42 references updated.

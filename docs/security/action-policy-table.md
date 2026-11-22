@@ -91,7 +91,7 @@ Rules a row can name, evaluated by the policy code against session identities:
 | SOD-NOT-SELF | The action may not target the actor themselves (no granting yourself a role, no approving a change to your own limits) |
 | SOD-NOT-AGENT-OWNER | When the draft came from an agent, the approver is not the human who owns or configured that agent (accepted, Q-42: approving a draft from an agent you own or set up is not a second person) |
 
-**Small tenants (Q-41, resolved 2026-11-22).** An eligible approver is a human who holds the row's approving role, is not the initiator, and is not an agent (and, for agent drafts, is not the agent's owner, SOD-NOT-AGENT-OWNER, Q-42). Where an R1 to R3 row requires SOD-DIFF and the tenant has only one eligible human, the sole owner may self-approve: the approval is flagged "self-approved", step-up is required, and the event is listed in a periodic review report. R4 rows (permission or role changes, bank-detail changes, agent limits or autonomy, reversals of posted history, Blueprint publish) never have this fallback: they wait for a second eligible human or, where allowed, go through section 8. Consequence for onboarding: a tenant needs a second eligible person to cancel posted invoices (AP-FIN-02) or change roles (AP-PERM-01). If a tenant has several humans but none other than the initiator is eligible for this request, the request waits or goes through section 8; it is never self-approved unless the single-owner rule above applies.
+**Small tenants (Q-41, resolved 2026-11-22).** An eligible approver is a human who holds the row's approving role, is not the initiator, and is not an agent (and, for agent drafts, is not the agent's owner, SOD-NOT-AGENT-OWNER, Q-42). Fallback: when the initiator is the tenant owner and no other human in the tenant holds the row's approving role (role holding, not availability), the owner may self-approve R1 to R3 rows that need a different approver (SOD-DIFF or SOD-DIFF-AUTHOR); the approval is flagged "self-approved", step-up is required, and the event is listed in a periodic review report. If another human holds the role but is away or unavailable, the request waits or goes through section 8; it is never self-approved. R4 rows (permission or role changes, bank-detail changes, agent limits or autonomy, reversals of posted history, Blueprint publish) never have this fallback: they wait for a second eligible human or, where allowed, go through section 8. Consequence for onboarding: a tenant needs a second eligible person to cancel posted invoices (AP-FIN-02) or change roles (AP-PERM-01). How the fallback interacts with SOD-NOT-AGENT-OWNER when the sole owner approves their own agent's draft is open (Q-563).
 
 **Platform staff.** Our own staff never approve a tenant's business action. Support access follows [access-policy.md](access-policy.md) and PLT-019 and is read-only by default. While only two founders exist, separation of duties for support grants is weak (T52); this table does not fix that.
 
@@ -128,7 +128,7 @@ States of one request: drafted, pending approval, approved, executing, executed,
 Two different things share the name; neither lets an agent act.
 
 **Tenant break-glass** (the approver is unavailable and something must happen, for example a delivery is stuck behind an absent approver):
-- Only rows marked break-glass allowed. Never for permission changes, bank-detail changes, agent limits or Blueprint publish.
+- Only rows marked break-glass allowed. Proposed: never for permission changes, bank-detail changes, agent limits or Blueprint publish.
 - Only a tenant owner, with step-up, a typed reason and a time box.
 - Executes as the owner under a break-glass flag; the event says so.
 - Notifies every other approver for that row at once.
@@ -169,7 +169,7 @@ Each event carries: tenant id, event id, sequence, action id and version, table 
 From any posted document, the audit trail can answer: who drafted it (human or agent), who submitted it, who approved it, which exact payload hash they approved, under which table version, when it executed, and whether break-glass was involved. QA-019 and the ERP-023 tests check this trail.
 
 ## 12. Starter table: golden-path actions
-Roles from [../specs/golden-path-trading-sale.md](../specs/golden-path-trading-sale.md) section 3: Owner, Sales, Warehouse, Finance. Proposals for founder, accountant and compliance review; nothing is settled. "Owner" also covers a tenant admin role if one exists (ADR-0007, Proposed).
+Roles from [../specs/golden-path-trading-sale.md](../specs/golden-path-trading-sale.md) section 3: Owner, Sales, Warehouse, Finance. The class assignments and rows are proposals for founder, accountant and compliance review; only Q-41, Q-42 and Q-43 are settled. "Owner" also covers a tenant admin role if one exists (ADR-0007, Proposed).
 
 | Action id | Action | Effect | Risk | Floor | May initiate | May approve | Approvals | Separation | Agent | Extra binding fields | Approval expiry | Break-glass |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|

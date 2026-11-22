@@ -11,7 +11,7 @@ from jsonschema import Draft202012Validator
 
 from components.compliance.country_pack import (
     OverrideRejectedError,
-    apply_company_overrides,
+    PackValidationError,
     load_country_pack,
     resolve_country_pack,
     validate_pack,
@@ -26,7 +26,7 @@ ARABIC_RE = re.compile(r"[؀-ۿ]")
 
 class TestQatarPack(unittest.TestCase):
     def setUp(self) -> None:
-        self.pack = load_country_pack("QA", PACKS_DIR, version="0.1.0")
+        self.pack = load_country_pack("QA", PACKS_DIR, version="0.1.0", environment="test")
 
     def test_loads_through_production_path_and_validates(self) -> None:
         self.assertEqual(validate_pack(self.pack), [])
@@ -35,7 +35,7 @@ class TestQatarPack(unittest.TestCase):
         self.assertEqual(self.pack["componentId"], "country.qa")
         self.assertIs(self.pack["testOnly"], False)
         # Unpinned load picks the same pack (no test-only version beside it).
-        self.assertEqual(load_country_pack("qa", PACKS_DIR)["version"], "0.1.0")
+        self.assertEqual(load_country_pack("qa", PACKS_DIR, environment="test")["version"], "0.1.0")
 
     def test_status_is_tested_and_evidence_unverified(self) -> None:
         # Tested = structure only; the facts stay UNVERIFIED and Arabic text needs sign-off (ADR-0033).
@@ -43,6 +43,16 @@ class TestQatarPack(unittest.TestCase):
         self.assertEqual(self.pack["evidenceStatus"], "unverified")
         self.assertIn("UNVERIFIED", self.pack["notes"])
         self.assertLessEqual(len(self.pack["notes"]), 500)
+
+    def test_pack_is_refused_in_production(self) -> None:
+        # CMP-034 go-live gate: a `tested` pack with `unverified` evidence never loads in production (default environment).
+        with self.assertRaises(PackValidationError) as ctx:
+            load_country_pack("QA", PACKS_DIR, version="0.1.0")
+        self.assertIn("cannot be used in production", str(ctx.exception))
+        with self.assertRaises(PackValidationError):
+            resolve_country_pack("QA", PACKS_DIR, version="0.1.0")
+        with self.assertRaises(PackValidationError):
+            load_country_pack("QA", PACKS_DIR, version="0.1.0", environment="production")
 
     def test_vat_not_assumed(self) -> None:
         tax = self.pack["tax"]
@@ -155,10 +165,10 @@ class TestQatarPack(unittest.TestCase):
             {"holidays": {"calendarRef": {"id": "sa.holidays", "version": "0.1.0"}}},
         ):
             with self.subTest(override=override), self.assertRaises(OverrideRejectedError) as ctx:
-                apply_company_overrides(self.pack, override)
+                resolve_country_pack("QA", PACKS_DIR, version="0.1.0", environment="test", company_overrides=override)
             self.assertIn("locked", str(ctx.exception))
         with self.assertRaises(OverrideRejectedError):
-            apply_company_overrides(self.pack, {"notAPath": 1})
+            resolve_country_pack("QA", PACKS_DIR, version="0.1.0", environment="test", company_overrides={"notAPath": 1})
 
     def test_valid_company_overrides_apply(self) -> None:
         resolved = resolve_country_pack(
@@ -178,6 +188,7 @@ class TestQatarPack(unittest.TestCase):
                 "numberSystem": "eastern_arabic",
             },
             version="0.1.0",
+            environment="test",
         )
         self.assertEqual(resolved["locale"]["week"]["weekendDays"], ["fri"])
         self.assertEqual(resolved["locale"]["fiscalYear"]["startMonth"], 7)
@@ -201,13 +212,14 @@ class TestQatarPack(unittest.TestCase):
                 },
             },
             version="0.1.0",
+            environment="test",
         )
         period = resolved["locale"]["workingTime"]["reducedPeriods"][0]
         self.assertEqual(period["hours"], {"from": "09:00", "to": "13:00"})
         self.assertIn("workingTime.reducedPeriods", resolved["appliedOverrides"])
         # An invalid reduced period (end before start) is refused.
         with self.assertRaises(OverrideRejectedError):
-            apply_company_overrides(self.pack, {"workingTime": {"reducedPeriods": [{
+            resolve_country_pack("QA", PACKS_DIR, version="0.1.0", environment="test", company_overrides={"workingTime": {"reducedPeriods": [{
                 "id": "ramadan",
                 "labels": {"ar": "ساعات رمضان", "en": "Ramadan hours"},
                 "rule": "ramadan",
@@ -224,7 +236,7 @@ class TestQatarPack(unittest.TestCase):
             {"holidays": {"overrides": [{"action": "move", "date": "2026-12-18"}]}},
         ):
             with self.subTest(override=override), self.assertRaises(OverrideRejectedError):
-                apply_company_overrides(self.pack, override)
+                resolve_country_pack("QA", PACKS_DIR, version="0.1.0", environment="test", company_overrides=override)
 
     def test_unresolved_placeholders_are_required_by_manifest(self) -> None:
         manifest = json.loads((QA_DIR / "manifest.json").read_text(encoding="utf-8"))

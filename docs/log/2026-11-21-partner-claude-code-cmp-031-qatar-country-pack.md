@@ -47,3 +47,10 @@ Next step (follow-ups for the coordinator to turn into plan rows; none added her
 - An `invoice` print kind in `pack.schema.json` for countries without VAT (Tier 3, its own PR); then replace the `tax_invoice` stand-in.
 - `vatNumberPattern` may be `null` when VAT is unsupported, replacing the `^(?!)$` workaround.
 - Source the CR number pattern, week start (`sun`), timezone and currency before the pack leaves `tested`.
+
+## Main merge after CMP-034
+Merged `origin/main` (b10fd66, includes CMP-034 #259, the loader go-live gate) with `git merge --no-ff`; no conflicts. Only `components/compliance/country_pack/tests/test_pack_qa.py` changed beyond the merge; no pack data, manifest, evidence, README, loader or schema file was touched.
+- Every `load_country_pack` and `resolve_country_pack` call in the test now passes `environment="test"`, because the pack is `tested` with `unverified` evidence and production now refuses it.
+- The private-merger calls `apply_company_overrides` became `resolve_country_pack(..., company_overrides=..., environment="test")` (the public resolver).
+- New test `test_pack_is_refused_in_production`: with the default environment (and `environment="production"`) both `load_country_pack` and `resolve_country_pack` raise `PackValidationError`.
+- Country pack suite: 42 tests pass, including the CMP-034 gate tests from main.

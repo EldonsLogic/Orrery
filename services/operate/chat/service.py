@@ -68,7 +68,11 @@ class ChatService:
         s = None if new else self.store.latest_session(p.tenant_id, p.subject)
         if s is not None:
             return s
-        self._admit(p, "session")  # new sessions are metered per user, so a fresh session is not a fresh quota
+        try:  # new sessions are metered per user, so a fresh session is not a fresh quota
+            self._admit(p, "session")
+        except ChatFailure as f:
+            self._audit_refusal(p, f)
+            raise
         now = self.clock()
         return self.store.create_session(Session(p.tenant_id, p.subject, self.ids.new_id("ses"),
                                                  self.ids.new_id("thr"), self.default_locale, now, now))
@@ -89,14 +93,23 @@ class ChatService:
 
     def _admit(self, p: Principal, kind: str) -> None:
         """Count one `kind` event for the verified principal (SEC-009). Over a limit is retryable with a wait time;
-        a limiter fault or misconfiguration is not, and says so. Every refusal is audited (no message text)."""
+        a limiter fault or misconfiguration is not, and says so. The first refusal per key and reason carries its
+        audit record (no message text); the caller emits it outside the chat lock (`_audit_refusal`)."""
         try:
             self.limiter.admit(kind, p.tenant_id, p.subject)
         except RateLimited as e:
-            self._audit(p, "chat.rate_limited", {"kind": kind, "reason": e.reason, "retry_after_s": e.retry_after_s})
             if e.retryable:
-                raise ChatFailure("chat_rate_limited", {"minutes": max(1, math.ceil(e.retry_after_s / 60))})
-            raise ChatFailure("chat_limit_unavailable")
+                f = ChatFailure("chat_rate_limited", {"minutes": max(1, math.ceil(e.retry_after_s / 60))})
+            else:
+                f = ChatFailure("chat_limit_unavailable")
+            if getattr(e, "first", True):
+                f.audit = {"kind": kind, "reason": e.reason, "retry_after_s": e.retry_after_s}
+            raise f
+
+    def _audit_refusal(self, p: Principal, exc: BaseException) -> None:
+        data = getattr(exc, "audit", None)
+        if data:
+            self._audit(p, "chat.rate_limited", data)
 
     # ---- audit ---------------------------------------------------------------------------------------------
     def _audit(self, p: Principal, type_: str, data: dict, trace: Optional[dict] = None) -> None:
@@ -129,7 +142,7 @@ class ChatService:
             raise ChatFailure("chat_message_too_long")
         session = self.open_session(p, session_id)
         lang = language.detect(text, session.locale)
-        thash, run_id = _sha(text), self.ids.new_id("run")
+        thash, run_id, refused = _sha(text), self.ids.new_id("run"), None
         with self._lock:  # dedup and the one-run rule are decided together
             rec = self.store.get_message(session, message_id)
             if rec is not None and rec.text_hash != thash:
@@ -140,12 +153,16 @@ class ChatService:
                     raise ChatFailure("chat_run_in_progress")  # second message is rejected, not queued
                 try:  # only an accepted turn counts; a replay is free (SEC-009)
                     self._admit(p, "turn")
-                except Exception:
+                except Exception as exc:
                     self.store.end_run(session, run_id)  # same lock: undo the accepted run before refusing
-                    raise
-                self.store.put_message(session, MessageRecord(message_id, thash, "running", "", run_id))
-                token = CancelToken()
-                self._active[(session.tenant_id, session.session_id)] = (run_id, token)
+                    refused = exc
+                else:
+                    self.store.put_message(session, MessageRecord(message_id, thash, "running", "", run_id))
+                    token = CancelToken()
+                    self._active[(session.tenant_id, session.session_id)] = (run_id, token)
+        if refused is not None:  # audited after the lock is released, so a flood cannot serialise other sends
+            self._audit_refusal(p, refused)
+            raise refused
         if replay is not None:
             yield from self._replay(session, replay, lang.locale)
             return

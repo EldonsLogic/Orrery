@@ -25,6 +25,8 @@ MAX_CLOCK_S = 1e10             # a monotonic clock in seconds stays far below th
 MIN_WINDOW_S, MAX_WINDOW_S = 1, 7 * 86400
 MAX_LIMIT = 1_000_000
 SWEEP_EVERY = 1024             # admits between sweeps of expired keys
+MAX_SKEW_S = 5                 # a backwards step up to this is clamped; a larger one is a clock reset (rebase)
+MAX_QUIET_KEYS = 10_000        # refusal-log suppression entries kept before the table is cleared
 BUDGET_REASONS = frozenset({"exceeded", "policy_missing", "meter_unavailable", "layer_unbound"})  # model-call 5
 
 
@@ -73,20 +75,27 @@ class RateLimited(Exception):
         super().__init__(f"{RATE_CODE}:{reason}")
         self.code, self.reason, self.retry_after_s = RATE_CODE, reason, retry_after_s
         self.retryable = reason in RETRYABLE_REASONS
+        self.first = True  # False for a repeat refusal of the same key and reason: callers do not log or audit it
 
 
 class RateLimiter:
     """Sliding-window counters. `clock` is injected and must be monotonic seconds (`time.monotonic` in a host,
-    `TickClock` in tests). A value that goes backwards is clamped to the last good one; a non-finite, negative or
-    huge value refuses with `store_error` and records nothing, so the limiter recovers when the clock does."""
+    `TickClock` in tests). A small backwards step (up to `MAX_SKEW_S`) is clamped to the last good value; a larger
+    one is a clock reset, so hits stamped after the new value are moved to it (counts kept, windows restart) and one
+    spurious high reading cannot freeze the limiter. A non-finite, negative or huge value refuses with `store_error`
+    and records nothing, so the limiter recovers when the clock does. Refusals are logged once per key and reason
+    until that key is admitted again; the repeats are counted and reported then."""
 
     def __init__(self, clock, rules=DEFAULT_RULES, sweep_every: int = SWEEP_EVERY):
         try:
             self.rules = tuple(rules)
         except Exception:
             self.rules = ()
-        self.clock, self._valid, self.sweep_every = clock, _valid_rules(self.rules), sweep_every
+        sweep_ok = type(sweep_every) is int and sweep_every >= 1
+        self.clock, self._valid = clock, _valid_rules(self.rules) and sweep_ok
+        self.sweep_every = sweep_every if sweep_ok else SWEEP_EVERY
         self._hits: dict = {}
+        self._quiet: dict = {}   # (kind, tenant, user) -> {reason: repeats not logged}
         self._last = 0.0
         self._calls = 0
         self._lock = threading.Lock()
@@ -94,12 +103,28 @@ class RateLimiter:
     def admit(self, kind: str, tenant_id, user_id) -> None:
         """Record one `kind` event for (tenant, user) or raise `RateLimited` (logged). A refused event is not
         recorded."""
+        ident = (str(kind)[:32], str(tenant_id)[:128], str(user_id)[:128])
         try:
             self._admit(kind, tenant_id, user_id)
         except RateLimited as e:
-            log.warning("rate refusal kind=%s tenant=%s user=%s reason=%s retry_after_s=%d", str(kind)[:32],
-                        str(tenant_id)[:128], str(user_id)[:128], e.reason, e.retry_after_s)
+            with self._lock:
+                seen = self._quiet.get(ident)
+                if seen is not None and e.reason in seen:
+                    seen[e.reason] += 1
+                    e.first = False
+                else:
+                    if len(self._quiet) >= MAX_QUIET_KEYS:
+                        self._quiet.clear()
+                    self._quiet.setdefault(ident, {})[e.reason] = 0
+            if e.first:
+                log.warning("rate refusal kind=%s tenant=%s user=%s reason=%s retry_after_s=%d", *ident, e.reason,
+                            e.retry_after_s)
             raise
+        with self._lock:
+            seen = self._quiet.pop(ident, None)
+        if seen and any(seen.values()):
+            log.warning("rate refusals repeated kind=%s tenant=%s user=%s %s", *ident,
+                        " ".join(f"{k}={v}" for k, v in sorted(seen.items())))
 
     def _admit(self, kind, tenant_id, user_id) -> None:
         if not (isinstance(tenant_id, str) and tenant_id.strip() and isinstance(user_id, str) and user_id.strip()):
@@ -112,7 +137,12 @@ class RateLimiter:
                 now = self.clock()
                 if not (_num(now) and 0 <= now <= MAX_CLOCK_S):
                     raise RateLimited("store_error")
-                now = self._last = max(float(now), self._last)
+                now = float(now)
+                if now < self._last - MAX_SKEW_S:
+                    self._rebase(now)
+                elif now < self._last:
+                    now = self._last
+                self._last = now
                 keyed = [(r, (kind, r.scope, float(r.window_s), tenant_id, user_id if r.scope == "user" else ""))
                          for r in rules]
                 for r, key in keyed:  # check every rule before recording any, so a refusal costs nothing
@@ -130,6 +160,12 @@ class RateLimiter:
             raise
         except Exception as exc:  # a broken clock or store refuses, never admits
             raise RateLimited("store_error") from exc
+
+    def _rebase(self, now: float) -> None:
+        """Clock reset: hits stamped after `now` are moved to `now` (the caller holds the lock)."""
+        for key, q in self._hits.items():
+            if q and q[-1] > now:
+                self._hits[key] = deque(min(t, now) for t in q)
 
     def _sweep(self, now: float) -> None:
         """Drop keys whose newest hit is outside their window (bounded memory; the caller holds the lock)."""

@@ -118,6 +118,65 @@ def test_backwards_clock_is_clamped():
     lim.admit("turn", "t_a", "u_1")
 
 
+def test_small_backwards_step_is_clamped():
+    clock = Clock(1000.0)
+    lim = RateLimiter(clock, (RateRule("turn", "user", 60, 1),))
+    lim.admit("turn", "t_a", "u_1")
+    clock.t = 997.0
+    assert reason(lim, "turn", "t_a", "u_1").retry_after_s == 60  # measured from 1000, not 997
+
+
+def test_one_spurious_high_reading_does_not_freeze_the_limiter():
+    clock = Clock(100.0)
+    lim = RateLimiter(clock, (RateRule("turn", "user", 60, 2),))
+    lim.admit("turn", "t_a", "u_2")
+    clock.t = 9e9  # in range, but wrong
+    lim.admit("turn", "t_a", "u_1")
+    lim.admit("turn", "t_a", "u_1")
+    clock.t = 110.0  # back to the real clock: counts are kept, their windows restart at the reset
+    e = reason(lim, "turn", "t_a", "u_1")
+    assert (e.reason, e.retry_after_s) == ("user_limit", 60)
+    lim.admit("turn", "t_a", "u_2")  # not frozen: other keys still admit
+    clock.t = 170.0
+    lim.admit("turn", "t_a", "u_1")
+
+
+@pytest.mark.parametrize("bad", [0, -1, None, 1.5, True])
+def test_invalid_sweep_every_refuses_and_records_nothing(bad):
+    lim = RateLimiter(Clock(1.0), RULES, sweep_every=bad)
+    for _ in range(3):
+        assert reason(lim, "turn", "t_a", "u_1").reason == "policy_missing"
+    assert not any(lim._hits.values())
+
+
+def test_sweep_keeps_live_counts():
+    clock = Clock(0.0)
+    lim = RateLimiter(clock, (RateRule("turn", "user", 60, 2),), sweep_every=2)
+    lim.admit("turn", "t_a", "u_1")
+    lim.admit("turn", "t_a", "u_1")  # second admit triggers a sweep; this key is live
+    clock.t = 10.0
+    lim.admit("turn", "t_a", "u_2")
+    lim.admit("turn", "t_a", "u_3")  # another sweep
+    assert reason(lim, "turn", "t_a", "u_1").reason == "user_limit"
+
+
+def test_refusal_is_logged_once_per_key_until_admitted(caplog):
+    clock = Clock(0.0)
+    lim = RateLimiter(clock, (RateRule("turn", "user", 60, 1),))
+    lim.admit("turn", "t_a", "u_1")
+    with caplog.at_level("WARNING", logger="ratelimit"):
+        firsts = [reason(lim, "turn", "t_a", "u_1").first for _ in range(5)]
+    assert firsts == [True, False, False, False, False]
+    lines = [r.getMessage() for r in caplog.records if r.name == "ratelimit"]
+    assert lines == ["rate refusal kind=turn tenant=t_a user=u_1 reason=user_limit retry_after_s=60"]
+    caplog.clear()
+    clock.t = 60.0
+    with caplog.at_level("WARNING", logger="ratelimit"):
+        lim.admit("turn", "t_a", "u_1")
+    assert [r.getMessage() for r in caplog.records] == [
+        "rate refusals repeated kind=turn tenant=t_a user=u_1 user_limit=4"]
+
+
 def test_stale_keys_are_swept():
     clock = Clock(0.0)
     lim = RateLimiter(clock, RULES, sweep_every=100)
@@ -202,7 +261,8 @@ def test_tool_limiter_keys_on_user_not_call_fields():
     lim, _ = limiter()
     tools = RateLimitedTools(Tools(), lim)
     assert tools.call(treq()).status == "ok"
-    other = treq(tool="sales_order.list", args={"id": "SO-9"}, idem="idem_2", session="s2", run="run_2")
+    other = treq(tool="sales_order.list", args={"id": "SO-9", "user_id": "u_9", "tenant_id": "t_z"}, idem="idem_2",
+                 session="s2", run="run_2")
     assert tools.call(other).error["code"] == "rate_limited"  # same user: tool, args, ids do not reset the count
 
 

@@ -42,6 +42,19 @@ def test_user_over_limit_gets_stable_code_wait_time_and_audit():
     assert last(send(svc, ALICE, 4))["type"] == "RUN_FINISHED"
 
 
+def test_repeat_refusals_audited_once_and_outside_the_chat_lock():
+    svc, _, _, audit = make_limited()
+    held = []
+    emit = audit.emit
+    audit.emit = lambda *a: (held.append(svc._lock.locked()), emit(*a))
+    send(svc, ALICE, 1)
+    send(svc, ALICE, 2)
+    for n in range(3, 8):
+        assert last(send(svc, ALICE, n))["code"] == "chat_rate_limited"
+    assert len(refusals(audit)) == 1
+    assert not any(held)  # no audit write ever ran under the chat lock
+
+
 def test_hourly_wait_is_shown_in_minutes_both_languages():
     en = render_error("chat_rate_limited", "en", {"minutes": 42})
     ar = render_error("chat_rate_limited", "ar", {"minutes": 42})

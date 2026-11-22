@@ -27,9 +27,11 @@ from change_engine.adapter.mapping import (
     SEMANTIC_PROPS,
     SUPPORTED_BLUEPRINT_TYPES,
     bounded_site_lock_key,
+    grant_plan_reason,
     has_prohibited_expression,
     inspect_field_ddl,
     is_protected_entity,
+    is_valid_entity_id,
     plan_statements_for_step,
 )
 from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord, TenantMismatch
@@ -920,8 +922,24 @@ class ChangeEngineAdapter:
 
     def _evaluate(self, site: SiteRecord, artifact: dict[str, Any]) -> dict[str, Any]:
         steps, additive, semantic = [], 0, 0
+        # SEC-022 (ADR-0051 item 3): role grants may target entities this Blueprint has or adds in this artifact
+        blueprint_entities = {e.get("id") for e in site.config.get("entities", []) if isinstance(e, dict)}
+        blueprint_entities |= {s["subject"].get("id") for s in artifact["steps"] if s["kind"] == "entity.add"}
+        own_cache: dict[str, bool] = {}
+
+        def own_allowed(entity: str) -> bool:
+            if entity not in own_cache:
+                if self.frappe_backend is None:
+                    # In-memory adapter: no engine exists, so the only document types are this Blueprint's own;
+                    # grant_plan_reason already limits `entity` to unmapped, unprotected Blueprint entities.
+                    own_cache[entity] = True
+                else:
+                    checker = getattr(self.frappe_backend, "can_grant_own_doctype", None)
+                    own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else False
+            return own_cache[entity]
+
         for step in artifact["steps"]:
-            disp, reason, ddl = self._judge(site, step)
+            disp, reason, ddl = self._judge(site, step, blueprint_entities, own_allowed)
             if ddl == "additive":
                 additive += 1
             elif ddl == "semantic":
@@ -954,7 +972,13 @@ class ChangeEngineAdapter:
             "storage": {"additive": additive, "semantic": semantic, "statementCount": additive + semantic},
         }
 
-    def _judge(self, site: SiteRecord, step: dict[str, Any]) -> tuple[str, str | None, str]:
+    def _judge(
+        self,
+        site: SiteRecord,
+        step: dict[str, Any],
+        blueprint_entities: set[str],
+        own_allowed: Callable[[str], bool] | None = None,
+    ) -> tuple[str, str | None, str]:
         kind, pointer, params = step["kind"], step["pointer"], step["params"]
         ddl = step["ddlImpact"]
         support = STEP_KINDS.get(kind, "unsupported")
@@ -967,10 +991,47 @@ class ChangeEngineAdapter:
         if has_prohibited_expression(params):
             return "blocked", "prohibited_expression", ddl
         segs = _segs(pointer)
-        if segs[:1] == ["entities"] and len(segs) > 1 and is_protected_entity(segs[1]):
-            return "blocked", "protected_subject", ddl
+        if segs[:1] == ["entities"] and len(segs) > 1:
+            ids: list[Any] = [segs[1]]
+            if kind == "entity.add":
+                ids.append(step["subject"].get("id"))
+            elif kind.startswith(("field.", "relation.")):
+                parents = step["subject"].get("parents")
+                parent_id = (
+                    parents[0].get("id")
+                    if isinstance(parents, list) and parents and isinstance(parents[0], dict)
+                    else None
+                )
+                ids.append(parent_id)
+            if not all(is_valid_entity_id(i) for i in ids):
+                return "blocked", "unsupported_value_type", ddl
+            if any(is_protected_entity(i) for i in ids):
+                return "blocked", "protected_subject", ddl
+            if len(ids) > 1 and ids[1] != ids[0]:
+                return "blocked", "definition_conflict", ddl
+        elif kind == "entity.add" or kind.startswith(("field.", "relation.")):
+            return "blocked", "unsupported_value_type", ddl
 
         defn = params.get("definition")
+        if kind == "workflow.upsert":
+            target_entity = defn.get("entity") if isinstance(defn, dict) else None
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
+        elif kind == "report.upsert":
+            if not isinstance(defn, dict):
+                return "blocked", "unsupported_value_type", ddl
+            if "entity" in defn:
+                target_entity = defn["entity"]
+                if not is_valid_entity_id(target_entity):
+                    return "blocked", "unsupported_value_type", ddl
+                if is_protected_entity(target_entity):
+                    return "blocked", "protected_subject", ddl
+        if kind == "role.upsert":
+            grant_reason = grant_plan_reason(defn, blueprint_entities, own_allowed)
+            if grant_reason:
+                return "blocked", grant_reason, ddl
         coll = self._collection(site, segs)
         elem = _walk(site.config, _cfg_segs(pointer))
         if kind.endswith((".add", ".upsert", ".enable")):

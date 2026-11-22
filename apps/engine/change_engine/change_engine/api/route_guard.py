@@ -40,9 +40,10 @@ ADAPTER_METHODS = (
 
 PING_PATH = "/api/method/ping"
 
-# Only top-level business records used by the adapter. A mapping change requires review
-# before it can expose another type. Writes use the guarded adapter methods.
-RESOURCE_ALLOWLIST = {name: ("GET",) for name in ("Customer", "Item", "Sales Order", "Sales Invoice")}
+# Explicit, reviewed set of top-level business records that may be read through the guard.
+# Adding grant entities to ENTITY_TO_DOCTYPE does not widen this set; writes use guarded adapter methods.
+READ_ROUTE_DOCTYPES = ("Customer", "Item", "Sales Order", "Sales Invoice")
+RESOURCE_ALLOWLIST = {name: ("GET",) for name in READ_ROUTE_DOCTYPES}
 _RESOURCE = re.compile(r"/api/resource/([^/]+)(?:/[A-Za-z0-9](?:[A-Za-z0-9 _.:\-]*[A-Za-z0-9_:\-])?)?")
 _ADAPTER_METHOD_PATHS = frozenset(METHOD_PREFIX + name for name in ADAPTER_METHODS)
 

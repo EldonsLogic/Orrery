@@ -90,6 +90,12 @@ class TestCertificationEvidence(unittest.TestCase):
         record["facts"][0] = {"paths": record["facts"][0]["paths"], "status": "PLATFORM-DEFAULT"}
         f._save(v, "evidence.json", record)
         self._refuse(v, "PLATFORM-DEFAULT needs a ref")
+        # A ref must be a string that is not blank (re-review round 3, Low): truthy non-strings and blanks are refused.
+        for bad_ref in (" ", "\t\n", True, ["x"], {"a": 1}, 7):
+            with self.subTest(ref=bad_ref):
+                record["facts"][0]["ref"] = bad_ref
+                f._save(v, "evidence.json", record)
+                self._refuse(v, "PLATFORM-DEFAULT needs a ref")
         # Keep current eligibility with a ref; statutory eligibility awaits a founder decision.
         record["facts"][0]["ref"] = "synthetic-platform-choice"
         f._save(v, "evidence.json", record)

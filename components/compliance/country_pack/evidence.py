@@ -94,7 +94,8 @@ def fact_source_violations(fact: dict, today: str) -> list[str]:
         isinstance(source, dict) and "accessed" in source for source in sources
     ):
         bad.append(f"{fact['status']} needs a read source with an access date")
-    if fact["status"] == "PLATFORM-DEFAULT" and not fact.get("ref"):
+    ref = fact.get("ref")
+    if fact["status"] == "PLATFORM-DEFAULT" and not (isinstance(ref, str) and ref.strip()):
         bad.append("PLATFORM-DEFAULT needs a ref")
     return bad
 

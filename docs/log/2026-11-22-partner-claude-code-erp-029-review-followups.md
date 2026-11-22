@@ -44,3 +44,7 @@ Unknown.
 
 ## Next step
 Eldon's Tier 3 line-by-line read of this diff, then Q-558 for the founders (ERP-029, OPR-004, OPR-007).
+
+## Main merge and Eldon's docs Low (coordinator, Claude Opus 5.5)
+- Merged origin/main. The only conflict was in `docs/open-questions.md`: kept main's Q-559 and this branch's edited Q-558.
+- Eldon's Low on 9628ca2: Q-558 now records his answer to (d), pending the partner founder's agreement. The design note's section 3 and section 7 item 2 point at it. Parts (a) to (c) stay open. The closing entry needs its own plan row.

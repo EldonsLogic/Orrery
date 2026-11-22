@@ -53,7 +53,7 @@ Left open (not decided here):
 - Of 31 candidate rows, 16 are marked RESOLVED by this ADR, 3 are marked DECIDED and stay open until their plan row lands (Q-51, Q-52, Q-64), and 12 stay open (listed above).
 - BPL-037 (todo): contract patch, compiled-artifact step uniqueness exempts `settings.set` keyed on `params.property` (Q-51) and `contracts/engine-adapter.md` 9.3 lists `labelOverrides` (Q-52).
 - BPL-038 (todo): validator rule 10 (`BP-BRAND-001/002`) calls the token resolver's OKLCH derive (Q-64).
-- Follow-up: update `docs/architecture/blueprint-versioning.md:27`, which still calls Q-86 open (outside this change's paths).
+- `docs/architecture/blueprint-versioning.md:27` now points here for Q-86.
 - Partner review is needed before this ADR is Accepted.
 
 ## Supersedes

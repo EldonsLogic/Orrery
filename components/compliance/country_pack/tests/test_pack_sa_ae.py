@@ -317,6 +317,10 @@ class TestEvidence(unittest.TestCase):
         self.assertEqual((len(mode), len(authority)), (1, 1))
         self.assertIn("uae-einvoicing-provider-selection.md section 1, items 1 and 9", mode[0]["ref"])
         self.assertIn("uae-einvoicing-provider-selection.md section 1, items 1 and 3", authority[0]["ref"])
+        # Review of #267 (Low): the PINT AE page is item 9 and backs neither item 1 nor item 3.
+        urls = [s["url"] for s in authority[0]["sources"]]
+        self.assertEqual(urls, ["https://mof.gov.ae/en/about-us/initiatives/einvoicing/"])
+        self.assertIn("PINT AE", authority[0]["sourceNote"])
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@
     "ar": "حزمة الإمارات العربية المتحدة",
     "en": "United Arab Emirates country pack"
   },
-  "description": "United Arab Emirates country pack (CMP-029): declarative locale defaults, formats and override policy. The UAE chart of accounts, tax codes, tax invoice mode and e-invoicing component do not exist yet, so those references are pending (evidence.json). E-invoicing is a go-live blocker: required from 2027-01-01 for businesses with revenue of AED 50 million or more. It holds no tax, ledger or e-invoice maths (ADR-0031). Pack status and level are both tested, not draft, because the manifest contract forbids draft when touchesLedgerOrTax is true. Evidence is unverified and reviewedBy is empty, so it is not for tenants. Arabic labels unreviewed (ADR-0033).",
+  "description": "United Arab Emirates country pack (CMP-029): declarative locale defaults, formats and override policy. The UAE chart of accounts, tax codes, tax invoice mode and e-invoicing component do not exist yet, so those references are pending (evidence.json). E-invoicing is a go-live blocker: required from 2027-01-01 for the first revenue band (band figures in evidence.json). It holds no tax, ledger or e-invoice maths (ADR-0031). Pack status and level are both tested, not draft, because the manifest contract forbids draft when touchesLedgerOrTax is true. Evidence is unverified and reviewedBy is empty, so it is not for tenants. Arabic labels unreviewed (ADR-0033).",
   "provides": [
     {
       "capability": "country.ae.pack_metadata",

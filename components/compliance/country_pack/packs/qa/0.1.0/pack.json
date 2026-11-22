@@ -54,8 +54,8 @@
         {
           "id": "ramadan",
           "labels": {
-            "ar": "ساعات العمل في رمضان (غير مراجعة)",
-            "en": "Ramadan working hours (unverified)"
+            "ar": "ساعات العمل في رمضان",
+            "en": "Ramadan working hours"
           },
           "rule": "ramadan",
           "hours": {

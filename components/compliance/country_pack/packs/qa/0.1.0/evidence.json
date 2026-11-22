@@ -1,7 +1,7 @@
 {
   "packId": "qa",
   "version": "0.1.0",
-  "purpose": "Per-fact evidence for pack.json (CMP-031), moved unchanged from the former SOURCES.md. Status: tested (structure only, schema and unit tests pass). Every fact in pack.json is UNVERIFIED (evidenceStatus: unverified). Source: the CMP-030 research, docs/compliance/qatar-research.md. Access date for every URL read: 2026-11-18; the KPMG and vatupdate pages were search excerpts only, so they carry no access date. Labels: VERIFIED-OFFICIAL, SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim). Each claim keeps the former value and evidence text. The pack holds declarative metadata only: no tax maths, no rates (ADR-0031). Nothing here is legal or tax advice.",
+  "purpose": "Per-fact evidence for pack.json (CMP-031), moved unchanged from the former SOURCES.md. Status: tested (structure only, schema and unit tests pass). Every fact in pack.json is UNVERIFIED (evidenceStatus: unverified). Source: the CMP-030 research, docs/compliance/qatar-research.md. Access date for every URL read: 2026-11-18; the KPMG and vatupdate pages were search excerpts only, so they carry read: false and no access date. Labels: VERIFIED-OFFICIAL, SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim). Each claim keeps the former value and evidence text. The pack holds declarative metadata only: no tax maths, no rates (ADR-0031). Nothing here is legal or tax advice.",
   "facts": [
     {
       "paths": ["tax.vatSupported", "tax.taxCodesRef", "tax.filingPeriods"],
@@ -40,8 +40,8 @@
       "ref": "docs/compliance/qatar-research.md section Q2",
       "sources": [
         {"url": "https://www.ey.com/en_gl/technical/tax-alerts/qatar-approves-draft-e-invoicing-law-and-implementing-regulations", "accessed": "2026-11-18"},
-        {"url": "https://kpmg.com/us/en/taxnewsflash/news/2026/05/qatar-cabinet-approves-draft-law-e-invoicing-executive-regulations.html", "note": "search excerpt only, full page not read (search of 2026-11-18)"},
-        {"url": "https://www.vatupdate.com/2026/06/05/qatar-cabinet-approves-draft-e-invoicing-law-and-regulations/", "note": "search excerpt only, full page not read (search of 2026-11-18)"},
+        {"url": "https://kpmg.com/us/en/taxnewsflash/news/2026/05/qatar-cabinet-approves-draft-law-e-invoicing-executive-regulations.html", "read": false, "note": "search excerpt only, full page not read (search of 2026-11-18)"},
+        {"url": "https://www.vatupdate.com/2026/06/05/qatar-cabinet-approves-draft-e-invoicing-law-and-regulations/", "read": false, "note": "search excerpt only, full page not read (search of 2026-11-18)"},
         {"url": "https://www.gta.gov.qa/en", "accessed": "2026-11-18", "note": "read"}
       ]
     },
@@ -185,7 +185,7 @@
   "goLiveBlockers": [],
   "arabicLabels": [
     {"file": "pack.json", "path": "name.ar", "text": "حزمة دولة قطر", "review": "unreviewed", "rule": "ADR-0033"},
-    {"file": "pack.json", "path": "localeDefaults.workingTime.reducedPeriods[0].labels.ar", "text": "ساعات العمل في رمضان (غير مراجعة)", "review": "unreviewed", "rule": "ADR-0033"},
+    {"file": "pack.json", "path": "localeDefaults.workingTime.reducedPeriods[0].labels.ar", "text": "ساعات العمل في رمضان", "review": "unreviewed", "rule": "ADR-0033"},
     {"file": "manifest.json", "path": "name.ar", "text": "حزمة دولة قطر", "review": "unreviewed", "rule": "ADR-0033"}
   ],
   "arabicReviewNote": "Do not promote past tested before a native Arabic reviewer signs off (ADR-0033, Q-28)."

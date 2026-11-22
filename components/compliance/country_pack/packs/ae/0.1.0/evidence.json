@@ -1,7 +1,7 @@
 {
   "packId": "ae",
   "version": "0.1.0",
-  "purpose": "Per-fact evidence for pack.json (CMP-029). pack.schema.json has no per-fact evidence field and caps notes at 500 characters, so sources live here. Labels: VERIFIED-OFFICIAL (official source read, per the cited repo doc), SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim). Access dates are those recorded in the cited repo doc; no source was re-read in this session. NOT legal advice.",
+  "purpose": "Per-fact evidence for pack.json (CMP-029). pack.schema.json has no per-fact evidence field and caps notes at 500 characters, so sources live here. Labels: VERIFIED-OFFICIAL (official source read, per the cited repo doc), SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim). Access dates are those recorded in the cited repo doc; no source was re-read in this session. A source not read in full (a snippet or not fetched) carries read: false and no access date. NOT legal advice.",
   "facts": [
     {
       "paths": ["coaTemplate"],
@@ -15,7 +15,7 @@
       "status": "SECONDARY",
       "ref": "docs/compliance/country-matrix.md row U5",
       "sources": [
-        {"url": "https://tax.gov.ae/en/taxes/Vat/vat.topics/registration.for.vat.aspx", "accessed": "2026-11-04", "note": "snippets of official pages"}
+        {"url": "https://tax.gov.ae/en/taxes/Vat/vat.topics/registration.for.vat.aspx", "read": false, "note": "snippets of official pages only, per country-matrix.md row U5 (research of 2026-11-04)"}
       ]
     },
     {
@@ -57,9 +57,9 @@
       "status": "UNVERIFIED",
       "ref": "docs/compliance/uae-einvoicing-provider-selection.md section 1, items 1 and 3",
       "sources": [
-        {"url": "https://mof.gov.ae/en/about-us/initiatives/einvoicing/", "accessed": "2026-11-18"},
-        {"url": "https://docs.peppol.eu/poac/ae/pint-ae/", "accessed": "2026-11-18"}
-      ]
+        {"url": "https://mof.gov.ae/en/about-us/initiatives/einvoicing/", "accessed": "2026-11-18"}
+      ],
+      "sourceNote": "The PINT AE page (https://docs.peppol.eu/poac/ae/pint-ae/, provider-selection item 9) was removed as a source here: it backs neither item 1 nor item 3 (review of #267). It still backs eInvoicing.mode."
     },
     {
       "paths": ["eInvoicing.required", "eInvoicing.componentId"],
@@ -112,7 +112,7 @@
       "status": "PLATFORM-DEFAULT",
       "ref": "docs/architecture/calendars-and-locale.md",
       "sources": [
-        {"url": "https://uaelegislation.gov.ae", "note": "not fetched (country-matrix U11)"}
+        {"url": "https://uaelegislation.gov.ae", "read": false, "note": "not fetched (country-matrix U11)"}
       ]
     },
     {
@@ -121,7 +121,7 @@
       "status": "UNVERIFIED",
       "ref": "docs/architecture/calendars-and-locale.md",
       "sources": [
-        {"url": "https://uaelegislation.gov.ae", "note": "not fetched"}
+        {"url": "https://uaelegislation.gov.ae", "read": false, "note": "not fetched"}
       ]
     },
     {
@@ -154,7 +154,7 @@
       "status": "UNVERIFIED",
       "ref": "docs/specs/core-module-scope-trading.md section 4",
       "sources": [
-        {"url": "https://www.mohre.gov.ae", "note": "WPS, not fetched (U10)"}
+        {"url": "https://www.mohre.gov.ae", "read": false, "note": "WPS, not fetched (U10)"}
       ]
     },
     {

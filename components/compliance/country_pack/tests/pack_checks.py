@@ -19,8 +19,10 @@ BLUEPRINT_SCHEMA = REPO_ROOT / "contracts" / "blueprint.schema.json"
 
 EVIDENCE_LABELS = {"VERIFIED-OFFICIAL", "SECONDARY", "UNVERIFIED", "PLATFORM-DEFAULT"}
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-# A source whose note says it was not fetched or not read carries no access date.
-UNREAD_NOTE = re.compile(r"not (fetched|read)")
+# A source that was not read in full (a snippet, a search excerpt, not fetched) carries `"read": false`
+# and no access date; every other source carries an access date. This note pattern is only a backstop
+# that catches a read source whose note says otherwise.
+UNREAD_NOTE = re.compile(r"snippet|excerpt|not (fetched|read)", re.I)
 # Areas whose every leaf must be backed by an evidence entry.
 EVIDENCED_AREAS = ("coaTemplate", "tax", "eInvoicing", "localeDefaults", "formats", "payrollHooks", "printFormats")
 # Keys that would mean a pack carries tax, ledger or invoice maths (principle 3, ADR-0031).
@@ -158,9 +160,73 @@ def rate_like_violations(pack: dict, modes: set[str]) -> list[str]:
                 bad.append(f"{path}: {val!r} is not a known id format")
     for path, val in all_leaves({"notes": pack.get("notes", ""), "name": pack.get("name", {})}):
         if isinstance(val, str):
-            rest = FREE_TEXT_TOKENS.sub("", val)
-            if "%" in rest or re.search(r"\d", rest):
-                bad.append(f"{path}: rate-like digits in free text {val!r}")
+            bad += free_text_violations(path, val)
+    return bad
+
+
+def source_violations(src: dict, today: str) -> list[str]:
+    """Structural read rule: `"read": false` and an access date never go together, and one of them is set."""
+    bad = []
+    if not src.get("url", "").startswith("https://"):
+        bad.append(f"{src.get('url')!r}: not an https URL")
+    if "read" in src and src["read"] is not False:
+        bad.append(f"{src['url']}: read may only be false")
+    if src.get("read") is False:
+        if "accessed" in src:
+            bad.append(f"{src['url']}: unread source has an access date")
+        if not src.get("note"):
+            bad.append(f"{src['url']}: unread source needs a note saying why")
+        return bad
+    if not ISO_DATE.match(str(src.get("accessed", ""))):
+        bad.append(f"{src['url']}: read source needs an ISO access date (or read: false)")
+    elif src["accessed"] > today:
+        bad.append(f"{src['url']}: access date in the future")
+    if UNREAD_NOTE.search(src.get("note", "")):
+        bad.append(f"{src['url']}: note says unread but the source is not marked read: false")
+    return bad
+
+
+def evidence_entries(evidence: dict):
+    """(stable id, entry) for every labelled entry: facts by their paths, blockers by id, outside facts by index."""
+    for fact in evidence["facts"]:
+        yield "|".join(fact["paths"]), fact
+    for blocker in evidence.get("goLiveBlockers", []):
+        yield f"blocker:{blocker['id']}", blocker
+    for idx, fact in enumerate(evidence.get("factsOutsideSchema", [])):
+        yield f"outside:{idx}", fact
+
+
+def labelled(evidence: dict, label: str) -> set[str]:
+    return {eid for eid, entry in evidence_entries(evidence) if entry["status"] == label}
+
+
+def recorded_status_violations(evidence: dict) -> list[str]:
+    """Where an entry keeps the former README status text, it must agree with the label."""
+    bad = []
+    for eid, entry in evidence_entries(evidence):
+        recorded = entry.get("recordedStatus")
+        if recorded is None:
+            continue
+        if (entry["status"] == "VERIFIED-OFFICIAL") != recorded.startswith("VERIFIED"):
+            bad.append(f"{eid}: {entry['status']} vs recorded {recorded!r}")
+        if "UNVERIFIED" in recorded and entry["status"] != "UNVERIFIED":
+            bad.append(f"{eid}: {entry['status']} vs recorded {recorded!r}")
+    return bad
+
+
+def free_text_violations(path: str, text: str) -> list[str]:
+    rest = FREE_TEXT_TOKENS.sub("", text)
+    if "%" in rest or re.search(r"\d", rest):
+        return [f"{path}: rate-like digits in free text {text!r}"]
+    return []
+
+
+def manifest_text_violations(manifest: dict) -> list[str]:
+    """The manifest description and name follow the same free-text rule as the pack's notes and name."""
+    bad = free_text_violations("manifest.description", manifest.get("description", ""))
+    for path, val in all_leaves({"name": manifest.get("name", {})}):
+        if isinstance(val, str):
+            bad += free_text_violations(f"manifest.{path}", val)
     return bad
 
 

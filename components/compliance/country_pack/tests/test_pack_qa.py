@@ -114,6 +114,13 @@ class TestQatarPack(unittest.TestCase):
             for marker in ("draft", "unverified", "مسودة", "غير مراجعة"):
                 self.assertNotIn(marker, text.lower())
 
+    def test_reduced_period_labels_are_neutral(self) -> None:
+        # Review of #267 (Low): user-facing labels carry no unverified marker; evidence.json keeps the status.
+        for period in self.pack["localeDefaults"]["workingTime"]["reducedPeriods"]:
+            for text in period["labels"].values():
+                for marker in ("draft", "unverified", "مسودة", "غير مراجعة", "("):
+                    self.assertNotIn(marker, text.lower())
+
     def test_evidence_file_has_urls_access_dates_and_excerpt_status(self) -> None:
         """Sources moved from the former SOURCES.md; the shared test checks coverage of every leaf."""
         evidence = json.loads((QA_DIR / "evidence.json").read_text(encoding="utf-8"))

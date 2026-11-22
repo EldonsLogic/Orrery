@@ -17,33 +17,55 @@ from components.compliance.country_pack import load_country_pack, validate_pack
 from components.compliance.country_pack.tests.pack_checks import (
     EVIDENCE_LABELS,
     EVIDENCED_AREAS,
-    ISO_DATE,
     LOADER_ARTIFACT,
     MANIFEST_SCHEMA,
     MATHS_KEY,
     NUMERIC_LEAVES,
     PACKS_DIR,
     REPO_ROOT,
-    UNREAD_NOTE,
     arabic_strings,
     blueprint_modes,
     certifiability_violations,
     covered,
+    evidence_entries,
     get,
     keys,
+    labelled,
     leaves,
     load_triplet,
+    manifest_text_violations,
     pending,
     rate_like_violations,
     read_json,
     real_pack_dirs,
+    recorded_status_violations,
     referenced_requirements,
     repo_components,
     requires_key,
+    source_violations,
 )
 
 EXPECTED_PACKS = {"ae", "eg", "qa", "sa"}
 BASE_FILES = {"pack.json", "manifest.json", "evidence.json"}
+# Reviewed snapshot of every entry that claims a read source (review of #267, Medium). Raising or lowering
+# any label to or from these two fails until a reviewer updates this snapshot in the same PR.
+SOURCED_LABELS = {
+    "ae": {
+        "VERIFIED-OFFICIAL": {"eInvoicing.mode", "blocker:uae_e_invoicing"},
+        "SECONDARY": {"tax.vatSupported|tax.taxCodesRef"},
+    },
+    "eg": {"VERIFIED-OFFICIAL": {"eInvoicing.authority"}, "SECONDARY": set()},
+    "qa": {"VERIFIED-OFFICIAL": set(), "SECONDARY": set()},
+    "sa": {
+        "VERIFIED-OFFICIAL": {"eInvoicing.required|eInvoicing.authority", "blocker:zatca_phase2"},
+        "SECONDARY": {
+            "tax.vatSupported|tax.taxCodesRef",
+            "eInvoicing.mandatoryDocumentLanguages|printFormats.mandatoryLanguages",
+        },
+    },
+}
+# Packs whose research held facts the pack schema has no field for, and how many (review of #267, Low).
+FACTS_OUTSIDE_SCHEMA = {"ae": 0, "eg": 1, "qa": 3, "sa": 0}
 
 
 class _AllPacks(unittest.TestCase):
@@ -94,30 +116,79 @@ class TestLayout(_AllPacks):
 
 
 class TestEvidence(_AllPacks):
-    def _facts(self, evidence: dict) -> list[dict]:
-        return [*evidence["facts"], *evidence.get("goLiveBlockers", []), *evidence.get("factsOutsideSchema", [])]
-
     def test_every_fact_has_a_label_and_sources(self) -> None:
         today = date.today().isoformat()
         for key, (_, pack, _, evidence) in self.data.items():
-            for idx, fact in enumerate(self._facts(evidence)):
-                with self.subTest(pack=key, fact=idx):
+            for eid, fact in evidence_entries(evidence):
+                with self.subTest(pack=key, fact=eid):
                     self.assertIn(fact["status"], EVIDENCE_LABELS)
                     self.assertTrue(fact["claim"])
                     for path in fact.get("paths", [fact["backs"]] if fact.get("backs") else []):
                         get(pack, path)  # every cited path exists in the pack
-                    for src in fact.get("sources", []):
-                        self.assertTrue(src["url"].startswith("https://"), src["url"])
-                        if UNREAD_NOTE.search(src.get("note", "")):
-                            self.assertNotIn("accessed", src, "an unread source has no access date")
-                            continue
-                        self.assertRegex(src["accessed"], ISO_DATE)
-                        self.assertLessEqual(src["accessed"], today)
-                    if fact["status"] in {"VERIFIED-OFFICIAL", "SECONDARY"}:
-                        read = [s for s in fact.get("sources", []) if "accessed" in s]
-                        self.assertTrue(read, "a sourced label needs a URL and access date")
+                    sources = fact.get("sources", [])
+                    self.assertEqual([v for s in sources for v in source_violations(s, today)], [])
+                    if fact["status"] == "VERIFIED-OFFICIAL":
+                        read = [s for s in sources if "accessed" in s]
+                        self.assertTrue(read, "VERIFIED-OFFICIAL needs a read source with an access date")
+                    if fact["status"] == "SECONDARY":  # a snippet of an official page is secondary evidence
+                        self.assertTrue(sources, "SECONDARY needs a source URL")
                     if fact["status"] == "PLATFORM-DEFAULT":
                         self.assertTrue(fact.get("ref"), "a platform default names the decision or doc")
+
+    def test_unread_rule_is_structural(self) -> None:
+        # Review of #267 (Low): an unread source is marked `"read": false`, not recognised by note wording.
+        today = date.today().isoformat()
+        unread = {"url": "https://example.org/a", "read": False, "note": "snippet per research 2.4"}
+        self.assertEqual(source_violations(unread, today), [])
+        for label, src in {
+            "unread with date": dict(unread, accessed="2026-11-18"),
+            "unread without note": {"url": "https://example.org/a", "read": False},
+            "read true": dict(unread, read=True, accessed="2026-11-18"),
+            "reworded snippet keeps date": {"url": "https://example.org/a", "accessed": "2026-11-18",
+                                            "note": "snippet per egypt-research.md 2.4"},
+            "excerpt keeps date": {"url": "https://example.org/a", "accessed": "2026-11-18",
+                                   "note": "Search Excerpt only"},
+            "no date no flag": {"url": "https://example.org/a", "note": "seen once"},
+            "future date": {"url": "https://example.org/a", "accessed": "2999-01-01"},
+            "http": {"url": "http://example.org/a", "accessed": "2026-11-18"},
+        }.items():
+            with self.subTest(mutation=label):
+                self.assertTrue(source_violations(src, today))
+
+    def test_every_unread_source_in_the_packs_is_flagged(self) -> None:
+        for key, (_, _, _, evidence) in self.data.items():
+            for eid, entry in evidence_entries(evidence):
+                for src in entry.get("sources", []):
+                    with self.subTest(pack=key, fact=eid, url=src["url"]):
+                        self.assertIs("accessed" in src, src.get("read", True))
+
+    def test_sourced_labels_are_pinned(self) -> None:
+        for key, (_, pack, _, evidence) in self.data.items():
+            with self.subTest(pack=key):
+                for label, expected in SOURCED_LABELS[pack["packId"]].items():
+                    self.assertEqual(labelled(evidence, label), expected, label)
+
+    def test_label_pin_has_teeth(self) -> None:
+        _, _, _, evidence = self.data["eg/0.1.0"]
+        raised = json.loads(json.dumps(evidence))
+        next(f for f in raised["facts"] if f["paths"] == ["tax.filingPeriods"])["status"] = "VERIFIED-OFFICIAL"
+        self.assertNotEqual(labelled(raised, "VERIFIED-OFFICIAL"), SOURCED_LABELS["eg"]["VERIFIED-OFFICIAL"])
+        self.assertTrue(recorded_status_violations(raised))
+
+    def test_recorded_status_agrees_with_label(self) -> None:
+        for key, (_, _, _, evidence) in self.data.items():
+            with self.subTest(pack=key):
+                self.assertEqual(recorded_status_violations(evidence), [])
+
+    def test_facts_outside_schema_are_kept(self) -> None:
+        for key, (_, pack, _, evidence) in self.data.items():
+            with self.subTest(pack=key):
+                expected = FACTS_OUTSIDE_SCHEMA[pack["packId"]]
+                if expected:
+                    self.assertIn("factsOutsideSchema", evidence)
+                self.assertEqual(len(evidence.get("factsOutsideSchema", [])), expected)
+                for fact in evidence.get("factsOutsideSchema", []):
+                    self.assertNotIn("paths", fact, "a fact outside the schema backs no pack path")
 
     def test_every_leaf_is_evidenced(self) -> None:
         for key, (_, pack, _, evidence) in self.data.items():
@@ -276,6 +347,15 @@ class TestDeclarativeOnly(_AllPacks):
                     pack = json.loads(json.dumps(base))
                     (pack[area] if area else pack)[field] = value
                     self.assertTrue(rate_like_violations(pack, modes))
+
+    def test_no_rate_like_strings_in_manifest_descriptions(self) -> None:
+        # Review of #267 (Low): figures live in evidence.json, not in the manifest description.
+        for key, (_, _, manifest, _) in self.data.items():
+            with self.subTest(pack=key):
+                self.assertEqual(manifest_text_violations(manifest), [])
+                for text in ("standard 14% VAT", "5-year retention", "revenue of AED 50 million"):
+                    mutated = dict(manifest, description=f"{manifest['description']} {text}")
+                    self.assertTrue(manifest_text_violations(mutated), text)
 
     def test_free_text_allows_record_ids_dates_and_versions(self) -> None:
         modes = blueprint_modes()

@@ -10,7 +10,7 @@ packs/
     <semver>/             # e.g. 0.1.0
       pack.json           # validated against ../pack.schema.json
       manifest.json       # component manifest (contracts/component.manifest.schema.json)
-      evidence.json       # source, access date and evidence label per fact; pending refs; Arabic label review state
+      evidence.json       # source, access date (or "read": false) and evidence label per fact; pending refs; Arabic label review state
       strings.json        # optional: i18n labels, only when manifest.json names it in i18n.stringsFile
 ```
 

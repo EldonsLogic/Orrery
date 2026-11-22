@@ -1,7 +1,7 @@
 {
   "packId": "sa",
   "version": "0.1.0",
-  "purpose": "Per-fact evidence for pack.json (CMP-029). pack.schema.json has no per-fact evidence field and caps notes at 500 characters, so sources live here. Labels: VERIFIED-OFFICIAL (official source read, per the cited repo doc), SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim). Access dates are those recorded in the cited repo doc; no source was re-read in this session. NOT legal advice.",
+  "purpose": "Per-fact evidence for pack.json (CMP-029). pack.schema.json has no per-fact evidence field and caps notes at 500 characters, so sources live here. Labels: VERIFIED-OFFICIAL (official source read, per the cited repo doc), SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim). Access dates are those recorded in the cited repo doc; no source was re-read in this session. A source not read in full (a snippet or not fetched) carries read: false and no access date. NOT legal advice.",
   "facts": [
     {
       "paths": ["coaTemplate"],
@@ -27,7 +27,7 @@
       "status": "UNVERIFIED",
       "ref": "docs/compliance/country-matrix.md row K5",
       "sources": [
-        {"url": "https://zatca.gov.sa/en/RulesRegulations/Taxes/Pages/default.aspx", "note": "not fetched in the research"}
+        {"url": "https://zatca.gov.sa/en/RulesRegulations/Taxes/Pages/default.aspx", "read": false, "note": "not fetched in the research"}
       ]
     },
     {
@@ -87,7 +87,7 @@
       "status": "UNVERIFIED",
       "ref": "docs/compliance/country-matrix.md row K9",
       "sources": [
-        {"url": "https://zatca.gov.sa/en/E-Invoicing/Introduction/LawsAndRegulations/Documents/E-Invoicing%20Implementation%20Resolution_EN.pdf", "note": "not read in the research"}
+        {"url": "https://zatca.gov.sa/en/E-Invoicing/Introduction/LawsAndRegulations/Documents/E-Invoicing%20Implementation%20Resolution_EN.pdf", "read": false, "note": "not read in the research"}
       ]
     },
     {
@@ -114,7 +114,7 @@
       "status": "PLATFORM-DEFAULT",
       "ref": "docs/architecture/calendars-and-locale.md",
       "sources": [
-        {"url": "https://laws.boe.gov.sa", "note": "Labour Law, not fetched (country-matrix K15)"}
+        {"url": "https://laws.boe.gov.sa", "read": false, "note": "Labour Law, not fetched (country-matrix K15)"}
       ]
     },
     {
@@ -123,7 +123,7 @@
       "status": "UNVERIFIED",
       "ref": "docs/compliance/country-matrix.md row K15",
       "sources": [
-        {"url": "https://laws.boe.gov.sa", "note": "not fetched"}
+        {"url": "https://laws.boe.gov.sa", "read": false, "note": "not fetched"}
       ]
     },
     {
@@ -156,8 +156,8 @@
       "status": "UNVERIFIED",
       "ref": "docs/specs/core-module-scope-trading.md section 4",
       "sources": [
-        {"url": "https://mudad.com.sa", "note": "WPS, not fetched (K13)"},
-        {"url": "https://www.gosi.gov.sa", "note": "GOSI, not fetched (K12)"}
+        {"url": "https://mudad.com.sa", "read": false, "note": "WPS, not fetched (K13)"},
+        {"url": "https://www.gosi.gov.sa", "read": false, "note": "GOSI, not fetched (K12)"}
       ]
     },
     {

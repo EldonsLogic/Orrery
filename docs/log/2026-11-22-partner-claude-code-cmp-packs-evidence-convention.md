@@ -68,3 +68,25 @@ Unknown.
 
 ## Next step
 Eldon's line-by-line read (ADR-0031) and a cross-model review of this PR. Sources for the Qatar and Egypt UNVERIFIED facts are still needed before any pack leaves `tested` (CMP-028, CMP-029, CMP-031).
+
+## Review fix round
+This round answers the cross-model review of c60f955 (Gemini 4 Hydrogen, APPROVE, with 1 Medium and 5 Low). I merged origin/main (73f6c9f) first, without rebasing. The tests came first, and no statutory value, rate, date, pack status or evidence label changed (a script compared every entry's status with HEAD).
+- **Medium, status labels pinned:** `test_country_packs.py` holds `SOURCED_LABELS`, a reviewed snapshot of the VERIFIED-OFFICIAL and SECONDARY entry ids per pack. Each pack is asserted equal to it. `recorded_status_violations` checks that Egypt's `recordedStatus` agrees with its label: VERIFIED-OFFICIAL if and only if the text starts with "VERIFIED", and "UNVERIFIED" text only on an UNVERIFIED entry.
+- **Low, structural unread rule:** every source now has either an `accessed` date or `"read": false`, never both, and an unread source needs a note. I added `read: false` to all 21 sources without a date: AE 4, EG 9, QA 2, SA 6. The note pattern (`snippet|excerpt|not fetched|not read`) is kept only as a backstop that flags a dated source whose note says it was unread.
+- **Consequence:** the UAE VAT source (country-matrix U5, "snippets of official pages") had an access date of 2026-11-04. It is now `read: false`, and the research date is kept in its note. Its label stays SECONDARY, because the research convention labels a snippet-only official source SECONDARY (country-matrix K3). The shared test therefore needs a read source for VERIFIED-OFFICIAL only; SECONDARY needs at least one source URL. **A reviewer should confirm this.**
+- **Low, `factsOutsideSchema`:** a pinned count per pack (`eg` 1, `qa` 3, `ae` and `sa` 0). The field must be present where the count is above 0.
+- **Low, Egypt manifest description:** "14% VAT / 5% machinery" and "5-year" were removed; the figures stay in `evidence.json`. The free-text digit rule now also covers manifest `description` and `name`. As a result, the UAE description lost "AED 50 million", which is still in `evidence.json` (eInvoicing facts and the blocker note).
+- **Low, Qatar Ramadan labels:** the "(unverified)" and "(غير مراجعة)" suffixes were removed from `pack.json` and from the `arabicLabels` text. The label is still `unreviewed`, and the fact is still UNVERIFIED.
+- **Low, UAE authority:** the PINT AE URL was removed from the `eInvoicing.authority` sources. A `sourceNote` records why: it is item 9, and it still backs `eInvoicing.mode`. A test asserts that the MoF page is the only source.
+
+### Checks
+- Unit tests: 99 tests, OK.
+- Mutations on the real files, each failing a test and then restored:
+  - Egypt `tax.filingPeriods` raised to VERIFIED-OFFICIAL fails the pin and the recordedStatus check;
+  - deleting Egypt `factsOutsideSchema` fails;
+  - an access date on an unread Egypt source fails;
+  - rewording an unread source to "snippet per egypt-research.md 2.4" with an access date (and no `read: false`) fails;
+  - "14% VAT, 5-year" added to the Egypt manifest description fails;
+  - the PINT AE URL added back to the UAE authority fails;
+  - "(unverified)" put back in the Qatar Ramadan label fails.
+- Repo checks: see the PR.

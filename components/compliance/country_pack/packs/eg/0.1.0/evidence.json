@@ -1,7 +1,7 @@
 {
   "packId": "eg",
   "version": "0.1.0",
-  "purpose": "Per-fact evidence for pack.json (CMP-028), moved from the source table of the former README.md. Status: tested (evidenceStatus: unverified, testOnly: false, certification level tested awaiting named human and counsel review per ADR-0031 and ADR-0034). Owner: partner (sayegh9). Primary research source: docs/compliance/egypt-research.md (external URLs accessed 2026-11-18), docs/compliance/country-matrix.md and docs/architecture/calendars-and-locale.md. Anything without a verified primary source is UNVERIFIED. Labels: VERIFIED-OFFICIAL, SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim); recordedStatus keeps the former README status text verbatim. Sources that egypt-research.md marks as snippets or PRIMARY-SNIPPET (page not read in full) carry no access date. The pack contains no tax, e-invoicing or payroll maths (principle 3, ADR-0031). NOT legal advice.",
+  "purpose": "Per-fact evidence for pack.json (CMP-028), moved from the source table of the former README.md. Status: tested (evidenceStatus: unverified, testOnly: false, certification level tested awaiting named human and counsel review per ADR-0031 and ADR-0034). Owner: partner (sayegh9). Primary research source: docs/compliance/egypt-research.md (external URLs accessed 2026-11-18), docs/compliance/country-matrix.md and docs/architecture/calendars-and-locale.md. Anything without a verified primary source is UNVERIFIED. Labels: VERIFIED-OFFICIAL, SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim); recordedStatus keeps the former README status text verbatim. Sources that egypt-research.md marks as snippets or PRIMARY-SNIPPET (page not read in full) carry read: false and no access date. The pack contains no tax, e-invoicing or payroll maths (principle 3, ADR-0031). NOT legal advice.",
   "facts": [
     {
       "paths": ["countryCode", "packId", "componentId"],
@@ -26,9 +26,9 @@
       "sources": [
         {"url": "https://taxsummaries.pwc.com/egypt/corporate/other-taxes", "accessed": "2026-11-18"},
         {"url": "https://taxnews.ey.com/news/2025-2316-egypt-introduces-significant-updates-to-vat-provisions", "accessed": "2026-11-18"},
-        {"url": "https://eg.andersen.com/egypts-vat-amendments-2026/", "note": "snippet per egypt-research.md 2.4, page not read in full (search of 2026-11-18)"},
-        {"url": "https://lookuptax.com/tax-changes/egypt/vat-exempt-schedule-law-149-2026", "note": "snippet per egypt-research.md 2.4, page not read in full (search of 2026-11-18)"},
-        {"url": "https://www.eta.gov.eg/sites/default/files/2024-02/VAT-Executive-Regulations-English.pdf", "note": "PRIMARY-SNIPPET per egypt-research.md 2.5, document not read (search of 2026-11-18)"}
+        {"url": "https://eg.andersen.com/egypts-vat-amendments-2026/", "read": false, "note": "snippet per egypt-research.md 2.4, page not read in full (search of 2026-11-18)"},
+        {"url": "https://lookuptax.com/tax-changes/egypt/vat-exempt-schedule-law-149-2026", "read": false, "note": "snippet per egypt-research.md 2.4, page not read in full (search of 2026-11-18)"},
+        {"url": "https://www.eta.gov.eg/sites/default/files/2024-02/VAT-Executive-Regulations-English.pdf", "read": false, "note": "PRIMARY-SNIPPET per egypt-research.md 2.5, document not read (search of 2026-11-18)"}
       ]
     },
     {
@@ -74,12 +74,12 @@
       "recordedStatus": "UNVERIFIED (snippets & conflicting secondary sources)",
       "ref": "docs/compliance/egypt-research.md items 1.5, 1.7, 1.9 and 1.10",
       "sources": [
-        {"url": "https://www.eta.gov.eg/en/home", "note": "PRIMARY-SNIPPET per egypt-research.md 1.5 (snippets only), page not read (search of 2026-11-18)"},
-        {"url": "https://eta.gov.eg/en/content/guides-dealing-electronic-invoices-system", "note": "PRIMARY-SNIPPET per egypt-research.md 1.5, page not read (search of 2026-11-18)"},
+        {"url": "https://www.eta.gov.eg/en/home", "read": false, "note": "PRIMARY-SNIPPET per egypt-research.md 1.5 (snippets only), page not read (search of 2026-11-18)"},
+        {"url": "https://eta.gov.eg/en/content/guides-dealing-electronic-invoices-system", "read": false, "note": "PRIMARY-SNIPPET per egypt-research.md 1.5, page not read (search of 2026-11-18)"},
         {"url": "https://www.fonoa.com/resources/country-tax-guides/egypt/e-invoicing-and-digital-reporting", "accessed": "2026-11-18"},
         {"url": "https://taxsummaries.pwc.com/egypt/corporate/other-taxes", "accessed": "2026-11-18"},
-        {"url": "https://vatit.com/e-invoicing-guide/egypt/", "note": "403, snippet only per egypt-research.md 1.7, page not read (search of 2026-11-18)"},
-        {"url": "https://www.storecove.com/blog/en/e-invoicing-regulations-egypt/", "note": "snippet only per egypt-research.md 1.10, page not read (search of 2026-11-18)"}
+        {"url": "https://vatit.com/e-invoicing-guide/egypt/", "read": false, "note": "403, snippet only per egypt-research.md 1.7, page not read (search of 2026-11-18)"},
+        {"url": "https://www.storecove.com/blog/en/e-invoicing-regulations-egypt/", "read": false, "note": "snippet only per egypt-research.md 1.10, page not read (search of 2026-11-18)"}
       ]
     },
     {
@@ -89,8 +89,8 @@
       "recordedStatus": "UNVERIFIED (snippets + vendor)",
       "ref": "docs/compliance/egypt-research.md item 1.6",
       "sources": [
-        {"url": "https://sdk.invoicing.eta.gov.eg/receiptissuancefaq/", "note": "snippet per egypt-research.md 1.6, page not read in full (search of 2026-11-18)"},
-        {"url": "https://sdk.invoicing.eta.gov.eg/documents/receipt-v1-2/", "note": "snippet per egypt-research.md 1.6, page not read in full (search of 2026-11-18)"},
+        {"url": "https://sdk.invoicing.eta.gov.eg/receiptissuancefaq/", "read": false, "note": "snippet per egypt-research.md 1.6, page not read in full (search of 2026-11-18)"},
+        {"url": "https://sdk.invoicing.eta.gov.eg/documents/receipt-v1-2/", "read": false, "note": "snippet per egypt-research.md 1.6, page not read in full (search of 2026-11-18)"},
         {"url": "https://www.fonoa.com/resources/country-tax-guides/egypt/e-invoicing-and-digital-reporting", "accessed": "2026-11-18"}
       ]
     },

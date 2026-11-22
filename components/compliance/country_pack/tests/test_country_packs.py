@@ -52,7 +52,7 @@ BASE_FILES = {"pack.json", "manifest.json", "evidence.json"}
 SOURCED_LABELS = {
     "ae": {
         "VERIFIED-OFFICIAL": {"eInvoicing.mode", "blocker:uae_e_invoicing"},
-        "SECONDARY": {"tax.vatSupported|tax.taxCodesRef"},
+        "SECONDARY": set(),
     },
     "eg": {"VERIFIED-OFFICIAL": {"eInvoicing.authority"}, "SECONDARY": set()},
     "qa": {"VERIFIED-OFFICIAL": set(), "SECONDARY": set()},
@@ -127,11 +127,9 @@ class TestEvidence(_AllPacks):
                         get(pack, path)  # every cited path exists in the pack
                     sources = fact.get("sources", [])
                     self.assertEqual([v for s in sources for v in source_violations(s, today)], [])
-                    if fact["status"] == "VERIFIED-OFFICIAL":
+                    if fact["status"] in ("VERIFIED-OFFICIAL", "SECONDARY"):
                         read = [s for s in sources if "accessed" in s]
-                        self.assertTrue(read, "VERIFIED-OFFICIAL needs a read source with an access date")
-                    if fact["status"] == "SECONDARY":  # a snippet of an official page is secondary evidence
-                        self.assertTrue(sources, "SECONDARY needs a source URL")
+                        self.assertTrue(read, f"{fact['status']} needs a read source with an access date")
                     if fact["status"] == "PLATFORM-DEFAULT":
                         self.assertTrue(fact.get("ref"), "a platform default names the decision or doc")
 

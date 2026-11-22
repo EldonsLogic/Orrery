@@ -90,3 +90,15 @@ This round answers the cross-model review of c60f955 (Gemini 4 Hydrogen, APPROVE
   - the PINT AE URL added back to the UAE authority fails;
   - "(unverified)" put back in the Qatar Ramadan label fails.
 - Repo checks: see the PR.
+
+## Fix round 2 (Eldon)
+This round answers Eldon's re-review (Fable 5.2) of `3c0450e` (REQUEST_CHANGES). I merged `origin/main` (`a1a69e7`) first with `--no-ff`, without rebasing. Tests were updated first (Tier 3 rigid-zone data). Tool and model for this round: `antigravity` (Gemini 4 Hydrogen), implementation sub-agent, author `partner`.
+- **Medium, UAE VAT label (`packs/ae/0.1.0/evidence.json`):** set `tax.vatSupported|tax.taxCodesRef` from `SECONDARY` to `UNVERIFIED`, because its only source is unread (`read: false`). No `pack.json` value changed; `vatSupported` stays `true`.
+- **Medium, SECONDARY requires a read source (`tests/test_country_packs.py`):** required a source with `accessed` for `SECONDARY` as well as `VERIFIED-OFFICIAL`, and set `SOURCED_LABELS["ae"]["SECONDARY"]` to `set()`. Before fixing `ae/0.1.0/evidence.json`, the test run failed on the UAE VAT fact and pin (`2` failures). After the fix, mutating the KSA Arabic-on-invoice source (`K7`, `SECONDARY`) to `read: false` with a note and no `accessed` failed `test_every_fact_has_a_label_and_sources` (`SECONDARY needs a read source with an access date`); restored afterwards.
+- **Low, framework doc (`docs/compliance/country-pack-framework.md`):** documented `"read": false` (either an `accessed` date or `"read": false`, never both; unread sources require a `note`) and that `VERIFIED-OFFICIAL` and `SECONDARY` both need a read source.
+- **Low, PR body and log:** updated PR #267 body where it stated no evidence label changed, and recorded this round here.
+
+### Checks (fix round 2)
+- Unit tests: `uv run --no-project --with "jsonschema==4.26.0" python3 -m unittest discover -s components/compliance/country_pack/tests -t . -v` — 99 tests, OK.
+- K7 mutation: marking KSA `eInvoicing.mandatoryDocumentLanguages|printFormats.mandatoryLanguages` (`SECONDARY`) as `read: false` fails `test_country_packs.py` (restored).
+- Repo checks: `check_docs`, `check_repo_hygiene`, `scan_secrets`, `check_lanes --base origin/main --actor partner` — all pass.

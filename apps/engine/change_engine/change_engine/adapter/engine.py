@@ -37,6 +37,7 @@ from change_engine.adapter.mapping import (
 from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord, TenantMismatch
 from change_engine.adapter.store_api import AdapterStore, StoreRefused, assert_store_allowed, is_production
 from change_engine.guarded_apply.action_policy_enforcer import ActionPolicyEnforcer, ActionRequest, AuthorizedAction
+from change_engine.guarded_apply.safety_guardrails import is_locked_doctype
 
 ADAPTER_ID = "frappe"
 ADAPTER_VERSION = "0.1.0"
@@ -272,6 +273,18 @@ def _set_path(doc: dict[str, Any], prop: str, params: dict[str, Any]) -> None:
         cur[segs[-1]] = copy.deepcopy(params["after"])
     else:
         cur.pop(segs[-1], None)
+
+
+def _options_target_str(after: Any) -> str | None:
+    """Mirror frappe_backend's `/options` value formatting so plan-time checks inspect what the backend writes."""
+    if isinstance(after, str):
+        return after
+    if isinstance(after, list):
+        return "\n".join(
+            str(o.get("value") or o.get("id") or "") if isinstance(o, dict) else str(o)
+            for o in after
+        )
+    return None
 
 
 def _prune_empty(doc: dict[str, Any]) -> None:
@@ -938,8 +951,17 @@ class ChangeEngineAdapter:
                     own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else False
             return own_cache[entity]
 
+        recorded_type_changes = site.config.get("_typeChangedPointers")
+        type_changed_pointers: set[str] = (
+            {p for p in recorded_type_changes if isinstance(p, str)}
+            if isinstance(recorded_type_changes, list)
+            else set()
+        )
+        for s in artifact["steps"]:
+            if s["kind"] == "field.set_property" and (s.get("params") or {}).get("property") == "/type":
+                type_changed_pointers.add(s["pointer"])
         for step in artifact["steps"]:
-            disp, reason, ddl = self._judge(site, step, blueprint_entities, own_allowed)
+            disp, reason, ddl = self._judge(site, step, blueprint_entities, own_allowed, type_changed_pointers)
             if ddl == "additive":
                 additive += 1
             elif ddl == "semantic":
@@ -978,6 +1000,7 @@ class ChangeEngineAdapter:
         step: dict[str, Any],
         blueprint_entities: set[str],
         own_allowed: Callable[[str], bool] | None = None,
+        type_changed_pointers: set[str] | None = None,
     ) -> tuple[str, str | None, str]:
         kind, pointer, params = step["kind"], step["pointer"], step["params"]
         ddl = step["ddlImpact"]
@@ -993,13 +1016,26 @@ class ChangeEngineAdapter:
         segs = _segs(pointer)
         if segs[:1] == ["entities"] and len(segs) > 1:
             ids: list[Any] = [segs[1]]
+            subject = step["subject"]
             if kind == "entity.add":
-                ids.append(step["subject"].get("id"))
+                ids.append(subject.get("id"))
+            elif kind == "field.reorder":
+                parents = subject.get("parents")
+                if not isinstance(parents, list) or len(parents) > 1:
+                    return "blocked", "unsupported_value_type", ddl
+                if len(parents) == 1:
+                    if not isinstance(parents[0], dict):
+                        return "blocked", "unsupported_value_type", ddl
+                    ids.append(parents[0].get("id"))
+                    if subject.get("kind") == "entity":
+                        ids.append(subject.get("id"))
+                else:
+                    ids.append(subject.get("id"))
             elif kind.startswith(("field.", "relation.")):
-                parents = step["subject"].get("parents")
+                parents = subject.get("parents")
                 parent_id = (
                     parents[0].get("id")
-                    if isinstance(parents, list) and parents and isinstance(parents[0], dict)
+                    if isinstance(parents, list) and len(parents) == 1 and isinstance(parents[0], dict)
                     else None
                 )
                 ids.append(parent_id)
@@ -1007,12 +1043,90 @@ class ChangeEngineAdapter:
                 return "blocked", "unsupported_value_type", ddl
             if any(is_protected_entity(i) for i in ids):
                 return "blocked", "protected_subject", ddl
-            if len(ids) > 1 and ids[1] != ids[0]:
+            if len(ids) > 1 and any(i != ids[0] for i in ids[1:]):
                 return "blocked", "definition_conflict", ddl
+            if kind == "field.reorder":
+                if (
+                    len(segs) != 3
+                    or segs[2] != "fields"
+                    or subject.get("kind") != "entity"
+                    or subject.get("parents") != []
+                    or subject.get("id") != segs[1]
+                ):
+                    return "blocked", "definition_conflict", ddl
+            elif kind.startswith(("field.", "relation.")):
+                expected_coll = "fields" if kind.startswith("field.") else "relations"
+                if len(segs) != 4 or segs[2] != expected_coll or subject.get("id") != segs[3]:
+                    return "blocked", "definition_conflict", ddl
+                if kind in ("field.add", "relation.add"):
+                    defn_add = params.get("definition")
+                    if not isinstance(defn_add, dict) or defn_add.get("id") != segs[3]:
+                        return "blocked", "definition_conflict", ddl
         elif kind == "entity.add" or kind.startswith(("field.", "relation.")):
             return "blocked", "unsupported_value_type", ddl
 
+        elem = _walk(site.config, _cfg_segs(pointer))
         defn = params.get("definition")
+        if kind == "entity.add":
+            if not isinstance(defn, dict):
+                return "blocked", "unsupported_value_type", ddl
+            inline_fields = defn.get("fields")
+            if inline_fields is not None:
+                if not isinstance(inline_fields, list):
+                    return "blocked", "unsupported_value_type", ddl
+                for fld in inline_fields:
+                    if not isinstance(fld, dict):
+                        return "blocked", "unsupported_value_type", ddl
+                    if fld.get("type") == "link" or "target" in fld:
+                        target_entity = fld.get("target")
+                        if not is_valid_entity_id(target_entity):
+                            return "blocked", "unsupported_value_type", ddl
+                        if is_protected_entity(target_entity):
+                            return "blocked", "protected_subject", ddl
+            inline_relations = defn.get("relations")
+            if inline_relations is not None:
+                if not isinstance(inline_relations, list):
+                    return "blocked", "unsupported_value_type", ddl
+                for rel in inline_relations:
+                    if not isinstance(rel, dict):
+                        return "blocked", "unsupported_value_type", ddl
+                    target_entity = rel.get("target")
+                    if not is_valid_entity_id(target_entity):
+                        return "blocked", "unsupported_value_type", ddl
+                    if is_protected_entity(target_entity):
+                        return "blocked", "protected_subject", ddl
+        elif (kind == "field.add" and isinstance(defn, dict) and defn.get("type") == "link") or kind == "relation.add":
+            target_entity = defn.get("target") if isinstance(defn, dict) else None
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
+        elif kind.startswith("relation.") and isinstance(defn, dict) and "target" in defn:
+            target_entity = defn["target"]
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
+        elif kind in ("field.set_property", "relation.set_property") and params.get("property") == "/options":
+            proven_non_link = (
+                kind == "field.set_property"
+                and isinstance(elem, dict)
+                and elem.get("type") in SUPPORTED_BLUEPRINT_TYPES
+                and elem.get("type") != "link"
+                and (type_changed_pointers is None or pointer not in type_changed_pointers)
+            )
+            if not proven_non_link:
+                raw_target = _options_target_str(params.get("after"))
+                if raw_target is not None and (is_protected_entity(raw_target) or is_locked_doctype(raw_target)):
+                    return "blocked", "protected_subject", ddl
+                return "blocked", "unsupported_value_type", ddl
+        elif kind in ("field.set_property", "relation.set_property") and params.get("property") == "/target":
+            # Config-only guard: frappe_backend does not map `/target` (it maps `/options`, guarded above).
+            target_entity = params.get("after")
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
         if kind == "workflow.upsert":
             target_entity = defn.get("entity") if isinstance(defn, dict) else None
             if not is_valid_entity_id(target_entity):
@@ -1033,7 +1147,6 @@ class ChangeEngineAdapter:
             if grant_reason:
                 return "blocked", grant_reason, ddl
         coll = self._collection(site, segs)
-        elem = _walk(site.config, _cfg_segs(pointer))
         if kind.endswith((".add", ".upsert", ".enable")):
             if coll is None:
                 return "blocked", "subject_missing", ddl
@@ -1571,6 +1684,16 @@ class ChangeEngineAdapter:
                 "revision": copy.deepcopy(artifact["blueprint"]["target"]),
             }
             site.history.append(copy.deepcopy(site.applied))
+        type_ptrs = [
+            step["pointer"]
+            for step in artifact["steps"]
+            if step["kind"] == "field.set_property" and (step.get("params") or {}).get("property") == "/type"
+        ]
+        if type_ptrs:
+            changed = site.config.setdefault("_typeChangedPointers", [])
+            for ptr in type_ptrs:
+                if ptr not in changed:
+                    changed.append(ptr)
         site.applied_ids.add(artifact["artifactId"])
         stages.append({"stage": "finalize", "status": "done"})
         finish("applied", None, sha(self._export(site)))

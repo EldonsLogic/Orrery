@@ -11,7 +11,7 @@ from change_engine.guarded_apply.ddl_plan_gate import (
 from change_engine.guarded_apply.safety_guardrails import (
     PROHIBITED_CODE_PROPERTIES,
     PROHIBITED_EXPRESSION_PATTERNS,
-    ZONE_2_LOCKED_DOCTYPES,
+    is_locked_doctype,
 )
 from change_engine.guarded_apply.schema_reconciler import make_bounded_lock_key
 
@@ -126,8 +126,20 @@ def entity_to_doctype(entity_id: str) -> str:
 
 
 # The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
-# (`unsupported_value_type`) on `/entities/<id>` pointers, `entity.add` subject ids, `field.*` / `relation.*`
-# parent ids, `workflow.upsert` / `report.upsert` `definition.entity`, and `role.upsert` grant targets.
+# (`unsupported_value_type`, and `protected_subject` for protected entities) on `/entities/<id>` pointers,
+# `entity.add` subject ids and inline `definition.fields[]` / `definition.relations[]` targets,
+# `field.*` / `relation.*` element steps (exact `/entities/<id>/fields/<fid>` or `/entities/<id>/relations/<rid>`
+# pointer, single parent matching `<id>`, `subject.id` matching the last pointer segment, and on `field.add` /
+# `relation.add`, `definition.id` matching both, else `definition_conflict`), `field.reorder` (exact
+# `/entities/<id>/fields` pointer with `bpdiff`'s entity subject `kind="entity"`, `id=<id>`, `parents=[]`,
+# validating entity/parent grammar and protection first, else `definition_conflict`),
+# link `field.add` and `relation.*` `definition.target`, `field.set_property` / `relation.set_property` `/target`
+# (config-only; backend does not map `/target`), `workflow.upsert` / `report.upsert` `definition.entity`, and
+# `role.upsert` grant targets. `/options` on `relation.set_property` is always refused at plan time; `/options`
+# on `field.set_property` is refused unless the field exists in site config with a known non-link Blueprint type
+# and has no `/type` change recorded in the current artifact or any earlier applied artifact (`protected_subject`
+# when the offered value names a protected/locked target, else `unsupported_value_type`; because `frappe_backend`
+# ignores `/type`, any recorded `/type` change permanently disqualifies the field from the non-link proof).
 ENTITY_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 
 
@@ -145,7 +157,7 @@ def is_protected_entity(entity_id: str) -> bool:
     """Compared on a normalised key: `gl_entry`, `GL Entry` and `gl_entry ` are one protected entity."""
     if _protected_key(entity_id) in {_protected_key(i) for i in PROTECTED_ENTITY_IDS}:
         return True
-    return _protected_key(entity_to_doctype(entity_id)) in {_protected_key(d) for d in ZONE_2_LOCKED_DOCTYPES}
+    return is_locked_doctype(entity_to_doctype(entity_id))
 
 
 # SEC-022 / ADR-0051 item 3: the document types a Blueprint role may get permission rules on are an allowlist:

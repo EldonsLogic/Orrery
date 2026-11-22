@@ -356,6 +356,9 @@ jobs:
           python3 -m pytest -q
           apps/engine/change_engine/change_engine/tests/test_sec_022_bpl_032_roles.py
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_2.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_4.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_5.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_6.py
 
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -363,11 +366,11 @@ jobs:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_021_phase0_proofs.py -v
 
-      - name: Engine action-policy tests (ERP-023)
+      - name: Engine action-policy and outcome reconciliation tests (ERP-023, ERP-029)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_023_action_policy.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_023_action_policy.py apps/engine/change_engine/change_engine/tests/test_erp_029_action_outcome_reconciliation.py -q
 
       - name: Inventory valuation correctness tests (ERP-015; live layer skips without a bench)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

@@ -10,7 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, time, timedelta
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 
 from components.compliance.country_pack import resolve_country_pack
 
@@ -36,7 +37,7 @@ class WorkingHours:
 @dataclass(frozen=True)
 class ReducedPeriod:
     id: str
-    labels: dict[str, str]
+    labels: Mapping[str, str]  # read-only view
     rule: str  # "ramadan" or "fixed_dates"
     hours: WorkingHours
     gregorian_from: date | None = None
@@ -108,7 +109,10 @@ class CompanyCalendarSettings:
 
     def week_start_date(self, day: date) -> date:
         offset = (_check_date(day).weekday() - WEEKDAYS.index(self.week_start)) % 7
-        return day - timedelta(days=offset)
+        try:
+            return day - timedelta(days=offset)
+        except OverflowError:
+            raise CalendarSettingsError("calendar_range") from None
 
     def ramadan_range(self, hijri_year: int) -> RamadanRange:
         """First and last Gregorian day of Ramadan, from the Umm al-Qura tables; fails closed outside them."""
@@ -178,7 +182,7 @@ def resolve_calendar_settings(
     loc = pack["locale"]
     reduced = tuple(
         ReducedPeriod(
-            id=rp["id"], labels=dict(rp["labels"]), rule=rp.get("rule", "ramadan"), hours=_hours(rp["hours"]),
+            id=rp["id"], labels=MappingProxyType(dict(rp["labels"])), rule=rp.get("rule", "ramadan"), hours=_hours(rp["hours"]),
             gregorian_from=date.fromisoformat(rp["gregorianFrom"]) if "gregorianFrom" in rp else None,
             gregorian_to=date.fromisoformat(rp["gregorianTo"]) if "gregorianTo" in rp else None,
         )

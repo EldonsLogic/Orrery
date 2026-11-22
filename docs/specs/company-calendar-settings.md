@@ -7,7 +7,7 @@ Related: [ADR-0015](../decisions/ADR-0015-country-packs-calendars-locale.md), [c
 First slice of the CMP-023 row: a deterministic settings module at `components/compliance/company_calendar/`. It reads a country pack only through `resolve_country_pack` (CMP-021) and the Umm al-Qura tables of `hijridate` 2.6.0 (CMP-022). It does not change the pack schema, the Blueprint contract or any pack.
 
 ## 1. Settings model
-`resolve_calendar_settings(country_code, packs_dir, company_locale, version=..., environment=...)` returns an immutable `CompanyCalendarSettings`:
+`resolve_calendar_settings(country_code, packs_dir, company_locale, version=..., environment=...)` returns an immutable `CompanyCalendarSettings` (nested period labels are read-only views):
 
 | Field | Source in `company.locale` / pack `localeDefaults` | Notes |
 |---|---|---|
@@ -32,7 +32,7 @@ Defaults come from the pack's `localeDefaults`. A company may override exactly t
 ## 4. Validation and failure behaviour
 Fail closed, no silent fallback:
 - Unknown country, missing pack, rejected or locked override, invalid weekday, overlapping work and weekend days, bad `HH:MM`, unknown number system: the framework raises (`UnknownCountryError`, `PackNotFoundError`, `OverrideRejectedError`) and the module lets it propagate.
-- `CalendarSettingsError` with a stable `code` (`invalid_date`, `invalid_year`, `invalid_text`, `calendar_range`, `calendar_unavailable`, `ambiguous_reduced_period`): non-`date` input (timestamps, strings), Hijri year or date outside the tables, library missing, ambiguous period. Messages carry no customer data and no user-facing text; the UI maps codes through i18n.
+- `CalendarSettingsError` with a stable `code` (`invalid_date`, `invalid_year`, `invalid_text`, `calendar_range`, `calendar_unavailable`, `ambiguous_reduced_period`): non-`date` input (timestamps, strings), Hijri year or date outside the tables, a week start before the earliest representable date, library missing, ambiguous period. Messages carry no customer data and no user-facing text; the UI maps codes through i18n.
 - Inputs are never mutated; results are frozen.
 
 ## 5. Legal values are data, not code

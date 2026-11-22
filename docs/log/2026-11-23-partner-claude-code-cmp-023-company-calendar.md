@@ -25,3 +25,11 @@ Unknown.
 
 ## Next step
 CMP-023 stays `doing` until the founders answer the open questions in the spec. Remaining from the row: announced (moon-sighting) Ramadan dates (needs CMP-024), a Blueprint-level `company.locale` resolver call site (BPL), UI settings screen. CMP-024 holidays, CMP-025 fiscal year, CMP-026 timezones follow.
+
+## Review fixes, round 1
+
+Cross-model review by ChatGPT gpt-6.1-sol at `f2b1898`: APPROVE with two Lows. It checked 632 Ramadan boundary dates across 1343 to 1500 AH against the pinned tables, and four deliberate Ramadan mutations were caught by the existing tests.
+
+- Low 1: a reduced period's `labels` dict could be changed in place despite the immutable-result contract. Labels are now a read-only `MappingProxyType`; `test_nested_labels_are_immutable` failed before the fix and passes after.
+- Low 2: `week_start_date(date.min)` raised a raw `OverflowError`. It now raises `CalendarSettingsError("calendar_range")`; `test_week_start_date_before_the_calendar_range_fails_closed` failed before and passes after.
+- Spec updated for both. Calendar suite 32 OK, country pack suite unchanged and OK.

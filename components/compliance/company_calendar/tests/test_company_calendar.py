@@ -51,6 +51,12 @@ class TestDefaultsFromPack(unittest.TestCase):
         with self.assertRaises(Exception):
             resolve("SA").week_start = "mon"  # type: ignore[misc]
 
+    def test_nested_labels_are_immutable(self) -> None:
+        period = resolve("SA").reduced_periods[0]
+        with self.assertRaises(TypeError):
+            period.labels["en"] = "changed"  # type: ignore[index]
+        self.assertNotEqual(resolve("SA").reduced_periods[0].labels.get("en"), "changed")
+
 
 class TestCompanyOverrides(unittest.TestCase):
     def test_overrides_replace_pack_values(self) -> None:
@@ -132,6 +138,11 @@ class TestDayClassification(unittest.TestCase):
         self.assertEqual(resolve("AE").week_start_date(d), date(2026, 11, 23))   # Monday
         self.assertEqual(resolve("SA", {"week": {"startDay": "sat"}}).week_start_date(d), date(2026, 11, 21))
         self.assertEqual(resolve("SA").week_start_date(date(2026, 11, 22)), date(2026, 11, 22))
+
+    def test_week_start_date_before_the_calendar_range_fails_closed(self) -> None:
+        with self.assertRaises(CalendarSettingsError) as ctx:
+            resolve("SA").week_start_date(date.min)
+        self.assertEqual(ctx.exception.code, "calendar_range")
 
 
 class TestRamadanHours(unittest.TestCase):

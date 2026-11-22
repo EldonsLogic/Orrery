@@ -2,6 +2,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+import hmac
 import sqlite3
 import threading
 
@@ -459,9 +461,10 @@ def test_unrelated_stuck_request_still_journals_and_escalates_when_conflict_exis
     policy.ActionPolicyStore(path).record_outcome("tenant-a", "request-2", "applied")
     later = NOW + timedelta(hours=2)
     reconciler = _reconciler(recon, path, engine, clock=lambda: later)
-    assert _states(reconciler.reconcile(("request-3",))) == {
-        "request-3": ("unknown", "readback_pending", True),
-    }
+    subset = _states(reconciler.reconcile(("request-3",)))
+    assert subset == {"request-3": ("unknown", "readback_pending", True)}
+    # The conflict for request-2 (outside the subset) is journaled but not returned; readers use the journal.
+    assert "request-2" not in subset
     assert _journal(path) == [
         ("tenant-a", "request-2", "failed", "readback", 0),
         ("tenant-a", "request-2", "unknown", "outcome_conflict", 1),
@@ -492,12 +495,12 @@ def test_new_not_applied_readback_stays_unknown_while_conflict_is_open(recon, tm
         "request-1": ("applied", "recorded", False),
         "request-2": ("unknown", "outcome_conflict", True),
         "request-3": ("applied", "readback", False),
-        "request-4": ("unknown", "readback_pending", False),
+        "request-4": ("unknown", "conflict_hold", False),
     }
     # After stuck_after, the unfinalised not_applied request escalates while the conflict stays open.
     second = _states(_reconciler(recon, path, engine, clock=lambda: NOW + timedelta(hours=2)).reconcile())
     assert second["request-2"] == ("unknown", "outcome_conflict", True)
-    assert second["request-4"] == ("unknown", "readback_pending", True)
+    assert second["request-4"] == ("unknown", "conflict_hold", True)
 
 
 def test_outcome_conflict_recorded_during_the_run_is_journaled_under_the_lock(recon, tmp_path):
@@ -517,7 +520,7 @@ def test_outcome_conflict_recorded_during_the_run_is_journaled_under_the_lock(re
         "request-1": ("applied", "recorded", False),
         "request-2": ("unknown", "outcome_conflict", True),
         "request-3": ("applied", "readback", False),
-        "request-4": ("unknown", "readback_pending", False),
+        "request-4": ("unknown", "conflict_hold", False),
     }
 
 
@@ -864,3 +867,53 @@ def test_integrity_error_in_commit_maps_to_journal_tampered(recon, tmp_path):
         db.execute("INSERT INTO action_outcome_reconciliation VALUES (2, ?, ?, ?, ?, ?, ?, ?)", (*fields, mac))
     with pytest.raises(recon.ReconciliationRefused, match="journal_tampered"):
         reconciler.reconcile()
+
+
+# ---------------------------------------------------------------- review follow-ups (PR #260 lows)
+def _chain_mac(prev, sequence, row):
+    """Independent MAC of one journal row, so a guard cannot pass by sharing the code under test."""
+    tenant_id, request_id, state, reason, stuck, timestamp = row
+    body = policy.canonical_json({
+        "prev": prev, "sequence": sequence, "tenant_id": tenant_id, "request_id": request_id,
+        "state": state, "reason": reason, "stuck": stuck, "timestamp": timestamp,
+    })
+    return hmac.new(KEY, body, sha256).hexdigest()
+
+
+def _insert_row(path, sequence, row, mac):
+    with sqlite3.connect(path) as db:
+        db.execute("INSERT INTO action_outcome_reconciliation VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                   (sequence, *row, mac))
+
+
+def test_mac_chains_each_entry_to_the_previous_mac(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    _admit(path, _request(1), _unknown)
+    _admit(path, _request(2), _unknown)
+    engine = Engine(recon)
+    _reconciler(recon, path, engine).reconcile()
+    with sqlite3.connect(path) as db:
+        rows = db.execute("SELECT sequence, tenant_id, request_id, state, reason, stuck, timestamp, mac "
+                          "FROM action_outcome_reconciliation ORDER BY sequence").fetchall()
+    assert [r[0] for r in rows] == [1, 2]
+    assert rows[0][7] == _chain_mac("", 1, rows[0][1:7])
+    assert rows[1][7] == _chain_mac(rows[0][7], 2, rows[1][1:7])
+    # A row whose MAC skips the previous link is refused, even with a valid sequence and fields.
+    _admit(path, _request(3), _unknown)
+    forged = ("tenant-a", "request-3", "unknown", "readback_pending", 0, NOW.isoformat())
+    _insert_row(path, 3, forged, _chain_mac(rows[0][7], 3, forged))
+    with pytest.raises(recon.ReconciliationRefused, match="journal_tampered"):
+        _reconciler(recon, path, engine).reconcile()
+
+
+def test_reason_outside_the_allowlist_is_refused_even_with_a_valid_mac(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    _admit(path, _request(1), _unknown)
+    engine = Engine(recon)
+    _reconciler(recon, path, engine).reconcile()
+    with sqlite3.connect(path) as db:
+        (prev,) = db.execute("SELECT mac FROM action_outcome_reconciliation WHERE sequence = 1").fetchone()
+    forged = ("tenant-a", "request-1", "unknown", "made_up_reason", 0, NOW.isoformat())
+    _insert_row(path, 2, forged, _chain_mac(prev, 2, forged))
+    with pytest.raises(recon.ReconciliationRefused, match="journal_tampered"):
+        _reconciler(recon, path, engine).reconcile()

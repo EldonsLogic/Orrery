@@ -22,7 +22,7 @@ from .action_policy_store import ActionAudit, ActionOutcome, ActionPolicyStore, 
 _TERMINAL = ("applied", "failed")
 _REASONS = frozenset({
     "recorded", "readback", "readback_pending", "readback_invalid", "readback_mismatch",
-    "reader_error", "admission_unbound", "handler_in_flight", "outcome_conflict",
+    "reader_error", "admission_unbound", "handler_in_flight", "outcome_conflict", "conflict_hold",
 })
 _COLUMNS = ("sequence", "tenant_id", "request_id", "state", "reason", "stuck", "timestamp", "mac")
 _SEQUENCE_CHECK = "CHECK (sequence > 0)"
@@ -260,7 +260,7 @@ class ActionOutcomeReconciler:
                     if outcome is not None and outcome.status in _TERMINAL:
                         state, reason = outcome.status, "recorded"
                     elif state == "failed" and conflict_open:
-                        state, reason = "unknown", "readback_pending"
+                        state, reason = "unknown", "conflict_hold"
                     # Human floor: escalate once, never retry or release the claim.
                     stuck = state == "unknown" and now - admissions[rid].timestamp >= self._stuck_after
                     if latest is None or state in _TERMINAL or reason != latest.reason or (stuck and not latest.stuck):

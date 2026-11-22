@@ -14,7 +14,8 @@ Gaps (why the row stays `doing`; each is a stand-in, not hidden):
 - No Operate chat in the chain (OPR-010 is a dependency, but G2-1 also needs the one chat); the owner screen is the DSC-009 service, not the web screen (WEB-027).
 - The golden-path sale posts on the simulator's in-memory tenant (documents, totals), not on the adapter fake: the adapter fake models configuration only, so debit and credit postings (COGS, trial balance) are not asserted. They need the real bench (BPL-028, ERP-021).
 - Review queue port is the build-state test fake, not the control-plane review queue (PLT-013); identity is a fake table.
-- Compiler output targets `change_engine`, the adapter fake accepts only `frappe` and lacks the `attachment` field type the trading template uses; the test patches both on the fake (contract 16.12, compiler open question 4). Real fix belongs to the adapter fake or the template.
+- The simulated month runs on the QA-011 eval fixture's tool set and mapping, not on one derived from this Blueprint (only revision, id and digest are stamped), so the "simulated Blueprint" leg is a stand-in. The month has no sales-order step (the simulator has none), and the golden sale is in the simulated month, before go-live.
+- Open questions Q-53 and Q-77: compiler output targets `change_engine`, the adapter fake accepts only `frappe` and lacks the `attachment` field type the trading template uses; the test patches both on the fake (contract 16.12, compiler open question 4). Real fix belongs to the adapter fake or the template.
 - Sandbox and live use the draft and the synthetic verified mapping; no real engine, no ZATCA or other compliance step.
 
 ## Files touched

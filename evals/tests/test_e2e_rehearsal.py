@@ -5,7 +5,8 @@ fakes (identity, review queue, the engine adapter fake, the simulated tenant). C
 
   interview -> answers -> Blueprint draft -> gap report and quote -> sealed owner approval (DSC-009)
   -> build state machine (BPL-020, real gates) -> team review -> compile + apply in a fake sandbox -> simulated month
-  -> sign-off -> cutover -> go live (compile for production + apply on a second fake site) -> one golden-path sale.
+  -> sign-off -> cutover -> go live (compile for production + apply on a second fake site). The simulated month
+  contains the golden-path sale (before go-live; no sales-order step, the simulator has none).
 
 Expected numbers are copied from docs/specs/golden-path-trading-sale.md (section 5); nothing here computes tax or
 ledger maths. What is a stand-in is listed in the QA-009 log, not hidden here.
@@ -119,8 +120,8 @@ class EnginePort:
 class Rehearsal:
     """The interview fixture drives a draft; the real machine and approval flow run behind fake identity and review ports."""
     def __init__(self, monkeypatch):
-        # Known gaps (QA-009 log): the adapter fake names the engine "frappe" and lacks the "attachment" field type,
-        # while the compiler output targets "change_engine" and the trading template uses attachments.
+        # Open questions Q-53 (canonical adapter id) and Q-77 (Studio drops the attachment field for the fake): the
+        # fake names the engine "frappe" and lacks "attachment", the compiler output targets "change_engine".
         monkeypatch.setattr(adapter_fake, "ADAPTER_ID", "change_engine")
         monkeypatch.setattr(adapter_fake, "SUPPORTED_TYPES", set(adapter_fake.SUPPORTED_TYPES) | {"attachment"})
         self.t = int(NOW.timestamp())
@@ -195,6 +196,17 @@ class _Late:
         return self.target.verify(*a)
 
 
+def to_cutover(w):
+    w.m.create("author", **w.args())
+    w.decide()
+    w.team_review()
+    w.m.build_sandbox("runner", **w.args())
+    w.simulate_month()
+    w.m.confirm_simulated("rev", **w.args(simulation_id=w.report["simulationId"]))
+    w.m.start_cutover("rev", **w.args(checks=["opening_balances", "backups_verified", "compliance_onboarding"]))
+    w.sign()
+
+
 def refused(fn, *a, **k):
     with pytest.raises((BuildStateError, oa.OwnerApprovalError)) as e:
         fn(*a, **k)
@@ -206,7 +218,7 @@ def w(monkeypatch):
     return Rehearsal(monkeypatch)
 
 
-def test_e2e_discovery_to_simulated_to_live_and_one_golden_sale(w):
+def test_e2e_discovery_to_simulated_month_with_golden_sale_to_live(w):
     # 1 interview: a draft input that still needs the owner (agents draft, humans approve)
     d = w.draft_input
     assert d["status"] == "draft" and d["requires_owner_approval"] is True and d["ready"] is True and d["validation_errors"] == []
@@ -246,7 +258,7 @@ def test_e2e_discovery_to_simulated_to_live_and_one_golden_sale(w):
     live = w.engine.artifacts["live"]
     assert live["blueprint"]["target"]["hash"] == sbx["blueprint"]["target"]["hash"]   # the content the owner approved
     assert [c[0] for c in w.engine.calls] == ["sandbox", "live"] and {c[2] for c in w.engine.calls} == {content_digest(w.bp)}
-    # 8 the golden-path sale posted its documents in order on the simulated tenant, totals as the spec expects
+    # 8 the simulated month's golden-path sale posted its documents in order (before go-live), totals as the spec expects
     assert [port.docs[i]["kind"] for i in port.post_order] == ["stock_in", "stock_out", "sales_invoice"]
     assert w.m.verify_tenant(T) == [] and w.m.status(T, w.bp_id)["state"] == "live"
 
@@ -256,7 +268,7 @@ def test_unapproved_blueprint_cannot_pass_any_later_gate_or_go_live(w):
     w.rev.approve(w.bps.v)
     assert refused(w.m.pass_team_review, "rev", **w.args(pinned_seq=w.rev.seq, pinned_head=w.rev.head)) == "BS-005"
     assert refused(w.m.build_sandbox, "runner", **w.args()) == "BS-005"
-    assert refused(w.m.go_live, "owner", **w.args()) in ("BS-005", "BS-008")   # no approval chain to re-derive
+    assert refused(w.m.go_live, "owner", **w.args()) == "BS-008"   # no approval chain to re-derive
     assert w.engine.calls == [] and w.m.status(T, w.bp_id)["state"] == "draft"
     # the machine's own owner gate refuses when no sealed owner decision backs it
     assert refused(w.m.approve_owner, "owner", **w.args(confirmations=CONFIRM, expected_digest=content_digest(w.bp),
@@ -301,3 +313,55 @@ def test_failed_sandbox_apply_stops_the_build_before_simulation(w, monkeypatch):
     assert w.m.status(T, w.bp_id)["state"] == "team_reviewed"
     w.simulate_month()
     assert refused(w.m.confirm_simulated, "rev", **w.args(simulation_id=w.report["simulationId"])) == "BS-005"
+
+
+def test_approval_evidence_is_bound_to_the_digests_the_owner_saw(w):
+    w.m.create("author", **w.args())
+    v = w.oa.review("owner", **w.args())
+    w.decide()
+    dg, qd = content_digest(w.bp), v["quoteDigest"]
+    assert w.oa.verify(T, w.bp_id, dg, qd, "u-owner")["approvedBy"] == "u-owner"
+    assert w.oa.verify(T, w.bp_id, "0" * 64, qd, "u-owner")["approvedBy"] is None   # swapped content digest
+    assert w.oa.verify(T, w.bp_id, dg, "0" * 64, "u-owner")["approvedBy"] is None   # swapped quote digest
+
+
+def test_a_tenant_realm_agent_with_the_owner_role_is_refused_by_the_human_check(w):
+    w.m.create("author", **w.args())
+    v = w.oa.review("owner", **w.args())
+    bs_table = w.oa._idn.base.table
+    bs_table["owner_agent"] = bs.P("agent-9", "agent", "tenant", ["owner"], tenant=T)
+    with pytest.raises(oa.OwnerApprovalError) as e:
+        w.oa.decide("owner_agent", **w.args(decision="approve", reason="agree", note="", seen_blueprint_digest=v["blueprintDigest"],
+                                            seen_quote_digest=v["quoteDigest"], confirmations=CONFIRM))
+    assert (e.value.code, e.value.detail) == ("OA-003", "human")
+
+
+def test_a_rejection_blocks_even_after_an_approval_of_the_same_content(w):
+    w.m.create("author", **w.args())
+    assert w.decide()["buildState"] == "owner_approved"   # owner 1 approves first
+    v = w.oa.review("owner2", **w.args())
+    assert w.decide("owner2", decision="reject", reason=oa.REASONS["reject"][0])["state"] == "rejected"
+    ev = w.oa.verify(T, w.bp_id, content_digest(w.bp), v["quoteDigest"], "u-owner")
+    assert ev["blocked"] is True   # the earlier approval existed; the rejection is what refuses
+    assert w.m.status(T, w.bp_id)["state"] == "draft"
+    assert refused(w.m.approve_owner, "owner", **w.args(confirmations=CONFIRM, expected_digest=content_digest(w.bp),
+                                                        quote_digest=v["quoteDigest"])) == "BS-006"
+
+
+def test_a_stale_quote_cannot_be_approved(w):
+    w.m.create("author", **w.args())
+    v = w.oa.review("owner", **w.args())
+    w.t += 400 * 86400   # past any price-book validity
+    assert w.oa.verify(T, w.bp_id, content_digest(w.bp), v["quoteDigest"], "u-owner")["quoteCurrent"] is False
+    with pytest.raises(oa.OwnerApprovalError):
+        w.oa.decide("owner", **w.args(decision="approve", reason="agree", note="", seen_blueprint_digest=v["blueprintDigest"],
+                                      seen_quote_digest=v["quoteDigest"], confirmations=CONFIRM))
+    assert w.m.status(T, w.bp_id)["state"] == "draft"
+
+
+def test_content_changed_between_sandbox_and_live_never_goes_live(w):
+    to_cutover(w)
+    w.bps.v["company"]["legalName"]["en"] = "Changed After Sign-off"
+    assert refused(w.m.go_live, "owner", **w.args()) == "BS-008"
+    assert [c[0] for c in w.engine.calls] == ["sandbox"] and "live" not in w.engine.artifacts
+    assert w.m.status(T, w.bp_id)["state"] == "simulated"

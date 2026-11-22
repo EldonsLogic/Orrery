@@ -118,6 +118,9 @@ SECTION_OF = {
     "report": "reports",
 }
 SETTINGS = ("company", "compliance", "i18n")
+# SEC-022 (ADR-0051 item 7): the only first pointer segments a step may target. Anything else, in particular a `_`
+# prefixed key such as the adapter's own `_typeChangedPointers` record, is refused at plan time.
+ALLOWED_POINTER_ROOTS = frozenset(SECTION_OF.values()) | frozenset(SETTINGS)
 
 EXPORTED = {
     "settings_company": ["legalName", "tradeName", "country", "crNumber", "vatNumber", "sizeBand", "industry", "languages", "locale"],
@@ -1014,6 +1017,8 @@ class ChangeEngineAdapter:
         if has_prohibited_expression(params):
             return "blocked", "prohibited_expression", ddl
         segs = _segs(pointer)
+        if not segs or "" in segs or segs[0] not in ALLOWED_POINTER_ROOTS:
+            return "blocked", "unsupported_value_type", ddl
         if segs[:1] == ["entities"] and len(segs) > 1:
             ids: list[Any] = [segs[1]]
             subject = step["subject"]

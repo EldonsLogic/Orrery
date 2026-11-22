@@ -43,6 +43,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 scripts/check_repo_hygiene.py
+      - name: Component reviewer check (ADR-0034, owner is not a reviewer)
+        run: python3 scripts/check_component_reviewers.py
 
   pr-log-gate:
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'

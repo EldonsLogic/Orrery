@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Callable
 
 from change_engine.guarded_apply.ddl_plan_gate import (
     APPROVED_DDL_REGEX,
@@ -20,6 +20,8 @@ ENTITY_TO_DOCTYPE = {
     "item": "Item",
     "sales_order": "Sales Order",
     "sales_order_line": "Sales Order Item",
+    "delivery_note": "Delivery Note",
+    "delivery_note_line": "Delivery Note Item",
     "sales_invoice": "Sales Invoice",
     "sales_invoice_line": "Sales Invoice Item",
     "general_ledger": "GL Entry",
@@ -58,8 +60,63 @@ SEMANTIC_PROPS = {"/type", "/unique", "/indexed", "/precision", "/maxLength", "/
 
 _SAFE_IDENT_RE = re.compile(r"^[a-z0-9_]+$")
 _DECIMAL_ADD_RE = re.compile(
-    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` decimal\(\d+,\d+\)(?: not null default [0-9.]+)?$"
+    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` decimal\(\d+,\d+\)(?: not null default [0-9.]+)?\Z"
 )
+
+
+# SEC-022 / ADR-0051: every role and workflow state the adapter writes carries this reserved prefix. The '-' is
+# outside the Blueprint id grammar, so no raw Blueprint id and no built-in engine name can equal a managed name.
+ENGINE_NAME_PREFIX = "bp-"
+_BLUEPRINT_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+
+
+class EngineNameError(ValueError):
+    """A value that is not a Blueprint id was offered as one; callers refuse the step (fail closed)."""
+
+
+def _managed_name(blueprint_id: Any) -> str:
+    if not isinstance(blueprint_id, str) or not _BLUEPRINT_ID_RE.fullmatch(blueprint_id):
+        raise EngineNameError("not a Blueprint id")
+    return ENGINE_NAME_PREFIX + blueprint_id
+
+
+def engine_role_name(role_id: Any) -> str:
+    """Adapter-owned engine role name for a Blueprint role id (ADR-0039 item 1, ADR-0051)."""
+    return _managed_name(role_id)
+
+
+def engine_state_name(state_id: Any) -> str:
+    """Adapter-owned engine workflow-state name for a Blueprint state id (ADR-0051)."""
+    return _managed_name(state_id)
+
+
+# BPL-032 / ADR-0039 section 2 as narrowed by ADR-0051: the flags of an engine permission rule. The adapter sets
+# each one explicitly; report, print, share, import, email and set_user_permissions are always 0.
+RULE_FLAGS = ("read", "write", "create", "delete", "submit", "cancel", "amend", "report", "export", "import", "share",
+              "print", "email", "set_user_permissions")
+
+
+def rule_flags(actions: Any, *, masked: bool, submittable: bool) -> dict[str, int]:
+    """Level-0 rule flags for one Blueprint grant; empty when the grant gives nothing (fail closed, never widened).
+
+    read needs to be granted, else nothing is. create and write are withheld when the grant masks fields (RM-018,
+    until the bench denied cases pass). The engine's own dependencies are honoured by dropping, never adding:
+    submit needs a submittable type and write, cancel needs submit, amend needs create and cancel."""
+    acts = {a for a in actions if isinstance(a, str)} if isinstance(actions, list) else set()
+    if "read" not in acts:
+        return {}
+    on = {"read"} | (acts & {"delete", "export"})
+    if not masked:
+        on |= acts & {"create"}
+        if "update" in acts:
+            on.add("write")
+    if submittable and "write" in on and "submit" in acts:
+        on.add("submit")
+        if "cancel" in acts:
+            on.add("cancel")
+            if "create" in on:
+                on.add("amend")
+    return {flag: int(flag in on) for flag in RULE_FLAGS}
 
 
 def entity_to_doctype(entity_id: str) -> str:
@@ -68,11 +125,69 @@ def entity_to_doctype(entity_id: str) -> str:
     return " ".join(part.capitalize() for part in str(entity_id).replace("-", "_").split("_") if part) or "Custom Entity"
 
 
+# The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
+# (`unsupported_value_type`) on `/entities/<id>` pointers, `entity.add` subject ids, `field.*` / `relation.*`
+# parent ids, `workflow.upsert` / `report.upsert` `definition.entity`, and `role.upsert` grant targets.
+ENTITY_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+
+
+def is_valid_entity_id(entity_id: Any) -> bool:
+    return isinstance(entity_id, str) and ENTITY_ID_RE.fullmatch(entity_id) is not None
+
+
+def _protected_key(name: Any) -> str:
+    """Comparison key: stripped, runs of whitespace and underscores collapsed to one `_`, case folded (defence in
+    depth; the engine folds case and pads trailing spaces in names, so `Gl Entry ` is `GL Entry`)."""
+    return re.sub(r"[\s_]+", "_", str(name).strip()).casefold()
+
+
 def is_protected_entity(entity_id: str) -> bool:
-    if entity_id in PROTECTED_ENTITY_IDS:
+    """Compared on a normalised key: `gl_entry`, `GL Entry` and `gl_entry ` are one protected entity."""
+    if _protected_key(entity_id) in {_protected_key(i) for i in PROTECTED_ENTITY_IDS}:
         return True
-    doctype = entity_to_doctype(entity_id)
-    return doctype in ZONE_2_LOCKED_DOCTYPES
+    return _protected_key(entity_to_doctype(entity_id)) in {_protected_key(d) for d in ZONE_2_LOCKED_DOCTYPES}
+
+
+# SEC-022 / ADR-0051 item 3: the document types a Blueprint role may get permission rules on are an allowlist:
+# the reviewed mapping above (minus protected entities), plus document types the adapter created itself for an
+# unmapped Blueprint entity (custom=1 in this module, see _ensure_doctype_exists). Everything else is refused.
+ADAPTER_DOCTYPE_MODULE = "Custom"
+
+
+def reviewed_grant_doctype(entity_id: Any) -> str | None:
+    """Engine document type of a reviewed, unprotected mapped entity; None for any other entity."""
+    if not isinstance(entity_id, str) or entity_id not in ENTITY_TO_DOCTYPE or is_protected_entity(entity_id):
+        return None
+    return ENTITY_TO_DOCTYPE[entity_id]
+
+
+def grant_plan_reason(
+    definition: Any,
+    blueprint_entities: set[str],
+    own_allowed: Callable[[str], bool] | None = None,
+) -> str | None:
+    """Plan-time allowlist check of a role.upsert definition's grant targets (ADR-0051 item 3).
+
+    An entity is allowed when it is in the reviewed mapping, or when it is an unmapped entity of this Blueprint
+    whose derived document type is adapter-created or not yet on the engine. The apply stage checks again on the
+    engine (FrappeRuntimeBackend)."""
+    perms = definition.get("permissions") if isinstance(definition, dict) else None
+    if perms is not None and not isinstance(perms, list):
+        return "unsupported_value_type"
+    for p in perms or []:
+        entity = p.get("entity") if isinstance(p, dict) else None
+        if not is_valid_entity_id(entity):
+            return "unsupported_value_type"
+        reviewed = reviewed_grant_doctype(entity) is not None
+        own = (
+            entity not in ENTITY_TO_DOCTYPE
+            and entity in blueprint_entities
+            and not is_protected_entity(entity)
+            and (own_allowed is None or own_allowed(entity))
+        )
+        if not (reviewed or own):
+            return "protected_subject"
+    return None
 
 
 def has_prohibited_expression(value: Any) -> bool:

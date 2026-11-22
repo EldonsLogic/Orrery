@@ -951,11 +951,17 @@ class ChangeEngineAdapter:
                     own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else False
             return own_cache[entity]
 
-        type_changed_pointers: set[str] = set()
+        recorded_type_changes = site.config.get("_typeChangedPointers")
+        type_changed_pointers: set[str] = (
+            {p for p in recorded_type_changes if isinstance(p, str)}
+            if isinstance(recorded_type_changes, list)
+            else set()
+        )
+        for s in artifact["steps"]:
+            if s["kind"] == "field.set_property" and (s.get("params") or {}).get("property") == "/type":
+                type_changed_pointers.add(s["pointer"])
         for step in artifact["steps"]:
             disp, reason, ddl = self._judge(site, step, blueprint_entities, own_allowed, type_changed_pointers)
-            if step["kind"] == "field.set_property" and (step.get("params") or {}).get("property") == "/type":
-                type_changed_pointers.add(step["pointer"])
             if ddl == "additive":
                 additive += 1
             elif ddl == "semantic":
@@ -1025,6 +1031,8 @@ class ChangeEngineAdapter:
             if any(is_protected_entity(i) for i in ids):
                 return "blocked", "protected_subject", ddl
             if len(ids) > 1 and ids[1] != ids[0]:
+                return "blocked", "definition_conflict", ddl
+            if kind.startswith(("field.", "relation.")) and (len(segs) < 3 or step["subject"].get("id") != segs[-1]):
                 return "blocked", "definition_conflict", ddl
         elif kind == "entity.add" or kind.startswith(("field.", "relation.")):
             return "blocked", "unsupported_value_type", ddl
@@ -1648,6 +1656,16 @@ class ChangeEngineAdapter:
                 "revision": copy.deepcopy(artifact["blueprint"]["target"]),
             }
             site.history.append(copy.deepcopy(site.applied))
+        type_ptrs = [
+            step["pointer"]
+            for step in artifact["steps"]
+            if step["kind"] == "field.set_property" and (step.get("params") or {}).get("property") == "/type"
+        ]
+        if type_ptrs:
+            changed = site.config.setdefault("_typeChangedPointers", [])
+            for ptr in type_ptrs:
+                if ptr not in changed:
+                    changed.append(ptr)
         site.applied_ids.add(artifact["artifactId"])
         stages.append({"stage": "finalize", "status": "done"})
         finish("applied", None, sha(self._export(site)))

@@ -128,12 +128,15 @@ def entity_to_doctype(entity_id: str) -> str:
 # The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
 # (`unsupported_value_type`, and `protected_subject` for protected entities) on `/entities/<id>` pointers,
 # `entity.add` subject ids and inline `definition.fields[]` / `definition.relations[]` targets,
-# `field.*` / `relation.*` parent ids (exactly one parent required), link `field.add` and `relation.*`
-# `definition.target`, `field.set_property` / `relation.set_property` `/target` (config-only; backend does
-# not map `/target`), `workflow.upsert` / `report.upsert` `definition.entity`, and `role.upsert` grant
-# targets. `/options` on `relation.set_property` and on `field.set_property` for link or non-proven-non-link
-# fields is refused at plan time (`protected_subject` when the offered value names a protected/locked target,
-# else `unsupported_value_type`); only fields proven non-link in site config may set `/options`.
+# `field.*` / `relation.*` parent ids (exactly one parent required; `subject.parents[0].id` must match the
+# entity segment and `subject.id` must match the last pointer segment at depth >= 3, else `definition_conflict`),
+# link `field.add` and `relation.*` `definition.target`, `field.set_property` / `relation.set_property` `/target`
+# (config-only; backend does not map `/target`), `workflow.upsert` / `report.upsert` `definition.entity`, and
+# `role.upsert` grant targets. `/options` on `relation.set_property` is always refused at plan time; `/options`
+# on `field.set_property` is refused unless the field exists in site config with a known non-link Blueprint type
+# and has no `/type` change recorded in the current artifact or any earlier applied artifact (`protected_subject`
+# when the offered value names a protected/locked target, else `unsupported_value_type`; because `frappe_backend`
+# ignores `/type`, any recorded `/type` change permanently disqualifies the field from the non-link proof).
 ENTITY_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 
 

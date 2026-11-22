@@ -73,6 +73,7 @@ LOCKED_VARIANTS = (
 CONTROL_CHAR_VARIANTS = (
     "GL Entry\x00",
     "\x01GL Entry",
+    "GL\x01 Entry",
     "GL\x07Entry",
     "User\x7f",
     "Account\x9f",
@@ -1267,6 +1268,7 @@ class TestSubjectIdMatchesPointer(_AdapterPlanBase):
             ("relation_set_property", _relation_step(1, "customer", "other_rel", kind="relation.set_property", pointer="/entities/customer/relations/rel_item")),
             ("relation_quarantine", _relation_step(1, "customer", "other_rel", kind="relation.quarantine", pointer="/entities/customer/relations/rel_item")),
             ("field_null_id", {**_field_step(1, "customer", "tier", kind="field.set_property"), "subject": {"kind": "field", "id": None, "parents": [{"kind": "entity", "id": "customer"}]}}),
+            ("field_short_pointer", _field_step(1, "customer", "customer", kind="field.set_property", pointer="/entities/customer")),
         )
         for label, step in steps:
             seen = {}
@@ -1540,6 +1542,53 @@ class TestTypeChangeHistoryRefusesOptions(_AdapterPlanBase):
                 self.assertTrue(pl2["ok"], pl2)
                 self.assertEqual(pl2["result"]["steps"][0]["disposition"], "ok", pl2)
                 self.assertEqual(pl2["result"]["verdict"], "auto_approved", pl2)
+
+    def test_field_without_type_in_config_refuses_options(self) -> None:
+        untyped_field = {
+            "id": "mystery",
+            "labels": {"en": "Mystery", "ar": "\u063a\u064a\u0631 \u0645\u062d\u062f\u062f"},
+        }
+        for label, after_val, expected_reason in (
+            ("user", "User", "protected_subject"),
+            ("customer", "Customer", "unsupported_value_type"),
+        ):
+            for name, adapter in self._adapters():
+                with self.subTest(case=label, adapter=name):
+                    prov = adapter.call("provision_site", _ctx(), {
+                        "idempotencyKey": f"idemp_r2_untyped_prov_{label}_{name}",
+                        "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+                        "blueprintId": "bp-f4",
+                        "siteClass": "sandbox",
+                        "countryPack": "sa",
+                    })
+                    self.assertTrue(prov["ok"], prov)
+                    rev1 = {"hash": "sha256:" + "5" * 64, "revision": 1}
+                    art1 = _artifact([_entity(1, "customer", fields=[untyped_field])], target=rev1)
+                    pl1 = adapter.call("plan", _ctx(), {"artifact": art1})
+                    self.assertTrue(pl1["ok"] and pl1["result"]["verdict"] == "auto_approved", pl1)
+                    ap1 = adapter.call("apply", _ctx(), {
+                        "idempotencyKey": f"idemp_r2_untyped_ap1_{label}_{name}",
+                        "planToken": pl1["result"]["planToken"],
+                        "artifact": art1,
+                        "approvals": {"changeApproved": "01J00000000000000000000036"},
+                    })
+                    self.assertTrue(ap1["ok"] and ap1["result"]["status"] == "applied", ap1)
+
+                    rev2 = {"hash": "sha256:" + "6" * 64, "revision": 2}
+                    opt_step = {
+                        **_field_step(1, "customer", "mystery", kind="field.set_property"),
+                        "params": {"property": "/options", "before": "", "after": after_val},
+                    }
+                    inv2 = _inverse_for(rev1, rev2, [_field_step(1, "customer", "mystery", kind="field.set_property")])
+                    art2 = _artifact([opt_step], base=rev1, target=rev2, inverse=inv2)
+                    pl2 = adapter.call("plan", _ctx(), {"artifact": art2})
+                    self.assertTrue(pl2["ok"], pl2)
+                    res = pl2["result"]
+                    self.assertEqual(
+                        (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"]),
+                        ("blocked", expected_reason, "rejected"),
+                        res,
+                    )
 
 
 if __name__ == "__main__":

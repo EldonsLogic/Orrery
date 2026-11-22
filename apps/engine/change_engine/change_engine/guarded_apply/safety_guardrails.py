@@ -75,6 +75,10 @@ def _strip_format_and_nfkc(name: str) -> str:
     return "".join(ch for ch in nfkc if unicodedata.category(ch) != "Cf")
 
 
+def _has_control_char(text: str) -> bool:
+    return any(unicodedata.category(ch) == "Cc" for ch in text)
+
+
 def _has_non_ascii_letter_or_mark(text: str) -> bool:
     return any(not ch.isascii() and unicodedata.category(ch)[:1] in ("L", "M") for ch in text)
 
@@ -87,15 +91,15 @@ def _matches_doctype_set(name: Any, doctypes: Iterable[str]) -> bool:
     if not isinstance(name, str):
         return True
     cleaned = _strip_format_and_nfkc(name)
-    if _has_non_ascii_letter_or_mark(cleaned):
+    if _has_control_char(cleaned) or _has_non_ascii_letter_or_mark(cleaned):
         return True
     key = re.sub(r"\s+", " ", cleaned.strip()).casefold()
     return any(key == _normalize_doctype_name(d) for d in doctypes)
 
 
 def is_locked_doctype(name: Any, extra_locked: Optional[Iterable[str]] = None) -> bool:
-    """Fail-closed Tier 0 locked-DocType check: NFKC, drop Cf, fail closed on non-ASCII letters/marks,
-    collapse whitespace and casefold both sides."""
+    """Fail-closed Tier 0 locked-DocType check: NFKC, drop Cf, fail closed on Cc control characters
+    and non-ASCII letters/marks, collapse whitespace and casefold both sides."""
     if _matches_doctype_set(name, ZONE_2_LOCKED_DOCTYPES):
         return True
     if extra_locked:
@@ -106,9 +110,10 @@ def is_locked_doctype(name: Any, extra_locked: Optional[Iterable[str]] = None) -
 def is_restricted_link_doctype(name: Any) -> bool:
     """Fail-closed direct-path restricted Link target check (ledger/audit tables only).
 
-    Uses the same NFKC, Cf-stripping, non-ASCII fail-closed and whitespace/casefold matching as
-    `is_locked_doctype`, scoped to `RESTRICTED_LINK_DOCTYPES` (widening to all locked DocTypes is
-    an open founder policy decision).
+    Uses the same NFKC, Cf-stripping, Cc control-character and non-ASCII fail-closed, and
+    whitespace/casefold matching as `is_locked_doctype`, scoped to `RESTRICTED_LINK_DOCTYPES`
+    (kept at the three ledger/audit DocTypes by founder decision on PR #262, 2026-11-22, so
+    ordinary links such as User keep working; the plan path stays stricter).
     """
     return _matches_doctype_set(name, RESTRICTED_LINK_DOCTYPES)
 

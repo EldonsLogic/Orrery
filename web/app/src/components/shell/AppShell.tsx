@@ -92,7 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div id="app-nav" className={styles.navWrap} data-open={drawer ? 'true' : 'false'}>
           <SideNav claims={claims} onNavigate={() => setDrawer(false)} />
         </div>
-        <main id="main" tabIndex={-1} className={styles.main}>
+        <main id="main" tabIndex={-1} className={styles.main} inert={drawer}>
           {switchFailed ? (
             <Alert tone="danger" title={t('workspace.failedTitle')}>
               <p>{t('workspace.failedBody')}</p>

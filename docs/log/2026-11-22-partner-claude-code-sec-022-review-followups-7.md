@@ -38,3 +38,8 @@ Tests first: 90 failing checks before the fix, none after. Four mutations of the
 - **Low 5** (ADR item 8 overstated): reworded to name exactly what it rests on.
 
 Tests first: 34 failing checks before the fix. The shape tests in follow-ups 5 and 7 that used the made-up property `/x` now use `/labels`, or expect a refusal. Four mutations of the allow list are all caught. `change_engine/tests`: 1393 passed, 87 skipped.
+
+## Cross-model review of 82769db and 079b1b3 (GPT-6.1 Sol): APPROVE, one Low fixed
+The Sol review approved. It confirmed that all 5 of Eldon's findings are addressed, that no current compiler output is newly refused, and that relation `/options` still reaches its target checks. Engine suite: 1393 passed. Its two mutations were both caught.
+
+Its Low: the relation tests built `parents: ["customer"]`, which is malformed, so they could pass on parent validation alone. Fixed: they now use `_relation_step` on the seeded relation `rel_item`, with a control showing that a valid relation step passes the rule. Switching off the relation exact-property guard now fails 6 checks; before, it failed none.

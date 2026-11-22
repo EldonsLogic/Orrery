@@ -22,7 +22,9 @@ from change_engine.tests.test_sec_022_review_followups_4 import (
     SITE,
     TENANT,
     _inverse_for,
+    TestPlanOptionsOnLinkAndRelation,
     TestTypeChangeHistoryRefusesOptions,
+    _relation_step,
 )
 
 _ENTITY_PHASE = {"entity.set_property": 6, "entity.quarantine": 16}
@@ -61,6 +63,8 @@ _SELECT_FIELD = {"id": "ref_link", "type": "select", "labels": {"en": "ref_link"
 class _Base(_AdapterPlanBase):
     # customer with link field `ref_link` (-> item) and select field `tier`, applied through the real plan and apply
     _seed_with_fields = TestTypeChangeHistoryRefusesOptions._seed_customer_with_fields
+    # the same customer plus relation `rel_item` (-> item), for relation.set_property steps
+    _seed_with_relation = TestPlanOptionsOnLinkAndRelation._seed_customer_with_fields
 
     def _snapshot(self, adapter) -> tuple:
         engine = adapter.frappe_backend._frappe_factory() if adapter.frappe_backend else None
@@ -300,6 +304,11 @@ class TestKindRootsFallback(_AdapterPlanBase):
                 self.assertEqual((got["disposition"], got.get("reasonCode")), ("blocked", "unsupported_value_type"), res)
 
 
+def _rel_step(prop: object) -> dict:
+    """`relation.set_property` on relation `rel_item` of `customer`, seeded by `_seed_with_relation`."""
+    return _relation_step(1, "customer", "rel_item", kind="relation.set_property", params_override=_set(prop))
+
+
 class TestPropertyMustBeAPointer(_Base):
     """Cross-model review of #280: `_segs` drops the text before the first `/`, so without schema validation
     `x/type` wrote `type` on the field with no gate and no history entry, and `x/options` / `x/target` skipped
@@ -320,10 +329,7 @@ class TestPropertyMustBeAPointer(_Base):
         cases = []
         for prop in bad:
             cases.append({**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(prop)})
-            rel = {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(prop)}
-            rel.update(kind="relation.set_property", pointer=CUSTOMER + "/relations/rel",
-                       subject={"kind": "relation", "id": "rel", "parents": ["customer"]})
-            cases.append(rel)
+            cases.append(_rel_step(prop))
             cases.append({**_entity_step("entity.set_property", CUSTOMER), "params": _set(prop)})
             sett = {**_entity_step("entity.set_property", CUSTOMER), "params": _set(prop)}
             sett.update(kind="settings.set", phase=1, pointer="/company", subject={"kind": "settings", "id": "company", "parents": []})
@@ -332,7 +338,7 @@ class TestPropertyMustBeAPointer(_Base):
             comp.update(kind="component.configure", phase=2, pointer="/components/c1", subject={"kind": "component", "id": "c1", "parents": []})
             cases.append(comp)
         for name, adapter in self._adapters():
-            self._seed_with_fields(adapter, f"idemp_f7_ptr_{name}")
+            self._seed_with_relation(adapter, f"idemp_f7_ptr_{name}")
             site = adapter._need_site(adapter.store.get_site(TENANT))
             for step in cases:
                 with self.subTest(adapter=name, kind=step["kind"], prop=step["params"]["property"]):
@@ -340,21 +346,13 @@ class TestPropertyMustBeAPointer(_Base):
 
     def test_nested_options_and_target_refused_on_relations(self) -> None:
         for name, adapter in self._adapters():
-            self._seed_with_fields(adapter, f"idemp_f7_reln_{name}")
+            self._seed_with_relation(adapter, f"idemp_f7_reln_{name}")
             site = adapter._need_site(adapter.store.get_site(TENANT))
+            # Control: a well-formed step on the seeded relation passes this rule, so the refusals below are this rule's.
+            self.assertNotEqual(adapter._judge(site, _rel_step("/labels/en"), {"customer"})[1], "unsupported_value_type")
             for prop in ("/options/0", "/options/x/y", "/target/x"):
-                step = {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(prop)}
-                step.update(kind="relation.set_property", pointer=CUSTOMER + "/relations/rel",
-                            subject={"kind": "relation", "id": "rel", "parents": ["customer"]})
                 with self.subTest(adapter=name, prop=prop):
-                    self.assertEqual(adapter._judge(site, step, {"customer"})[:2], ("blocked", "unsupported_value_type"))
-
-
-def _rel_step(prop: object) -> dict:
-    step = {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(prop)}
-    step.update(kind="relation.set_property", pointer=CUSTOMER + "/relations/rel",
-                subject={"kind": "relation", "id": "rel", "parents": ["customer"]})
-    return step
+                    self.assertEqual(adapter._judge(site, _rel_step(prop), {"customer"})[:2], ("blocked", "unsupported_value_type"))
 
 
 class TestSettablePropertiesAllowList(_Base):
@@ -377,8 +375,9 @@ class TestSettablePropertiesAllowList(_Base):
         steps = [{**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(p)} for p in field]
         steps += [_entity_step("entity.set_property", CUSTOMER, _set(p)) for p in entity]
         for name, adapter in self._adapters():
-            self._seed_with_fields(adapter, f"idemp_f7_allow_{name}")
+            self._seed_with_relation(adapter, f"idemp_f7_allow_{name}")
             site = adapter._need_site(adapter.store.get_site(TENANT))
+            self.assertNotEqual(adapter._judge(site, _rel_step("/labels/en"), {"customer"})[1], "unsupported_value_type")
             for step in steps + [_rel_step(p) for p in relation]:
                 with self.subTest(adapter=name, kind=step["kind"], prop=step["params"]["property"]):
                     self.assertEqual(adapter._judge(site, step, {"customer"})[:2], ("blocked", "unsupported_value_type"))

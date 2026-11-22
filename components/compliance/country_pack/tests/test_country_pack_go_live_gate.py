@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import components.compliance.country_pack as country_pack_pkg
 from components.compliance.country_pack import (
@@ -61,16 +62,150 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
         # Clearly synthetic approvals; never promote the repository's research-stage packs.
         self._save(version, "manifest.json", {
             "id": pack["componentId"], "version": version,
-            "certification": {"level": status, "reviewedBy": ["synthetic-reviewer"]},
+            "kind": "rigid", "name": {"ar": "اختبار", "en": "Synthetic pack"},
+            "description": "Synthetic certification fixture only.",
+            "provides": [{"capability": "country.sa.pack_metadata",
+                          "artifacts": [{"type": "function", "ref": "synthetic_loader"}]}],
+            "requires": [], "parameters": [],
+            "tests": [{"id": "synthetic_test", "kind": "unit", "path": "synthetic_test.py", "blocking": True}],
+            "certification": {"level": status, "reviewedBy": ["synthetic-reviewer"],
+                              "certifiedAt": "2026-01-01T00:00:00Z",
+                              "evidence": [{"kind": "review", "ref": "synthetic-review"}],
+                              "touchesLedgerOrTax": status != "draft"},
+            "engineCompatibility": {"adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0"},
+            "licence": {"spdx": "LicenseRef-Proprietary"}, "owner": {"github": "synthetic-owner"},
         })
         self._save(version, "evidence.json", {
             "packId": pack["packId"], "version": version,
+            "facts": [{"paths": ["tax", "eInvoicing", "payrollHooks"],
+                       "status": "SECONDARY" if evidence == "secondary" else "VERIFIED-OFFICIAL",
+                       "claim": "Synthetic evidence fixture only.",
+                       "sources": [{"url": "https://example.org/synthetic", "accessed": "2026-01-01"}]}],
             "certification": {
                 "accountant": {"name": "Synthetic Accountant", "market": "SA", "signOffRef": "synthetic-signoff"},
                 "founder": "partner",
             },
         })
         return version
+
+    def _record(self, version: str, filename: str) -> dict:
+        """Read the synthetic companion so each test mutates only its targeted field."""
+        return json.loads((self.packs_dir / "sa" / version / filename).read_text(encoding="utf-8"))
+
+    def test_production_validates_the_entire_manifest_contract(self) -> None:
+        for field in ("kind", "owner", "provides", "certifiedAt", "evidence"):
+            with self.subTest(missing=field):
+                v = self._write("certified", "verified_official")
+                manifest = self._record(v, "manifest.json")
+                target = manifest["certification"] if field in ("certifiedAt", "evidence") else manifest
+                target.pop(field)
+                self._save(v, "manifest.json", manifest)
+                self._assert_refused(v)
+        for timestamp in ("not-a-timestamp", "2026-01-01T00:00:00+00:60"):
+            with self.subTest(timestamp=timestamp):
+                v = self._write("certified", "verified_official")
+                manifest = self._record(v, "manifest.json")
+                manifest["certification"]["certifiedAt"] = timestamp
+                self._save(v, "manifest.json", manifest)
+                self._assert_refused(v)
+
+    def test_production_refuses_self_review_case_insensitively(self) -> None:
+        v = self._write("certified", "secondary")
+        manifest = self._record(v, "manifest.json")
+        manifest["certification"]["reviewedBy"].append("SYNTHETIC-OWNER")
+        self._save(v, "manifest.json", manifest)
+        self._assert_refused(v)
+
+    def test_production_fails_closed_without_manifest_validation(self) -> None:
+        v = self._write("certified", "verified_official")
+        import sys
+        with patch.dict(sys.modules, {"jsonschema": None}):
+            self._assert_refused(v)
+
+    def test_production_fails_closed_without_a_usable_manifest_contract(self) -> None:
+        contract = Path(self._tmp.name) / "component.manifest.schema.json"
+        v = self._write("certified", "verified_official")
+        # patch.object(create=True) also lets this regression run before the constant exists.
+        with patch("components.compliance.country_pack.certification.MANIFEST_SCHEMA", contract, create=True):
+            for content in (None, "{", '{"type": "unknown-type"}'):
+                with self.subTest(contract=content):
+                    if content is not None:
+                        contract.write_text(content, encoding="utf-8")
+                    self._assert_refused(v)
+
+    def test_production_refuses_unverified_facts_on_every_locked_path(self) -> None:
+        for evidence in ("verified_official", "secondary"):
+            for path in ("tax", "tax.filingPeriods", "eInvoicing.mode", "payrollHooks.wpsEnabled",
+                         "coaTemplate", "printFormats", "localeDefaults.holidays.calendarRef"):
+                with self.subTest(evidence=evidence, path=path):
+                    v = self._write("certified", evidence)
+                    record = self._record(v, "evidence.json")
+                    record["facts"].append({"paths": [path], "status": "UNVERIFIED"})
+                    self._save(v, "evidence.json", record)
+                    self._assert_refused(v)
+                    for environment in ("sandbox", "test"):
+                        self._assert_loads(v, environment=environment)
+
+    def test_unverified_unlocked_fact_does_not_block_signed_pack(self) -> None:
+        v = self._write("certified", "secondary")
+        record = self._record(v, "evidence.json")
+        record["facts"].append({"paths": ["localeDefaults.week.startDay"], "status": "UNVERIFIED"})
+        self._save(v, "evidence.json", record)
+        self._assert_loads(v)
+
+    def test_production_refuses_unusable_fact_records(self) -> None:
+        for facts in (None, [], {}, [None], [{"paths": "tax", "status": "UNVERIFIED"}],
+                      [{"paths": [], "status": "UNVERIFIED"}],
+                      [{"paths": ["tax"], "status": "unknown"}]):
+            with self.subTest(facts=facts):
+                v = self._write("certified", "secondary")
+                record = self._record(v, "evidence.json")
+                record["facts"] = facts
+                self._save(v, "evidence.json", record)
+                self._assert_refused(v)
+
+    def test_production_refuses_placeholder_accountants_references_and_reviewers(self) -> None:
+        for value in ("\u200b", "-", "\u200d--\ufeff", "\uff0d"):
+            for field in ("name", "signOffRef", "reviewedBy"):
+                with self.subTest(value=repr(value), field=field):
+                    v = self._write("certified", "secondary")
+                    filename = "manifest.json" if field == "reviewedBy" else "evidence.json"
+                    record = self._record(v, filename)
+                    target = record["certification"]
+                    if field != "reviewedBy":
+                        target = target["accountant"]
+                    target[field] = [value] if field == "reviewedBy" else value
+                    self._save(v, filename, record)
+                    self._assert_refused(v)
+
+    def test_production_refuses_unknown_certification_keys(self) -> None:
+        for nested in (False, True):
+            with self.subTest(accountant=nested):
+                v = self._write("certified", "secondary")
+                record = self._record(v, "evidence.json")
+                target = record["certification"]["accountant"] if nested else record["certification"]
+                target["revoked"] = True
+                self._save(v, "evidence.json", record)
+                self._assert_refused(v)
+
+    def test_secondary_signoff_reason_is_independent_of_other_diagnostics(self) -> None:
+        v = self._write("certified", "secondary")
+        record = self._record(v, "evidence.json")
+        record["certification"]["accountant"]["name"] = "-"
+        self._save(v, "evidence.json", record)
+        with self.assertRaises(PackValidationError) as ctx:
+            load_country_pack("SA", self.packs_dir, version=v)
+        self.assertTrue(any(reason.startswith("secondary evidence requires") for reason in ctx.exception.errors))
+
+        # The pack id can appear in unrelated identity diagnostics; it must not imply a bad sign-off.
+        pack = self._record(v, "pack.json")
+        pack["packId"] = "accountant"
+        from components.compliance.country_pack.certification import certification_refusals
+        record["certification"]["accountant"]["name"] = "Synthetic Accountant"
+        self._save(v, "evidence.json", record)
+        reasons = certification_refusals(pack, self.packs_dir / "sa" / v)
+        self.assertTrue(reasons)  # identity mismatch is still refused
+        self.assertFalse(any(reason.startswith("secondary evidence requires") for reason in reasons))
 
     def _save(self, version: str, filename: str, data: object) -> None:
         """Persist a mutated companion document for a loader-level regression test."""

@@ -35,3 +35,12 @@ Unknown.
 
 ## Next step
 Eldon's Tier 3 line-by-line and different-model security review of CMP-035 and Proposed ADR-0063 before merge. This implementation sub-agent is not authorized to merge. No phase or gate exit claimed.
+
+## Review fixes
+- Addressed PR #282 findings 1–6. Production validates the entire companion manifest contract, refuses owner self-review case-insensitively and fails closed when the contract or validation dependency is unavailable. Synthetic fixtures now satisfy the contract. Timestamp format validation uses a deterministic check because the pinned jsonschema install lacks its optional date-time format dependency.
+- Moved the minimal evidence labels, traversal and path-coverage helpers from test support into `evidence.py`; shared tests still pin the same `SOURCED_LABELS`. Production refuses unusable fact records and any UNVERIFIED fact overlapping a locked path, including tax, e-invoicing and payroll. No shipped fact label changed.
+- Accountant names, sign-off references and reviewer entries need a letter or digit after NFKC normalization and removing Cf characters. Evidence certification and nested accountant records have closed key sets. Secondary sign-off diagnostics use an explicit validity flag, independent of other message text.
+- Proposed ADR-0063 explicitly amends ADR-0059 Decision 2's official-only production requirement; ADR-0059 is untouched. Updated the framework with the manifest, locked-fact and closed-key rules. Sandbox/test companion-read behaviour is unchanged, including draft packs without manifests.
+- Tests first: the go-live module ran 28 methods with 44 failing subtests before implementation. After fixes, `python3 -m unittest discover -s components/compliance/country_pack/tests -t . -v` (the CI command) passed all 113 methods, no skips. Separately, `python3 -m unittest components.compliance.country_pack.tests.test_country_packs -v` passed all 27 methods.
+- `python3 scripts/check_docs.py`: 0 errors, 0 warnings; `check_repo_hygiene.py`: pass; `check_plan_independence.py`: pass; `scan_secrets.py`: 0 hits. `git diff --check` passed. Used the existing pinned dependencies in an external temporary environment.
+- Finding 7 remains out of scope: companion symlink handling is pre-existing behaviour and is unchanged. Residual: trusted bundle publication must account for those symlinks. No real accountant details, sign-offs or personal data were added. CMP-035 remains doing pending Tier 3 founder and cross-model re-review; no merge or phase exit claimed.

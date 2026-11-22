@@ -11,13 +11,19 @@ import json
 from pathlib import Path
 import re
 
+from components.compliance.country_pack.evidence import (
+    EVIDENCE_LABELS,
+    covered,
+    evidence_entries,
+    labelled,
+)
+
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 PACKS_DIR = PACKAGE_DIR / "packs"
 REPO_ROOT = PACKAGE_DIR.parents[2]
 MANIFEST_SCHEMA = REPO_ROOT / "contracts" / "component.manifest.schema.json"
 BLUEPRINT_SCHEMA = REPO_ROOT / "contracts" / "blueprint.schema.json"
 
-EVIDENCE_LABELS = {"VERIFIED-OFFICIAL", "SECONDARY", "UNVERIFIED", "PLATFORM-DEFAULT"}
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # A source that was not read in full (a snippet, a search excerpt, not fetched) carries `"read": false`
 # and no access date; every other source carries an access date. This note pattern is only a backstop
@@ -100,10 +106,6 @@ def keys(obj):
             yield from keys(item)
 
 
-def covered(leaf: str, paths: list[str]) -> bool:
-    return any(leaf == p or leaf.startswith(f"{p}.") for p in paths)
-
-
 def get(obj: dict, dotted: str):
     """Resolve a dotted path; `name[0]` indexes a list."""
     for part in dotted.split("."):
@@ -184,20 +186,6 @@ def source_violations(src: dict, today: str) -> list[str]:
     if UNREAD_NOTE.search(src.get("note", "")):
         bad.append(f"{src['url']}: note says unread but the source is not marked read: false")
     return bad
-
-
-def evidence_entries(evidence: dict):
-    """(stable id, entry) for every labelled entry: facts by their paths, blockers by id, outside facts by index."""
-    for fact in evidence["facts"]:
-        yield "|".join(fact["paths"]), fact
-    for blocker in evidence.get("goLiveBlockers", []):
-        yield f"blocker:{blocker['id']}", blocker
-    for idx, fact in enumerate(evidence.get("factsOutsideSchema", [])):
-        yield f"outside:{idx}", fact
-
-
-def labelled(evidence: dict, label: str) -> set[str]:
-    return {eid for eid, entry in evidence_entries(evidence) if entry["status"] == label}
 
 
 def recorded_status_violations(evidence: dict) -> list[str]:

@@ -1591,5 +1591,492 @@ class TestTypeChangeHistoryRefusesOptions(_AdapterPlanBase):
                     )
 
 
+def _bpdiff_field_reorder_step(
+    seq: int,
+    entity_id: str,
+    order: list[str],
+    previous_order: list[str],
+    *,
+    pointer: str | None = None,
+    subject: dict | None = None,
+) -> dict:
+    """Build a `field.reorder` step in the exact shape `bpdiff` emits for `/entities/<id>/fields`."""
+    ptr = f"/entities/{entity_id}/fields" if pointer is None else pointer
+    subj = {"kind": "entity", "id": entity_id, "parents": []} if subject is None else subject
+    return {
+        "seq": seq,
+        "phase": 6,
+        "kind": "field.reorder",
+        "subject": subj,
+        "pointer": ptr,
+        "impact": "config",
+        "ddlImpact": "none",
+        "reversible": True,
+        "params": {"order": list(order), "previousOrder": list(previous_order)},
+        "sourceOps": [ptr],
+    }
+
+
+class TestAddDefinitionIdMatchesPointer(_AdapterPlanBase):
+    """Fix round 3 item 1: `field.add` and `relation.add` require `definition.id == subject.id == pointer seg`."""
+
+    def _seed_customer_with_fields(self, adapter: ChangeEngineAdapter, key: str) -> dict:
+        rev1 = self._seed_customer(adapter, key)
+        rev2 = {"hash": "sha256:" + "a" * 64, "revision": 2}
+        select_step = _field_step(2, "customer", "tier", kind="field.add", field_type="select")
+        select_step["params"]["definition"]["options"] = [
+            {"value": "gold", "labels": {"en": "Gold", "ar": "\u0630\u0647\u0628\u064a"}},
+        ]
+        steps = [
+            _field_step(1, "customer", "ref_link", kind="field.add", field_type="link", target="item"),
+            select_step,
+            _relation_step(3, "customer", "rel_item", kind="relation.add", target="item"),
+        ]
+        inv = _inverse_for(
+            rev1,
+            rev2,
+            [
+                _field_step(1, "customer", "ref_link", kind="field.quarantine"),
+                _field_step(2, "customer", "tier", kind="field.quarantine"),
+                _relation_step(3, "customer", "rel_item", kind="relation.quarantine"),
+            ],
+        )
+        art2 = _artifact(steps, base=rev1, target=rev2, inverse=inv)
+        pl = adapter.call("plan", _ctx(), {"artifact": art2})
+        self.assertTrue(pl["ok"] and pl["result"]["verdict"] == "auto_approved", pl)
+        ap = adapter.call("apply", _ctx(), {
+            "idempotencyKey": key + "_apply_fields",
+            "planToken": pl["result"]["planToken"],
+            "artifact": art2,
+            "approvals": {"changeApproved": "01J00000000000000000000041"},
+        })
+        self.assertTrue(ap["ok"] and ap["result"]["status"] == "applied", ap)
+        return rev2
+
+    def test_repro_quarantine_link_then_field_add_mismatched_definition_id_refused_and_options_closed(self) -> None:
+        seen = {}
+        for name, adapter in self._adapters():
+            with self.subTest(adapter=name):
+                rev2 = self._seed_customer_with_fields(adapter, f"idemp_r3_repro_{name}")
+                # Step 1: quarantine existing link field `ref_link`.
+                rev3 = {"hash": "sha256:" + "b" * 64, "revision": 3}
+                quar_step = _field_step(1, "customer", "ref_link", kind="field.quarantine", field_type="link")
+                restore_step = _field_step(1, "customer", "ref_link", kind="field.add", field_type="link", target="item")
+                art3 = _artifact([quar_step], base=rev2, target=rev3, inverse=_inverse_for(rev2, rev3, [restore_step]))
+                pl3 = adapter.call("plan", _ctx(), {"artifact": art3})
+                self.assertTrue(pl3["ok"] and pl3["result"]["verdict"] == "auto_approved", pl3)
+                ap3 = adapter.call("apply", _ctx(), {
+                    "idempotencyKey": f"idemp_r3_repro_quar_{name}",
+                    "planToken": pl3["result"]["planToken"],
+                    "artifact": art3,
+                    "approvals": {"changeApproved": "01J00000000000000000000042"},
+                })
+                self.assertTrue(ap3["ok"] and ap3["result"]["status"] == "applied", ap3)
+
+                engine = adapter.frappe_backend._frappe_factory() if adapter.frappe_backend else None
+                before_rows = repr(engine.ensure_site(SITE).rows) if engine else None
+                if engine is not None:
+                    cf_rows = [r for r in engine.rows("Custom Field") if r.get("fieldname") == "custom_ref_link"]
+                    self.assertEqual(len(cf_rows), 1, cf_rows)
+                    self.assertEqual(cf_rows[0].get("fieldtype"), "Link", cf_rows)
+                    hidden_ps = [
+                        r for r in engine.rows("Property Setter")
+                        if r.get("field_name") == "custom_ref_link" and r.get("property") == "hidden"
+                    ]
+                    self.assertEqual(len(hidden_ps), 1, hidden_ps)
+                    self.assertEqual(str(hidden_ps[0].get("value")), "1", hidden_ps)
+
+                # Step 2: attempt field.add with pointer/subject `brand_new` but definition.id `ref_link` (type select).
+                rev4 = {"hash": "sha256:" + "c" * 64, "revision": 4}
+                bad_add = _field_step(1, "customer", "brand_new", kind="field.add", field_type="select")
+                bad_add["params"]["definition"] = {
+                    "id": "ref_link",
+                    "type": "select",
+                    "labels": {"en": "Brand New", "ar": "\u062c\u062f\u064a\u062f"},
+                }
+                art4 = _artifact(
+                    [bad_add],
+                    base=rev3,
+                    target=rev4,
+                    inverse=_inverse_for(rev3, rev4, [_field_step(1, "customer", "brand_new", kind="field.quarantine")]),
+                )
+                pl4 = adapter.call("plan", _ctx(), {"artifact": art4})
+                self.assertTrue(pl4["ok"], pl4)
+                res4 = pl4["result"]
+                got = (res4["steps"][0]["disposition"], res4["steps"][0].get("reasonCode"), res4["verdict"])
+                seen[name] = got
+                self.assertEqual(got, ("blocked", "definition_conflict", "rejected"), res4)
+
+                ap4 = adapter.call("apply", _ctx(), {
+                    "idempotencyKey": f"idemp_r3_repro_add_{name}",
+                    "planToken": res4["planToken"],
+                    "artifact": art4,
+                    "approvals": {
+                        "changeApproved": "01J00000000000000000000043",
+                        "gateApproved": "01J00000000000000000000044",
+                    },
+                })
+                self.assertTrue(ap4["ok"], ap4)
+                self.assertEqual(ap4["result"]["status"], "rejected", ap4)
+                self.assertEqual(ap4["result"]["site"]["state"], "ready", ap4)
+                if engine is not None:
+                    self.assertEqual(repr(engine.ensure_site(SITE).rows), before_rows)
+                    cf_rows = [r for r in engine.rows("Custom Field") if r.get("fieldname") == "custom_ref_link"]
+                    self.assertEqual(cf_rows[0].get("options"), "Item", cf_rows)
+                    hidden_ps = [
+                        r for r in engine.rows("Property Setter")
+                        if r.get("field_name") == "custom_ref_link" and r.get("property") == "hidden"
+                    ]
+                    self.assertEqual(str(hidden_ps[0].get("value")), "1", hidden_ps)
+
+                # Step 3: confirm later `/options="User"` path is closed on both `brand_new` and `ref_link`.
+                for target_fid in ("brand_new", "ref_link"):
+                    with self.subTest(later_options_on=target_fid):
+                        opt_step = {
+                            **_field_step(1, "customer", target_fid, kind="field.set_property"),
+                            "params": {"property": "/options", "before": "Item", "after": "User"},
+                        }
+                        art5 = _artifact(
+                            [opt_step],
+                            base=rev3,
+                            target=rev4,
+                            inverse=_inverse_for(rev3, rev4, [_field_step(1, "customer", target_fid, kind="field.set_property")]),
+                        )
+                        pl5 = adapter.call("plan", _ctx(), {"artifact": art5})
+                        self.assertTrue(pl5["ok"], pl5)
+                        res5 = pl5["result"]
+                        self.assertEqual(
+                            (res5["steps"][0]["disposition"], res5["steps"][0].get("reasonCode"), res5["verdict"]),
+                            ("blocked", "protected_subject", "rejected"),
+                            res5,
+                        )
+                        if engine is not None:
+                            self.assertEqual(repr(engine.ensure_site(SITE).rows), before_rows)
+        self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+    def test_field_add_and_relation_add_refuse_definition_id_mismatches_and_allow_matching(self) -> None:
+        bad_cases: list[tuple[str, dict]] = []
+        for label, bad_id in (
+            ("other_id", "ref_link"),
+            ("missing_id", _OMIT),
+            ("none_id", None),
+            ("trailing_space", "brand_new "),
+            ("wrong_case", "BRAND_NEW"),
+        ):
+            f_step = _field_step(1, "customer", "brand_new", kind="field.add", field_type="string")
+            if bad_id is _OMIT:
+                f_step["params"]["definition"].pop("id")
+            else:
+                f_step["params"]["definition"]["id"] = bad_id
+            bad_cases.append((f"field_add_{label}", f_step))
+
+            r_step = _relation_step(1, "customer", "brand_new", kind="relation.add", target="item")
+            if bad_id is _OMIT:
+                r_step["params"]["definition"].pop("id")
+            else:
+                r_step["params"]["definition"]["id"] = bad_id
+            bad_cases.append((f"relation_add_{label}", r_step))
+
+        # Wrong collection segment and collection-depth pointer on add steps.
+        bad_cases.extend([
+            (
+                "field_add_wrong_collection",
+                _field_step(1, "customer", "brand_new", kind="field.add", pointer="/entities/customer/relations/brand_new"),
+            ),
+            (
+                "relation_add_wrong_collection",
+                _relation_step(1, "customer", "brand_new", kind="relation.add", pointer="/entities/customer/fields/brand_new"),
+            ),
+            (
+                "field_add_collection_pointer",
+                _field_step(1, "customer", "fields", kind="field.add", pointer="/entities/customer/fields"),
+            ),
+        ])
+
+        for label, step in bad_cases:
+            seen = {}
+            for name, adapter in self._adapters():
+                with self.subTest(case=label, adapter=name):
+                    rev2 = self._seed_customer_with_fields(adapter, f"idemp_r3_defid_{label}_{name}")
+                    engine = adapter.frappe_backend._frappe_factory() if adapter.frappe_backend else None
+                    before_rows = repr(engine.ensure_site(SITE).rows) if engine else None
+                    rev3 = {"hash": "sha256:" + "d" * 64, "revision": 3}
+                    art3 = _artifact(
+                        [step],
+                        base=rev2,
+                        target=rev3,
+                        inverse=_inverse_for(rev2, rev3, [_field_step(1, "customer", "brand_new", kind="field.quarantine")]),
+                    )
+                    pl = adapter.call("plan", _ctx(), {"artifact": art3})
+                    self.assertTrue(pl["ok"], pl)
+                    res = pl["result"]
+                    got = (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"])
+                    seen[name] = got
+                    self.assertEqual(got, ("blocked", "definition_conflict", "rejected"), res)
+                    if engine is not None:
+                        self.assertEqual(repr(engine.ensure_site(SITE).rows), before_rows)
+            self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+        # Positive controls: matching field.add and relation.add still plan ok on both adapters.
+        for label, step in (
+            ("field_add_match", _field_step(1, "customer", "brand_new", kind="field.add", field_type="string")),
+            ("relation_add_match", _relation_step(1, "customer", "rel_new", kind="relation.add", target="item")),
+        ):
+            for name, adapter in self._adapters():
+                with self.subTest(control=label, adapter=name):
+                    rev2 = self._seed_customer_with_fields(adapter, f"idemp_r3_defok_{label}_{name}")
+                    rev3 = {"hash": "sha256:" + "e" * 64, "revision": 3}
+                    art3 = _artifact(
+                        [step],
+                        base=rev2,
+                        target=rev3,
+                        inverse=_inverse_for(rev2, rev3, [_field_step(1, "customer", "brand_new", kind="field.quarantine")]),
+                    )
+                    pl = adapter.call("plan", _ctx(), {"artifact": art3})
+                    self.assertTrue(pl["ok"], pl)
+                    self.assertEqual(pl["result"]["steps"][0]["disposition"], "ok", pl)
+                    self.assertEqual(pl["result"]["verdict"], "auto_approved", pl)
+
+
+class TestFieldReorderRules(_AdapterPlanBase):
+    """Fix round 3 item 2: `field.reorder` uses `/entities/<id>/fields` with bpdiff's entity subject."""
+
+    def _seed_customer_with_two_fields(self, adapter: ChangeEngineAdapter, key: str) -> dict:
+        rev1 = self._seed_customer(adapter, key)
+        rev2 = {"hash": "sha256:" + "a" * 64, "revision": 2}
+        steps = [
+            _field_step(1, "customer", "alpha_note", kind="field.add", field_type="string"),
+            _field_step(2, "customer", "beta_note", kind="field.add", field_type="string"),
+        ]
+        inv = _inverse_for(
+            rev1,
+            rev2,
+            [
+                _field_step(1, "customer", "alpha_note", kind="field.quarantine"),
+                _field_step(2, "customer", "beta_note", kind="field.quarantine"),
+            ],
+        )
+        art2 = _artifact(steps, base=rev1, target=rev2, inverse=inv)
+        pl = adapter.call("plan", _ctx(), {"artifact": art2})
+        self.assertTrue(pl["ok"] and pl["result"]["verdict"] == "auto_approved", pl)
+        ap = adapter.call("apply", _ctx(), {
+            "idempotencyKey": key + "_apply_two",
+            "planToken": pl["result"]["planToken"],
+            "artifact": art2,
+            "approvals": {"changeApproved": "01J00000000000000000000051"},
+        })
+        self.assertTrue(ap["ok"] and ap["result"]["status"] == "applied", ap)
+        return rev2
+
+    def test_bpdiff_field_reorder_passes_plan_and_apply_on_both_adapters(self) -> None:
+        # Cross-check against real bpdiff output so the subject/pointer shape cannot drift.
+        from services.blueprint.diff.bpdiff import diff as bp_diff
+
+        bp_a = {
+            "entities": [
+                {
+                    "id": "customer",
+                    "labels": {"en": "Customer", "ar": "\u0639\u0645\u064a\u0644"},
+                    "fields": [
+                        {"id": "alpha_note", "type": "string", "labels": {"en": "Alpha", "ar": "\u0623\u0644\u0641\u0627"}},
+                        {"id": "beta_note", "type": "string", "labels": {"en": "Beta", "ar": "\u0628\u064a\u062a\u0627"}},
+                    ],
+                }
+            ]
+        }
+        bp_b = {
+            "entities": [
+                {
+                    "id": "customer",
+                    "labels": {"en": "Customer", "ar": "\u0639\u0645\u064a\u0644"},
+                    "fields": list(reversed(bp_a["entities"][0]["fields"])),
+                }
+            ]
+        }
+        ops = bp_diff(bp_a, bp_b)["ops"]
+        self.assertEqual(len(ops), 1, ops)
+        op = ops[0]
+        self.assertEqual(op["op"], "reorder")
+        self.assertEqual(op["pointer"], "/entities/customer/fields")
+        self.assertEqual(op["subject"], {"kind": "entity", "id": "customer", "parents": []})
+
+        fwd_step = _bpdiff_field_reorder_step(
+            1,
+            "customer",
+            op["after"],
+            op["before"],
+            pointer=op["pointer"],
+            subject=op["subject"],
+        )
+        inv_step = _bpdiff_field_reorder_step(
+            1,
+            "customer",
+            op["before"],
+            op["after"],
+            pointer=op["pointer"],
+            subject=op["subject"],
+        )
+        for name, adapter in self._adapters():
+            with self.subTest(adapter=name):
+                rev2 = self._seed_customer_with_two_fields(adapter, f"idemp_r3_reord_ok_{name}")
+                rev3 = {"hash": "sha256:" + "b" * 64, "revision": 3}
+                art3 = _artifact([fwd_step], base=rev2, target=rev3, inverse=_inverse_for(rev2, rev3, [inv_step]))
+
+                pl = adapter.call("plan", _ctx(), {"artifact": art3})
+                self.assertTrue(pl["ok"], pl)
+                self.assertEqual(pl["result"]["steps"][0]["disposition"], "ok", pl)
+                self.assertEqual(pl["result"]["verdict"], "auto_approved", pl)
+
+                ap = adapter.call("apply", _ctx(), {
+                    "idempotencyKey": f"idemp_r3_reord_ap_{name}",
+                    "planToken": pl["result"]["planToken"],
+                    "artifact": art3,
+                    "approvals": {"changeApproved": "01J00000000000000000000052"},
+                })
+                self.assertTrue(ap["ok"] and ap["result"]["status"] == "applied", ap)
+
+                exp = adapter.call("export_config", _ctx(), {})
+                self.assertTrue(exp["ok"], exp)
+                cust = next(e for e in exp["result"]["export"]["sections"]["entities"] if e["id"] == "customer")
+                self.assertEqual([f["id"] for f in cust["fields"]], ["beta_note", "alpha_note"])
+
+    def test_field_reorder_refuses_protected_invalid_mismatched_and_bad_pointer(self) -> None:
+        cases = (
+            (
+                "protected_pointer_user",
+                _bpdiff_field_reorder_step(1, "user", ["a"], ["a"]),
+                "protected_subject",
+            ),
+            (
+                "protected_pointer_gl_entry",
+                _bpdiff_field_reorder_step(1, "gl_entry", ["a"], ["a"]),
+                "protected_subject",
+            ),
+            (
+                "protected_subject_id_user",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"],
+                    subject={"kind": "entity", "id": "user", "parents": []},
+                ),
+                "protected_subject",
+            ),
+            (
+                "protected_parent_user",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"],
+                    subject={"kind": "field", "id": "alpha_note", "parents": [{"kind": "entity", "id": "user"}]},
+                ),
+                "protected_subject",
+            ),
+            (
+                "invalid_pointer_gl_ws",
+                _bpdiff_field_reorder_step(1, "gl_entry ", ["a"], ["a"]),
+                "unsupported_value_type",
+            ),
+            (
+                "invalid_pointer_upper",
+                _bpdiff_field_reorder_step(1, "GL Entry", ["a"], ["a"]),
+                "unsupported_value_type",
+            ),
+            (
+                "invalid_subject_id_nl",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"],
+                    subject={"kind": "entity", "id": "widget\n", "parents": []},
+                ),
+                "unsupported_value_type",
+            ),
+            (
+                "invalid_subject_id_none",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"],
+                    subject={"kind": "entity", "id": None, "parents": []},
+                ),
+                "unsupported_value_type",
+            ),
+            (
+                "non_entity_pointer_roles",
+                _bpdiff_field_reorder_step(1, "customer", ["alpha_note"], ["alpha_note"], pointer="/roles/x"),
+                "unsupported_value_type",
+            ),
+            (
+                "mismatched_subject_entity",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"],
+                    subject={"kind": "entity", "id": "item", "parents": []},
+                ),
+                "definition_conflict",
+            ),
+            (
+                "wrong_pointer_short",
+                _bpdiff_field_reorder_step(1, "customer", ["alpha_note"], ["alpha_note"], pointer="/entities/customer"),
+                "definition_conflict",
+            ),
+            (
+                "wrong_pointer_element",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"], pointer="/entities/customer/fields/alpha_note"
+                ),
+                "definition_conflict",
+            ),
+            (
+                "wrong_pointer_relations",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"], pointer="/entities/customer/relations"
+                ),
+                "definition_conflict",
+            ),
+            (
+                "wrong_subject_kind_field_empty_parents",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"],
+                    subject={"kind": "field", "id": "customer", "parents": []},
+                ),
+                "definition_conflict",
+            ),
+            (
+                "unexpected_parent_on_entity_subject",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"],
+                    subject={"kind": "entity", "id": "customer", "parents": [{"kind": "entity", "id": "customer"}]},
+                ),
+                "definition_conflict",
+            ),
+            (
+                "field_subject_with_parent",
+                _bpdiff_field_reorder_step(
+                    1, "customer", ["alpha_note"], ["alpha_note"],
+                    subject={"kind": "field", "id": "alpha_note", "parents": [{"kind": "entity", "id": "customer"}]},
+                ),
+                "definition_conflict",
+            ),
+        )
+        for label, step, expected_reason in cases:
+            seen = {}
+            for name, adapter in self._adapters():
+                with self.subTest(case=label, adapter=name):
+                    rev2 = self._seed_customer_with_two_fields(adapter, f"idemp_r3_reord_bad_{label}_{name}")
+                    engine = adapter.frappe_backend._frappe_factory() if adapter.frappe_backend else None
+                    before_rows = repr(engine.ensure_site(SITE).rows) if engine else None
+                    rev3 = {"hash": "sha256:" + "c" * 64, "revision": 3}
+                    art3 = _artifact(
+                        [step],
+                        base=rev2,
+                        target=rev3,
+                        inverse=_inverse_for(
+                            rev2, rev3, [_bpdiff_field_reorder_step(1, "customer", ["alpha_note"], ["alpha_note"])]
+                        ),
+                    )
+                    pl = adapter.call("plan", _ctx(), {"artifact": art3})
+                    self.assertTrue(pl["ok"], pl)
+                    res = pl["result"]
+                    got = (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"])
+                    seen[name] = got
+                    self.assertEqual(got, ("blocked", expected_reason, "rejected"), res)
+                    if engine is not None:
+                        self.assertEqual(repr(engine.ensure_site(SITE).rows), before_rows)
+            self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+
 if __name__ == "__main__":
     unittest.main()

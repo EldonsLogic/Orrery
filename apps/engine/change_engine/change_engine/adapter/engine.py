@@ -1016,10 +1016,23 @@ class ChangeEngineAdapter:
         segs = _segs(pointer)
         if segs[:1] == ["entities"] and len(segs) > 1:
             ids: list[Any] = [segs[1]]
+            subject = step["subject"]
             if kind == "entity.add":
-                ids.append(step["subject"].get("id"))
+                ids.append(subject.get("id"))
+            elif kind == "field.reorder":
+                parents = subject.get("parents")
+                if not isinstance(parents, list) or len(parents) > 1:
+                    return "blocked", "unsupported_value_type", ddl
+                if len(parents) == 1:
+                    if not isinstance(parents[0], dict):
+                        return "blocked", "unsupported_value_type", ddl
+                    ids.append(parents[0].get("id"))
+                    if subject.get("kind") == "entity":
+                        ids.append(subject.get("id"))
+                else:
+                    ids.append(subject.get("id"))
             elif kind.startswith(("field.", "relation.")):
-                parents = step["subject"].get("parents")
+                parents = subject.get("parents")
                 parent_id = (
                     parents[0].get("id")
                     if isinstance(parents, list) and len(parents) == 1 and isinstance(parents[0], dict)
@@ -1030,10 +1043,25 @@ class ChangeEngineAdapter:
                 return "blocked", "unsupported_value_type", ddl
             if any(is_protected_entity(i) for i in ids):
                 return "blocked", "protected_subject", ddl
-            if len(ids) > 1 and ids[1] != ids[0]:
+            if len(ids) > 1 and any(i != ids[0] for i in ids[1:]):
                 return "blocked", "definition_conflict", ddl
-            if kind.startswith(("field.", "relation.")) and (len(segs) < 3 or step["subject"].get("id") != segs[-1]):
-                return "blocked", "definition_conflict", ddl
+            if kind == "field.reorder":
+                if (
+                    len(segs) != 3
+                    or segs[2] != "fields"
+                    or subject.get("kind") != "entity"
+                    or subject.get("parents") != []
+                    or subject.get("id") != segs[1]
+                ):
+                    return "blocked", "definition_conflict", ddl
+            elif kind.startswith(("field.", "relation.")):
+                expected_coll = "fields" if kind.startswith("field.") else "relations"
+                if len(segs) != 4 or segs[2] != expected_coll or subject.get("id") != segs[3]:
+                    return "blocked", "definition_conflict", ddl
+                if kind in ("field.add", "relation.add"):
+                    defn_add = params.get("definition")
+                    if not isinstance(defn_add, dict) or defn_add.get("id") != segs[3]:
+                        return "blocked", "definition_conflict", ddl
         elif kind == "entity.add" or kind.startswith(("field.", "relation.")):
             return "blocked", "unsupported_value_type", ddl
 

@@ -128,8 +128,11 @@ def entity_to_doctype(entity_id: str) -> str:
 # The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
 # (`unsupported_value_type`, and `protected_subject` for protected entities) on `/entities/<id>` pointers,
 # `entity.add` subject ids and inline `definition.fields[]` / `definition.relations[]` targets,
-# `field.*` / `relation.*` parent ids (exactly one parent required; `subject.parents[0].id` must match the
-# entity segment and `subject.id` must match the last pointer segment at depth >= 3, else `definition_conflict`),
+# `field.*` / `relation.*` element steps (exact `/entities/<id>/fields/<fid>` or `/entities/<id>/relations/<rid>`
+# pointer, single parent matching `<id>`, `subject.id` matching the last pointer segment, and on `field.add` /
+# `relation.add`, `definition.id` matching both, else `definition_conflict`), `field.reorder` (exact
+# `/entities/<id>/fields` pointer with `bpdiff`'s entity subject `kind="entity"`, `id=<id>`, `parents=[]`,
+# validating entity/parent grammar and protection first, else `definition_conflict`),
 # link `field.add` and `relation.*` `definition.target`, `field.set_property` / `relation.set_property` `/target`
 # (config-only; backend does not map `/target`), `workflow.upsert` / `report.upsert` `definition.entity`, and
 # `role.upsert` grant targets. `/options` on `relation.set_property` is always refused at plan time; `/options`

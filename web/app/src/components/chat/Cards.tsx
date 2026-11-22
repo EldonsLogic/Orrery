@@ -49,7 +49,7 @@ export function ClarifyPrompt({ clarifyKey }: { clarifyKey: string }) {
   const t = useTranslations('chat.clarify');
   const known = ['whichRecord', 'whichPeriod', 'whichAction', 'generic'];
   return (
-    <Alert tone="info" title={t('title')}>
+    <Alert tone="info" role="note" title={t('title')}>
       {t(known.includes(clarifyKey) ? clarifyKey : 'generic')}
     </Alert>
   );

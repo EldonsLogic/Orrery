@@ -37,7 +37,7 @@
 
 thead .cell {
   font-weight: var(--text-h3-weight);
-  border-block-end-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  border-block-end-color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
 .rowHeader {

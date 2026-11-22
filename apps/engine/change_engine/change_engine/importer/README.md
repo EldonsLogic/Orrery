@@ -65,8 +65,11 @@ entity, row or mapping field is accepted.
    prior-record updates** and record a sanitized failed attempt with the
    authenticated user ID. The offline failure log is append-only per tenant and
    has no retention cap. Older records without an actor keep a null user ID.
-   Rollback or failure-log errors require recovery (`IMP-RECOVERY`). Auth and
-   initial validation refusals do not write a failure record.
+   Rollback or failure-log errors require recovery (`IMP-RECOVERY`). Initial
+   entry auth and validation refusals do not write a failure record; `IMP-AUTH`
+   raised during `apply` or `confirm` after initial authorization is written to
+   the append-only failure log with the authenticated user ID (no secrets or
+   caller-supplied roles).
 
 ## Entities and invariants
 
@@ -132,17 +135,38 @@ offline budget must be reassessed before live bulk import. Text starting with `=
 NFKC detection-only normalization and leading Unicode whitespace/format/control
 removal. Embedded tabs, newlines and carriage returns fail with `IMP-SCHEMA`.
 Standard Arabic directional and joining marks (`\u200c`, `\u200d`, `\u200e`,
-`\u200f`, `\u061c`) are allowed only in name and free-text fields (and stripped
-when computing name-based master business keys). Codes, account numbers,
-`warehouse_name`, link fields (including `customer_group`, `territory`,
+`\u200f`, `\u061c`) are allowed only in name and free-text fields. Any other `Cf`
+or `Cc` character anywhere in text — including `Cf` default-ignorables such as
+`U+200B` (ZWSP), `U+00AD` (SHY), `U+2060` (WJ), `U+FEFF` (BOM), `U+180E` and
+Unicode tag characters — is rejected with `IMP-FORMULA`. Name fields also refuse
+leading or trailing whitespace, any non-ASCII whitespace (including `U+3000`),
+`U+2800` (Braille pattern blank), non-`Cf` Unicode default-ignorable code points
+(such as `U+034F`, `U+115F`, `U+1160`, `U+3164` and variation selectors), and
+runs of internal ASCII spaces (`IMP-SCHEMA`; refuse, never repair). Names are
+**never modified** and non-`NFC` input (such as vocalised Arabic typed with
+shadda before fatha, combining hamza/madda, or NFD accents) is accepted verbatim;
+name-based master business keys strip the five safe marks and apply Unicode
+`NFC` (never `NFKC`), so canonically equivalent twins are refused as
+`IMP-DUPLICATE` both within a batch and against stored masters while the stored
+value stays byte-identical to the input. Fullwidth forms, Arabic
+presentation-form twins, and blank-rendering symbols such as `U+1D159` remain
+recorded residuals in Q-556 (NFKC is not applied to names). Link fields keep
+the strict rule below, so a reference to a master whose name was typed in
+non-`NFC` form must be given in `NFC`; the as-typed spelling is refused with
+`IMP-SCHEMA` (fails closed). The importer accepts only exact built-in JSON
+types (`dict`, `list`, `str`, numbers, `None`); any subclass is refused with
+`IMP-SCHEMA` before it is copied, so a value cannot answer differently on a
+later read. Codes, account
+numbers, `warehouse_name`, link fields (including `customer_group`, `territory`,
 `supplier_group`, `item_group`, `stock_uom`, `parent_warehouse`,
 `parent_account` and opening detail links) and batch metadata (`tenant_id`,
-`company`, `batch_id`, `posting_date`, `currency`) refuse those marks as well
-as leading or trailing whitespace, any non-ASCII whitespace, any Unicode
-default-ignorable code point, and any value that changes under `NFKC`
+`company`, `batch_id`, `posting_date`, `currency`) refuse the five safe marks as
+well as leading or trailing whitespace, any non-ASCII whitespace, `U+2800`,
+non-`Cf` default-ignorable code points, and any value that changes under `NFKC`
 normalization (`IMP-SCHEMA`); it is UNVERIFIED whether the live engine strips
-whitespace on insert. Any other `Cf` or `Cc` character anywhere in text is
-rejected (`IMP-FORMULA`). Accepted source spelling is unchanged. Numeric fields
+whitespace on insert, and Q-556 tracks UNVERIFIED live engine collation behavior
+for visible code twins (`C1`/`c1`, `X Y`/`X  Y`, Arabic-Indic vs ASCII digits)
+and residual name twins. Accepted source spelling is unchanged. Numeric fields
 follow their stricter decimal grammar.
 
 ## DSC-011 and DSC-019 integration

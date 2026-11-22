@@ -265,6 +265,20 @@ def min_pointer_segments(kind: str) -> int:
     return 2
 
 
+# SEC-022 (ADR-0051 items 3 and 7): `entity.*` steps address the entity itself, `/entities/<id>`, exactly. Of an entity's
+# properties, `entity.set_property` may not name the identity or the two element lists: they hold the fields and relations
+# (a field's `type` among them), which only the `field.*` and `relation.*` kinds may change, each with its own checks.
+ENTITY_STRUCTURAL_PROPERTIES = frozenset({"id", "fields", "relations"})
+
+
+def _property_head(prop: Any) -> str | None:
+    """The first decoded segment of a step's `property` pointer, or None when it is not a well-formed pointer."""
+    if not isinstance(prop, str) or not prop.startswith("/"):
+        return None
+    parts = _segs(prop)
+    return parts[0] if parts and "" not in parts else None
+
+
 def _cfg_segs(pointer: str) -> list[str]:
     segs = _segs(pointer)
     return ["settings"] + segs if segs and segs[0] in SETTINGS else segs
@@ -1047,7 +1061,7 @@ class ChangeEngineAdapter:
             return "unsupported", "unsupported_step_kind", ddl
         if kind in ("field.add", "relation.add", "entity.add") and ddl == "none":
             ddl = "additive"
-        if kind.endswith("set_property") and params.get("property") in SEMANTIC_PROPS:
+        if kind.endswith("set_property") and isinstance(params.get("property"), str) and params["property"] in SEMANTIC_PROPS:
             ddl = "semantic"
         if has_prohibited_expression(params):
             return "blocked", "prohibited_expression", ddl
@@ -1061,8 +1075,20 @@ class ChangeEngineAdapter:
             or segs[0] not in KIND_ROOTS.get(kind, frozenset())
             # field.* and relation.* keep their exact-length check below (definition_conflict).
             or (len(segs) < min_pointer_segments(kind) and not kind.startswith(("field.", "relation.")))
+            # entity.* addresses exactly /entities/<id>: a deeper pointer reaches a field, relation or option.
+            or (kind.startswith("entity.") and len(segs) != 2)
         ):
             return "blocked", "unsupported_value_type", ddl
+        prop = params.get("property")
+        if kind == "entity.set_property":
+            head = _property_head(prop)
+            if head is None or head in ENTITY_STRUCTURAL_PROPERTIES:
+                return "blocked", "unsupported_value_type", ddl
+        elif kind == "field.set_property" and isinstance(prop, str) and prop != "/type":
+            # A field's type changes only as exactly `/type` (gated, and recorded in the `/type` history); `/type/x`
+            # and the like would reach it by another spelling.
+            if prop.startswith("/") and _segs(prop)[0] == "type":
+                return "blocked", "unsupported_value_type", ddl
         if segs[:1] == ["entities"] and len(segs) > 1:
             ids: list[Any] = [segs[1]]
             subject = step["subject"]

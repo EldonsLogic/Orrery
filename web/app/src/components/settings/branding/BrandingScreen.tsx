@@ -2,11 +2,12 @@
 
 import { useEffect, useId, useMemo, useState, type CSSProperties } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { Alert, Button, Card, Stack, TextField } from '../../../ui';
+import { Alert, Button, Card, Stack, TextField, VisuallyHidden } from '../../../ui';
 import { canEditBranding } from '../../../settings/branding/access';
 import { DEFAULT_PRIMARY, derive, normHex, rawPairs, type Pair, type Theme } from '../../../settings/branding/colour';
 import { checkLogo, createFakeBrandingPort, type BrandingPort, type BrandingSettings } from '../../../settings/branding/port';
 import { fixtureBlueprint } from '../../../blueprint/fixture';
+import { plainText } from '../../../factory/text';
 import { callerOf } from '../../../lib/session';
 import { useSession } from '../../shell/SessionProvider';
 import styles from './BrandingScreen.module.css';
@@ -42,17 +43,23 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
   const [logo, setLogo] = useState<BrandingSettings['logo']>(initial?.logo ?? null);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>('idle');
+  const [loaded, setLoaded] = useState<'loading' | 'ready' | 'failed'>(initial ? 'ready' : 'loading');
   const logoId = useId();
 
   useEffect(() => {
     if (initial) return;
     let live = true;
-    void port.load().then((s) => {
-      if (live) {
+    void port.load().then(
+      (s) => {
+        if (!live) return;
         setText(s.primary);
         setLogo(s.logo);
-      }
-    });
+        setLoaded('ready');
+      },
+      () => {
+        if (live) setLoaded('failed');
+      },
+    );
     return () => {
       live = false;
     };
@@ -64,7 +71,7 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
   const picked = normHex(text);
 
   const onSave = async () => {
-    if (!picked || !valid) return;
+    if (!picked || !valid || loaded !== 'ready') return;
     setStatus('saving');
     const r = await port.save({ primary: picked, logo });
     setStatus(r.ok ? 'saved' : r.code);
@@ -92,9 +99,7 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
         <strong>{t(`preview.${mode}`)}</strong>
         <div className={styles.panelCard}>
           <span>{t('preview.card')}</span>
-          <a className={styles.pLink} href="#branding-preview" onClick={(e) => e.preventDefault()}>
-            {t('preview.link')}
-          </a>
+          <span className={styles.pLink}>{t('preview.link')}</span>
           <span className={styles.pBtn}>{t('preview.button')}</span>
         </div>
         <span>
@@ -108,22 +113,22 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
     <table key={mode} className={styles.pairs}>
       <caption>
         {tr('result.summary', { pass: pairs.filter((p) => p.ok).length, total: pairs.length, theme: t(`themeName.${mode}`) })}
-        {rawPairsOfMode ? ` (${t('result.raw')}: ${rawPairsOfMode.filter((p) => p.ok).length}/${rawPairsOfMode.length})` : ''}
+        {rawPairsOfMode ? ' ' + tr('result.rawSummary', { pass: rawPairsOfMode.filter((p) => p.ok).length, total: rawPairsOfMode.length }) : ''}
       </caption>
       <thead>
         <tr>
           <th scope="col">{t('result.pair')}</th>
           <th scope="col">{t('result.ratio')}</th>
           <th scope="col">{t('result.min')}</th>
-          <th scope="col">{t('result.pass')}</th>
+          <th scope="col">{t('result.result')}</th>
         </tr>
       </thead>
       <tbody>
         {pairs.map((p) => (
           <tr key={p.id}>
             <th scope="row">{pairLabel(p.id)}</th>
-            <td className={styles.num}>{nf.format(p.ratio)}:1</td>
-            <td className={styles.num}>{nf.format(p.min)}:1</td>
+            <td className={styles.num}>{tr('result.ratioValue', { value: nf.format(p.ratio) })}</td>
+            <td className={styles.num}>{tr('result.ratioValue', { value: nf.format(p.min) })}</td>
             <td>{p.ok ? t('result.pass') : t('result.fail')}</td>
           </tr>
         ))}
@@ -138,7 +143,7 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
         <p>{t('intro')}</p>
       </header>
       <div className={styles.layout}>
-        <Card as="section" aria-label={t('colour.label')}>
+        <Card as="section" aria-label={t('settings')}>
           <Stack>
             <div className={styles.row}>
               <input
@@ -153,7 +158,8 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
                 hint={t('colour.hint')}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                numeric
+                dir="ltr"
+                pattern="#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})"
                 spellCheck={false}
                 autoComplete="off"
                 error={result.status === 'rejected' ? t(`reject.${result.code}`) : undefined}
@@ -168,10 +174,10 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
               error={logoError ? t(`logo.${logoError}`) : undefined}
               onChange={(e) => void onLogo(e.target.files?.[0])}
             />
-            {logo ? <Alert tone="info">{t('logo.pending', { name: logo.fileName })}</Alert> : null}
+            {logo ? <Alert tone="info">{t('logo.pending', { name: plainText(logo.fileName, 80) })}</Alert> : null}
           </Stack>
         </Card>
-        <div id="branding-preview" aria-live="polite">
+        <div id="branding-preview">
           {result.status === 'ok' ? (
             <Stack>
               <h2>{t('preview.title')}</h2>
@@ -179,7 +185,7 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
               {panel('dark', result.dark, result.adjusted.dark)}
             </Stack>
           ) : (
-            <Alert tone="warning" title={t('result.rejected')}>
+            <Alert tone="warning" role="presentation" title={t('result.rejected')}>
               {t(`reject.${result.code}`)}
             </Alert>
           )}
@@ -194,11 +200,16 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
           {table('dark', result.dark.pairs, raw?.dark)}
         </Card>
       ) : null}
+      <VisuallyHidden role="status">
+        {result.status === 'ok' ? t('result.statusOk') : t(`reject.${result.code}`)}
+      </VisuallyHidden>
+      {loaded === 'loading' ? <Alert tone="info">{t('loading')}</Alert> : null}
+      {loaded === 'failed' ? <Alert tone="danger">{t('loadFailed')}</Alert> : null}
       <div className={styles.actions}>
-        <Button onClick={() => void onSave()} loading={status === 'saving'} disabled={!valid}>
+        <Button onClick={() => void onSave()} loading={status === 'saving'} disabled={!valid || loaded !== 'ready'}>
           {status === 'saving' ? t('saving') : t('save')}
         </Button>
-        {!valid ? <span>{t('fixBeforeSave')}</span> : null}
+        {loaded === 'ready' && !valid ? <span>{t('fixBeforeSave')}</span> : null}
       </div>
       <div aria-live="polite">
         {status === 'saved' ? <Alert tone="success">{t('saved')}</Alert> : null}

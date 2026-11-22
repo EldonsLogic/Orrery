@@ -396,8 +396,7 @@
     "colour": {
       "label": "Primary colour",
       "hint": "Pick a colour or type a hex code with 3 or 6 digits.",
-      "picker": "Colour picker",
-      "hex": "Hex code"
+      "picker": "Colour picker"
     },
     "logo": {
       "label": "Logo",
@@ -419,8 +418,6 @@
     "result": {
       "title": "Contrast check",
       "ok": "Your colour passes in both themes{adjusted, select, yes { after adjustment} other {}}.",
-      "raw": "Your colour as picked",
-      "derived": "Colour used",
       "rejected": "This colour cannot be used.",
       "summary": "{pass} of {total} pairs pass in the {theme}",
       "pair": "Pair",
@@ -428,7 +425,11 @@
       "min": "Minimum",
       "pass": "Pass",
       "fail": "Fail",
-      "note": "AA minimums: 4.5 for text, 3 for focus rings. The same rules as the platform build."
+      "note": "AA minimums: 4.5 for text, 3 for focus rings. The same rules as the platform build.",
+      "result": "Result",
+      "ratioValue": "{value}:1",
+      "rawSummary": "(your colour as picked: {pass} of {total})",
+      "statusOk": "The colour passes in both themes."
     },
     "reject": {
       "invalid": "Enter a valid hex code with 3 or 6 digits.",
@@ -467,7 +468,10 @@
     "errForbidden": "You do not have permission to change branding.",
     "errInvalid": "This colour was refused. Pick another one.",
     "errFailed": "Saving failed. Try again.",
-    "fixBeforeSave": "Fix the colour before saving."
+    "fixBeforeSave": "Fix the colour before saving.",
+    "loading": "Loading your saved branding.",
+    "loadFailed": "Your saved branding could not be loaded, so saving is turned off to protect it. Reload the page to try again.",
+    "settings": "Colour and logo"
   },
   "blueprint": {
     "title": "Business blueprint",

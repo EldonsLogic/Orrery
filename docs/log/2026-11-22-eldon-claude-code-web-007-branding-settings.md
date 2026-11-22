@@ -23,3 +23,7 @@ Unknown.
 
 ## Next step
 Real gateway adapter for the port and SEC-006 logo pipeline (then show the logo); WEB-008 login branding can reuse `derive`; port accent support if the screen needs it.
+
+## Review follow-up (Fable, #278)
+- Fixed: hex field text keypad with pattern (M1); Save off until load succeeds, error and no overwrite on failure (M2); locale-aware ratios and caption in messages, dropped unused keys (L3); file name through `plainText` (L4); one status line instead of a live preview region (L5); preview link is a span (L6); own "Result" header and Card label (L7).
+- Open follow-ups: make the tokens-only gate scan `.json` with a named allowlist (L1, gate untouched here); a sample per reject code and compare reject reasons in the parity test, and check white and Carbon against tokens.json (L2); use a border token if one is added (L8).

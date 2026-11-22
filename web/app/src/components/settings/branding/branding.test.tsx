@@ -46,6 +46,29 @@ describe('branding screen', () => {
   });
 });
 
+describe('branding review fixes', () => {
+  it('hex field uses a text keypad (A-F reachable), ltr, with a pattern', () => {
+    const out = view('en', S.teal);
+    expect(out).not.toContain('inputMode="decimal"');
+    expect(out).toContain('pattern=');
+    expect(out).toMatch(/dir="ltr"/);
+  });
+  it('Save is disabled until stored branding has loaded', () => {
+    const out = renderToString(
+      <NextIntlClientProvider locale="en" messages={messages.en}>
+        <BrandingEditor port={createFakeBrandingPort()} initial={null} />
+      </NextIntlClientProvider>,
+    );
+    expect(out).toMatch(/<button[^>]*disabled/);
+    expect(out).toContain(messages.en.branding.loading);
+  });
+  it('the preview link is not a dead tab stop and the result column has its own header', () => {
+    const out = view('en', S.teal);
+    expect(out).not.toContain('<a ');
+    expect(out).toContain(messages.en.branding.result.result);
+  });
+});
+
 describe('branding access and port', () => {
   it('only owner and general manager may edit (deny by default)', () => {
     expect(canEditBranding(fixtureBlueprint, { roleIds: ['owner'] })).toBe(true);

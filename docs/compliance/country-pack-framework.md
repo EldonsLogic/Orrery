@@ -22,7 +22,7 @@ Packs live on disk under a configured packs root:
 
 `evidence.json` holds the sources for every fact in `pack.json`, because `pack.schema.json` has no per-fact evidence field and caps `notes` at 500 characters. It is the only place for a pack's sources: no `SOURCES.md` or README source table beside a pack. One format for every pack (the UAE and KSA packs set it):
 - `packId` and `version` equal the pack's; `purpose` says where the evidence comes from.
-- `facts[]`: `paths` (dotted paths into `pack.json`), `claim`, `status`, optional `ref` (a repo doc, ADR or contract) and optional `sources[]` (`url`, either `accessed` as YYYY-MM-DD or `"read": false`, optional `note` — required when `"read": false`). `status` is one of `VERIFIED-OFFICIAL`, `SECONDARY` (treated as UNVERIFIED), `UNVERIFIED` or `PLATFORM-DEFAULT` (a platform choice, not a statutory claim). A converted pack may add `recordedStatus` with the original status text verbatim.
+- `facts[]`: `paths` (dotted paths into `pack.json`), `claim`, `status`, optional `ref` (a repo doc, ADR or contract) and optional `sources[]` (`url`, either `accessed` as YYYY-MM-DD or `"read": false`, optional `note` — required when `"read": false`). `status` is one of `VERIFIED-OFFICIAL`, `SECONDARY` (needs accountant sign-off for production, Q-560), `UNVERIFIED` or `PLATFORM-DEFAULT` (a platform choice, not a statutory claim). A converted pack may add `recordedStatus` with the original status text verbatim.
 - Every source has either an `accessed` date or `"read": false`, never both. A source that was not fetched or read in full (search excerpt, snippet) carries `"read": false`, a `note` saying why, and no `accessed` date. `VERIFIED-OFFICIAL` and `SECONDARY` both need at least one read source (one with an access date); `PLATFORM-DEFAULT` needs a `ref`.
 - `pendingRefs[]` (`path`, `value`, `blockedBy`) lists every reference that does not resolve yet; `goLiveBlockers[]` lists blockers with the `requires` entry copied into the manifest; `factsOutsideSchema[]` keeps researched facts the schema has no field for; `arabicLabels[]` (`file`, `path`, `text`, `review`, `rule`) lists every Arabic string in the pack, manifest and strings file with its review state (ADR-0033).
 
@@ -71,12 +71,36 @@ Raised in [open-questions.md](../open-questions.md) (`Q-289`, owner `eldon`):
 - **Pinning & rollout:** Tenants pin an exact `version` in their compiled artifact. Upgrades validate stored `company_overrides` against the target pack's `overridesPolicy` (failing closed if a previously allowed field is now locked), run through canary tenants, and apply via the change-engine diff/preview/rollback path.
 - **Regulatory evidence:** Pack facts follow [country-matrix.md](country-matrix.md) (`VERIFIED-OFFICIAL`, `SECONDARY`, or `UNVERIFIED` per `evidenceStatus`; no unverified regulatory claim is treated as verified).
 
-## 6. Go-live gate (CMP-034)
+## 6. Go-live gate (CMP-034, CMP-035)
 `load_country_pack` and `resolve_country_pack` take a keyword `environment`: `"sandbox"`, `"test"` or `"production"`. The default is `"production"`, so a caller that forgets the argument gets the strict gate. Any other value, including a `str` subclass (the check is on the exact type), is refused with `CountryPackError`.
-- **Production** refuses a pack (`PackValidationError`, naming every reason) when `status` is below `certified` (`draft`, `tested`, `reviewed`), when `evidenceStatus` is anything but `verified_official`, or when the pack is marked `testOnly: true`. `certified` and `regulated` pass, the same production boundary ADR-0034 sets for components. Evidence is an allowlist: `secondary` is refused, because [country-matrix.md](country-matrix.md) treats SECONDARY as UNVERIFIED, until [Q-560](../open-questions.md) is answered.
-- **Sandbox and test** accept `draft`, `tested`, `secondary` and `unverified` packs, so research-stage packs stay loadable for tests and demos.
+- **Production** refuses a pack (`PackValidationError`, naming every reason) below `certified` (`draft`, `tested`, `reviewed`), with `unverified` evidence, or marked `testOnly: true`. Both `certified` and `regulated` require official or accountant-approved `secondary` evidence, the certification record below, and a matching companion manifest. This applies the founders' [Q-560](../open-questions.md) resolution and [ADR-0063](../decisions/ADR-0063-country-pack-certification-record.md) (Proposed implementation record).
+- **Sandbox and test** accept `draft`, `tested`, `secondary` and `unverified` packs without reading certification companions, so existing research-stage packs stay loadable. Synthetic data only: the caller guarantees this; a simulation using real customer figures must use production ([ADR-0059](../decisions/ADR-0059-draft-country-packs-in-sandbox.md)).
 - `allow_test_packs` opens `testOnly: true` packs in sandbox and test only. Without it a `testOnly` pack is refused in every environment; with it a `testOnly` pack is still refused in production, pinned or unpinned.
 - An unpinned production load picks the highest version (the highest non-test version unless `allow_test_packs` is set) and then applies the gate; it does not fall back to an older certified version past a newer draft or test pack.
 - `resolve_country_pack` is the only production entry. The override merger (`_apply_company_overrides`) is private, runs no go-live gate and takes a raw pack, so it is not exported from the package.
 
-The compiler's registry gate covers only `blueprint.components[]`, not `compliance.countryPack`, so any production consumer of a country pack must call the loader with `environment="production"` (the default). Who may certify a pack, and on what evidence, is open: [Q-560](../open-questions.md), linked to Q-202.
+The compiler's registry gate covers only `blueprint.components[]`, not `compliance.countryPack`, so any production consumer of a country pack must call the loader with `environment="production"` (the default). Certification follows the resolved [Q-560](../open-questions.md); Q-202 remains a separate regulatory evidence question.
+
+### Certification record (production only)
+`evidence.json` carries an optional `certification` object, required for production. Example with **synthetic placeholders only**, not an approval:
+
+```json
+{
+  "packId": "sa",
+  "version": "0.1.0",
+  "certification": {
+    "accountant": {
+      "name": "Synthetic Accountant",
+      "market": "SA",
+      "signOffRef": "synthetic-signoff"
+    },
+    "founder": "partner"
+  }
+}
+```
+
+- `accountant.name` and `accountant.signOffRef` must be non-blank strings; `accountant.market` must equal `pack.json.countryCode` exactly. `signOffRef` identifies the accountant's sign-off for this pack and version, kept in the approved evidence store. Verify the named accountant is qualified for that market and that the sign-off covers the sources and locked facts before publishing. Keep confidential sign-off material outside this public repo.
+- `founder` records the approving founder, exactly `eldon` or `partner`. The founder verifies the sign-off reference and trusted adviser sources; a nonempty record alone does not establish professional qualifications or authenticate approval.
+- `manifest.json.id` must equal `pack.json.componentId`, `manifest.json.version` must equal the pack's version, and `manifest.json.certification.level` must equal its `status`. The existing `certification.reviewedBy` array must contain at least one GitHub login; every entry follows the component contract grammar (`[A-Za-z0-9-]{1,39}`). This is the reviewer record; do not duplicate it in evidence.
+- `evidence.json.packId` and `version` must match the selected pack. Both companions must be readable JSON objects; missing, malformed, wrongly typed or mismatched records fail closed with the offending filename/field. Validation reads only the selected version's sibling files, never a caller-supplied approval.
+- This is record validation, not credential verification, signature verification or a substitute for the component publication gate. Only trusted, reviewed pack bundles may be deployed. Existing per-fact evidence labels, read-source rules and pinned `SOURCED_LABELS` stay in force; accountant sign-off never relabels an `UNVERIFIED` fact. No existing pack is promoted by CMP-035.

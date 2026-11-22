@@ -1,8 +1,8 @@
 """Go-live gate tests for the country pack loader (CMP-034, review of PR #255 item 1).
 
-Outside sandbox and test, a pack below `certified`, with any `evidenceStatus` other than `verified_official`,
-or marked `testOnly` is refused. `allow_test_packs` opens `testOnly` packs in sandbox and test only, never in
-production (review of PR #259).
+Production requires certified, signed-off packs with official or accountant-approved secondary evidence.
+CMP-035 checks the companion manifest and evidence records; sandbox and test keep their existing rules.
+`allow_test_packs` opens `testOnly` packs in sandbox and test only, never in production (review of PR #259).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from components.compliance.country_pack import (
 SAMPLE_PACKS_DIR = Path(__file__).resolve().parent / "sample_packs"
 BELOW_CERTIFIED = ("draft", "tested", "reviewed")
 GO_LIVE_STATUSES = ("certified", "regulated")
-NOT_PRODUCTION_EVIDENCE = ("unverified", "secondary")  # secondary counts as UNVERIFIED until Q-560 is answered
+NOT_PRODUCTION_EVIDENCE = ("unverified", "secondary")  # secondary without accountant sign-off is refused
 
 
 class _PermissiveStr(str):
@@ -58,7 +58,23 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
         pdir = self.packs_dir / "sa" / version
         pdir.mkdir(parents=True)
         (pdir / "pack.json").write_text(json.dumps(pack), encoding="utf-8")
+        # Clearly synthetic approvals; never promote the repository's research-stage packs.
+        self._save(version, "manifest.json", {
+            "id": pack["componentId"], "version": version,
+            "certification": {"level": status, "reviewedBy": ["synthetic-reviewer"]},
+        })
+        self._save(version, "evidence.json", {
+            "packId": pack["packId"], "version": version,
+            "certification": {
+                "accountant": {"name": "Synthetic Accountant", "market": "SA", "signOffRef": "synthetic-signoff"},
+                "founder": "partner",
+            },
+        })
         return version
+
+    def _save(self, version: str, filename: str, data: object) -> None:
+        """Persist a mutated companion document for a loader-level regression test."""
+        (self.packs_dir / "sa" / version / filename).write_text(json.dumps(data), encoding="utf-8")
 
     def _assert_refused(self, version: str, **kwargs) -> None:
         with self.assertRaises(PackValidationError):
@@ -77,16 +93,19 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
                 self._assert_refused(v, environment="production")
                 self._assert_refused(v)  # default environment is production
 
-    def test_production_refuses_non_official_evidence(self) -> None:
+    def test_production_refuses_unverified_or_unsigned_secondary_evidence(self) -> None:
         for status in GO_LIVE_STATUSES:
             for evidence in NOT_PRODUCTION_EVIDENCE:
                 with self.subTest(status=status, evidence=evidence):
                     v = self._write(status, evidence)
+                    if evidence == "secondary":
+                        self._save(v, "evidence.json", {"packId": "sa", "version": v})
                     self._assert_refused(v, environment="production")
                     self._assert_refused(v)
 
     def test_production_refusal_names_secondary_evidence(self) -> None:
         v = self._write("certified", "secondary")
+        self._save(v, "evidence.json", {"packId": "sa", "version": v})
         with self.assertRaises(PackValidationError) as ctx:
             load_country_pack("SA", self.packs_dir, version=v)
         self.assertIn("secondary", str(ctx.exception))
@@ -113,6 +132,90 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
                 for evidence in NOT_PRODUCTION_EVIDENCE:
                     with self.subTest(environment=env, status=status, evidence=evidence):
                         v = self._write(status, evidence)
+                        self._assert_loads(v, environment=env)
+
+    def test_signed_packs_load_for_both_levels_evidence_types_and_founders(self) -> None:
+        for status in GO_LIVE_STATUSES:
+            for evidence in ("verified_official", "secondary"):
+                for founder in ("eldon", "partner"):
+                    with self.subTest(status=status, evidence=evidence, founder=founder):
+                        v = self._write(status, evidence)
+                        path = self.packs_dir / "sa" / v / "evidence.json"
+                        record = json.loads(path.read_text())
+                        record["certification"]["founder"] = founder
+                        self._save(v, "evidence.json", record)
+                        self._assert_loads(v)  # both public entry points, production by default
+                        self._assert_loads(v, environment="production")
+
+    def test_production_rejects_incomplete_or_invalid_signoff(self) -> None:
+        mutations = [
+            ("certification", None), ("certification", []),
+            ("accountant", None), ("accountant", "Synthetic Accountant"),
+            ("name", None), ("name", " "), ("name", 7),
+            ("market", None), ("market", "AE"), ("market", ["SA"]),
+            ("signOffRef", None), ("signOffRef", " "), ("signOffRef", False),
+            ("founder", None), ("founder", "synthetic-reviewer"), ("founder", ["partner"]),
+        ]
+        for status in GO_LIVE_STATUSES:
+            for evidence in ("verified_official", "secondary"):
+                for field, value in mutations:
+                    with self.subTest(status=status, evidence=evidence, field=field, value=value):
+                        v = self._write(status, evidence)
+                        path = self.packs_dir / "sa" / v / "evidence.json"
+                        record = json.loads(path.read_text())
+                        target = record if field == "certification" else record["certification"]
+                        if field in ("name", "market", "signOffRef"):
+                            target = target["accountant"]
+                        if value is None:
+                            target.pop(field)
+                        else:
+                            target[field] = value
+                        self._save(v, "evidence.json", record)
+                        reason = "accountant" if field in ("name", "market", "signOffRef", "accountant") else field
+                        for load in (load_country_pack, resolve_country_pack):
+                            with self.assertRaisesRegex(PackValidationError, reason):
+                                load("SA", self.packs_dir, version=v)
+
+    def test_production_checks_manifest_level_and_named_reviewer(self) -> None:
+        for status in GO_LIVE_STATUSES:
+            for certification in (None, [], {}, {"level": "tested", "reviewedBy": ["synthetic-reviewer"]},
+                                  *({"level": status, "reviewedBy": r} for r in
+                                    (None, [], "synthetic-reviewer", [" "], [7], ["invalid_login"]))):
+                with self.subTest(status=status, certification=certification):
+                    v = self._write(status, "verified_official")
+                    self._save(v, "manifest.json", {"id": "country.sa", "version": v,
+                                                    "certification": certification})
+                    reason = "level" if isinstance(certification, dict) and certification.get("level") != status else "reviewedBy"
+                    if not isinstance(certification, dict):
+                        reason = "certification"
+                    with self.assertRaisesRegex(PackValidationError, reason):
+                        load_country_pack("SA", self.packs_dir, version=v)
+
+    def test_companions_fail_closed_and_remain_optional_outside_production(self) -> None:
+        for filename, fields in (("manifest.json", ("id", "version")), ("evidence.json", ("packId", "version"))):
+            for mutation in ("missing", "unreadable", "malformed", "non_object", "invalid_encoding", *fields):
+                with self.subTest(filename=filename, mutation=mutation):
+                    v = self._write("certified", "verified_official")
+                    path = self.packs_dir / "sa" / v / filename
+                    if mutation == "missing":
+                        path.unlink()
+                    elif mutation == "unreadable":
+                        path.unlink()
+                        path.mkdir()  # deterministic OSError even when tests run as root
+                    elif mutation == "malformed":
+                        path.write_text("{")
+                    elif mutation == "invalid_encoding":
+                        path.write_bytes(b"\xff")
+                    elif mutation == "non_object":
+                        path.write_text("[]")
+                    else:
+                        record = json.loads(path.read_text())
+                        record[mutation] = "wrong"
+                        self._save(v, filename, record)
+                    for load in (load_country_pack, resolve_country_pack):
+                        with self.assertRaisesRegex(PackValidationError, filename):
+                            load("SA", self.packs_dir, version=v)
+                    for env in ("sandbox", "test"):
                         self._assert_loads(v, environment=env)
 
     def test_unknown_environment_refused(self) -> None:

@@ -55,11 +55,14 @@ export function BrandedLogin({ port = fakeBrandingPort, tenantKey, initialBrandi
 
   useEffect(() => {
     const key = tenantKey ?? new URLSearchParams(window.location.search).get('tenant');
-    if (!isTenantKey(key)) return;
+    if (!isTenantKey(key)) {
+      setBranding(null);
+      return;
+    }
     let live = true;
     port
       .load(key)
-      .then((b) => live && setBranding(sanitiseBranding(b)))
+      .then((b) => live && setBranding(b && b.slug === key ? sanitiseBranding(b) : null))
       .catch(() => live && setBranding(null)); // any failure: platform look, never a broken page
     return () => {
       live = false;

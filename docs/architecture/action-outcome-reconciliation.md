@@ -32,7 +32,7 @@ The reconciler never calls a handler, never retries, and never releases a claim.
   - `pending`: anything else, including an effect that may still be in flight.
 - **Decision.** An exact `applied` gives `applied`. An exact `not_applied` gives `failed`, except:
   - when the outcome is missing or recorded `unknown` and the admission is younger than `handler_deadline` (`0 < handler_deadline < stuck_after`): then the outcome stays `unknown` with reason `handler_in_flight` so an in-flight handler or commit is never marked `failed` before it finishes;
-  - when any `outcome_conflict` is open for the tenant: then `not_applied` stays `unknown` with reason `conflict_hold`. A conflict is never closed in this module (section 4), so for that tenant this lasts until a conflict can be closed (Q-558 (d)).
+  - when any `outcome_conflict` is open for the tenant: then `not_applied` stays `unknown` with reason `conflict_hold`. A conflict is never closed in this module (section 4), so for that tenant this lasts until a conflict can be closed (Q-558 (d); Eldon's proposed answer, pending partner agreement: an authorised person closes it with an audited, tamper-evident entry, not built yet).
   Everything else stays `unknown` with a reason: `readback_pending`, `readback_mismatch` (wrong echo, other tenant, other request or hash, or effect fields on `not_applied`), `readback_invalid` (wrong type or state) or `reader_error` (any exception). A reader error never resolves anything.
 
 UNVERIFIED engine facts that a live reader must prove before use:
@@ -75,7 +75,7 @@ Why it is needed: ERP-023 stores the idempotency claim as `[submitter, key]` wit
 ## 7. Gate for OPR-004 and OPR-007 live handlers
 No live business-action handler is enabled for a tenant until all of these hold:
 1. A real `read_engine_state` exists for each enabled action. It is tested on the pinned bench (ERP-001, ERP-024) for exact lookup by `(tenant, submitter, key)`, for storing `request_id` and `payload_hash`, and for a fenced `not_applied`.
-2. The reconciler runs on a schedule shorter than `stuck_after`, for every tenant with admissions. Its refusals (`journal_tampered`, `clock_unavailable`) page the operator and block new admissions for that tenant. An `outcome_conflict` is not a run failure: it is a returned, journaled result (`unknown`, `stuck = 1`) that escalates through the journal like any stuck outcome (section 4), and it holds back new `failed` outcomes for the tenant (`conflict_hold`) until a conflict can be closed (Q-558 (d)).
+2. The reconciler runs on a schedule shorter than `stuck_after`, for every tenant with admissions. Its refusals (`journal_tampered`, `clock_unavailable`) page the operator and block new admissions for that tenant. An `outcome_conflict` is not a run failure: it is a returned, journaled result (`unknown`, `stuck = 1`) that escalates through the journal like any stuck outcome (section 4), and it holds back new `failed` outcomes for the tenant (`conflict_hold`) until a conflict can be closed (Q-558 (d): Eldon's proposed answer is an audited, tamper-evident closing entry by an authorised person, pending partner agreement and not built yet).
 3. Stuck outcomes arrive in the OPR-007 approval inbox for the floor role, and nothing auto-closes them.
 4. Q-558 is answered: the threshold, the escalation recipient, journal key custody, and attestation yes or no.
 5. Production storage follows ADR-0041: tenant database, not a shared SQLite file. The reconciliation journal moves with the ERP-023 journal (UNVERIFIED; it needs its own row).

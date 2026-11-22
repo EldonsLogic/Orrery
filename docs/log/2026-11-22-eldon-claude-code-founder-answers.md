@@ -9,12 +9,17 @@ Plan IDs: GOV-061, GOV-062, GOV-063
 Eldon answered founder questions one at a time in chat. The answers are written into `docs/open-questions.md`.
 
 ## Files touched
-- `docs/open-questions.md`:
-  - Q-560, Q-70, Q-23, Q-25, Q-29, Q-123, Q-43, Q-42, Q-41 and Q-312 are marked RESOLVED with Eldon's answer.
-  - Eldon said he answers for both founders. That is recorded on Q-42, Q-41 and Q-312.
+- `docs/open-questions.md`: 16 questions answered.
+  - Q-560, Q-70, Q-23, Q-25, Q-29, Q-123, Q-43, Q-42, Q-41, Q-312, Q-128, Q-294, Q-296 and Q-291 are marked RESOLVED with Eldon's answer.
+  - Q-292 and Q-293 are marked DECIDED, pending GOV-063.
+  - Eldon said he answers for both founders. That is recorded on Q-42, Q-41, Q-312, Q-560 and the second-round rows.
+- `docs/decisions/ADR-0027-human-floor-action-policy-and-agent-authority.md`: Status Accepted; Approved-by names this log; the three Q-294 checks are written into the Decision (it was Proposed, so its body could still change).
+- `docs/decisions/INDEX.md`: ADR-0027 shown Accepted.
 - `docs/PLAN.md`:
-  - GOV-061 added (doing).
+  - GOV-061 added and set done.
   - GOV-062 added (todo): supersede ADR-0034's sandbox rule.
+  - GOV-063 added (todo): apply Q-292 and Q-293.
+  - GOV-064 added (todo): apply Q-41, Q-42, Q-43 to the action-policy table, RULES 21 to 23 wording to ADR-0027, and Q-70 tokens.
 
 ## Decisions
 - **Country-pack evidence (Q-560):**
@@ -38,6 +43,11 @@ Eldon answered founder questions one at a time in chat. The answers are written 
 - **Q-296:** the mapping gets every strictness item.
 - **Q-291:** staging may use a dev-class host now.
 - **Q-292 and Q-293:** decided, pending GOV-063 (new todo row).
+
+## Notes for the partner (his lane, no rows added from Eldon's side)
+- Q-23: set `enable_immutable_ledger = 1` for every v1 tenant in provisioning.
+- Q-291: `infra/staging.md` still asks for an INF-001 provider ADR; confirm whether a dev-class staging host needs it.
+- Q-296: add every strictness item to the role-and-permission mapping (record scopes, deny unmapped fields, artifact hash, negative tests, the two `Percent` to `Float` fixes).
 
 ## Tokens or cost
 Unknown.

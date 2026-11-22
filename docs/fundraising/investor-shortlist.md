@@ -2,7 +2,7 @@
 
 Status: draft. Owner: eldon. Re-verification of [../research/05-investors.md](../research/05-investors.md). All sources accessed 2026-11-21.
 Method: web search plus one firm-page fetch (Raed). Most facts come from press and trackers (Wamda, Arab News, aggregators), not firm pages. "Cheque" values are mostly aggregator figures. Treat every cheque as UNVERIFIED until the firm confirms. Firm-level pages only; no personal contacts.
-Fit score is 0-10 for an AI-native ERP builder (B2B SaaS, owner-led SMEs, KSA first, then UAE, Egypt, Qatar) at pre-seed/seed. It is judgement, not a prediction. No gate has opened fundraising yet (see [README.md](README.md)); this list is for sequencing only.
+Fit score is 0-10 for an AI-native ERP builder (B2B SaaS, owner-led SMEs, four phase-1 markets in readiness order, no fixed launch order (ADR-0024, ADR-0026)) at pre-seed/seed. It is judgement, not a prediction. No gate has opened fundraising yet (see [README.md](README.md)); this list is for sequencing only.
 
 Headline: still no regional AI-native ERP comp found. No firm confirmed a published cheque on its own site; Raed's site states stage ("early stage companies in MENA") but no cheque.
 

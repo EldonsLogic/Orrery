@@ -1,10 +1,10 @@
 # Action-policy table
 
-Status: proposed
+Status: accepted for Q-41, Q-42 and Q-43 (Eldon, 2026-11-22); row class assignments in section 11 still for founder, accountant and compliance review
 Owner: eldon
 Approved by: pending (partner review with a different model; accountant and compliance review of the finance rows before Phase 2)
 
-Plan ID: SEC-019. Specifies the one authoritative action-policy table that [ADR-0027](../decisions/ADR-0027-human-floor-action-policy-and-agent-authority.md) calls for. ADR-0027 is still Proposed; this spec follows its wording and changes nothing in it. Enforcement is built in ERP-023 (engine side) and OPR-004, OPR-007 (Tool API and approval inbox); agent roles are specified in SEC-020; scoped-chat leak tests are QA-019. Threats addressed: T2, T13, T42, T43, T44, T47, T52, T55, T56 in [threat-model.md](threat-model.md).
+Plan ID: SEC-019. Specifies the one authoritative action-policy table that [ADR-0027](../decisions/ADR-0027-human-floor-action-policy-and-agent-authority.md) calls for. ADR-0027 is Accepted; this spec follows its wording and changes nothing in it. Enforcement is built in ERP-023 (engine side) and OPR-004, OPR-007 (Tool API and approval inbox); agent roles are specified in SEC-020; scoped-chat leak tests are QA-019. Threats addressed: T2, T13, T42, T43, T44, T47, T52, T55, T56 in [threat-model.md](threat-model.md).
 
 Nothing here is built. Every behaviour below is a design requirement, not a description of running code.
 
@@ -56,9 +56,9 @@ Each row of the table has these fields. Field names are illustrative; the contra
 | R1 | Record change with no ledger, stock, money or external effect | Initiator's own submission; logged |
 | R2 | Stock movement or ledger posting arising from an operational document | Human submits (floor); approval above a tenant limit |
 | R3 | Direct ledger posting, external send of a financial document, money movement | Human submits; second approver above a limit or by tenant setting; step-up |
-| R4 | Reversal of posted history, permission or role change, bank-detail change, agent limit or autonomy change, Blueprint publish | Always a second, different, eligible human approver (section 6); with none available the action is refused, never self-approved, until Q-41 is decided; step-up; short expiry; break-glass only through section 8 |
+| R4 | Reversal of posted history, permission or role change, bank-detail change, agent limit or autonomy change, Blueprint publish | Always a second, different, eligible human approver (section 6); with none available the action is refused, never self-approved (Q-41: R4 has no self-approval); step-up; short expiry; break-glass only through section 8 |
 
-The class sets the minimum. A row may be stricter, never looser. The class assignments in section 11 are proposals for founder review.
+The class sets the minimum. A row may be stricter, never looser. The class assignments in section 11 are still for founder, accountant and compliance review.
 
 ## 5. Approval binding
 An approval is valid only for the exact payload it was granted for. The evaluator computes a payload hash at request time, shows the approver a rendering produced from the same canonical payload, records the hash with the approval, and recomputes it at execution. Any mismatch voids the approval (T43).
@@ -89,9 +89,9 @@ Rules a row can name, evaluated by the policy code against session identities:
 | SOD-DIFF | Approver is a different human from the initiator |
 | SOD-DIFF-AUTHOR | Approver is different from the initiator and from every human who edited the payload since the draft was created |
 | SOD-NOT-SELF | The action may not target the actor themselves (no granting yourself a role, no approving a change to your own limits) |
-| SOD-NOT-AGENT-OWNER | When the draft came from an agent, the approver is not the human who owns or configured that agent (proposal; see open question Q-42) |
+| SOD-NOT-AGENT-OWNER | When the draft came from an agent, the approver is not the human who owns or configured that agent (accepted, Q-42: approving a draft from an agent you own or set up is not a second person) |
 
-**Small tenants. Interim rule (fail closed, until Q-41 is decided):** no row accepts a single-approver fallback. An eligible approver is a human who holds the row's approving role, is not the initiator, and is not an agent. If the tenant has several humans but none other than the initiator is eligible for this request (for example the other approver is away or lacks the role), the request waits for an eligible human or goes through section 8; it is never self-approved. The fallback described next is the proposal under Q-41 and is not active. An owner-led company of ten may have one person who can approve finance actions. Where a row requires SOD-DIFF and the tenant has only one eligible human, the proposed behaviour is: the single owner may self-approve only if the row allows the single-approver fallback, the approval is flagged "self-approved", step-up is required, and the event is listed in a periodic review report. Rows marked "no fallback" (permission changes, bank-detail changes, agent limits) stay blocked until a second eligible human exists, or go through section 8. This is open question Q-41.
+**Small tenants (Q-41, resolved 2026-11-22).** An eligible approver is a human who holds the row's approving role, is not the initiator, and is not an agent (and, for agent drafts, is not the agent's owner, SOD-NOT-AGENT-OWNER, Q-42). Where an R1 to R3 row requires SOD-DIFF and the tenant has only one eligible human, the sole owner may self-approve: the approval is flagged "self-approved", step-up is required, and the event is listed in a periodic review report. R4 rows (permission or role changes, bank-detail changes, agent limits or autonomy, reversals of posted history, Blueprint publish) never have this fallback: they wait for a second eligible human or, where allowed, go through section 8. Consequence for onboarding: a tenant needs a second eligible person to cancel posted invoices (AP-FIN-02) or change roles (AP-PERM-01). If a tenant has several humans but none other than the initiator is eligible for this request, the request waits or goes through section 8; it is never self-approved unless the single-owner rule above applies.
 
 **Platform staff.** Our own staff never approve a tenant's business action. Support access follows [access-policy.md](access-policy.md) and PLT-019 and is read-only by default. While only two founders exist, separation of duties for support grants is weak (T52); this table does not fix that.
 
@@ -122,13 +122,13 @@ States of one request: drafted, pending approval, approved, executing, executed,
 - **Outcome unknown:** never retried automatically with a new key. Deterministic reconciliation reads the engine by idempotency key and target revision and moves the request to executed or failed. Until then it is visible to the initiator and approver as "outcome unknown". Golden path section 7 case 2 is the test.
 - A partial effect is a defect, not a state: engine operations for one action must be atomic. If one is ever observed, it is an incident ([incident-response.md](incident-response.md)).
 
-**Timeout and expiry.** Proposed defaults, to be settled per row (open question Q-43): request expiry, R1 to R2 several days, R3 to R4 one working day; approval expiry, R2 to R3 a few hours, R4 one hour. Expiry is checked by the evaluator at execution from a trusted clock, never from the client. Expired items are not executed late.
+**Timeout and expiry.** Defaults accepted in Q-43: request expiry, R1 to R2 several days, R3 to R4 one working day; approval expiry, R2 to R3 a few hours, R4 one hour. Tenants may shorten these defaults, never lengthen them (Q-43). Expiry is checked by the evaluator at execution from a trusted clock, never from the client. Expired items are not executed late.
 
 ## 8. Emergency access (break-glass)
 Two different things share the name; neither lets an agent act.
 
 **Tenant break-glass** (the approver is unavailable and something must happen, for example a delivery is stuck behind an absent approver):
-- Only rows marked break-glass allowed. Proposed: never for permission changes, bank-detail changes, agent limits or Blueprint publish.
+- Only rows marked break-glass allowed. Never for permission changes, bank-detail changes, agent limits or Blueprint publish.
 - Only a tenant owner, with step-up, a typed reason and a time box.
 - Executes as the owner under a break-glass flag; the event says so.
 - Notifies every other approver for that row at once.
@@ -176,7 +176,7 @@ Roles from [../specs/golden-path-trading-sale.md](../specs/golden-path-trading-s
 | AP-SALES-01 | Create and submit a sales order | Record change | R1 | No | Sales, Owner | None | 0 | SOD-NONE | Draft only | Customer, lines (item, quantity, price, discount), total | Not applicable | Not needed |
 | AP-STOCK-01 | Create and submit a delivery against an order | Stock movement and its ledger posting (perpetual inventory) | R2 | Yes (human submits) | Warehouse, Owner | None up to tenant limit; Owner above it | 0, or 1 above limit | SOD-NONE; SOD-DIFF above limit | Draft only | Order id and revision, warehouse, lines (item, quantity) | Few hours | Allowed (tenant) |
 | AP-FIN-01 | Review and post a sales invoice to the ledger | Ledger posting | R3 | Yes | Finance | Finance poster by default; Owner above tenant limit | 0, or 1 above limit | SOD-DIFF-AUTHOR above limit; single-approver fallback allowed | Draft only | Source delivery ids and revisions, customer, lines, discount, total, currency | Few hours | Allowed (tenant) |
-| AP-FIN-02 | Cancel a posted invoice (correcting entries, never edited history) | Reversal of posted history | R4 | Yes | Finance | Owner | 1 | SOD-DIFF; no fallback until Q-41 is decided (proposal: single-approver fallback with flag) | Draft only | Invoice id and revision, reason, the correcting entries preview total | One hour | Not allowed |
+| AP-FIN-02 | Cancel a posted invoice (correcting entries, never edited history) | Reversal of posted history | R4 | Yes | Finance | Owner | 1 | SOD-DIFF; no self-approval fallback (R4, Q-41) | Draft only | Invoice id and revision, reason, the correcting entries preview total | One hour | Not allowed |
 | AP-PERM-01 | Change a user's roles or permissions, or a tenant limit | Permission change | R4 | Yes | Owner | A second Owner or admin | 1 | SOD-DIFF, SOD-NOT-SELF; no fallback | Draft only (never even for its own role) | Target user, roles before and after, scopes, limits before and after | One hour | Not allowed |
 | AP-BPL-01 | Publish a Blueprint change to the live tenant | Configuration change | R4 | Yes | Owner | Owner (confirming the deterministic diff) and our review gate for first clients | 1 owner, plus platform review | SOD-NOT-AGENT-OWNER when agent-drafted; reviewer is not the author | Draft only | Blueprint id, from and to revision, diff hash | One hour | Not allowed |
 
@@ -191,9 +191,9 @@ Notes on the rows:
 
 ## 13. Open questions for the founders
 Added to [../open-questions.md](../open-questions.md) as Q-41 to Q-44 (numbers chosen after the highest number used on any open branch).
-1. **Q-41** Single-approver fallback for small tenants: may a sole owner self-approve SOD-DIFF rows with a flag and step-up, and which rows have no fallback?
-2. **Q-42** When a human approves a draft made by their own agent, does that count as separation of duties (SOD-NOT-AGENT-OWNER)?
-3. **Q-43** Default request and approval expiry per risk class, and whether tenants may lengthen them up to a platform cap.
+1. **Q-41** (resolved 2026-11-22) Single-approver fallback for small tenants: may a sole owner self-approve SOD-DIFF rows with a flag and step-up, and which rows have no fallback?
+2. **Q-42** (resolved 2026-11-22) When a human approves a draft made by their own agent, does that count as separation of duties (SOD-NOT-AGENT-OWNER)?
+3. **Q-43** (resolved 2026-11-22) Default request and approval expiry per risk class, and whether tenants may lengthen them up to a platform cap.
 4. **Q-44** Does an operational posting (delivery posting cost of goods sold under perpetual inventory) count as "posting to the ledger" under ADR-0027, and therefore need floor treatment? Accountant input needed.
 
 Also for review, not separate questions: the risk class of each starter row; the canonical-form and hash proposal (UNVERIFIED); whether break-glass for AP-STOCK-01 and AP-FIN-01 is acceptable.

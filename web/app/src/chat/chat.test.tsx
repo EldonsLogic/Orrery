@@ -168,6 +168,8 @@ describe('flows with the fake port', () => {
   it('abstain shows a clarify prompt and errors map to domain messages', () => {
     const s = fold([{ type: 'abstain', clarifyKey: 'whichPeriod' }]);
     expect(render('en', <ClarifyPrompt clarifyKey={s.clarifyKey!} />)).toContain(messages.en.chat.clarify.whichPeriod);
+    // QA-014 review: it sits inside the persistent live region, so it must not be a second live region.
+    expect(render('en', <ClarifyPrompt clarifyKey="generic" />)).not.toContain('role="status"');
     expect(render('ar', <ClarifyPrompt clarifyKey="made-up" />)).toContain(messages.ar.chat.clarify.generic);
     const e = fold([{ type: 'run_error', code: 'forbidden' }]);
     expect(e.run).toBe('idle');

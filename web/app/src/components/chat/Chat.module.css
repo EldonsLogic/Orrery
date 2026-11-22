@@ -17,6 +17,7 @@
 .system { background: color-mix(in srgb, var(--color-text) 8%, var(--color-surface)); color: color-mix(in srgb, var(--color-text) 70%, transparent); font-size: var(--text-small-size); }
 .cursor { color: color-mix(in srgb, var(--color-text) 70%, transparent); }
 .meta { display: block; font-size: var(--text-caption-size); color: color-mix(in srgb, var(--color-text) 70%, transparent); margin-block-end: calc(var(--space-unit) / 2); }
+.user .meta { color: var(--color-background); }
 .empty { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 1.5); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-unit); list-style: none; margin: 0; padding: 0; }
 .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(var(--space-unit) / 2); font-size: var(--text-small-size); }

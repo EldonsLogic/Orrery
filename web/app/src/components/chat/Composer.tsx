@@ -57,6 +57,8 @@ export function Composer({ mode, running, onMode, onSend, onCancel }: ComposerPr
           hint={tm('hint')}
           value={mode}
           aria-disabled={running || undefined}
+          onMouseDown={(e) => { if (running) e.preventDefault(); }}
+          onKeyDown={(e) => { if (running && e.key !== 'Tab') e.preventDefault(); }}
           onChange={(e) => {
             if (!running) onMode(e.target.value as ChatMode);
           }}

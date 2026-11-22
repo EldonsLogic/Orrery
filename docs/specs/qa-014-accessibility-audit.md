@@ -3,7 +3,7 @@
 Status: draft
 Owner: eldon
 Method: static review of `web/app/src` (ui library, shell, auth, chat, records, blueprint, factory, console). Base token contrast computed by hand (light: text on background 16.6, primary on surface 7.5, danger 5.9, warning 5.6, success 5.4; secondary text now 70% mix). No screen reader, no browser, no axe run: no a11y test dependency is installed (only vitest), and none was added.
-Result: 12 findings (0 critical, 3 high, 5 medium, 4 low). 12 fixed in this change, A-10 left (label text needs a copy decision); A-09 drawer partly open.
+Result: 12 findings (0 critical, 3 high, 5 medium, 4 low). 9 fixed, 2 fixed in part (A-09 drawer, A-11), 1 open (A-10: label text needs a copy decision).
 
 | ID | WCAG | Where | Severity | Finding | Status / fix |
 |---|---|---|---|---|---|

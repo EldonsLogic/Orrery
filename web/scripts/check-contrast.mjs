@@ -1,18 +1,19 @@
 // QA-014 A-12: WCAG 2.x contrast of the colour pairs used in web/app CSS modules, in light and dark.
-// Reads the web token copy (read only). Colours are resolved with sRGB alpha blending, matching color-mix(in srgb, ...).
+// Reads docs/brand/tokens/tokens.css directly (read only; the web copy is gitignored and absent on a clean checkout). Colours are resolved with sRGB alpha blending, matching color-mix(in srgb, ...).
 // WCAG 2.2 SC 1.4.3 (4.5:1 text, 3:1 large text) and SC 1.4.11 (3:1 UI borders, focus rings, graphics). Accessed 2026-11-21.
 // https://www.w3.org/TR/WCAG22/#contrast-minimum  https://www.w3.org/TR/WCAG22/#non-text-contrast
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const tokensFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'brand', 'tokens', 'tokens.css');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'app', 'src');
 
 export function readThemes(css) {
   const grab = (re) => {
     const m = css.match(re);
     if (!m) throw new Error(`token block not found: ${re}`);
-    return Object.fromEntries([...m[1].matchAll(/--(color-[a-z]+):\s*(#[0-9a-fA-F]{6})/g)].map((x) => [x[1], x[2]]));
+    return Object.fromEntries([...m[1].matchAll(/--(color-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g)].map((x) => [x[1], x[2]]));
   };
   return {
     light: grab(/:root\s*\{([^}]*)\}/),
@@ -62,7 +63,8 @@ add('on-danger-active', 'background on danger active', 'ui/Button.module.css', '
 add('ghost-hover', 'primary ghost text on 20% primary tint (active) over background', 'ui/Button.module.css', 'var(--color-primary) 20%', (c) => c.primary, (c) => mix(c.primary, 0.2, c.background), N);
 add('ghost-hover-surface', 'primary ghost text on 20% primary tint over surface', 'ui/Button.module.css', 'var(--color-primary) 20%', (c) => c.primary, (c) => mix(c.primary, 0.2, c.surface), N);
 add('secondary-hover', 'text on secondary button active (84% surface, 16% text)', 'ui/Button.module.css', 'var(--color-surface) 84%', (c) => c.text, (c) => mix(c.surface, 0.84, c.text), N);
-add('nav-active', 'primary on nav link tint (14% primary) over surface', 'components/shell/Shell.module.css', 'var(--color-primary) 14%', (c) => c.primary, (c) => mix(c.primary, 0.14, c.surface), N);
+add('nav-active', 'text on nav link tint (14% primary) over surface', 'components/shell/Shell.module.css', 'var(--color-primary) 14%', (c) => c.text, (c) => mix(c.primary, 0.14, c.surface), N);
+add('user-bubble-meta', 'user bubble role label: background on primary', 'components/chat/Chat.module.css', '.user .meta', (c) => c.background, (c) => c.primary, N);
 add('system-bubble', 'system bubble: text 70% on text 8% over surface', 'components/chat/Chat.module.css', 'var(--color-text) 8%', (c) => mix(c.text, 0.7, mix(c.text, 0.08, c.surface)), (c) => mix(c.text, 0.08, c.surface), N);
 for (const tone of ['primary', 'success', 'warning', 'danger']) {
   add(`alert-text/${tone}`, `alert text on ${tone} tint over surface`, 'ui/Alert.module.css', 'color: var(--color-text)', (c) => c.text, (c) => mix(c[tone], 0.14, c.surface), N);
@@ -86,9 +88,12 @@ export function evaluate(themes) {
   return out;
 }
 
-export const tokenCss = () => fs.readFileSync(path.join(root, 'styles', 'tokens.generated.css'), 'utf8');
+export const tokenCss = () => fs.readFileSync(tokensFile, 'utf8');
 export const readSource = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  for (const r of evaluate(readThemes(tokenCss()))) if (r.ratio < r.min) console.log(`${r.mode} ${r.id} ${r.ratio.toFixed(2)} < ${r.min}`);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const failed = evaluate(readThemes(tokenCss())).filter((r) => r.ratio < r.min);
+  for (const r of failed) console.error(`${r.mode} ${r.id} ${r.ratio.toFixed(2)} < ${r.min}`);
+  if (failed.length) process.exit(1);
+  console.log('check-contrast: ok');
 }

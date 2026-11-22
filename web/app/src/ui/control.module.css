@@ -32,7 +32,8 @@
   border-width: 2px;
 }
 
-.control:disabled {
+.control:disabled,
+.control[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
 }

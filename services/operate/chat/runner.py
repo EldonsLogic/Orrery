@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from runtime import Limits
+from runtime import Limits, RateLimitedTools
 from runtime.agui_adapter import AguiRuntimeAdapter
 
 
@@ -22,8 +22,11 @@ class HistoryModel:
 
 
 def loop_runtime_factory(*, model, tools, tool_defs, clock, ids, traces, events=None, limits: Limits = Limits(),
-                         assistant_for=None):
-    """Return `factory(setup) -> AgentRuntime` for `ChatService`."""
+                         assistant_for=None, limiter=None):
+    """Return `factory(setup) -> AgentRuntime` for `ChatService`. With `limiter` (SEC-009, the same one the chat
+    service uses) every dispatched tool call counts against the caller's tenant and user `tool` rules."""
+    if limiter is not None:
+        tools = RateLimitedTools(tools, limiter)
 
     def factory(setup):
         return AguiRuntimeAdapter(

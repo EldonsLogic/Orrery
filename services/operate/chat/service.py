@@ -13,7 +13,7 @@ from typing import Iterator, Optional
 
 from agui import events as wire
 from agui.ports import Principal, RuntimeContext
-from runtime import CancelToken
+from runtime import CancelToken, RateLimited, RateLimiter
 
 from . import errors, language
 from change import ChangeRefused
@@ -35,15 +35,17 @@ def _sha(text: str) -> str:
 class ChatService:
     def __init__(self, *, store, runtime_factory, ids, clock, audit=None, router=None, retention=None,
                  limits: ChatLimits = ChatLimits(), frame_for=default_frame, default_locale: str = "en",
-                 change=None, pending=None):
+                 change=None, pending=None, limiter=None):
         """`change` is a ChangePort (change.ChangeService) built on the SAME clock. With it, a `change` turn that the
         router says needs confirmation is proposed and previewed here, the pending confirmation is recorded only after
         the preview was shown, and a confirming turn goes to `change.confirm` with the router's binding. Without it
-        the chat never proposes or confirms anything."""
+        the chat never proposes or confirms anything. `limiter` (SEC-009) counts admitted turns per tenant and user;
+        the default uses `runtime.ratelimit.DEFAULT_RULES` on the same clock. Share it with `loop_runtime_factory`."""
         self.store, self.factory, self.ids, self.clock, self.audit = store, runtime_factory, ids, clock, audit
         self.change, self.pending = change, pending or MemoryPendingStore()
         self.router, self.retention = router or DefaultRouter(), retention or NoRetention()
         self.limits, self.frame_for, self.default_locale = limits, frame_for, default_locale
+        self.limiter = limiter or RateLimiter(clock)
         self._lock = threading.Lock()
         self._active: dict = {}  # (tenant, session_id) -> (run_id, CancelToken)
 
@@ -120,6 +122,10 @@ class ChatService:
                 raise ChatFailure("chat_message_id_conflict")
             replay = rec if rec is not None and rec.status == "done" else None
             if replay is None:
+                try:  # a replay is free; a new turn counts, keyed by the verified principal only (SEC-009)
+                    self.limiter.admit("turn", p.tenant_id, p.subject)
+                except RateLimited:
+                    raise ChatFailure("chat_rate_limited")
                 if not self.store.begin_run(session, run_id, self.clock(), self.limits.run_ttl_s):
                     raise ChatFailure("chat_run_in_progress")  # second message is rejected, not queued
                 self.store.put_message(session, MessageRecord(message_id, thash, "running", "", run_id))

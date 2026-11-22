@@ -76,7 +76,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-006 | Brand asset upload enforcement in storage: PNG/JPG/SVG only, size limits, SVG sanitiser, malware scan, per-tenant storage (rules from SEC-018) | Security | G2 | PLT-017,SEC-018 | partner | todo |
 | SEC-007 | Dependency and SBOM scanning for Python and Node (beyond dependabot actions) | Security | G2 | GOV-006 | eldon | done |
 | SEC-008 | Audit log integrity: append-only, hash-chained, exported off-box | Security | G2 | PLT-015 | eldon | todo |
-| SEC-009 | Rate limits and abuse controls on chat and gateway | Security | G2 | PLT-026 | eldon | todo |
+| SEC-009 | Rate limits and abuse controls on chat and gateway | Security | G2 | PLT-026 | eldon | doing |
 | SEC-010 | Sandbox and static analysis for factory-built components | Security | G2 | BPL-015 | eldon | done |
 | SEC-011 | Encryption at rest and in transit; per-tenant key management | Security | G3 | INF-005 | partner | todo |
 | SEC-012 | Security baseline checklist for paying customers | Security | G3 | SEC-004,SEC-008 | eldon | todo |

@@ -22,6 +22,8 @@ TABLE = {
                                 "تعذر إرسال الرسالة. حاول مرة أخرى."),
     "chat_message_id_conflict": (False, "This message id was already used for a different message.",
                                  "تم استخدام معرف الرسالة هذا لرسالة مختلفة."),
+    "chat_rate_limited": (True, "You are sending messages too quickly. Wait a minute and try again.",
+                          "أنت ترسل الرسائل بسرعة كبيرة. انتظر دقيقة ثم حاول مرة أخرى."),
     "chat_cancelled": (True, "Stopped.", "تم الإيقاف."),
     "permission_denied": (False, "You do not have access to this.", "ليس لديك صلاحية الوصول إلى هذا."),
     "internal_error": (True, "Something went wrong on our side. Please try again.",

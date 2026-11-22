@@ -15,10 +15,10 @@ Fixed the partner's review findings on PR #228. The contrast and CSS-variable ch
 - web/app/src/components/chat/Chat.module.css, Cards.tsx, Composer.tsx; ui/control.module.css; records/ConfirmWrite.tsx, Records.module.css; tests
 
 ## Decisions
-- None, or link to ADR / strategy decision.
+- None. Spec counts corrected (9 fixed, 2 in part, 1 open) and QA-014 set to `doing` until CI is green.
 
 ## Tokens or cost
-Unknown or approximate, if known.
+Unknown.
 
 ## Next step
-Partner re-review of PR #228; correct the spec counts and PLAN status (QA-014).
+Partner re-review of PR #228 (QA-014); A-10 label copy decision still open.

@@ -1,0 +1,162 @@
+{
+  "$schema": "../../../pack.schema.json",
+  "schemaVersion": "0.1.0",
+  "packId": "eg",
+  "componentId": "country.eg",
+  "countryCode": "EG",
+  "version": "0.1.0",
+  "status": "tested",
+  "evidenceStatus": "unverified",
+  "testOnly": false,
+  "notes": "Tested EG pack (status=tested, evidenceStatus=unverified). Statutory refs from docs/compliance/egypt-research.md (accessed 2026-11-18) and country-matrix.md: ETA e-invoice/e-receipt (SDK VERIFIED; rollout/token UNVERIFIED), 14%/5%/schedule VAT & 5yr retention (UNVERIFIED), Africa/Cairo DST (UNVERIFIED), Gregorian/Sun-Thu/EGP/western digits (UNVERIFIED). Payroll disabled (out of v1 scope). Arabic labels unreviewed (ADR-0033). No tax/e-invoice maths. Sources in README.md.",
+  "name": {
+    "ar": "حزمة دولة مصر",
+    "en": "Egypt Country Pack"
+  },
+  "coaTemplate": {
+    "componentId": "finance.coa_eg",
+    "artifactRef": "eg_unified_coa_unverified",
+    "versionRange": ">=0.1.0 <1.0.0"
+  },
+  "tax": {
+    "vatSupported": true,
+    "taxCodesRef": "eg.tax_codes_unverified",
+    "filingPeriods": [
+      "monthly"
+    ],
+    "roundingRule": "half_away_from_zero",
+    "vatNumberPattern": "^[0-9A-Za-z/-]{1,64}$",
+    "crNumberPattern": "^[0-9A-Za-z/-]{1,64}$"
+  },
+  "eInvoicing": {
+    "required": true,
+    "mode": "eg_e_invoice",
+    "authority": "Egyptian Tax Authority (ETA)",
+    "componentId": "compliance.eta_eg",
+    "mandatoryDocumentLanguages": [
+      "ar"
+    ],
+    "archiveRetentionYears": 5
+  },
+  "localeDefaults": {
+    "timezone": "Africa/Cairo",
+    "calendar": {
+      "primary": "gregorian",
+      "secondaryDisplay": "none"
+    },
+    "week": {
+      "startDay": "sun",
+      "weekendDays": [
+        "fri",
+        "sat"
+      ]
+    },
+    "workingTime": {
+      "workDays": [
+        "sun",
+        "mon",
+        "tue",
+        "wed",
+        "thu"
+      ],
+      "hours": {
+        "from": "09:00",
+        "to": "17:00"
+      }
+    },
+    "fiscalYear": {
+      "type": "gregorian",
+      "startMonth": 1,
+      "startDay": 1
+    },
+    "holidays": {
+      "calendarRef": {
+        "id": "eg.holidays",
+        "version": "0.1.0"
+      },
+      "announcedDates": []
+    },
+    "numberSystem": "western",
+    "currency": "EGP"
+  },
+  "formats": {
+    "currency": "EGP",
+    "currencyDecimals": 2,
+    "gregorianDateFormat": "YYYY-MM-DD",
+    "hijriDateFormat": "iYYYY-iMM-iDD",
+    "numberSystem": "western",
+    "decimalSeparator": ".",
+    "thousandsSeparator": ","
+  },
+  "payrollHooks": {
+    "wpsEnabled": false,
+    "wpsFormatRef": null,
+    "socialInsuranceRef": null,
+    "eosbRuleRef": null
+  },
+  "printFormats": {
+    "legalLayoutPrecedence": true,
+    "mandatoryLanguages": [
+      "ar"
+    ],
+    "templates": [
+      {
+        "kind": "tax_invoice",
+        "templateRef": "eg_tax_invoice_template_unverified",
+        "componentId": "compliance.eta_eg"
+      },
+      {
+        "kind": "credit_note",
+        "templateRef": "eg_credit_note_template_unverified",
+        "componentId": "compliance.eta_eg"
+      },
+      {
+        "kind": "debit_note",
+        "templateRef": "eg_debit_note_template_unverified",
+        "componentId": "compliance.eta_eg"
+      }
+    ]
+  },
+  "overridesPolicy": {
+    "overridablePaths": [
+      "timezone",
+      "calendar.primary",
+      "calendar.secondaryDisplay",
+      "week.startDay",
+      "week.weekendDays",
+      "workingTime.workDays",
+      "workingTime.hours",
+      "workingTime.reducedPeriods",
+      "fiscalYear",
+      "holidays.overrides",
+      "numberSystem"
+    ],
+    "lockedPaths": [
+      "countryCode",
+      "packId",
+      "componentId",
+      "version",
+      "coaTemplate",
+      "tax",
+      "eInvoicing",
+      "formats",
+      "payrollHooks",
+      "printFormats",
+      "holidays.calendarRef",
+      "currency"
+    ],
+    "constraints": {
+      "fiscalYearLocked": false,
+      "allowedFiscalYearTypes": [
+        "gregorian"
+      ],
+      "allowedCurrencies": [
+        "EGP"
+      ]
+    }
+  },
+  "upgradePolicy": {
+    "compatibilityRange": ">=0.1.0 <0.2.0",
+    "migrationRequired": false
+  }
+}

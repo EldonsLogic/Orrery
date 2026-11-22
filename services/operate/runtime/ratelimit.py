@@ -5,7 +5,7 @@ Keys are (tenant, user) from the verified principal only, never from a request b
 Every check fails closed: a missing identity, a kind with no valid rule, an invalid rule set, a clock value that is
 not a finite number in range, or any store error refuses. Over a limit is the Tool API code `rate_limited`
 (retryable, with `retry_after_s`); the model-call contract has no rate code. The default numbers are proposed
-defaults (UNVERIFIED, not measured). State is in process memory; a multi-instance host needs a shared store (Q-562)."""
+defaults (accepted as starting values, Q-561; not measured). State is in process memory; a multi-instance host uses the shared cache with a per-instance fallback on cache outage (Q-562, not built yet)."""
 from __future__ import annotations
 
 import logging

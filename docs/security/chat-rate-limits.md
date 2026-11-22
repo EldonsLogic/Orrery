@@ -28,7 +28,7 @@ The chat service and the runtime factory turn limits on by default. Pass the sam
 Replays of a finished message id are free on purpose: they start no run, no model call and no tool call, and the client retries them after a dropped connection. They are bounded by the gateway-side request limits (section 7).
 
 ## 3. Proposed defaults (not facts)
-`DEFAULT_RULES` in `ratelimit.py`. These are proposed starting values chosen to sit well above one person typing and well below scripted flooding; they are UNVERIFIED and not measured on real traffic. Tune them from PLT-025 metering (Q-561).
+`DEFAULT_RULES` in `ratelimit.py`. These are proposed starting values chosen to sit well above one person typing and well below scripted flooding; they are not measured on real traffic. Eldon accepted them as the starting values on 2026-11-22 (Q-561): the same on every plan, changed per tenant only by the platform team, and revisited with pilot metering (PLT-025).
 
 | Kind | Scope | Window | Limit |
 |---|---|---|---|
@@ -53,6 +53,6 @@ Pre-run refusals render in the service's default locale, as other pre-run chat e
 3. If `end_run` raises while releasing a refused turn, the user gets `internal_error` and the session stays blocked until the run TTL.
 
 ## 7. Not covered here
-1. State is per process. A host with more than one instance needs a shared counter store (Q-562); until then the effective limit is per instance.
+1. State is per process. A host with more than one instance needs a shared counter store; until then the effective limit is per instance. Decided (Q-562, Eldon, 2026-11-22): counters go in the platform's shared cache, and if that cache is down each instance falls back to its own in-memory counts, so chat keeps working with looser limits instead of refusing everyone. Not built yet: it needs the shared cache. The fail-closed `store_error` here covers the in-process store only.
 2. Gateway side (partner lane, `services/gateway/`): edge and per-IP limits, WAF and CDN, per-tenant HTTP quotas covering the free paths here (replays, validation failures, history reads), OTP limits (T12), and the budget layers and reservation of the real model-call implementation (PLT-009, PLT-021).
 3. Per-tool limits and external-send limits (prompt-injection-defence section 5.5) stay with SEC-020 and OPR-004.

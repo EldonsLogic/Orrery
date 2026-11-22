@@ -4,6 +4,27 @@
 # directory (infra/dev/docker), so the worker builds the same engine image.
 # Use only with a throwaway project name (run_isolation_suite.py sets one).
 services:
+  # The engine answers HTTP through raw_engine_wsgi.py: same gunicorn settings as the dev
+  # entrypoint's `start` (--chdir is relative to the image WORKDIR, the bench root), but without the ERP-020 before_request hook (see that file for why).
+  engine:
+    command:
+      - gunicorn
+      - --chdir=sites
+      - --bind=0.0.0.0:8000
+      - --threads=4
+      - --workers=2
+      - --worker-class=gthread
+      - --worker-tmp-dir=/dev/shm
+      - --timeout=120
+      - raw_engine_wsgi:application
+    environment:
+      - SEC004_RAW_ENGINE=1
+      - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-}
+      - PYTHONPATH=/opt/sec004
+    volumes:
+      # Relative to infra/dev/docker (the first compose file), not to this directory.
+      - ./isolation/raw_engine_wsgi.py:/opt/sec004/raw_engine_wsgi.py:ro
+
   worker:
     build:
       context: .

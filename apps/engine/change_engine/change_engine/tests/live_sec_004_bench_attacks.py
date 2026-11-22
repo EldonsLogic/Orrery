@@ -14,6 +14,10 @@ Known leaks are `unittest.expectedFailure` tracked by plan rows and `docs/risks.
 and now a plain check. Once a
 leak is fixed, unittest reports `unexpected success` as a loud failure so the marker
 must be removed. Combined testing with the headless guard (ERP-020) is tracked in SEC-021.
+
+The bench serves HTTP through `infra/dev/docker/isolation/raw_engine_wsgi.py`, which drops the
+ERP-020 `before_request` hook: with it on, login, session cookies and every route this suite
+attacks answer a blanket 404. This suite certifies the engine's own isolation without that guard.
 """
 
 from __future__ import annotations
@@ -34,6 +38,9 @@ CONTEXT_ENV = "SEC004_CONTEXT"
 REQUIRE_LIVE_ENV = "CI_REQUIRE_LIVE_SEC004"
 PROBE = "change_engine.tests.sec004_isolation_probe"
 DENIED = (401, 403, 404, 417)
+# The adapter endpoints refuse with the builtin PermissionError (not frappe.PermissionError), which
+# the engine reports as HTTP 500. It is a refusal, not a crash, only when the body names it.
+APP_REFUSAL = b"PermissionError: Not permitted"
 _GRANT_TARGET_RE = re.compile(r"^GRANT\s+.+\s+ON\s+(.+?)\s+TO\s+", re.IGNORECASE)
 
 
@@ -147,6 +154,12 @@ class CrossTenantIsolation(unittest.TestCase):
         except ValueError:
             return status, None
 
+    def assert_refused(self, resp, what=""):
+        """DENIED, or the adapter's explicit PermissionError refusal (HTTP 500 naming it)."""
+        status, body, _ = resp
+        refused = status in DENIED or (status == 500 and APP_REFUSAL in body)
+        self.assertTrue(refused, f"{what}: not refused (HTTP {status})")
+
     def assert_no_leak(self, resp, marker, what):
         status, body, _ = resp
         self.assertNotIn(marker.encode(), body, f"{what}: tenant marker leaked (HTTP {status})")
@@ -197,7 +210,7 @@ class CrossTenantIsolation(unittest.TestCase):
         ):
             with self.subTest(host=host, path=path):
                 resp = self.http("GET", path, host, token=low_tok)
-                self.assertIn(resp[0], DENIED)
+                self.assert_refused(resp, f"low-role {host}{path}")
                 self.assert_no_leak(resp, self.mark_b, f"low-role {host}{path}")
 
         reg_body = json.dumps({"policy_data": {"policy_id": "POL_LOW_BAD", "doctype": "ToDo",
@@ -206,15 +219,15 @@ class CrossTenantIsolation(unittest.TestCase):
                                                "error_message": "bad"}})
         resp = self.http("POST", "/api/method/change_engine.api.endpoints.register_runtime_policy",
                          self.A["site"], body=reg_body, headers={"Content-Type": "application/json"}, token=low_tok)
-        self.assertIn(resp[0], DENIED)
+        self.assert_refused(resp, "low-role register_runtime_policy")
 
     # ---------- 2. Host / X-Forwarded-Host / site-selector header swaps ----------
     def test_header_swaps_do_not_reach_b(self):
         a, b = self.A["site"], self.B["site"]
         list_path = "/api/resource/ToDo?fields=%5B%22description%22%5D&limit_page_length=0"
 
-        # Positive controls: spoofed site headers on Host: B with B's credentials must still route to B.
-        for extra in ({"X-Forwarded-Host": a}, {"X-Frappe-Site-Name": a}):
+        # Positive controls: spoofed forwarding headers on Host: B with B's credentials must still route to B.
+        for extra in ({"X-Forwarded-Host": a},):
             for auth in ({"sid": self.sid_b}, {"token": self.token_b}):
                 with self.subTest(control=True, headers=extra, auth=list(auth)):
                     st, body, _ = self.http("GET", f"/api/resource/ToDo/{self.todo_b}", b, headers=extra, **auth)
@@ -222,13 +235,32 @@ class CrossTenantIsolation(unittest.TestCase):
                     self.assertIn(self.mark_b.encode(), body)
 
         # Attacks on Host: B with spoofed A headers and A's credentials must fail closed (never 200 on A).
-        for extra in ({"X-Forwarded-Host": a}, {"X-Frappe-Site-Name": a}):
+        for extra in ({"X-Forwarded-Host": a},):
             for auth in ({"sid": self.sid_a}, {"token": self.token_a}):
                 with self.subTest(host=b, headers=extra, auth=list(auth)):
                     for path in (f"/api/resource/ToDo/{self.todo_b}", list_path):
                         resp = self.http("GET", path, b, headers=extra, **auth)
                         self.assertIn(resp[0], DENIED, f"Host:B + {extra} with A creds not denied: HTTP {resp[0]}")
                         self.assert_no_leak(resp, self.mark_b, f"{b} {extra} {path}")
+
+        # X-Frappe-Site-Name is the engine's own site selector and overrides Host (frappe/app.py
+        # init_request). That is why the gateway must strip it (PLT-024) and the ERP-020 guard refuses
+        # any request that carries it. This pins that behaviour and what must still hold: credentials
+        # stay bound to the site the header selects, and B's data never reaches A's credentials.
+        sel = {"X-Frappe-Site-Name": a}
+        with self.subTest(selector="header routes the request to the site it names"):
+            self.assertEqual(self.logged_user(b, headers=sel, sid=self.sid_a), (200, "Administrator"))
+            self.assertEqual(self.logged_user(b, headers=sel, token=self.token_a), (200, "Administrator"))
+        for auth in ({"sid": self.sid_b}, {"token": self.token_b}):
+            with self.subTest(selector="B's credentials fail on the site the header names", auth=list(auth)):
+                resp = self.http("GET", f"/api/resource/ToDo/{self.todo_b}", b, headers=sel, **auth)
+                self.assertIn(resp[0], DENIED)
+                self.assert_no_leak(resp, self.mark_b, f"{b} {sel} B creds")
+        for auth in ({"sid": self.sid_a}, {"token": self.token_a}):
+            with self.subTest(selector="A's credentials with the header never read B's data", auth=list(auth)):
+                for path in (f"/api/resource/ToDo/{self.todo_b}", list_path):
+                    resp = self.http("GET", path, b, headers=sel, **auth)
+                    self.assert_no_leak(resp, self.mark_b, f"{b} {sel} {path}")
 
         # Attacks on Host: A with spoofed B headers must keep routing on A and deny B's doc.
         swaps_on_a = [
@@ -383,7 +415,7 @@ class CrossTenantIsolation(unittest.TestCase):
             with self.subTest(method=method, host=host, path=path):
                 hdrs = {"Content-Type": "application/json"} if body else {}
                 resp = self.http(method, path, host, headers=hdrs, body=body, token=self.token_a)
-                self.assertIn(resp[0], DENIED)
+                self.assert_refused(resp, f"{method} {host}{path}")
                 self.assert_no_leak(resp, self.mark_b, f"{method} {host}{path}")
 
     # ---------- 6. Site config keys & MariaDB grants / symmetric DML denial ----------

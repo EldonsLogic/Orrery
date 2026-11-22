@@ -25,6 +25,8 @@ CI runs this harness via [.github/workflows/sec-004-live-isolation.yml](../../..
   - A `sec004-tenant-a.localhost` (SA) and B `sec004-tenant-b.localhost` (AE) with the default app set;
   - a prefix twin `sec004-tenant-a.localhost.sa` (change_engine only), the `acme.com` vs `acme.com.sa` case, to catch prefix-matching site filters.
 
+- The engine serves HTTP through [raw_engine_wsgi.py](raw_engine_wsgi.py), which drops the ERP-020 `before_request` hook (`change_engine.api.route_guard.enforce_internal_only`). That hook is installed on every site that has change_engine and answers 404 to everything outside its internal allowlist (login, session cookies, `/api/resource/ToDo`, files, backups and the job API included), so with it on the suite could neither log in nor tell a real denial from the blanket 404. The module is mounted only by this compose file, refuses to start outside a `sec004` project, and touches no production image, hook or allowlist. The suite therefore certifies the engine's own isolation without the guard; the run with the guard on is SEC-021.
+
 Full provisioning takes tens of minutes (two full ERPNext + HRMS installs). The suite itself takes a few minutes.
 
 ## Reading the result

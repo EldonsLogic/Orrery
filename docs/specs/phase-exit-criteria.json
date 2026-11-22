@@ -210,11 +210,11 @@
       "evidence": [
         {
           "id": "G1-1",
-          "text": "A hand-written Blueprint compiles to a fresh tenant, applies, diffs and rolls back, on a real bench."
+          "text": "A hand-written Blueprint compiles to a fresh tenant, applies and diffs, and a failed or unwanted apply is recoverable (ADR-0028), on a real bench."
         },
         {
           "id": "G1-2",
-          "text": "A ZATCA Phase 2 invoice passes the ZATCA sandbox."
+          "text": "Compliance for the first pilot market is proven in its own sandbox or checklist. For Saudi Arabia that is a ZATCA Phase 2 invoice passing the ZATCA sandbox, a Saudi release criterion that does not block a pilot in another market (ADR-0026)."
         },
         {
           "id": "G1-3",
@@ -241,7 +241,7 @@
       "evidence": [
         {
           "id": "G2-1",
-          "text": "One real business goes from discovery to a simulated Blueprint to live, with the human review gate and the one chat."
+          "text": "One real business goes from discovery to a Blueprint (simulated month optional) to live, with the human review gate and the one chat."
         },
         {
           "id": "G2-2",
@@ -280,7 +280,7 @@
         },
         {
           "id": "G3-4",
-          "text": "UAE e-invoicing and payroll (WPS, GOSI) either shipped or explicitly excluded from the sold scope."
+          "text": "Per sold market: e-invoicing and payroll (for example UAE e-invoicing, WPS, GOSI) either shipped or explicitly excluded from the sold scope."
         }
       ]
     },

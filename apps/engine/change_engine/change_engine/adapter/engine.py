@@ -118,6 +118,9 @@ SECTION_OF = {
     "report": "reports",
 }
 SETTINGS = ("company", "compliance", "i18n")
+# SEC-022 (ADR-0051 item 7): the only first pointer segments a step may target. Anything else, in particular a `_`
+# prefixed key such as the adapter's own `_typeChangedPointers` record, is refused at plan time.
+ALLOWED_POINTER_ROOTS = frozenset(SECTION_OF.values()) | frozenset(SETTINGS)
 
 EXPORTED = {
     "settings_company": ["legalName", "tradeName", "country", "crNumber", "vatNumber", "sizeBand", "industry", "languages", "locale"],
@@ -225,6 +228,26 @@ class _Early(Exception):
 
 def _segs(pointer: str) -> list[str]:
     return [s.replace("~1", "/").replace("~0", "~") for s in pointer.split("/")[1:]]
+
+
+def min_pointer_segments(kind: str) -> int:
+    """Fewest pointer segments a step of `kind` needs (ADR-0051 item 7); anything shorter names no element.
+
+    `settings.set` addresses a settings document (`/company`); `field.reorder` a field list
+    (`/entities/<id>/fields`, 3); `option.reorder` an option list (`/entities/<id>/fields/<id>/options`, 5);
+    `option.add` and `option.quarantine` one option (6); `field.*` and `relation.*` elements 4; every other kind
+    one element of a section (`/<section>/<id>`, 2).
+    """
+    if kind == "settings.set":
+        return 1
+    if kind == "field.reorder":
+        return 3
+    section = kind.split(".")[0]
+    if section == "option":
+        return 5 if kind == "option.reorder" else 6
+    if section in ("field", "relation"):
+        return 4
+    return 2
 
 
 def _cfg_segs(pointer: str) -> list[str]:
@@ -1014,6 +1037,15 @@ class ChangeEngineAdapter:
         if has_prohibited_expression(params):
             return "blocked", "prohibited_expression", ddl
         segs = _segs(pointer)
+        if (
+            not pointer.startswith("/")
+            or not segs
+            or "" in segs
+            or segs[0] not in ALLOWED_POINTER_ROOTS
+            # field.* and relation.* keep their exact-length check below (definition_conflict).
+            or (len(segs) < min_pointer_segments(kind) and not kind.startswith(("field.", "relation.")))
+        ):
+            return "blocked", "unsupported_value_type", ddl
         if segs[:1] == ["entities"] and len(segs) > 1:
             ids: list[Any] = [segs[1]]
             subject = step["subject"]

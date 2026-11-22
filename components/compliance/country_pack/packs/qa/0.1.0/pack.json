@@ -1,0 +1,146 @@
+{
+  "$schema": "../../../pack.schema.json",
+  "schemaVersion": "0.1.0",
+  "packId": "qa",
+  "componentId": "country.qa",
+  "countryCode": "QA",
+  "version": "0.1.0",
+  "status": "tested",
+  "evidenceStatus": "unverified",
+  "testOnly": false,
+  "notes": "Tested for structure only; all facts UNVERIFIED (CMP-030 research, accessed 2026-11-18; see SOURCES.md). No VAT in force, no e-invoicing law enacted, payroll and WPS out of v1 scope. CoA and print template refs are unresolved placeholders. Arabic text is unreviewed (ADR-0033). Declarative metadata only, no tax maths.",
+  "name": {
+    "ar": "حزمة دولة قطر (مسودة غير مراجعة)",
+    "en": "Qatar Country Pack (draft, unverified)"
+  },
+  "coaTemplate": {
+    "componentId": "finance.coa_qa_unresolved",
+    "artifactRef": "unresolved_no_qatar_coa_component_yet",
+    "versionRange": ">=0.1.0 <1.0.0"
+  },
+  "tax": {
+    "vatSupported": false,
+    "taxCodesRef": null,
+    "filingPeriods": [],
+    "roundingRule": "half_away_from_zero",
+    "vatNumberPattern": "^(?!)$",
+    "crNumberPattern": "^[A-Za-z0-9/-]{1,30}$"
+  },
+  "eInvoicing": {
+    "required": false,
+    "mode": "none",
+    "authority": null,
+    "componentId": null,
+    "mandatoryDocumentLanguages": [],
+    "archiveRetentionYears": 10
+  },
+  "localeDefaults": {
+    "timezone": "Asia/Qatar",
+    "calendar": {
+      "primary": "gregorian",
+      "secondaryDisplay": "none"
+    },
+    "week": {
+      "startDay": "sun",
+      "weekendDays": ["fri", "sat"]
+    },
+    "workingTime": {
+      "workDays": ["sun", "mon", "tue", "wed", "thu"],
+      "hours": {
+        "from": "08:00",
+        "to": "16:00"
+      },
+      "reducedPeriods": [
+        {
+          "id": "ramadan",
+          "labels": {
+            "ar": "ساعات العمل في رمضان (غير مراجعة)",
+            "en": "Ramadan working hours (unverified)"
+          },
+          "rule": "ramadan",
+          "hours": {
+            "from": "08:00",
+            "to": "14:00"
+          }
+        }
+      ]
+    },
+    "fiscalYear": {
+      "type": "gregorian",
+      "startMonth": 1,
+      "startDay": 1
+    },
+    "holidays": {
+      "calendarRef": {
+        "id": "qa.holidays",
+        "version": "0.1.0"
+      }
+    },
+    "numberSystem": "western",
+    "currency": "QAR"
+  },
+  "formats": {
+    "currency": "QAR",
+    "currencyDecimals": 2,
+    "gregorianDateFormat": "YYYY-MM-DD",
+    "hijriDateFormat": "iYYYY-iMM-iDD",
+    "numberSystem": "western",
+    "decimalSeparator": ".",
+    "thousandsSeparator": ","
+  },
+  "payrollHooks": {
+    "wpsEnabled": false,
+    "wpsFormatRef": null,
+    "socialInsuranceRef": null,
+    "eosbRuleRef": null
+  },
+  "printFormats": {
+    "legalLayoutPrecedence": true,
+    "mandatoryLanguages": ["ar"],
+    "templates": [
+      {
+        "kind": "tax_invoice",
+        "templateRef": "unresolved_no_qatar_invoice_template_yet",
+        "componentId": "sales.invoice_print_qa_unresolved"
+      }
+    ]
+  },
+  "overridesPolicy": {
+    "overridablePaths": [
+      "timezone",
+      "calendar.primary",
+      "calendar.secondaryDisplay",
+      "week.startDay",
+      "week.weekendDays",
+      "workingTime.workDays",
+      "workingTime.hours",
+      "workingTime.reducedPeriods",
+      "fiscalYear",
+      "holidays.overrides",
+      "numberSystem"
+    ],
+    "lockedPaths": [
+      "countryCode",
+      "packId",
+      "componentId",
+      "version",
+      "coaTemplate",
+      "tax",
+      "eInvoicing",
+      "formats",
+      "payrollHooks",
+      "printFormats",
+      "holidays.calendarRef",
+      "currency"
+    ],
+    "constraints": {
+      "fiscalYearLocked": false,
+      "allowedFiscalYearTypes": ["gregorian"],
+      "allowedCurrencies": ["QAR"]
+    }
+  },
+  "upgradePolicy": {
+    "compatibilityRange": ">=0.1.0 <0.2.0",
+    "migrationRequired": false
+  }
+}

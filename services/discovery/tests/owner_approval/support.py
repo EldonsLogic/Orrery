@@ -17,7 +17,7 @@ def cdigest(content):
 
 
 def make_bp(rev=1, extra=None):
-    bp = {"meta": {"id": BP, "revision": rev}, "company": {"country": "SA", "labels": {"ar": "شركة", "en": "Acme"}},
+    bp = {"meta": {"id": BP, "revision": rev}, "company": {"country": "SA", "legalName": {"ar": "شركة", "en": "Acme"}},
           "entities": [{"id": "customer", "labels": {"ar": "عميل", "en": "Customer"}}],
           "workflows": [{"id": "sales_order", "labels": {"ar": "طلب", "en": "Sales order"}}], "reports": [], "roles": [], "components": []}
     if extra:
@@ -48,6 +48,7 @@ class World:
         self.calls, self.gate_error, self.gate_noop = [], None, False
         self.owner, self.before_approve, self.timeout_after, self.rollback_error = None, None, False, None
         self.rollbacks = 0
+        self.pending = self.recovery = None   # the machine's apply in flight / live recovery block
 
     def regen(self, bp=None):
         self.bp = bp or make_bp()
@@ -112,10 +113,14 @@ class Gate:
 
     def status(self, t, bp):
         return {"state": self.w.machine, "contentDigest": self.w.recorded, "contentChanged": self.w.recorded != cdigest(self.w.bp),
-                "owner": copy.deepcopy(self.w.owner), "rollbacks": self.w.rollbacks}
+                "owner": copy.deepcopy(self.w.owner), "rollbacks": self.w.rollbacks,
+                "pending": copy.deepcopy(self.w.pending), "recovery": copy.deepcopy(self.w.recovery)}
 
     def _human(self, claims):
-        p = self.ident.resolve(claims, step_up=True)
+        try:
+            p = self.ident.resolve(claims, step_up=True)
+        except Exception:
+            raise GateRefusal("BS-003") from None   # the machine's own actor check
         if p.kind != "human" or p.step_up is not True:
             raise GateRefusal("BS-003")
         return p
@@ -148,6 +153,8 @@ class Gate:
         self._human(claims)
         if self.w.rollback_error:
             raise self.w.rollback_error
+        if self.w.pending or self.w.recovery:
+            raise GateRefusal("BS-005")
         if self.w.gate_error:
             raise self.w.gate_error
         self.w.machine, self.w.owner, self.w.rollbacks = to_state, None, self.w.rollbacks + 1

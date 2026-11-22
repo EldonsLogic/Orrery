@@ -120,11 +120,16 @@ class SealedLog:
         return rec
 
     def _manifest(self, tenant: str) -> dict:
+        return self._manifest_n(tenant)[1]
+
+    def _manifest_n(self, tenant: str) -> tuple:
+        """(n, streams) from ONE verified manifest read: the counter the store's CAS checks and the streams written
+        under it must come from the same read, or a stream committed in between is dropped (partner review F1)."""
         m = self._get(self._store.manifest, tenant)
         if m is None:
             if self._get(self._store.has_records, tenant) is not False:
                 raise OwnerApprovalError("OA-009", "manifest")
-            return {}
+            return 0, {}
         try:
             if type(m) is not dict or set(m) != {"schema", "tenant_id", "n", "streams", "key_id", "seal"} or m["schema"] != "1" \
                     or m["tenant_id"] != tenant or type(m["n"]) is not int or type(m["seal"]) is not str \
@@ -135,7 +140,7 @@ class SealedLog:
                 if sid in out or type(seq) is not int:
                     raise OwnerApprovalError("OA-009", "manifest")
                 out[sid] = (seq, hd)
-            return out
+            return m["n"], out
         except OwnerApprovalError:
             raise
         except Exception:
@@ -176,13 +181,14 @@ class SealedLog:
         if check is not None:
             check(existing)
         body = _plain(body)
-        mf = self._manifest(tenant)
+        n, mf = self._manifest_n(tenant)
+        if mf.get(stream) != ((len(existing), existing[-1]["seal"]) if existing else None):
+            raise OwnerApprovalError("OA-004", "conflict")   # this stream moved since it was read: refuse, write nothing
         rec = {"schema": "1", "tenant_id": tenant, "stream": stream, "seq": len(existing) + 1,
                "prev": existing[-1]["seal"] if existing else "", "body": body, "key_id": self._active}
         rec["seal"] = self._mac(rec, b"record")
         mf[stream] = (rec["seq"], rec["seal"])
-        old = self._get(self._store.manifest, tenant)
-        manifest = self._seal({"schema": "1", "tenant_id": tenant, "n": (old["n"] if old else 0) + 1,
+        manifest = self._seal({"schema": "1", "tenant_id": tenant, "n": n + 1,
                                "streams": [[k, *mf[k]] for k in sorted(mf)]}, b"manifest")
         try:
             self._store.commit(tenant, stream, copy.deepcopy(rec), manifest)

@@ -16,7 +16,17 @@ Packs live on disk under a configured packs root:
     <semver>/                # e.g. 0.1.0
       pack.json              # validated against pack.schema.json
       manifest.json          # companion component manifest (component.manifest.schema.json)
+      evidence.json          # per-fact sources, evidence labels, pending refs, Arabic review state
+      strings.json           # optional i18n labels, only when manifest.json names it in i18n.stringsFile
 ```
+
+`evidence.json` holds the sources for every fact in `pack.json`, because `pack.schema.json` has no per-fact evidence field and caps `notes` at 500 characters. It is the only place for a pack's sources: no `SOURCES.md` or README source table beside a pack. One format for every pack (the UAE and KSA packs set it):
+- `packId` and `version` equal the pack's; `purpose` says where the evidence comes from.
+- `facts[]`: `paths` (dotted paths into `pack.json`), `claim`, `status`, optional `ref` (a repo doc, ADR or contract) and optional `sources[]` (`url`, `accessed` as YYYY-MM-DD, optional `note`). `status` is one of `VERIFIED-OFFICIAL`, `SECONDARY` (treated as UNVERIFIED), `UNVERIFIED` or `PLATFORM-DEFAULT` (a platform choice, not a statutory claim). A converted pack may add `recordedStatus` with the original status text verbatim.
+- A source that was not fetched or read (search excerpt, snippet) has a `note` saying so and no `accessed` date. `VERIFIED-OFFICIAL` and `SECONDARY` need at least one source with an access date; `PLATFORM-DEFAULT` needs a `ref`.
+- `pendingRefs[]` (`path`, `value`, `blockedBy`) lists every reference that does not resolve yet; `goLiveBlockers[]` lists blockers with the `requires` entry copied into the manifest; `factsOutsideSchema[]` keeps researched facts the schema has no field for; `arabicLabels[]` (`file`, `path`, `text`, `review`, `rule`) lists every Arabic string in the pack, manifest and strings file with its review state (ADR-0033).
+
+The shared test `components/compliance/country_pack/tests/test_country_packs.py` enforces this for every pack under the packs root: every leaf of the locked and locale areas has an evidence entry, labels and access dates follow the rules above, the components a pack references equal its manifest `requires`, pack `status` equals the manifest certification level, `evidenceStatus` stays `unverified` while pending refs exist, locked values, `notes` and `name` hold no rate-like digits, and every manifest `provides` one `country.<code>.pack_metadata` capability with the shared loader function as its artifact. Each pack keeps its own test module for pack-specific facts.
 
 Every `pack.json` declares eight areas (`additionalProperties: false` throughout):
 

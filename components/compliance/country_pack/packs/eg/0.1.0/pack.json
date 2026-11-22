@@ -8,7 +8,7 @@
   "status": "tested",
   "evidenceStatus": "unverified",
   "testOnly": false,
-  "notes": "Tested EG pack (status=tested, evidenceStatus=unverified). Statutory refs from docs/compliance/egypt-research.md (accessed 2026-11-18) and country-matrix.md: ETA e-invoice/e-receipt (SDK VERIFIED; rollout/token UNVERIFIED), 14%/5%/schedule VAT & 5yr retention (UNVERIFIED), Africa/Cairo DST (UNVERIFIED), Gregorian/Sun-Thu/EGP/western digits (UNVERIFIED). Payroll disabled (out of v1 scope). Arabic labels unreviewed (ADR-0033). No tax/e-invoice maths. Sources in README.md.",
+  "notes": "Tested EG pack (status=tested, evidenceStatus=unverified). Statutory refs from docs/compliance/egypt-research.md (accessed 2026-11-18) and country-matrix.md: ETA e-invoice/e-receipt (SDK VERIFIED; rollout/token UNVERIFIED), VAT, schedule tax and tax record retention (UNVERIFIED), Africa/Cairo DST (UNVERIFIED), Gregorian/Sun-Thu/EGP/western digits (UNVERIFIED). Payroll disabled (out of v1 scope). Arabic labels unreviewed (ADR-0033). No tax/e-invoice maths. Sources per fact: evidence.json.",
   "name": {
     "ar": "حزمة دولة مصر",
     "en": "Egypt Country Pack"

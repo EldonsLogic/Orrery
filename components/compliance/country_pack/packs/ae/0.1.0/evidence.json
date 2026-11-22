@@ -45,7 +45,7 @@
       "paths": ["eInvoicing.mode"],
       "claim": "The UAE model is DCTCE (Peppol five-corner): the supplier sends PINT AE data to its accredited service provider (ASP), which reports onward. The mode id uae_e_invoicing is the Blueprint contract value, itself a placeholder id.",
       "status": "VERIFIED-OFFICIAL",
-      "ref": "docs/compliance/uae-einvoicing-provider-selection.md section 1, items 1 and 3; contracts/blueprint.schema.json compliance.eInvoicing.mode",
+      "ref": "docs/compliance/uae-einvoicing-provider-selection.md section 1, items 1 and 9; contracts/blueprint.schema.json compliance.eInvoicing.mode",
       "sources": [
         {"url": "https://mof.gov.ae/en/about-us/initiatives/einvoicing/", "accessed": "2026-11-18"},
         {"url": "https://docs.peppol.eu/poac/ae/pint-ae/", "accessed": "2026-11-18"}
@@ -55,7 +55,7 @@
       "paths": ["eInvoicing.authority"],
       "claim": "The Ministry of Finance runs the programme (read). That the FTA is Corner 5, the tax authority that receives the reports, is an inference, so naming both is UNVERIFIED.",
       "status": "UNVERIFIED",
-      "ref": "docs/compliance/uae-einvoicing-provider-selection.md section 1, item 9",
+      "ref": "docs/compliance/uae-einvoicing-provider-selection.md section 1, items 1 and 3",
       "sources": [
         {"url": "https://mof.gov.ae/en/about-us/initiatives/einvoicing/", "accessed": "2026-11-18"},
         {"url": "https://docs.peppol.eu/poac/ae/pint-ae/", "accessed": "2026-11-18"}

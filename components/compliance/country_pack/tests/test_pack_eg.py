@@ -169,7 +169,7 @@ class TestEgyptCountryPack(unittest.TestCase):
     def test_allowed_company_overrides_validate_and_resolve(self) -> None:
         overrides = {
             "numberSystem": "eastern_arabic",
-            "calendar": {"secondaryDisplay": "gregorian"},
+            "calendar": {"secondaryDisplay": "hijri_umm_al_qura"},
             "week": {"startDay": "mon", "weekendDays": ["sat", "sun"]},
             "workingTime": {
                 "workDays": ["mon", "tue", "wed", "thu", "fri"],
@@ -199,7 +199,7 @@ class TestEgyptCountryPack(unittest.TestCase):
         self.assertEqual(resolved["status"], "tested")
         self.assertEqual(resolved["evidenceStatus"], "unverified")
         self.assertEqual(resolved["locale"]["numberSystem"], "eastern_arabic")
-        self.assertEqual(resolved["locale"]["calendar"]["secondaryDisplay"], "gregorian")
+        self.assertEqual(resolved["locale"]["calendar"], {"primary": "gregorian", "secondaryDisplay": "hijri_umm_al_qura"})
         self.assertEqual(resolved["locale"]["week"], {"startDay": "mon", "weekendDays": ["sat", "sun"]})
         self.assertEqual(resolved["locale"]["fiscalYear"], {"type": "gregorian", "startMonth": 7, "startDay": 1})
         self.assertEqual(resolved["locale"]["currency"], "EGP")

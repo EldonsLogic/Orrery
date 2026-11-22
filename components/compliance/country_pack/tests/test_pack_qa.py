@@ -102,52 +102,32 @@ class TestQatarPack(unittest.TestCase):
             self.assertRegex(label, ARABIC_RE)
         self.assertIn("ADR-0033", self.pack["notes"])
         self.assertIn("unreviewed", self.pack["notes"].lower())
-        sources = (QA_DIR / "SOURCES.md").read_text(encoding="utf-8")
-        self.assertIn("Arabic text needing native review", sources)
+        evidence = json.loads((QA_DIR / "evidence.json").read_text(encoding="utf-8"))
+        listed = {(a["file"], a["path"]) for a in evidence["arabicLabels"] if a["review"] == "unreviewed"}
+        self.assertIn(("pack.json", "name.ar"), listed)
+        self.assertIn(("manifest.json", "name.ar"), listed)
 
-    def test_sources_file_has_urls_and_access_date(self) -> None:
-        sources = (QA_DIR / "SOURCES.md").read_text(encoding="utf-8")
-        self.assertIn("2026-11-18", sources)
-        self.assertIn("https://www.gta.gov.qa/en", sources)
-        self.assertIn("UNVERIFIED", sources)
+    def test_names_are_neutral(self) -> None:
+        # Review of #255 (Low): the name carries no draft or unverified marker; status and evidence say that.
+        self.assertEqual(self.pack["name"]["en"], "Qatar Country Pack")
+        for text in self.pack["name"].values():
+            for marker in ("draft", "unverified", "مسودة", "غير مراجعة"):
+                self.assertNotIn(marker, text.lower())
 
-    def test_every_locked_field_with_a_value_has_a_sources_row(self) -> None:
-        """Per-field traceability: a SOURCES.md row names the field and has a URL or an explicit no-source note."""
-        rows = []
-        for line in (QA_DIR / "SOURCES.md").read_text(encoding="utf-8").splitlines():
-            if line.startswith("| `"):
-                cells = [c.strip() for c in line.strip().strip("|").split("|")]
-                rows.append((re.findall(r"`([^`]+)`", cells[0]), line))
-        self.assertTrue(rows)
-
-        def leaves(node: object, path: str):
-            if isinstance(node, dict):
-                for key, value in node.items():
-                    yield from leaves(value, f"{path}.{key}" if path else key)
-            elif node not in (None, [], ""):
-                yield path
-
-        def row_matches(token: str, path: str) -> bool:
-            if token.endswith(".*"):
-                return path.startswith(token[:-1])
-            return path == token or path.startswith(token + ".") or path.endswith("." + token)
-
-        locked = {k: self.pack[k] for k in ("coaTemplate", "tax", "eInvoicing", "formats", "payrollHooks", "printFormats")}
-        locked["localeDefaults"] = {
-            "currency": self.pack["localeDefaults"]["currency"],
-            "holidays": {"calendarRef": self.pack["localeDefaults"]["holidays"]["calendarRef"]},
-        }
-        checked = 0
-        for path in leaves(locked, ""):
-            matching = [line for tokens, line in rows if any(row_matches(t, path) for t in tokens)]
-            with self.subTest(path=path):
-                self.assertTrue(matching, f"no SOURCES.md row for {path}")
-                self.assertTrue(
-                    any("http" in line or "no source" in line or "Platform default" in line for line in matching),
-                    f"row for {path} has neither a URL nor an explicit 'no source' note",
-                )
-            checked += 1
-        self.assertGreater(checked, 20)
+    def test_evidence_file_has_urls_access_dates_and_excerpt_status(self) -> None:
+        """Sources moved from the former SOURCES.md; the shared test checks coverage of every leaf."""
+        evidence = json.loads((QA_DIR / "evidence.json").read_text(encoding="utf-8"))
+        sources = {s["url"]: s for f in [*evidence["facts"], *evidence["factsOutsideSchema"]] for s in f.get("sources", [])}
+        self.assertEqual(sources["https://www.gta.gov.qa/en"]["accessed"], "2026-11-18")
+        for url, src in sources.items():
+            with self.subTest(url=url):
+                if "kpmg.com" in url or "vatupdate.com" in url:  # search excerpts only (qatar-research.md Q2)
+                    self.assertNotIn("accessed", src)
+                    self.assertIn("search excerpt only", src["note"])
+                else:
+                    self.assertEqual(src["accessed"], "2026-11-18")
+        self.assertTrue(all(f["status"] in ("UNVERIFIED", "PLATFORM-DEFAULT") for f in evidence["facts"]))
+        self.assertFalse((QA_DIR / "SOURCES.md").exists())
 
     def test_locked_areas_cover_every_non_locale_area(self) -> None:
         locked = set(self.pack["overridesPolicy"]["lockedPaths"])

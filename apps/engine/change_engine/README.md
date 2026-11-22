@@ -28,7 +28,14 @@ for t in test_ai_control_plane test_api_deployment test_phase2_property_setter t
   PYTHONPATH=. python3 -m unittest change_engine.tests.$t
 done
 ```
-Needs Python 3.10+ and `pydantic>=2`. The live test (`test_live_mariadb_suite_b.py`) needs `pymysql` and the dev stack, and the full zero-mock Frappe bench integration suite (`test_ce_sec_005_real_bench.py`) runs inside the pinned Docker bench via `python3 infra/dev/docker/run_real_bench_ci.py` (`.github/workflows/real-bench.yml`).
+Needs Python 3.10+ and `pydantic>=2`. The full zero-mock Frappe bench integration suite (`test_ce_sec_005_real_bench.py`) runs inside the pinned Docker bench via `python3 infra/dev/docker/run_real_bench_ci.py` (`.github/workflows/real-bench.yml`).
+
+Live MariaDB Suite B requires `pymysql` and a throwaway MariaDB dev stack. It creates the `ce_poc_db` database and recreates tables inside it. Export `DB_USER` and `DB_PASS` with credentials for that stack, and set `DB_HOST` and `DB_PORT` if its address differs from `127.0.0.1:3306`. Run from this directory:
+
+```bash
+CE_LIVE_MARIADB_SUITE_B=1 DB_USER="${DB_USER:?Set DB_USER}" DB_PASS="${DB_PASS:?Set DB_PASS}" \
+  PYTHONPATH=. python3 -m unittest change_engine.tests.test_live_mariadb_suite_b
+```
 
 ## Business record outbox (ERP-009)
 

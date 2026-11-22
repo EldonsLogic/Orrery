@@ -48,11 +48,6 @@ from change_engine.guarded_apply.schema_reconciler import (
     make_bounded_lock_key,
 )
 
-# Database Connection Configuration
-DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
-DB_PORT = int(os.environ.get("DB_PORT", 3306))
-DB_USER = os.environ.get("DB_USER", "root")
-DB_PASS = os.environ.get("DB_PASS", "admin")
 DB_NAME = "ce_poc_db"
 
 logging.basicConfig(
@@ -64,12 +59,16 @@ logger = logging.getLogger("SuiteB")
 
 
 def get_raw_connection(database: Optional[str] = DB_NAME) -> pymysql.Connection:
-    """Helper to establish a direct PyMySQL connection."""
+    """Connect to the dev stack using explicit credentials from the environment."""
+    user = os.environ.get("DB_USER")
+    password = os.environ.get("DB_PASS")
+    if not user or not password:
+        raise RuntimeError("Live MariaDB Suite B requires DB_USER and DB_PASS to be set and non-empty.")
     return pymysql.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASS,
+        host=os.environ.get("DB_HOST", "127.0.0.1"),
+        port=int(os.environ.get("DB_PORT", "3306")),
+        user=user,
+        password=password,
         database=database,
         autocommit=True,
     )
@@ -327,6 +326,10 @@ class RealMariaDBDeploymentAdapter:
             self.conn.close()
 
 
+@unittest.skipUnless(
+    os.environ.get("CE_LIVE_MARIADB_SUITE_B") == "1",
+    "Set CE_LIVE_MARIADB_SUITE_B=1 to run against the throwaway MariaDB dev stack (see README.md).",
+)
 class TestLiveMariaDBSuiteB(unittest.TestCase):
     """
     Test Suite B: Live MariaDB 10.11 empirical validation of ADR-001 Rev 2.3:

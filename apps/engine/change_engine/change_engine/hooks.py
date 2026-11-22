@@ -1,8 +1,8 @@
 """
 Change engine: Frappe app registration.
 
-Registers runtime policy enforcement, the business record outbox, and the
-internal-only request guard.
+Registers runtime policy enforcement, Hijri companion synchronization, the
+business record event outbox, and the internal-only request guard.
 No Desk UI assets, no branding, no landing-page routing (the product UI is a separate service).
 """
 
@@ -56,9 +56,18 @@ before_request = ["change_engine.api.route_guard.enforce_internal_only"]
 # NOTE: runs for every DocType; the policy store fails closed on database errors.
 doc_events = {
     "*": {
-        "validate": "change_engine.api.endpoints.enforce_runtime_policies_on_validate",
-        "before_submit": "change_engine.api.endpoints.enforce_runtime_policies_on_submit",
-        "before_update_after_submit": "change_engine.api.endpoints.enforce_runtime_policies_on_update_after_submit",
+        "validate": [
+            "change_engine.api.endpoints.enforce_runtime_policies_on_validate",
+            "change_engine.i18n.hijri_fields.sync_companions",
+        ],
+        "before_submit": [
+            "change_engine.api.endpoints.enforce_runtime_policies_on_submit",
+            "change_engine.i18n.hijri_fields.sync_companions",
+        ],
+        "before_update_after_submit": [
+            "change_engine.api.endpoints.enforce_runtime_policies_on_update_after_submit",
+            "change_engine.i18n.hijri_fields.sync_companions",
+        ],
     },
     **{
         doctype: {method: "change_engine.adapter.record_events.record_document_event"

@@ -12,7 +12,7 @@ from jsonschema import Draft202012Validator
 
 from components.compliance.country_pack import (
     OverrideRejectedError,
-    apply_company_overrides,
+    PackValidationError,
     load_country_pack,
     resolve_country_pack,
     validate_pack,
@@ -29,12 +29,12 @@ class TestEgyptCountryPack(unittest.TestCase):
     """Validates Egypt country pack loading, schema conformance, locked paths, overrides, and ADR-0031/0033 rules."""
 
     def setUp(self) -> None:
-        self.pack = load_country_pack("EG", PACKS_DIR, version="0.1.0")
+        self.pack = load_country_pack("EG", PACKS_DIR, version="0.1.0", environment="test")
         self.manifest = json.loads((EG_PACK_DIR / "manifest.json").read_text(encoding="utf-8"))
         self.strings = json.loads((EG_PACK_DIR / "strings.json").read_text(encoding="utf-8"))
 
     def test_loads_from_packs_root_without_test_only(self) -> None:
-        latest = load_country_pack("eg", PACKS_DIR)
+        latest = load_country_pack("eg", PACKS_DIR, environment="test")
         self.assertEqual(latest["version"], "0.1.0")
         self.assertEqual(self.pack["packId"], "eg")
         self.assertEqual(self.pack["componentId"], "country.eg")
@@ -43,6 +43,16 @@ class TestEgyptCountryPack(unittest.TestCase):
         self.assertEqual(self.pack["evidenceStatus"], "unverified")
         self.assertFalse(self.pack["testOnly"])
         self.assertEqual(validate_pack(self.pack), [])
+
+    def test_pack_is_refused_in_production(self) -> None:
+        # CMP-034 go-live gate: a `tested` pack with `unverified` evidence never loads in production (default environment).
+        with self.assertRaises(PackValidationError) as ctx:
+            load_country_pack("EG", PACKS_DIR, version="0.1.0")
+        self.assertIn("cannot be used in production", str(ctx.exception))
+        with self.assertRaises(PackValidationError):
+            resolve_country_pack("EG", PACKS_DIR, version="0.1.0")
+        with self.assertRaises(PackValidationError):
+            load_country_pack("EG", PACKS_DIR, version="0.1.0", environment="production")
 
     def test_manifest_validates_against_component_contract(self) -> None:
         schema = json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -146,15 +156,15 @@ class TestEgyptCountryPack(unittest.TestCase):
         for attempt in locked_attempts:
             with self.subTest(attempt=attempt):
                 with self.assertRaises(OverrideRejectedError):
-                    resolve_country_pack("EG", PACKS_DIR, company_overrides=attempt, version="0.1.0")
+                    resolve_country_pack("EG", PACKS_DIR, company_overrides=attempt, version="0.1.0", environment="test")
 
         # Constraint & post-merge invariant checks fail closed.
         with self.assertRaises(OverrideRejectedError):
-            apply_company_overrides(self.pack, {"fiscalYear": {"type": "hijri"}})
+            resolve_country_pack("EG", PACKS_DIR, version="0.1.0", environment="test", company_overrides={"fiscalYear": {"type": "hijri"}})
         with self.assertRaises(OverrideRejectedError):
-            apply_company_overrides(self.pack, {"workingTime": {"workDays": ["sun", "fri"]}})
+            resolve_country_pack("EG", PACKS_DIR, version="0.1.0", environment="test", company_overrides={"workingTime": {"workDays": ["sun", "fri"]}})
         with self.assertRaises(OverrideRejectedError):
-            apply_company_overrides(self.pack, {"timezone": "Invalid/Zone"})
+            resolve_country_pack("EG", PACKS_DIR, version="0.1.0", environment="test", company_overrides={"timezone": "Invalid/Zone"})
 
     def test_allowed_company_overrides_validate_and_resolve(self) -> None:
         overrides = {
@@ -185,7 +195,7 @@ class TestEgyptCountryPack(unittest.TestCase):
                 ]
             },
         }
-        resolved = resolve_country_pack("EG", PACKS_DIR, company_overrides=overrides, version="0.1.0")
+        resolved = resolve_country_pack("EG", PACKS_DIR, company_overrides=overrides, version="0.1.0", environment="test")
         self.assertEqual(resolved["status"], "tested")
         self.assertEqual(resolved["evidenceStatus"], "unverified")
         self.assertEqual(resolved["locale"]["numberSystem"], "eastern_arabic")

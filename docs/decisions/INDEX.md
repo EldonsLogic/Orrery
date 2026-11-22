@@ -33,7 +33,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0024-four-phase-1-markets.md](ADR-0024-four-phase-1-markets.md) | Four phase-1 markets, no fixed launch order | Accepted |
 | [ADR-0025-independent-founder-lanes-in-the-plan.md](ADR-0025-independent-founder-lanes-in-the-plan.md) | Independent founder lanes in the plan | Accepted |
 | [ADR-0026-phased-delivery-and-market-pack-track.md](ADR-0026-phased-delivery-and-market-pack-track.md) | Phased delivery, phase exits and the market-pack track | Accepted |
-| [ADR-0027-human-floor-action-policy-and-agent-authority.md](ADR-0027-human-floor-action-policy-and-agent-authority.md) | Human floor, action-policy table and agent authority | Proposed |
+| [ADR-0027-human-floor-action-policy-and-agent-authority.md](ADR-0027-human-floor-action-policy-and-agent-authority.md) | Human floor, action-policy table and agent authority | Accepted |
 | [ADR-0028-recoverable-journaled-change-apply.md](ADR-0028-recoverable-journaled-change-apply.md) | Recoverable, journaled change apply (not universal rollback) | Accepted |
 | [ADR-0029-engine-disclosure-wording-and-saas-only.md](ADR-0029-engine-disclosure-wording-and-saas-only.md) | Engine disclosure wording and SaaS-only delivery | Proposed |
 | [ADR-0030-blueprint-to-engine-mapping-contract.md](ADR-0030-blueprint-to-engine-mapping-contract.md) | Blueprint-to-engine mapping contract | Proposed |

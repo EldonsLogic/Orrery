@@ -73,6 +73,14 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
   - The partner is building the loader go-live gate as CMP-034.
 - Meeting/ was moved out of the repo.
 
+## Update 2026-11-22
+- Reviews posted as Eldon: approved #256 (Egypt), #257 (KSA and UAE, after #259), #259 (loader gate), #261 and #262 (SEC-022 follow-ups); changes requested on #260 (ERP-029; answered the partner's question: journal one conflict entry, escalate it, continue the other requests).
+- Eldon's instruction: Fable line-by-line reviews posted on #255, #256, #257, #259, #261 (post-merge) and #262, signed "Line-by-line review (ADR-0031): Eldon ... read on my behalf by Fable 5.2 at my direction; I accept it as my review". HUMAN-ONLY items (tax facts, Arabic, counsel, Q-560) stay open.
+- Open on main (partner lane): a link field can be re-pointed through `/options` (flagged on #262).
+- #253: blueprint-versioning.md now points at ADR-0057 for Q-86.
+- #263 (GOV-060, ADR-0058): design-confirmation batch 2. Resolves Q-109 and Q-112; five rows decided and pending (BPL-039, SEC-023, WEB-028, INF-014, unchanged); 14 dropped with reasons. Fable approved it after one fix round. Merges after #253; Tier 2, so it waits for the partner.
+- Founder decision brief for the 29 G1 founder questions given to Eldon (kept outside the repo).
+
 ## Files touched
 - AGENTS.md: session start step 5 (live session log)
 - docs/RULES.md: rule 51

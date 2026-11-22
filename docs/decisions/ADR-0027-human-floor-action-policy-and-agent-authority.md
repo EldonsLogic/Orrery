@@ -2,7 +2,7 @@
 
 Status: Accepted
 Owner: eldon
-Approved by: Eldon, answering for both founders, 2026-11-22 (Q-128 and Q-294), recorded in docs/log/2026-11-22-eldon-claude-code-founder-answers.md; accepted with the partner's three Q-294 checks, now written into the Decision below. The per-country clearance sequence still needs accountant and compliance review before it is used. Whether delivery-generated GL postings fall under the floor stays with Q-44.
+Approved by: Eldon, answering for both founders, 2026-11-22 (Q-128 and Q-294), recorded in docs/log/2026-11-22-eldon-claude-code-founder-answers.md, with the partner's review of PR #264 as the second founder's record (ADR-0032 item 2); accepted with the partner's three Q-294 checks, now written into the Decision below. The per-country clearance sequence still needs accountant and compliance review before it is used. Whether delivery-generated GL postings fall under the floor stays with Q-44.
 
 ## Context
 Customers will create agents with an autonomy level per agent. The earlier wording of the human floor ("books, tax filing, payments, permission changes, or a human-set limit") had two holes: a limit set absurdly high is autonomy, and per-invoice authority clearance, where a country requires it, is a tax submission with no human in the loop (UNVERIFIED per country; accountant and counsel confirm). Agent authority also needs defining ([ADR-0004](ADR-0004-one-chat-role-based-views.md), [ADR-0005](ADR-0005-human-review-gate-free-first.md), RULES 21 to 23).

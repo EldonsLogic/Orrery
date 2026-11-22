@@ -25,3 +25,10 @@ Unknown.
 ## Next step
 - Partner (gateway lane, `services/gateway/`): edge and per-IP limits, WAF and CDN, per-tenant HTTP quotas and the real budget layers under PLT-009 and PLT-021; then SEC-009 can close.
 - Wire `BudgetGuard` when a contract client replaces `gateway_port.py` (PLT-009). Founders: Q-561, Q-562.
+
+## Review fixes (cross-model security review of PR 270, head 2738aa9)
+Tests first; all four Medium and ten Low findings addressed. 20 targeted mutants of `ratelimit.py`, `chat/service.py`, `chat/runner.py` and `runtime/loop.py` are all killed, including the four that survived the review (lock removal, tool key on a request field, chat-session keying, BudgetGuard dict branch).
+- M1: clock values must be finite numbers in 0..1e10 s, else `store_error` with nothing recorded; the key recovers with the clock. M2: the rule set is validated once (int limit 1..1e6, finite window 1 s..7 days, known scope, no duplicates); any junk makes every check `policy_missing`.
+- M3: faults (`identity_missing`, `policy_missing`, `store_error`) reach the user as `chat_limit_unavailable` (not retryable, en and ar); over a limit is `chat_rate_limited` with the wait in minutes from `retry_after_s`. Every refusal is logged (`ratelimit`) and chat refusals are audited as `chat.rate_limited`.
+- M4: a turn is counted only after `begin_run` accepted it; a refusal releases the run in the same lock.
+- Lows: `loop_runtime_factory` always wraps tools; periodic sweep of stale keys; backwards clock clamped; tool `rate_limited` carries `retryable` and `retry_after_s` and stops the run (`stop_reason: rate_limited`, `runtime/loop.py`); `limiter is None`; BudgetGuard reasons closed to the contract set (else `unknown`); `RateLimited.as_dict` removed; new sessions metered per user (kind `session`), keyed on the subject; replays stay free (documented); Q-261 notes that `web/app` maps no `chat_*` code yet; `test_chat.py` error-table test fills the `{minutes}` template.

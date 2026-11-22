@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import re
 import threading
 from typing import Iterator, Optional
@@ -39,13 +40,14 @@ class ChatService:
         """`change` is a ChangePort (change.ChangeService) built on the SAME clock. With it, a `change` turn that the
         router says needs confirmation is proposed and previewed here, the pending confirmation is recorded only after
         the preview was shown, and a confirming turn goes to `change.confirm` with the router's binding. Without it
-        the chat never proposes or confirms anything. `limiter` (SEC-009) counts admitted turns per tenant and user;
-        the default uses `runtime.ratelimit.DEFAULT_RULES` on the same clock. Share it with `loop_runtime_factory`."""
+        the chat never proposes or confirms anything. `limiter` (SEC-009) counts accepted turns and new sessions per
+        tenant and user; the default uses `runtime.ratelimit.DEFAULT_RULES` on the same clock (which must be
+        monotonic). Share it with `loop_runtime_factory`."""
         self.store, self.factory, self.ids, self.clock, self.audit = store, runtime_factory, ids, clock, audit
         self.change, self.pending = change, pending or MemoryPendingStore()
         self.router, self.retention = router or DefaultRouter(), retention or NoRetention()
         self.limits, self.frame_for, self.default_locale = limits, frame_for, default_locale
-        self.limiter = limiter or RateLimiter(clock)
+        self.limiter = RateLimiter(clock) if limiter is None else limiter
         self._lock = threading.Lock()
         self._active: dict = {}  # (tenant, session_id) -> (run_id, CancelToken)
 
@@ -66,6 +68,7 @@ class ChatService:
         s = None if new else self.store.latest_session(p.tenant_id, p.subject)
         if s is not None:
             return s
+        self._admit(p, "session")  # new sessions are metered per user, so a fresh session is not a fresh quota
         now = self.clock()
         return self.store.create_session(Session(p.tenant_id, p.subject, self.ids.new_id("ses"),
                                                  self.ids.new_id("thr"), self.default_locale, now, now))
@@ -83,6 +86,17 @@ class ChatService:
             return False
         cur[1].cancel()
         return True
+
+    def _admit(self, p: Principal, kind: str) -> None:
+        """Count one `kind` event for the verified principal (SEC-009). Over a limit is retryable with a wait time;
+        a limiter fault or misconfiguration is not, and says so. Every refusal is audited (no message text)."""
+        try:
+            self.limiter.admit(kind, p.tenant_id, p.subject)
+        except RateLimited as e:
+            self._audit(p, "chat.rate_limited", {"kind": kind, "reason": e.reason, "retry_after_s": e.retry_after_s})
+            if e.retryable:
+                raise ChatFailure("chat_rate_limited", {"minutes": max(1, math.ceil(e.retry_after_s / 60))})
+            raise ChatFailure("chat_limit_unavailable")
 
     # ---- audit ---------------------------------------------------------------------------------------------
     def _audit(self, p: Principal, type_: str, data: dict, trace: Optional[dict] = None) -> None:
@@ -122,12 +136,13 @@ class ChatService:
                 raise ChatFailure("chat_message_id_conflict")
             replay = rec if rec is not None and rec.status == "done" else None
             if replay is None:
-                try:  # a replay is free; a new turn counts, keyed by the verified principal only (SEC-009)
-                    self.limiter.admit("turn", p.tenant_id, p.subject)
-                except RateLimited:
-                    raise ChatFailure("chat_rate_limited")
                 if not self.store.begin_run(session, run_id, self.clock(), self.limits.run_ttl_s):
                     raise ChatFailure("chat_run_in_progress")  # second message is rejected, not queued
+                try:  # only an accepted turn counts; a replay is free (SEC-009)
+                    self._admit(p, "turn")
+                except Exception:
+                    self.store.end_run(session, run_id)  # same lock: undo the accepted run before refusing
+                    raise
                 self.store.put_message(session, MessageRecord(message_id, thash, "running", "", run_id))
                 token = CancelToken()
                 self._active[(session.tenant_id, session.session_id)] = (run_id, token)

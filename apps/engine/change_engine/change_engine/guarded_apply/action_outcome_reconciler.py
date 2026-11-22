@@ -22,7 +22,7 @@ from .action_policy_store import ActionAudit, ActionOutcome, ActionPolicyStore, 
 _TERMINAL = ("applied", "failed")
 _REASONS = frozenset({
     "recorded", "readback", "readback_pending", "readback_invalid", "readback_mismatch",
-    "reader_error", "admission_unbound", "handler_in_flight",
+    "reader_error", "admission_unbound", "handler_in_flight", "outcome_conflict",
 })
 _COLUMNS = ("sequence", "tenant_id", "request_id", "state", "reason", "stuck", "timestamp", "mac")
 _SEQUENCE_CHECK = "CHECK (sequence > 0)"
@@ -115,6 +115,9 @@ class ActionOutcomeReconciler:
                 CREATE UNIQUE INDEX IF NOT EXISTS action_outcome_reconciliation_terminal
                 ON action_outcome_reconciliation (tenant_id, request_id)
                 WHERE state IN ('applied', 'failed');
+                CREATE UNIQUE INDEX IF NOT EXISTS action_outcome_reconciliation_conflict
+                ON action_outcome_reconciliation (tenant_id, request_id)
+                WHERE reason = 'outcome_conflict';
                 CREATE TRIGGER IF NOT EXISTS action_outcome_reconciliation_no_update
                 BEFORE UPDATE ON action_outcome_reconciliation
                 BEGIN SELECT RAISE(ABORT, 'Append-only reconciliation'); END;
@@ -160,10 +163,10 @@ class ActionOutcomeReconciler:
                 self._verify(db)
             finally:
                 db.close()
-            self._check_run(admissions, now)  # Before any read-back or write.
+            self._check_clock(admissions, now)  # Before any read-back or write.
             planned = {}
             for rid in selected:
-                if not self._is_terminal(rid):
+                if not self._is_settled(rid):
                     outcome = self._store.outcome_for(self._tenant, rid)
                     planned[rid] = self._decide(admissions[rid], outcome, now)
             return self._commit(admissions, selected, planned, now)
@@ -179,30 +182,31 @@ class ActionOutcomeReconciler:
             found[audit.request_id] = audit
         return found
 
-    def _is_terminal(self, request_id: str) -> bool:
+    def _is_settled(self, request_id: str) -> bool:
         latest = self._latest.get(request_id)
-        return latest is not None and latest.state in _TERMINAL
+        return latest is not None and (latest.state in _TERMINAL or latest.reason == "outcome_conflict")
 
-    def _check_run(self, admissions: dict[str, ActionAudit], now: datetime) -> None:
-        """Refuse the whole run on a backwards clock or a contradicted final entry, any request."""
+    def _check_clock(self, admissions: dict[str, ActionAudit], now: datetime) -> None:
+        """Refuse the whole run on a backwards clock."""
         if any(now < audit.timestamp for audit in admissions.values()) or any(
                 now < entry.timestamp for entry in self._latest.values()):
             raise ReconciliationRefused("clock_unavailable")
+
+    def _conflicts(self) -> list[str]:
         conflicts = []
         for rid, entry in self._latest.items():
             if entry.state in _TERMINAL:
                 outcome = self._store.outcome_for(self._tenant, rid)
                 if outcome is not None and outcome.status in _TERMINAL and outcome.status != entry.state:
                     conflicts.append(rid)
-        if conflicts:
-            raise ReconciliationRefused("outcome_conflict", tuple(conflicts))
+        return conflicts
 
     def _decide(self, audit: ActionAudit, outcome: ActionOutcome | None, now: datetime) -> tuple[str, str]:
         if outcome is not None and outcome.status in _TERMINAL:
             return outcome.status, "recorded"
         state, reason = self._read_back(audit)
-        if state == "failed" and outcome is None and now - audit.timestamp < self._handler_deadline:
-            return "unknown", "handler_in_flight"  # A slow handler may still record its outcome.
+        if state == "failed" and now - audit.timestamp < self._handler_deadline:
+            return "unknown", "handler_in_flight"  # An in-flight effect may still commit.
         return state, reason
 
     def _read_back(self, audit: ActionAudit) -> tuple[str, str]:
@@ -235,29 +239,40 @@ class ActionOutcomeReconciler:
         planned: dict[str, tuple[str, str]], now: datetime,
     ) -> tuple[ReconciledOutcome, ...]:
         db = sqlite3.connect(self._uri, uri=True)
+        saved = (self._sequence, self._prev, dict(self._latest))
         try:
             with db:
                 db.execute("BEGIN IMMEDIATE")
                 self._verify(db)  # Entries a concurrent run appended since the first check.
-                self._check_run(admissions, now)
+                saved = (self._sequence, self._prev, dict(self._latest))
+                self._check_clock(admissions, now)
+                for rid in self._conflicts():
+                    self._insert(db, rid, "unknown", "outcome_conflict", True, now)
+                conflict_open = any(e.reason == "outcome_conflict" for e in self._latest.values())
                 results = []
                 for rid in selected:
                     latest = self._latest.get(rid)
-                    if latest is not None and latest.state in _TERMINAL:
-                        results.append(ReconciledOutcome(self._tenant, rid, latest.state, latest.reason, False))
+                    if self._is_settled(rid):
+                        results.append(ReconciledOutcome(self._tenant, rid, latest.state, latest.reason, latest.stuck))
                         continue
                     state, reason = planned[rid]
                     outcome = self._store.outcome_for(self._tenant, rid)  # A recorded final outcome wins.
                     if outcome is not None and outcome.status in _TERMINAL:
                         state, reason = outcome.status, "recorded"
+                    elif state == "failed" and conflict_open:
+                        state, reason = "unknown", "readback_pending"
                     # Human floor: escalate once, never retry or release the claim.
                     stuck = state == "unknown" and now - admissions[rid].timestamp >= self._stuck_after
-                    if latest is None or state in _TERMINAL or (stuck and not latest.stuck):
+                    if latest is None or state in _TERMINAL or reason != latest.reason or (stuck and not latest.stuck):
                         self._insert(db, rid, state, reason, stuck, now)
                     results.append(ReconciledOutcome(self._tenant, rid, state, reason, stuck))
             return tuple(results)
         except sqlite3.IntegrityError:
+            self._sequence, self._prev, self._latest = saved
             raise ReconciliationRefused("journal_tampered") from None
+        except Exception:
+            self._sequence, self._prev, self._latest = saved
+            raise
         finally:
             db.close()
 
@@ -289,26 +304,31 @@ class ActionOutcomeReconciler:
         a duplicate, a sequence <= 0 or a shrinkage from an earlier check is refused.
         """
         floor = self._sequence
+        saved = (self._sequence, self._prev, dict(self._latest))
         self._reset()
-        rows = db.execute(
-            "SELECT sequence, tenant_id, request_id, state, reason, stuck, timestamp, mac "
-            "FROM action_outcome_reconciliation ORDER BY sequence"
-        ).fetchall()
-        for sequence, tenant_id, request_id, state, reason, stuck, timestamp, mac in rows:
-            fields = (tenant_id, request_id, state, reason, stuck, timestamp)
-            if (sequence != self._sequence + 1
-                    or not all(type(v) is str for v in (tenant_id, request_id, state, reason, timestamp, mac))
-                    or reason not in _REASONS or type(stuck) is not int or stuck not in (0, 1)
-                    or not hmac.compare_digest(mac.encode(), self._mac(sequence, fields).encode())):
+        try:
+            rows = db.execute(
+                "SELECT sequence, tenant_id, request_id, state, reason, stuck, timestamp, mac "
+                "FROM action_outcome_reconciliation ORDER BY sequence"
+            ).fetchall()
+            for sequence, tenant_id, request_id, state, reason, stuck, timestamp, mac in rows:
+                fields = (tenant_id, request_id, state, reason, stuck, timestamp)
+                if (sequence != self._sequence + 1
+                        or not all(type(v) is str for v in (tenant_id, request_id, state, reason, timestamp, mac))
+                        or reason not in _REASONS or type(stuck) is not int or stuck not in (0, 1)
+                        or not hmac.compare_digest(mac.encode(), self._mac(sequence, fields).encode())):
+                    raise ReconciliationRefused("journal_tampered")
+                try:
+                    instant = datetime.fromisoformat(timestamp)
+                except ValueError:
+                    instant = None
+                if not valid_instant(instant):
+                    raise ReconciliationRefused("journal_tampered")
+                self._sequence, self._prev = sequence, mac
+                if tenant_id == self._tenant:
+                    self._latest[request_id] = _Entry(state, reason, bool(stuck), instant)
+            if self._sequence < floor:
                 raise ReconciliationRefused("journal_tampered")
-            try:
-                instant = datetime.fromisoformat(timestamp)
-            except ValueError:
-                instant = None
-            if not valid_instant(instant):
-                raise ReconciliationRefused("journal_tampered")
-            self._sequence, self._prev = sequence, mac
-            if tenant_id == self._tenant:
-                self._latest[request_id] = _Entry(state, reason, bool(stuck), instant)
-        if self._sequence < floor:
-            raise ReconciliationRefused("journal_tampered")
+        except Exception:
+            self._sequence, self._prev, self._latest = saved
+            raise

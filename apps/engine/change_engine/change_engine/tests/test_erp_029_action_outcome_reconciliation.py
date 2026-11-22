@@ -154,6 +154,7 @@ def test_applied_failed_and_unknown_then_unknown_resolved_by_readback(recon, tmp
         ("tenant-a", "request-3", "unknown", "readback_pending", 0),
         ("tenant-a", "request-4", "unknown", "readback_pending", 0),
         ("tenant-a", "request-3", "applied", "readback", 0),
+        ("tenant-a", "request-4", "unknown", "handler_in_flight", 0),
         ("tenant-a", "request-4", "failed", "readback", 0),
     ]
     assert digest4  # Bound digest was produced at admission.
@@ -425,33 +426,99 @@ def _journal_failed_request_2(recon, path, engine):
     return digest3
 
 
-@pytest.mark.parametrize("request_ids", [None, ("request-1",), ("request-3",), ("request-2",)])
-def test_outcome_conflict_refuses_the_run_with_nothing_written(recon, tmp_path, request_ids):
+def test_outcome_conflict_is_journaled_once_escalated_and_sticky(recon, tmp_path):
     path = tmp_path / "policy.sqlite3"
     engine = Engine(recon)
     _journal_failed_request_2(recon, path, engine)
     policy.ActionPolicyStore(path).record_outcome("tenant-a", "request-2", "applied")
-    before, calls = _journal(path), list(engine.calls)
-    with pytest.raises(recon.ReconciliationRefused, match="outcome_conflict") as refused:
-        _reconciler(recon, path, engine, clock=lambda: LATER).reconcile(request_ids)
-    assert refused.value.request_ids == ("request-2",)
-    assert _journal(path) == before
-    assert engine.calls == calls  # Refused before any read-back.
+    later = NOW + timedelta(hours=2)
+    reconciler = _reconciler(recon, path, engine, clock=lambda: later)
+    first = _states(reconciler.reconcile())
+    assert first == {
+        "request-1": ("applied", "recorded", False),
+        "request-2": ("unknown", "outcome_conflict", True),
+        "request-3": ("unknown", "readback_pending", True),
+    }
+    expected = [
+        ("tenant-a", "request-2", "failed", "readback", 0),
+        ("tenant-a", "request-2", "unknown", "outcome_conflict", 1),
+        ("tenant-a", "request-1", "applied", "recorded", 0),
+        ("tenant-a", "request-3", "unknown", "readback_pending", 1),
+    ]
+    assert _journal(path) == expected
+    # Sticky and written once: repeat runs on the same or a new instance add no duplicate entry.
+    assert _states(reconciler.reconcile()) == first
+    assert _states(_reconciler(recon, path, engine, clock=lambda: later).reconcile()) == first
+    assert _journal(path) == expected
 
 
-def test_outcome_conflict_recorded_during_the_run_is_caught_under_the_lock(recon, tmp_path):
+def test_unrelated_stuck_request_still_journals_and_escalates_when_conflict_exists(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    engine = Engine(recon)
+    _journal_failed_request_2(recon, path, engine)
+    policy.ActionPolicyStore(path).record_outcome("tenant-a", "request-2", "applied")
+    later = NOW + timedelta(hours=2)
+    reconciler = _reconciler(recon, path, engine, clock=lambda: later)
+    assert _states(reconciler.reconcile(("request-3",))) == {
+        "request-3": ("unknown", "readback_pending", True),
+    }
+    assert _journal(path) == [
+        ("tenant-a", "request-2", "failed", "readback", 0),
+        ("tenant-a", "request-2", "unknown", "outcome_conflict", 1),
+        ("tenant-a", "request-3", "unknown", "readback_pending", 1),
+    ]
+    # A subsequent full run writes no duplicate conflict or stuck entry.
+    assert _states(reconciler.reconcile()) == {
+        "request-1": ("applied", "recorded", False),
+        "request-2": ("unknown", "outcome_conflict", True),
+        "request-3": ("unknown", "readback_pending", True),
+    }
+    assert [r for r in _journal(path) if r[3] == "outcome_conflict"] == [
+        ("tenant-a", "request-2", "unknown", "outcome_conflict", 1),
+    ]
+
+
+def test_new_not_applied_readback_stays_unknown_while_conflict_is_open(recon, tmp_path):
     path = tmp_path / "policy.sqlite3"
     engine = Engine(recon)
     digest3 = _journal_failed_request_2(recon, path, engine)
-    before = _journal(path)
+    _admit(path, _request(4))  # Missing outcome, read-back says not_applied.
+    policy.ActionPolicyStore(path).record_outcome("tenant-a", "request-2", "applied")
+    engine.effects[("tenant-a", "finance-a", "key-3")] = ("applied", "request-3", digest3)
+    engine.effects[("tenant-a", "finance-a", "key-4")] = ("not_applied", None, None)
+
+    first = _states(_reconciler(recon, path, engine, clock=lambda: LATER).reconcile())
+    assert first == {
+        "request-1": ("applied", "recorded", False),
+        "request-2": ("unknown", "outcome_conflict", True),
+        "request-3": ("applied", "readback", False),
+        "request-4": ("unknown", "readback_pending", False),
+    }
+    # After stuck_after, the unfinalised not_applied request escalates while the conflict stays open.
+    second = _states(_reconciler(recon, path, engine, clock=lambda: NOW + timedelta(hours=2)).reconcile())
+    assert second["request-2"] == ("unknown", "outcome_conflict", True)
+    assert second["request-4"] == ("unknown", "readback_pending", True)
+
+
+def test_outcome_conflict_recorded_during_the_run_is_journaled_under_the_lock(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    engine = Engine(recon)
+    digest3 = _journal_failed_request_2(recon, path, engine)
+    _admit(path, _request(4), _unknown)
 
     def read(tenant_id, submitter_id, key):
-        policy.ActionPolicyStore(path).record_outcome("tenant-a", "request-2", "applied")
-        return recon.EngineReadback(tenant_id, submitter_id, key, "applied", "request-3", digest3)
+        if key == "key-3":
+            policy.ActionPolicyStore(path).record_outcome("tenant-a", "request-2", "applied")
+            return recon.EngineReadback(tenant_id, submitter_id, key, "applied", "request-3", digest3)
+        return recon.EngineReadback(tenant_id, submitter_id, key, "not_applied")
 
-    with pytest.raises(recon.ReconciliationRefused, match="outcome_conflict"):
-        _reconciler(recon, path, engine, clock=lambda: LATER, read=read).reconcile()
-    assert _journal(path) == before
+    results = _states(_reconciler(recon, path, engine, clock=lambda: LATER, read=read).reconcile())
+    assert results == {
+        "request-1": ("applied", "recorded", False),
+        "request-2": ("unknown", "outcome_conflict", True),
+        "request-3": ("applied", "readback", False),
+        "request-4": ("unknown", "readback_pending", False),
+    }
 
 
 def test_outcome_recorded_during_the_readback_wins(recon, tmp_path):
@@ -605,9 +672,14 @@ def test_not_applied_must_carry_no_effect_fields(recon, tmp_path, extra):
 
     results = _states(_reconciler(recon, path, None, read=read).reconcile())
     assert results["request-1"] == ("unknown", "readback_mismatch", False)
-    # Once the handler has recorded unknown, a clean not_applied is final even before handler_deadline.
-    clean = _reconciler(recon, path, None, read=lambda t, s, k: recon.EngineReadback(t, s, k, "not_applied"))
-    assert _states(clean.reconcile())["request-1"] == ("failed", "readback", False)
+    # A recorded unknown also waits for handler_deadline before accepting a clean not_applied.
+    clean_now = _reconciler(recon, path, None, read=lambda t, s, k: recon.EngineReadback(t, s, k, "not_applied"))
+    assert _states(clean_now.reconcile())["request-1"] == ("unknown", "handler_in_flight", False)
+    results_later = _states(_reconciler(recon, path, None, clock=lambda: LATER, read=read).reconcile())
+    assert results_later["request-1"] == ("unknown", "readback_mismatch", False)
+    clean_later = _reconciler(
+        recon, path, None, clock=lambda: LATER, read=lambda t, s, k: recon.EngineReadback(t, s, k, "not_applied"))
+    assert _states(clean_later.reconcile())["request-1"] == ("failed", "readback", False)
 
 
 def test_binding_submitter_must_match_the_audited_submitter(recon, tmp_path):
@@ -649,7 +721,7 @@ def test_racing_reconcilers_with_contradictory_readbacks_append_one_final_entry(
             return recon.EngineReadback(tenant_id, submitter_id, key, state)
         return read
 
-    reconcilers = [_reconciler(recon, path, None, read=reader(s)) for s in ("applied", "not_applied")]
+    reconcilers = [_reconciler(recon, path, None, clock=lambda: LATER, read=reader(s)) for s in ("applied", "not_applied")]
     with ThreadPoolExecutor(2) as pool:
         results = list(pool.map(lambda r: r.reconcile(), reconcilers))
     assert len({_states(r)["request-1"] for r in results}) == 1
@@ -668,3 +740,127 @@ def test_one_instance_shared_across_threads(recon, tmp_path):
         results = list(pool.map(lambda _: reconciler.reconcile(), range(16)))
     assert {_states(r)["request-1"] for r in results} == {("applied", "readback", False)}
     assert [row[1:3] for row in _journal(path)] == [("request-1", "applied"), ("request-2", "applied")]
+
+
+# ---------------------------------------------------------------- fix round 2 (PR #260)
+@pytest.mark.parametrize("handler", [None, _unknown])
+def test_handler_deadline_boundary_for_missing_and_recorded_unknown(recon, tmp_path, handler):
+    path = tmp_path / "policy.sqlite3"
+    _admit(path, _request(1), handler)
+    engine = Engine(recon)
+    engine.effects[("tenant-a", "finance-a", "key-1")] = ("not_applied", None, None)
+    before_deadline = NOW + timedelta(minutes=10) - timedelta(seconds=1)
+    at_deadline = NOW + timedelta(minutes=10)
+    times = iter((before_deadline, at_deadline))
+    reconciler = _reconciler(recon, path, engine, clock=lambda: next(times))
+    assert _states(reconciler.reconcile())["request-1"] == ("unknown", "handler_in_flight", False)
+    assert _states(reconciler.reconcile())["request-1"] == ("failed", "readback", False)
+    assert _journal(path) == [
+        ("tenant-a", "request-1", "unknown", "handler_in_flight", 0),
+        ("tenant-a", "request-1", "failed", "readback", 0),
+    ]
+
+
+def test_stuck_after_boundary(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    _admit(path, _request(1), _unknown)
+    engine = Engine(recon)
+    before_stuck = NOW + timedelta(hours=1) - timedelta(seconds=1)
+    at_stuck = NOW + timedelta(hours=1)
+    times = iter((before_stuck, at_stuck))
+    reconciler = _reconciler(recon, path, engine, clock=lambda: next(times))
+    assert _states(reconciler.reconcile())["request-1"] == ("unknown", "readback_pending", False)
+    assert _states(reconciler.reconcile())["request-1"] == ("unknown", "readback_pending", True)
+    assert _journal(path) == [
+        ("tenant-a", "request-1", "unknown", "readback_pending", 0),
+        ("tenant-a", "request-1", "unknown", "readback_pending", 1),
+    ]
+
+
+def test_reason_change_before_stuck_threshold_is_journaled(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    digest = _admit(path, _request(1), _unknown)
+    engine = Engine(recon)
+    reconciler = _reconciler(recon, path, engine)
+    assert _states(reconciler.reconcile())["request-1"] == ("unknown", "readback_pending", False)
+    engine.effects[("tenant-a", "finance-a", "key-1")] = ("applied", "request-9", digest)
+    assert _states(reconciler.reconcile())["request-1"] == ("unknown", "readback_mismatch", False)
+    assert _states(reconciler.reconcile())["request-1"] == ("unknown", "readback_mismatch", False)
+    assert _journal(path) == [
+        ("tenant-a", "request-1", "unknown", "readback_pending", 0),
+        ("tenant-a", "request-1", "unknown", "readback_mismatch", 0),
+    ]
+
+
+def test_rolled_back_commit_restores_in_memory_head(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    _admit(path, _request(1), _applied)
+    _admit(path, _request(2), _applied)
+    engine = Engine(recon)
+    reconciler = _reconciler(recon, path, engine)
+    assert _states(reconciler.reconcile(("request-1",))) == {"request-1": ("applied", "recorded", False)}
+
+    _admit(path, _request(3), _applied)
+    real_insert = reconciler._insert
+    calls = 0
+
+    def flaky_insert(db, rid, state, reason, stuck, now):
+        nonlocal calls
+        calls += 1
+        real_insert(db, rid, state, reason, stuck, now)
+        if calls == 2:
+            raise sqlite3.OperationalError("simulated disk I/O error mid-commit")
+
+    reconciler._insert = flaky_insert
+    with pytest.raises(sqlite3.OperationalError, match="mid-commit"):
+        reconciler.reconcile()
+    assert _journal(path) == [("tenant-a", "request-1", "applied", "recorded", 0)]
+
+    reconciler._insert = real_insert
+    assert _states(reconciler.reconcile()) == {
+        "request-1": ("applied", "recorded", False),
+        "request-2": ("applied", "recorded", False),
+        "request-3": ("applied", "recorded", False),
+    }
+    assert len(_journal(path)) == 3
+
+
+def test_tampered_stuck_column_is_caught_by_mac(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    _admit(path, _request(1), _unknown)
+    engine = Engine(recon)
+    _reconciler(recon, path, engine).reconcile()
+    with sqlite3.connect(path) as db:
+        db.execute("DROP TRIGGER action_outcome_reconciliation_no_update")
+        db.execute("UPDATE action_outcome_reconciliation SET stuck = 1 WHERE request_id = 'request-1'")
+    with pytest.raises(recon.ReconciliationRefused, match="journal_tampered"):
+        _reconciler(recon, path, engine).reconcile()
+
+
+def test_journal_shrinkage_on_same_instance_is_refused(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    _admit(path, _request(1), _applied)
+    _admit(path, _request(2), _applied)
+    engine = Engine(recon)
+    reconciler = _reconciler(recon, path, engine)
+    reconciler.reconcile()
+    with sqlite3.connect(path) as db:
+        db.execute("DROP TRIGGER action_outcome_reconciliation_no_delete")
+        db.execute("DELETE FROM action_outcome_reconciliation WHERE sequence = 2")
+    with pytest.raises(recon.ReconciliationRefused, match="journal_tampered"):
+        reconciler.reconcile()
+
+
+def test_integrity_error_in_commit_maps_to_journal_tampered(recon, tmp_path):
+    path = tmp_path / "policy.sqlite3"
+    _admit(path, _request(1), _applied)
+    engine = Engine(recon)
+    reconciler = _reconciler(recon, path, engine)
+    reconciler.reconcile()
+    # A valid-MAC unknown row appended after a terminal row hits the unique terminal index on commit.
+    fields = ("tenant-a", "request-1", "unknown", "readback_pending", 0, NOW.isoformat())
+    mac = reconciler._mac(2, fields)
+    with sqlite3.connect(path) as db:
+        db.execute("INSERT INTO action_outcome_reconciliation VALUES (2, ?, ?, ?, ?, ?, ?, ?)", (*fields, mac))
+    with pytest.raises(recon.ReconciliationRefused, match="journal_tampered"):
+        reconciler.reconcile()

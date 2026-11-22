@@ -91,3 +91,29 @@ Tool and model: antigravity (Gemini 4 Argon, continuing Claude Opus 5.5 WIP `ba8
 - BPL-025 conformance: 208 passed (`make_harness`) and 208 passed (`make_frappe_harness`, `CHANGE_ENGINE_ENV=test`).
 - `scripts/tests`: 36 passed, 29 subtests.
 - `check_docs`, `check_repo_hygiene`, `scan_secrets` and `check_lanes --base origin/main --actor partner`: all passed.
+
+## Fix round 2 (Eldon)
+Date: 2026-11-22
+Author: partner
+Tool and model: antigravity (Gemini 4 Argon)
+
+### Findings fixed (Fable 5.2 re-review of `f111281`, for Eldon)
+1. **Journal conflicts instead of refusing the run (Medium 1, blocking):**
+   - When a recorded final outcome contradicts a journaled terminal state, `_commit()` writes one HMAC-chained `outcome_conflict` entry (`state = 'unknown'`, `reason = 'outcome_conflict'`, `stuck = 1`, guarded by a partial unique index) per conflicted request. The entry is written once, sticky, returned as escalated (`stuck: true`), and never resolved automatically.
+   - Other requests in the same run (and in targeted runs such as `reconcile(("request-3",))`) continue reconciling and escalating, including `stuck`, in a single transaction.
+   - While any conflict is open for the tenant (evidence that the reader's `not_applied` fence failed), new `not_applied` read-backs are never finalised as `failed`; they stay `unknown` (`readback_pending`) and escalate at `stuck_after`. Recorded final outcomes, exact `applied` read-backs and stuck escalations continue to be written.
+   - Updated `docs/architecture/action-outcome-reconciliation.md` to document conflict journaling and remove the earlier "refuses the whole run / writes nothing" claim about conflicts.
+2. **Apply `handler_deadline` to recorded `unknown` outcomes (Low 2):**
+   - `_decide()` now applies `handler_deadline` whenever `state == "failed"` (from a `not_applied` read-back) and `now - audit.timestamp < handler_deadline`, covering both a missing outcome and a recorded `unknown` outcome while an engine commit may still be in flight.
+3. **Restore in-memory chain head on rollback (Low 3):**
+   - `_commit()` and `_verify()` snapshot `(self._sequence, self._prev, dict(self._latest))` and restore it on any rollback or exception so a failed transaction (e.g. `sqlite3.OperationalError` mid-run) never triggers a false `journal_tampered` on the next run of the same instance.
+4. **Journal `reason` changes before `stuck_after` (Low 4):**
+   - `_commit()` now journals an entry whenever `reason != latest.reason` while `state == "unknown"` (e.g. `readback_pending` transitioning to `readback_mismatch` or `handler_in_flight`).
+5. **Mutation tests (Low 5):**
+   - Added dedicated tests for: `stuck` removed from `_mac()`; tail shrinkage refusal (`self._sequence < floor`) on the same instance; `sqlite3.IntegrityError` mapping in `_commit()`; the exact `stuck_after` boundary; and the exact `handler_deadline` boundary (for both missing and recorded `unknown` outcomes).
+
+### Verification (fix round 2)
+- Tests first: 10 failed, 61 passed before the `action_outcome_reconciler.py` changes; 71 passed after.
+- Mutation checks: all targeted mutations (removing conflict journaling, removing recorded-`unknown` deadline guard, removing rollback head restoration, removing `reason != latest.reason`, removing `stuck` from `_mac`, removing `self._sequence < floor`, removing `except sqlite3.IntegrityError`, mutating `>= self._stuck_after` to `>`, and mutating `< self._handler_deadline` to `<=`) make tests fail.
+- ERP-023: 73 passed; ERP-021: 7 passed; ERP-026 offline: 30 passed, 36 skipped; CE-SEC mocks: 61 passed; BPL-025 conformance: 208 passed (`make_harness`) and 208 passed (`make_frappe_harness`, `CHANGE_ENGINE_ENV=test`); `scripts/tests`: 36 passed.
+- `check_docs`, `check_repo_hygiene`, `scan_secrets` and `check_lanes --base origin/main --actor partner`: all passed.

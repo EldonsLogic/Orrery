@@ -20,7 +20,7 @@ Sources, in order:
 1. The enforcer recorded `applied` or `failed`: taken as final (reason `recorded`). It is not re-read from the engine. Verifying recorded outcomes against engine state is out of scope here.
 2. The enforcer recorded `unknown`, or recorded nothing: resolved only by an exact read-back (section 3).
 
-Once `applied` or `failed` is journaled for a request it never changes. A unique index allows one final entry per tenant and request. Under `BEGIN IMMEDIATE`, `_commit()` re-reads `outcome_for` before inserting so a final outcome recorded while the read-back was running wins over the read-back. If a recorded final outcome contradicts an already journaled final state for any request of the tenant (including requests outside `request_ids`), `_check_run()` refuses the whole run with `outcome_conflict` (`ReconciliationRefused.request_ids` lists the conflicted requests) before any read-back and again under `BEGIN IMMEDIATE`, writing nothing.
+Once `applied` or `failed` is journaled for a request it is not re-read from the engine. A unique index allows one final entry per tenant and request. Under `BEGIN IMMEDIATE`, `_commit()` re-reads `outcome_for` before inserting so a final outcome recorded while the read-back was running wins over the read-back. If a recorded final outcome later contradicts an already journaled final state for any request of the tenant (including requests outside `request_ids`), `_commit()` appends one HMAC-chained `outcome_conflict` entry (`state = 'unknown'`, `reason = 'outcome_conflict'`, `stuck = 1`, guarded by a partial unique index) for that request. The conflict entry is written once, sticky, returned as escalated (`stuck: true`), and never resolved automatically. The run continues in the same transaction with the other requests, which keep reconciling and escalating. While any conflict is open for the tenant (evidence that the reader's `not_applied` fence failed), no new `failed` outcome is finalised from a `not_applied` read-back; it stays `unknown` (`readback_pending`) so it escalates. Recorded final outcomes, exact `applied` read-backs and stuck escalations may still be written.
 
 ## 3. Resolving unknown: exact read-back by idempotency key
 The reconciler never calls a handler, never retries, and never releases a claim. It reads.
@@ -30,7 +30,10 @@ The reconciler never calls a handler, never retries, and never releases a claim.
   - `applied`: the effect carries the bound `request_id` and `payload_hash`. Both must equal the admission's (constant-time compare), or the result is `readback_mismatch`.
   - `not_applied`: no effect exists and the engine guarantees none can commit later for that key (a fence). This carries no request or hash.
   - `pending`: anything else, including an effect that may still be in flight.
-- **Decision.** An exact `applied` gives `applied`. An exact `not_applied` gives `failed`, except when no outcome row has been recorded yet (`outcome_for` is `None`) and the admission is younger than `handler_deadline` (`0 < handler_deadline < stuck_after`): then the outcome stays `unknown` with reason `handler_in_flight` so a slow handler is never marked `failed` before it finishes. Everything else stays `unknown` with a reason: `readback_pending`, `readback_mismatch` (wrong echo, other tenant, other request or hash, or effect fields on `not_applied`), `readback_invalid` (wrong type or state) or `reader_error` (any exception). A reader error never resolves anything.
+- **Decision.** An exact `applied` gives `applied`. An exact `not_applied` gives `failed`, except:
+  - when the outcome is missing or recorded `unknown` and the admission is younger than `handler_deadline` (`0 < handler_deadline < stuck_after`): then the outcome stays `unknown` with reason `handler_in_flight` so an in-flight handler or commit is never marked `failed` before it finishes;
+  - when any `outcome_conflict` is open for the tenant: then `not_applied` stays `unknown` with reason `readback_pending` until a human acts.
+  Everything else stays `unknown` with a reason: `readback_pending`, `readback_mismatch` (wrong echo, other tenant, other request or hash, or effect fields on `not_applied`), `readback_invalid` (wrong type or state) or `reader_error` (any exception). A reader error never resolves anything.
 
 UNVERIFIED engine facts that a live reader must prove before use:
 - that a committed business effect is findable by `(tenant, submitter, idempotency key)`;
@@ -38,10 +41,10 @@ UNVERIFIED engine facts that a live reader must prove before use:
 - that a `not_applied` answer is fenced, so a late in-flight commit for that key is refused. Without a fence the reader must answer `pending`, and the outcome escalates (section 4).
 
 ## 4. Stuck outcomes and the human floor
-An outcome is **stuck** when it is still `unknown` and its admission is at least `stuck_after` old. `stuck_after` and `handler_deadline` are constructor arguments with no defaults (`0 < handler_deadline < stuck_after`). The thresholds are founder decisions ([Q-558](../open-questions.md)).
+An outcome is **stuck** when it is still `unknown` and its admission is at least `stuck_after` old, or when it is an `outcome_conflict`. `stuck_after` and `handler_deadline` are constructor arguments with no defaults (`0 < handler_deadline < stuck_after`). The thresholds are founder decisions ([Q-558](../open-questions.md)).
 
 When an outcome is stuck:
-- The journal records `stuck = 1` in a separate column (`CHECK (stuck IN (0, 1) AND (stuck = 0 OR state = 'unknown'))`, covered by the entry's HMAC) while keeping the specific `reason` (`readback_pending`, `readback_mismatch`, `readback_invalid`, `reader_error`, `admission_unbound`, `handler_in_flight`). The transition to `stuck = 1` is journaled once; later runs return `stuck: true` with the current reason without appending.
+- The journal records `stuck = 1` in a separate column (`CHECK (stuck IN (0, 1) AND (stuck = 0 OR state = 'unknown'))`, covered by the entry's HMAC) while keeping the specific `reason` (`readback_pending`, `readback_mismatch`, `readback_invalid`, `reader_error`, `admission_unbound`, `handler_in_flight`, `outcome_conflict`). The transition to `stuck = 1` is journaled once for a given reason; later runs return `stuck: true` with the current reason without appending.
 - The request keeps every replay claim. Resubmitting the same request or key is refused as `replay` (tested).
 - The result is handed to a human with the floor role for that action (ADR-0027, SEC-019). In G2 that means an item in the approval inbox (OPR-007). Until OPR-007 exists, the caller must surface the item; nothing auto-closes it.
 - The human cannot mark it `applied` or `failed` in this module. They repair or inspect the engine side so that a later exact read-back decides it. Whether an audited human attestation may close an outcome that no read-back can ever decide is open ([Q-558](../open-questions.md)).
@@ -49,7 +52,7 @@ When an outcome is stuck:
 ## 5. Reconciliation journal (append-only)
 Table `action_outcome_reconciliation`, in the same server-owned database as the ERP-023 journal. Columns: `sequence` (`INTEGER PRIMARY KEY CHECK (sequence > 0)`), `tenant_id`, `request_id`, `state`, `reason`, `stuck`, `timestamp` and `mac`. `__init__` checks the column list and `CHECK (sequence > 0)` constraint and refuses any other schema layout. No payload, no session and no idempotency key are stored.
 
-- **What is journaled.** All transitions of a run commit together in one `BEGIN IMMEDIATE` transaction; any refusal rolls back and writes nothing. The journal records the first observation of each admitted request, every move to a final state, and the first `stuck = 1` escalation. A repeat run under the same conditions appends nothing. An instance lock serializes threads sharing one `ActionOutcomeReconciler`, while separate instances serialize on `BEGIN IMMEDIATE`, re-verify under the lock, and append at most one final entry.
+- **What is journaled.** All transitions of a run commit together in one `BEGIN IMMEDIATE` transaction; any refusal or error rolls back, restores the in-memory chain head, and writes nothing. The journal records the first observation of each admitted request, every change of `reason` while `unknown`, every move to a final state, the first `stuck = 1` escalation, and one sticky `outcome_conflict` escalation per conflicted request. A repeat run under the same conditions appends nothing. An instance lock serializes threads sharing one `ActionOutcomeReconciler`, while separate instances serialize on `BEGIN IMMEDIATE`, re-verify under the lock, and append at most one final entry.
 - **Append-only.** Triggers refuse `UPDATE`, `DELETE` and `INSERT OR REPLACE`.
 - **Tamper evidence.** Each entry carries an HMAC-SHA256 over its fields (including `stuck`), its sequence and the previous entry's MAC. The chain covers all tenants, so moving a row to another tenant breaks it. Every run verifies all rows in `ORDER BY sequence` from 1 (`sequence == prev + 1`) before any read-back and again inside `BEGIN IMMEDIATE`. A gap, duplicate, `sequence <= 0`, MAC mismatch, shrinkage, or `IntegrityError` stops the run with `journal_tampered` and writes nothing. The key (at least 32 bytes) is injected and never stored in the database.
 - **Limits, stated plainly:**
@@ -79,13 +82,13 @@ No live business-action handler is enabled for a tenant until all of these hold:
 
 ## 8. Tests (offline)
 `test_erp_029_action_outcome_reconciliation.py` covers:
-- applied, failed and unknown from the real ERP-023 enforcer, with a later read-back resolving `unknown` both to `applied` and to `failed` (and keeping a missing outcome `handler_in_flight` until `handler_deadline`);
+- applied, failed and unknown from the real ERP-023 enforcer, with a later read-back resolving `unknown` both to `applied` and to `failed` (and keeping both a missing outcome and a recorded `unknown` outcome `handler_in_flight` until `handler_deadline`, tested at the exact boundary);
 - exact-match refusals: wrong tenant/submitter/key echo, other request, other hash, missing fields, effect fields on `not_applied`, invalid state;
-- reader errors and wrong types failing closed;
-- a repeated run, 8 concurrent reconcilers, a barrier-forced contradictory-readback race, and a single instance shared across 8 threads;
-- whole-run atomic `outcome_conflict` detection before any read-back (including outside `request_ids`) and under `BEGIN IMMEDIATE`, plus an outcome recorded during the read-back winning under the lock;
-- stuck escalation preserving each specific failure reason (`readback_pending`, `readback_mismatch`, `readback_invalid`, `reader_error`, `admission_unbound`) and journaling `stuck = 1` once, with claims kept;
-- triggers, `CHECK (sequence > 0)`, out-of-range sequences (`<= 0`), older schema layout, edited, moved, deleted or forged rows, and a wrong key, all refused;
+- reader errors and wrong types failing closed, and reason changes before `stuck_after` being journaled;
+- a repeated run, 8 concurrent reconcilers, a barrier-forced contradictory-readback race, a single instance shared across 8 threads, and a rolled-back commit (`OperationalError` mid-run) restoring the in-memory chain head;
+- sticky, single-entry `outcome_conflict` journaling and escalation when a recorded final outcome contradicts a journaled final state (including when recorded during the read-back), with unrelated requests continuing to reconcile and escalate, and new `not_applied` read-backs staying `unknown` while a conflict is open, plus an outcome recorded during the read-back winning under the lock;
+- stuck escalation at the exact `stuck_after` boundary preserving each specific failure reason (`readback_pending`, `readback_mismatch`, `readback_invalid`, `reader_error`, `admission_unbound`, `outcome_conflict`) and journaling `stuck = 1` once, with claims kept;
+- triggers, `CHECK (sequence > 0)`, out-of-range sequences (`<= 0`), older schema layout, edited, moved, deleted or forged rows (including `stuck` tampering, tail shrinkage on the same instance, and `IntegrityError` mapping to `journal_tampered`), and a wrong key, all refused;
 - a re-pointed admission binding or mismatched submitter never reaching the reader, and tenant-scoped binding lookup;
 - cross-tenant requests, cross-tenant readbacks and separate tenants;
 - invalid configuration and an untrusted or backwards clock (earlier than admission or latest journal entry);

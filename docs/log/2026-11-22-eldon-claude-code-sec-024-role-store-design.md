@@ -33,3 +33,10 @@ Unknown.
 - Mediums and Lows: encryption in the service with a split of database and service checks; bootstrap rule made satisfiable; single-use approvals and compare-and-set; signed rows and state, column and version in associated data, latest-history check per read; forced row-level security, transaction-local tenant, separate per-tenant assignment key; promotion bound to signed receipts; tombstones, last-Owner rule, signed deletion evidence; audit reader role; rate-limited refusal log; snapshot expiry; owner and admin from catalog flags.
 - Tests: RAS-T01 to RAS-T22. Q-581 and Q-582 reworded and marked as blockers for acceptance.
 - Next: re-review by a different model; founder answers to Q-581, founder and counsel answers to Q-582.
+
+## Revision after round 2 security review (Claude Fable 5.2, ACCEPT WITH CONDITIONS)
+- Round 2: 0 High, 6 Medium, 6 Low, all from the rewrite. Corrected in the text; Status stays Proposed, blocked on Q-581 and Q-582.
+- N-M1: row ciphertexts never compared with history ciphertexts; history records a row digest per member, `history_member` index, `cipherGeneration` on rows; promotion and reconciliation re-encrypt and re-sign in the service, verifier re-checks before a fence lifts.
+- N-M2: section 3.1 table of permitted writes per status; entering a fence is a signed state update without the anchor; leaving is anchored; `resync` kind for site fences.
+- N-M3: the evaluator's `approved` state is a required veto at execution. N-M4: read-path high-water mark per tenant plus anchor-head refresh (proposed 30 s); verifier is the backstop. N-M5: catalog refresh evidence is identity-signed approve assertions plus the signed apply receipt; ADR-0050's HMAC seal is not used. N-M6: last-Owner rule on `change` only; identity checks before removal, suspension never blocked; no-Owner recovery added to Q-583.
+- Lows N-L1 to N-L6 answered (verifier fence-only key and role, single action-policy hash, create-if-absent anchor and "outcome unknown", scope refresh voids approvals, dropped refusals counted, adapter clock tolerance). Tests RAS-T23 to RAS-T26 added; residual risk extended.

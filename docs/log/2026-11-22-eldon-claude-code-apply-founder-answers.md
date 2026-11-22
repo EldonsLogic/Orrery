@@ -34,7 +34,7 @@ ADR-0059 Accepted (Q-560) and ADR-0060 Proposed pending security review (Q-292).
 ## Notes for the partner (not edited, partner lane)
 - **country-pack-framework.md:66-72:** cite ADR-0059. The loader.py:26 comment "until Q-560 is answered" is now stale.
 - **CMP-015:** "KSA, then UAE" implies a market order.
-- **ADR-0039, ADR-0040 and role-and-permission-mapping.md:** they can now cite ADR-0060 instead of "blocked by Q-292".
+- **ADR-0039, ADR-0040 and role-and-permission-mapping.md:** once ADR-0060 is Accepted after its security review, they can cite it instead of "blocked by Q-292".
 - **Q-560 policy follow-ups (proposals, ADR-0032 item 3):** adviser sources after accountant sign-off, the certification rule, the production-only status-to-manifest check, and documenting the caller's synthetic-data duty for `sandbox` and `test`.
 - **ADR-0060 security review:** who may write to the store, `syncVersion` integrity, per-tenant keying, deny on outage.
 

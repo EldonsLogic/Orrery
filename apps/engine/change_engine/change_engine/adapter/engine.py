@@ -31,6 +31,7 @@ from change_engine.adapter.mapping import (
     has_prohibited_expression,
     inspect_field_ddl,
     is_protected_entity,
+    is_valid_entity_id,
     plan_statements_for_step,
 )
 from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord, TenantMismatch
@@ -928,8 +929,13 @@ class ChangeEngineAdapter:
 
         def own_allowed(entity: str) -> bool:
             if entity not in own_cache:
-                checker = getattr(self.frappe_backend, "can_grant_own_doctype", None)
-                own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else False
+                if self.frappe_backend is None:
+                    # In-memory adapter: no engine exists, so the only document types are this Blueprint's own;
+                    # grant_plan_reason already limits `entity` to unmapped, unprotected Blueprint entities.
+                    own_cache[entity] = True
+                else:
+                    checker = getattr(self.frappe_backend, "can_grant_own_doctype", None)
+                    own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else False
             return own_cache[entity]
 
         for step in artifact["steps"]:
@@ -985,10 +991,43 @@ class ChangeEngineAdapter:
         if has_prohibited_expression(params):
             return "blocked", "prohibited_expression", ddl
         segs = _segs(pointer)
-        if segs[:1] == ["entities"] and len(segs) > 1 and is_protected_entity(segs[1]):
-            return "blocked", "protected_subject", ddl
+        if segs[:1] == ["entities"] and len(segs) > 1:
+            ids: list[Any] = [segs[1]]
+            if kind == "entity.add":
+                ids.append(step["subject"].get("id"))
+            elif kind.startswith(("field.", "relation.")):
+                parents = step["subject"].get("parents")
+                parent_id = (
+                    parents[0].get("id")
+                    if isinstance(parents, list) and parents and isinstance(parents[0], dict)
+                    else None
+                )
+                ids.append(parent_id)
+            if not all(is_valid_entity_id(i) for i in ids):
+                return "blocked", "unsupported_value_type", ddl
+            if any(is_protected_entity(i) for i in ids):
+                return "blocked", "protected_subject", ddl
+            if len(ids) > 1 and ids[1] != ids[0]:
+                return "blocked", "definition_conflict", ddl
+        elif kind == "entity.add" or kind.startswith(("field.", "relation.")):
+            return "blocked", "unsupported_value_type", ddl
 
         defn = params.get("definition")
+        if kind == "workflow.upsert":
+            target_entity = defn.get("entity") if isinstance(defn, dict) else None
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
+        elif kind == "report.upsert":
+            if not isinstance(defn, dict):
+                return "blocked", "unsupported_value_type", ddl
+            if "entity" in defn:
+                target_entity = defn["entity"]
+                if not is_valid_entity_id(target_entity):
+                    return "blocked", "unsupported_value_type", ddl
+                if is_protected_entity(target_entity):
+                    return "blocked", "protected_subject", ddl
         if kind == "role.upsert":
             grant_reason = grant_plan_reason(defn, blueprint_entities, own_allowed)
             if grant_reason:

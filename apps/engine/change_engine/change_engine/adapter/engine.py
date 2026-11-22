@@ -269,6 +269,17 @@ def min_pointer_segments(kind: str) -> int:
 # properties, `entity.set_property` may not name the identity or the two element lists: they hold the fields and relations
 # (a field's `type` among them), which only the `field.*` and `relation.*` kinds may change, each with its own checks.
 ENTITY_STRUCTURAL_PROPERTIES = frozenset({"id", "fields", "relations"})
+# The kinds that carry `params.property` (contract: a pointer below the subject, pattern `^(/[^/]+)+$`). `_segs` drops
+# any text before the first `/`, so `_judge` needs a well-formed pointer itself: schema validation can be skipped.
+PROPERTY_KINDS = frozenset({
+    "settings.set", "component.configure", "entity.set_property", "field.set_property", "relation.set_property",
+})
+# Element properties with their own checks keyed on the exact spelling (`/type` gated and recorded, `/options` and
+# `/target` target checks): any other spelling that reaches them (`/type/x`, `/options/0`) is refused.
+EXACT_ELEMENT_PROPERTIES = {
+    "field.set_property": frozenset({"type", "options", "target"}),
+    "relation.set_property": frozenset({"options", "target"}),
+}
 
 
 def _property_head(prop: Any) -> str | None:
@@ -1079,15 +1090,15 @@ class ChangeEngineAdapter:
             or (kind.startswith("entity.") and len(segs) != 2)
         ):
             return "blocked", "unsupported_value_type", ddl
-        prop = params.get("property")
-        if kind == "entity.set_property":
+        if kind in PROPERTY_KINDS:
+            prop = params.get("property")
             head = _property_head(prop)
-            if head is None or head in ENTITY_STRUCTURAL_PROPERTIES:
-                return "blocked", "unsupported_value_type", ddl
-        elif kind == "field.set_property" and isinstance(prop, str) and prop != "/type":
-            # A field's type changes only as exactly `/type` (gated, and recorded in the `/type` history); `/type/x`
-            # and the like would reach it by another spelling.
-            if prop.startswith("/") and _segs(prop)[0] == "type":
+            if (
+                head is None
+                or (kind == "entity.set_property" and head in ENTITY_STRUCTURAL_PROPERTIES)
+                # A field's type changes only as exactly `/type` (gated, and recorded in the `/type` history).
+                or (head in EXACT_ELEMENT_PROPERTIES.get(kind, ()) and prop != "/" + head)
+            ):
                 return "blocked", "unsupported_value_type", ddl
         if segs[:1] == ["entities"] and len(segs) > 1:
             ids: list[Any] = [segs[1]]

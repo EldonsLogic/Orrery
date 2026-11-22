@@ -11,6 +11,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
+from change_engine.adapter import contracts_support as cs
 from change_engine.adapter.engine import KIND_ROOTS, STEP_KINDS
 from change_engine.tests.test_sec_022_review_followups_4 import (
     _AdapterPlanBase,
@@ -298,6 +299,56 @@ class TestKindRootsFallback(_AdapterPlanBase):
                 self.assertTrue(res["ok"], res)
                 got = res["result"]["steps"][0]
                 self.assertEqual((got["disposition"], got.get("reasonCode")), ("blocked", "unsupported_value_type"), res)
+
+
+class TestPropertyMustBeAPointer(_Base):
+    """Cross-model review of #280: `_segs` drops the text before the first `/`, so without schema validation
+    `x/type` wrote `type` on the field with no gate and no history entry, and `x/options` / `x/target` skipped
+    their exact-spelling checks. Every kind that carries `params.property` now needs a well-formed pointer, and
+    on fields and relations `type`, `options` and `target` only as exactly `/type`, `/options`, `/target`."""
+
+    def test_reviewer_repro_without_schema_validation(self) -> None:
+        # The pure-Python path: no schema validator, so the contract pattern is not enforced.
+        steps = [
+            {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(prop, "select", "link")}
+            for prop in ("x/type", "type", "x/options", "/options/0", "x/target", "/target/x")
+        ]
+        with mock.patch.object(cs, "_validator_for", return_value=None):
+            self._refuse_all(steps, "nopat", apply=True)
+
+    def test_every_property_kind_needs_a_well_formed_pointer(self) -> None:
+        bad = ("x/type", "type", "x/options", "options", "x/target", "x", "", "/", "//", "/a/", 7, None, ["/type"])
+        cases = []
+        for prop in bad:
+            cases.append({**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(prop)})
+            rel = {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(prop)}
+            rel.update(kind="relation.set_property", pointer=CUSTOMER + "/relations/rel",
+                       subject={"kind": "relation", "id": "rel", "parents": ["customer"]})
+            cases.append(rel)
+            cases.append({**_entity_step("entity.set_property", CUSTOMER), "params": _set(prop)})
+            sett = {**_entity_step("entity.set_property", CUSTOMER), "params": _set(prop)}
+            sett.update(kind="settings.set", phase=1, pointer="/company", subject={"kind": "settings", "id": "company", "parents": []})
+            cases.append(sett)
+            comp = {**_entity_step("entity.set_property", CUSTOMER), "params": _set(prop)}
+            comp.update(kind="component.configure", phase=2, pointer="/components/c1", subject={"kind": "component", "id": "c1", "parents": []})
+            cases.append(comp)
+        for name, adapter in self._adapters():
+            self._seed_with_fields(adapter, f"idemp_f7_ptr_{name}")
+            site = adapter._need_site(adapter.store.get_site(TENANT))
+            for step in cases:
+                with self.subTest(adapter=name, kind=step["kind"], prop=step["params"]["property"]):
+                    self.assertEqual(adapter._judge(site, step, {"customer"})[:2], ("blocked", "unsupported_value_type"))
+
+    def test_nested_options_and_target_refused_on_relations(self) -> None:
+        for name, adapter in self._adapters():
+            self._seed_with_fields(adapter, f"idemp_f7_reln_{name}")
+            site = adapter._need_site(adapter.store.get_site(TENANT))
+            for prop in ("/options/0", "/options/x/y", "/target/x"):
+                step = {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(prop)}
+                step.update(kind="relation.set_property", pointer=CUSTOMER + "/relations/rel",
+                            subject={"kind": "relation", "id": "rel", "parents": ["customer"]})
+                with self.subTest(adapter=name, prop=prop):
+                    self.assertEqual(adapter._judge(site, step, {"customer"})[:2], ("blocked", "unsupported_value_type"))
 
 
 if __name__ == "__main__":

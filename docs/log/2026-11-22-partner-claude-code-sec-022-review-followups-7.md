@@ -23,3 +23,10 @@ Unknown.
 
 ## Next step
 Security review by a different model, then Eldon line by line (SEC-022, BPL-032). Live bench behaviour is UNVERIFIED (offline only).
+
+## Review fix (cross-model review, GPT-6.1 Sol, partial)
+The review stopped before its report, but the defect it reproduced is real. `_segs` drops any text before the first `/`. So with schema validation skipped, `field.set_property` with property `x/type` planned `auto_approved` and wrote `type` without recording it. `x/options` and `x/target` also skipped their exact-spelling checks.
+
+Fix (Claude Opus 5.5, coordinator): every kind that carries `params.property` now needs a well-formed pointer (`PROPERTY_KINDS`). On fields and relations, `type`, `options` and `target` are accepted only as exactly `/type`, `/options` and `/target` (`EXACT_ELEMENT_PROPERTIES`). ADR-0051 item 8 is updated.
+
+Tests first: 90 failing checks before the fix, none after. Four mutations of the new rule are all caught. `change_engine/tests`: 1389 passed, 87 skipped.

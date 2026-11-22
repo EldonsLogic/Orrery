@@ -1,8 +1,8 @@
 # ADR-0027: Human floor, action-policy table and agent authority
 
-Status: Proposed
+Status: Accepted
 Owner: eldon
-Approved by: pending (partner review; accountant and compliance review of the clearance sequence)
+Approved by: Eldon, answering for both founders, 2026-11-22 (Q-128 and Q-294), with the partner's first three checks as written in this ADR. The per-country clearance sequence still needs accountant and compliance review before it is used. Whether delivery-generated GL postings fall under the floor stays with Q-44.
 
 ## Context
 Customers will create agents with an autonomy level per agent. The earlier wording of the human floor ("books, tax filing, payments, permission changes, or a human-set limit") had two holes: a limit set absurdly high is autonomy, and per-invoice authority clearance, where a country requires it, is a tax submission with no human in the loop (UNVERIFIED per country; accountant and counsel confirm). Agent authority also needs defining ([ADR-0004](ADR-0004-one-chat-role-based-views.md), [ADR-0005](ADR-0005-human-review-gate-free-first.md), RULES 21 to 23).

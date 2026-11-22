@@ -3,7 +3,7 @@
 Date: 2026-11-22
 Author: eldon
 Tool and model: claude-code (Claude Opus; the questions were prepared by Opus and Fable review agents)
-Plan IDs: GOV-061, GOV-062
+Plan IDs: GOV-061, GOV-062, GOV-063
 
 ## Summary
 Eldon answered founder questions one at a time in chat. The answers are written into `docs/open-questions.md`.
@@ -32,6 +32,12 @@ Eldon answered founder questions one at a time in chat. The answers are written 
   - all six live-handler gates are required (#260);
   - the direct-path link rule stays limited to ledger and audit tables (#262);
   - Egypt e-receipts stay out of scope for now (#256).
+
+## Second round (same day)
+- **Q-128 and Q-294:** ADR-0027 is Accepted (status line and INDEX updated) with the partner's first three checks. Delivery postings stay with Q-44.
+- **Q-296:** the mapping gets every strictness item.
+- **Q-291:** staging may use a dev-class host now.
+- **Q-292 and Q-293:** decided, pending GOV-063 (new todo row).
 
 ## Tokens or cost
 Unknown.

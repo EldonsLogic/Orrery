@@ -1,0 +1,77 @@
+{
+  "$schema": "../../../../../../contracts/component.manifest.schema.json",
+  "id": "country.ae",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": {
+    "ar": "حزمة الإمارات العربية المتحدة",
+    "en": "United Arab Emirates country pack"
+  },
+  "description": "United Arab Emirates country pack (CMP-029): declarative locale defaults, formats and override policy. The UAE chart of accounts, tax codes, tax invoice mode and e-invoicing component do not exist yet, so those references are pending (evidence.json). E-invoicing is a go-live blocker: required from 2027-01-01 for businesses with revenue of AED 50 million or more. It holds no tax, ledger or e-invoice maths (ADR-0031). Pack status and level are both tested, not draft, because the manifest contract forbids draft when touchesLedgerOrTax is true. Evidence is unverified and reviewedBy is empty, so it is not for tenants. Arabic labels unreviewed (ADR-0033).",
+  "provides": [
+    {
+      "capability": "country.ae.pack_metadata",
+      "artifacts": [
+        {
+          "type": "function",
+          "ref": "components.compliance.country_pack.loader.resolve_country_pack"
+        }
+      ]
+    }
+  ],
+  "requires": [
+    {
+      "component": "finance.coa_ae_trading",
+      "versionRange": ">=0.1.0 <0.2.0"
+    },
+    {
+      "component": "finance.vat_ae_treatments",
+      "versionRange": ">=0.1.0 <0.2.0"
+    },
+    {
+      "component": "compliance.pint_ae",
+      "versionRange": ">=0.1.0 <1.0.0"
+    },
+    {
+      "component": "ae.holidays",
+      "versionRange": ">=0.1.0 <0.2.0"
+    }
+  ],
+  "parameters": [],
+  "tests": [
+    {
+      "id": "test_pack_sa_ae",
+      "kind": "unit",
+      "path": "components/compliance/country_pack/tests/test_pack_sa_ae.py",
+      "blocking": true
+    }
+  ],
+  "certification": {
+    "level": "tested",
+    "touchesLedgerOrTax": true,
+    "reviewedBy": []
+  },
+  "engineCompatibility": {
+    "adapter": "change_engine",
+    "engineRange": ">=0.1.0 <1.0.0",
+    "testedAgainst": []
+  },
+  "licence": {
+    "spdx": "LicenseRef-Proprietary"
+  },
+  "owner": {
+    "github": "sayegh9"
+  },
+  "i18n": {
+    "locales": [
+      "ar",
+      "en"
+    ],
+    "rtlVerified": false
+  },
+  "dataHandling": {
+    "storesPersonalData": false,
+    "sendsDataToModels": false,
+    "promotableToLibrary": true
+  }
+}

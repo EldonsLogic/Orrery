@@ -122,6 +122,21 @@ SETTINGS = ("company", "compliance", "i18n")
 # prefixed key such as the adapter's own `_typeChangedPointers` record, is refused at plan time.
 ALLOWED_POINTER_ROOTS = frozenset(SECTION_OF.values()) | frozenset(SETTINGS)
 
+# SEC-022 (ADR-0051 item 7): the root a step's pointer must start at, by kind. A kind's section is the part before
+# the dot (`location.upsert` -> `location` -> `/locations`); the sub-element kinds `field.*`, `relation.*` and
+# `option.*` live inside an entity, so they sit under `/entities`; `settings.set` takes only the settings roots.
+# Unsupported kinds (`binding.*`) get no entry and so no root.
+_SECTION_OF_KIND_PREFIX = {**{p: p for p in SECTION_OF}, "field": "entity", "relation": "entity", "option": "entity"}
+KIND_ROOTS: dict[str, frozenset[str]] = {
+    kind: (
+        frozenset(SETTINGS)
+        if kind == "settings.set"
+        else frozenset({SECTION_OF[_SECTION_OF_KIND_PREFIX[kind.split(".")[0]]]})
+    )
+    for kind, support in STEP_KINDS.items()
+    if support != "unsupported"
+}
+
 EXPORTED = {
     "settings_company": ["legalName", "tradeName", "country", "crNumber", "vatNumber", "sizeBand", "industry", "languages", "locale"],
     "settings_compliance": ["country", "countryPack", "eInvoicing", "vat", "hijriDisplay", "documentLanguages", "payroll"],
@@ -1042,6 +1057,8 @@ class ChangeEngineAdapter:
             or not segs
             or "" in segs
             or segs[0] not in ALLOWED_POINTER_ROOTS
+            # The root must be the one this kind belongs to (KIND_ROOTS); an unmapped kind gets none.
+            or segs[0] not in KIND_ROOTS.get(kind, frozenset())
             # field.* and relation.* keep their exact-length check below (definition_conflict).
             or (len(segs) < min_pointer_segments(kind) and not kind.startswith(("field.", "relation.")))
         ):

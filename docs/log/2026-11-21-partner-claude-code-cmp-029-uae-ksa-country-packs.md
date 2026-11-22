@@ -58,3 +58,10 @@ Stopped:
 14. The duplicate loader function stays: the manifest contract needs at least one `provides` artifact, and no artifact type fits pack data. A test pins the single shared ref. `country-pack-framework.md` was not edited (a later convention PR documents `evidence.json`).
 
 New open question: Q-559 (number assigned by the coordinator; Q-558 and Q-560 belong to #260 and #259).
+
+## Main merge after CMP-034
+Merged `origin/main` (b10fd66, includes CMP-034 #259, the loader go-live gate) with `git merge --no-ff`. One conflict, in `docs/open-questions.md`: kept both rows, Q-559 (this PR) then Q-560 (from main); no row dropped or duplicated. `docs/PLAN.md` merged without conflict. Only `components/compliance/country_pack/tests/test_pack_sa_ae.py` changed beyond the merge; no pack data, manifest, evidence, README, loader or schema file was touched.
+- Every `load_country_pack` and `resolve_country_pack` call in the test now passes `environment="test"`, because both packs are `tested` with `unverified` evidence and production now refuses them.
+- The private-merger calls `apply_company_overrides` became `resolve_country_pack(..., company_overrides=..., environment="test")` (the public resolver).
+- New test `test_real_packs_are_refused_in_production`: for SA and AE, with the default environment (and `environment="production"`), both `load_country_pack` and `resolve_country_pack` raise `PackValidationError`.
+- Country pack suite: 59 tests pass, including the CMP-034 gate tests from main.

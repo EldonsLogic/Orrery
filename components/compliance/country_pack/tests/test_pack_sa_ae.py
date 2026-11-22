@@ -21,7 +21,6 @@ from components.compliance.country_pack import (
     OverrideRejectedError,
     PackNotFoundError,
     PackValidationError,
-    apply_company_overrides,
     load_country_pack,
     resolve_country_pack,
     validate_pack,
@@ -226,8 +225,8 @@ class TestRealPacksLoad(unittest.TestCase):
     def test_both_packs_load_from_real_root(self) -> None:
         for code, version in PACKS.items():
             with self.subTest(code=code):
-                pinned = load_country_pack(code, PACKS_DIR, version=version)
-                latest = load_country_pack(code, PACKS_DIR)
+                pinned = load_country_pack(code, PACKS_DIR, version=version, environment="test")
+                latest = load_country_pack(code, PACKS_DIR, environment="test")
                 self.assertEqual(pinned, latest)
                 self.assertEqual(validate_pack(pinned), [])
                 self.assertEqual(pinned["countryCode"], code)
@@ -236,7 +235,7 @@ class TestRealPacksLoad(unittest.TestCase):
     def test_status_matches_level_and_evidence_unverified(self) -> None:
         for code in PACKS:
             with self.subTest(code=code):
-                pack = load_country_pack(code, PACKS_DIR)
+                pack = load_country_pack(code, PACKS_DIR, environment="test")
                 cert = _read_json(_version_dir(code) / "manifest.json")["certification"]
                 self.assertEqual(pack["status"], cert["level"])
                 self.assertEqual(pack["status"], "tested")
@@ -259,6 +258,18 @@ class TestRealPacksLoad(unittest.TestCase):
                     cert = dict(manifest["certification"], level=level)
                     self.assertTrue(_certifiability_violations(pack, dict(manifest, certification=cert), evidence))
 
+    def test_real_packs_are_refused_in_production(self) -> None:
+        # CMP-034 go-live gate: `tested` packs with `unverified` evidence never load in production (default environment).
+        for code, version in PACKS.items():
+            with self.subTest(code=code):
+                with self.assertRaises(PackValidationError) as ctx:
+                    load_country_pack(code, PACKS_DIR, version=version)
+                self.assertIn("cannot be used in production", str(ctx.exception))
+                with self.assertRaises(PackValidationError):
+                    resolve_country_pack(code, PACKS_DIR, version=version)
+                with self.assertRaises(PackValidationError):
+                    load_country_pack(code, PACKS_DIR, version=version, environment="production")
+
     def test_real_root_holds_no_test_only_pack(self) -> None:
         for pack_file in PACKS_DIR.glob("*/*/pack.json"):
             with self.subTest(pack=str(pack_file.relative_to(PACKS_DIR))):
@@ -268,7 +279,7 @@ class TestRealPacksLoad(unittest.TestCase):
         expected = {"SA": ("SAR", "Asia/Riyadh"), "AE": ("AED", "Asia/Dubai")}
         for code, (currency, zone) in expected.items():
             with self.subTest(code=code):
-                resolved = resolve_country_pack(code, PACKS_DIR, version=PACKS[code])
+                resolved = resolve_country_pack(code, PACKS_DIR, version=PACKS[code], environment="test")
                 self.assertEqual(resolved["locale"]["currency"], currency)
                 self.assertEqual(resolved["locked"]["formats"]["currency"], currency)
                 self.assertEqual(resolved["locale"]["timezone"], zone)
@@ -278,7 +289,7 @@ class TestRealPacksLoad(unittest.TestCase):
 class TestTestOnlyStillRefused(unittest.TestCase):
     def test_sample_pack_refused_without_flag(self) -> None:
         with self.assertRaises(PackValidationError):
-            load_country_pack("SA", SAMPLE_PACKS_DIR, version="0.1.0")
+            load_country_pack("SA", SAMPLE_PACKS_DIR, version="0.1.0", environment="test")
 
     def test_real_pack_marked_test_only_is_refused(self) -> None:
         pack = _read_json(_version_dir("SA") / "pack.json")
@@ -288,35 +299,40 @@ class TestTestOnlyStillRefused(unittest.TestCase):
             target.mkdir(parents=True)
             (target / "pack.json").write_text(json.dumps(pack), encoding="utf-8")
             with self.assertRaises(PackValidationError):
-                load_country_pack("SA", Path(tmp), version="0.1.0")
+                load_country_pack("SA", Path(tmp), version="0.1.0", environment="test")
             with self.assertRaises(PackNotFoundError):
-                load_country_pack("SA", Path(tmp))
+                load_country_pack("SA", Path(tmp), environment="test")
 
 
 class TestOverrides(unittest.TestCase):
     def test_locked_areas_reject_overrides(self) -> None:
         for code in PACKS:
-            pack = load_country_pack(code, PACKS_DIR)
             for override in LOCKED_OVERRIDES:
                 with self.subTest(code=code, override=override):
                     with self.assertRaises(OverrideRejectedError):
-                        apply_company_overrides(pack, override)
+                        resolve_country_pack(
+                            code, PACKS_DIR, version=PACKS[code], company_overrides=override, environment="test"
+                        )
 
     def test_unknown_path_rejected(self) -> None:
         for code in PACKS:
             with self.subTest(code=code):
                 with self.assertRaises(OverrideRejectedError):
-                    apply_company_overrides(load_country_pack(code, PACKS_DIR), {"vatRate": 0})
+                    resolve_country_pack(
+                        code, PACKS_DIR, version=PACKS[code], company_overrides={"vatRate": 0}, environment="test"
+                    )
 
     def test_ksa_company_overrides_validate(self) -> None:
-        pack = load_country_pack("SA", PACKS_DIR)
+        pack = load_country_pack("SA", PACKS_DIR, environment="test")
         override = {
             "week": {"startDay": "mon", "weekendDays": ["sat", "sun"]},
             "workingTime": {"workDays": ["mon", "tue", "wed", "thu", "fri"], "hours": {"from": "09:00", "to": "18:00"}},
             "fiscalYear": {"type": "hijri", "startMonth": 1, "startDay": 1},
             "calendar": {"primary": "hijri_umm_al_qura"},
         }
-        resolved = apply_company_overrides(pack, override)
+        resolved = resolve_country_pack(
+            "SA", PACKS_DIR, version=PACKS["SA"], company_overrides=override, environment="test"
+        )
         self.assertEqual(resolved["locale"]["week"]["weekendDays"], ["sat", "sun"])
         self.assertEqual(resolved["locale"]["fiscalYear"]["type"], "hijri")
         self.assertEqual(resolved["locale"]["calendar"]["secondaryDisplay"], "hijri_umm_al_qura")
@@ -325,24 +341,31 @@ class TestOverrides(unittest.TestCase):
         self.assertEqual(resolved["locked"]["coaTemplate"], pack["coaTemplate"])
 
     def test_uae_company_overrides_validate(self) -> None:
-        pack = load_country_pack("AE", PACKS_DIR)
+        pack = load_country_pack("AE", PACKS_DIR, environment="test")
         override = {
             "week": {"startDay": "sun", "weekendDays": ["fri", "sat"]},
             "workingTime": {"workDays": ["sun", "mon", "tue", "wed", "thu"]},
             "fiscalYear": {"type": "gregorian", "startMonth": 4, "startDay": 1},
             "holidays": {"overrides": [{"action": "move", "date": "2027-03-20", "movedTo": "2027-03-21"}]},
         }
-        resolved = apply_company_overrides(pack, override)
+        resolved = resolve_country_pack(
+            "AE", PACKS_DIR, version=PACKS["AE"], company_overrides=override, environment="test"
+        )
         self.assertEqual(resolved["locale"]["fiscalYear"]["startMonth"], 4)
         self.assertEqual(resolved["locked"]["eInvoicing"], pack["eInvoicing"])
 
     def test_overrides_breaking_invariants_rejected(self) -> None:
-        sa = load_country_pack("SA", PACKS_DIR)
         with self.assertRaises(OverrideRejectedError):  # workDays overlap the new weekend
-            apply_company_overrides(sa, {"week": {"weekendDays": ["sun"]}})
-        ae = load_country_pack("AE", PACKS_DIR)
+            resolve_country_pack(
+                "SA", PACKS_DIR, version=PACKS["SA"], company_overrides={"week": {"weekendDays": ["sun"]}},
+                environment="test",
+            )
         with self.assertRaises(OverrideRejectedError):  # Hijri fiscal year is not allowed in the UAE pack
-            apply_company_overrides(ae, {"fiscalYear": {"type": "hijri", "startMonth": 1, "startDay": 1}})
+            resolve_country_pack(
+                "AE", PACKS_DIR, version=PACKS["AE"],
+                company_overrides={"fiscalYear": {"type": "hijri", "startMonth": 1, "startDay": 1}},
+                environment="test",
+            )
 
 
 class TestDeclarativeOnly(unittest.TestCase):
@@ -386,7 +409,7 @@ class TestDeclarativeOnly(unittest.TestCase):
         expected = {"SA": "zatca_phase1", "AE": "uae_e_invoicing"}
         for code, mode in expected.items():
             with self.subTest(code=code):
-                pack = load_country_pack(code, PACKS_DIR)
+                pack = load_country_pack(code, PACKS_DIR, environment="test")
                 self.assertEqual(pack["eInvoicing"]["mode"], mode)
                 self.assertIn(mode, modes)
 
@@ -405,13 +428,13 @@ class TestDeclarativeOnly(unittest.TestCase):
     def test_payroll_disabled_for_v1(self) -> None:
         for code in PACKS:
             with self.subTest(code=code):
-                hooks = load_country_pack(code, PACKS_DIR)["payrollHooks"]
+                hooks = load_country_pack(code, PACKS_DIR, environment="test")["payrollHooks"]
                 self.assertEqual(
                     hooks, {"wpsEnabled": False, "wpsFormatRef": None, "socialInsuranceRef": None, "eosbRuleRef": None}
                 )
 
     def test_ksa_references_cmp006_without_copying(self) -> None:
-        pack = load_country_pack("SA", PACKS_DIR)
+        pack = load_country_pack("SA", PACKS_DIR, environment="test")
         refs = {"coaTemplate.artifactRef": pack["coaTemplate"]["artifactRef"], "tax.taxCodesRef": pack["tax"]["taxCodesRef"]}
         for label, ref in refs.items():
             with self.subTest(ref=label):
@@ -427,7 +450,7 @@ class TestDeclarativeOnly(unittest.TestCase):
     def test_ksa_print_templates_exist(self) -> None:
         evidence = _read_json(_version_dir("SA") / "evidence.json")
         pending = {(p["path"], p["value"]) for p in evidence["pendingRefs"]}
-        for idx, tpl in enumerate(load_country_pack("SA", PACKS_DIR)["printFormats"]["templates"]):
+        for idx, tpl in enumerate(load_country_pack("SA", PACKS_DIR, environment="test")["printFormats"]["templates"]):
             with self.subTest(kind=tpl["kind"]):
                 path, _, layout = tpl["templateRef"].partition("#")
                 self.assertIn(layout, (REPO_ROOT / path).read_text(encoding="utf-8"))

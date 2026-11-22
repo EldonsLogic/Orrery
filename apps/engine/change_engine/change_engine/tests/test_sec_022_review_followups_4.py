@@ -70,6 +70,18 @@ LOCKED_VARIANTS = (
     " Account",
     "ver\u017fion",  # Latin small letter long s -> casefolds to "version"
 ) + UNICODE_LOCKED_VARIANTS
+CONTROL_CHAR_VARIANTS = (
+    "GL Entry\x00",
+    "\x01GL Entry",
+    "GL\x07Entry",
+    "User\x7f",
+    "Account\x9f",
+    "Customer\x00",
+    "\x01Customer",
+    "Cust\x07omer",
+    "Item\x7f",
+    "Sales Invoice\x9f",
+)
 ALLOWED_DOCTYPES = ("Customer", "Sales Invoice", "Item", "Delivery Note", "Payment Entry", "Accounts")
 
 
@@ -321,6 +333,46 @@ class TestSharedLockedDoctypeHelper(unittest.TestCase):
         for dt in ALLOWED_DOCTYPES:
             with self.subTest(doctype=dt):
                 self.assertFalse(safety_guardrails.is_locked_doctype(dt))
+
+    def test_control_characters_fail_closed_across_helpers_and_engines(self) -> None:
+        for dt in CONTROL_CHAR_VARIANTS:
+            with self.subTest(helper="is_locked_doctype", doctype=dt):
+                self.assertTrue(safety_guardrails.is_locked_doctype(dt))
+            with self.subTest(helper="is_restricted_link_doctype", doctype=dt):
+                self.assertTrue(safety_guardrails.is_restricted_link_doctype(dt))
+            with self.subTest(engine="validate_mutation_safety_target", doctype=dt):
+                with self.assertRaises(ZoneSafetyViolation) as ctx:
+                    validate_mutation_safety({
+                        "intent": "add_custom_fields",
+                        "target_doctype": dt,
+                        "user_roles": ["System Manager"],
+                        "changes": [{"fieldname": "custom_probe", "fieldtype": "Data", "label": "Probe"}],
+                    })
+                self.assertIn("Zone 2 Compliance Lock Violation", str(ctx.exception))
+            with self.subTest(engine="validate_mutation_safety_link", options=dt):
+                with self.assertRaises(ZoneSafetyViolation) as ctx:
+                    validate_mutation_safety({
+                        "intent": "add_custom_fields",
+                        "target_doctype": "Customer",
+                        "user_roles": ["System Manager"],
+                        "changes": [
+                            {
+                                "fieldname": "custom_ref_probe",
+                                "fieldtype": "Link",
+                                "label": "Ref Probe",
+                                "options": dt,
+                            }
+                        ],
+                    })
+                self.assertIn("Restricted Link Target", str(ctx.exception))
+            with self.subTest(engine="workflow_engine", doctype=dt):
+                res = validate_workflow_state_machine(_workflow_def(dt))
+                self.assertFalse(res.is_valid, f"expected refusal for {dt!r}")
+                self.assertTrue(any("Tier 0" in e for e in res.errors), res.errors)
+            with self.subTest(engine="report_engine", doctype=dt):
+                res = validate_report_definition(_report_def(dt))
+                self.assertFalse(res.is_valid, f"expected refusal for {dt!r}")
+                self.assertTrue(any("prohibited" in e.lower() for e in res.errors), res.errors)
 
     def test_validate_mutation_safety_refuses_locked_variants_and_allows_ordinary(self) -> None:
         for dt in LOCKED_VARIANTS:
@@ -1112,6 +1164,382 @@ class TestEntityAddInlineTargets(_AdapterPlanBase):
                 res = self._plan_on_customer(adapter, [good], f"idemp_ent_ok_{name}")
                 self.assertEqual(res["steps"][0]["disposition"], "ok", res)
                 self.assertEqual(res["verdict"], "auto_approved", res)
+
+
+class TestSubjectIdMatchesPointer(_AdapterPlanBase):
+    """Fix round 2 item 1: every field.* and relation.* step must match subject.id to the last pointer segment."""
+
+    def _seed_customer_with_fields(self, adapter: ChangeEngineAdapter, key: str) -> dict:
+        rev1 = self._seed_customer(adapter, key)
+        rev2 = {"hash": "sha256:" + "a" * 64, "revision": 2}
+        select_step = _field_step(2, "customer", "tier", kind="field.add", field_type="select")
+        select_step["params"]["definition"]["options"] = [
+            {"value": "gold", "labels": {"en": "Gold", "ar": "\u0630\u0647\u0628\u064a"}},
+        ]
+        steps = [
+            _field_step(1, "customer", "ref_link", kind="field.add", field_type="link", target="item"),
+            select_step,
+            _relation_step(3, "customer", "rel_item", kind="relation.add", target="item"),
+        ]
+        inv = _inverse_for(
+            rev1,
+            rev2,
+            [
+                _field_step(1, "customer", "ref_link", kind="field.quarantine"),
+                _field_step(2, "customer", "tier", kind="field.quarantine"),
+                _relation_step(3, "customer", "rel_item", kind="relation.quarantine"),
+            ],
+        )
+        art2 = _artifact(steps, base=rev1, target=rev2, inverse=inv)
+        pl = adapter.call("plan", _ctx(), {"artifact": art2})
+        self.assertTrue(pl["ok"] and pl["result"]["verdict"] == "auto_approved", pl)
+        ap = adapter.call("apply", _ctx(), {
+            "idempotencyKey": key + "_apply_fields",
+            "planToken": pl["result"]["planToken"],
+            "artifact": art2,
+            "approvals": {"changeApproved": "01J00000000000000000000021"},
+        })
+        self.assertTrue(ap["ok"] and ap["result"]["status"] == "applied", ap)
+        return rev2
+
+    def test_repro_pointer_select_subject_link_options_user_refused_with_zero_writes(self) -> None:
+        for idx, target_opt in enumerate(("User", "GL Entry")):
+            step = {
+                **_field_step(
+                    1,
+                    "customer",
+                    "ref_link",
+                    kind="field.set_property",
+                    pointer="/entities/customer/fields/tier",
+                ),
+                "params": {"property": "/options", "before": "Item", "after": target_opt},
+            }
+            seen = {}
+            for name, adapter in self._adapters():
+                with self.subTest(target=target_opt, adapter=name):
+                    rev2 = self._seed_customer_with_fields(adapter, f"idemp_r2_repro_{idx}_{name}")
+                    engine = adapter.frappe_backend._frappe_factory() if adapter.frappe_backend else None
+                    before_rows = repr(engine.ensure_site(SITE).rows) if engine else None
+                    rev3 = {"hash": "sha256:" + "b" * 64, "revision": 3}
+                    inv = _inverse_for(rev2, rev3, [_field_step(1, "customer", "tier", kind="field.set_property")])
+                    art3 = _artifact([step], base=rev2, target=rev3, inverse=inv)
+
+                    planned = adapter.call("plan", _ctx(), {"artifact": art3})
+                    self.assertTrue(planned["ok"], planned)
+                    res = planned["result"]
+                    got = (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"])
+                    seen[name] = got
+                    self.assertEqual(got, ("blocked", "definition_conflict", "rejected"), res)
+
+                    ap = adapter.call("apply", _ctx(), {
+                        "idempotencyKey": f"idemp_r2_repro_ap_{idx}_{name}",
+                        "planToken": res["planToken"],
+                        "artifact": art3,
+                        "approvals": {"changeApproved": "01J00000000000000000000022"},
+                    })
+                    self.assertTrue(ap["ok"], ap)
+                    self.assertEqual(ap["result"]["status"], "rejected", ap)
+                    self.assertEqual(ap["result"]["site"]["state"], "ready", ap)
+
+                    st = adapter.call("site_status", _ctx(), {})
+                    self.assertTrue(st["ok"], st)
+                    self.assertEqual(st["result"]["state"], "ready", st)
+
+                    if engine is not None:
+                        self.assertEqual(repr(engine.ensure_site(SITE).rows), before_rows)
+                        ps_rows = engine.rows("Property Setter")
+                        self.assertFalse(
+                            any(
+                                r.get("field_name") == "custom_ref_link" and r.get("property") == "options"
+                                for r in ps_rows
+                            ),
+                            ps_rows,
+                        )
+            self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+    def test_every_field_and_relation_step_refuses_mismatched_subject_id(self) -> None:
+        steps = (
+            ("field_add", _field_step(1, "customer", "other_fld", kind="field.add", pointer="/entities/customer/fields/new_fld")),
+            ("field_set_property", _field_step(1, "customer", "ref_link", kind="field.set_property", pointer="/entities/customer/fields/tier")),
+            ("field_quarantine", _field_step(1, "customer", "ref_link", kind="field.quarantine", pointer="/entities/customer/fields/tier")),
+            ("field_reorder", _field_step(1, "customer", "tier", kind="field.reorder", pointer="/entities/customer/fields")),
+            ("relation_add", _relation_step(1, "customer", "other_rel", kind="relation.add", pointer="/entities/customer/relations/new_rel")),
+            ("relation_set_property", _relation_step(1, "customer", "other_rel", kind="relation.set_property", pointer="/entities/customer/relations/rel_item")),
+            ("relation_quarantine", _relation_step(1, "customer", "other_rel", kind="relation.quarantine", pointer="/entities/customer/relations/rel_item")),
+            ("field_null_id", {**_field_step(1, "customer", "tier", kind="field.set_property"), "subject": {"kind": "field", "id": None, "parents": [{"kind": "entity", "id": "customer"}]}}),
+        )
+        for label, step in steps:
+            seen = {}
+            for name, adapter in self._adapters():
+                with self.subTest(case=label, adapter=name):
+                    rev2 = self._seed_customer_with_fields(adapter, f"idemp_r2_sid_{label}_{name}")
+                    rev3 = {"hash": "sha256:" + "c" * 64, "revision": 3}
+                    inv = _inverse_for(rev2, rev3, [_field_step(1, "customer", "tier", kind="field.set_property")])
+                    art3 = _artifact([step], base=rev2, target=rev3, inverse=inv)
+                    planned = adapter.call("plan", _ctx(), {"artifact": art3})
+                    self.assertTrue(planned["ok"], planned)
+                    res = planned["result"]
+                    got = (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"])
+                    seen[name] = got
+                    self.assertEqual(got, ("blocked", "definition_conflict", "rejected"), res)
+            self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+
+class TestTypeChangeHistoryRefusesOptions(_AdapterPlanBase):
+    """Fix round 2 item 2: any earlier or same-artifact /type change defeats the non-link /options proof."""
+
+    def _seed_customer_with_fields(self, adapter: ChangeEngineAdapter, key: str) -> dict:
+        rev1 = self._seed_customer(adapter, key)
+        rev2 = {"hash": "sha256:" + "a" * 64, "revision": 2}
+        select_step = _field_step(2, "customer", "tier", kind="field.add", field_type="select")
+        select_step["params"]["definition"]["options"] = [
+            {"value": "gold", "labels": {"en": "Gold", "ar": "\u0630\u0647\u0628\u064a"}},
+        ]
+        steps = [
+            _field_step(1, "customer", "ref_link", kind="field.add", field_type="link", target="item"),
+            select_step,
+        ]
+        inv = _inverse_for(
+            rev1,
+            rev2,
+            [
+                _field_step(1, "customer", "ref_link", kind="field.quarantine"),
+                _field_step(2, "customer", "tier", kind="field.quarantine"),
+            ],
+        )
+        art2 = _artifact(steps, base=rev1, target=rev2, inverse=inv)
+        pl = adapter.call("plan", _ctx(), {"artifact": art2})
+        self.assertTrue(pl["ok"] and pl["result"]["verdict"] == "auto_approved", pl)
+        ap = adapter.call("apply", _ctx(), {
+            "idempotencyKey": key + "_apply_fields",
+            "planToken": pl["result"]["planToken"],
+            "artifact": art2,
+            "approvals": {"changeApproved": "01J00000000000000000000031"},
+        })
+        self.assertTrue(ap["ok"] and ap["result"]["status"] == "applied", ap)
+        return rev2
+
+    def _apply_gated_step(
+        self,
+        adapter: ChangeEngineAdapter,
+        step: dict,
+        inv_step: dict,
+        base: dict,
+        target: dict,
+        key: str,
+    ) -> None:
+        inv = _inverse_for(base, target, [inv_step])
+        art = _artifact([step], base=base, target=target, inverse=inv)
+        pl = adapter.call("plan", _ctx(), {"artifact": art})
+        self.assertTrue(pl["ok"], pl)
+        self.assertEqual(pl["result"]["verdict"], "needs_gate_approval", pl)
+        ap = adapter.call("apply", _ctx(), {
+            "idempotencyKey": key,
+            "planToken": pl["result"]["planToken"],
+            "artifact": art,
+            "approvals": {
+                "changeApproved": "01J00000000000000000000032",
+                "gateApproved": "01J00000000000000000000033",
+            },
+        })
+        self.assertTrue(ap["ok"] and ap["result"]["status"] == "applied", ap)
+
+    def test_type_change_in_earlier_artifact_refuses_later_options(self) -> None:
+        cases = (
+            ("user", "User", "protected_subject"),
+            ("gl_entry", "GL Entry", "protected_subject"),
+            ("customer", "Customer", "unsupported_value_type"),
+            ("select_list", [{"value": "gold", "labels": {"en": "Gold", "ar": "\u0630\u0647\u0628\u064a"}}], "unsupported_value_type"),
+        )
+        for label, after_val, expected_reason in cases:
+            seen = {}
+            for name, adapter in self._adapters():
+                with self.subTest(case=label, adapter=name):
+                    rev2 = self._seed_customer_with_fields(adapter, f"idemp_r2_t2o_{label}_{name}")
+                    rev3 = {"hash": "sha256:" + "d" * 64, "revision": 3}
+                    type_to_select = {
+                        **_field_step(1, "customer", "ref_link", kind="field.set_property"),
+                        "params": {"property": "/type", "before": "link", "after": "select"},
+                    }
+                    type_back_link = {
+                        **_field_step(1, "customer", "ref_link", kind="field.set_property"),
+                        "params": {"property": "/type", "before": "select", "after": "link"},
+                    }
+                    self._apply_gated_step(adapter, type_to_select, type_back_link, rev2, rev3, f"idemp_r2_t2o_ap_{label}_{name}")
+
+                    engine = adapter.frappe_backend._frappe_factory() if adapter.frappe_backend else None
+                    before_rows = repr(engine.ensure_site(SITE).rows) if engine else None
+                    rev4 = {"hash": "sha256:" + "e" * 64, "revision": 4}
+                    opt_step = {
+                        **_field_step(1, "customer", "ref_link", kind="field.set_property"),
+                        "params": {"property": "/options", "before": "Item", "after": after_val},
+                    }
+                    inv4 = _inverse_for(rev3, rev4, [_field_step(1, "customer", "ref_link", kind="field.set_property")])
+                    art4 = _artifact([opt_step], base=rev3, target=rev4, inverse=inv4)
+
+                    planned = adapter.call("plan", _ctx(), {"artifact": art4})
+                    self.assertTrue(planned["ok"], planned)
+                    res = planned["result"]
+                    got = (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"])
+                    seen[name] = got
+                    self.assertEqual(got, ("blocked", expected_reason, "rejected"), res)
+
+                    ap = adapter.call("apply", _ctx(), {
+                        "idempotencyKey": f"idemp_r2_t2o_opt_{label}_{name}",
+                        "planToken": res["planToken"],
+                        "artifact": art4,
+                        "approvals": {"changeApproved": "01J00000000000000000000034"},
+                    })
+                    self.assertTrue(ap["ok"], ap)
+                    self.assertEqual(ap["result"]["status"], "rejected", ap)
+                    if engine is not None:
+                        self.assertEqual(repr(engine.ensure_site(SITE).rows), before_rows)
+            self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+    def test_roundtrip_type_change_select_to_link_to_select_still_refuses_options(self) -> None:
+        for name, adapter in self._adapters():
+            with self.subTest(adapter=name):
+                rev2 = self._seed_customer_with_fields(adapter, f"idemp_r2_rt_{name}")
+                rev3 = {"hash": "sha256:" + "d" * 64, "revision": 3}
+                rev4 = {"hash": "sha256:" + "e" * 64, "revision": 4}
+                rev5 = {"hash": "sha256:" + "f" * 64, "revision": 5}
+                to_link = {
+                    **_field_step(1, "customer", "tier", kind="field.set_property"),
+                    "params": {"property": "/type", "before": "select", "after": "link"},
+                }
+                to_select = {
+                    **_field_step(1, "customer", "tier", kind="field.set_property"),
+                    "params": {"property": "/type", "before": "link", "after": "select"},
+                }
+                self._apply_gated_step(adapter, to_link, to_select, rev2, rev3, f"idemp_r2_rt1_{name}")
+                self._apply_gated_step(adapter, to_select, to_link, rev3, rev4, f"idemp_r2_rt2_{name}")
+
+                opt_step = {
+                    **_field_step(1, "customer", "tier", kind="field.set_property"),
+                    "params": {"property": "/options", "before": [], "after": "User"},
+                }
+                inv5 = _inverse_for(rev4, rev5, [_field_step(1, "customer", "tier", kind="field.set_property")])
+                art5 = _artifact([opt_step], base=rev4, target=rev5, inverse=inv5)
+                planned = adapter.call("plan", _ctx(), {"artifact": art5})
+                self.assertTrue(planned["ok"], planned)
+                res = planned["result"]
+                self.assertEqual(
+                    (res["steps"][0]["disposition"], res["steps"][0].get("reasonCode"), res["verdict"]),
+                    ("blocked", "protected_subject", "rejected"),
+                    res,
+                )
+
+    def test_same_artifact_both_orders_refuse_options(self) -> None:
+        combos = (
+            (
+                "type_then_options_link_to_select",
+                [
+                    {
+                        **_field_step(1, "customer", "ref_link", kind="field.set_property"),
+                        "params": {"property": "/type", "before": "link", "after": "select"},
+                    },
+                    {
+                        **_field_step(2, "customer", "ref_link", kind="field.set_property"),
+                        "params": {"property": "/options", "before": "Item", "after": "User"},
+                    },
+                ],
+                1,
+                "protected_subject",
+            ),
+            (
+                "options_then_type_select_to_link_protected",
+                [
+                    {
+                        **_field_step(1, "customer", "tier", kind="field.set_property"),
+                        "params": {"property": "/options", "before": [], "after": "User"},
+                    },
+                    {
+                        **_field_step(2, "customer", "tier", kind="field.set_property"),
+                        "params": {"property": "/type", "before": "select", "after": "link"},
+                    },
+                ],
+                0,
+                "protected_subject",
+            ),
+            (
+                "options_then_type_select_to_link_ordinary",
+                [
+                    {
+                        **_field_step(1, "customer", "tier", kind="field.set_property"),
+                        "params": {"property": "/options", "before": [], "after": "Customer"},
+                    },
+                    {
+                        **_field_step(2, "customer", "tier", kind="field.set_property"),
+                        "params": {"property": "/type", "before": "select", "after": "link"},
+                    },
+                ],
+                0,
+                "unsupported_value_type",
+            ),
+        )
+        for label, steps, opt_idx, expected_reason in combos:
+            seen = {}
+            for name, adapter in self._adapters():
+                with self.subTest(case=label, adapter=name):
+                    rev2 = self._seed_customer_with_fields(adapter, f"idemp_r2_same_{label}_{name}")
+                    rev3 = {"hash": "sha256:" + "d" * 64, "revision": 3}
+                    inv = _inverse_for(rev2, rev3, [_field_step(1, "customer", "tier", kind="field.set_property")])
+                    art3 = _artifact(steps, base=rev2, target=rev3, inverse=inv)
+                    planned = adapter.call("plan", _ctx(), {"artifact": art3})
+                    self.assertTrue(planned["ok"], planned)
+                    res = planned["result"]
+                    got = (res["steps"][opt_idx]["disposition"], res["steps"][opt_idx].get("reasonCode"), res["verdict"])
+                    seen[name] = got
+                    self.assertEqual(got, ("blocked", expected_reason, "rejected"), res)
+            self.assertEqual(seen["in_memory"], seen["offline_engine"])
+
+    def test_inline_entity_select_field_options_still_allowed_when_type_unchanged(self) -> None:
+        inline_select = {
+            "id": "priority",
+            "type": "select",
+            "labels": {"en": "Priority", "ar": "\u0623\u0648\u0644\u0648\u064a\u0629"},
+            "options": [{"value": "high", "labels": {"en": "High", "ar": "\u0639\u0627\u0644\u064a"}}],
+        }
+        for name, adapter in self._adapters():
+            with self.subTest(adapter=name):
+                prov = adapter.call("provision_site", _ctx(), {
+                    "idempotencyKey": f"idemp_r2_inline_prov_{name}",
+                    "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
+                    "blueprintId": "bp-f4",
+                    "siteClass": "sandbox",
+                    "countryPack": "sa",
+                })
+                self.assertTrue(prov["ok"], prov)
+                rev1 = {"hash": "sha256:" + "5" * 64, "revision": 1}
+                art1 = _artifact([_entity(1, "customer", fields=[inline_select])], target=rev1)
+                pl1 = adapter.call("plan", _ctx(), {"artifact": art1})
+                self.assertTrue(pl1["ok"] and pl1["result"]["verdict"] == "auto_approved", pl1)
+                ap1 = adapter.call("apply", _ctx(), {
+                    "idempotencyKey": f"idemp_r2_inline_ap1_{name}",
+                    "planToken": pl1["result"]["planToken"],
+                    "artifact": art1,
+                    "approvals": {"changeApproved": "01J00000000000000000000035"},
+                })
+                self.assertTrue(ap1["ok"] and ap1["result"]["status"] == "applied", ap1)
+
+                rev2 = {"hash": "sha256:" + "6" * 64, "revision": 2}
+                opt_step = {
+                    **_field_step(1, "customer", "priority", kind="field.set_property"),
+                    "params": {
+                        "property": "/options",
+                        "before": inline_select["options"],
+                        "after": [
+                            {"value": "high", "labels": {"en": "High", "ar": "\u0639\u0627\u0644\u064a"}},
+                            {"value": "low", "labels": {"en": "Low", "ar": "\u0645\u0646\u062e\u0641\u0636"}},
+                        ],
+                    },
+                }
+                inv2 = _inverse_for(rev1, rev2, [_field_step(1, "customer", "priority", kind="field.set_property")])
+                art2 = _artifact([opt_step], base=rev1, target=rev2, inverse=inv2)
+                pl2 = adapter.call("plan", _ctx(), {"artifact": art2})
+                self.assertTrue(pl2["ok"], pl2)
+                self.assertEqual(pl2["result"]["steps"][0]["disposition"], "ok", pl2)
+                self.assertEqual(pl2["result"]["verdict"], "auto_approved", pl2)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
-import { LoginForm } from '../../components/auth/LoginForm';
+import { BrandedLogin } from '../../components/login/BrandedLogin';
 
 export default function LoginPage() {
-  return <LoginForm />;
+  return <BrandedLogin />;
 }

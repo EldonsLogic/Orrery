@@ -135,6 +135,7 @@
   "auth": {
     "backToLogin": "Back to sign in",
     "login": {
+      "platformName": "The platform",
       "title": "Sign in",
       "intro": "Use your work email and password.",
       "email": "Email",

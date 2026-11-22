@@ -1,0 +1,48 @@
+.brand {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+}
+
+.logo {
+  display: block;
+  block-size: 40px;
+  inline-size: auto;
+  max-inline-size: 160px;
+  object-fit: contain;
+}
+
+.logoDark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hasDark .logoLight {
+    display: none;
+  }
+
+  :root:not([data-theme="light"]) .hasDark .logoDark {
+    display: block;
+  }
+}
+
+:root[data-theme="dark"] .hasDark .logoLight {
+  display: none;
+}
+
+:root[data-theme="dark"] .hasDark .logoDark {
+  display: block;
+}
+
+.name {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--text-h3-weight);
+  font-size: var(--text-h3-size);
+  overflow-wrap: anywhere;
+}
+
+.headline {
+  margin: 0;
+  color: var(--color-text-muted);
+}

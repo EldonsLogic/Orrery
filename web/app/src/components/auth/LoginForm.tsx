@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Alert, Button, Stack, TextField } from '../../ui';
 import { placeholderLogin, type AuthResult, type LoginHandler } from '../../lib/authPlaceholder';
@@ -12,9 +12,12 @@ export type LoginFormProps = {
   onSubmit?: LoginHandler;
   /** Starting outcome, for tests and previews only. */
   initialResult?: AuthResult;
+  /** Tenant look (WEB-008): brand block above the title and the scoping tenant slug. */
+  brand?: ReactNode;
+  tenant?: string;
 };
 
-export function LoginForm({ onSubmit = placeholderLogin, initialResult }: LoginFormProps) {
+export function LoginForm({ onSubmit = placeholderLogin, initialResult, brand, tenant }: LoginFormProps) {
   const t = useTranslations('auth');
   const [result, setResult] = useState<AuthResult | undefined>(initialResult);
   const [busy, setBusy] = useState(false);
@@ -33,7 +36,7 @@ export function LoginForm({ onSubmit = placeholderLogin, initialResult }: LoginF
   }
 
   return (
-    <AuthShell title={t('login.title')}>
+    <AuthShell title={t('login.title')} brand={brand} tenant={tenant}>
       <p className={styles.intro}>{t('login.intro')}</p>
       <form onSubmit={handle} noValidate={false}>
         <Stack gap={2}>

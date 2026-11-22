@@ -26,3 +26,4 @@ Not measured; one Sonnet session with two short follow-ups (web wiring, review f
 None for GOV-064. Checks run: web lint, typecheck, test, node --test scripts; services/blueprint tokens tests; brand tools.
 
 Review fixes (PR #268): break-glass list marked Proposed again; sole-owner rule reworded (role holding, not availability); RULES 21 and 23 wording; Q-563 added for Q-41 with Q-42; agent-least-privilege Q-42 references updated.
+- Q-563 answered by Eldon in chat (2026-11-22): the sole-owner fallback covers the owner's own agent drafts, R1-R3 only; recorded in the table and open-questions.

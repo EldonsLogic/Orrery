@@ -265,10 +265,22 @@ def min_pointer_segments(kind: str) -> int:
     return 2
 
 
-# SEC-022 (ADR-0051 items 3 and 7): `entity.*` steps address the entity itself, `/entities/<id>`, exactly. Of an entity's
-# properties, `entity.set_property` may not name the identity or the two element lists: they hold the fields and relations
-# (a field's `type` among them), which only the `field.*` and `relation.*` kinds may change, each with its own checks.
-ENTITY_STRUCTURAL_PROPERTIES = frozenset({"id", "fields", "relations"})
+# SEC-022 (ADR-0051 items 3, 7 and 8): `entity.*` steps address the entity itself, `/entities/<id>`, exactly. A
+# set_property step names only a Blueprint property of its element (`contracts/blueprint.schema.json`, where each of
+# these has `additionalProperties: false`), never the identity (`id`: renaming a field onto another's id defeats the
+# checks keyed on it) nor an entity's element lists (`fields`, `relations`: only the `field.*` and `relation.*` kinds
+# change those, each with its own checks). An allow list, so a case or encoding variant (`/Fields`, `/%66ields`) is
+# refused too. `tests/test_sec_022_review_followups_7.py` pins these sets to the schema.
+SETTABLE_PROPERTIES = {
+    "entity.set_property": frozenset({"labels", "pluralLabels", "kind", "numbering", "workflow", "components", "provenance"}),
+    "field.set_property": frozenset({
+        "type", "required", "unique", "maxLength", "precision", "min", "max", "options", "target", "computed",
+        "readOnly", "labels", "default", "visibleToRoles",
+    }),
+    # `options` on a relation is not a Blueprint property: it is the engine link target, which `frappe_backend` maps and
+    # the `/options` target checks in `_judge` guard (SEC-022 follow-up 4), so it stays settable.
+    "relation.set_property": frozenset({"labels", "target", "kind", "cardinality", "onDelete", "required", "options"}),
+}
 # The kinds that carry `params.property` (contract: a pointer below the subject, pattern `^(/[^/]+)+$`). `_segs` drops
 # any text before the first `/`, so `_judge` needs a well-formed pointer itself: schema validation can be skipped.
 PROPERTY_KINDS = frozenset({
@@ -1095,7 +1107,7 @@ class ChangeEngineAdapter:
             head = _property_head(prop)
             if (
                 head is None
-                or (kind == "entity.set_property" and head in ENTITY_STRUCTURAL_PROPERTIES)
+                or (kind in SETTABLE_PROPERTIES and head not in SETTABLE_PROPERTIES[kind])
                 # A field's type changes only as exactly `/type` (gated, and recorded in the `/type` history).
                 or (head in EXACT_ELEMENT_PROPERTIES.get(kind, ()) and prop != "/" + head)
             ):

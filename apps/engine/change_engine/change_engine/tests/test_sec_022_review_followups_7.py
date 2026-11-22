@@ -223,7 +223,6 @@ class TestValidEntityStepsStillPlan(_Base):
             ("/numbering/prefix", "C-"),
             ("/workflow", "wf"),
             ("/components", []),
-            ("/x", 1),
             ("/labels/a~1b", "slash"),
         )
         for name, adapter in self._adapters():
@@ -349,6 +348,70 @@ class TestPropertyMustBeAPointer(_Base):
                             subject={"kind": "relation", "id": "rel", "parents": ["customer"]})
                 with self.subTest(adapter=name, prop=prop):
                     self.assertEqual(adapter._judge(site, step, {"customer"})[:2], ("blocked", "unsupported_value_type"))
+
+
+def _rel_step(prop: object) -> dict:
+    step = {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(prop)}
+    step.update(kind="relation.set_property", pointer=CUSTOMER + "/relations/rel",
+                subject={"kind": "relation", "id": "rel", "parents": ["customer"]})
+    return step
+
+
+class TestSettablePropertiesAllowList(_Base):
+    """Eldon's review of #280 (Fable 5.2), Medium 1 and Low 4: `field.set_property /id` renamed a field onto a link
+    field's id (no gate), so the `/options` non-link proof read the wrong field; and the entity deny list let
+    `/Fields`, `/fields ` and `/%66ields` plan. A set_property step may now name only a Blueprint property of its
+    element (the schema has `additionalProperties: false`), never the identity or the element lists."""
+
+    def test_eldon_rename_repro_refused(self) -> None:
+        steps = [
+            {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set("/id", "zzz_old", "ref_link")},
+            {**_field_step(1, "customer", "tier", kind="field.set_property"), "params": _set("/id", "ref_link", "tier")},
+        ]
+        self._refuse_all(steps, "rename", apply=True)
+
+    def test_identity_and_unknown_properties_refused(self) -> None:
+        field = ("/id", "/id/x", "/Type", "/type ", "/%74ype", "/indexed", "/unknown", "/fields")
+        entity = ("/Fields", "/fields ", "/%66ields", "/unknown", "/provenance ", "/Labels")
+        relation = ("/id", "/id/x", "/unknown", "/Target", "/fields")
+        steps = [{**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set(p)} for p in field]
+        steps += [_entity_step("entity.set_property", CUSTOMER, _set(p)) for p in entity]
+        for name, adapter in self._adapters():
+            self._seed_with_fields(adapter, f"idemp_f7_allow_{name}")
+            site = adapter._need_site(adapter.store.get_site(TENANT))
+            for step in steps + [_rel_step(p) for p in relation]:
+                with self.subTest(adapter=name, kind=step["kind"], prop=step["params"]["property"]):
+                    self.assertEqual(adapter._judge(site, step, {"customer"})[:2], ("blocked", "unsupported_value_type"))
+
+    def test_allow_lists_match_the_blueprint_schema(self) -> None:
+        import json
+        from pathlib import Path
+        from change_engine.adapter.engine import SETTABLE_PROPERTIES
+
+        root = next(p for p in Path(__file__).resolve().parents if (p / "contracts" / "blueprint.schema.json").exists())
+        defs = json.loads((root / "contracts" / "blueprint.schema.json").read_text())["$defs"]
+        for kind, element, excluded in (
+            ("entity.set_property", "entity", {"id", "fields", "relations"}),
+            ("field.set_property", "field", {"id"}),
+            ("relation.set_property", "relation", {"id"}),
+        ):
+            # `options` on a relation is the adapter's own link-target property (frappe_backend maps it), kept under the
+            # `/options` target checks; it is not a Blueprint relation property.
+            extra = {"options"} if element == "relation" else set()
+            with self.subTest(kind=kind):
+                self.assertIs(defs[element].get("additionalProperties"), False)
+                self.assertEqual(SETTABLE_PROPERTIES[kind], (frozenset(defs[element]["properties"]) - excluded) | extra)
+
+    def test_every_allowed_field_and_relation_property_still_plans_past_the_rule(self) -> None:
+        from change_engine.adapter.engine import SETTABLE_PROPERTIES
+
+        for name, adapter in self._adapters():
+            self._seed_with_fields(adapter, f"idemp_f7_allowok_{name}")
+            site = adapter._need_site(adapter.store.get_site(TENANT))
+            for prop in sorted(SETTABLE_PROPERTIES["field.set_property"] - {"type", "options", "target"}):
+                step = {**_field_step(1, "customer", "ref_link", kind="field.set_property"), "params": _set("/" + prop, True)}
+                with self.subTest(adapter=name, prop=prop):
+                    self.assertNotEqual(adapter._judge(site, step, {"customer"})[1], "unsupported_value_type")
 
 
 if __name__ == "__main__":

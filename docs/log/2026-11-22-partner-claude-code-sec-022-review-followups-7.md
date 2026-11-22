@@ -30,3 +30,11 @@ The review stopped before its report, but the defect it reproduced is real. `_se
 Fix (Claude Opus 5.5, coordinator): every kind that carries `params.property` now needs a well-formed pointer (`PROPERTY_KINDS`). On fields and relations, `type`, `options` and `target` are accepted only as exactly `/type`, `/options` and `/target` (`EXACT_ELEMENT_PROPERTIES`). ADR-0051 item 8 is updated.
 
 Tests first: 90 failing checks before the fix, none after. Four mutations of the new rule are all caught. `change_engine/tests`: 1389 passed, 87 skipped.
+
+## Eldon's review of #280 (Fable 5.2, at 1c1d929): fixes
+- **Medium 1** (`field.set_property /id` renames a field onto a link field's id with no gate): fixed. `SETTABLE_PROPERTIES` is an allow list taken from the Blueprint schema for entity, field and relation set_property steps, and it excludes `id` (and `fields` and `relations` on entities). Relation `options` is kept, because it is the engine link target, guarded by the target checks.
+- **Medium 2** and **Low 3** (text before the first `/`, and a malformed property raising mid-apply): already fixed in 82769db (`PROPERTY_KINDS`).
+- **Low 4** (the deny list let `/Fields`, `/fields ` and `/%66ields` through): fixed by the allow list. This replaces `ENTITY_STRUCTURAL_PROPERTIES`.
+- **Low 5** (ADR item 8 overstated): reworded to name exactly what it rests on.
+
+Tests first: 34 failing checks before the fix. The shape tests in follow-ups 5 and 7 that used the made-up property `/x` now use `/labels`, or expect a refusal. Four mutations of the allow list are all caught. `change_engine/tests`: 1393 passed, 87 skipped.

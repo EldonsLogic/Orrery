@@ -15,11 +15,12 @@ from components.compliance.country_pack import (
     PackNotFoundError,
     PackValidationError,
     UnknownCountryError,
-    apply_company_overrides,
     load_country_pack,
     resolve_country_pack,
     validate_pack,
 )
+# Private since CMP-034: resolve_country_pack is the only production entry (it runs the go-live gate first).
+from components.compliance.country_pack.loader import _apply_company_overrides as apply_company_overrides
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = PACKAGE_DIR / "pack.schema.json"
@@ -31,11 +32,11 @@ class TestCountryPackFramework(unittest.TestCase):
 
     def setUp(self) -> None:
         self.sample_pack = load_country_pack(
-            "SA", SAMPLE_PACKS_DIR, version="0.1.0", allow_test_packs=True
+            "SA", SAMPLE_PACKS_DIR, version="0.1.0", allow_test_packs=True, environment="test"
         )
 
     def test_valid_pack_loads(self) -> None:
-        pack = load_country_pack("SA", SAMPLE_PACKS_DIR, version="0.1.0", allow_test_packs=True)
+        pack = load_country_pack("SA", SAMPLE_PACKS_DIR, version="0.1.0", allow_test_packs=True, environment="test")
         self.assertTrue(pack["testOnly"])
         self.assertEqual(pack["countryCode"], "SA")
         self.assertEqual(pack["packId"], "sa")
@@ -44,7 +45,7 @@ class TestCountryPackFramework(unittest.TestCase):
         self.assertEqual(validate_pack(pack), [])
 
         resolved = resolve_country_pack(
-            "sa", SAMPLE_PACKS_DIR, version="0.1.0", allow_test_packs=True
+            "sa", SAMPLE_PACKS_DIR, version="0.1.0", allow_test_packs=True, environment="test"
         )
         self.assertEqual(resolved["locale"]["currency"], "SAR")
         self.assertEqual(resolved["locale"]["timezone"], "Asia/Riyadh")
@@ -54,7 +55,7 @@ class TestCountryPackFramework(unittest.TestCase):
 
     def test_test_only_rejected_and_unpinned_resolve_rejected_by_default(self) -> None:
         with self.assertRaises(PackValidationError):
-            load_country_pack("SA", SAMPLE_PACKS_DIR, version="0.1.0")
+            load_country_pack("SA", SAMPLE_PACKS_DIR, version="0.1.0", environment="test")
         with self.assertRaises(PackNotFoundError):
             load_country_pack("SA", SAMPLE_PACKS_DIR)
         with self.assertRaises(PackNotFoundError):
@@ -98,7 +99,7 @@ class TestCountryPackFramework(unittest.TestCase):
             pdir.mkdir(parents=True)
             (pdir / "pack.json").write_text(json.dumps(bad_missing), encoding="utf-8")
             with self.assertRaises(PackValidationError):
-                load_country_pack("SA", Path(tmp), version="0.1.0", allow_test_packs=True)
+                load_country_pack("SA", Path(tmp), version="0.1.0", allow_test_packs=True, environment="test")
 
     def test_locked_setting_override_rejected(self) -> None:
         locked_attempts = [
@@ -156,7 +157,7 @@ class TestCountryPackFramework(unittest.TestCase):
             },
         }
         resolved = resolve_country_pack(
-            "SA", SAMPLE_PACKS_DIR, company_overrides=overrides, version="0.1.0", allow_test_packs=True
+            "SA", SAMPLE_PACKS_DIR, company_overrides=overrides, version="0.1.0", allow_test_packs=True, environment="test"
         )
         self.assertEqual(resolved["locale"]["timezone"], "Asia/Dubai")
         self.assertEqual(resolved["locale"]["numberSystem"], "eastern_arabic")
@@ -212,11 +213,11 @@ class TestCountryPackFramework(unittest.TestCase):
                 d = Path(tmp) / "sa" / ver
                 d.mkdir(parents=True)
                 (d / "pack.json").write_text(json.dumps(data), encoding="utf-8")
-            # Default production load ignores testOnly=true 0.2.0 and picks 0.1.0
-            loaded_prod = load_country_pack("SA", Path(tmp))
+            # Default (allow_test_packs=False) load ignores testOnly=true 0.2.0 and picks 0.1.0
+            loaded_prod = load_country_pack("SA", Path(tmp), environment="test")
             self.assertEqual(loaded_prod["version"], "0.1.0")
             # Discovery with allow_test_packs=True sees 0.2.0
-            loaded_test = load_country_pack("SA", Path(tmp), allow_test_packs=True)
+            loaded_test = load_country_pack("SA", Path(tmp), allow_test_packs=True, environment="test")
             self.assertEqual(loaded_test["version"], "0.2.0")
 
     def test_unknown_country_fails_closed(self) -> None:
@@ -226,11 +227,11 @@ class TestCountryPackFramework(unittest.TestCase):
                     load_country_pack(bad_country, SAMPLE_PACKS_DIR)
 
         with self.assertRaises(PackNotFoundError):
-            load_country_pack("SA", SAMPLE_PACKS_DIR, version="9.9.9", allow_test_packs=True)
+            load_country_pack("SA", SAMPLE_PACKS_DIR, version="9.9.9", allow_test_packs=True, environment="test")
 
         with self.assertRaises(PackValidationError):
             resolve_country_pack(
-                "SA", SAMPLE_PACKS_DIR, version="0.1.0", pack_id="ae", allow_test_packs=True
+                "SA", SAMPLE_PACKS_DIR, version="0.1.0", pack_id="ae", allow_test_packs=True, environment="test"
             )
 
 

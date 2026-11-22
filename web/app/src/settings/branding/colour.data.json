@@ -1,0 +1,21 @@
+{
+  "note": "Data colours for the branding derivation (WEB-007), not UI styling. base mirrors docs/brand/tokens/tokens.json (colour.test.ts checks it). Kept in JSON so the tokens-only gate, which scans TS and CSS, sees no colour literals in code.",
+  "defaultPrimary": "#2443D0",
+  "white": "#FFFFFF",
+  "carbonDeep": "#0E1117",
+  "carbonInk": "#12151B",
+  "base": {
+    "light": { "background": "#F3F4F6", "surface": "#FFFFFF", "text": "#12151B", "danger": "#C21F3A" },
+    "dark": { "background": "#0E1117", "surface": "#171B23", "text": "#E8EAEF", "danger": "#FF6B81" }
+  },
+  "samples": {
+    "parity": ["#2443D0", "#0B7A75", "#7A1FA2", "#F2C200", "#808080", "#C21F3A", "#FFE066", "#5B8DEF"],
+    "teal": "#0B7A75",
+    "grey": "#888888",
+    "danger": "#C21F3A",
+    "pale": "#FFE066",
+    "short": " #abc ",
+    "shortGrey": "#888",
+    "shortNorm": "#AABBCC"
+  }
+}

@@ -247,7 +247,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | WEB-004 | Chat screen with modes | Web | G2 | WEB-003,OPR-010 | eldon | done |
 | WEB-005 | Approval inbox screen | Web | G2 | WEB-003,OPR-007 | eldon | todo |
 | WEB-006 | Reports and dashboard screens | Web | G2 | WEB-003,OPR-008 | eldon | todo |
-| WEB-007 | Settings: Branding screen with live preview and contrast feedback | Web | G2 | WEB-003,BRD-006,BRD-007 | eldon | todo |
+| WEB-007 | Settings: Branding screen with live preview and contrast feedback | Web | G2 | WEB-003,BRD-006,BRD-007 | eldon | done |
 | WEB-008 | Login page with tenant branding | Web | G2 | WEB-003,BRD-007 | eldon | todo |
 | WEB-009 | Settings: document templates for tenant-branded invoices | Web | G3 | WEB-007,ERP-016 | eldon | todo |
 | WEB-010 | Settings: users, roles and scopes | Web | G2 | WEB-003,ERP-008 | eldon | todo |

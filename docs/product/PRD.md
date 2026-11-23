@@ -3,7 +3,7 @@
 Status: draft
 Owner: eldon
 
-Platform name: Seshna (final name, seshna.com; see ADR-0066).
+Platform name: Seshna (final name, seshna.com; see ADR-0066); trademark clearance pending (LEG-008); seshna.com registration pending (LEG-005).
 
 ## 1. Problem
 Owner-led companies (10-100 staff) in KSA, UAE, Egypt and Qatar run on Excel, WhatsApp and a mix of tools. Moving to an ERP means a partner project costing 5-14x the licence in year one (UNVERIFIED partner pricing, see [../research/02-market-and-customer.md](../research/02-market-and-customer.md) section 3), and customised ERPs become a liability at upgrade time (same file, section 4). Compliance deadlines (ZATCA Phase 2 waves, UAE e-invoicing) force a decision. Evidence of buyer demand is thin and must be tested in interviews ([../strategy/01-gaps-and-risks.md](../strategy/01-gaps-and-risks.md) risk 1).

@@ -7,6 +7,7 @@ Plan IDs: GOV-070
 
 ## Summary
 Renamed Orrery to Seshna in services (except gateway and provisioning), scripts and the product, legal, gtm and runbooks docs; all affected test suites pass.
+Other matches are owned elsewhere: docs/brand by BRD-014; AGENTS.md, README, RULES, START-HERE, ONBOARDING and agents/ by GOV-069 (#296).
 
 ## Files touched
 - services/blueprint, control-plane, datasets, discovery, operate: hash domain strings, dataset name, module-name prefixes

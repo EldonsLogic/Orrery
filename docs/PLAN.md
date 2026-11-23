@@ -241,6 +241,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BRD-010 | UI component library built from tokens | Brand | G2 | BRD-005 | eldon | done |
 | BRD-011 | Font licence and Arabic typography verification | Brand | G1 | BRD-001 | eldon | doing |
 | BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | eldon | done |
+| BRD-013 | Pre-counsel name screening for candidate names (Seshna, Sesh): trademark, company, connotation and domain signals; input to LEG-008 and BRD-003 | Brand | G1 | - | eldon | done |
 | WEB-001 | Marketing website v1, bilingual | Web | G2 | BRD-009 | eldon | todo |
 | WEB-002 | Contact and waitlist form with PDPL consent | Web | G2 | WEB-001,LEG-012 | eldon | todo |
 | WEB-003 | App shell: sign-in, workspace switcher, navigation | Web | G2 | PLT-005,BRD-010 | eldon | done |

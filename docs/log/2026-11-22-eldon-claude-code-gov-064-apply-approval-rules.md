@@ -27,3 +27,8 @@ None for GOV-064. Checks run: web lint, typecheck, test, node --test scripts; se
 
 Review fixes (PR #268): break-glass list marked Proposed again; sole-owner rule reworded (role holding, not availability); RULES 21 and 23 wording; Q-563 added for Q-41 with Q-42; agent-least-privilege Q-42 references updated.
 - Q-563 answered by Eldon in chat (2026-11-22): the sole-owner fallback covers the owner's own agent drafts, R1-R3 only; recorded in the table and open-questions.
+
+## Review fixes round 2 (PR #268, partner review at fa09d47, 2026-11-23)
+- Merged origin/main; PLAN.md and open-questions.md conflicts resolved keeping both sides (GOV-062/063 done, GOV-065 to GOV-068, Q-560 with ADR-0059 update, Q-601, plus GOV-064 done and Q-563).
+- Medium fixed: docs/security/agent-least-privilege.md section on adopting drafts and ALP-030 now carry the Q-563 guarded exception (sole owner, R1 to R3, flagged self-approved, step-up, periodic review report; never R4; not when a second eligible person exists). TC-22 is now the allowed case; new TC-23 is the denied case (R4, or a second eligible person exists). Ranges updated to TC-01 to TC-23.
+- Grep of docs/security for other unconditional "own agent" bans: none left.

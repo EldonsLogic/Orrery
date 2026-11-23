@@ -108,7 +108,7 @@ The grant is a binding payload: approving it binds every field above through the
 - Agents are draft-only in every action-policy row (action-policy section 9). An agent never submits, approves, rejects, posts, sends, changes a permission or changes an approval rule.
 - An agent never approves anything, including its own draft and any R4 action. `approval.decide` is not reachable from any agent (PI-017).
 - R4 rows: an agent may not create a request for AP-FIN-02 or AP-PERM-01. AP-BPL-01 drafts come only from the platform's discovery agents and stay L3 (PI-030). Any other R4 drafting is decision D-2.
-- When a human adopts an agent's draft they become the initiator; the agent's owner may not also approve it (Q-42, accepted): SOD-NOT-AGENT-OWNER applies to every agent draft that needs a different approver, as set out in the action-policy table.
+- When a human adopts an agent's draft they become the initiator; the agent's owner may not also approve it (Q-42, accepted): SOD-NOT-AGENT-OWNER applies to every agent draft that needs a different approver, as set out in the action-policy table. One guarded exception (Q-563, resolved 2026-11-22): a sole owner, meaning no other eligible human holds the row's approving role, may self-approve a draft from their own agent for R1 to R3 rows only; each approval is flagged self-approved, needs step-up, and is listed in a periodic review report. R4 is never self-approved, and the exception does not apply when a second eligible person exists.
 - Floor actions in ADR-0027 stay human whatever the grant says. A grant field that would allow otherwise is rejected at validation.
 
 ## 10. Owner change
@@ -219,7 +219,7 @@ Every transition is an event. Only `active` may make calls; every other state re
 | ALP-027 | Re-owning requires a new owner holding every granted permission; no automatic transfer | OPR-007 |
 | ALP-028 | Agents can draft only; the evaluator refuses submit and approve with an agent actor | ERP-023, OPR-004 |
 | ALP-029 | No agent may create a request for AP-FIN-02 or AP-PERM-01; R4 drafting otherwise per D-2 | OPR-004 |
-| ALP-030 | The agent's owner may not approve that agent's drafts where a different approver is required (Q-42, SOD-NOT-AGENT-OWNER) | OPR-007 |
+| ALP-030 | The agent's owner may not approve that agent's drafts where a different approver is required (Q-42, SOD-NOT-AGENT-OWNER). Exception (Q-563): a sole owner may self-approve R1 to R3 rows, each flagged self-approved, with step-up and a periodic review report; never R4, and not when a second eligible person exists | OPR-007 |
 | ALP-031 | Caps nest platform ≥ tenant ≥ grant ≥ run; lower layers only tighten | PLT-025, OPR-001 |
 | ALP-032 | Cost is taken from gateway metering; if metering is unavailable, agent model calls are refused | PLT-025 |
 | ALP-033 | On exhaustion the run stops, `agent.budget_exceeded` is emitted, the owner is notified, the agent is paused | OPR-001 |
@@ -259,7 +259,8 @@ Every transition is an event. Only `active` may make calls; every other state re
 | TC-19 | Kill flag store unreachable | All agent calls refused |
 | TC-20 | Delegation cycle A to B to A | Second call refused |
 | TC-21 | Grantor without C3 access tries to grant C3 fields | Grant refused, not trimmed |
-| TC-22 | Owner tries to approve their own agent's R3 draft | Refused under ALP-030 (Q-42) |
+| TC-22 | Sole owner (no other eligible human holds the approving role) approves their own agent's R3 draft | Allowed under the ALP-030 exception (Q-563): flagged self-approved, step-up required, listed in the periodic review report |
+| TC-23 | Owner tries to approve their own agent's R4 draft, or an R1 to R3 draft while a second eligible person exists | Refused under ALP-030 (Q-42); no self-approval |
 
 ## 20. Decisions needed
 1. **D-1** A dedicated action-policy row for agent grants (grant, widen, renew, re-own) instead of reusing AP-PERM-01. Needs a SEC-019 follow-up; recommended.
@@ -291,5 +292,5 @@ Not added to [../open-questions.md](../open-questions.md); for the founders to p
 | OPR-007 and WEB-005 approvals | ALP-009, ALP-012, ALP-021, ALP-027, ALP-030, ALP-043, ALP-044 |
 | ERP-023 engine-side enforcement | ALP-023, ALP-028, ALP-036 |
 | DSC-010 connector framework | Connector jobs are not agents and get no grant; their output feeds agents only as L3 (PI-003, PI-006); ALP-014, ALP-018 apply to any agent reading it |
-| OPR-016 first pilot agent | All ALP rows that apply to a draft-only, single-tenant agent with no delegation; TC-01 to TC-22 pass before it runs on pilot data |
-| QA-005 agent evals | TC-01 to TC-22 as automated cases; ALP-037 |
+| OPR-016 first pilot agent | All ALP rows that apply to a draft-only, single-tenant agent with no delegation; TC-01 to TC-23 pass before it runs on pilot data |
+| QA-005 agent evals | TC-01 to TC-23 as automated cases; ALP-037 |

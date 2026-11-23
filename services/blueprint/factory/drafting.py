@@ -67,7 +67,8 @@ MONEY_AR = tuple(fold(x) for x in ("رصيد", "خصم", "سعر", "اسعار",
                                    "ميزانيه", "بدل", "رسوم", "بنك", "نقد", "مصروف", "ايراد", "دفع", "سداد", "تسويه"))
 
 (INVALID, INJECTION, RIGID, UNPROVEN, MODEL_REFUSED, MALFORMED, OUTSIDE, MANIFEST, SANDBOX, INTERNAL, PER_CLIENT,
- PERSONAL, CHECK_FAILED, RESERVED_ID) = (f"FDR-{i:03d}" for i in range(1, 15))
+ PERSONAL, CHECK_FAILED, RESERVED_ID, NOT_STAFF) = (f"FDR-{i:03d}" for i in range(1, 16))
+STAFF_REALM = "staff"     # identity Realm.STAFF (services/control-plane/identity/models.py); Q-600: staff only for now
 
 
 class Refused(Exception):
@@ -269,7 +270,9 @@ def check_draft(req: dict, text: str, owner: str) -> tuple[dict, list]:
 @dataclass
 class Drafter:
     """`port` implements contracts/model-call.md (`complete(request) -> reply`, raises on refusal). `principal` is the
-    verified identity the port also holds; the body `caller` only mirrors it. `audit` receives one record per outcome;
+    verified identity the port also holds; the body `caller` only mirrors it. Q-600: only a human platform-staff
+    principal may draft (`realm` from the verified identity claims, Realm.STAFF, and `actor_kind` user); anything else,
+    a tenant admin or a principal with no realm included, is refused before any model call. `audit` receives one record per outcome;
     if it raises, no draft is kept. Candidate tests are never run here (no OS sandbox before INF-014)."""
     port: object
     principal: dict
@@ -286,6 +289,8 @@ class Drafter:
         tmp = placed = None
         try:
             rec.update(tenant_id=self.principal["tenant_id"], requester=self.principal["actor_id"])
+            if self.principal.get("realm") != STAFF_REALM or self.principal.get("actor_kind") != "user":
+                raise Refused(NOT_STAFF, "platform_staff_only")
             rec["request_sha256"] = _sha(req)
             if isinstance(req, dict):
                 rec.update(request_id=req.get("request_id"), component_id=req.get("component_id"))

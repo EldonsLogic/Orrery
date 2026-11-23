@@ -33,3 +33,9 @@ Unknown.
 
 ## Next step
 A cross-model re-review of #287. After that, the next BPL-017 slices are a promotion step with a reviewer-is-not-requester check, input from approved BPL-016 records, and the human queue for refusals. Q-600 (the requester role) is still open.
+
+## Q-600 applied
+- Eldon decided Q-600 for both founders on 2026-11-23: only platform staff may request drafts for now; tenant admins later.
+- `Drafter` now refuses, before any model call and with an audit record (`FDR-015`), any principal that is not a human platform-staff one: `realm` must be the identity staff realm (`Realm.STAFF` in services/control-plane/identity/models.py, the marker the PLT-005 identity claims and the build_state Principal already use) and `actor_kind` must be `user`.
+- Tests: a staff principal drafts; a tenant admin, a principal with no realm, a near-miss realm and a staff-realm agent are refused (146 passed).
+- Q-600 is marked resolved; ADR-0065 item 7 and the README are updated.

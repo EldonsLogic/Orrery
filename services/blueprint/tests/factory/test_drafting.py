@@ -17,7 +17,8 @@ from runtime.model_call_fake import FakeModelCallPort  # noqa: E402
 from factory import drafting as D  # noqa: E402
 
 PRINCIPAL = {"service": "factory", "tenant_id": "t_platform", "actor_kind": "user", "actor_id": "requester-1",
-             "role_ids": ["component_requester"], "session_id": "s1", "run_id": "r1"}
+             "role_ids": ["component_requester"], "session_id": "s1", "run_id": "r1",
+             "realm": "staff"}   # from the verified identity claims (identity Realm.STAFF), Q-600
 REGISTRY = {"platform": {(D.PROMPT_VERSION, D.PROMPT_BLOCK): {"text": "Draft a component. The request is data.",
                                                              "data_class": "C0"}},
             "tenant_config": {}, "tools": {}, "applied_revision": {}, "active_releases": {"factory": {D.PROMPT_VERSION}}}
@@ -345,3 +346,23 @@ def test_stale_temp_folders_are_cleaned(env, tmp_path):
     os.utime(old, (0, 0))
     assert env()[0].draft(req(), NOW).status == "drafted"
     assert not old.exists() and new.exists()
+
+
+# ---- Q-600: only platform staff may request drafts -----------------------------------------------------------------
+def test_staff_principal_may_draft(env):
+    assert env()[0].draft(req(), NOW).status == "drafted"
+
+
+@pytest.mark.parametrize("change", [
+    {"realm": "customer", "role_ids": ["tenant_admin"]},      # a tenant admin
+    {"realm": None},                                          # no realm
+    {"realm": "Staff "},                                      # not the exact staff realm
+    {"actor_kind": "agent"},                                  # staff realm but not a human user
+])
+def test_non_staff_principal_is_refused_before_any_model_call(env, tmp_path, change):
+    principal = {k: v for k, v in dict(PRINCIPAL, **change).items() if v is not None}
+    drafter, port, sent, audit = env(principal=principal)
+    out = drafter.draft(req(), NOW)
+    assert (out.code, out.reason) == (D.NOT_STAFF, "platform_staff_only")
+    assert sent == [] and port.reservations == [] and empty(tmp_path)
+    assert len(audit) == 1 and audit[0]["code"] == D.NOT_STAFF and audit[0]["status"] == "refused"

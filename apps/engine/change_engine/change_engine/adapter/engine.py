@@ -450,12 +450,14 @@ class ChangeEngineAdapter:
                   "sync_version", "config", "retained") + (("state",) if with_state else ())
         return json.dumps({k: snap[k] for k in fields}, sort_keys=True, default=sorted)
 
-    def _repair_state_copy(self, tenant_id: str) -> None:
+    def _repair_state_copy(self, tenant_id: str, *, rotate: bool = False) -> None:
         """Make the tenant-database copy say what the operation store says (BPL-033). Best effort: it never raises.
 
         The store is the source of truth. A copy can lag it (a crash or a failed write after the store committed). Skipped
         while an operation holds the site (it writes its own copy). The copy is read before the store and the rewrite is a
-        compare-and-set on the token read, so a writer that got in between wins and nothing newer is overwritten."""
+        compare-and-set on the token read, so a writer that got in between wins and nothing newer is overwritten.
+        `rotate` rewrites even a matching copy with a fresh token: recovery uses it so no writer from before the recovered
+        operation can still pass its compare-and-set and promote the copy (re-review 2 at aa8849d)."""
         backend = self.frappe_backend
         loader = getattr(backend, "load_site_state", None)
         if backend is None or not callable(loader) or tenant_id == "platform":
@@ -466,7 +468,8 @@ class ChangeEngineAdapter:
             if site is None or site.lock is not None:
                 return
             want = self._site_snapshot(site)
-            if seen is not None and self._mirror_key(seen, with_state=True) == self._mirror_key(want, with_state=True):
+            if (not rotate and seen is not None
+                    and self._mirror_key(seen, with_state=True) == self._mirror_key(want, with_state=True)):
                 return
             backend.persist_site_state(
                 tenant_id,
@@ -884,6 +887,7 @@ class ChangeEngineAdapter:
         blocked and unlocked for a human (ADR-0028, never a second blind run); other operations are released to retry.
         Safe to call from every worker at any time: each operation is closed once (compare and set)."""
         closed = 0
+        recovered: set[str] = set()
         for rec in self.store.expired_operations():
             try:
                 if rec["operation"] in ("apply", "rollback"):
@@ -908,6 +912,7 @@ class ChangeEngineAdapter:
                             {"change_id": pend["artifactId"], "revision": rec["meta"].get("revision"), "error_code": "recovery_required"},
                             rec["tenant"],
                         )
+                    recovered.add(rec["tenant"])
                 else:
                     if not self.store.recover_operation(rec, None):
                         continue
@@ -922,7 +927,7 @@ class ChangeEngineAdapter:
             except Exception:
                 tenants = []
             for tenant in tenants:
-                self._repair_state_copy(tenant)
+                self._repair_state_copy(tenant, rotate=tenant in recovered)
         return closed
 
     def _release_on_error(self, tenant: str, op: str, inp: dict[str, Any], op_id: str) -> None:

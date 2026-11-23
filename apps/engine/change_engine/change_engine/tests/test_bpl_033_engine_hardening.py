@@ -431,6 +431,65 @@ class TestStateCopyMirrorsTheStore(Bpl033EngineBase):
         self.assertEqual(loaded["state"], "ready")
 
 
+class TestRecoveryRotatesTheCopyToken(Bpl033EngineBase):
+    """Re-review 2 at aa8849d: a recovery that left a matching copy untouched kept an older writer's token valid, so a
+    paused mark-ready or repair could promote the copy to ready after the store was blocked. Recovery now rewrites the
+    copy of every site it closed with a fresh token."""
+
+    second_artifact = TestStateCopyMirrorsTheStore.second_artifact
+    crash_before_mark_ready = TestStateCopyMirrorsTheStore.crash_before_mark_ready
+    copy_state = TestStateCopyMirrorsTheStore.copy_state
+    hydrated_state = TestStateCopyMirrorsTheStore.hydrated_state
+
+    def _second_worker_dies_and_is_recovered(self) -> None:
+        art = self.second_artifact()
+        plan = self.adapter.call("plan", bpl027.ctx(), {"artifact": art})
+        self.assertTrue(plan["ok"], plan)
+        real_step = self.backend.execute_step
+
+        def die_after_step(tenant, step):
+            real_step(tenant, step)
+            raise _Death()
+
+        with mock.patch.object(self.backend, "execute_step", side_effect=die_after_step):
+            with self.assertRaises(_Death):
+                self.adapter.call("apply", bpl027.ctx(), {"artifact": art, "planToken": plan["result"]["planToken"],
+                                                          "idempotencyKey": "idemp_bpl033_rotate_second",
+                                                          "approvals": APPROVAL})
+        self.adapter.store.clock = lambda: time.time() + 10_000_000
+        self.assertEqual(self.adapter.recover_interrupted(), 1)
+        self.assertEqual(self.site_state(), "recovery_required")
+
+    def _pause_first_ready_write(self):
+        real = self.backend.persist_site_state
+        entered = []
+
+        def pause(tenant, snap):
+            if snap["state"] == "ready" and not entered:
+                entered.append(True)
+                self._second_worker_dies_and_is_recovered()
+            return real(tenant, snap)
+
+        return mock.patch.object(self.backend, "persist_site_state", side_effect=pause)
+
+    def _assert_blocked_everywhere(self) -> None:
+        self.assertEqual(self.site_state(), "recovery_required")
+        self.assertEqual(self.backend.load_site_state(bpl027.TENANT)["state"], "recovery_required")
+        fresh = ChangeEngineAdapter(environment="test", frappe_backend=self.backend)
+        self.assertEqual(fresh.call("site_status", bpl027.ctx(), {})["result"]["state"], "recovery_required")
+
+    def test_a_paused_mark_ready_cannot_promote_the_copy_after_a_later_recovery(self) -> None:
+        with self._pause_first_ready_write():
+            self.assertEqual(self.apply("idemp_bpl033_rotate_first")["status"], "applied")
+        self._assert_blocked_everywhere()
+
+    def test_a_paused_repair_cannot_promote_the_copy_after_a_later_recovery(self) -> None:
+        self.crash_before_mark_ready("idemp_bpl033_rotate_crash")
+        with self._pause_first_ready_write():
+            self.adapter._repair_state_copy(bpl027.TENANT)
+        self._assert_blocked_everywhere()
+
+
 class TestReadinessBeforeExecute(Bpl033EngineBase):
     def test_a_site_that_is_not_ready_fails_clean_before_any_step_runs(self) -> None:
         ran: list[int] = []

@@ -223,13 +223,17 @@ class Cases:
         for name in ("ensure_entity_table", "ensure_field_column"):
             real = getattr(w1.store, name)
             setattr(w1.store, name, lambda *a, _real=real, _name=name, **k: (ddl.append(_name), _real(*a, **k))[1])
-        real_journal = w1.store.append_journal
+        real_owned = w1.store.operation_owned
+        checks = []
 
-        def journal_then_lease_expires(*a, **k):
-            real_journal(*a, **k)
-            self.expire(w1)  # the engine step takes long: the lease runs out before its DDL
+        def owned_then_lease_expires(*a, **k):
+            owned = real_owned(*a, **k)
+            if not checks:  # BPL-033: the journal follows the step, so the seam is the ownership check before it
+                self.expire(w1)  # the engine step takes long: the lease runs out before its DDL
+            checks.append(owned)
+            return owned
 
-        w1.store.append_journal = journal_then_lease_expires
+        w1.store.operation_owned = owned_then_lease_expires
         res = w1.call("apply", _ctx(), apply_input(w1))
         self.assertTrue(res["ok"], res)
         self.assertEqual(res["result"]["status"], "recovery_required")

@@ -234,6 +234,10 @@ class _LeaseLost(Exception):
     """This worker no longer owns its operation (lease expired, or another worker recovered it): stop, write nothing."""
 
 
+class _StatePersistFailed(Exception):
+    """The tenant-database copy of the site state could not be written (BPL-033): the operation ends recovery_required."""
+
+
 class _Early(Exception):
     def __init__(self, status: str, error: dict[str, Any] | None):
         super().__init__(status)
@@ -1577,47 +1581,67 @@ class ChangeEngineAdapter:
             if ready_before and site.state == "applying":
                 site.state = "ready"
 
-        status, error = state["status"], state["error"]
-        outcome: dict[str, Any] = {
-            "operationId": op_id,
-            "operation": operation,
-            "artifactId": artifact["artifactId"],
-            "status": status,
-            "stages": stages,
-            "steps": steps,
-            "postConditions": pcs,
-            "site": site.status(),
-        }
-        if state["export_hash"]:
-            outcome["exportHash"] = state["export_hash"]
-        if error:
-            outcome["error"] = error
-        event: tuple[str, str, dict[str, Any]] | None = None
-        if status != "already_applied":
-            event_art = forward if operation == "rollback" and status == "applied" else artifact
-            etype, data = self._event_data(operation, status, event_art, target_rev, error)
-            if operation == "rollback" and status == "applied":
-                data["revision"] = forward["blueprint"]["base"]["revision"] if forward["blueprint"]["base"] else target_rev
-            event = (_new_event_id(), etype, data)
-            outcome["eventIds"] = [event[0]]
+        def settle(persist_state: bool) -> dict[str, Any]:
+            status, error = state["status"], state["error"]
+            outcome: dict[str, Any] = {
+                "operationId": op_id,
+                "operation": operation,
+                "artifactId": artifact["artifactId"],
+                "status": status,
+                "stages": stages,
+                "steps": steps,
+                "postConditions": pcs,
+                "site": site.status(),
+            }
+            if state["export_hash"]:
+                outcome["exportHash"] = state["export_hash"]
+            if error:
+                outcome["error"] = error
+            event: tuple[str, str, dict[str, Any]] | None = None
+            if status != "already_applied":
+                event_art = forward if operation == "rollback" and status == "applied" else artifact
+                etype, data = self._event_data(operation, status, event_art, target_rev, error)
+                if operation == "rollback" and status == "applied":
+                    data["revision"] = forward["blueprint"]["base"]["revision"] if forward["blueprint"]["base"] else target_rev
+                event = (_new_event_id(), etype, data)
+                outcome["eventIds"] = [event[0]]
 
-        # finalize (5.6): the stored outcome, the site state and the event commit together or not at all. The outcome
-        # write goes first and is compare-and-set on our reservation: a worker whose lease was recovered by another
-        # one writes nothing (its site and event writes roll back with the transaction).
-        try:
+            # finalize (5.6): the stored outcome, the site state and the event commit together or not at all. The outcome
+            # write goes first and is compare-and-set on our reservation: a worker whose lease was recovered by another
+            # one writes nothing (its site and event writes roll back with the transaction).
             with self.store.transaction():
                 if not self.store.idem_complete(site.tenant_id, operation, inp["idempotencyKey"], op_id, outcome):
                     raise _LeaseLost()  # rolls the site and event writes back with the transaction
                 self.store.save_site(site)
                 if event is not None:
                     self.store.append_event(*event, tenant_id=site.tenant_id)
+                if persist_state and self.frappe_backend is not None:
+                    # BPL-033: the tenant-database copy of the state is written inside the transaction, after the lease
+                    # check, so a failure rolls the outcome back instead of being swallowed after it was committed.
+                    try:
+                        self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
+                    except Exception as exc:
+                        raise _StatePersistFailed() from exc
+            return outcome
+
+        try:
+            try:
+                outcome = settle(True)
+            except _StatePersistFailed:
+                # Fail closed: the engine may hold effects the tenant-database state does not describe. Record that in
+                # the outcome, the audit result and the event, block the site for a human (ADR-0028) and say so.
+                site.state = "recovery_required"
+                stages[:] = [st for st in stages if st["stage"] != "finalize"] + [{"stage": "finalize", "status": "failed"}]
+                state.update(status="recovery_required", error=AdapterError("recovery_required", stage="finalize").to_error(),
+                             export_hash=None)
+                outcome = settle(False)
+                if self.frappe_backend is not None:
+                    try:  # keep the tenant-database copy from claiming a ready site; the failure is already reported above
+                        self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
+                    except Exception:
+                        pass
         except _LeaseLost:
             return self._lost_lease_outcome(site.tenant_id, operation, inp)
-        if self.frappe_backend is not None:
-            try:
-                self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
-            except Exception:
-                pass
         if timed_out["v"]:
             raise AdapterError("timeout", stage="execute")
         return outcome, False
@@ -1690,6 +1714,18 @@ class ChangeEngineAdapter:
             finish("failed_clean", AdapterError("engine_unavailable", stage="prepare").to_error())
             return
 
+        # BPL-033: a read-only readiness check of the engine site before the first step, so a site that cannot take the
+        # artifact fails clean here (nothing ran, contract 5.6) instead of compensating after earlier steps committed.
+        check_ready = getattr(self.frappe_backend, "check_ready", None) if self.frappe_backend is not None else None
+        if callable(check_ready):
+            try:
+                check_ready(site.tenant_id, artifact["steps"])
+            except Exception as exc:
+                code = getattr(exc, "code", None)
+                stages.append({"stage": "prepare", "status": "failed"})
+                finish("failed_clean", AdapterError(code if isinstance(code, str) else "engine_unavailable", stage="prepare").to_error())
+                return
+
         self.store.save_prepare_intent(
             op_id,
             site.tenant_id,
@@ -1724,8 +1760,7 @@ class ChangeEngineAdapter:
                 comp_fault = bool(fault["comp"])
                 break
             if guard is not None:
-                guard()  # before the journal entry: a step that never ran must not appear as run
-            self.store.append_journal(site.tenant_id, artifact["artifactId"], seq, "execute")
+                guard()  # before the step: a worker that lost its lease must not start one
             try:
                 self._exec(site, step, persist_storage=True, guard=guard)
             except _LeaseLost:
@@ -1745,6 +1780,17 @@ class ChangeEngineAdapter:
                 break
             entry_j["executed"] = True
             entry["status"] = "applied"
+            # BPL-033: the durable journal lists a step only once it took effect (contract 15.1: a step that failed
+            # before taking effect is not listed). The in-memory journal above already counts the step as executed, so
+            # a journal write that fails now cannot hide it: fail closed, a human decides (ADR-0028).
+            try:
+                self.store.append_journal(site.tenant_id, artifact["artifactId"], seq, "execute")
+            except _LeaseLost:
+                raise
+            except Exception:
+                failure = AdapterError("recovery_required", {"stepSeq": seq}, stage="execute")
+                comp_fault = True
+                break
 
         stages.append({"stage": "execute", "status": "failed" if failure else "done"})
         doc = self._export(site)

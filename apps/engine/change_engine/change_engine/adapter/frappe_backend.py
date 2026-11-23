@@ -84,6 +84,7 @@ _ZERO_RULE = {**dict.fromkeys(RULE_FLAGS, 0), "if_owner": 0}
 
 ENGINE_ENV_VAR = "CHANGE_ENGINE_ENV"
 OFFLINE_SIMULATOR_ENVS = frozenset({"dev", "test"})
+LOCATION_KINDS = frozenset({"branch", "warehouse", "department"})  # contracts/blueprint.schema.json location.kind
 
 
 class FrappeBackendError(Exception):
@@ -658,7 +659,9 @@ class FrappeRuntimeBackend:
 
                 elif kind == "location.upsert":
                     defn = params.get("definition") or {}
-                    if defn.get("kind") == "warehouse":
+                    # BPL-033: dispatch on the Blueprint location kind. A branch or a department has no engine record
+                    # yet (engine-adapter open question 11), so it is an explicit no-op, never a Warehouse.
+                    if self._location_kind(defn.get("kind"), required=True) == "warehouse":
                         wh_name = str(defn.get("id") or subject.get("id"))
                         explicit_company = defn.get("company") or params.get("company")
                         existing, company = self._find_warehouse(
@@ -681,16 +684,19 @@ class FrappeRuntimeBackend:
                     loc_id = str(subject.get("id") or segs[-1])
                     defn = params.get("definition") if isinstance(params.get("definition"), dict) else {}
                     explicit_company = params.get("company") or defn.get("company")
-                    existing, _company = self._find_warehouse(
-                        f,
-                        loc_id,
-                        company_name=explicit_company if isinstance(explicit_company, str) else None,
-                        require_company=False,
-                    )
-                    if existing:
-                        f.db.set_value("Warehouse", existing, "disabled", 1)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
+                    # A step that names its kind (every compensation step does) never reaches a Warehouse unless the
+                    # kind is warehouse; a disable that carries no definition keeps the company-scoped warehouse lookup.
+                    if self._location_kind(defn.get("kind"), required=False) in (None, "warehouse"):
+                        existing, _company = self._find_warehouse(
+                            f,
+                            loc_id,
+                            company_name=explicit_company if isinstance(explicit_company, str) else None,
+                            require_company=False,
+                        )
+                        if existing:
+                            f.db.set_value("Warehouse", existing, "disabled", 1)
+                            if hasattr(f.db, "commit"):
+                                f.db.commit()
 
                 elif kind == "settings.set":
                     has_after = "after" in params and params.get("after") is not None
@@ -709,6 +715,44 @@ class FrappeRuntimeBackend:
                     except Exception:
                         pass
                 raise
+
+    @staticmethod
+    def _location_kind(kind: Any, *, required: bool) -> str | None:
+        """The Blueprint location kind (branch, warehouse, department). Anything else is refused before any write."""
+        if kind is None and not required:
+            return None
+        if kind not in LOCATION_KINDS:
+            raise FrappeBackendError(
+                "invalid_request", {"fields": ["/params/definition/kind"]}, stage="execute", side_effect_free=True
+            )
+        return str(kind)
+
+    def check_ready(self, tenant_id: str, steps: list[dict[str, Any]]) -> None:
+        """Read-only readiness check before the first step of an apply or rollback (BPL-033, contract 5.6.1).
+
+        Refuses with a side-effect-free error when the engine site cannot take the artifact: its database does not
+        answer, a location step has no kind the adapter knows, or a warehouse step has no resolvable company. The
+        engine turns the refusal into ``failed_clean`` (nothing ran) instead of compensating committed steps."""
+        with self._site_session(tenant_id) as (f, _site_name):
+            try:
+                f.db.sql("SELECT 1")
+            except Exception as exc:
+                raise FrappeBackendError("engine_unavailable", stage="prepare", side_effect_free=True) from exc
+            for step in steps:
+                if step.get("kind") != "location.upsert":
+                    continue
+                params = step.get("params") or {}
+                defn = params.get("definition") or {}
+                if self._location_kind(defn.get("kind"), required=True) != "warehouse":
+                    continue
+                explicit_company = defn.get("company") or params.get("company")
+                subject = step.get("subject") or {}
+                self._find_warehouse(
+                    f,
+                    str(defn.get("id") or subject.get("id")),
+                    company_name=explicit_company if isinstance(explicit_company, str) else None,
+                    require_company=True,
+                )
 
     def _find_warehouse(
         self,

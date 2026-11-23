@@ -67,3 +67,5 @@ Unknown.
   - #299 re-review, gpt-6.1-sol at `dd60720`: findings 2 and 3 closed, finding 1 partly open (stale stdout summary). Fixed by the coordinator test-first at `ec5996f` (count from stderr only, ambiguous summaries fail); infra suite 125 OK. Real bench at `85998d2` (run 45214473661): ERP-014 16 live tests OK, ERP-015 19 OK, no skips. Posted on #299.
   - Re-review round 2 dispatched: gpt-6.1-sol (high), `dd60720..ec5996f`.
   - #299 re-review round 2, gpt-6.1-sol: APPROVE at `ec5996f` (finding 1 closed, no new findings). Posted on #299 with a request for Eldon's Tier 3 review. Left: Eldon's line-by-line read, real bench on `ec5996f`, the partner's say-so.
+  - #300 fixes returned and pushed at `2ce73b1`: scoped outside-schema claims, `requires` resolves version ranges against contract-valid providers (strict comparator; every range in `components/` today fits it), provisional product-choice entries inactive until resolved with evidence, no `TypeError` escapes. Suite 196 OK. Fixes table posted on #300.
+  - Re-review dispatched: gpt-6.1-sol (high), `1998c4a..2ce73b1`.

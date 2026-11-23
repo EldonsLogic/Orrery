@@ -50,7 +50,7 @@ def slug(text: str, limit: int = 60) -> str:
 
 
 # ---- scope detection (backstop only: the structural control is policy.py, which derives the risk class) -------------------
-_AR_FOLD = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ة": "ه", "ى": "ي", "ی": "ي", "ئ": "ي", "ؤ": "و", "ک": "ك", "ۀ": "ه"})
+_AR_FOLD = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ة": "ه", "ى": "ي", "ی": "ي", "ئ": "ي", "ؤ": "و", "ک": "ك", "ۀ": "ه", "ٹ": "ت"})
 _CONFUSABLE = str.maketrans({
     "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "к": "k", "і": "i", "ј": "j", "ѕ": "s", "һ": "h",
     "т": "t", "м": "m", "н": "h", "в": "b", "ԁ": "d", "ɡ": "g", "ɑ": "a", "ο": "o", "α": "a", "ν": "v", "τ": "t", "ρ": "p",
@@ -62,14 +62,15 @@ _SPLIT = re.compile(r"[^a-z0-9ء-ي]+")
 _EN_TOKEN = re.compile(
     r"^(ledgers?|gls?|journals?|tax(es|able|ation|ed|code|codes|rate|rates|id|ids)?|vats?|zakat|zakah|zakaah|zatca|fatoora|einvoic\w*|payrolls?|"
     r"payslips?|wages?|remunerations?|salary|salaries|gratuity|eosb|wps|gosi|audit\w*|bookkeep\w*|withholding|excise|accounting|"
-    r"accountants?|accruals?|reconcil\w*)$")
+    r"accountants?|accruals?|reconcil\w*|lev(y|ies)|gst|dut(y|ies)|customs|tariffs?|depreciation|deductions?|"
+    r"postings?)$")
 _EN_CONCAT = ("payroll", "payslip", "ledger", "zatca", "fatoora", "einvoic", "electronicinvoic", "bookkeep", "remuneration", "gratuity",
               "endofservice", "chartofaccounts", "trialbalance", "grosspay", "netpay", "salestax", "taxcode", "taxrate", "taxid",
               "auditlog", "audittrail", "withholdingtax", "wagesheet", "salary", "salaries", "journal", "zakah", "zakat")
 _AR_STEMS = ("ضريب", "ضرائب", "زكا", "دفتر", "قيد", "قيود", "رواتب", "راتب", "مرتب", "مسير", "تدقيق", "محاسب", "فوتر", "فاتور", "اجور",
-            "تاميني", "ترحيل", "ذمم")
+            "تاميني", "ترحيل", "ذمم", "استقطاع", "جمارك", "جمرك", "اهلاك", "ٹیکس")
 _AR_EXACT = {"اجر", "اجره", "اجرة"}
-_AR_CONCAT = ("دفترالاستاذ", "نهايهالخدمه", "فاتورهالكترونيه", "قيديوميه", "مراجعهحسابات")
+_AR_CONCAT = ("دفترالاستاذ", "نهايهالخدمه", "فاتورهالكترونيه", "قيديوميه", "مراجعهحسابات", "كشفحساب")
 
 _AR_STEMS = tuple(x.translate(_AR_FOLD) for x in _AR_STEMS)
 _AR_EXACT = {x.translate(_AR_FOLD) for x in _AR_EXACT}
@@ -90,11 +91,11 @@ def _split_words(text: str) -> str:
 
 
 def tokens(text: str) -> list[str]:
-    """Words after folding. Runs of single letters ("t a x", "v.a.t") are joined into one word."""
+    """Words after folding. Runs of single letters ("t a x", "v.a.t", "ض ر ي ب ة") are joined into one word."""
     out: list[str] = []
     run = ""
     for w in (w for w in _split_words(text).split(" ") if w):
-        if len(w) == 1 and w.isascii():
+        if len(w) == 1:
             run += w
             continue
         if run:
@@ -127,20 +128,34 @@ def foreign_letters(text: str) -> bool:
     return False
 
 
+def _ar_forms(w: str) -> set[str]:
+    """The word with up to three Arabic prefixes removed (و ف ب ك ل, then ال or لل): والضريبة, بالضريبة, للضريبة."""
+    out = {w}
+    for _ in range(3):
+        for x in list(out):
+            if len(x) > 3 and (x.startswith("ال") or x.startswith("لل")):
+                out.add(x[2:])
+            if len(x) > 3 and x[0] in "وفبكل":
+                out.add(x[1:])
+    return out
+
+
 def scope_hits(*texts: str) -> list[str]:
     """Words for ledger, tax, e-invoicing, payroll maths or audit, after normalising. A backstop: a miss proves nothing."""
     found: set[str] = set()
     for t in texts:
         for variant in (t, t.translate(_LEET), t.replace("I", "l")):
             toks = tokens(variant)
-            toks_ar = [w[2:] if w.startswith("ال") and len(w) > 4 else (w[1:] if w.startswith("لل") else w) for w in toks]
+            toks_ar = sorted({f for w in toks for f in _ar_forms(w)})
             concat = "".join(toks)
             found.update(w for w in toks if _EN_TOKEN.match(w))
+            found.update(a + b for a, b in zip(toks, toks[1:]) if _EN_TOKEN.match(a + b))   # "ta x"
             found.update(c for c in _EN_CONCAT if c in concat)
             for w in toks_ar:
                 found.update(a for a in _AR_STEMS if w.startswith(a))
                 found.update(w for _ in (0,) if w in _AR_EXACT)
-            found.update(a for a in _AR_CONCAT if a in "".join(toks_ar))
+            bare = "".join(min(_ar_forms(w), key=len) for w in toks)      # word order kept, prefixes removed
+            found.update(a for a in _AR_CONCAT if a in bare or a in "".join(toks))
     return sorted(found)
 
 

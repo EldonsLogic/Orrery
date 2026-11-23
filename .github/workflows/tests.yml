@@ -131,7 +131,7 @@ jobs:
           # - ERP-003 and ERP-021 use the dev bench; its tests discover ERP-014 in apps/engine.
           # - Components are also used by discovery, studio and the engine.
           echo "brand=$(check_path '^docs/brand/(tools|tokens)/')" >> "$GITHUB_OUTPUT"
-          echo "blueprint=$(check_path '^(services/(blueprint|discovery/templates)/|components/|docs/brand/(tools|tokens)/)')" >> "$GITHUB_OUTPUT"
+          echo "blueprint=$(check_path '^(services/(blueprint|discovery/templates|operate/runtime)/|components/|docs/brand/(tools|tokens)/|contracts/model-call)')" >> "$GITHUB_OUTPUT"
           echo "control_plane=$(check_path '^services/control-plane/')" >> "$GITHUB_OUTPUT"
           echo "datasets=$(check_path '^services/datasets/')" >> "$GITHUB_OUTPUT"
           echo "discovery=$(check_path '^(services/(discovery|blueprint)/|components/)')" >> "$GITHUB_OUTPUT"

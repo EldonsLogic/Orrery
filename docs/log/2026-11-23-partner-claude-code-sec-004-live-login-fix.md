@@ -6,7 +6,7 @@ Tool and model: claude-code
 Plan IDs: SEC-004
 
 ## Summary
-Found why the weekly live isolation workflow died in `setUpClass` with `login ... failed: HTTP 404` (run 45018521150, job 137196017488) and made the harness run the suite again: 25 tests ran locally, OK with the one known expected failure. CI result of this branch is in "Verification".
+Found why the weekly live isolation workflow died in `setUpClass` with `login ... failed: HTTP 404` (run 45018521150, job 137196017488) and made the harness run the suite again: 25 tests ran locally, OK with the one known expected failure. CI run 45086223077 on this branch: success.
 
 ## Root cause (reproduced locally, not a race)
 - The ERP-020 hook `before_request = ["change_engine.api.route_guard.enforce_internal_only"]` (`hooks.py`) is active on every site that has change_engine installed, and the harness provisions A, B and the twin with it. The hook answers a plain 404 to everything outside its internal allowlist: GET ping, the adapter POST methods and GET on four business doctypes, all with an internal token. `/api/method/login`, session cookies, `/api/resource/ToDo`, files, backups and the job API are not on it.
@@ -34,7 +34,7 @@ Found why the weekly live isolation workflow died in `setUpClass` with `login ..
 
 ## Verification
 - Local, full fresh path was not run in one go: the stack was provisioned once by the runner (`--keep`) and the suite run against it with `--reuse` after each fix. Last local run: `Ran 25 tests ... OK (expected failures=1)`. `test_b_jobs_invisible_to_a_rq_job_api` failed twice on the reused stack with "RQ Job list never showed marker": the same 20-row page cause (item 4), fixed; four later runs on that stack passed.
-- CI run 45083756451 (first push of this branch): 24 of 25 passed, `test_prefix_twin_jobs_invisible_to_a` showed unexpected success (item 4 above). Result of the rerun after that fix: see the PR.
+- CI run 45083756451 (first push of this branch): 24 of 25 passed, `test_prefix_twin_jobs_invisible_to_a` showed unexpected success (item 4 above). Run 45086223077 (fresh path, after that fix): success, 25 tests, `OK (expected failures=1)`.
 
 ## Tokens or cost
 Unknown.

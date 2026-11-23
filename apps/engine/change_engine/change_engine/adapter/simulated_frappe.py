@@ -145,6 +145,12 @@ _CORE_DOCTYPES: dict[str, dict[str, Any]] = {
     "Note": {"issingle": 0, "fields": [{"fieldname": "title", "fieldtype": "Data", "permlevel": 0}], "perms": {"System Manager": {"read": 1, "write": 1, "create": 1}}},
 }
 
+# BPL-031: built-in document types the mapping contract names (golden path and purchasing); entity.add adds fields to
+# them and never creates them, so a simulated site must hold them like a real one.
+for _builtin in ("Delivery Note", "Delivery Note Item", "Supplier", "Price List", "Item Price", "Purchase Order",
+                 "Purchase Order Item", "Purchase Receipt", "Purchase Receipt Item", "Purchase Invoice", "Purchase Invoice Item"):
+    _CORE_DOCTYPES.setdefault(_builtin, {"issingle": 0, "fields": [], "perms": {"System Manager": {"read": 1, "write": 1, "create": 1}}})
+
 _FIELDTYPE_TO_SQL = {
     "Data": "varchar(140)",
     "Small Text": "text",

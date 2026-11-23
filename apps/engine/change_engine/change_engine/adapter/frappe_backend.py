@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
 import os
 import re
 from typing import Any, Callable, Iterator
@@ -29,6 +30,7 @@ from change_engine.adapter.mapping import (
     engine_role_name,
     engine_state_name,
     entity_to_doctype,
+    is_contract_mapped_entity,
     is_protected_entity,
     reviewed_grant_doctype,
     rule_flags,
@@ -49,6 +51,8 @@ from change_engine.guarded_apply.workflow_engine import (
     TERMINAL_REJECT_STATE_NAMES,
     execute_workflow_deployment,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 COUNTRY_DEFAULTS: dict[str, dict[str, str]] = {
     "sa": {"country": "Saudi Arabia", "currency": "SAR", "language": "ar", "timezone": "Asia/Riyadh"},
@@ -570,7 +574,7 @@ class FrappeRuntimeBackend:
                 if kind == "entity.add":
                     entity_id = str(subject.get("id") or (segs[1] if len(segs) > 1 else "entity"))
                     doctype = entity_to_doctype(entity_id)
-                    self._ensure_doctype_exists(f, doctype, params.get("definition") or {})
+                    self._add_entity(f, dep, tenant_id, entity_id, doctype, params.get("definition") or {})
 
                 elif kind in ("field.add", "relation.add"):
                     parents = subject.get("parents") or []
@@ -755,6 +759,49 @@ class FrappeRuntimeBackend:
             return None, None
         existing = f.db.get_value("Warehouse", {"warehouse_name": wh_name, "company": company}, "name")
         return (str(existing) if existing else None), company
+
+    def _add_entity(self, f: Any, dep: FrappeDeploymentAdapter, tenant_id: str, entity_id: str, doctype: str,
+                    defn: dict[str, Any]) -> None:
+        """entity.add (BPL-031). The rule comes from the mapping contract and ADR-0051 item 3:
+        - an entity the contract maps to a built-in type gets the Blueprint's fields as custom fields on that type,
+          through the guarded field path; a missing built-in is refused, never created under its name;
+        - an entity with no mapping becomes one adapter-owned custom type (custom=1 in the adapter's module); if the
+          derived name is already an engine type the adapter did not make, it is refused instead of applying nothing.
+        Every refusal is raised before any write."""
+        exists = self._doctype_exists(f, doctype)
+        if not is_contract_mapped_entity(entity_id):
+            if exists and not self._adapter_owns_doctype(f, doctype):
+                raise self._refuse("protected_subject")
+            self._ensure_doctype_exists(f, doctype, defn)
+            return
+        if not exists:
+            raise self._refuse("subject_missing")
+        fields = [fld for fld in defn.get("fields") or [] if isinstance(fld, dict)]
+        if any(fld.get("type", "string") not in BLUEPRINT_TO_FRAPPE_FIELDTYPE for fld in fields):
+            raise self._refuse("unsupported_value_type")
+        meta = f.get_meta(doctype)
+        for fld in fields:
+            fieldname = _sanitize_custom_fieldname(str(fld.get("id") or "field"))
+            # A field the type already holds (a native field of the same name, or one added earlier) is left alone.
+            if meta.get_field(fieldname) is not None or meta.get_field(str(fld.get("id"))) is not None:
+                continue
+            if fld.get("unique") or fld.get("indexed"):
+                # The guarded field path refuses unique and index DDL (it queues it for a controlled admin deployment), so
+                # the column is added without the constraint. Never silent: BPL-031 open question, DDL gate follow-up.
+                _LOGGER.warning("entity.add %s.%s: unique/index constraint not applied on a built-in type", doctype, fieldname)
+                fld = {**fld, "unique": False, "indexed": False}
+            self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, fld)
+
+    @staticmethod
+    def _doctype_exists(f: Any, doctype: str) -> bool:
+        if f.db.exists("DocType", doctype):
+            return True
+        return bool(getattr(f.db, "table_exists", None) and f.db.table_exists(doctype))
+
+    @staticmethod
+    def _adapter_owns_doctype(f: Any, doctype: str) -> bool:
+        row = f.db.get_value("DocType", doctype, ["name", "custom", "module"])  # a failed read raises
+        return bool(row) and str(row[0]) == doctype and int(row[1] or 0) == 1 and row[2] == ADAPTER_DOCTYPE_MODULE
 
     def _ensure_doctype_exists(self, f: Any, doctype: str, defn: dict[str, Any]) -> None:
         if getattr(f.db, "table_exists", None) and f.db.table_exists(doctype):

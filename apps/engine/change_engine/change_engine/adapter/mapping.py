@@ -42,6 +42,23 @@ ENTITY_TO_DOCTYPE = {
     "session_token": "Session",
 }
 
+# BPL-031 / BPL-034: entities that the mapping contract (contracts/engine-mapping.md 0.2.0, purchasing example) maps to a
+# built-in engine document type but that the reviewed grant table above does not list yet. They resolve to the built-in
+# name so entity.add and field.add never make a custom twin of it ("Purchase Order Line" beside "Purchase Order Item").
+# They are NOT in the grant allowlist (SEC-022, ADR-0051 item 3): a role grant on them stays refused until the BPL-034
+# follow-up reviews them and moves them into ENTITY_TO_DOCTYPE. Engine names are UNVERIFIED until a bench run.
+CONTRACT_ENTITY_TO_DOCTYPE = {
+    "supplier": "Supplier",
+    "price_list": "Price List",
+    "price_list_item": "Item Price",
+    "purchase_order": "Purchase Order",
+    "purchase_order_line": "Purchase Order Item",
+    "purchase_receipt": "Purchase Receipt",
+    "purchase_receipt_line": "Purchase Receipt Item",
+    "purchase_invoice": "Purchase Invoice",
+    "purchase_invoice_line": "Purchase Invoice Item",
+}
+
 PROTECTED_ENTITY_IDS = {
     "general_ledger",
     "tax_ledger",
@@ -133,7 +150,14 @@ def rule_flags(actions: Any, *, masked: bool, submittable: bool) -> dict[str, in
 def entity_to_doctype(entity_id: str) -> str:
     if entity_id in ENTITY_TO_DOCTYPE:
         return ENTITY_TO_DOCTYPE[entity_id]
+    if entity_id in CONTRACT_ENTITY_TO_DOCTYPE:
+        return CONTRACT_ENTITY_TO_DOCTYPE[entity_id]
     return " ".join(part.capitalize() for part in str(entity_id).replace("-", "_").split("_") if part) or "Custom Entity"
+
+
+def is_contract_mapped_entity(entity_id: Any) -> bool:
+    """True when the mapping contract maps this entity to a built-in engine document type (BPL-031)."""
+    return isinstance(entity_id, str) and (entity_id in ENTITY_TO_DOCTYPE or entity_id in CONTRACT_ENTITY_TO_DOCTYPE)
 
 
 # The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time

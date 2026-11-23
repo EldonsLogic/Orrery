@@ -11,7 +11,7 @@ from change_engine.guarded_apply.ddl_plan_gate import (
 from change_engine.guarded_apply.safety_guardrails import (
     PROHIBITED_CODE_PROPERTIES,
     PROHIBITED_EXPRESSION_PATTERNS,
-    ZONE_2_LOCKED_DOCTYPES,
+    is_locked_doctype,
 )
 from change_engine.guarded_apply.schema_reconciler import make_bounded_lock_key
 
@@ -60,7 +60,7 @@ SEMANTIC_PROPS = {"/type", "/unique", "/indexed", "/precision", "/maxLength", "/
 
 _SAFE_IDENT_RE = re.compile(r"^[a-z0-9_]+$")
 _DECIMAL_ADD_RE = re.compile(
-    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` decimal\(\d+,\d+\)(?: not null default [0-9.]+)?$"
+    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` decimal\(\d+,\d+\)(?: not null default [0-9.]+)?\Z"
 )
 
 
@@ -125,11 +125,39 @@ def entity_to_doctype(entity_id: str) -> str:
     return " ".join(part.capitalize() for part in str(entity_id).replace("-", "_").split("_") if part) or "Custom Entity"
 
 
+# The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
+# (`unsupported_value_type`, and `protected_subject` for protected entities) on `/entities/<id>` pointers,
+# `entity.add` subject ids and inline `definition.fields[]` / `definition.relations[]` targets,
+# `field.*` / `relation.*` element steps (exact `/entities/<id>/fields/<fid>` or `/entities/<id>/relations/<rid>`
+# pointer, single parent matching `<id>`, `subject.id` matching the last pointer segment, and on `field.add` /
+# `relation.add`, `definition.id` matching both, else `definition_conflict`), `field.reorder` (exact
+# `/entities/<id>/fields` pointer with `bpdiff`'s entity subject `kind="entity"`, `id=<id>`, `parents=[]`,
+# validating entity/parent grammar and protection first, else `definition_conflict`),
+# link `field.add` and `relation.*` `definition.target`, `field.set_property` / `relation.set_property` `/target`
+# (config-only; backend does not map `/target`), `workflow.upsert` / `report.upsert` `definition.entity`, and
+# `role.upsert` grant targets. `/options` on `relation.set_property` is always refused at plan time; `/options`
+# on `field.set_property` is refused unless the field exists in site config with a known non-link Blueprint type
+# and has no `/type` change recorded in the current artifact or any earlier applied artifact (`protected_subject`
+# when the offered value names a protected/locked target, else `unsupported_value_type`; because `frappe_backend`
+# ignores `/type`, any recorded `/type` change permanently disqualifies the field from the non-link proof).
+ENTITY_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+
+
+def is_valid_entity_id(entity_id: Any) -> bool:
+    return isinstance(entity_id, str) and ENTITY_ID_RE.fullmatch(entity_id) is not None
+
+
+def _protected_key(name: Any) -> str:
+    """Comparison key: stripped, runs of whitespace and underscores collapsed to one `_`, case folded (defence in
+    depth; the engine folds case and pads trailing spaces in names, so `Gl Entry ` is `GL Entry`)."""
+    return re.sub(r"[\s_]+", "_", str(name).strip()).casefold()
+
+
 def is_protected_entity(entity_id: str) -> bool:
-    if entity_id in PROTECTED_ENTITY_IDS:
+    """Compared on a normalised key: `gl_entry`, `GL Entry` and `gl_entry ` are one protected entity."""
+    if _protected_key(entity_id) in {_protected_key(i) for i in PROTECTED_ENTITY_IDS}:
         return True
-    doctype = entity_to_doctype(entity_id)
-    return doctype in ZONE_2_LOCKED_DOCTYPES
+    return is_locked_doctype(entity_to_doctype(entity_id))
 
 
 # SEC-022 / ADR-0051 item 3: the document types a Blueprint role may get permission rules on are an allowlist:
@@ -160,7 +188,7 @@ def grant_plan_reason(
         return "unsupported_value_type"
     for p in perms or []:
         entity = p.get("entity") if isinstance(p, dict) else None
-        if not isinstance(entity, str):
+        if not is_valid_entity_id(entity):
             return "unsupported_value_type"
         reviewed = reviewed_grant_doctype(entity) is not None
         own = (

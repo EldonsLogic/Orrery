@@ -1,0 +1,17 @@
+{
+  "version": "0.1.0",
+  "reviewStatus": "proposed_for_native_speaker_review",
+  "note": "Arabic labels are unreviewed machine-assisted draft text. A native Arabic speaker must review them before customer use (ADR-0033). Reviewer, date: pending.",
+  "labels": {
+    "country.eg.name": {
+      "en": "Egypt Country Pack",
+      "ar": "حزمة دولة مصر",
+      "reviewStatus": "unreviewed"
+    },
+    "country.eg.authority": {
+      "en": "Egyptian Tax Authority (ETA)",
+      "ar": "مصلحة الضرائب المصرية",
+      "reviewStatus": "unreviewed"
+    }
+  }
+}

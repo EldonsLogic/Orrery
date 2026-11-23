@@ -35,3 +35,7 @@ Unknown.
 
 ## Next step
 Partner review of ADR-0057, then BPL-036 to done. BPL-037 and BPL-038 are ready. Update docs/architecture/blueprint-versioning.md:27 (still calls Q-86 open). Q-88 needs its own decision with Q-89.
+
+## Correction (2026-11-23, review of PR #253 at 0e282b3)
+- The "Open / next" item that says to update `docs/architecture/blueprint-versioning.md:27` is stale: that file no longer calls Q-86 open, so nothing is pending there.
+- Q-55 in ADR-0057 was aligned with shared Q-296 (GOV-061): the mapping hash is recorded in the approved artifact. Q-70 is noted as accepted in GOV-061.

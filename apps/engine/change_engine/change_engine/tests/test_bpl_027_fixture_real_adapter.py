@@ -648,8 +648,14 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.db_path = os.path.join(cls.tmp.name, "adapter.sqlite")
         cls.bp_raw = load_fixture()
-        cls.bp = without_attachments(cls.bp_raw)
+        cls.bp_full = without_attachments(cls.bp_raw)
+        cls.bp = (
+            cls.bp_full
+            if os.environ.get("BPL027_PURCHASING_MAPPED") == "1"
+            else without_unmapped_builtin_grants(cls.bp_full)
+        )
         cls.art_raw = compile_for_adapter(cls.bp_raw)
+        cls.art_full = compile_for_adapter(cls.bp_full)
         cls.art = compile_for_adapter(cls.bp)
         cls.expected = expected_engine_config(cls.bp)
         cls.adapter = new_adapter(cls.db_path)
@@ -670,6 +676,48 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         res = self.call("plan", {"artifact": art})
         self.assertTrue(res["ok"], res)
         return res["result"]
+
+    def _plan_preview_and_refuse_without_gate(self) -> None:
+        plan = self.plan(self.art)
+        self.assertEqual(plan["verdict"], "needs_gate_approval", plan)
+        gated = {(s["seq"], s.get("reasonCode")) for s in plan["steps"] if s["disposition"] == "gated"}
+        reasons = {r for _, r in gated}
+        self.assertIn("unique_or_index", reasons)  # item_code, customer_code, supplier_code are unique
+        self.assertIn("protected_subject", reasons)  # role.upsert is gated by the adapter
+        self.assertFalse([s for s in plan["steps"] if s["disposition"] in ("blocked", "unsupported")], plan)
+        preview = self.call("preview", {"artifact": self.art})
+        self.assertTrue(preview["ok"], preview)
+        self.assertEqual(preview["result"]["verdict"], "needs_gate_approval")
+        before = fingerprint()
+        refused = self.call("apply", {
+            "idempotencyKey": "idemp_bpl027_apply_nogate",
+            "artifact": self.art,
+            "planToken": plan["planToken"],
+            "approvals": {"changeApproved": "01J00000000000000000000010", "teamReviewed": "01J00000000000000000000012"},
+        })
+        self.assertEqual(refused["result"]["status"], "rejected", refused)
+        self.assertEqual(refused["result"]["error"]["code"], "approval_missing")
+        self.assertIn("/approvals/gateApproved", refused["result"]["error"]["details"]["fields"])
+        self.assertEqual(fingerprint(), before, "a refused apply changed the site")
+        self.state.update(plan=plan, predicted=preview["result"]["predictedExportHash"])
+
+    def _apply_planned_artifact(self) -> None:
+        res = self.call("apply", {
+            "idempotencyKey": "idemp_bpl027_apply_v1",
+            "artifact": self.art,
+            "planToken": self.state["plan"]["planToken"],
+            "approvals": {
+                "changeApproved": "01J00000000000000000000010",
+                "gateApproved": "01J00000000000000000000011",
+                "teamReviewed": "01J00000000000000000000012",
+            },
+        })
+        self.assertTrue(res["ok"], res)
+        out = res["result"]
+        failed = [s for s in out["steps"] if s["status"] != "applied"]
+        self.assertEqual(out["status"], "applied", {"error": out.get("error"), "failed": failed[:3]})
+        self.assertEqual(out["exportHash"], self.state["predicted"])
+        self.state.update(applied=out)
 
     def test_01_provision_fresh_site_and_raw_fixture_is_refused(self) -> None:
         res = self.call("provision_site", {
@@ -698,18 +746,17 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         any write, while delivery_note and mapped/custom grants pass plan."""
         self.need("provisioned")
         before = fingerprint()
-        plan = self.plan(self.art)
+        plan = self.plan(self.art_full)
         self.assertEqual(plan["verdict"], "rejected", plan)
         blocked = [s for s in plan["steps"] if s["disposition"] == "blocked"]
-        by_seq = {s["seq"]: s for s in self.art["steps"]}
-        self.assertEqual(len(blocked), len(self.bp["roles"]))
+        by_seq = {s["seq"]: s for s in self.art_full["steps"]}
+        self.assertEqual(len(blocked), len(self.bp_full["roles"]))
         for s in blocked:
             self.assertEqual(s.get("reasonCode"), "protected_subject")
             self.assertEqual(by_seq[s["seq"]]["kind"], "role.upsert")
         self.assertEqual(fingerprint(), before, "plan modified the site")
 
-        mapped_art = compile_for_adapter(without_unmapped_builtin_grants(self.bp))
-        mapped_plan = self.plan(mapped_art)
+        mapped_plan = self.plan(self.art)
         self.assertEqual(mapped_plan["verdict"], "needs_gate_approval", mapped_plan)
         self.assertFalse([s for s in mapped_plan["steps"] if s["disposition"] in ("blocked", "unsupported")], mapped_plan)
         self.assertEqual(fingerprint(), before, "plan modified the site")
@@ -723,28 +770,7 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         """Requires BPL-034 (purchasing and price-list engine mapping, owned by eldon) covering Supplier, Price List,
         and Purchase Order/Receipt/Invoice; set BPL027_PURCHASING_MAPPED=1 once mapped."""
         self.need("provisioned")
-        plan = self.plan(self.art)
-        self.assertEqual(plan["verdict"], "needs_gate_approval", plan)
-        gated = {(s["seq"], s.get("reasonCode")) for s in plan["steps"] if s["disposition"] == "gated"}
-        reasons = {r for _, r in gated}
-        self.assertIn("unique_or_index", reasons)  # item_code, customer_code, supplier_code are unique
-        self.assertIn("protected_subject", reasons)  # role.upsert is gated by the adapter
-        self.assertFalse([s for s in plan["steps"] if s["disposition"] in ("blocked", "unsupported")], plan)
-        preview = self.call("preview", {"artifact": self.art})
-        self.assertTrue(preview["ok"], preview)
-        self.assertEqual(preview["result"]["verdict"], "needs_gate_approval")
-        before = fingerprint()
-        refused = self.call("apply", {
-            "idempotencyKey": "idemp_bpl027_apply_nogate",
-            "artifact": self.art,
-            "planToken": plan["planToken"],
-            "approvals": {"changeApproved": "01J00000000000000000000010", "teamReviewed": "01J00000000000000000000012"},
-        })
-        self.assertEqual(refused["result"]["status"], "rejected", refused)
-        self.assertEqual(refused["result"]["error"]["code"], "approval_missing")
-        self.assertIn("/approvals/gateApproved", refused["result"]["error"]["details"]["fields"])
-        self.assertEqual(fingerprint(), before, "a refused apply changed the site")
-        self.state.update(plan=plan, predicted=preview["result"]["predictedExportHash"])
+        self._plan_preview_and_refuse_without_gate()
 
     @unittest.skipUnless(
         os.environ.get("BPL027_PURCHASING_MAPPED") == "1",
@@ -756,22 +782,18 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         and Purchase Order/Receipt/Invoice (BPL-034, contract PR #247). Flagged with skipUnless on BPL027_PURCHASING_MAPPED=1 so live
         runs will not fail with 'unexpected success' once BPL-034 lands; unflag after BPL-034 merges."""
         self.need("plan")
-        res = self.call("apply", {
-            "idempotencyKey": "idemp_bpl027_apply_v1",
-            "artifact": self.art,
-            "planToken": self.state["plan"]["planToken"],
-            "approvals": {
-                "changeApproved": "01J00000000000000000000010",
-                "gateApproved": "01J00000000000000000000011",
-                "teamReviewed": "01J00000000000000000000012",
-            },
-        })
-        self.assertTrue(res["ok"], res)
-        out = res["result"]
-        failed = [s for s in out["steps"] if s["status"] != "applied"]
-        self.assertEqual(out["status"], "applied", {"error": out.get("error"), "failed": failed[:3]})
-        self.assertEqual(out["exportHash"], self.state["predicted"])
-        self.state.update(applied=out)
+        self._apply_planned_artifact()
+
+    @unittest.skipIf(
+        os.environ.get("BPL027_PURCHASING_MAPPED") == "1",
+        "BPL-034 mapped: test_02 and test_03 plan and apply the full fixture",
+    )
+    def test_03b_apply_mapped_fixture_through_real_adapter(self) -> None:
+        """While BPL-034 is unmapped, plan, gate-check and apply without_unmapped_builtin_grants(bp) so live read-back
+        and security tests (test_04, test_04b, test_06, test_07, test_08) run now instead of skipping."""
+        self.need("provisioned")
+        self._plan_preview_and_refuse_without_gate()
+        self._apply_planned_artifact()
 
     def test_04_readback_roles_workflows_reports_locations_settings(self) -> None:
         """Compared case-insensitively: the engine matches record names without case (see test_04b)."""

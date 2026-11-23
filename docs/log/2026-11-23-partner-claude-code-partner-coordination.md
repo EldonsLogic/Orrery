@@ -69,3 +69,5 @@ Unknown.
   - #299 re-review round 2, gpt-6.1-sol: APPROVE at `ec5996f` (finding 1 closed, no new findings). Posted on #299 with a request for Eldon's Tier 3 review. Left: Eldon's line-by-line read, real bench on `ec5996f`, the partner's say-so.
   - #300 fixes returned and pushed at `2ce73b1`: scoped outside-schema claims, `requires` resolves version ranges against contract-valid providers (strict comparator; every range in `components/` today fits it), provisional product-choice entries inactive until resolved with evidence, no `TypeError` escapes. Suite 196 OK. Fixes table posted on #300.
   - Re-review dispatched: gpt-6.1-sol (high), `1998c4a..2ce73b1`.
+  - #300 re-review, gpt-6.1-sol at `2ce73b1`: findings 1 to 3 closed, finding 4 partly open (oversized version digits raise `ValueError`). Fixed by the coordinator test-first at `f6a82be` (9-digit cap per segment); suite 197 OK. Posted on #300.
+  - Re-review round 2 dispatched: gpt-6.1-sol (high), `2ce73b1..f6a82be`.

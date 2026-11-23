@@ -71,3 +71,4 @@ Unknown.
   - Re-review dispatched: gpt-6.1-sol (high), `1998c4a..2ce73b1`.
   - #300 re-review, gpt-6.1-sol at `2ce73b1`: findings 1 to 3 closed, finding 4 partly open (oversized version digits raise `ValueError`). Fixed by the coordinator test-first at `f6a82be` (9-digit cap per segment); suite 197 OK. Posted on #300.
   - Re-review round 2 dispatched: gpt-6.1-sol (high), `2ce73b1..f6a82be`.
+  - #300 re-review 2, gpt-6.1-sol at `f6a82be`: finding 4 closed; two older Medium exception paths (regex `OverflowError`, oversized version selector `ValueError`). Fixed by the coordinator test-first at `01d2029`; suite 199 OK. Posted on #300. Re-review round 3 dispatched (gpt-6.1-sol, high).

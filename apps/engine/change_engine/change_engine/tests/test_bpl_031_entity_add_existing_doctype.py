@@ -21,6 +21,7 @@ from change_engine.tests.test_bpl_027_fixture_real_adapter import (
     entity_gaps,
     expected_engine_config,
     load_fixture,
+    apply_ready,
     without_attachments,
 )
 
@@ -160,12 +161,215 @@ class TestEntityAddExistingDoctype(unittest.TestCase):
         self.assertEqual(eng.rows("Custom Field"), [])
 
 
+def role_step(definition: dict) -> dict:
+    return {"seq": 1, "kind": "role.upsert", "pointer": f"/roles/{definition['id']}",
+            "subject": {"kind": "role", "id": definition["id"]}, "params": {"definition": definition}}
+
+
+def role(role_id: str, entity_id: str, *hidden: str, scope: str = "own_records") -> dict:
+    return {"id": role_id, "labels": {"en": role_id, "ar": role_id}, "scope": {"type": scope},
+            "permissions": [{"entity": entity_id, "actions": ["read"], "hiddenFields": list(hidden)}]}
+
+
+def can_read(eng: CaseInsensitiveEngine, role_name: str, doctype: str, fieldname: str) -> bool:
+    """Independent read-back: does a Custom DocPerm rule of the role read the field at the level the field now sits on?"""
+    level = int(getattr(eng.get_meta(doctype).get_field(fieldname), "permlevel", 0) or 0)
+    return any(r.get("role") == role_name and r.get("parent") == doctype and int(r.get("permlevel") or 0) == level
+               and int(r.get("read") or 0) for r in eng.rows("Custom DocPerm"))
+
+
+def provision_cost_mask(eng: CaseInsensitiveEngine) -> None:
+    """Tenant provisioning (E0-7 item 4) puts Item.valuation_rate on permission level 1."""
+    eng.make_property_setter({"doctype": "Item", "fieldname": "valuation_rate", "property": "permlevel", "value": 1,
+                              "property_type": "Int"})
+
+
+def contract_native_fields() -> dict[tuple[str, str], str | None]:
+    """{(entity, field): native engine field, or None when the data is stored on another record} for every field the
+    contract maps to a name other than its own (written from the contract files, not from the adapter)."""
+    out = {}
+    for path in MAPPINGS:
+        for ent in json.loads(path.read_text(encoding="utf-8"))["entities"]:
+            for fld in ent["fields"]:
+                if fld.get("engineField") != fld["blueprintField"]:
+                    out[(ent["blueprintEntity"], fld["blueprintField"])] = fld.get("engineField")
+    return out
+
+
+class TestReviewFixesHiddenFieldMask(unittest.TestCase):
+    """Review finding 1 (high, security): a hidden field must be masked on the engine field that holds the data."""
+
+    def test_sales_rep_cannot_read_native_valuation_rate(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        entity_add(backend, entity("item", ("cost_price", "money")))
+        backend.execute_step(TENANT, role_step(role("sales_rep", "item", "cost_price")))
+        self.assertFalse(can_read(eng, "bp-sales_rep", "Item", "valuation_rate"), "the native cost field is readable")
+        self.assertFalse(can_read(eng, "bp-sales_rep", "Item", "custom_cost_price"))
+
+    def test_with_the_native_cost_field_on_a_protected_level_the_grant_applies(self) -> None:
+        eng = engine()
+        provision_cost_mask(eng)
+        backend = backend_for(eng)
+        entity_add(backend, entity("item", ("cost_price", "money")))
+        backend.execute_step(TENANT, role_step(role("sales_rep", "item", "cost_price")))
+        self.assertTrue(can_read(eng, "bp-sales_rep", "Item", "item_name"), "the grant must apply, or this test proves nothing")
+        self.assertFalse(can_read(eng, "bp-sales_rep", "Item", "valuation_rate"))
+        self.assertEqual(int(eng.get_meta("Item").get_field("valuation_rate").permlevel), 1)
+
+    def test_a_field_stored_on_another_record_cannot_be_masked_on_the_type_so_the_grant_is_withheld(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        entity_add(backend, entity("item", ("selling_price", "money")))  # the engine keeps the price on Item Price (contract)
+        backend.execute_step(TENANT, role_step(role("sales_rep", "item", "selling_price")))
+        self.assertFalse([r for r in eng.rows("Custom DocPerm") if r.get("role") == "bp-sales_rep"])
+
+    def test_an_unmapped_hidden_field_is_still_masked_on_its_custom_field(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        entity_add(backend, entity("customer", ("credit_limit", "money")))
+        backend.execute_step(TENANT, role_step(role("sales_rep", "customer", "credit_limit")))
+        self.assertTrue(can_read(eng, "bp-sales_rep", "Customer", "customer_name"))
+        self.assertFalse(can_read(eng, "bp-sales_rep", "Customer", "custom_credit_limit"))
+
+    def test_the_adapter_table_matches_the_contract(self) -> None:
+        from change_engine.adapter.mapping import CONTRACT_NATIVE_FIELDS
+
+        self.assertEqual(dict(CONTRACT_NATIVE_FIELDS), contract_native_fields())
+
+
+class TestReviewFixesUniqueAndIndexed(unittest.TestCase):
+    """Review finding 2 (high): a unique or indexed Blueprint field is never applied without its constraint."""
+
+    def refuse(self, eng: CaseInsensitiveEngine, definition: dict) -> FrappeBackendError:
+        with self.assertRaises(FrappeBackendError) as err:
+            entity_add(backend_for(eng), definition)
+        self.assertEqual(err.exception.code, "plan_rejected")
+        self.assertEqual(err.exception.details.get("reasonCode"), "unique_or_index")
+        self.assertTrue(err.exception.side_effect_free)
+        return err.exception
+
+    def test_a_unique_field_on_a_built_in_type_is_refused_before_any_write(self) -> None:
+        eng = engine()
+        definition = entity("customer", ("vat_number", "string"), ("customer_code", "string"))
+        definition["fields"][1]["unique"] = True
+        self.refuse(eng, definition)
+        self.assertEqual(eng.rows("Custom Field"), [], "the refusal must come before the first write")
+        self.assertEqual(eng.rows("Property Setter"), [])
+
+    def test_an_indexed_field_is_refused_too(self) -> None:
+        eng = engine()
+        definition = entity("supplier", ("supplier_code", "string"))
+        definition["fields"][0]["indexed"] = True
+        self.refuse(eng, definition)
+        self.assertEqual(eng.rows("Custom Field"), [])
+
+    def test_a_unique_field_the_type_already_holds_needs_no_ddl_and_is_not_refused(self) -> None:
+        eng = engine()  # Item.item_code is native: nothing is added, so no constraint is dropped
+        definition = entity("item", ("item_code", "string"))
+        definition["fields"][0]["unique"] = True
+        entity_add(backend_for(eng), definition)
+        self.assertEqual(eng.rows("Custom Field"), [])
+
+
+def item_review_artifacts():
+    """Artifact pair for the public-API rollback tests: v1 adds Customer fields, v2 adds Item with a review note."""
+    from change_engine.tests.test_bpl_008_blueprint_rollback import _load_example, _make_artifact
+
+    bp = _load_example("blueprint-trading-minimal.json")
+    rev1 = {"hash": "sha256:" + ("1" * 64), "revision": 1}
+    rev2 = {"hash": "sha256:" + ("2" * 64), "revision": 2}
+    note_item = entity("item", ("review_note", "string"))
+
+    def step(kind: str, ent: dict, impact: str, ddl: str) -> dict:
+        return {"seq": 1, "phase": 16 if kind.endswith(".quarantine") else 4, "kind": kind, "subject": {"kind": "entity", "id": ent["id"], "parents": []},
+                "pointer": f"/entities/{ent['id']}", "impact": impact, "ddlImpact": ddl, "reversible": True,
+                "params": {"definition": ent}, "sourceOps": [f"/entities/{ent['id']}"]}
+
+    customer = entity("customer", ("vat_number", "string"))
+    v1 = _make_artifact(bp_id="example-trading-001", kind="forward", base=None, target=rev1,
+                        steps=[step("entity.add", customer, "data_shape", "additive")],
+                        post_conditions=[{"id": "pc_001", "check": "exists", "pointer": "/entities/customer"}])
+    v2_inv = _make_artifact(bp_id="example-trading-001", kind="inverse", base=rev2, target=rev1, diff_hash="sha256:" + ("a" * 64),
+                            steps=[step("entity.quarantine", note_item, "destructive", "none")],
+                            post_conditions=[{"id": "pc_001", "check": "quarantined", "pointer": "/entities/item"}])
+    v2 = _make_artifact(bp_id="example-trading-001", kind="forward", base=rev1, target=rev2, diff_hash="sha256:" + ("b" * 64),
+                        steps=[step("entity.add", note_item, "data_shape", "additive")],
+                        post_conditions=[{"id": "pc_001", "check": "exists", "pointer": "/entities/item"}], inverse=v2_inv)
+    return v1, v2, bp
+
+
+class TestReviewFixesQuarantine(unittest.TestCase):
+    """Review finding 3 (medium): rolling back an entity.add hides exactly the fields it added, re-apply restores them."""
+
+    def hidden(self, eng: CaseInsensitiveEngine, doctype: str, fieldname: str) -> int:
+        return int(getattr(eng.get_meta(doctype).get_field(fieldname), "hidden", 0) or 0)
+
+    def quarantine(self, backend: FrappeRuntimeBackend, definition: dict) -> None:
+        backend.execute_step(TENANT, {"seq": 1, "kind": "entity.quarantine", "pointer": f"/entities/{definition['id']}",
+                                      "subject": {"kind": "entity", "id": definition["id"]}, "params": {"definition": definition}})
+
+    def test_quarantine_hides_only_the_fields_entity_add_introduced_and_reapply_restores_them(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        # a custom field that is already there (added earlier by field.add) is not this entity.add's to hide
+        backend.execute_step(TENANT, {"seq": 1, "kind": "field.add", "pointer": "/entities/customer/fields/earlier",
+                                      "subject": {"kind": "field", "id": "earlier", "parents": [{"kind": "entity", "id": "customer"}]},
+                                      "params": {"definition": {"id": "earlier", "type": "string"}}})
+        definition = entity("customer", ("earlier", "string"), ("review_note", "string"), ("customer_name", "string"))
+        entity_add(backend, definition)
+        self.assertEqual(self.hidden(eng, "Customer", "custom_review_note"), 0)
+        self.quarantine(backend, definition)
+        self.assertEqual(self.hidden(eng, "Customer", "custom_review_note"), 1)
+        self.assertEqual(self.hidden(eng, "Customer", "custom_earlier"), 0, "a pre-existing custom field must stay visible")
+        self.assertEqual(self.hidden(eng, "Customer", "customer_name"), 0, "a native field must never be hidden")
+        self.assertEqual({r["field_name"] for r in eng.rows("Property Setter") if r["property"] == "hidden"}, {"custom_review_note"})
+        entity_add(backend, definition)  # re-apply
+        self.assertEqual(self.hidden(eng, "Customer", "custom_review_note"), 0)
+        self.assertEqual(len([r for r in eng.rows("Custom Field") if r["fieldname"] == "custom_review_note"]), 1)
+
+    def test_a_quarantine_with_nothing_journaled_changes_nothing(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        self.quarantine(backend, entity("customer", ("vat_number", "string")))
+        self.assertEqual(eng.rows("Property Setter"), [])
+
+    def test_public_api_rollback_hides_and_reapply_restores_the_added_field(self) -> None:
+        from change_engine.adapter import ADAPTER_ID, ChangeEngineAdapter, SimulatedFrappeRuntime
+        from change_engine.api.endpoints import FrappeDeploymentAdapter
+        from change_engine.tests.test_bpl_008_blueprint_rollback import _apply, _ctx, _k
+
+        FrappeDeploymentAdapter.reset_in_memory_state()
+        self.addCleanup(FrappeDeploymentAdapter.reset_in_memory_state)
+        sim = SimulatedFrappeRuntime()
+        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True, offline_ddl_simulator=True)
+        adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
+        tenant = "t_alpha"
+        prov = adapter.call("provision_site", _ctx(tenant), {"idempotencyKey": _k("prov_bpl031"),
+                            "engineTarget": {"adapter": ADAPTER_ID, "versionSet": "set-example"},
+                            "blueprintId": "example-trading-001", "siteClass": "production", "countryPack": "sa"})
+        self.assertTrue(prov["ok"], prov)
+        v1, v2, _bp = item_review_artifacts()
+        for art, key in ((v1, "bpl031_v1"), (v2, "bpl031_v2")):
+            res = _apply(adapter, tenant, art, key)
+            self.assertTrue(res["ok"] and res["result"]["status"] == "applied", res)
+        self.assertEqual(self.hidden(sim, "Item", "custom_review_note"), 0)
+        rb = adapter.call("rollback", _ctx(tenant), {"idempotencyKey": _k("bpl031_rb"), "forwardArtifact": v2, "reason": "owner_request",
+                                                     "approvals": {"rollbackApproved": "01J00000000000000000000021"}})
+        self.assertTrue(rb["ok"] and rb["result"]["status"] == "applied", rb)
+        self.assertEqual(self.hidden(sim, "Item", "custom_review_note"), 1, "the rolled-back field must be hidden")
+        self.assertEqual(self.hidden(sim, "Customer", "custom_vat_number"), 0, "fields of the still-applied version stay visible")
+        again = _apply(adapter, tenant, v2, "bpl031_v2_again")
+        self.assertTrue(again["ok"] and again["result"]["status"] == "applied", again)
+        self.assertEqual(self.hidden(sim, "Item", "custom_review_note"), 0, "re-apply must restore the field")
+
+
 class TestFixtureReadBack(unittest.TestCase):
     """The offline twin of bench test_05: apply every fixture entity, then read the engine back."""
 
     @staticmethod
     def apply_fixture(eng: CaseInsensitiveEngine) -> dict:
-        bp = without_attachments(load_fixture())
+        bp = apply_ready(load_fixture())  # Q-603: no new unique or indexed field on a built-in type
         backend = backend_for(eng)
         for elem in bp["entities"]:
             entity_add(backend, elem)

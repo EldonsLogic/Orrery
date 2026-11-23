@@ -40,6 +40,20 @@ FIXTURE = SERVICES_BP_DIR / "fixtures" / "trading-distribution.blueprint.json"
 MAPPING = REPO_ROOT / "contracts" / "examples" / "engine-mapping-golden-path.json"
 # Every engine-mapping example is a separate mapping over the same fixture; an entity is mapped in only one of them.
 MAPPINGS = (MAPPING, REPO_ROOT / "contracts" / "examples" / "engine-mapping-purchasing.json")
+
+
+def _contract_native_fields() -> dict:
+    """{(entity, field): native engine field or None} for fields the contract stores under another name, read from the files."""
+    out = {}
+    for path in MAPPINGS:
+        for ent in json.loads(path.read_text(encoding="utf-8"))["entities"]:
+            for fld in ent["fields"]:
+                if fld.get("engineField") != fld["blueprintField"]:
+                    out[(ent["blueprintEntity"], fld["blueprintField"])] = fld.get("engineField")
+    return out
+
+
+CONTRACT_NATIVE = _contract_native_fields()
 BENCH_SITE = os.environ.get("BPL027_BENCH_SITE", "")
 SITES_PATH = os.path.expanduser(os.environ.get("BPL027_SITES_PATH", "~/frappe-bench/sites"))
 TENANT = "t_bpl027"
@@ -100,6 +114,30 @@ def without_attachments(bp: dict) -> dict:
             if fld["type"] == "attachment":
                 fld["type"] = "string"
     return bp
+
+
+def without_unenforceable_constraints(bp: dict) -> dict:
+    """Q-603 (BPL-031 review): entity.add refuses a new unique or indexed field on a built-in engine type, because the
+    guarded field path cannot deploy that DDL here and the field must never apply without its constraint. Until Q-603 is
+    answered the fixture is adapted in memory, like the attachment type above: the constraint is dropped from every field
+    of a contract-mapped entity that the adapter would have to add (customer_code, supplier_code). A field the engine
+    already holds under the same name (item_code) needs no DDL and keeps it, so the plan still gates unique_or_index."""
+    bp = copy.deepcopy(bp)
+    mapped, native = set(), set()
+    for path in MAPPINGS:
+        for ent in json.loads(path.read_text(encoding="utf-8"))["entities"]:
+            mapped.add(ent["blueprintEntity"])
+            native |= {(ent["blueprintEntity"], f["blueprintField"]) for f in ent["fields"] if f.get("engineField") == f["blueprintField"]}
+    for ent in bp["entities"]:
+        for fld in ent["fields"]:
+            if ent["id"] in mapped and (ent["id"], fld["id"]) not in native:
+                fld.pop("unique", None)
+                fld.pop("indexed", None)
+    return bp
+
+
+def apply_ready(bp: dict) -> dict:
+    return without_unenforceable_constraints(without_attachments(bp))
 
 
 def with_unmapped_builtin_role(bp: dict) -> dict:
@@ -258,8 +296,17 @@ def expected_grants(f, bp: dict) -> dict:
             acts, dt = set(p["actions"]), entity_to_doctype(p["entity"])
             meta = f.get_meta(dt)
             names = {_attr(d, "fieldname") for d in meta.fields}
-            hidden = [_sanitize_custom_fieldname(h) for h in p.get("hiddenFields", [])]
-            if "read" not in acts or any(h not in names for h in hidden):
+            hidden, native, withheld = [], [], False
+            for h in p.get("hiddenFields", []):
+                if (p["entity"], h) in CONTRACT_NATIVE:  # the data lives on the native field (or on another record: None)
+                    n = CONTRACT_NATIVE[(p["entity"], h)]
+                    # protected only where the native field already sits above level 0; the adapter never moves it
+                    withheld |= n is None or n not in names or int(_attr(meta.get_field(n), "permlevel") or 0) < 1
+                    native.append(n)
+                else:
+                    hidden.append(_sanitize_custom_fieldname(h))
+                    withheld |= hidden[-1] not in names
+            if "read" not in acts or withheld:
                 continue
             masked = bool(p.get("hiddenFields") or p.get("readOnlyFields"))
             flags = {"read"} | {"export"} & acts | {"delete"} & acts
@@ -271,7 +318,8 @@ def expected_grants(f, bp: dict) -> dict:
                     flags.add("cancel")
                     if "create" in flags:
                         flags.add("amend")
-            out[(engine_role_name(r["id"]), dt)] = {"flags": flags, "if_owner": int(scope == "own_records"), "hidden": hidden}
+            out[(engine_role_name(r["id"]), dt)] = {"flags": flags, "if_owner": int(scope == "own_records"), "hidden": hidden,
+                                                    "native": native}
     return out
 
 
@@ -298,6 +346,11 @@ def grant_gaps(f, bp: dict) -> dict:
                 levels.append((r, dt, fn, "visible"))
             levels += [(o, dt, fn, "hidden") for (o, _d) in readers
                        if fn not in exp[(o, _d)]["hidden"] and lvl and "read" not in rules.get((o, dt, lvl), (set(), 0))[0]]
+    for (r, dt), e in exp.items():
+        for n in e["native"]:  # a native cost field must not be readable by the role that hides it
+            lvl = int(_attr(f.get_meta(dt).get_field(n), "permlevel") or 0)
+            if lvl == 0 or "read" in rules.get((r, dt, lvl), (set(), 0))[0]:
+                levels.append((r, dt, n, "native visible"))
     return {"missing": missing, "extra": extra, "levels": sorted(set(levels))}
 
 
@@ -382,7 +435,7 @@ class TestBpl027Offline(unittest.TestCase):
         from change_engine.adapter import FrappeRuntimeBackend
         from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
 
-        bp = without_attachments(load_fixture())
+        bp = apply_ready(load_fixture())
         engine = CaseInsensitiveEngine("bpl027.localhost")
         backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
                                        frappe_factory=lambda: engine, offline_ddl_simulator=True)
@@ -417,7 +470,7 @@ class TestBpl027Offline(unittest.TestCase):
         from change_engine.adapter import FrappeRuntimeBackend
         from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
 
-        bp = without_attachments(load_fixture())
+        bp = apply_ready(load_fixture())
         engine = CaseInsensitiveEngine("bpl027.localhost")
         engine.add_field("Item", "valuation_secret", permlevel=2)  # an engine field on a level the adapter never owns
         engine.add_field("Customer", "credit_hold", permlevel=1)
@@ -441,9 +494,12 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertEqual(rules[("bp-auditor", "Payment", 0)], ({"read", "export"}, 0))  # a document type the adapter made
         # BPL-031: entity.add now gives Customer its credit_limit, so the grant that hides it applies (read only, level 2).
         self.assertEqual(rules[("bp-sales_rep", "Customer", 0)], ({"read"}, 1))
+        # BPL-031 review: the contract stores cost_price in the native valuation_rate, which sits on level 0 here (no tenant
+        # provisioning ran), so masking the custom twin protects nothing and the sales rep's Item grant is withheld.
+        self.assertNotIn(("bp-sales_rep", "Item", 0), rules)
         self.assertFalse([k for k in rules if k[0] in ("bp-warehouse_keeper", "bp-branch_sales_manager")])  # location scopes
         # Field levels are used only where the fixture hides a field the engine now holds (BPL-031): Customer and Item.
-        self.assertEqual({(k[1], k[2]) for k in rules if k[0].startswith("bp-") and k[2] != 0}, {("Customer", 2), ("Item", 1)})
+        self.assertEqual({(k[1], k[2]) for k in rules if k[0].startswith("bp-") and k[2] != 0}, {("Customer", 2)})
         # BPL-032 after BPL-034: the purchasing and price-list built-ins are in the reviewed mapping and hold the fixture's grants.
         self.assertEqual(rules[("bp-owner", "Supplier", 0)], ({"read", "create", "write", "export"}, 0))
         self.assertEqual(rules[("bp-owner", "Purchase Order", 0)], ({"read", "create", "write", "export"}, 0))  # cancel without submit: dropped
@@ -463,10 +519,10 @@ class TestBpl027Offline(unittest.TestCase):
         levels = {fn: int(getattr(engine.get_meta(dt).get_field(fn), "permlevel", 0) or 0)
                   for dt, fn in (("Item", "valuation_secret"), ("Customer", "credit_hold"))}
         self.assertEqual(levels, {"valuation_secret": 2, "credit_hold": 1})
-        # The only Property Setters are the field levels of the two hidden fields entity.add created (BPL-031), placed on
-        # the free level (Customer.credit_hold holds 1, Item.valuation_secret holds 2).
+        # The only Property Setter is the field level of the hidden field entity.add created on Customer (BPL-031), placed on
+        # the free level (Customer.credit_hold holds 1).
         self.assertEqual({(r["doc_type"], r["field_name"], r["property"], int(r["value"])) for r in engine.rows("Property Setter")},
-                         {("Customer", "custom_credit_limit", "permlevel", 2), ("Item", "custom_cost_price", "permlevel", 1)})
+                         {("Customer", "custom_credit_limit", "permlevel", 2)})
 
     def test_06d_offline_purchasing_grants_plan_and_unmapped_builtins_are_still_refused(self) -> None:
         """ADR-0051 item 3 after BPL-034 and BPL-032: Supplier, Price List and the purchase documents are in the reviewed
@@ -684,7 +740,7 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.db_path = os.path.join(cls.tmp.name, "adapter.sqlite")
         cls.bp_raw = load_fixture()
-        cls.bp_full = without_attachments(cls.bp_raw)
+        cls.bp_full = apply_ready(cls.bp_raw)
         cls.bp = cls.bp_full
         cls.art_raw = compile_for_adapter(cls.bp_raw)
         cls.art = compile_for_adapter(cls.bp)

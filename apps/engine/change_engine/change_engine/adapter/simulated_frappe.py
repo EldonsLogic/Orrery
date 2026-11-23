@@ -451,6 +451,15 @@ class SimulatedFrappeDB:
                 site.rows.setdefault(tbl, {})
             return ()
 
+        if "`TABCHANGE ENGINE ENTITY FIELD`" in q_upper:  # BPL-031 review: fields an entity.add introduced (rows keyed by pair)
+            tbl = site.rows.setdefault("tabChange Engine Entity Field", {})
+            if q_upper.startswith("INSERT"):
+                dt, fn = p
+                tbl.setdefault(f"{dt}\x00{fn}", {"doctype": dt, "fieldname": fn})
+                return ()
+            if q_upper.startswith("SELECT"):
+                return [(r["fieldname"],) for r in tbl.values() if r["doctype"] == p[0]]
+
         if "FROM INFORMATION_SCHEMA.COLUMNS" in q_upper:
             table_name = p[0] if p else ""
             cols = site.table_columns.get(table_name, [])

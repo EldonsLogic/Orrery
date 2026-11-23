@@ -73,3 +73,4 @@ Unknown.
   - Re-review round 2 dispatched: gpt-6.1-sol (high), `2ce73b1..f6a82be`.
   - #300 re-review 2, gpt-6.1-sol at `f6a82be`: finding 4 closed; two older Medium exception paths (regex `OverflowError`, oversized version selector `ValueError`). Fixed by the coordinator test-first at `01d2029`; suite 199 OK. Posted on #300. Re-review round 3 dispatched (gpt-6.1-sol, high).
   - #300 re-review 3, gpt-6.1-sol at `01d2029`: both round-2 paths closed; one new Medium (deep schema-valid nesting raises `RecursionError` at the final copy). Fixed by the coordinator test-first at `4ea5173`; suite 200 OK. Posted on #300. Narrow round 4 dispatched.
+  - #300 re-review 4, gpt-6.1-sol: APPROVE at `4ea5173` (no new findings; 200 tests OK). Posted on #300 with a request for Eldon's Tier 3 review. Left: Eldon's line-by-line read and confirmation of the ADR-0067 readings, the partner's say-so.

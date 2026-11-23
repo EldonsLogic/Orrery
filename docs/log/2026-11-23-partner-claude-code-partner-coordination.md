@@ -64,3 +64,5 @@ Unknown.
   - Re-review dispatched: gpt-6.1-sol (high), `85998d2..dd60720`, read-only.
   - #300 review result, gpt-6.1-sol: REQUEST_CHANGES at `1998c4a` (3 High: UNVERIFIED outside-schema claims escape when `paths` is missing or empty; `requires` checks names, not version ranges or valid providers; provisional rounding entries already authorise production defaults. 1 Medium: malformed `requires` crashes instead of refusing). Posted on #300.
   - Fixes dispatched: Claude Sonnet, test-first, in the #300 checkout only; provisional entries made inactive until resolved with evidence (fail closed; no pack is certified today). Allowed `components/compliance/country_pack/**`, ADR-0067, the framework doc, the PR's own log; no git.
+  - #299 re-review, gpt-6.1-sol at `dd60720`: findings 2 and 3 closed, finding 1 partly open (stale stdout summary). Fixed by the coordinator test-first at `ec5996f` (count from stderr only, ambiguous summaries fail); infra suite 125 OK. Real bench at `85998d2` (run 45214473661): ERP-014 16 live tests OK, ERP-015 19 OK, no skips. Posted on #299.
+  - Re-review round 2 dispatched: gpt-6.1-sol (high), `dd60720..ec5996f`.

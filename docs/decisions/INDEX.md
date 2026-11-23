@@ -7,7 +7,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 
 | ADR | Title | Status |
 |---|---|---|
-| [ADR-0001-working-codename.md](ADR-0001-working-codename.md) | Working codename Orrery, not cleared | Accepted |
+| [ADR-0001-working-codename.md](ADR-0001-working-codename.md) | Working codename Orrery, not cleared | Accepted; superseded by ADR-0066 (working-name rule) |
 | [ADR-0002-seed-engine-frappe-erpnext.md](ADR-0002-seed-engine-frappe-erpnext.md) | Seed engine is Frappe + ERPNext, behind an adapter | Accepted |
 | [ADR-0003-five-parts-four-contracts.md](ADR-0003-five-parts-four-contracts.md) | Five parts and four contracts | Accepted |
 | [ADR-0004-one-chat-role-based-views.md](ADR-0004-one-chat-role-based-views.md) | One chat, anyone chats, role-based views | Accepted |
@@ -17,7 +17,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0008-no-client-specific-code.md](ADR-0008-no-client-specific-code.md) | No client-specific code; component factory; autonomy metrics | Accepted |
 | [ADR-0009-repo-workflow.md](ADR-0009-repo-workflow.md) | Repo workflow | Accepted |
 | [ADR-0010-model-strategy.md](ADR-0010-model-strategy.md) | Model strategy | Accepted |
-| [ADR-0011-interim-design-system.md](ADR-0011-interim-design-system.md) | Interim design system is brand guidelines v1 (Quadrant); logo is a placeholder | Accepted |
+| [ADR-0011-interim-design-system.md](ADR-0011-interim-design-system.md) | Interim design system is brand guidelines v1 (Quadrant); logo is a placeholder | Accepted; partly superseded by ADR-0066 (logo, heading typeface) |
 | [ADR-0012-phase-2-strategy-decisions.md](ADR-0012-phase-2-strategy-decisions.md) | Phase 2 strategy decisions D-P2-1..11 | Accepted |
 | [ADR-0013-change-engine-module.md](ADR-0013-change-engine-module.md) | The prototype change engine becomes a module of Part 2 | Accepted |
 | [ADR-0014-theming-and-tenant-branding.md](ADR-0014-theming-and-tenant-branding.md) | Theming and tenant branding | Accepted |

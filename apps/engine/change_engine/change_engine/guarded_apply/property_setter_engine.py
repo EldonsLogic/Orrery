@@ -24,6 +24,7 @@ from .safety_guardrails import (
     PROHIBITED_CODE_PROPERTIES,
     PROHIBITED_EXPRESSION_PATTERNS,
     TIER_1_GOVERNANCE_ROLES,
+    is_restricted_link_doctype,
     validate_mutation_safety,
     ZoneSafetyViolation,
 )
@@ -62,6 +63,29 @@ def normalize_property_value(property_name: str, property_type: str, value: Any)
     if value is None:
         return ""
     return str(value)
+
+
+def _resolve_fieldtype(db: Any, doctype: str, fieldname: Optional[str]) -> Optional[str]:
+    """Read the target field's fieldtype from adapter or Frappe metadata; None when unavailable."""
+    if not fieldname:
+        return None
+    if db is not None and hasattr(db, "get_effective_field_property") and callable(getattr(db, "get_effective_field_property", None)):
+        try:
+            ft = db.get_effective_field_property(doctype, fieldname, "fieldtype")
+            if isinstance(ft, str) and ft.strip():
+                return ft.strip()
+        except Exception:
+            pass
+    if frappe and hasattr(frappe, "get_meta"):
+        try:
+            meta = frappe.get_meta(doctype)
+            df = meta.get_field(fieldname) if hasattr(meta, "get_field") else None
+            ft = getattr(df, "fieldtype", None) if df is not None else None
+            if isinstance(ft, str) and ft.strip():
+                return ft.strip()
+        except Exception:
+            pass
+    return None
 
 
 def execute_property_setter_deployment(
@@ -135,6 +159,26 @@ def execute_property_setter_deployment(
                 f"Unapproved Field Property Violation (§5): Property '{property_name}' on '{doctype}.{fieldname}' "
                 f"is not in the approved property allowlist {sorted(ALLOWED_PROPERTY_SETTER_PROPERTIES)}."
             )
+
+        if property_name == "options":
+            target_fieldtype = _resolve_fieldtype(db, doctype, fieldname)
+            ft_cf = target_fieldtype.casefold() if target_fieldtype is not None else None
+            if ft_cf == "link":
+                link_target = str(normalized_value).strip()
+                if not link_target:
+                    raise ZoneSafetyViolation(
+                        f"Invalid Link Target: '{fieldname}' requires a target DocType in 'options'."
+                    )
+                if is_restricted_link_doctype(link_target):
+                    raise ZoneSafetyViolation(
+                        f"Restricted Link Target: Cannot link directly to ledger/audit table '{link_target}'."
+                    )
+            elif ft_cf is None or ft_cf in ("table", "table multiselect"):
+                # Fail closed when fieldtype cannot be proven non-Link (or is a DocType-bearing Table field).
+                if is_restricted_link_doctype(normalized_value):
+                    raise ZoneSafetyViolation(
+                        f"Restricted Link Target: Cannot link directly to ledger/audit table '{normalized_value}'."
+                    )
     except ZoneSafetyViolation as exc:
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
         if kwargs.get("raise_on_violation") or kwargs.get("raise_on_safety_violation"):

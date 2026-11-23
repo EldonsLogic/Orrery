@@ -1,0 +1,61 @@
+{
+  "$schema": "../../../../../../contracts/component.manifest.schema.json",
+  "id": "country.qa",
+  "version": "0.1.0",
+  "kind": "rigid",
+  "name": {
+    "ar": "حزمة دولة قطر",
+    "en": "Qatar Country Pack"
+  },
+  "description": "Declarative Qatar country pack: no VAT in force, no e-invoicing mandate enacted, payroll and WPS out of v1 scope, Gregorian fiscal year, locale defaults. All facts UNVERIFIED (see evidence.json). Holds no tax maths (ADR-0031). Arabic text unreviewed (ADR-0033).",
+  "provides": [
+    {
+      "capability": "country.qa.pack_metadata",
+      "artifacts": [
+        {
+          "type": "function",
+          "ref": "components.compliance.country_pack.loader.resolve_country_pack"
+        }
+      ]
+    }
+  ],
+  "requires": [
+    { "component": "finance.coa_qa_unresolved", "versionRange": ">=0.1.0 <1.0.0" },
+    { "component": "sales.invoice_print_qa_unresolved", "versionRange": ">=0.1.0 <1.0.0" },
+    { "component": "qa.holidays", "versionRange": ">=0.1.0 <0.2.0" }
+  ],
+  "parameters": [],
+  "tests": [
+    {
+      "id": "test_pack_qa",
+      "kind": "unit",
+      "path": "components/compliance/country_pack/tests/test_pack_qa.py",
+      "blocking": true
+    }
+  ],
+  "certification": {
+    "level": "tested",
+    "touchesLedgerOrTax": true,
+    "reviewedBy": []
+  },
+  "engineCompatibility": {
+    "adapter": "change_engine",
+    "engineRange": ">=0.1.0 <1.0.0",
+    "testedAgainst": []
+  },
+  "licence": {
+    "spdx": "LicenseRef-Proprietary"
+  },
+  "owner": {
+    "github": "sayegh9"
+  },
+  "i18n": {
+    "locales": ["ar", "en"],
+    "rtlVerified": false
+  },
+  "dataHandling": {
+    "storesPersonalData": false,
+    "sendsDataToModels": false,
+    "promotableToLibrary": true
+  }
+}

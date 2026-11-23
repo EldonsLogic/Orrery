@@ -573,10 +573,14 @@ def _collect_snapshots(
                 mdb_info["load_total_mb"] = float(cols[2])
         snap["mariadb"] = mdb_info
 
-    # 5. Redis cache metrics
-    rc = compose_exec(project, compose_file, "redis-cache", "redis-cli", "INFO", "memory", timeout=15)
-    rs = compose_exec(project, compose_file, "redis-cache", "redis-cli", "INFO", "stats", timeout=15)
-    rk = compose_exec(project, compose_file, "redis-cache", "redis-cli", "DBSIZE", timeout=15)
+    # 5. Redis cache metrics (INF-015: authenticate inside the container; the password never leaves it)
+    def redis_cli(*cmd: str) -> subprocess.CompletedProcess:
+        return compose_exec(project, compose_file, "redis-cache", "sh", "-c",
+                            'REDISCLI_AUTH="$REDIS_PASSWORD" exec redis-cli "$@"', "redis-cli", *cmd, timeout=15)
+
+    rc = redis_cli("INFO", "memory")
+    rs = redis_cli("INFO", "stats")
+    rk = redis_cli("DBSIZE")
     redis_info: Dict[str, Any] = {}
     for raw in (rc.stdout if rc.returncode == 0 else "", rs.stdout if rs.returncode == 0 else ""):
         for ln in raw.splitlines():

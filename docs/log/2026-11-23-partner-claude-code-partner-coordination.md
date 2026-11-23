@@ -48,3 +48,4 @@ Unknown.
 
 ## Handover to a new coordinator thread (2026-11-23)
 - The earlier coordinator thread stopped; a new Claude Code (Opus) thread owns this branch and log. State at handover: #296 changes requested at `733b470`, #297 approved at `7091c78`, #298 changes requested at `658df11`; no new pushes from Eldon yet. #280, #281, #284 approved by Eldon, waiting for the partner's Tier 3 say-so. GitHub watcher restarted.
+- The partner gave the Tier 3 say-so for #280, #281 and #284 on Eldon's approvals. Merged #284 and #280 (merge commits). #281 then conflicted in `.github/workflows/tests.yml` (both PRs added a test path to one list); main merged into `bpl-032-purchasing-doctypes` keeping both entries (`a14fef9`); the three affected test files pass locally (51 tests). Eldon's approval still stands; merge on green CI.

@@ -19,3 +19,10 @@ export function composerKeyAction(e: ComposerKey): 'send' | 'none' {
   if (e.isComposing || e.keyCode === 229) return 'none';
   return 'send';
 }
+
+/** Language of a text by script: Arabic only -> 'ar', Latin only -> 'en', mixed or neither -> undefined (inherit). For `lang` (WCAG 3.1.2). */
+export function textLang(text: string): 'ar' | 'en' | undefined {
+  const ar = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFC]/.test(text);
+  const en = /[A-Za-z]/.test(text);
+  return ar && !en ? 'ar' : en && !ar ? 'en' : undefined;
+}

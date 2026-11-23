@@ -19,6 +19,7 @@ from change_engine.adapter import (
     make_frappe_harness,
 )
 from change_engine.adapter import contracts_support as cs
+from change_engine.adapter.mapping import engine_role_name
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 EXAMPLES_DIR = REPO_ROOT / "contracts" / "examples"
@@ -509,6 +510,10 @@ class TestErp012FrappeAdapter(unittest.TestCase):
             "valuation_rate": 12.50,
             "standard_rate": 25.00,
         }
+        # Members hold the managed role (SEC-022, ADR-0051). This simulator evaluates only its seeded standard rules,
+        # not the custom rules role.upsert writes (covered by test_sec_022_bpl_032_roles), so seed the managed role's
+        # read on Item here: this test checks caller impersonation (T36), not grant mapping.
+        site_db.doctype_meta["Item"]["perms"][engine_role_name("sales_rep")] = {"read": 1}
 
         # Sync shadow members (with displayName PII supplied in input that must NOT enter User)
         sync_res = adapter.call(

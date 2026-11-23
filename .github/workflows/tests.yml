@@ -88,7 +88,7 @@ jobs:
             case "$path" in
               */test_*.py|*/tests.py|*/tests/*_test.py)
                 case "$path" in
-                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/core/hrms_skeleton/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*) continue ;;
+                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/core/hrms_skeleton/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*|components/compliance/company_calendar/tests/*) continue ;;
                   components/sales/trading/tests/*) continue ;;
                   services/discovery/accountant_view/tests/*|services/discovery/gap_analysis/tests/*|services/discovery/quote/tests/*|services/discovery/template_flow/tests/*|services/operate/memory/tests/*) continue ;;
                 esac
@@ -284,6 +284,10 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_003_tenant_provisioning.py -v
 
+      - name: Live isolation suite decision helpers, offline (SEC-004)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_sec_004_live_helpers.py -v
+
       - name: Bilingual tax invoice print format tests (ERP-007)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
@@ -359,6 +363,7 @@ jobs:
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_4.py
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_5.py
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_6.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_7.py
           apps/engine/change_engine/change_engine/tests/test_bpl_032_purchasing_mapping.py
 
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
@@ -487,6 +492,12 @@ jobs:
       - name: Country pack framework tests (CMP-021)
         if: steps.filter.outputs.components == 'true' && !cancelled()
         run: python3 -m unittest discover -s components/compliance/country_pack/tests -t . -v
+
+      - name: Company calendar settings tests (CMP-023)
+        if: steps.filter.outputs.components == 'true' && !cancelled()
+        run: |
+          pip install "hijridate==2.6.0"
+          python3 -m unittest discover -s components/compliance/company_calendar/tests -t . -v
 
       - name: Trading and distribution pack unit and factory sandbox checks (ERP-011)
         if: steps.filter.outputs.components == 'true' && !cancelled()

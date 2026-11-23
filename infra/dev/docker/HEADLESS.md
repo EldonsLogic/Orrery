@@ -11,11 +11,11 @@ The engine is never a customer-facing web server. Two independent layers enforce
 ```bash
 export COMPOSE_PROJECT_NAME=platform-headless SITE_NAME=synthetic.localhost
 export ENGINE_INTERNAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
-# plus DB_ROOT_PASSWORD and ADMIN_PASSWORD as in README.md
+# plus DB_ROOT_PASSWORD, ADMIN_PASSWORD and REDIS_PASSWORD (INF-015) as in README.md
 docker compose --env-file /dev/null -f infra/dev/docker/docker-compose.headless.yml up -d --build
 ```
 - No service publishes a host port. The engine listens on 8000 inside the project only.
-- Two networks are `internal: true` (no route to the host or the internet): `data` (database, caches, engine) and `engine_internal` (engine and its callers). The database and caches are not on `engine_internal`.
+- Three networks are `internal: true` (no route to the host or the internet): `data` (database and engine), `redis_internal` (the two password-protected Redis services and engine services only, INF-015) and `engine_internal` (engine and its callers). The database and Redis are not on `engine_internal`.
 - The `headless` image target preinstalls the app build backend by wheel hash. Startup installs the mounted app with `--no-index --no-build-isolation`; no outbound network is attached. The ordinary developer target is unchanged.
 - The gateway is the only ingress. It runs in its own Compose project or file, joins the external network `<project>_engine_internal` and reaches the engine at `engine:8000`, sending the site name in the `Host` header. Only the gateway publishes a port to the outside.
 - Anything hosted (shared dev server, staging, production) must use this shape. `docker-compose.dev.yml` alone still publishes the engine on IPv4 loopback for local verification (`verify_dev_bench.py`, phase 0 proofs); that is a developer convenience, not a deployment shape. Open for the founders: drop the loopback port from the dev default once ERP-002 and the proofs no longer need it.
@@ -29,7 +29,7 @@ The allowlist lives in `apps/engine/change_engine/change_engine/api/route_guard.
 | Caller | Allowed |
 |---|---|
 | Anyone | `GET /api/method/ping` (liveness) |
-| Holder of the internal token (header `X-Internal-Token`) | `POST /api/method/change_engine.api.endpoints.<adapter method>` (twelve whitelisted methods) and read-only `GET /api/resource/<DocType>[/<name>]` for Customer, Item, Sales Order and Sales Invoice. Writes use guarded adapter endpoints; all other DocTypes are denied |
+| Holder of the internal token (header `X-Internal-Token`) | `POST /api/method/change_engine.api.endpoints.<adapter method>` (twelve whitelisted methods) and read-only `GET /api/resource/<DocType>[/<name>]` for the explicit read-route set (`READ_ROUTE_DOCTYPES`: `Customer`, `Item`, `Sales Order` and `Sales Invoice`). Writes use guarded adapter endpoints; all other DocTypes (including mapped grant entities with no read consumer, such as `Delivery Note`) are denied |
 | Everyone | Nothing else: `/`, `/app`, `/desk`, `/login`, `/api/method/login`, other `/api/method/*`, file upload, `/assets`, `/files`, `/private/files`, `/backups`, website pages, the legacy `cmd` RPC |
 
 The environment token is an interim G1 internal service credential, not the final SEC-002 workload identity or a tenant identity. It admits requests to the engine's own user permission checks. `ENGINE_INTERNAL_TOKEN` must contain 32–256 URL-safe characters; generate it from secure random bytes, not a memorable string. The startup validator refuses malformed or absent current credentials before opening the listener. Missing/invalid credentials also fail closed in each request guard. No credential values are logged.

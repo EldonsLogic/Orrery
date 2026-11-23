@@ -33,7 +33,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0024-four-phase-1-markets.md](ADR-0024-four-phase-1-markets.md) | Four phase-1 markets, no fixed launch order | Accepted |
 | [ADR-0025-independent-founder-lanes-in-the-plan.md](ADR-0025-independent-founder-lanes-in-the-plan.md) | Independent founder lanes in the plan | Accepted |
 | [ADR-0026-phased-delivery-and-market-pack-track.md](ADR-0026-phased-delivery-and-market-pack-track.md) | Phased delivery, phase exits and the market-pack track | Accepted |
-| [ADR-0027-human-floor-action-policy-and-agent-authority.md](ADR-0027-human-floor-action-policy-and-agent-authority.md) | Human floor, action-policy table and agent authority | Proposed |
+| [ADR-0027-human-floor-action-policy-and-agent-authority.md](ADR-0027-human-floor-action-policy-and-agent-authority.md) | Human floor, action-policy table and agent authority | Accepted |
 | [ADR-0028-recoverable-journaled-change-apply.md](ADR-0028-recoverable-journaled-change-apply.md) | Recoverable, journaled change apply (not universal rollback) | Accepted |
 | [ADR-0029-engine-disclosure-wording-and-saas-only.md](ADR-0029-engine-disclosure-wording-and-saas-only.md) | Engine disclosure wording and SaaS-only delivery | Proposed |
 | [ADR-0030-blueprint-to-engine-mapping-contract.md](ADR-0030-blueprint-to-engine-mapping-contract.md) | Blueprint-to-engine mapping contract | Proposed |
@@ -57,5 +57,9 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0048-agent-authority-propose-not-act.md](ADR-0048-agent-authority-propose-not-act.md) | Agent authority: agents propose, humans and deterministic code decide | Proposed |
 | [ADR-0049-human-review-queue.md](ADR-0049-human-review-queue.md) | Human review queue and the team_reviewed gate evidence | Proposed |
 | [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |
+| [ADR-0051-adapter-role-and-state-namespacing.md](ADR-0051-adapter-role-and-state-namespacing.md) | Adapter-owned engine roles and workflow states carry a reserved prefix, collisions are refused, role.upsert writes the mapped grants | Proposed |
 | [ADR-0052-isolated-browser-runner-placement.md](ADR-0052-isolated-browser-runner-placement.md) | Isolated browser runner placement (Tier 5 connector) | Proposed |
 | [ADR-0056-golden-path-mapping-gaps.md](ADR-0056-golden-path-mapping-gaps.md) | Golden-path engine mapping: complete unmapped list, computed fields engine-authoritative | Proposed |
+| [ADR-0055-purchasing-engine-mapping.md](ADR-0055-purchasing-engine-mapping.md) | Purchasing and price-list engine mapping (contract 0.2.0) | Proposed |
+| [ADR-0059-draft-country-packs-in-sandbox.md](ADR-0059-draft-country-packs-in-sandbox.md) | Draft country packs may run in sandbox and test (synthetic data only); partly supersedes ADR-0034 | Accepted |
+| [ADR-0060-role-assignments-in-regional-store.md](ADR-0060-role-assignments-in-regional-store.md) | Role assignments live in a regional store outside the tenant site; supersedes ADR-0007 item 9 once Accepted (decided by Eldon 2026-11-22, pending security review) | Proposed |

@@ -121,9 +121,10 @@ class InternalSurfaceTests(unittest.TestCase):
                         self.assertFalse(decide(method, path).allowed, method)
 
     def test_doctype_not_on_the_allowlist_is_refused_even_with_a_valid_token(self):
-        for doctype in ("ToDo", "Customer Group", "Sales Order Item", "Custom Field", "Property Setter", "DocType",
-                        "Server Script", "Client Script", "Webhook", "File", "Connected App", "OAuth Client",
-                        "Email Account", "Workflow", "Report", "Warehouse", "customer", "CUSTOMER", "Customer "):
+        for doctype in ("ToDo", "Customer Group", "Sales Order Item", "Delivery Note", "Delivery Note Item",
+                        "Custom Field", "Property Setter", "DocType", "Server Script", "Client Script", "Webhook",
+                        "File", "Connected App", "OAuth Client", "Email Account", "Workflow", "Report", "Warehouse",
+                        "customer", "CUSTOMER", "Customer "):
             for path in (f"/api/resource/{doctype}", f"/api/resource/{doctype}/X-1"):
                 with self.subTest(path=path):
                     self.assertFalse(decide("GET", path).allowed)
@@ -141,15 +142,24 @@ class InternalSurfaceTests(unittest.TestCase):
         locked = literal_assignment(GUARDRAILS_PY, "ZONE_2_LOCKED_DOCTYPES")
         self.assertFalse(set(rg.RESOURCE_ALLOWLIST) & locked)
 
-    def test_allowlist_is_derived_from_the_adapter_entity_map(self):
-        """Drift guard: the adapter's tenant-data doctypes (mapping.ENTITY_TO_DOCTYPE), minus the locked ones
-        and the child tables, are exactly the allowlist. A new adapter entity must be added here on purpose."""
+    def test_allowlist_is_an_explicit_subset_of_mapped_doctypes(self):
+        """Drift guard: read routes have their own explicit reviewed set so adding grant entities (such as
+        Delivery Note or BPL-034 purchasing types) does not automatically expose new read routes. Read routes must
+        remain a subset of the mapped, non-locked, non-child doctypes and never contain a locked doctype or Session."""
         entity_map = literal_assignment(MAPPING_PY, "ENTITY_TO_DOCTYPE")
         locked = literal_assignment(GUARDRAILS_PY, "ZONE_2_LOCKED_DOCTYPES")
         protected = literal_assignment(MAPPING_PY, "PROTECTED_ENTITY_IDS")
-        derived = {d for k, d in entity_map.items() if k not in protected and d not in locked
-                   and d not in {"Sales Order Item", "Sales Invoice Item"}}
-        self.assertEqual(set(rg.RESOURCE_ALLOWLIST), derived)
+        child_doctypes = {d for k, d in entity_map.items() if k.endswith("_line")} | {
+            "Sales Order Item", "Delivery Note Item", "Sales Invoice Item",
+        }
+        mapped_top_level = {
+            d for k, d in entity_map.items() if k not in protected and d not in locked and d not in child_doctypes
+        }
+        self.assertEqual(set(rg.RESOURCE_ALLOWLIST), {"Customer", "Item", "Sales Order", "Sales Invoice"})
+        self.assertTrue(set(rg.RESOURCE_ALLOWLIST) <= mapped_top_level)
+        self.assertIn("Delivery Note", mapped_top_level - set(rg.RESOURCE_ALLOWLIST))
+        self.assertFalse(set(rg.RESOURCE_ALLOWLIST) & locked)
+        self.assertFalse(set(rg.RESOURCE_ALLOWLIST) & child_doctypes)
         self.assertNotIn("Session", rg.RESOURCE_ALLOWLIST)
 
     def test_run_method_and_rpc_parameters_are_refused_on_every_resource_path(self):

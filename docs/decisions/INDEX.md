@@ -57,3 +57,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |
 | [ADR-0052-isolated-browser-runner-placement.md](ADR-0052-isolated-browser-runner-placement.md) | Isolated browser runner placement (Tier 5 connector) | Proposed |
 | [ADR-0054-model-call-contract.md](ADR-0054-model-call-contract.md) | Model-call interface contract | Proposed |
+| [ADR-0064-scheduled-agent-authority-and-budgets.md](ADR-0064-scheduled-agent-authority-and-budgets.md) | Scheduled agents: owner authority, draft-only runs and two-level budgets | Proposed |

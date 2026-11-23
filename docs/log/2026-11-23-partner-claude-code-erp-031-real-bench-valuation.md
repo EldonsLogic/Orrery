@@ -44,3 +44,6 @@ Open the PR, read the first real-bench run (ERP-031): confirm the live layers ra
 - Reused project cleanup: every site drop is attempted, errors are collected, then one failure names them all. Tests: first drop fails, remaining drops still run; two failures both reported.
 - Older runner fakes in `test_ce_sec_005_real_bench_ci.py` and `test_inf_015_redis_auth.py` now return a real `Ran N tests` line for unittest children.
 - Ran: `python3 -m unittest discover -s infra/dev/docker/tests` 123 tests OK; hygiene OK; the new tests fail on the old runner (7 failures, 5 errors). The real bench was not run.
+
+## Re-review fix (coordinator, Claude Opus 5.5)
+- gpt-6.1-sol re-review at `dd60720`: findings 2 and 3 closed; finding 1 partly open (a stale `Ran N tests` line on stdout could mask a short run). Fixed test-first: the run count now comes only from the child's stderr, where unittest writes its summary, and two or more summaries count as zero (ambiguous). New tests `test_a_stale_summary_on_stdout_cannot_mask_a_short_run`, `test_an_ambiguous_summary_fails_the_run` and a new `test_the_run_counter` case failed before the fix. Fakes in two older test files now put the summary on stderr. Infra suite: 125 tests OK (10 skipped).

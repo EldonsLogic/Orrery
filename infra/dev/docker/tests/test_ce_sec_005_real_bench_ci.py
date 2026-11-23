@@ -136,7 +136,7 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
             calls.append(("verify", tuple(cmd)))
             # ERP-031: the live valuation layers are children here too and must report real test counts
             out = "Ran 99 tests in 1.0s\n\nOK\n" if "unittest" in cmd else "Verified"
-            return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr=out if "unittest" in cmd else "")
 
         with mock.patch.object(run_real_bench_ci, "_run_compose", side_effect=fake_run_compose), \
              mock.patch.object(run_real_bench_ci, "_verify_http_ready"), \
@@ -175,7 +175,8 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
             return subprocess.CompletedProcess([], 0, stdout="engine\nmariadb\nredis-cache\nredis-queue\n", stderr="")
 
         output = io.StringIO()
-        verified = subprocess.CompletedProcess([], 0, stdout="Ran 99 tests in 1.0s\n\nOK\n")  # live layers need a run count (ERP-031)
+        verified = subprocess.CompletedProcess([], 0, stdout="Ran 99 tests in 1.0s\n\nOK\n",
+                                           stderr="Ran 99 tests in 1.0s\n\nOK\n")  # live layers need a run count on stderr (ERP-031)
         with (
             mock.patch.dict(os.environ, {"ENGINE_INTERNAL_TOKEN": inherited_token}),
             mock.patch.object(run_real_bench_ci, "_run_compose", side_effect=fake_run_compose),

@@ -269,10 +269,11 @@ def unittest_reported_skips(output: str) -> bool:
     return bool(SKIP_RE.search(output))
 
 
-def unittest_tests_run(output: str) -> int:
-    """How many tests unittest's own `Ran N tests in ...` summary line says ran; 0 when there is no such line."""
-    match = RAN_RE.search(output)
-    return int(match.group(1)) if match else 0
+def unittest_tests_run(stderr: str) -> int:
+    """How many tests unittest's own `Ran N tests in ...` summary says ran. Pass the child's stderr only (unittest
+    writes its summary there; test prints go to stdout). 0 when there is no summary or more than one (ambiguous)."""
+    matches = RAN_RE.findall(stderr)
+    return int(matches[0]) if len(matches) == 1 else 0
 
 
 def _run_valuation_layer(env: dict[str, str], project: str, site: str, layer: tuple[str, ...]) -> int:
@@ -295,7 +296,7 @@ def _run_valuation_layer(env: dict[str, str], project: str, site: str, layer: tu
     if res.returncode == 0 and unittest_reported_skips(output):
         print(f"{prefix.upper()} live layer skipped tests: that is a failure in real-bench CI.", file=sys.stderr)
         return 1
-    ran = unittest_tests_run(output)
+    ran = unittest_tests_run(redact(res.stderr or "", env))
     if res.returncode == 0 and ran < minimum:
         print(f"{prefix.upper()} live layer ran {ran} tests, expected at least {minimum}: a vacuous run is a failure "
               "in real-bench CI.", file=sys.stderr)

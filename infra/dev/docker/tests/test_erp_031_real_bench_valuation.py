@@ -78,7 +78,7 @@ RAN_OK = "Ran 99 tests in 1.0s\n\nOK\n"
 
 class TestRunnerRunsTheValuationLayers(unittest.TestCase):
     def _run(self, unittest_output: str = RAN_OK, unittest_rc: int = 0, reuse: bool = False, drop_rcs=None,
-             outputs_by_layer=None):
+             outputs_by_layer=None, stdout_by_layer=None):
         """Run the runner with docker and the children faked. ``drop_rcs`` are the exit codes of successive
         site drops; ``outputs_by_layer`` maps ERP014/ERP015 to that layer's unittest output."""
         compose_calls, unittest_calls, other_calls = [], [], []
@@ -98,7 +98,8 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
                 unittest_calls.append((tuple(cmd), kwargs))
                 layer = "ERP014" if "test_erp_014_accounting_properties" in " ".join(cmd) else "ERP015"
                 out = (outputs_by_layer or {}).get(layer, unittest_output)
-                return subprocess.CompletedProcess(cmd, unittest_rc, stdout=out, stderr="")
+                # unittest writes its summary to stderr; stdout carries the test code's own prints.
+                return subprocess.CompletedProcess(cmd, unittest_rc, stdout=(stdout_by_layer or {}).get(layer, ""), stderr=out)
             other_calls.append((tuple(cmd), kwargs))
             return subprocess.CompletedProcess(cmd, 0, stdout="Verified", stderr="")
 
@@ -164,6 +165,18 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
                 rc, _, _ = self._run(outputs_by_layer={layer: f"Ran {minimum} tests in 1s\n\nOK\n"})
                 self.assertEqual(rc, 0, "the expected count passes")
 
+    def test_a_stale_summary_on_stdout_cannot_mask_a_short_run(self) -> None:
+        """Review at dd60720: a stale `Ran 7 tests` printed on stdout must not count; only unittest's own stderr summary does."""
+        for layer, minimum in ((p.upper(), n) for p, _, _, _, _, n in run_real_bench_ci.VALUATION_LAYERS):
+            with self.subTest(layer):
+                rc, _, _ = self._run(outputs_by_layer={layer: "Ran 1 test in 0.1s\n\nOK\n"},
+                                     stdout_by_layer={layer: f"Ran {minimum} tests in 1s\n"})
+                self.assertNotEqual(rc, 0)
+
+    def test_an_ambiguous_summary_fails_the_run(self) -> None:
+        rc, _, _ = self._run(unittest_output="Ran 99 tests in 1.0s\n\nOK\nRan 1 test in 0.1s\n\nOK\n")
+        self.assertNotEqual(rc, 0, "two summaries in one child's stderr: refuse rather than guess")
+
     def test_the_runner_selects_the_live_classes_and_their_minimum_counts_match_the_real_ones(self) -> None:
         _, _, unittest_calls = self._run()
         selected = {name for cmd, _ in unittest_calls for name in cmd if name.startswith("change_engine.tests.")}
@@ -181,6 +194,7 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
         self.assertEqual(ran("Ran 0 tests in 0.0s\n\nNO TESTS RAN\n"), 0)
         self.assertEqual(ran("OK\n"), 0)
         self.assertEqual(ran("noise Ran 50 tests in a log line\n"), 0, "only unittest's own summary line counts")
+        self.assertEqual(ran("Ran 7 tests in 1s\nRan 1 test in 0.1s\n"), 0, "more than one summary is ambiguous")
 
     def test_a_failing_live_layer_fails_the_run_and_both_layers_still_run(self) -> None:
         rc, _, unittest_calls = self._run(unittest_rc=1, unittest_output="FAILED (failures=1)\n")

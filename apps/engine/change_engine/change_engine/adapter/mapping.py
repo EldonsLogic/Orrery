@@ -24,6 +24,17 @@ ENTITY_TO_DOCTYPE = {
     "delivery_note_line": "Delivery Note Item",
     "sales_invoice": "Sales Invoice",
     "sales_invoice_line": "Sales Invoice Item",
+    # BPL-032 after BPL-034 (ADR-0055, contract 0.2.0, contracts/examples/engine-mapping-purchasing.json). The engine
+    # names are UNVERIFIED until a recorded bench run. A price-list line is a master document (Item Price).
+    "supplier": "Supplier",
+    "price_list": "Price List",
+    "price_list_item": "Item Price",
+    "purchase_order": "Purchase Order",
+    "purchase_order_line": "Purchase Order Item",
+    "purchase_receipt": "Purchase Receipt",
+    "purchase_receipt_line": "Purchase Receipt Item",
+    "purchase_invoice": "Purchase Invoice",
+    "purchase_invoice_line": "Purchase Invoice Item",
     "general_ledger": "GL Entry",
     "tax_ledger": "Tax Rule",
     "audit_log": "Activity Log",

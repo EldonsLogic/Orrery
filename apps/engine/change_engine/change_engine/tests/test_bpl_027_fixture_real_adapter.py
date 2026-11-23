@@ -99,21 +99,17 @@ def without_attachments(bp: dict) -> dict:
     return bp
 
 
-# Built-in ERPNext DocTypes used in the trading fixture that await BPL-034 (purchasing and price-list engine mapping).
-UNMAPPED_BUILTIN_ENTITIES = frozenset({
-    "supplier",
-    "price_list",
-    "purchase_order",
-    "purchase_receipt",
-    "purchase_invoice",
-})
-
-
-def without_unmapped_builtin_grants(bp: dict) -> dict:
-    """Strip role grants on unmapped built-in DocTypes (BPL-034) so offline mapped-grant read-backs can apply."""
+def with_unmapped_builtin_role(bp: dict) -> dict:
+    """Add an entity named for an ERPNext built-in that is still outside the reviewed mapping (Payment Entry) and a
+    role that grants it. Supplier, Price List and the purchase documents are mapped since BPL-034 and plan."""
     bp = copy.deepcopy(bp)
-    for role in bp["roles"]:
-        role["permissions"] = [p for p in role.get("permissions", []) if p.get("entity") not in UNMAPPED_BUILTIN_ENTITIES]
+    entity = copy.deepcopy(next(e for e in bp["entities"] if e["id"] == "payment"))
+    entity["id"] = "payment_entry"
+    bp["entities"].append(entity)
+    role = copy.deepcopy(bp["roles"][0])
+    role["id"] = "payment_clerk"
+    role["permissions"] = [{"entity": "payment_entry", "actions": ["read"]}]
+    bp["roles"].append(role)
     return bp
 
 
@@ -354,12 +350,12 @@ class TestBpl027Offline(unittest.TestCase):
 
 
     def _apply_fixture_offline(self):
-        """Apply the fixture's entities, mapped/custom role grants, workflows and reports through the real backend on a
+        """Apply the fixture's entities, role grants (mapped, purchasing and custom), workflows and reports through the real backend on a
         simulated engine whose names match without case, like the bench (no compiler needed)."""
         from change_engine.adapter import FrappeRuntimeBackend
         from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
 
-        bp = without_unmapped_builtin_grants(without_attachments(load_fixture()))
+        bp = without_attachments(load_fixture())
         engine = CaseInsensitiveEngine("bpl027.localhost")
         backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
                                        frappe_factory=lambda: engine, offline_ddl_simulator=True)
@@ -394,7 +390,7 @@ class TestBpl027Offline(unittest.TestCase):
         from change_engine.adapter import FrappeRuntimeBackend
         from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
 
-        bp = without_unmapped_builtin_grants(without_attachments(load_fixture()))
+        bp = without_attachments(load_fixture())
         engine = CaseInsensitiveEngine("bpl027.localhost")
         engine.add_field("Item", "valuation_secret", permlevel=2)  # an engine field on a level the adapter never owns
         engine.add_field("Customer", "credit_hold", permlevel=1)
@@ -419,12 +415,18 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertNotIn(("bp-sales_rep", "Customer", 0), rules)  # hides credit_limit, which the engine does not hold
         self.assertFalse([k for k in rules if k[0] in ("bp-warehouse_keeper", "bp-branch_sales_manager")])  # location scopes
         self.assertFalse([k for k in rules if k[0].startswith("bp-") and k[2] != 0])  # no field level used on this fixture
-        # Seeded built-in DocTypes remain custom=0 (never overwritten by entity.add) and unmapped ones hold no bp-* rules.
+        # BPL-032 after BPL-034: the purchasing and price-list built-ins are in the reviewed mapping and hold the fixture's grants.
+        self.assertEqual(rules[("bp-owner", "Supplier", 0)], ({"read", "create", "write", "export"}, 0))
+        self.assertEqual(rules[("bp-owner", "Purchase Order", 0)], ({"read", "create", "write", "export"}, 0))  # cancel without submit: dropped
+        self.assertEqual(rules[("bp-accountant", "Purchase Order", 0)], ({"read", "export"}, 0))  # submit without update: dropped
+        self.assertEqual(rules[("bp-accountant", "Purchase Invoice", 0)], ({"read", "create", "write", "submit", "export"}, 0))
+        self.assertEqual(rules[("bp-purchasing_officer", "Purchase Order", 0)],
+                         ({"read", "create", "write", "submit", "cancel", "amend", "export"}, 0))
+        self.assertEqual(rules[("bp-sales_rep", "Price List", 0)], ({"read"}, 1))
+        # Seeded built-in DocTypes remain custom=0 (never overwritten by entity.add).
         doctypes = {d["name"]: d for d in engine.rows("DocType")}
         for dt in ("Delivery Note", "Supplier", "Price List", "Purchase Order", "Purchase Receipt", "Purchase Invoice"):
             self.assertEqual(doctypes[dt]["custom"], 0, dt)
-        for dt in ("Supplier", "Price List", "Purchase Order", "Purchase Receipt", "Purchase Invoice"):
-            self.assertFalse([k for k in rules if k[0].startswith("bp-") and k[1] == dt], dt)
         builtin = {k: v for k, v in rules.items() if not k[0].startswith("bp-")}
         self.assertEqual(builtin, {("Auditor", "Customer", 0): ({"read"}, 0),
                                    ("Sales User", "Customer", 0): ({"read", "write", "create"}, 0),
@@ -434,33 +436,38 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertEqual(levels, {"valuation_secret": 2, "credit_hold": 1})
         self.assertEqual(engine.rows("Property Setter"), [])
 
-    def test_06d_offline_grant_on_an_unreviewed_engine_document_type_is_refused(self) -> None:
-        """ADR-0051 item 3: on a real site Supplier, Price List and the purchase documents are seeded built-in engine
-        document types outside the reviewed mapping, so the fixture roles that grant them are refused at both plan
-        and apply time, while delivery_note is allowed."""
+    def test_06d_offline_purchasing_grants_plan_and_unmapped_builtins_are_still_refused(self) -> None:
+        """ADR-0051 item 3 after BPL-034 and BPL-032: Supplier, Price List and the purchase documents are in the reviewed
+        mapping, so the fixture roles that grant them apply and plan like the sales ones; a built-in engine document type
+        outside the mapping (Payment Entry) is still refused at both plan and apply time."""
         from change_engine.adapter import FrappeRuntimeBackend
         from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine
 
-        bp, engine = without_attachments(load_fixture()), CaseInsensitiveEngine("bpl027.localhost")
+        bp, engine = self._apply_fixture_offline()
         backend = FrappeRuntimeBackend(site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
                                        frappe_factory=lambda: engine, offline_ddl_simulator=True)
-        owner = next(r for r in bp["roles"] if r["id"] == "owner")
+        granted = expected_grants(engine, bp)
+        for doctype in ("Supplier", "Price List", "Purchase Order", "Purchase Receipt", "Purchase Invoice"):
+            self.assertIn(("bp-owner", doctype), granted)
+
+        bp_x = with_unmapped_builtin_role(bp)
+        clerk = next(r for r in bp_x["roles"] if r["id"] == "payment_clerk")
         with self.assertRaises(FrappeBackendError) as err:
-            backend.execute_step(TENANT, {"seq": 1, "kind": "role.upsert", "pointer": "/roles/owner",
-                                          "subject": {"kind": "role", "id": "owner"}, "params": {"definition": owner}})
+            backend.execute_step(TENANT, {"seq": 1, "kind": "role.upsert", "pointer": "/roles/payment_clerk",
+                                          "subject": {"kind": "role", "id": "payment_clerk"}, "params": {"definition": clerk}})
         self.assertEqual(err.exception.details.get("reasonCode"), "protected_subject")
         self.assertTrue(err.exception.side_effect_free)
-        self.assertIsNone(engine.db.get_value("Role", "bp-owner", "name"))
+        self.assertIsNone(engine.db.get_value("Role", "bp-payment_clerk", "name"))
 
-        # Plan time against the compiled trading fixture refuses the 8 role.upsert steps (supplier/price_list/purchase_*)
-        # with no writes, while entity.add/workflow.upsert/report.upsert (including delivery_note) are not blocked.
-        art = compile_for_adapter(bp)
+        # Plan time on the compiled trading fixture: every role plans (gated, never blocked); with the Payment Entry
+        # grant added, only that one role.upsert step is blocked, with no writes.
         adapter = make_frappe_adapter(
             site_resolver=FrappeSiteResolver(site_map={TENANT: "bpl027.localhost"}),
             frappe_factory=lambda: engine,
             offline_ddl_simulator=True,
             test_hooks=False,
         )
+        art = compile_for_adapter(bp)
         prov = adapter.call("provision_site", ctx(), {
             "idempotencyKey": "idemp_bpl027_06d_prov", "engineTarget": art["engineTarget"],
             "blueprintId": art["blueprint"]["id"], "siteClass": "sandbox", "countryPack": "sa",
@@ -468,21 +475,18 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertTrue(prov["ok"], prov)
         planned = adapter.call("plan", ctx(), {"artifact": art})
         self.assertTrue(planned["ok"], planned)
-        self.assertEqual(planned["result"]["verdict"], "rejected")
-        blocked = [s for s in planned["result"]["steps"] if s["disposition"] == "blocked"]
-        by_seq = {s["seq"]: s for s in art["steps"]}
-        self.assertEqual(len(blocked), len(bp["roles"]))
-        for s in blocked:
-            self.assertEqual(s.get("reasonCode"), "protected_subject")
-            self.assertEqual(by_seq[s["seq"]]["kind"], "role.upsert")
-        self.assertIsNone(engine.db.get_value("Role", "bp-owner", "name"))
+        self.assertEqual(planned["result"]["verdict"], "needs_gate_approval")
+        self.assertFalse([s for s in planned["result"]["steps"] if s["disposition"] in ("blocked", "unsupported")])
 
-        # Stripping only the BPL-034 unmapped built-in grants lets delivery_note and all reviewed/custom grants plan cleanly.
-        art_mapped = compile_for_adapter(without_unmapped_builtin_grants(bp))
-        planned_ok = adapter.call("plan", ctx(), {"artifact": art_mapped})
-        self.assertTrue(planned_ok["ok"], planned_ok)
-        self.assertEqual(planned_ok["result"]["verdict"], "needs_gate_approval")
-        self.assertFalse([s for s in planned_ok["result"]["steps"] if s["disposition"] in ("blocked", "unsupported")])
+        art_x = compile_for_adapter(bp_x)
+        planned_x = adapter.call("plan", ctx(), {"artifact": art_x})
+        self.assertTrue(planned_x["ok"], planned_x)
+        self.assertEqual(planned_x["result"]["verdict"], "rejected")
+        blocked = [s for s in planned_x["result"]["steps"] if s["disposition"] == "blocked"]
+        by_seq = {s["seq"]: s for s in art_x["steps"]}
+        self.assertEqual([by_seq[s["seq"]]["pointer"] for s in blocked], ["/roles/payment_clerk"])
+        self.assertEqual(blocked[0].get("reasonCode"), "protected_subject")
+        self.assertIsNone(engine.db.get_value("Role", "bp-payment_clerk", "name"))
 
     @staticmethod
     def _two_warehouse_artifact(target: dict) -> dict:
@@ -649,14 +653,10 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         cls.db_path = os.path.join(cls.tmp.name, "adapter.sqlite")
         cls.bp_raw = load_fixture()
         cls.bp_full = without_attachments(cls.bp_raw)
-        cls.bp = (
-            cls.bp_full
-            if os.environ.get("BPL027_PURCHASING_MAPPED") == "1"
-            else without_unmapped_builtin_grants(cls.bp_full)
-        )
+        cls.bp = cls.bp_full
         cls.art_raw = compile_for_adapter(cls.bp_raw)
-        cls.art_full = compile_for_adapter(cls.bp_full)
         cls.art = compile_for_adapter(cls.bp)
+        cls.art_builtin = compile_for_adapter(with_unmapped_builtin_role(cls.bp))
         cls.expected = expected_engine_config(cls.bp)
         cls.adapter = new_adapter(cls.db_path)
         ensure_synthetic_company()
@@ -735,64 +735,31 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         self.assertEqual([seqs[s["seq"]] for s in bad], ["/entities/purchase_invoice"])
         self.state["provisioned"] = True
 
-    @unittest.skipIf(
-        os.environ.get("BPL027_PURCHASING_MAPPED") == "1",
-        "BPL-034 mapped: the purchasing and price-list built-ins are no longer refused; invert or remove this test "
-        "in the follow-up that adds them to ENTITY_TO_DOCTYPE",
-    )
-    def test_01b_plan_refuses_unmapped_builtins_and_allows_delivery_note(self) -> None:
-        """SEC-022 / BPL-032: on a real site, plan refuses role.upsert grants on unmapped built-in DocTypes
-        (Supplier, Price List, Purchase Order/Receipt/Invoice, pending BPL-034) with protected_subject before
-        any write, while delivery_note and mapped/custom grants pass plan."""
+    def test_01b_plan_allows_mapped_purchasing_grants_and_refuses_unmapped_builtins(self) -> None:
+        """SEC-022 / BPL-032 after BPL-034: on a real site, plan lets role.upsert grants on Supplier, Price List and the
+        purchase documents through (gated, never blocked), and still refuses a grant on a built-in DocType outside the
+        reviewed mapping (Payment Entry) with protected_subject, before any write."""
         self.need("provisioned")
         before = fingerprint()
-        plan = self.plan(self.art_full)
-        self.assertEqual(plan["verdict"], "rejected", plan)
-        blocked = [s for s in plan["steps"] if s["disposition"] == "blocked"]
-        by_seq = {s["seq"]: s for s in self.art_full["steps"]}
-        self.assertEqual(len(blocked), len(self.bp_full["roles"]))
-        for s in blocked:
-            self.assertEqual(s.get("reasonCode"), "protected_subject")
-            self.assertEqual(by_seq[s["seq"]]["kind"], "role.upsert")
-        self.assertEqual(fingerprint(), before, "plan modified the site")
-
         mapped_plan = self.plan(self.art)
         self.assertEqual(mapped_plan["verdict"], "needs_gate_approval", mapped_plan)
         self.assertFalse([s for s in mapped_plan["steps"] if s["disposition"] in ("blocked", "unsupported")], mapped_plan)
         self.assertEqual(fingerprint(), before, "plan modified the site")
 
-    @unittest.skipUnless(
-        os.environ.get("BPL027_PURCHASING_MAPPED") == "1",
-        "BPL-034 (purchasing and price-list engine mapping, owned by eldon; contract PR #247): Supplier, Price List, "
-        "Purchase Order, Purchase Receipt and Purchase Invoice lack a contract mapping, so plan refuses role.upsert",
-    )
+        plan = self.plan(self.art_builtin)
+        self.assertEqual(plan["verdict"], "rejected", plan)
+        blocked = [s for s in plan["steps"] if s["disposition"] == "blocked"]
+        by_seq = {s["seq"]: s for s in self.art_builtin["steps"]}
+        self.assertEqual([by_seq[s["seq"]]["pointer"] for s in blocked], ["/roles/payment_clerk"])
+        self.assertEqual(blocked[0].get("reasonCode"), "protected_subject")
+        self.assertEqual(fingerprint(), before, "plan modified the site")
+
     def test_02_plan_preview_and_ddl_gate_refuses_without_gate_approval(self) -> None:
-        """Requires BPL-034 (purchasing and price-list engine mapping, owned by eldon) covering Supplier, Price List,
-        and Purchase Order/Receipt/Invoice; set BPL027_PURCHASING_MAPPED=1 once mapped."""
         self.need("provisioned")
         self._plan_preview_and_refuse_without_gate()
 
-    @unittest.skipUnless(
-        os.environ.get("BPL027_PURCHASING_MAPPED") == "1",
-        "BPL-034 (purchasing and price-list engine mapping, owned by eldon; contract PR #247): missing contract mapping "
-        "for Supplier, Price List and Purchase Order/Receipt/Invoice",
-    )
     def test_03_apply_through_real_adapter(self) -> None:
-        """Requires BPL-034 (purchasing and price-list engine mapping, owned by eldon) covering Supplier, Price List,
-        and Purchase Order/Receipt/Invoice (BPL-034, contract PR #247). Flagged with skipUnless on BPL027_PURCHASING_MAPPED=1 so live
-        runs will not fail with 'unexpected success' once BPL-034 lands; unflag after BPL-034 merges."""
         self.need("plan")
-        self._apply_planned_artifact()
-
-    @unittest.skipIf(
-        os.environ.get("BPL027_PURCHASING_MAPPED") == "1",
-        "BPL-034 mapped: test_02 and test_03 plan and apply the full fixture",
-    )
-    def test_03b_apply_mapped_fixture_through_real_adapter(self) -> None:
-        """While BPL-034 is unmapped, plan, gate-check and apply without_unmapped_builtin_grants(bp) so live read-back
-        and security tests (test_04, test_04b, test_06, test_07, test_08) run now instead of skipping."""
-        self.need("provisioned")
-        self._plan_preview_and_refuse_without_gate()
         self._apply_planned_artifact()
 
     def test_04_readback_roles_workflows_reports_locations_settings(self) -> None:

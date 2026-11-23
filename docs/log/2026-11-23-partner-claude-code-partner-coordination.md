@@ -58,3 +58,5 @@ Unknown.
   - Review dispatched: ChatGPT gpt-6.1-sol (high), code-correctness review of #299 at `85998d2`, read-only.
   - Review result, gpt-6.1-sol: REQUEST_CHANGES at `85998d2` (3 Medium: vacuous zero-test runs pass; phase time budget leaves no headroom; one failed site drop leaks the others). Posted on #299. Back-dated figures agree with the Decimal oracle; no ledger logic changed.
   - Fixes dispatched: Claude Sonnet, test-first, in the #299 checkout only; allowed `run_real_bench_ci.py`, `infra/dev/docker/tests/**`, `real-bench.yml`, the PR's own log; no git.
+- CMP-036 returned: Q1-C product-choice list, Q2-A open blockers with a resolution record, Lows 2 to 7, ADR-0067 (Proposed), 44 new tests; shipped packs still refused in production. The coordinator cut `cmp-036-pack-production-rules` from main, applied the diff, set CMP-035 `done` and CMP-036 `doing`, re-ran the suite (173 OK) and opened PR #300 at `1998c4a` (Tier 3).
+  - Review dispatched: ChatGPT gpt-6.1-sol (high), code-correctness review of #300 at `1998c4a`, read-only, focused on fail-open paths and the author's stated readings.

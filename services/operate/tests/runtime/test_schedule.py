@@ -34,7 +34,12 @@ DEFS = [tool("sales_order.list", kind="read"), tool("customer_note.create", "R1"
         tool("customer_note.transition", "R1", **W), tool("lead.create", "R1", transitions=[], **W),
         tool("memo.create", "R1", kind="write"), tool("memo_two.create", "R1", entity_class="plain")] + [
         tool(n, "R1", **W) for n in ("glPosting.create", "generalledger.create", "zakat_return.create",
-                                     "gosi_contribution.create", "withholding.create", "bank_account.update")]
+                                     "gosi_contribution.create", "withholding.create", "bank_account.update",
+                                     "GLPosting.create", "ZATCAInvoice.create", "salesinvoice.create",
+                                     "payrollrun.create", "journalentry.create", "salaryslip.create",
+                                     "wpsfile.create", "iban_change.create", "vatReturn.create",
+                                     "glNote.create")] + [
+        tool(n, "R1", **W) for n in ("task.create", "visit_report.create", "meeting.update")]
 
 
 class Clock:
@@ -253,7 +258,10 @@ def test_role_escalation_and_malformed_principal():
     ("customer_note.transition", "draft_only"), ("lead.create", "draft_only"), ("memo.create", "draft_only"),
     ("memo_two.create", "draft_only"), ("glPosting.create", "draft_only"), ("generalledger.create", "draft_only"),
     ("zakat_return.create", "draft_only"), ("gosi_contribution.create", "draft_only"),
-    ("withholding.create", "draft_only"), ("bank_account.update", "draft_only")])
+    ("withholding.create", "draft_only"), ("bank_account.update", "draft_only"),
+    *[(n, "draft_only") for n in ("GLPosting.create", "ZATCAInvoice.create", "salesinvoice.create", "payrollrun.create",
+                                  "journalentry.create", "salaryslip.create", "wpsfile.create", "iban_change.create",
+                                  "vatReturn.create", "glNote.create")]])
 def test_draft_only_tool_rules(name, code):
     s, _, _, _ = make()
     refused(code, s.create, OWNER, **(SPEC | {"tools": (name,)}))
@@ -606,9 +614,9 @@ def test_long_gap_is_a_fresh_start_that_keeps_the_ledger():
     assert s.period_spent(OWNER, sch.id) > spent                    # the earlier run still counts after the gap
 
 
-def test_far_future_first_reading_recovers_without_restart():
+def test_far_future_first_reading_recovers_ticking_without_replay():
     s, clock, events, _ = make()
-    s.create(OWNER, **SPEC)
+    sch = s.create(OWNER, **SPEC)
     clock.t = 3_900_000_000                                          # implausible but in range
     s.tick(digest_agent)
     outs = []
@@ -621,7 +629,92 @@ def test_far_future_first_reading_recovers_without_restart():
     assert outs[:-1] == ["clock_fault"] * (S.REBASE_AFTER - 1) and outs[-1] == 0
     assert any(e["type"] == "scheduler.clock_rebase" for e in events)
     clock.t = 1000 + DAY
-    assert len(s.tick(digest_agent)) == 1                            # back on schedule
+    assert s.tick(digest_agent) == []                                # ticks again; no slot below the mark runs
+    assert s.period_spent(OWNER, sch.id) > 0                         # the later row keeps counting (fail closed)
+
+
+def test_rebase_keeps_the_cap_and_never_replays_a_slot():
+    s, clock, events, _ = make(factory=lambda p, b: fake_port(p, b, cls=BadMeter))  # runs settle at the 2,000 hold
+    spec = SPEC | {"cadence_s": 3600, "period_s": DAY, "period_cap": 2_500, "run_cap": 2_000}
+    s.create(OWNER, **spec)
+    t0 = 1000 + 5 * DAY + 10 * 3600
+    recs = []
+    clock.t = t0
+    recs += s.tick(digest_agent)
+    clock.t = t0 + 3600
+    recs += s.tick(digest_agent)
+    assert [r.outcome for r in recs] == ["completed", "refused"]
+    for i in range(S.REBASE_AFTER):                                  # back two days, then rebase
+        clock.t = t0 - 2 * DAY + i
+        try:
+            recs += s.tick(digest_agent)
+        except ScheduleRefused:
+            pass
+    assert any(e["type"] == "scheduler.clock_rebase" for e in events)
+    clock.t = t0 - 2 * DAY + 2.1 * DAY                               # forward again, under the gap rule
+    recs += s.tick(digest_agent)
+    assert [r.outcome for r in recs if r.outcome == "completed"] == ["completed"]   # the cap still binds
+    ids = [r.run_id for r in recs]
+    assert len(ids) == len(set(ids)), ids
+
+
+def test_platform_errors_are_not_counted_as_the_schedules_fault():
+    state = {"defs": True, "factory": True, "port": True}
+
+    def defs(t):
+        if not state["defs"]:
+            raise OSError("store down")
+        return DEFS
+
+    class Flaky(FakeModelCallPort):
+        def complete(self, request):
+            if not state["port"]:
+                raise ConnectionError("gateway down")
+            return super().complete(request)
+
+    def factory(p, b):
+        if not state["factory"]:
+            raise OSError("factory down")
+        return fake_port(p, b, cls=Flaky)
+    s = Scheduler(tool_defs=defs, roles_of=lambda t, u: ("sales",), port_factory=factory, clock=Clock(0),
+                  emit=lambda e: None)
+    clock = s._clock
+    sch = s.create(OWNER, **(SPEC | {"period_cap": 50_000}))
+    day = 0
+    for key in ("defs", "factory", "port"):
+        state[key] = False
+        for _ in range(S.MAX_FAILURES):
+            clock.t = 1000 + day * DAY
+            day += 1
+            assert s.tick(digest_agent)[0].code == "platform_unavailable"
+        state[key] = True
+    assert s.get(OWNER, sch.id).active
+
+    def boom(ctx):
+        raise RuntimeError("agent bug")
+    clock.t = 1000 + day * DAY
+    assert s.tick(boom)[0].code == "run_failed"                       # a genuine agent error still counts
+
+
+def test_resume_refuses_an_active_schedule_and_keeps_the_count():
+    s, clock, _, _ = make()
+    sch = s.create(OWNER, **(SPEC | {"period_cap": 50_000}))
+
+    def boom(ctx):
+        raise RuntimeError("x")
+    for day in range(S.MAX_FAILURES - 1):
+        clock.t = 1000 + day * DAY
+        s.tick(boom)
+    refused("already_active", s.resume, OWNER, sch.id)
+    clock.t = 1000 + (S.MAX_FAILURES - 1) * DAY
+    s.tick(boom)
+    assert not s.get(OWNER, sch.id).active                            # the count was not reset
+
+
+def test_ordinary_tool_names_stay_schedulable():
+    s, _, _, _ = make()
+    tools = ("sales_order.list", "customer_note.create", "task.create", "visit_report.create", "meeting.update")
+    assert s.create(OWNER, **(SPEC | {"tools": tools})).tools == tools
 
 
 def test_concurrent_holds_of_one_owner_count_against_the_cap():

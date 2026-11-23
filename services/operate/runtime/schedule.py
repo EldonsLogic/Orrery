@@ -28,7 +28,8 @@ log = logging.getLogger("schedule")
 CODES = frozenset({"invalid_schedule", "not_found", "tenant_mismatch", "owner_mismatch", "role_escalation",
                    "tool_not_allowed", "draft_only", "owner_permission_lost", "budget_exhausted", "overlap",
                    "clock_fault", "port_refused", "run_failed", "run_timeout", "audit_unavailable",
-                   "tenant_budget_missing", "schedule_limit", "roles_unavailable"})
+                   "tenant_budget_missing", "schedule_limit", "roles_unavailable", "platform_unavailable",
+                   "already_active"})
 FIELDS = ("agent_role", "tools", "cadence_s", "start_at", "run_cap", "period_s", "period_cap")
 # Platform defaults (ADR-0064 item 4; placeholders per Q-156, UNVERIFIED against real pricing).
 MIN_CADENCE_S, MIN_PERIOD_S, MAX_PERIOD_S = 300, 86400, 366 * 86400
@@ -41,9 +42,10 @@ MAX_EPOCH_S = 4_102_444_800             # 2100-01-01: a larger reading is a cloc
 MAX_FAILURES = 3                        # consecutive self-caused failed runs before the schedule is suspended
 SELF_CAUSED = frozenset({"run_failed", "tool_not_allowed", "draft_only"})  # platform outages never count
 READ_VERBS = frozenset({"get", "list"})  # `export` is egress (Tool API section 11), not a read
-RIGID_TOKENS = frozenset({"einvoice", "zatca", "fatoora", "wps", "gl", "posting", "tax", "vat", "payroll",
-                          "salary", "payslip", "ledger", "journal", "invoice", "invoices", "generalledger", "zakat",
-                          "gosi", "withholding", "bank"})
+# Rigid-zone words, matched as substrings of the lowercased name with separators removed (GLPosting, salesinvoice).
+RIGID_SUBSTRINGS = ("invoice", "zatca", "fatoora", "wps", "posting", "tax", "payroll", "salary", "payslip", "ledger",
+                    "journal", "zakat", "gosi", "withholding", "bank", "iban")
+RIGID_TOKENS = frozenset({"gl", "vat"})  # too short for substring matching (global, private): whole tokens only
 HARD_STOP = (KeyboardInterrupt, SystemExit, GeneratorExit)
 _SPLIT = re.compile(r"[^a-z0-9]+")
 _CAMEL = re.compile(r"([a-z0-9])([A-Z])")
@@ -52,6 +54,11 @@ _RUNS: dict = {}                        # opaque run token -> run state; the age
 
 def _tokens(name: str) -> set:
     return {t for t in _SPLIT.split(_CAMEL.sub(r"\1_\2", name).lower()) if t}
+
+
+def _rigid(name: str) -> bool:
+    flat = _SPLIT.sub("", name.lower())
+    return any(w in flat for w in RIGID_SUBSTRINGS) or bool(_tokens(name) & RIGID_TOKENS)
 
 
 def _ctx_functions(token: str):
@@ -144,6 +151,8 @@ class _Meter:
         except ModelCallRefused as exc:
             charged = not exc.reservation_released
             raise
+        except Exception as exc:                                  # the port failed, not the schedule
+            raise ScheduleRefused("platform_unavailable") from exc
         finally:
             self._attribute(before, charged)
 
@@ -262,6 +271,8 @@ class Scheduler:
         with self._lock:
             try:
                 old = self.get(who, schedule_id)
+                if old.active:
+                    raise ScheduleRefused("already_active")       # resume never resets a running schedule's count
                 if sum(1 for s in self._s.values() if s.active and s.tenant_id == who.tenant_id
                        and s.owner_id == who.user_id and s.id != old.id) >= MAX_SCHEDULES_PER_OWNER:
                     raise ScheduleRefused("schedule_limit")
@@ -310,7 +321,11 @@ class Scheduler:
         self._check_tools(s)
 
     def _check_tools(self, s: Schedule) -> None:
-        allow = resolve_allowlist(self._defs(s.tenant_id), (s.agent_role,))
+        try:
+            defs = self._defs(s.tenant_id)
+        except Exception as exc:                                  # the store failed, not the schedule
+            raise ScheduleRefused("platform_unavailable") from exc
+        allow = resolve_allowlist(defs, (s.agent_role,))
         for name in s.tools:
             if name not in allow.menu:
                 raise ScheduleRefused("tool_not_allowed")
@@ -330,7 +345,7 @@ class Scheduler:
             return False
         if d.get("kind") != "write" or d.get("entity_class") != "plain":
             return True                                           # missing kind or class is never plain
-        return bool(_tokens(domain) & RIGID_TOKENS) or A.posting_entity(d, domain)
+        return _rigid(domain) or A.posting_entity(d, domain)
 
     def _record(self, type_: str, tenant_id, subject, data: dict) -> None:
         try:
@@ -400,13 +415,13 @@ class Scheduler:
             self._ledger[key] = [(t + delta, c) for t, c in rows]
 
     def _rebase(self, now, last) -> None:
-        """Follow a clock that is consistently earlier: keep every spend row (clamped to now), mark slots done."""
+        """Follow a clock that is consistently earlier. Spend rows are kept as they are (a row ahead of now keeps
+        counting) and slot marks only ever rise, so no slot runs twice and the cap still binds."""
         self._clock_event("scheduler.clock_rebase", last)
         self._backward, self._last_now = [], now
-        for key, rows in self._ledger.items():
-            self._ledger[key] = [(min(t, now), c) for t, c in rows]
         for sid, sch in self._s.items():
-            self._last_slot[sid] = int((now - sch.start_at) // sch.cadence_s) if now >= sch.start_at else -1
+            cur = int((now - sch.start_at) // sch.cadence_s) if now >= sch.start_at else -1
+            self._last_slot[sid] = max(self._last_slot.get(sid, -1), cur)
 
     def _claim(self, sid: str, now):
         """Under the lock: re-read the schedule and claim its slot, or say why not. Returns (sch, slot, refusal)."""
@@ -461,7 +476,10 @@ class Scheduler:
                          "actor_id": f"agent_{sid}", "role_ids": [sch.agent_role], "on_behalf_of": sch.owner_id,
                          "agent_id": f"agent_{sid}", "run_id": run_id, "thread_id": run_id,
                          "tool_grant": list(sch.tools)}
-            port = self._factory(copy.deepcopy(principal), {"run": sch.run_cap})
+            try:
+                port = self._factory(copy.deepcopy(principal), {"run": sch.run_cap})
+            except Exception as exc:
+                raise ScheduleRefused("platform_unavailable") from exc
             if getattr(port, "principal", {}).get("tenant_id") != sch.tenant_id:
                 raise ScheduleRefused("tenant_mismatch")
             if "tenant" not in tuple(getattr(port, "layers", ())) or "run" not in tuple(getattr(port, "layers", ())):

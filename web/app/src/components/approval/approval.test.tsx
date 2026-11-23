@@ -5,6 +5,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { messages } from '../../i18n';
 import { buildRequest, emptyForm, formKey, nextStatus, submitDecision, type Form } from '../../approval/decide';
 import { messagePath, percentText } from '../../approval/labels';
+import { regionName } from '../../blueprint/format';
 import { INJECTION, fakePort, fixtureBlockedReview, fixtureInjectionReview, fixtureReview } from '../../approval/fixture';
 import type { DecisionKey, ReviewModel } from '../../approval/types';
 import { OwnerApprovalView } from './OwnerApprovalView';
@@ -63,7 +64,7 @@ describe('owner approval screen', () => {
     const out = page(fixtureReview, 'en');
     expect(out).toContain('VAT 15%');
     expect(out).toContain(messages.en.ownerApproval.ui.vatRegistered);
-    expect(out).toContain('phase_1');
+    expect(out).toContain(messages.en.ownerApproval.ui.mode.zatca_phase1);
     expect(out).toContain(messages.en.ownerApproval.ui.country);
     expect(page(fixtureReview, 'ar')).toContain(messages.ar.ownerApproval.ui.eInvoicing);
   });
@@ -170,6 +171,40 @@ describe('owner approval form and status', () => {
   it('formats basis points as a percent', () => {
     const rows: Array<[number, string]> = [[0, '0'], [5, '0.05'], [50, '0.5'], [1405, '14.05'], [1450, '14.5'], [1500, '15'], [10000, '100']];
     for (const [bp, text] of rows) expect(percentText(bp)).toBe(text);
+  });
+});
+
+describe('owner approval compliance row', () => {
+  const withCompliance = (c: object) => ({ ...fixtureReview, sections: fixtureReview.sections.map((s) => (s.id === 'summary' ? { ...s, compliance: { ...s.compliance, ...c } } : s)) }) as ReviewModel;
+  it('hides the country row for an empty or malformed code instead of throwing', () => {
+    for (const country of ['', 'sa', 'SAU', '1!', 'S']) {
+      const out = page(withCompliance({ country }), 'en');
+      expect(out).not.toContain(messages.en.ownerApproval.ui.country);
+    }
+    expect(page(withCompliance({ country: 'AE' }), 'en')).toContain('United Arab Emirates');
+  });
+  it('regionName falls back to the code for a malformed one', () => {
+    expect(regionName('zz1', 'en')).toBe('zz1');
+    expect(regionName('', 'en')).toBe('');
+    expect(regionName('SA', 'en')).toBe('Saudi Arabia');
+  });
+  it('names every e-invoicing contract value in both languages, and an unknown one neutrally', () => {
+    for (const mode of ['none', 'zatca_phase1', 'zatca_phase2', 'uae_e_invoicing', 'eg_e_invoice']) {
+      for (const l of ['en', 'ar'] as const) {
+        const label = (messages[l].ownerApproval.ui.mode as Record<string, string>)[mode];
+        expect(label, `${l} ${mode}`).toBeTruthy();
+        const out = page(withCompliance({ eInvoicingMode: mode }), l);
+        expect(out).toContain(label);
+        expect(out).not.toContain(mode);
+      }
+    }
+    expect(page(withCompliance({ eInvoicingMode: 'made_up' }), 'en')).not.toContain('made_up');
+    expect(fixtureReview.sections[0]).toMatchObject({ compliance: { eInvoicingMode: 'zatca_phase1' } });
+  });
+  it('joins lists with the locale list format', () => {
+    const en = page(fixtureReview, 'en');
+    expect(en).toContain('Record 1, Process 1, and Job role 1');
+    expect(en).toContain('Logo and colours and Language settings');
   });
 });
 

@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Alert, Badge, Button, Card, Checkbox, Select, TextField } from '../../ui';
+import { joinList, regionName } from '../../blueprint/format';
 import { messagePath, percentText } from '../../approval/labels';
 import { buildRequest, emptyForm, formKey, nextStatus, submitDecision, type Form, type Status } from '../../approval/decide';
 import type {
@@ -26,6 +27,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
     return t.has(p) ? t(p, values) : t('ui.unknownLabel');
   };
   const loc = (l: Loc) => (locale === 'ar' ? l.ar || l.en : l.en || l.ar) + (l.cut ? ` ${t('ui.cut')}` : '');
+  const list = (items: ReadonlyArray<string>) => joinList(items, locale);
   const money = (m: Money) => <bdi dir="ltr" className={styles.num}>{`${m.currency} ${m.text}`}</bdi>;
   const when = (iso: string) => {
     const d = new Date(iso);
@@ -88,10 +90,12 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
         ) : null}
       </Card>
       <Card className={styles.card}>
-        <p className={styles.line}>
-          <span className={styles.muted}>{t('ui.country')}</span>
-          <bdi>{new Intl.DisplayNames(locale, { type: 'region' }).of(s.compliance.country) ?? s.compliance.country}</bdi>
-        </p>
+        {/^[A-Z]{2}$/.test(s.compliance.country) ? (
+          <p className={styles.line}>
+            <span className={styles.muted}>{t('ui.country')}</span>
+            <bdi>{regionName(s.compliance.country, locale)}</bdi>
+          </p>
+        ) : null}
         {s.compliance.vatRegistered === null ? null : (
           <p className={styles.line}>
             <span className={styles.muted}>{t('ui.vatRegistered')}</span>
@@ -101,12 +105,12 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
         {s.compliance.eInvoicingMode ? (
           <p className={styles.line}>
             <span className={styles.muted}>{t('ui.eInvoicing')}</span>
-            <bdi>{s.compliance.eInvoicingMode}</bdi>
+            <bdi>{t.has(`ui.mode.${s.compliance.eInvoicingMode}`) ? t(`ui.mode.${s.compliance.eInvoicingMode}`) : t('ui.unknownLabel')}</bdi>
           </p>
         ) : null}
       </Card>
       <p className={styles.muted}>
-        {t('ui.counts')}: {Object.entries(s.counts).filter(([, n]) => n > 0).map(([k, n]) => `${say(`oa.kind.${k}`)} ${n}`).join(', ')}
+        {t('ui.counts')}: {list(Object.entries(s.counts).filter(([, n]) => n > 0).map(([k, n]) => `${say(`oa.kind.${k}`)} ${n}`))}
       </p>
       <ul className={`${styles.list} ${styles.plain}`}>
         {s.items.length === 0 ? <li className={styles.muted}>{t('ui.noItems')}</li> : null}
@@ -123,7 +127,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
       </ul>
       {s.moreItems > 0 ? <Alert tone="warning" title={t('ui.more', { count: s.moreItems })} /> : null}
       <p className={styles.muted}>
-        {say(s.notShownNoticeKey)} {s.notShown.map((n) => say(n.labelKey)).join(', ')}.
+        {say(s.notShownNoticeKey)} {list(s.notShown.map((n) => say(n.labelKey)))}.
       </p>
     </>
   );

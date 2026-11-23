@@ -1360,7 +1360,14 @@
       "vatRegistered": "VAT registered",
       "eInvoicing": "E-invoicing mode",
       "counts": "What the plan holds",
-      "sampleNotice": "Sample data. Nothing you do here is saved."
+      "sampleNotice": "Sample data. Nothing you do here is saved.",
+      "mode": {
+        "none": "None",
+        "zatca_phase1": "Saudi phase 1 (generation)",
+        "zatca_phase2": "Saudi phase 2 (integration)",
+        "uae_e_invoicing": "UAE e-invoicing",
+        "eg_e_invoice": "Egypt e-invoice"
+      }
     },
     "title": "Approve your plan",
     "intro": "Read this page, then choose. Nothing goes live from here.",

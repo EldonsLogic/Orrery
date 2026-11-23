@@ -364,6 +364,314 @@ class TestReviewFixesQuarantine(unittest.TestCase):
         self.assertEqual(self.hidden(sim, "Item", "custom_review_note"), 0, "re-apply must restore the field")
 
 
+def field_add_step(entity_id: str, definition: dict) -> dict:
+    return {"seq": 1, "kind": "field.add", "pointer": f"/entities/{entity_id}/fields/{definition['id']}",
+            "subject": {"kind": "field", "id": definition["id"], "parents": [{"kind": "entity", "id": entity_id}]},
+            "params": {"definition": definition}}
+
+
+def set_property_step(entity_id: str, field_id: str, prop: str, before: object, after: object) -> dict:
+    return {"seq": 1, "kind": "field.set_property", "pointer": f"/entities/{entity_id}/fields/{field_id}",
+            "subject": {"kind": "field", "id": field_id, "parents": [{"kind": "entity", "id": entity_id}]},
+            "params": {"property": prop, "before": before, "after": after}}
+
+
+def has_grant(eng: CaseInsensitiveEngine, role_name: str, doctype: str) -> bool:
+    """Does the role hold a level-0 read rule on the type at all (the grant applied rather than withheld)?"""
+    return any(r.get("role") == role_name and r.get("parent") == doctype and int(r.get("permlevel") or 0) == 0
+               and int(r.get("read") or 0) for r in eng.rows("Custom DocPerm"))
+
+
+def permlevel(eng: CaseInsensitiveEngine, doctype: str, fieldname: str) -> int:
+    return int(getattr(eng.get_meta(doctype).get_field(fieldname), "permlevel", 0) or 0)
+
+
+def seed_constraint(eng: CaseInsensitiveEngine, doctype: str, fieldname: str, *, unique: int = 0, search_index: int = 0) -> None:
+    """Set unique and search_index on a field the engine already holds, native or custom (read back through its meta)."""
+    site = eng.current_site_db()
+    custom = site.rows["tabCustom Field"].get(f"{doctype}-{fieldname}")
+    target = custom if custom is not None else next(f for f in site.doctype_meta[doctype]["fields"] if f["fieldname"] == fieldname)
+    target.update(unique=unique, search_index=search_index)
+
+
+def written_state(eng: CaseInsensitiveEngine) -> tuple:
+    return tuple(eng.rows(t) for t in ("Custom Field", "Property Setter", "Custom DocPerm", "Change Engine Entity Field"))
+
+
+class TestRereviewMaskEveryRepresentation(unittest.TestCase):
+    """Re-review finding 1 (high, security): a hidden field is masked on EVERY engine representation (the contract's native
+    field, same-name or not, and the custom twin), or the grant is withheld."""
+
+    def test_cost_price_is_masked_on_the_native_field_and_on_the_custom_twin(self) -> None:
+        eng = engine()
+        provision_cost_mask(eng)  # valuation_rate on level 1, as tenant provisioning leaves it
+        backend = backend_for(eng)
+        entity_add(backend, entity("item", ("cost_price", "money")))
+        backend.execute_step(TENANT, role_step(role("sales_rep", "item", "cost_price")))
+        self.assertTrue(can_read(eng, "bp-sales_rep", "Item", "item_name"), "the grant must apply, or this test proves nothing")
+        self.assertFalse(can_read(eng, "bp-sales_rep", "Item", "valuation_rate"), "native cost field readable")
+        self.assertGreaterEqual(permlevel(eng, "Item", "custom_cost_price"), 1)
+        self.assertFalse(can_read(eng, "bp-sales_rep", "Item", "custom_cost_price"), "the custom twin leaks the cost")
+
+    def test_vat_number_is_masked_on_tax_id_and_on_the_custom_twin(self) -> None:
+        eng = engine()
+        eng.add_field("Supplier", "tax_id", 1)  # the native field already sits on a protected level
+        backend = backend_for(eng)
+        entity_add(backend, entity("supplier", ("vat_number", "string")))
+        backend.execute_step(TENANT, role_step(role("buyer", "supplier", "vat_number")))
+        self.assertTrue(has_grant(eng, "bp-buyer", "Supplier"), "the grant must apply, or this test proves nothing")
+        self.assertFalse(can_read(eng, "bp-buyer", "Supplier", "tax_id"))
+        self.assertFalse(can_read(eng, "bp-buyer", "Supplier", "custom_vat_number"), "the custom twin leaks the VAT number")
+
+    def test_vat_number_with_tax_id_on_level_zero_withholds_the_grant(self) -> None:
+        eng = engine()
+        eng.add_field("Supplier", "tax_id", 0)
+        backend = backend_for(eng)
+        entity_add(backend, entity("supplier", ("vat_number", "string")))
+        backend.execute_step(TENANT, role_step(role("buyer", "supplier", "vat_number")))
+        self.assertFalse(has_grant(eng, "bp-buyer", "Supplier"))
+        self.assertFalse(can_read(eng, "bp-buyer", "Supplier", "tax_id"))
+        self.assertFalse(can_read(eng, "bp-buyer", "Supplier", "custom_vat_number"))
+
+    def test_a_same_name_native_field_on_level_zero_withholds_the_grant_even_with_a_custom_twin(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        backend.execute_step(TENANT, field_add_step("customer", {"id": "customer_name", "type": "string"}))  # makes the twin
+        self.assertIn("custom_customer_name", custom_fields(eng, "Customer"))
+        backend.execute_step(TENANT, role_step(role("clerk", "customer", "customer_name")))
+        self.assertFalse(can_read(eng, "bp-clerk", "Customer", "customer_name"), "the native customer_name is readable")
+        self.assertFalse(can_read(eng, "bp-clerk", "Customer", "custom_customer_name"))
+        self.assertFalse(has_grant(eng, "bp-clerk", "Customer"), "the native field cannot be masked, so no grant")
+
+    def test_a_same_name_native_field_on_a_protected_level_and_its_twin_are_both_masked(self) -> None:
+        eng = engine()
+        eng.make_property_setter({"doctype": "Customer", "fieldname": "customer_name", "property": "permlevel", "value": 1,
+                                  "property_type": "Int"})
+        backend = backend_for(eng)
+        backend.execute_step(TENANT, field_add_step("customer", {"id": "customer_name", "type": "string"}))
+        backend.execute_step(TENANT, role_step(role("clerk", "customer", "customer_name")))
+        self.assertTrue(has_grant(eng, "bp-clerk", "Customer"), "the grant must apply, or this test proves nothing")
+        self.assertFalse(can_read(eng, "bp-clerk", "Customer", "customer_name"))
+        self.assertFalse(can_read(eng, "bp-clerk", "Customer", "custom_customer_name"))
+
+    def test_a_hidden_field_with_no_engine_representation_withholds_the_grant(self) -> None:
+        eng = engine()  # no custom field and no native field of that name
+        backend_for(eng).execute_step(TENANT, role_step(role("sales_rep", "customer", "credit_limit")))
+        self.assertFalse(has_grant(eng, "bp-sales_rep", "Customer"))
+
+
+class TestRereviewExistingFieldConstraints(unittest.TestCase):
+    """Re-review finding 2 (high): an existing field is never accepted without a unique or index constraint the definition
+    asks for; a unique or index property change the backend cannot deploy is refused, never reported as applied."""
+
+    def refused(self, step_or_definition: dict, backend: FrappeRuntimeBackend, *, add: bool = True) -> FrappeBackendError:
+        with self.assertRaises(FrappeBackendError) as err:
+            if add:
+                entity_add(backend, step_or_definition)
+            else:
+                backend.execute_step(TENANT, step_or_definition)
+        self.assertEqual(err.exception.code, "plan_rejected")
+        self.assertEqual(err.exception.details.get("reasonCode"), "unique_or_index")
+        self.assertTrue(err.exception.side_effect_free)
+        return err.exception
+
+    def test_reapplying_a_constrained_entity_over_an_unconstrained_custom_field_is_refused(self) -> None:
+        for key in ("unique", "indexed"):  # no subTest: pytest without a plugin does not report a failing one
+            eng = engine()
+            backend = backend_for(eng)
+            definition = entity("customer", ("review_code", "string"))
+            entity_add(backend, definition)
+            before = written_state(eng)
+            definition["fields"][0][key] = True
+            self.refused(definition, backend)
+            self.assertEqual(written_state(eng), before, key)
+
+    def test_a_constrained_definition_over_a_native_field_that_is_not_constrained_is_refused(self) -> None:
+        for key in ("unique", "indexed"):
+            eng = engine()  # the simulated Customer.customer_name is neither unique nor indexed
+            definition = entity("customer", ("customer_name", "string"))
+            definition["fields"][0][key] = True
+            self.refused(definition, backend_for(eng))
+            self.assertEqual(written_state(eng), written_state(engine()), key)
+
+    def test_an_existing_field_that_already_holds_the_constraint_is_accepted(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        definition = entity("customer", ("review_code", "string"), ("customer_name", "string"), ("note_ref", "string"))
+        entity_add(backend, entity("customer", ("review_code", "string"), ("note_ref", "string")))
+        seed_constraint(eng, "Customer", "custom_review_code", unique=1)
+        seed_constraint(eng, "Customer", "custom_note_ref", search_index=1)
+        seed_constraint(eng, "Customer", "customer_name", search_index=1)
+        definition["fields"][0]["unique"] = True
+        definition["fields"][1]["indexed"] = True
+        definition["fields"][2]["indexed"] = True
+        before = written_state(eng)
+        entity_add(backend, definition)
+        self.assertEqual(written_state(eng), before)
+
+    def test_a_unique_engine_field_satisfies_an_index_request(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        definition = entity("customer", ("review_code", "string"))
+        entity_add(backend, definition)
+        seed_constraint(eng, "Customer", "custom_review_code", unique=1)
+        definition["fields"][0]["indexed"] = True
+        entity_add(backend, definition)  # a unique index is an index
+
+    def test_item_code_is_refused_when_the_engine_does_not_report_it_unique(self) -> None:
+        eng = engine()
+        seed_constraint(eng, "Item", "item_code", unique=0)
+        definition = entity("item", ("item_code", "string"))
+        definition["fields"][0]["unique"] = True
+        self.refused(definition, backend_for(eng))
+
+    def test_field_add_over_an_existing_unconstrained_field_is_refused(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        entity_add(backend, entity("customer", ("review_code", "string")))
+        before = written_state(eng)
+        step = field_add_step("customer", {"id": "review_code", "type": "string", "unique": True})
+        self.refused(step, backend, add=False)
+        self.assertEqual(written_state(eng), before)
+
+    def test_set_property_unique_or_indexed_on_an_unconstrained_field_is_refused(self) -> None:
+        for prop in ("/unique", "/indexed"):
+            eng = engine()
+            backend = backend_for(eng)
+            entity_add(backend, entity("customer", ("review_code", "string")))
+            before = written_state(eng)
+            self.refused(set_property_step("customer", "review_code", prop, False, True), backend, add=False)
+            self.assertEqual(written_state(eng), before, prop)
+
+    def test_set_property_unique_on_a_native_field_without_a_twin_is_refused(self) -> None:
+        eng = engine()
+        self.refused(set_property_step("customer", "customer_name", "/unique", False, True), backend_for(eng), add=False)
+
+    def test_set_property_that_the_engine_already_reflects_is_accepted_and_writes_nothing(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        entity_add(backend, entity("customer", ("review_code", "string"), ("plain", "string")))
+        seed_constraint(eng, "Customer", "custom_review_code", unique=1)
+        before = written_state(eng)
+        backend.execute_step(TENANT, set_property_step("customer", "review_code", "/unique", False, True))
+        backend.execute_step(TENANT, set_property_step("customer", "review_code", "/indexed", False, True))  # unique implies index
+        backend.execute_step(TENANT, set_property_step("customer", "plain", "/unique", True, False))
+        self.assertEqual(written_state(eng), before)
+
+    def test_set_property_that_would_remove_an_enforced_constraint_is_refused(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        entity_add(backend, entity("customer", ("review_code", "string")))
+        seed_constraint(eng, "Customer", "custom_review_code", unique=1)
+        self.refused(set_property_step("customer", "review_code", "/unique", True, False), backend, add=False)
+
+    def test_public_api_set_property_unique_is_not_reported_applied(self) -> None:
+        from change_engine.adapter import ADAPTER_ID, ChangeEngineAdapter, SimulatedFrappeRuntime
+        from change_engine.api.endpoints import FrappeDeploymentAdapter
+        from change_engine.tests.test_bpl_008_blueprint_rollback import _apply, _ctx, _k, _make_artifact
+
+        FrappeDeploymentAdapter.reset_in_memory_state()
+        self.addCleanup(FrappeDeploymentAdapter.reset_in_memory_state)
+        sim = SimulatedFrappeRuntime()
+        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True, offline_ddl_simulator=True)
+        adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
+        tenant = "t_alpha"
+        prov = adapter.call("provision_site", _ctx(tenant), {"idempotencyKey": _k("prov_bpl031_u"),
+                            "engineTarget": {"adapter": ADAPTER_ID, "versionSet": "set-example"},
+                            "blueprintId": "example-trading-001", "siteClass": "production", "countryPack": "sa"})
+        self.assertTrue(prov["ok"], prov)
+        v1, _v2, _bp = item_review_artifacts()
+        first = _apply(adapter, tenant, v1, "bpl031_u_v1")
+        self.assertTrue(first["ok"] and first["result"]["status"] == "applied", first)
+        pointer = "/entities/customer/fields/vat_number"
+
+        def step(before: bool, after: bool) -> dict:
+            return {"seq": 1, "phase": 6, "kind": "field.set_property", "pointer": pointer, "impact": "data_shape", "ddlImpact": "semantic",
+                    "subject": {"kind": "field", "id": "vat_number", "parents": [{"kind": "entity", "id": "customer"}]},
+                    "reversible": True, "params": {"property": "/unique", "before": before, "after": after},
+                    "sourceOps": [pointer + "/unique"]}
+
+        post = [{"id": "pc_001", "check": "exists", "pointer": pointer}]
+        rev2 = {"hash": "sha256:" + ("2" * 64), "revision": 2}
+        inverse = _make_artifact(bp_id="example-trading-001", kind="inverse", base=rev2, target=v1["blueprint"]["target"],
+                                 steps=[step(True, False)], post_conditions=post, diff_hash="sha256:" + ("c" * 64))
+        v2 = _make_artifact(bp_id="example-trading-001", kind="forward", base=v1["blueprint"]["target"], target=rev2,
+                            steps=[step(False, True)], post_conditions=post, diff_hash="sha256:" + ("b" * 64), inverse=inverse)
+        res = _apply(adapter, tenant, v2, "bpl031_u_v2")
+        self.assertFalse(res["ok"] and res["result"]["status"] == "applied", "an unenforced unique property was reported applied")
+        with backend._site_session(tenant):
+            self.assertFalse(getattr(sim.get_meta("Customer").get_field("custom_vat_number"), "unique", 0))
+        fields = adapter.store.get_site(tenant).config["entities"][0]["fields"]
+        self.assertFalse(next(f for f in fields if f["id"] == "vat_number").get("unique"), "the exported config claims unique")
+
+
+class TestRereviewJournalOwnership(unittest.TestCase):
+    """Re-review finding 3 (medium): a journal row is intent (pending) until this adapter has created the field (created);
+    only created rows are quarantined or restored, and a field that appears without our creation is never ours."""
+
+    def hidden(self, eng: CaseInsensitiveEngine, fieldname: str) -> int:
+        return int(getattr(eng.get_meta("Customer").get_field(fieldname), "hidden", 0) or 0)
+
+    def failing_creation(self, backend: FrappeRuntimeBackend, definition: dict) -> None:
+        with mock.patch.object(backend, "_apply_or_restore_custom_field", side_effect=RuntimeError("field creation failed")):
+            with self.assertRaises(FrappeBackendError):
+                entity_add(backend, definition)
+
+    def test_the_row_is_pending_until_the_field_is_created(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        definition = entity("customer", ("review_note", "string"))
+        self.failing_creation(backend, definition)
+        self.assertEqual({(r["fieldname"], r.get("status")) for r in eng.rows("Change Engine Entity Field")},
+                         {("custom_review_note", "pending")})
+        entity_add(backend, definition)
+        self.assertEqual({(r["fieldname"], r.get("status")) for r in eng.rows("Change Engine Entity Field")},
+                         {("custom_review_note", "created")})
+
+    def test_an_independent_field_after_a_failed_creation_is_never_quarantined(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        definition = entity("customer", ("review_note", "string"))
+        self.failing_creation(backend, definition)  # the intent is journaled, the field is not created
+        backend.execute_step(TENANT, field_add_step("customer", definition["fields"][0]))  # someone else creates it
+        entity_add(backend, definition)  # the retry finds the field already there
+        TestReviewFixesQuarantine().quarantine(backend, definition)
+        self.assertEqual(self.hidden(eng, "custom_review_note"), 0, "the independently created field was hidden")
+        self.assertEqual(eng.rows("Property Setter"), [])
+        self.assertEqual([r for r in eng.rows("Change Engine Entity Field") if r.get("status") == "pending"], [],
+                         "a stale pending row must not outlive the field that appeared without us")
+
+    def test_a_field_created_independently_between_the_journal_and_our_creation_is_not_adopted(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        definition = entity("customer", ("review_note", "string"))
+        record = backend._record_entity_fields
+
+        def record_then_race(*args, **kwargs):
+            record(*args, **kwargs)
+            backend.execute_step(TENANT, field_add_step("customer", definition["fields"][0]))
+
+        with mock.patch.object(backend, "_record_entity_fields", side_effect=record_then_race):
+            entity_add(backend, definition)
+        TestReviewFixesQuarantine().quarantine(backend, definition)
+        self.assertEqual(self.hidden(eng, "custom_review_note"), 0)
+
+    def test_a_pending_row_is_not_restored_or_quarantined(self) -> None:
+        eng = engine()
+        backend = backend_for(eng)
+        definition = entity("customer", ("review_note", "string"))
+        backend.execute_step(TENANT, field_add_step("customer", definition["fields"][0]))
+        backend.execute_step(TENANT, {"seq": 1, "kind": "field.quarantine", "pointer": "/entities/customer/fields/review_note",
+                                      "subject": {"kind": "field", "id": "review_note", "parents": [{"kind": "entity", "id": "customer"}]},
+                                      "params": {}})
+        eng.db.sql("CREATE TABLE IF NOT EXISTS `tabChange Engine Entity Field` (doctype VARCHAR(140), fieldname VARCHAR(140), status VARCHAR(16))")
+        eng.db.sql("INSERT IGNORE INTO `tabChange Engine Entity Field` (doctype, fieldname, status) VALUES (%s, %s, 'pending')",
+                   ("Customer", "custom_review_note"))
+        self.assertEqual(self.hidden(eng, "custom_review_note"), 1)
+        entity_add(backend, definition)  # a hidden field with only a pending row is not ours to restore
+        self.assertEqual(self.hidden(eng, "custom_review_note"), 1)
+
+
 class TestFixtureReadBack(unittest.TestCase):
     """The offline twin of bench test_05: apply every fixture entity, then read the engine back."""
 

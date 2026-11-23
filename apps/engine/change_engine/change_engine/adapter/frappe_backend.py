@@ -607,7 +607,16 @@ class FrappeRuntimeBackend:
                     fieldname = _sanitize_custom_fieldname(str(subject.get("id") or segs[-1]))
                     prop_ptr = str(params.get("property") or "")
                     mapped = _BP_PROP_TO_FRAPPE.get(prop_ptr)
-                    if mapped:
+                    if prop_ptr in ("/unique", "/indexed"):
+                        # Unique and index are DDL this backend deploys nowhere (Q-603), so the step applies only when the
+                        # engine field already holds exactly the requested value, and then there is nothing to write.
+                        meta = f.get_meta(doctype)
+                        named = (fieldname, str(subject.get("id") or segs[-1]))
+                        holders = [x for x in (meta.get_field(n) for n in named) if x is not None]
+                        wanted = bool(params.get("after"))
+                        if not holders or any(self._has_constraint(x, prop_ptr) != wanted for x in holders):
+                            raise self._refuse("unique_or_index")
+                    elif mapped:
                         frappe_prop, frappe_ptype = mapped
                         if "after" not in params or params.get("after") is None:
                             self._delete_property_setter(dep, doctype, fieldname, frappe_prop)
@@ -789,12 +798,19 @@ class FrappeRuntimeBackend:
         journaled = self._journaled_fields(f, doctype)
         add: list[tuple[str, dict[str, Any]]] = []
         restore: list[tuple[str, dict[str, Any]]] = []
+        present: list[str] = []
         for fld in fields:
             fieldname = _sanitize_custom_fieldname(str(fld.get("id") or "field"))
             held = meta.get_field(fieldname)
-            if held is not None or meta.get_field(str(fld.get("id"))) is not None:
-                # A field the type already holds (a native field of the same name, or one added earlier) is left alone,
-                # except one this adapter added that a rollback hid: re-applying the entity restores it.
+            holders = [x for x in (held, meta.get_field(str(fld.get("id")))) if x is not None]
+            if holders:
+                # A field the type already holds (a native field of the same name, or one added earlier) is left alone, but
+                # only if it already enforces what the definition asks for: skipping it must never apply the field without
+                # its unique or index constraint (Q-603). The exception is a field this adapter added that a rollback hid:
+                # re-applying the entity restores it.
+                if any(self._lacks_constraint(x, fld.get("unique"), fld.get("indexed")) for x in holders):
+                    raise self._refuse("unique_or_index")
+                present.append(fieldname)
                 if held is not None and fieldname in journaled and int(getattr(held, "hidden", 0) or 0):
                     restore.append((fieldname, fld))
                 continue
@@ -804,32 +820,71 @@ class FrappeRuntimeBackend:
                 # its constraint: refuse the entity before any write (Q-603).
                 raise self._refuse("unique_or_index")
             add.append((fieldname, fld))
-        if add:  # recorded before the first field exists, so a rollback finds every field this step may have created
-            self._record_entity_fields(f, doctype, [name for name, _ in add])
-        for fieldname, fld in [*add, *restore]:
+        # Intent first, so a rollback finds every field this step may have created; a row becomes "created" only once this
+        # call has created the field itself, and one whose field appeared without us is dropped, never adopted.
+        if add or present:
+            self._record_entity_fields(f, doctype, [name for name, _ in add], present)
+        for fieldname, fld in add:
+            if self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, fld):
+                self._confirm_entity_field(f, doctype, fieldname)
+        for fieldname, fld in restore:
             self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, fld)
+
+    @staticmethod
+    def _has_constraint(field: Any, prop_ptr: str) -> bool:
+        """Does the engine field carry unique (/unique) or an index (/indexed; a unique field is indexed)?"""
+        is_unique = bool(int(getattr(field, "unique", 0) or 0))
+        return is_unique if prop_ptr == "/unique" else is_unique or bool(int(getattr(field, "search_index", 0) or 0))
+
+    @classmethod
+    def _lacks_constraint(cls, field: Any, unique: Any, indexed: Any) -> bool:
+        """True when a definition asks for unique or index and this engine field does not carry it."""
+        return bool((unique and not cls._has_constraint(field, "/unique")) or (indexed and not cls._has_constraint(field, "/indexed")))
 
     _ENTITY_FIELD_TABLE = "Change Engine Entity Field"
 
     def _journaled_fields(self, f: Any, doctype: str) -> set[str]:
-        """Custom fields an entity.add introduced on this existing type (never native or earlier fields)."""
+        """Custom fields this adapter created for an entity.add on this existing type (never native, earlier or pending)."""
         if not f.db.table_exists(self._ENTITY_FIELD_TABLE):
             return set()
-        rows = f.db.sql(f"SELECT fieldname FROM `tab{self._ENTITY_FIELD_TABLE}` WHERE doctype = %s", (doctype,))
+        rows = f.db.sql(
+            f"SELECT fieldname FROM `tab{self._ENTITY_FIELD_TABLE}` WHERE doctype = %s AND status = 'created'", (doctype,)
+        )
         return {str(r[0]) for r in rows or []}
 
-    def _record_entity_fields(self, f: Any, doctype: str, fieldnames: list[str]) -> None:
-        f.db.sql(
-            f"CREATE TABLE IF NOT EXISTS `tab{self._ENTITY_FIELD_TABLE}` ("
-            "doctype VARCHAR(140) NOT NULL, fieldname VARCHAR(140) NOT NULL, PRIMARY KEY (doctype, fieldname))"
-        )
+    def _record_entity_fields(self, f: Any, doctype: str, fieldnames: list[str], present: list[str]) -> None:
+        """Journal the intent to create fieldnames as pending; drop a stale pending row of a field that now exists."""
+        if fieldnames:
+            f.db.sql(
+                f"CREATE TABLE IF NOT EXISTS `tab{self._ENTITY_FIELD_TABLE}` ("
+                "doctype VARCHAR(140) NOT NULL, fieldname VARCHAR(140) NOT NULL, "
+                "status VARCHAR(16) NOT NULL DEFAULT 'pending', PRIMARY KEY (doctype, fieldname))"
+            )
+        if f.db.table_exists(self._ENTITY_FIELD_TABLE):
+            for fieldname in present:
+                f.db.sql(
+                    f"DELETE FROM `tab{self._ENTITY_FIELD_TABLE}` WHERE doctype = %s AND fieldname = %s AND status = 'pending'",
+                    (doctype, fieldname),
+                )
         for fieldname in fieldnames:
-            f.db.sql(f"INSERT IGNORE INTO `tab{self._ENTITY_FIELD_TABLE}` (doctype, fieldname) VALUES (%s, %s)", (doctype, fieldname))
+            f.db.sql(
+                f"INSERT IGNORE INTO `tab{self._ENTITY_FIELD_TABLE}` (doctype, fieldname, status) VALUES (%s, %s, 'pending')",
+                (doctype, fieldname),
+            )
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
+    def _confirm_entity_field(self, f: Any, doctype: str, fieldname: str) -> None:
+        f.db.sql(
+            f"UPDATE `tab{self._ENTITY_FIELD_TABLE}` SET status = 'created' "
+            "WHERE doctype = %s AND fieldname = %s AND status = 'pending'",
+            (doctype, fieldname),
+        )
         if hasattr(f.db, "commit"):
             f.db.commit()
 
     def _quarantine_entity_fields(self, f: Any, dep: FrappeDeploymentAdapter, tenant_id: str, doctype: str) -> None:
-        """entity.quarantine on a built-in type: hide exactly the custom fields its entity.add introduced; data stays."""
+        """entity.quarantine on a built-in type: hide exactly the custom fields its entity.add created; data stays."""
         meta = f.get_meta(doctype)
         for fieldname in sorted(self._journaled_fields(f, doctype)):
             if fieldname.startswith("custom_") and meta.get_field(fieldname) is not None:
@@ -873,16 +928,20 @@ class FrappeRuntimeBackend:
         doctype: str,
         fieldname: str,
         defn: dict[str, Any],
-    ) -> None:
+    ) -> bool:
+        """Create the custom field, or restore a quarantined one; True only when this call created it."""
         dep_id = self._next_id("dep_cf")
         snap = dep.take_snapshot(doctype, fieldname, expected_deployment_id=dep_id)
         if snap.has_meta and snap.has_col:
-            # Non-destructive restore of a quarantined field (preserve column & existing rows!)
+            # Non-destructive restore of a quarantined field (preserve column & existing rows!). The field exists, so a
+            # unique or index request is only accepted if it already carries it (it is never added here, Q-603).
+            if self._lacks_constraint(f.get_meta(doctype).get_field(fieldname), defn.get("unique"), defn.get("indexed")):
+                raise self._refuse("unique_or_index")
             self._apply_property_setter(dep, tenant_id, doctype, fieldname, "hidden", 0, "Check")
             self._apply_property_setter(dep, tenant_id, doctype, fieldname, "reqd", 1 if defn.get("required") else 0, "Check")
             self._apply_property_setter(dep, tenant_id, doctype, fieldname, "read_only", 1 if defn.get("readOnly") else 0, "Check")
             dep.clear_doctype_cache(doctype)
-            return
+            return False
 
         if snap.has_meta != snap.has_col:
             raise FrappeBackendError("recovery_required", stage="execute")
@@ -923,6 +982,7 @@ class FrappeRuntimeBackend:
             raise FrappeBackendError("recovery_required", stage="execute")
         if status not in ("APPLIED", "ALREADY_APPLIED"):
             raise FrappeBackendError("engine_unavailable", stage="execute")
+        return status == "APPLIED"
 
     def _execute_six_stage_field(
         self,
@@ -1336,24 +1396,29 @@ class FrappeRuntimeBackend:
     def _hidden_fields(meta: Any, fieldnames: set[Any], entity: str, hidden_fields: list[Any]) -> list[str] | None:
         """Engine fields the adapter lays out on permission levels for a grant's hiddenFields; None withholds the grant.
 
-        A mask must protect the engine field that holds the data. Where the mapping contract names a native field
-        (CONTRACT_NATIVE_FIELDS: cost_price is valuation_rate) the custom twin entity.add adds holds nothing, so the
-        native field must already sit on a permission level above 0 (tenant provisioning puts valuation_rate there; the
-        adapter never moves a native field); otherwise, or when the contract names no field on the type, the grant is
-        withheld. Any other field is masked on its custom field, which must exist."""
+        Fail closed: a hidden Blueprint field is masked on EVERY engine field that can hold its data, or the grant is
+        withheld. The representations are the contract's native field (CONTRACT_NATIVE_FIELDS: cost_price is
+        valuation_rate), a native field of the Blueprint's own name (customer_name, the contract's same-name mapping),
+        and the custom twin entity.add or field.add materialised (custom_<id>). The adapter never moves a native field,
+        so each native one must already sit above level 0 (tenant provisioning puts valuation_rate on level 1); one the
+        contract keeps on another record (None) or does not find on the type cannot be masked here. The custom twin, when
+        it exists, is laid out on a protected level. A field with no representation at all cannot be masked either."""
         layout: set[str] = set()
         for h in hidden_fields:
-            key = (entity, str(h))
-            if key in CONTRACT_NATIVE_FIELDS:
-                native = CONTRACT_NATIVE_FIELDS[key]
-                field = meta.get_field(native) if native else None
-                if field is None or int(getattr(field, "permlevel", 0) or 0) < 1:
+            hid = str(h)
+            natives = {hid} & fieldnames
+            if (entity, hid) in CONTRACT_NATIVE_FIELDS:
+                contract = CONTRACT_NATIVE_FIELDS[(entity, hid)]
+                if contract is None or contract not in fieldnames:
                     return None
-                continue
-            custom = _sanitize_custom_fieldname(str(h))
-            if custom not in fieldnames:
+                natives.add(contract)
+            if any(int(getattr(meta.get_field(n), "permlevel", 0) or 0) < 1 for n in natives):
                 return None
-            layout.add(custom)
+            custom = _sanitize_custom_fieldname(hid)
+            if custom in fieldnames:
+                layout.add(custom)
+            elif not natives:
+                return None
         return sorted(layout)
 
     def _grant_doctype(self, f: Any, entity: str) -> str:

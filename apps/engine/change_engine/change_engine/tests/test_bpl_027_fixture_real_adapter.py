@@ -298,14 +298,21 @@ def expected_grants(f, bp: dict) -> dict:
             names = {_attr(d, "fieldname") for d in meta.fields}
             hidden, native, withheld = [], [], False
             for h in p.get("hiddenFields", []):
-                if (p["entity"], h) in CONTRACT_NATIVE:  # the data lives on the native field (or on another record: None)
+                # Every representation is masked or the grant is withheld (BPL-031 re-review): the native field the contract
+                # names (or None: the data lives on another record), a native field of the same name, and the custom twin.
+                held = {h} & names
+                if (p["entity"], h) in CONTRACT_NATIVE:
                     n = CONTRACT_NATIVE[(p["entity"], h)]
-                    # protected only where the native field already sits above level 0; the adapter never moves it
-                    withheld |= n is None or n not in names or int(_attr(meta.get_field(n), "permlevel") or 0) < 1
-                    native.append(n)
+                    withheld |= n is None or n not in names
+                    held |= {n} & names
+                # a native field is protected only where it already sits above level 0; the adapter never moves it
+                withheld |= any(int(_attr(meta.get_field(n), "permlevel") or 0) < 1 for n in held)
+                native += sorted(held)
+                twin = _sanitize_custom_fieldname(h)
+                if twin in names:
+                    hidden.append(twin)
                 else:
-                    hidden.append(_sanitize_custom_fieldname(h))
-                    withheld |= hidden[-1] not in names
+                    withheld |= not held
             if "read" not in acts or withheld:
                 continue
             masked = bool(p.get("hiddenFields") or p.get("readOnlyFields"))

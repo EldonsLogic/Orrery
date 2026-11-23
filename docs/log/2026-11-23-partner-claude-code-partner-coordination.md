@@ -28,6 +28,7 @@ Live coordinator log for the partner's lane (RULES 51, created mid-session when 
 - #230 GOV-056: APPROVED at `9c97b0c` (all 14 earlier log versions preserved); merged.
 - #268 GOV-064: REQUEST_CHANGES at `fa09d47` (side chat); re-review at `dbb17fa`: both findings closed. Sol found `action_policy_enforcer.py:313` (partner lane, ERP-023) still denies sole-owner R1 to R3 self-approval (stricter than Q-563, fails closed). Not a defect in #268: new partner row ERP-033 owns the alignment. APPROVED at `dbb17fa`.
 - #270 SEC-009: REQUEST_CHANGES at `4311b39`. Q-562 wording now matches the partner's answer (accepted by Eldon); a failed rollback still leaves a refused call charged. Re-review at `d2b79e9` (staged publish under the lock): Medium closed, one non-blocking Low (test placement). APPROVED at `d2b79e9`.
+- #296 GOV-069 (final name and mark, ADR-0066) and #297 GOV-070 (rename in Eldon's lane and shared paths): Sol reviews dispatched. Whether the partner agreed to the final name is asked of the partner before any approval.
 
 ## Decisions
 - Q-311 (tenant id format): the partner agrees the event-stream format (letters, digits, underscore) is canonical and provisioning refuses hyphens. Needs Eldon's confirmation before ERP-009 or provisioning changes.

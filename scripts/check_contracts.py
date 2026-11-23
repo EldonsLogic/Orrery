@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parent.parent
 C = ROOT / "contracts"
 # example glob -> schema file
 PAIRS = [("examples/blueprint-*.json", "blueprint.schema.json"),
-         ("examples/compiled-artifact-*.json", "compiled-artifact.schema.json")]
+         ("examples/compiled-artifact-*.json", "compiled-artifact.schema.json"),
+         ("examples/model-call-*.json", "model-call.schema.json")]
 
 
 def main():

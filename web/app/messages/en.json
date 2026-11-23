@@ -1247,6 +1247,16 @@
   "pwa": {
     "name": "The platform",
     "shortName": "Platform",
-    "description": "Run your business from one chat."
+    "description": "Run your business from one chat.",
+    "pageTitle": {
+      "home": "Home",
+      "chat": "Chat",
+      "blueprint": "Business blueprint",
+      "onboarding": "Get started",
+      "records": "Records",
+      "console": "Console",
+      "login": "Sign in",
+      "reset-password": "Reset password"
+    }
   }
 }

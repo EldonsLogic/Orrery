@@ -21,7 +21,7 @@ try:
 except ImportError:
     frappe = None
 
-from .safety_guardrails import ZONE_2_LOCKED_DOCTYPES
+from .safety_guardrails import ZONE_2_LOCKED_DOCTYPES, is_locked_doctype
 from .schema_reconciler import (
     IdempotencyConflictError,
     compute_canonical_payload_hash,
@@ -180,7 +180,7 @@ def validate_report_definition(
 
     # 1. Prohibit internal system DocTypes
     ref_dt = rd.ref_doctype.strip()
-    if ref_dt in PROHIBITED_REPORT_DOCTYPES or any(ref_dt.lower() == p.lower() for p in PROHIBITED_REPORT_DOCTYPES):
+    if is_locked_doctype(rd.ref_doctype, PROHIBITED_REPORT_DOCTYPES):
         errors.append(f"Report creation prohibited on internal system DocType '{ref_dt}' under ADR-001.")
 
     # 2. Check for SQL injection in ref_doctype

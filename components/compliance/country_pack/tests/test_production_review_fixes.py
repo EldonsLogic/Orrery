@@ -12,7 +12,7 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
-from components.compliance.country_pack import PackValidationError, load_country_pack
+from components.compliance.country_pack import PackNotFoundError, PackValidationError, load_country_pack
 from components.compliance.country_pack import certification, evidence as evidence_mod
 from components.compliance.country_pack.tests.test_production_rules import RESOLVED, _Fixture
 
@@ -274,6 +274,24 @@ class TestNoExceptionEscapesTheLoader(_Fixture):
                 with patch.object(certification, "COMPONENTS_ROOT", Path(tmp.name)):
                     with self.assertRaisesRegex(PackValidationError, "requires"):
                         load_country_pack("SA", self.f.packs_dir, version=v)
+
+    def test_oversized_regex_repeat_in_a_tax_pattern_refuses_cleanly(self) -> None:
+        """Re-review 2 at f6a82be: `a{4294967295}` raised OverflowError from re.compile, not a refusal."""
+        for key in ("vatNumberPattern", "crNumberPattern"):
+            with self.subTest(pattern=key):
+                v = self.mutate("pack.json", lambda p, key=key: p["tax"].update({key: "a{4294967295}"}))
+                for environment in ("production", "sandbox", "test"):
+                    with self.assertRaisesRegex(PackValidationError, f"tax.{key}"):
+                        load_country_pack("SA", self.f.packs_dir, version=v, environment=environment)
+
+    def test_oversized_version_selector_is_not_found(self) -> None:
+        """Re-review 2 at f6a82be: a 5,000-digit segment in the requested version raised ValueError from int()."""
+        self.f._write("certified", "verified_official")  # the market directory exists
+        huge = "1" + "0" * 5000
+        for selector in (f"{huge}.0.0", f"0.{huge}.0", f"0.0.{huge}"):
+            with self.subTest(selector=selector[:12]):
+                with self.assertRaises(PackNotFoundError):
+                    load_country_pack("SA", self.f.packs_dir, version=selector)
 
     def test_mutated_manifest_and_evidence_fields_never_raise(self) -> None:
         version = self.f._write("certified", "verified_official")

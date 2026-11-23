@@ -201,7 +201,7 @@ def validate_pack(pack: Any, schema_path: Path | None = None) -> list[str]:
     for pat_key in ("vatNumberPattern", "crNumberPattern"):
         try:
             re.compile(pack["tax"][pat_key])
-        except re.error as exc:
+        except (re.error, OverflowError, RecursionError) as exc:  # e.g. a{4294967295} overflows, not re.error
             errors.append(f"tax.{pat_key}: invalid regex ({exc})")
 
     einv = pack["eInvoicing"]
@@ -250,7 +250,10 @@ def _semver_key(version: str) -> tuple[int, int, int, int, str] | None:
     m = SEMVER_RE.match(version)
     if not m:
         return None
-    major, minor, patch, pre = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+    try:
+        major, minor, patch, pre = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+    except ValueError:  # beyond int()'s digit limit: not a usable version
+        return None
     return (major, minor, patch, 1 if pre is None else 0, pre or "")
 
 

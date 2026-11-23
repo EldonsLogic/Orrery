@@ -49,3 +49,5 @@ Unknown.
 ## Handover to a new coordinator thread (2026-11-23)
 - The earlier coordinator thread stopped; a new Claude Code (Opus) thread owns this branch and log. State at handover: #296 changes requested at `733b470`, #297 approved at `7091c78`, #298 changes requested at `658df11`; no new pushes from Eldon yet. #280, #281, #284 approved by Eldon, waiting for the partner's Tier 3 say-so. GitHub watcher restarted.
 - The partner gave the Tier 3 say-so for #280, #281 and #284 on Eldon's approvals. Merged #284 and #280 (merge commits). #281 then conflicted in `.github/workflows/tests.yml` (both PRs added a test path to one list); main merged into `bpl-032-purchasing-doctypes` keeping both entries (`a14fef9`); the three affected test files pass locally (51 tests). Eldon's approval still stands; merge on green CI.
+- #281 merged on green CI at `a14fef9`.
+- #298 founder question answered by the partner: the kit code in `docs/brand/tools/` was written by the founders and their agents and falls under the repo's proprietary LICENSE. Posted on #298 with a request to record it in PROVENANCE.md; the Mediums and the Low are still open.

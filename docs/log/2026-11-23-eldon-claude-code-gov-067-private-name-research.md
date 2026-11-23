@@ -15,11 +15,11 @@ Added rule 52: candidate names and their screening stay out of the public repo u
 ## Decisions
 - Eldon answered the partner's founder question on #292 (option B), for both founders. Future name and brand screening goes to a private place both founders can read, not the public repo.
 - The BRD-013 screen stays in `docs/research/`. It is already in the public history, so removing it would not undo the exposure.
-- The real protection is registering the domains (seshna.com, seshna.app) and the handles. Eldon does that.
+- The real protection is registering the BRD-013 candidate's domains and handles. Eldon does that.
 
 ## Tokens or cost
 Unknown.
 
 ## Next step
-- Pick the private place for name research, for example a private repo in the new organisation once GOV-002 is done.
-- Register the Seshna domains and handles.
+- GOV-068: pick the shared private place for name research and confirm both founders can read it (GOV-002 alone does not set it up).
+- Register the BRD-013 candidate's domains and handles.

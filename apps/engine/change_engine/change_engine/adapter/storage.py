@@ -289,6 +289,11 @@ class SQLiteAdapterStore:
         row = self.conn.execute(f"SELECT {self._SITE_COLS} FROM adapter_sites WHERE tenant_id = ?", (tenant_id,)).fetchone()
         return self._site_from_row(row) if row is not None else None
 
+    def site_tenants(self) -> list[str]:
+        """Tenants with a site row (a tenant-bound store: only its own). The engine walks them to repair state copies."""
+        where, args = ("WHERE tenant_id = ?", (self.bound_tenant,)) if self.bound_tenant is not None else ("", ())
+        return [r["tenant_id"] for r in self.conn.execute("SELECT tenant_id FROM adapter_sites " + where, args).fetchall()]
+
     def hydrate_site(self, site: SiteRecord) -> SiteRecord:
         self.save_site(site)
         return site

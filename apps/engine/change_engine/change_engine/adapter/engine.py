@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import re
 import secrets
 import time
@@ -230,6 +231,9 @@ class _Missing:
 _MISSING = _Missing()
 
 
+_NO_EXPECT = object()  # `_site_snapshot(expect=...)` left out: an unconditional copy write
+
+
 class _LeaseLost(Exception):
     """This worker no longer owns its operation (lease expired, or another worker recovered it): stop, write nothing."""
 
@@ -415,10 +419,13 @@ class ChangeEngineAdapter:
         self.recover_interrupted()
 
     @staticmethod
-    def _site_snapshot(site: SiteRecord, *, pending: bool = False) -> dict[str, Any]:
+    def _site_snapshot(
+        site: SiteRecord, *, pending: bool = False, token: str | None = None, expect: Any = _NO_EXPECT
+    ) -> dict[str, Any]:
         """The state copy for the tenant database. `pending` writes it as recovery_required: the store has not yet
-        committed the outcome this snapshot describes (BPL-033)."""
-        return {
+        committed the outcome this snapshot describes (BPL-033). `token` tags the write; `expect` makes it a compare-and-set
+        on the token the copy must still carry (see `ChangeEngineAdapter._repair_state_copy`); left out, it is unconditional."""
+        snap = {
             "state": "recovery_required" if pending else site.state,
             "site_class": site.site_class,
             "engine_target": site.engine_target,
@@ -430,7 +437,43 @@ class ChangeEngineAdapter:
             "sync_version": site.sync_version,
             "config": site.config,
             "retained": site.retained,
+            "write_token": token,
         }
+        if expect is not _NO_EXPECT:
+            snap["expect_token"] = expect
+        return snap
+
+    @staticmethod
+    def _mirror_key(snap: dict[str, Any], *, with_state: bool) -> str:
+        """What the copy mirrors, as canonical text: equal keys mean the copy says what the store says."""
+        fields = ("site_class", "engine_target", "blueprint_id", "country_pack", "applied", "applied_ids", "history",
+                  "sync_version", "config", "retained") + (("state",) if with_state else ())
+        return json.dumps({k: snap[k] for k in fields}, sort_keys=True, default=sorted)
+
+    def _repair_state_copy(self, tenant_id: str) -> None:
+        """Make the tenant-database copy say what the operation store says (BPL-033). Best effort: it never raises.
+
+        The store is the source of truth. A copy can lag it (a crash or a failed write after the store committed). Skipped
+        while an operation holds the site (it writes its own copy). The copy is read before the store and the rewrite is a
+        compare-and-set on the token read, so a writer that got in between wins and nothing newer is overwritten."""
+        backend = self.frappe_backend
+        loader = getattr(backend, "load_site_state", None)
+        if backend is None or not callable(loader) or tenant_id == "platform":
+            return
+        try:
+            seen = loader(tenant_id)
+            site = self.store.get_site(tenant_id)
+            if site is None or site.lock is not None:
+                return
+            want = self._site_snapshot(site)
+            if seen is not None and self._mirror_key(seen, with_state=True) == self._mirror_key(want, with_state=True):
+                return
+            backend.persist_site_state(
+                tenant_id,
+                self._site_snapshot(site, token=self._new_id("cp"), expect=seen.get("write_token") if seen else None),
+            )
+        except Exception:
+            pass  # retried by the next recovery sweep, replay or already_applied
 
     def _execute_as_caller(
         self,
@@ -871,6 +914,15 @@ class ChangeEngineAdapter:
                 closed += 1
             except Exception:  # a recovery that cannot run now must not break the caller; it is retried next time
                 continue
+        # BPL-033: the copy mirrors the store. A recovery changed a site, or a worker died or failed after its store commit
+        # and before its copy write: bring every copy that disagrees back in line with the store.
+        if self.frappe_backend is not None:
+            try:
+                tenants = self.store.site_tenants()
+            except Exception:
+                tenants = []
+            for tenant in tenants:
+                self._repair_state_copy(tenant)
         return closed
 
     def _release_on_error(self, tenant: str, op: str, inp: dict[str, Any], op_id: str) -> None:
@@ -1521,6 +1573,8 @@ class ChangeEngineAdapter:
             site.tenant_id, operation, inp, op_id, lock=True, pending=running, meta={"revision": target_rev}
         )
         if verdict in ("replay", "in_progress"):
+            if verdict == "replay":
+                self._repair_state_copy(site.tenant_id)  # a replay is the retry of a run that may have died before its copy write
             return stored, True
         # whether to put the site back to ready is decided by the acquire itself, in the transaction that took the lock;
         # reading the state earlier races with a worker that finishes in between and leaves the site stuck in applying
@@ -1529,6 +1583,9 @@ class ChangeEngineAdapter:
         # the row may have changed under us (another worker, or a recovery just run): continue from what the database holds
         site = self._need_site(self.store.get_site(tenant), ready=False)
         stages.append({"stage": "acquire", "status": "done"})
+        # what the store holds before this run changes anything: the copy is rewritten only when the run changes it
+        state_before = "ready" if ready_before else site.state
+        mirror_before = self._mirror_key(self._site_snapshot(site), with_state=False)
 
         def owned() -> None:
             """Called before every engine or DDL step: a worker whose lease expired or was recovered stops at once."""
@@ -1583,6 +1640,8 @@ class ChangeEngineAdapter:
             if ready_before and site.state == "applying":
                 site.state = "ready"
 
+        marker = self._new_id("cp")  # the write token of this run's pending marker
+
         def settle(persist_state: bool, *, mark_ready: bool = False) -> dict[str, Any]:
             status, error = state["status"], state["error"]
             outcome: dict[str, Any] = {
@@ -1623,14 +1682,20 @@ class ChangeEngineAdapter:
                     # backend commits its own connection, so this write goes in as a pending marker (never `ready`): a
                     # process death before the store commit leaves a copy that matches what lease recovery will record.
                     try:
-                        self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site, pending=True))
+                        self.frappe_backend.persist_site_state(
+                            site.tenant_id, self._site_snapshot(site, pending=True, token=marker)
+                        )
                     except Exception as exc:
                         raise _StatePersistFailed() from exc
             if mark_ready and self.frappe_backend is not None and site.state != "recovery_required":
-                # The store has committed: the copy may now say what the store says. A failure leaves the pending
-                # marker, which blocks the site for a human (fail closed); the committed outcome is true and stands.
+                # The store has committed and the lock is free: the copy may now say what the store says, but only while it
+                # still carries this run's marker. If another run wrote the copy since, this write is stale and changes
+                # nothing. A failure leaves the marker, which blocks the site (fail closed); the next recovery sweep,
+                # replay or already_applied rewrites the copy from the store. The committed outcome is true and stands.
                 try:
-                    self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
+                    self.frappe_backend.persist_site_state(
+                        site.tenant_id, self._site_snapshot(site, token=self._new_id("cp"), expect=marker)
+                    )
                 except Exception:
                     pass
             return outcome
@@ -1640,7 +1705,14 @@ class ChangeEngineAdapter:
                 # BPL-033: a run in which no step took effect (readiness refusal, rejection, already applied) leaves the
                 # engine and the tenant-state copy unchanged, so it neither needs the tenant database nor escalates.
                 took_effect = any(st["status"] not in ("not_run", "already_present") for st in steps)
-                outcome = settle(took_effect, mark_ready=took_effect)
+                # the store changed when a step ran, the state moved, or the site content differs from before (a zero-step
+                # apply moves applied and history without running a step)
+                store_changed = (
+                    took_effect
+                    or site.state != state_before
+                    or self._mirror_key(self._site_snapshot(site), with_state=False) != mirror_before
+                )
+                outcome = settle(store_changed, mark_ready=store_changed)
             except _StatePersistFailed:
                 # Fail closed: the engine may hold effects the tenant-database state does not describe. Record that in
                 # the outcome, the audit result and the event, block the site for a human (ADR-0028) and say so.
@@ -1649,13 +1721,11 @@ class ChangeEngineAdapter:
                 state.update(status="recovery_required", error=AdapterError("recovery_required", stage="finalize").to_error(),
                              export_hash=None)
                 outcome = settle(False)
-                if self.frappe_backend is not None:
-                    try:  # keep the tenant-database copy from claiming a ready site; the failure is already reported above
-                        self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
-                    except Exception:
-                        pass
+                self._repair_state_copy(site.tenant_id)  # keep the copy from claiming a ready site; the failure is reported above
         except _LeaseLost:
             return self._lost_lease_outcome(site.tenant_id, operation, inp)
+        if state["status"] == "already_applied":
+            self._repair_state_copy(site.tenant_id)  # nothing ran; the copy may still lag a store that did commit earlier
         if timed_out["v"]:
             raise AdapterError("timeout", stage="execute")
         return outcome, False
@@ -1998,8 +2068,7 @@ class ChangeEngineAdapter:
                     raise AdapterError("stale_sync_version")
                 self.store.replace_members(tenant, members)
             site.sync_version = inp["syncVersion"]
-            if self.frappe_backend is not None:
-                self.frappe_backend.persist_site_state(tenant, self._site_snapshot(site))
+            self._repair_state_copy(tenant)  # the store has committed: mirror it (compare-and-set, never an older state)
             return result, False
         except BaseException:
             self._release_on_error(tenant, "sync_members", inp, op_id)

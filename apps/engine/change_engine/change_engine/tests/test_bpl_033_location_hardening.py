@@ -136,6 +136,22 @@ class TestKindAwareLocations(unittest.TestCase):
         make_backend(engine).execute_step(TENANT, loc_step("location.disable", "riyadh", "branch"))
         self.assertEqual(engine.writes, [])
 
+    def test_a_kind_that_is_not_a_string_is_invalid_request_never_engine_unavailable(self) -> None:
+        """Re-review of PR #301, finding 4: `kind: []` or `{}` is not hashable, so the set lookup raised TypeError and the
+        caller saw engine_unavailable. A non-string kind is a bad request, refused before any write."""
+        for bad in ([], {}, ["warehouse"], {"kind": "warehouse"}, 1, 1.5, True):
+            for kind_step in ("location.upsert", "location.disable"):
+                for method in ("execute_step", "check_ready"):
+                    engine = FakeEngine()
+                    step = loc_step(kind_step, "wh_a", "warehouse")
+                    step["params"]["definition"]["kind"] = bad
+                    arg = step if method == "execute_step" else [step]
+                    with self.assertRaises(FrappeBackendError, msg=f"{bad!r} {kind_step} {method}") as err:
+                        getattr(make_backend(engine), method)(TENANT, arg)
+                    self.assertEqual(err.exception.code, "invalid_request", f"{bad!r} {kind_step} {method}")
+                    self.assertTrue(err.exception.side_effect_free)
+                    self.assertEqual(engine.writes, [])
+
 
 class TestWarehouseRetryAndDisable(unittest.TestCase):
     def test_upsert_twice_inserts_once_and_a_retry_after_disable_re_enables_the_same_warehouse(self) -> None:

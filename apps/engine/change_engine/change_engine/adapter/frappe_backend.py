@@ -85,6 +85,7 @@ _ZERO_RULE = {**dict.fromkeys(RULE_FLAGS, 0), "if_owner": 0}
 ENGINE_ENV_VAR = "CHANGE_ENGINE_ENV"
 OFFLINE_SIMULATOR_ENVS = frozenset({"dev", "test"})
 LOCATION_KINDS = frozenset({"branch", "warehouse", "department"})  # contracts/blueprint.schema.json location.kind
+_STATE_TABLE = "tabChange Engine Blueprint State"  # the tenant-database copy of the site state
 
 
 class FrappeBackendError(Exception):
@@ -295,10 +296,17 @@ class FrappeRuntimeBackend:
                 history_json LONGTEXT NOT NULL,
                 sync_version INT NOT NULL DEFAULT 0,
                 config_json LONGTEXT NOT NULL,
-                retained_json LONGTEXT NOT NULL
+                retained_json LONGTEXT NOT NULL,
+                write_token VARCHAR(64) NULL
             )
             """
         )
+        # BPL-033: a table made before the token column existed gets it on first touch
+        if not f.db.sql(
+            "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = %s AND column_name = %s",
+            (_STATE_TABLE, "write_token"),
+        ):
+            f.db.sql(f"ALTER TABLE `{_STATE_TABLE}` ADD COLUMN IF NOT EXISTS write_token VARCHAR(64) NULL")
 
     def _ensure_audit_table(self, f: Any) -> None:
         self._deployment_adapter(f)._ensure_audit_table()
@@ -350,16 +358,35 @@ class FrappeRuntimeBackend:
 
             self.persist_site_state(tenant_id, site_state)
 
-    def persist_site_state(self, tenant_id: str, site_state: dict[str, Any]) -> None:
+    def persist_site_state(self, tenant_id: str, site_state: dict[str, Any]) -> bool:
+        """Write the tenant-database copy of the site state; the operation store stays the source of truth (BPL-033).
+
+        `write_token` tags the write. With an `expect_token` key the write is a compare-and-set: it replaces the copy only
+        while the copy still carries that token (None: a copy with no token, or no copy at all); otherwise it changes
+        nothing and returns False, so a writer that was overtaken cannot put an older state over a newer one. Without
+        `expect_token` the write is unconditional: provisioning, and the operation that still holds the site lock."""
         with self._site_session(tenant_id) as (f, _):
             self._ensure_state_table(f)
+            if "expect_token" in site_state:
+                # the row lock lasts until the commit below, so the check and the write are one step for other writers
+                rows = f.db.sql(
+                    f"SELECT write_token FROM `{_STATE_TABLE}` WHERE tenant_id = %s FOR UPDATE", (tenant_id,), as_dict=True
+                )
+                row = rows[0] if rows else None
+                current = (row.get("write_token") if isinstance(row, dict) else row[0]) if row is not None else None
+                if (row is None and site_state["expect_token"] is not None) or (
+                    row is not None and current != site_state["expect_token"]
+                ):
+                    if hasattr(f.db, "commit"):
+                        f.db.commit()  # nothing changed; release the row lock
+                    return False
             f.db.sql(
-                """
-                INSERT INTO `tabChange Engine Blueprint State` (
+                f"""
+                INSERT INTO `{_STATE_TABLE}` (
                     tenant_id, state, site_class, engine_target_json, blueprint_id,
                     country_pack, applied_json, applied_ids_json, history_json,
-                    sync_version, config_json, retained_json
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    sync_version, config_json, retained_json, write_token
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     state = VALUES(state),
                     site_class = VALUES(site_class),
@@ -371,7 +398,8 @@ class FrappeRuntimeBackend:
                     history_json = VALUES(history_json),
                     sync_version = VALUES(sync_version),
                     config_json = VALUES(config_json),
-                    retained_json = VALUES(retained_json)
+                    retained_json = VALUES(retained_json),
+                    write_token = VALUES(write_token)
                 """,
                 (
                     tenant_id,
@@ -386,20 +414,23 @@ class FrappeRuntimeBackend:
                     int(site_state["sync_version"]),
                     json.dumps(site_state["config"]),
                     json.dumps(site_state["retained"]),
+                    site_state.get("write_token"),
                 ),
             )
             if hasattr(f.db, "commit"):
                 f.db.commit()
+        return True
 
     def load_site_state(self, tenant_id: str) -> dict[str, Any] | None:
         try:
             with self._site_session(tenant_id, create_if_missing=False) as (f, _):
+                self._ensure_state_table(f)  # adds the token column to a table made before it existed
                 rows = f.db.sql(
-                    """
+                    f"""
                     SELECT tenant_id, state, site_class, engine_target_json, blueprint_id,
                            country_pack, applied_json, applied_ids_json, history_json,
-                           sync_version, config_json, retained_json
-                    FROM `tabChange Engine Blueprint State`
+                           sync_version, config_json, retained_json, write_token
+                    FROM `{_STATE_TABLE}`
                     WHERE tenant_id = %s
                     """,
                     (tenant_id,),
@@ -424,6 +455,7 @@ class FrappeRuntimeBackend:
                 "sync_version",
                 "config_json",
                 "retained_json",
+                "write_token",
             )
             row = dict(zip(keys, row))
         return {
@@ -439,6 +471,7 @@ class FrappeRuntimeBackend:
             "sync_version": int(row["sync_version"]),
             "config": json.loads(row["config_json"]),
             "retained": json.loads(row["retained_json"]),
+            "write_token": row.get("write_token"),
         }
 
     def check_health(self, tenant_id: str, site_state_value: str | None = None) -> list[dict[str, str]]:
@@ -720,7 +753,7 @@ class FrappeRuntimeBackend:
     def _location_kind(kind: Any) -> str:
         """The Blueprint location kind (branch, warehouse, department). Anything else, including none, is refused before
         any write."""
-        if kind not in LOCATION_KINDS:
+        if not isinstance(kind, str) or kind not in LOCATION_KINDS:  # a list or dict kind is unhashable: test the type first
             raise FrappeBackendError(
                 "invalid_request", {"fields": ["/params/definition/kind"]}, stage="execute", side_effect_free=True
             )

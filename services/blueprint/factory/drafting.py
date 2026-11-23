@@ -271,7 +271,8 @@ def check_draft(req: dict, text: str, owner: str) -> tuple[dict, list]:
 class Drafter:
     """`port` implements contracts/model-call.md (`complete(request) -> reply`, raises on refusal). `principal` is the
     verified identity the port also holds; the body `caller` only mirrors it. Q-600: only a human platform-staff
-    principal may draft (`realm` from the verified identity claims, Realm.STAFF, and `actor_kind` user); anything else,
+    principal may draft (`realm` from the verified identity claims, Realm.STAFF, `mfa_satisfied` True from the same
+    claims, and `actor_kind` user); anything else,
     a tenant admin or a principal with no realm included, is refused before any model call. `audit` receives one record per outcome;
     if it raises, no draft is kept. Candidate tests are never run here (no OS sandbox before INF-014)."""
     port: object
@@ -289,7 +290,8 @@ class Drafter:
         tmp = placed = None
         try:
             rec.update(tenant_id=self.principal["tenant_id"], requester=self.principal["actor_id"])
-            if self.principal.get("realm") != STAFF_REALM or self.principal.get("actor_kind") != "user":
+            if self.principal.get("realm") != STAFF_REALM or self.principal.get("actor_kind") != "user" \
+                    or self.principal.get("mfa_satisfied") is not True:     # as the flag and review-queue staff gates
                 raise Refused(NOT_STAFF, "platform_staff_only")
             rec["request_sha256"] = _sha(req)
             if isinstance(req, dict):

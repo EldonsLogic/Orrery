@@ -39,3 +39,6 @@ A cross-model re-review of #287. After that, the next BPL-017 slices are a promo
 - `Drafter` now refuses, before any model call and with an audit record (`FDR-015`), any principal that is not a human platform-staff one: `realm` must be the identity staff realm (`Realm.STAFF` in services/control-plane/identity/models.py, the marker the PLT-005 identity claims and the build_state Principal already use) and `actor_kind` must be `user`.
 - Tests: a staff principal drafts; a tenant admin, a principal with no realm, a near-miss realm and a staff-realm agent are refused (146 passed).
 - Q-600 is marked resolved; ADR-0065 item 7 and the README are updated.
+
+## MFA on the staff gate
+- The drafter gate now also requires `mfa_satisfied` true on the principal, matching the feature-flag and review-queue staff gates; missing, false or non-boolean is refused with `FDR-015` (3 new tests, written first). No control-plane import: the host copies the value from the verified claims (UNVERIFIED until the host adapter exists; ADR-0065 note).

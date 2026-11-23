@@ -13,7 +13,7 @@ Recorded the founders' 2026-11-23 decision: the product's final name is Seshna (
 - docs/decisions/INDEX.md: ADR-0066 row.
 - AGENTS.md, CLAUDE.md, GEMINI.md: product name Seshna; repo keeps `EldonsLogic/Orrery` until GOV-002.
 - docs/RULES.md: rules 37 (name) and 38 (mark, typefaces) rewritten; rule 52 note that Seshna was published by founder choice.
-- docs/00-START-HERE.md, README.md, docs/ONBOARDING.md: Seshna as the product name; repo URL and `ORRERY_FOUNDER` keep the old name until GOV-002.
+- docs/00-START-HERE.md, README.md, docs/ONBOARDING.md: Seshna as the product name; the repo URL keeps the old name until GOV-002; ONBOARDING names `SESHNA_FOUNDER` (renamed in the parallel GOV-070 PR); README lists all four phase-1 markets (ADR-0024).
 - agents/delegation-playbook.md, agents/team-protocol.md: "Orrery repo" to "Seshna repo" in the starter prompts.
 - docs/PLAN.md: GOV-069 and BRD-003 done; LEG-005 reworded to seshna.com and @seshna handles; BRD-009 names the Nuqta S kit and Cairo; WEB-028 self-hosts Cairo instead of Alexandria.
 - docs/risks.md: R-034 (uncleared trademark, unregistered domain).
@@ -30,4 +30,4 @@ Unknown.
 - LEG-008: counsel clearance, answer Q-602.
 - BRD-009: regenerate `docs/brand/` from the Nuqta S kit (other agent's scope); `docs/brand/04-typography.md` still names Alexandria.
 - WEB-028: self-host Cairo and Readex Pro.
-- GOV-002: rename the repo, organisation and internal identifiers (for example `ORRERY_FOUNDER` in `scripts/check_lanes.py`).
+- GOV-002: rename the repo, organisation and internal identifiers (env vars `SESHNA_FOUNDER` and `SESHNA_ALLOW_MAIN_PUSH` are renamed under GOV-070).

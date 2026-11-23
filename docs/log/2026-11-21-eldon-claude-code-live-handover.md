@@ -20,9 +20,32 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 ## In flight (dispatched, no result yet)
 | Plan ID | Model | Scope | Allowed paths | Branch |
 |---|---|---|---|---|
+| PLT-026 | opus-5.5 (worktree) | Fix the 9 security findings on #244 (trust by reference, post-dispatch metering, identity, idempotency, strict schema); resumed after a usage-limit stop | contracts/model-call*, services/operate/runtime/model_call_fake.py and tests, ADR-0054, PLT-026 log | plt-026-fixes (local), then pushed to plt-026-model-call-contract |
+| ERP-016 | fable-5.2 | Re-review partner #204 at 6d416c5 (bench tokens, UAE neutral invoice); resumed after a usage-limit stop | none (review text) | - |
+| DSC-009 | fable-5.2 | Different-model Tier 3 security review of #224 (owner approval flow), read-only | none (review text returned) | dsc-009-owner-approval |
+| PLT-009 | opus-5.5 | Model gateway design: home within lanes, routing, budgets, caching, logs, residency; ADR Proposed | docs/architecture/model-gateway.md, one new ADR | plt-009-model-gateway (to create) |
+| DSC-009 | opus-5.5 (worktree) | Fix #224 security findings H1, H2, M3 to M5 with tests first | DSC-009 package and tests | dsc-009-fixes (local commit, orchestrator pushes to dsc-009-owner-approval) |
+| ERP-013, ERP-015 | fable-5.2 | Re-review partner #202 at new head; review new #229 | none (review text) | - |
+| ERP-016, CMP-005 | fable-5.2 | Re-review partner #204 and #155 at new heads | none (review text) | - |
+| INF-009 | fable-5.2 | Re-review partner #225 at new head | none (review text) | - |
+| OPR-015 | sonnet-5.5 | Messaging channel design (WhatsApp or push), approvals never in WhatsApp | docs/product/opr-015-messaging-channel.md | opr-015-messaging-channel (to create) |
+| DSC-009 | opus-5.5 (worktree) | Fix #224 security findings H1, H2, M3 to M5 with tests first | DSC-009 package and tests | dsc-009-fixes (local), then pushed to dsc-009-owner-approval |
+| ERP-013, ERP-015 | fable-5.2 | Re-review partner #202 at new head; review #229 | none (review text) | - |
+| SEC-022, BPL-032 | fable-5.2 | Tier 3 security review of partner #235 (role namespacing) | none (review text) | - |
+| ERP-010 | opus-5.5 | Review partner #236 (follow-ups from #201) | none (review text) | - |
+| QA-014 | sonnet-5.5 | Undefined CSS var lint plus A-06 to A-11 fixes | web/scripts, web/app, docs/specs/qa-014-accessibility-audit.md | qa-014-accessibility-audit (PR #228) |
+| BRD-007 | sonnet-5.5 | Deterministic brand asset script (logo variants, derived dark, sizes, --check) | scripts/build_brand_assets.py, its test, docs/brand | brd-007-brand-assets (to create) |
+| LEG-003 | sonnet-5.5 | Counsel scope of work draft for KSA, UAE, Egypt, Qatar | docs/legal/counsel-scope-of-work.md | leg-003-counsel-scope (to create) |
+| - | watcher | Background script exits on any new sayegh9 comment, review or PR | - | - |
+| DSC-009 | fable-5.2 | Re-review the #224 security fixes (5c37939, a0ffd87) | none (review text) | - |
+| QA-014 | sonnet-5.5 | A-12 dark and light contrast pairs in the existing contrast test | web/ tests, docs/specs/qa-014-accessibility-audit.md | qa-014-accessibility-audit (PR #228) |
 | - | watcher | Background script exits on any new sayegh9 comment, review or new PR | - | - |
+| GTM-004 | sonnet-5.5 | Dubai AI Agents Championship: official terms, one narrow agent, gate plan | docs/gtm/dubai-ai-agents-championship.md | gtm-004-championship (to create) |
+| FND-002 | sonnet-5.5 | Accelerator evaluation: Hub71+, Antler, up to 3 alternatives | docs/fundraising/accelerator-evaluation.md | fnd-002-accelerators (to create) |
+| BRD-011 | haiku-5.5 | Font licence and Arabic coverage check | docs/brand/font-licence-check.md, docs/legal/licence-register.md | brd-011-font-licence (to create) |
 
 ## Results
+- (appended as each task returns)
 - FND-002 (sonnet): docs/fundraising/accelerator-evaluation.md. Hub71+ wait (relocation, SAFE terms UNVERIFIED), Antler skip, Sanabil/500 wait for MVP, Flat6Labs Riyadh wait (KSA residency), QSTP skip. Hub71 deadline still UNVERIFIED (page 403). Branch fnd-002-accelerators.
 - GTM-004 (sonnet): docs/gtm/dubai-ai-agents-championship.md. Recommends an Owner Interview agent (draft Blueprint, human approves). Registration Jan 2027 per official page, Dec 2026 per press: treat Dec 2026 as binding until confirmed. Needs a Dubai trade licence to receive funds; IP stays ours. Founder decisions listed in the file. Branch gtm-004-championship.
 - PLT-009 (opus): design plus ADR-0053 Proposed, PR #232; home must be services/gateway/ (partner lane), Q-543 asks founders to decide the lane (recommend moving PLT-009 to partner). Row left doing.
@@ -41,9 +64,11 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - GOV-058 PR #241: Eldon decided Q-127 option A (PLT-009, 010, 011, 021 to the partner; Eldon builds the PLT-026 model-call contract). Needs the partner's agreement; not claimed.
 - Merged: #241 GOV-058 (partner accepted option A), #240 LEG-003, #243 partner plan cleanup. PLT-026 contract PR #244 opened; Fable security review found 2 High (caller-asserted trust labels, unmetered post-dispatch refusals) and 4 Medium, fixes in flight.
 - #224: partner review Medium (same-second rollback) fixed in 00eef82 via a rollback sequence; main merged; Q-544 gates host wiring. #230 and #234 fixed per partner review; #202 M1 fix offered as a patch (lane guard blocks a cross-lane push), partner applying the same rule in his round 6.
+- Both accounts hit a 5-hour usage limit at about 14:30 UTC; the two agents above were resumed after the reset.
 - Eldon's account hit its 5-hour usage limit at about 14:30 UTC (correction: only this account, not both); the two cut-off agents were resumed after the reset.
 - Merged after Fable approval: #204 ERP-016 (bench tokens fixed, UAE neutral invoice mitigated as Q-553; 5 Lows for the partner, fix the UAE country gap before callers use branded renderers), #202 ERP-013 (M1 fixed in partner rounds 6 and 7; 3 Lows).
 - #244 PLT-026: 2 High and 4 Medium fixed (16d152e), Fable approved, 6 Lows fixed (fcdaa5d, contract 0.2.1); awaits the partner's Tier 3 review.
+- #229 ERP-015: Fable approved (back-dated and repost tests added, CI wiring split to ERP-031); conflicts with main, partner to merge main before merging.
 - #229 ERP-015: Fable approved (back-dated and repost tests added, CI wiring split to ERP-031); partner merged main (ae93956), all checks green, merged by Eldon's agent.
 - BRD-011 (haiku): docs/brand/font-licence-check.md; Readex Pro, Alexandria, Noto Sans Arabic, DejaVu Sans added to the licence register (all OFL 1.1 except DejaVu, Bitstream Vera). Arial in the print stack is proprietary and unverified: founder decision to drop it. Digit and SAR symbol coverage UNVERIFIED. Branch brd-011-font-licence.
 
@@ -52,7 +77,7 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 - #245 ERP-013 follow-ups (Tier 3): Fable asked for changes (High: apply() tenant binding). The partner's re-review confirms the High is closed; fix round 2 is in progress (read before the tenant check; NFC handled via name keys, not refusal).
 - #247 BPL-034 opened: purchasing and price-list engine mapping, contract 0.2.0, ADR-0055. Fable round 1 found 4 Medium, all fixed in 424ebe0; Fable re-review approved; CI green. Waiting on the partner's Tier 2 review.
 - #248 BPL-035 opened: golden-path mapping gaps (36 unmapped fields; outstanding_amount moved to payments), ADR-0056. Opus approved; its 3 Lows are fixed in a8c93ac; CI green. Waiting on the partner's Tier 2 review.
-- Meeting/ was moved out of the repo to ~/Documents/Orrery-Meeting (Eldon approved).
+- Meeting/ was moved out of the repo to <home>/Orrery-Meeting (outside the repo) (Eldon approved).
 
 - **Merged after Eldon's reviews (Fable, Opus and Sonnet):**
   - #235 SEC-022 allowlist and #252 its follow-ups;
@@ -94,6 +119,12 @@ Read the "In flight" and "Results" sections below, then `gh pr list --state open
 Not tracked per agent; roughly 85k to 165k tokens per subagent run.
 
 ## Next step
+Finish the in-flight rows above, ship each on its own branch, keep five agents busy. Partner: review #224 and #228, fix #202, #204, #225, #155, merge main into #221.
+- Partner (sayegh9): fix #235 (High: grant allowlist), #202 (invisible marks in codes, merge main), #229 (back-dated/repost tests, live test in CI, merge main), #204 (bench tokens, UAE neutral invoice, merge main). Review Eldon's #224 (Tier 3 line-by-line), #228, #230, #232, #234, #239, #240. Close own `doing` rows whose PRs merged (list under Results).
 - Partner (sayegh9): fix #235 (High: grant allowlist), #202 (invisible marks in codes, merge main), #204 (bench tokens, UAE neutral invoice, merge main). Review Eldon's #224 (Tier 3 line-by-line), #228, #230, #232, #234, #239, #240. Close own `doing` rows whose PRs merged (list under Results).
 - Founders: Q-543 model gateway lane; GTM-004 demo code yes/no and deadline check with the organiser; accelerator relocation or KSA residency; LEG-003 one firm or four; INF-012 dev host account; drop Arial from the print stack.
 - Eldon's agents: finish the in-flight rows, ship each on its own branch, keep five agents busy while ready work exists.
+
+
+## Append-only restoration (review fix)
+- Earlier commits (7c63f3c, 16c8c3e and others) deleted dispatch rows and rewrote result lines. Every removed line is restored above in its original place; each later outcome or correction stays directly after the line it supersedes. The only edit to an existing line is the local-path redaction in the Meeting/ line (RULES 11).

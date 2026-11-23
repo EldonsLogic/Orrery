@@ -33,3 +33,11 @@ Cross-model review by ChatGPT gpt-6.1-sol at `f2b1898`: APPROVE with two Lows. I
 - Low 1: a reduced period's `labels` dict could be changed in place despite the immutable-result contract. Labels are now a read-only `MappingProxyType`; `test_nested_labels_are_immutable` failed before the fix and passes after.
 - Low 2: `week_start_date(date.min)` raised a raw `OverflowError`. It now raises `CalendarSettingsError("calendar_range")`; `test_week_start_date_before_the_calendar_range_fails_closed` failed before and passes after.
 - Spec updated for both. Calendar suite 32 OK, country pack suite unchanged and OK.
+
+## Review fixes, round 2 (Eldon's review at 0210f34)
+
+Eldon approved at `0210f34` (Fable 5.2 cross-model read) with one Medium to add before merging and five Lows for a follow-up.
+
+- M1, production refusal untested: `test_production_is_the_default_and_refuses_uncertified_packs` (no environment argument, and `environment="production"`, refuse all four shipped packs) and `test_unknown_environment_refused` (`"prod"`). With `settings.py` hard-coded to `environment="test"`, 6 tests fail; restored, all pass.
+- L1, `hours_on` on a day that is neither a work day nor a weekend: asserted `None`. With the check changed to `if self.is_weekend(day)`, 1 test fails; restored, all pass.
+- L2 to L5 and the nits stay open for a follow-up: hashable labels or `to_dict()`, the licence-register line for `hijridate`, tying the CI pin to the runtime pin, and Q numbers for the three product questions.

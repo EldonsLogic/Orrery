@@ -10,7 +10,12 @@ from components.compliance.company_calendar import (
     CalendarSettingsError,
     resolve_calendar_settings,
 )
-from components.compliance.country_pack import OverrideRejectedError, UnknownCountryError
+from components.compliance.country_pack import (
+    CountryPackError,
+    OverrideRejectedError,
+    PackValidationError,
+    UnknownCountryError,
+)
 
 PACKS_DIR = Path(__file__).resolve().parents[2] / "country_pack" / "packs"
 
@@ -112,6 +117,19 @@ class TestCompanyOverrides(unittest.TestCase):
         s = resolve("SA", {"workingTime": {"workDays": ["sun", "mon", "tue", "wed"]}})
         self.assertFalse(s.is_work_day(date(2026, 11, 26)))  # Thursday
         self.assertFalse(s.is_weekend(date(2026, 11, 26)))
+        self.assertIsNone(s.hours_on(date(2026, 11, 26)))  # no hours on a day that is not a work day
+
+    def test_production_is_the_default_and_refuses_uncertified_packs(self) -> None:
+        # No environment argument: production, which refuses every shipped (uncertified) pack.
+        for code in ("SA", "AE", "EG", "QA"):
+            with self.subTest(code=code), self.assertRaises(PackValidationError):
+                resolve_calendar_settings(code, PACKS_DIR, version="0.1.0")
+        with self.assertRaises(PackValidationError):
+            resolve_calendar_settings("SA", PACKS_DIR, version="0.1.0", environment="production")
+
+    def test_unknown_environment_refused(self) -> None:
+        with self.assertRaises(CountryPackError):
+            resolve_calendar_settings("SA", PACKS_DIR, version="0.1.0", environment="prod")
 
 
 class TestDayClassification(unittest.TestCase):

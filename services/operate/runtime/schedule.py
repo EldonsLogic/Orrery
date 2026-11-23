@@ -278,6 +278,9 @@ class Scheduler:
                     raise ScheduleRefused("schedule_limit")
                 sch = replace(old, active=True, version=old.version + 1)
                 self._check(who, sch)
+                key = _owner(sch)
+                if self._spent(key, self._last_now) + self._owner_held(key) + sch.run_cap > sch.period_cap:
+                    raise ScheduleRefused("budget_exhausted")     # still exhausted: stays paused (Q-598)
             except ScheduleRefused as exc:
                 self._refused_change(who, schedule_id, exc)
                 raise
@@ -406,7 +409,7 @@ class Scheduler:
 
     def _clock_event(self, type_: str, last) -> None:
         try:
-            self._record(type_, None, None, {"last": last})
+            self._record(type_, "platform", None, {"last": last})   # platform events (contract 4 section 3)
         except ScheduleRefused:
             log.error("%s not audited", type_)
 
@@ -463,8 +466,8 @@ class Scheduler:
                 return None
             run_id = f"srun_{sid}_{slot}"
             if why is not None:
-                if why == "owner_permission_lost":
-                    self._suspend(sid, why)                       # suspended even if its audit fails
+                if why in ("owner_permission_lost", "budget_exhausted"):
+                    self._suspend(sid, why)       # paused until the owner resumes (ALP-026, ALP-033, Q-598)
                 kind = "agent.budget_exceeded" if why == "budget_exhausted" else "agent.run_refused"
                 self._audit(kind, sch, None, run_id=run_id, slot=slot, code=why, scope="period",
                             spent=self._spent(_owner(sch), now))

@@ -116,17 +116,25 @@ def test_run_drafts_only_reserves_and_settles_through_the_port():
     assert "follow up" not in json.dumps(events)
 
 
-def test_period_budget_exhaustion_refuses_and_meters_then_frees_up():
+def test_budget_exhaustion_pauses_until_the_owner_resumes():
     s, clock, events, _ = make()
     sch = s.create(OWNER, **SPEC)
     outcomes = []
     for day in range(4):
         clock.t = 1000 + day * DAY
         outcomes += [r.code or r.outcome for r in s.tick(digest_agent)]
-    assert outcomes == ["completed", "completed", "budget_exhausted", "budget_exhausted"]
+    assert outcomes == ["completed", "completed", "budget_exhausted"]  # then paused: no further run (Q-598)
     assert [e for e in events if e["type"] == "agent.budget_exceeded"][0]["data"]["scope"] == "period"
-    clock.t = 1000 + 7 * DAY                                        # the first run leaves the trailing window
-    assert s.tick(digest_agent)[0].outcome == "completed" and s.period_spent(OWNER, sch.id) > 0
+    paused = [e for e in events if e["type"] == "schedule.suspended"]
+    assert [e["data"]["reason"] for e in paused] == ["budget_exhausted"] and not s.get(OWNER, sch.id).active
+    refused("budget_exhausted", s.resume, OWNER, sch.id)               # still exhausted: stays paused
+    assert not s.get(OWNER, sch.id).active
+    clock.t = 1000 + 8 * DAY                                         # the window has freed up, yet no auto-restart
+    assert s.tick(digest_agent) == []
+    spent = s.period_spent(OWNER, sch.id)
+    assert s.resume(OWNER, sch.id).active and s.period_spent(OWNER, sch.id) == spent   # ledger kept
+    clock.t = 1000 + 9 * DAY
+    assert s.tick(digest_agent)[0].outcome == "completed"
 
 
 def test_cap_boundary_is_allowed():
@@ -654,6 +662,7 @@ def test_rebase_keeps_the_cap_and_never_replays_a_slot():
     clock.t = t0 - 2 * DAY + 2.1 * DAY                               # forward again, under the gap rule
     recs += s.tick(digest_agent)
     assert [r.outcome for r in recs if r.outcome == "completed"] == ["completed"]   # the cap still binds
+    refused("budget_exhausted", s.resume, OWNER, "sch_1")            # the row from before the rebase still counts
     ids = [r.run_id for r in recs]
     assert len(ids) == len(set(ids)), ids
 
@@ -741,3 +750,20 @@ def test_drafts_are_rebuilt_tainted_when_recorded():
     rec = first_run(s, clock, tamper)
     assert [d["tainted"] for d in rec.drafts] == [True, True] and all(set(d) == {"tool", "args", "tainted"}
                                                                        for d in rec.drafts)
+
+
+def test_emitted_types_are_in_the_event_contract():
+    contract = (Path(__file__).resolve().parents[4] / "contracts/events.md").read_text(encoding="utf-8")
+    import re
+    src = Path(S.__file__).read_text(encoding="utf-8")
+    emitted = set(re.findall(r'"((?:schedule|scheduler|agent)\.[a-z_]+)"', src))
+    assert {"schedule.created", "schedule.resumed", "scheduler.clock_rebase", "agent.run_refused"} <= emitted
+    missing = sorted(t for t in emitted if f"`{t}`" not in contract)
+    assert not missing, missing
+
+
+def test_clock_events_are_platform_events():
+    s, clock, events, _ = make()
+    clock.t = math.nan
+    refused("clock_fault", s.tick, digest_agent)
+    assert events[-1]["type"] == "scheduler.clock_fault" and events[-1]["tenant_id"] == "platform"

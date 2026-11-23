@@ -30,6 +30,7 @@ Live coordinator log for the partner's lane (RULES 51, created mid-session when 
 - #270 SEC-009: REQUEST_CHANGES at `4311b39`. Q-562 wording now matches the partner's answer (accepted by Eldon); a failed rollback still leaves a refused call charged. Re-review at `d2b79e9` (staged publish under the lock): Medium closed, one non-blocking Low (test placement). APPROVED at `d2b79e9`.
 - #296 GOV-069 (final name and mark, ADR-0066): partner's agreement recorded; REQUEST_CHANGES at `ae56bf2` (Medium: ONBOARDING documents `SESHNA_FOUNDER` before the script reads it; Lows: BRD-003 depends on LEG-008, Cairo licence unsourced, START-HERE placeholder rule).
 - #297 GOV-070 (rename in Eldon's lane and shared paths): APPROVED at `7091c78`; merge back to back with #296. GOV-071 (partner lane rename) follows.
+- #298 BRD-014 part 1 (brand kit): REQUEST_CHANGES at `658df11` (High: kit code author and licence missing; Medium: Cairo not in the licence register, icon raster build not reproducible, tenant preview still shows the retired mark; Low: stale `logo/proposed/` link). Founder question to both: who authored the kit and under what licence.
 
 ## Decisions
 - Q-311 (tenant id format): the partner agrees the event-stream format (letters, digits, underscore) is canonical and provisioning refuses hyphens. Needs Eldon's confirmation before ERP-009 or provisioning changes.

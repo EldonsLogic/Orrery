@@ -62,3 +62,5 @@ Unknown.
   - Review dispatched: ChatGPT gpt-6.1-sol (high), code-correctness review of #300 at `1998c4a`, read-only, focused on fail-open paths and the author's stated readings.
   - #299 fixes returned and pushed at `dd60720`: live classes only with minimum `Ran N` counts, full phase budget (3,750 s) with job limit 75 minutes, every site drop attempted. 12 of 19 new tests fail on the old code; infra suite 123 OK. Fixes table posted on #299.
   - Re-review dispatched: gpt-6.1-sol (high), `85998d2..dd60720`, read-only.
+  - #300 review result, gpt-6.1-sol: REQUEST_CHANGES at `1998c4a` (3 High: UNVERIFIED outside-schema claims escape when `paths` is missing or empty; `requires` checks names, not version ranges or valid providers; provisional rounding entries already authorise production defaults. 1 Medium: malformed `requires` crashes instead of refusing). Posted on #300.
+  - Fixes dispatched: Claude Sonnet, test-first, in the #300 checkout only; provisional entries made inactive until resolved with evidence (fail closed; no pack is certified today). Allowed `components/compliance/country_pack/**`, ADR-0067, the framework doc, the PR's own log; no git.

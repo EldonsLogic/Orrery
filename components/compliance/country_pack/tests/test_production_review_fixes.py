@@ -284,6 +284,15 @@ class TestNoExceptionEscapesTheLoader(_Fixture):
                     with self.assertRaisesRegex(PackValidationError, f"tax.{key}"):
                         load_country_pack("SA", self.f.packs_dir, version=v, environment=environment)
 
+    def test_schema_valid_deep_nesting_refuses_cleanly(self) -> None:
+        """Re-review 3 at 01d2029: nesting the schema allows (holidays.announcedDates items are free objects)
+        passed every check, then copy.deepcopy raised RecursionError."""
+        deep = json.loads('{"x":' * 600 + "0" + "}" * 600)
+        v = self.mutate("pack.json", lambda p: p["localeDefaults"]["holidays"].update(announcedDates=[deep]))
+        for environment in ("production", "sandbox", "test"):
+            with self.assertRaisesRegex(PackValidationError, "nested too deeply"):
+                load_country_pack("SA", self.f.packs_dir, version=v, environment=environment)
+
     def test_oversized_version_selector_is_not_found(self) -> None:
         """Re-review 2 at f6a82be: a 5,000-digit segment in the requested version raised ValueError from int()."""
         self.f._write("certified", "verified_official")  # the market directory exists

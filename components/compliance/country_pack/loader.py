@@ -326,7 +326,10 @@ def load_country_pack(
     if pack["version"] != chosen_version:
         raise PackValidationError(f"Pack version '{pack['version']}' does not match directory '{chosen_version}'")
     _check_go_live(pack, pack_file.parent, f"{code_upper}@{chosen_version}", environment)
-    return copy.deepcopy(pack)
+    try:
+        return copy.deepcopy(pack)
+    except RecursionError as exc:  # schema-valid free-form objects can still nest too deeply to copy
+        raise PackValidationError(f"Country pack {code_upper}@{chosen_version} is nested too deeply") from exc
 
 
 def _flatten_override_paths(obj: dict[str, Any], prefix: str = "") -> list[str]:

@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { NextIntlClientProvider } from 'next-intl';
 import { messages } from '../../i18n';
-import { buildRequest, submitDecision, type Form } from '../../approval/decide';
+import { buildRequest, emptyForm, formKey, nextStatus, submitDecision, type Form } from '../../approval/decide';
+import { messagePath, percentText } from '../../approval/labels';
 import { INJECTION, fakePort, fixtureBlockedReview, fixtureInjectionReview, fixtureReview } from '../../approval/fixture';
 import type { DecisionKey, ReviewModel } from '../../approval/types';
 import { OwnerApprovalView } from './OwnerApprovalView';
@@ -19,7 +20,7 @@ const page = (view: ReviewModel, locale: 'ar' | 'en', choice: DecisionKey | null
   );
 const ALL = fixtureReview.confirmations.map((c) => c.key);
 const form = (decision: DecisionKey, over: Partial<Form> = {}): Form => ({
-  decision, reason: decision === 'approve' ? 'agree' : decision === 'reject' ? 'other' : 'unclear', note: '', confirmed: ALL, ...over,
+  for: formKey(fixtureReview), decision, reason: decision === 'approve' ? 'agree' : decision === 'reject' ? 'other' : 'unclear', note: '', confirmed: ALL, ...over,
 });
 
 describe('owner approval screen', () => {
@@ -51,11 +52,31 @@ describe('owner approval screen', () => {
     const btn = (label: string) => new RegExp(`<button[^>]*>${label}</button>`).exec(out)?.[0] ?? '';
     expect(btn(messages.en.ownerApproval.decision.approve)).toContain('disabled=""');
     expect(btn(messages.en.ownerApproval.decision.reject)).not.toContain('disabled');
+    expect(fixtureBlockedReview.canDecide).toBe(true); // a state the model emits: too_large stops approval only
     expect(out).toContain(messages.en.ownerApproval.blocker.too_large);
   });
   it('shows the form for an allowed choice and hides it for a blocked one', () => {
     expect(page(fixtureReview, 'en', 'approve')).toContain(messages.en.ownerApproval.ui.confirmHeading);
     expect(page(fixtureBlockedReview, 'en', 'approve')).not.toContain(messages.en.ownerApproval.ui.confirmHeading);
+  });
+  it('shows the VAT line, the tax setup and the counts from the model', () => {
+    const out = page(fixtureReview, 'en');
+    expect(out).toContain('VAT 15%');
+    expect(out).toContain(messages.en.ownerApproval.ui.vatRegistered);
+    expect(out).toContain('phase_1');
+    expect(out).toContain(messages.en.ownerApproval.ui.country);
+    expect(page(fixtureReview, 'ar')).toContain(messages.ar.ownerApproval.ui.eInvoicing);
+  });
+  it('isolates item names, quote parameters and unpriced text, and marks a shortened name', () => {
+    const out = page(fixtureReview, 'en');
+    expect(out).toMatch(/<bdi[^>]*>Customer<\/bdi>/);
+    expect(out).toContain('\u2068core.crm\u2069');
+    const cut = { ...fixtureReview, sections: fixtureReview.sections.map((s) => (s.id === 'summary' ? { ...s, items: s.items.map((it, i) => (i ? it : { ...it, labels: { ...it.labels, cut: true } })) } : s)) } as ReviewModel;
+    expect(page(cut, 'en')).toContain(messages.en.ownerApproval.ui.cut);
+  });
+  it('says unavailable, not an error, for a label key it does not know', () => {
+    const odd = { ...fixtureReview, introKey: 'oa.nope' } as ReviewModel;
+    expect(page(odd, 'en')).toContain(messages.en.ownerApproval.ui.unknownLabel);
   });
   it('renders untrusted text as plain text', () => {
     for (const l of ['ar', 'en'] as const) {
@@ -99,6 +120,56 @@ describe('owner approval decisions', () => {
     expect(await submitDecision(fakePort({ ok: false, code: 'OA-006' }), fixtureReview, form('approve'))).toEqual({ ok: false, code: 'OA-006' });
     const bad = { decide: async () => { throw new Error('down'); } };
     expect(await submitDecision(bad, fixtureReview, form('approve'))).toEqual({ ok: false, code: 'generic' });
+  });
+});
+
+describe('owner approval form and status', () => {
+  it('a form made for another view never sends, so old ticks cannot go out with new digests', async () => {
+    const f = form('approve', { note: 'seen' });
+    const next = { ...fixtureReview, quoteDigest: 'f'.repeat(64) };
+    expect(formKey(next)).not.toBe(formKey(fixtureReview));
+    expect(buildRequest(next, f)).toBeNull();
+    expect(buildRequest({ ...fixtureReview, blueprintDigest: 'e'.repeat(64) }, f)).toBeNull();
+    const port = fakePort();
+    expect(await submitDecision(port, next, f)).toEqual({ ok: false, code: 'OA-001' });
+    expect(port.calls).toHaveLength(0);
+    expect(emptyForm(next, 'approve')).toMatchObject({ for: formKey(next), confirmed: [], note: '', reason: 'agree' });
+    expect(emptyForm(next, 'reject').reason).toBe('');
+  });
+  it('puts the chosen reason and note in the request', () => {
+    expect(buildRequest(fixtureReview, form('request_changes', { reason: 'wrong_price', note: 'n' }))).toMatchObject({ reason: 'wrong_price', note: 'n', decision: 'request_changes' });
+  });
+  it('holds the note at its limit and requires one only where the model says so', () => {
+    const n = fixtureReview.noteLimit;
+    expect(buildRequest(fixtureReview, form('reject', { note: 'x'.repeat(n) }))).not.toBeNull();
+    expect(buildRequest(fixtureReview, form('reject', { note: 'x'.repeat(n + 1) }))).toBeNull();
+    const need = { ...fixtureReview, decisions: fixtureReview.decisions.map((d) => (d.key === 'reject' ? { ...d, noteRequired: true } : d)) };
+    expect(buildRequest(need, form('reject'))).toBeNull();
+    expect(buildRequest(need, form('reject', { note: '   ' }))).toBeNull();
+    expect(buildRequest(need, form('reject', { note: 'why' }))).not.toBeNull();
+  });
+  it('checks each decision own allowed flag, apart from canDecide', () => {
+    const only = (key: DecisionKey, over: object): ReviewModel => ({ ...fixtureReview, decisions: fixtureReview.decisions.map((d) => (d.key === key ? { ...d, ...over } : d)) });
+    expect(buildRequest(only('approve', { allowed: false }), form('approve'))).toBeNull(); // canDecide stays true
+    expect(buildRequest(only('reject', { allowed: false }), form('reject'))).toBeNull();
+    expect(buildRequest({ ...fixtureReview, canDecide: false }, form('approve'))).toBeNull();
+    expect(buildRequest(fixtureReview, form('reject'))).not.toBeNull();
+  });
+  it('shows recorded only for an ok result, and locks the form after OA-006', () => {
+    expect(nextStatus({ ok: true })).toEqual({ kind: 'done' });
+    expect(nextStatus({ ok: false, code: 'OA-015' })).toEqual({ kind: 'error', code: 'OA-015' });
+    expect(nextStatus({ ok: false, code: 'generic' })).toEqual({ kind: 'error', code: 'generic' });
+    expect(nextStatus({ ok: false, code: 'OA-006' })).toEqual({ kind: 'stale' });
+  });
+  it('maps view-model label keys to message paths', () => {
+    expect(messagePath('oa.summary.not_shown')).toBe('summary.not_shown_notice');
+    expect(messagePath('oa.summary.not_shown.branding')).toBe('summary.not_shown.branding');
+    expect(messagePath('oa.state.awaiting')).toBe('state.awaiting');
+    expect(messagePath('quote.line.module')).toBe('quote.line.module');
+  });
+  it('formats basis points as a percent', () => {
+    const rows: Array<[number, string]> = [[0, '0'], [5, '0.05'], [50, '0.5'], [1405, '14.05'], [1450, '14.5'], [1500, '15'], [10000, '100']];
+    for (const [bp, text] of rows) expect(percentText(bp)).toBe(text);
   });
 });
 

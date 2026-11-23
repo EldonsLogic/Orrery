@@ -9,6 +9,8 @@ export type SummaryItem = { kind: string; kindKey: string; id: string; labels: L
 export type Detail = { [k: string]: string | number | boolean | null | Detail | ReadonlyArray<string | number | boolean | null | Detail> };
 export type SummarySection = {
   id: 'summary'; labelKey: string; introKey: string;
+  counts: Readonly<Record<string, number>>;
+  compliance: { country: string; vatRegistered: boolean | null; eInvoicingMode: string };
   company: { legalName: Loc; legalNameKey: string; tradeName: Loc | null; tradeNameKey: string; country: string };
   notShown: ReadonlyArray<{ key: string; labelKey: string }>; notShownNoticeKey: string;
   items: ReadonlyArray<SummaryItem>; moreItems: number;

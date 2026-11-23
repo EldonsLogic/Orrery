@@ -1,10 +1,23 @@
 // Pure decision logic for the owner approval screen: what may be sent, and the one call through the port.
 import type { ApprovalPort, DecisionKey, DecisionRequest, DecisionResult, ReviewModel } from './types';
 
-export type Form = { decision: DecisionKey; reason: string; note: string; confirmed: ReadonlyArray<string> };
+/** `for` is the view the ticks were made against; a form made for another view never sends. */
+export type Form = { for: string; decision: DecisionKey; reason: string; note: string; confirmed: ReadonlyArray<string> };
+
+export const formKey = (view: ReviewModel): string => `${view.blueprintDigest}:${view.quoteDigest}`;
+export const emptyForm = (view: ReviewModel, decision: DecisionKey): Form => {
+  const o = view.decisions.find((d) => d.key === decision);
+  return { for: formKey(view), decision, reason: o && o.reasons.length === 1 ? o.reasons[0].value : '', note: '', confirmed: [] };
+};
+
+export type Status = { kind: 'idle' } | { kind: 'sending' } | { kind: 'done' } | { kind: 'error'; code: string } | { kind: 'stale' };
+/** Only an ok result is "recorded". OA-006 (the draft or quote moved on) locks the form: the owner must reload and read again. */
+export const nextStatus = (res: DecisionResult): Status =>
+  res.ok ? { kind: 'done' } : res.code === 'OA-006' ? { kind: 'stale' } : { kind: 'error', code: res.code };
 
 /** The request for a form, or null when it must not be sent. The model decides what is allowed; nothing is invented here. */
 export function buildRequest(view: ReviewModel, form: Form): DecisionRequest | null {
+  if (form.for !== formKey(view)) return null;
   const opt = view.decisions.find((d) => d.key === form.decision);
   if (!opt || !opt.allowed || (form.decision === 'approve' && !view.canDecide)) return null;
   if (!opt.reasons.some((r) => r.value === form.reason)) return null;

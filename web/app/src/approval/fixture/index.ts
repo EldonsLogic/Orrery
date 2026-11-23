@@ -5,10 +5,10 @@ import type { ApprovalPort, DecisionRequest, ReviewModel, SummarySection } from 
 
 export const fixtureReview = review as unknown as ReviewModel;
 
-/** What an approval is refused for (here: the plan is too large to list), as the model reports it: approve is not allowed. */
+/** A state the model emits: the plan is too large to list, so approve is not allowed but the other two are. */
 export const fixtureBlockedReview: ReviewModel = {
   ...fixtureReview,
-  canDecide: false,
+  canDecide: true, // too_large stops an approval only; rejecting and asking for changes still work (flow.py can_change)
   blockers: [{ key: 'too_large', labelKey: 'oa.blocker.too_large' }],
   decisions: fixtureReview.decisions.map((d) => (d.key === 'approve' ? { ...d, allowed: false } : d)),
 };

@@ -4,14 +4,14 @@ import { useId, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Alert, Badge, Button, Card, Checkbox, Select, TextField } from '../../ui';
 import { messagePath, percentText } from '../../approval/labels';
-import { submitDecision } from '../../approval/decide';
+import { buildRequest, emptyForm, formKey, nextStatus, submitDecision, type Form, type Status } from '../../approval/decide';
 import type {
   ApprovalPort, CostSection, Detail, DecisionKey, GapsSection, Loc, Money, QuoteLine, ReviewModel, SimulationSection, SummarySection, Totals,
 } from '../../approval/types';
 import styles from './Approval.module.css';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
-type Status = { kind: 'idle' } | { kind: 'sending' } | { kind: 'done' } | { kind: 'error'; code: string };
+const isolate = (v: string): string => `\u2068${v}\u2069`; // keep untrusted text from reordering what is around it
 
 /**
  * Owner approval screen (WEB-027) over the DSC-009 view model. Port-based: decisions leave through `port` only, no
@@ -23,34 +23,31 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
   const t = useTranslations('ownerApproval') as unknown as Translate & { has: (k: string) => boolean };
   const say = (key: string, values?: Record<string, string | number>) => {
     const p = messagePath(key);
-    return t.has(p) ? t(p, values) : t('error.generic');
+    return t.has(p) ? t(p, values) : t('ui.unknownLabel');
   };
-  const loc = (l: Loc) => (locale === 'ar' ? l.ar || l.en : l.en || l.ar);
+  const loc = (l: Loc) => (locale === 'ar' ? l.ar || l.en : l.en || l.ar) + (l.cut ? ` ${t('ui.cut')}` : '');
   const money = (m: Money) => <bdi dir="ltr" className={styles.num}>{`${m.currency} ${m.text}`}</bdi>;
   const when = (iso: string) => {
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeZone: 'UTC' }).format(d);
   };
 
-  const [choice, setChoice] = useState<DecisionKey | null>(initialChoice);
-  const [reason, setReason] = useState('');
-  const [note, setNote] = useState('');
-  const [confirmed, setConfirmed] = useState<ReadonlyArray<string>>([]);
+  // The form belongs to the view it was filled against: when either digest changes, the choice, reason, note and ticks are gone.
+  const [stored, setStored] = useState<Form | null>(initialChoice ? emptyForm(view, initialChoice) : null);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  const form = stored && stored.for === formKey(view) ? stored : null;
   const noteId = useId();
+  const choice = form?.decision ?? null;
   const opt = view.decisions.find((d) => d.key === choice);
-  const ready = !!opt && opt.allowed && reason !== '' && view.confirmations.every((c) => confirmed.includes(c.key)) && status.kind !== 'sending';
+  const stale = status.kind === 'stale';
+  const ready = !!form && buildRequest(view, form) !== null && status.kind !== 'sending' && !stale;
+  const patch = (p: Partial<Form>) => form && setStored({ ...form, ...p });
 
-  const pickChoice = (d: DecisionKey) => {
-    const o = view.decisions.find((x) => x.key === d);
-    setChoice(d);
-    setReason(o && o.reasons.length === 1 ? o.reasons[0].value : '');
-  };
+  const pickChoice = (d: DecisionKey) => setStored(emptyForm(view, d));
   const send = async () => {
-    if (!choice || !ready) return;
+    if (!form || !ready) return;
     setStatus({ kind: 'sending' });
-    const res = await submitDecision(port, view, { decision: choice, reason, note, confirmed });
-    setStatus(res.ok ? { kind: 'done' } : { kind: 'error', code: res.code });
+    setStatus(nextStatus(await submitDecision(port, view, form)));
   };
 
   const detail = (d: Detail, key = 'd'): React.ReactNode => (
@@ -90,6 +87,27 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
           </p>
         ) : null}
       </Card>
+      <Card className={styles.card}>
+        <p className={styles.line}>
+          <span className={styles.muted}>{t('ui.country')}</span>
+          <bdi>{new Intl.DisplayNames(locale, { type: 'region' }).of(s.compliance.country) ?? s.compliance.country}</bdi>
+        </p>
+        {s.compliance.vatRegistered === null ? null : (
+          <p className={styles.line}>
+            <span className={styles.muted}>{t('ui.vatRegistered')}</span>
+            <span>{t(s.compliance.vatRegistered ? 'ui.yes' : 'ui.no')}</span>
+          </p>
+        )}
+        {s.compliance.eInvoicingMode ? (
+          <p className={styles.line}>
+            <span className={styles.muted}>{t('ui.eInvoicing')}</span>
+            <bdi>{s.compliance.eInvoicingMode}</bdi>
+          </p>
+        ) : null}
+      </Card>
+      <p className={styles.muted}>
+        {t('ui.counts')}: {Object.entries(s.counts).filter(([, n]) => n > 0).map(([k, n]) => `${say(`oa.kind.${k}`)} ${n}`).join(', ')}
+      </p>
       <ul className={`${styles.list} ${styles.plain}`}>
         {s.items.length === 0 ? <li className={styles.muted}>{t('ui.noItems')}</li> : null}
         {s.items.map((it) => (
@@ -117,7 +135,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
         {rows.map((r) => (
           <li key={r.id} className={styles.line}>
             <span className={styles.name}>
-              {say(r.labelKey, r.params)} <span className={styles.muted}>{t('ui.quantity', { count: r.quantity })}</span>
+              {say(r.labelKey, Object.fromEntries(Object.entries(r.params).map(([k, v]) => [k, isolate(v)])))} <span className={styles.muted}>{t('ui.quantity', { count: r.quantity })}</span>
             </span>
             {money(r.total)}
           </li>
@@ -140,7 +158,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
       {s.unpriced.length > 0 ? (
         <ul className={styles.list}>
           {s.unpriced.map((u, i) => (
-            <li key={i}>{t('ui.unpricedItem', { ref: u.requirement })}</li>
+            <li key={i}>{t('ui.unpricedItem', { ref: isolate(u.requirement) })}</li>
           ))}
         </ul>
       ) : null}
@@ -202,6 +220,8 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
           </Alert>
         ) : null}
         <p className={styles.muted}>{say(view.stepUpNoticeKey)} {say(view.evidenceNoticeKey)} {say(view.commitNoticeKey)}</p>
+        {stale ? <Alert tone="danger" title={t('error.OA-006')} /> : null}
+        {status.kind === 'error' ? <Alert tone="danger" title={t.has(`error.${status.code}`) ? t(`error.${status.code}`) : t('error.generic')} /> : null}
         {status.kind === 'done' ? (
           <Alert tone="success" title={t('ui.done')} />
         ) : (
@@ -211,7 +231,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
                 <Button
                   key={d.key}
                   variant={d.key === 'approve' ? 'primary' : d.key === 'reject' ? 'danger' : 'secondary'}
-                  disabled={!d.allowed}
+                  disabled={!d.allowed || stale}
                   aria-pressed={choice === d.key}
                   onClick={() => pickChoice(d.key)}
                 >
@@ -219,9 +239,9 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
                 </Button>
               ))}
             </div>
-            {opt && opt.allowed ? (
+            {opt && opt.allowed && !stale ? (
               <div className={styles.form}>
-                <Select label={t('ui.reason')} value={reason} onChange={(e) => setReason(e.target.value)}>
+                <Select label={t('ui.reason')} value={form?.reason ?? ''} onChange={(e) => patch({ reason: e.target.value })}>
                   <option value="">{t('ui.reasonPick')}</option>
                   {opt.reasons.map((r) => (
                     <option key={r.value} value={r.value}>{say(r.labelKey)}</option>
@@ -232,8 +252,8 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
                   label={t('ui.note')}
                   hint={t('ui.noteHint', { limit: view.noteLimit })}
                   maxLength={view.noteLimit}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
+                  value={form?.note ?? ''}
+                  onChange={(e) => patch({ note: e.target.value })}
                 />
                 <fieldset>
                   <legend>{t('ui.confirmHeading')}</legend>
@@ -241,12 +261,11 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
                     <Checkbox
                       key={c.key}
                       label={say(c.labelKey)}
-                      checked={confirmed.includes(c.key)}
-                      onChange={(e) => setConfirmed((cur) => (e.target.checked ? [...cur, c.key] : cur.filter((k) => k !== c.key)))}
+                      checked={form?.confirmed.includes(c.key) ?? false}
+                      onChange={(e) => patch({ confirmed: e.target.checked ? [...(form?.confirmed ?? []), c.key] : (form?.confirmed ?? []).filter((k) => k !== c.key) })}
                     />
                   ))}
                 </fieldset>
-                {status.kind === 'error' ? <Alert tone="danger" title={t.has(`error.${status.code}`) ? t(`error.${status.code}`) : t('error.generic')} /> : null}
                 <Button disabled={!ready} loading={status.kind === 'sending'} onClick={send}>
                   {t('ui.submit', { decision: say(opt.labelKey) })}
                 </Button>

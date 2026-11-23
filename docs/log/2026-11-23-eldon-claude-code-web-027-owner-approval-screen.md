@@ -26,3 +26,6 @@ Approximate, one Sonnet-class session.
 
 ## Next step
 Q-544 and Q-505 adapters, then wire the port; add step-up prompt and history list (Q-585).
+
+## Review fixes (Fable review of 853663a)
+R1: the form is bound to the view digests (`Form.for`, `emptyForm`); a form made for another view never sends and the screen drops it. R2: tests for `percentText`, per-decision `allowed`, `nextStatus`, reason, note limit, `noteRequired`, `messagePath`, bdi. Lows: `ready` from `buildRequest`, form locked after OA-006, neutral label for unknown keys, compliance and counts shown, cut marker, isolates on params and requirement, blocked fixture now a state the model emits, unused ui keys removed, sample-data notice. Web tests 298 pass; lint, typecheck, build, check_docs and hygiene pass.

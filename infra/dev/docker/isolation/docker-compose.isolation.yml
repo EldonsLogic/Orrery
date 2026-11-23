@@ -24,6 +24,7 @@ services:
     volumes:
       # Relative to infra/dev/docker (the first compose file), not to this directory.
       - ./isolation/raw_engine_wsgi.py:/opt/sec004/raw_engine_wsgi.py:ro
+      - ./isolation/sec004_project.py:/opt/sec004/sec004_project.py:ro
 
   worker:
     build:

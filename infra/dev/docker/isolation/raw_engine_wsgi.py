@@ -13,17 +13,19 @@ does that; bare gunicorn does not).
 
 This module is mounted only by docker-compose.isolation.yml. It does not change the hook, the
 route allowlist or any production image. It refuses to start unless the compose file set
-SEC004_RAW_ENGINE=1 and the project name contains "sec004".
+SEC004_RAW_ENGINE=1 and the project name is `sec004` or starts with `sec004-`
+(sec004_project.py; `prod-sec004` is refused).
 """
 
 import os
 
 import frappe
+from sec004_project import is_sec004_project
 from werkzeug.exceptions import NotFound
 
 HOOK = "change_engine.api.route_guard.enforce_internal_only"
 
-if os.environ.get("SEC004_RAW_ENGINE") != "1" or "sec004" not in os.environ.get("COMPOSE_PROJECT_NAME", ""):
+if os.environ.get("SEC004_RAW_ENGINE") != "1" or not is_sec004_project(os.environ.get("COMPOSE_PROJECT_NAME", "")):
     raise SystemExit("raw_engine_wsgi is for the SEC-004 throwaway bench only")
 
 _get_hooks = frappe.get_hooks

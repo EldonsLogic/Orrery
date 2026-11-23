@@ -157,12 +157,31 @@ class TestWarehouseRetryAndDisable(unittest.TestCase):
         self.assertEqual(engine.warehouses[0]["disabled"], 0)
         self.assertEqual(len(engine.warehouses), 1, "re-enable, never a second warehouse")
 
-    def test_disable_without_a_definition_keeps_the_company_scoped_warehouse_lookup(self) -> None:
+    def test_disable_without_a_kind_is_refused_and_never_defaults_to_a_warehouse(self) -> None:
+        """Review of PR #301, finding 1: a schema-valid disable whose definition omits `kind` must not reach a Warehouse
+        (the Blueprint location may be a branch with the same id)."""
+        for step in (loc_step("location.disable", "wh_a", None),  # definition present, kind omitted
+                     loc_step("location.disable", "wh_a", None, with_definition=False)):  # no definition at all
+            engine = FakeEngine()
+            backend = make_backend(engine)
+            backend.execute_step(TENANT, loc_step("location.upsert", "wh_a", "warehouse"))
+            engine.writes.clear()
+            with self.assertRaises(FrappeBackendError) as err:
+                backend.execute_step(TENANT, step)
+            self.assertEqual(err.exception.code, "invalid_request")
+            self.assertTrue(err.exception.side_effect_free)
+            self.assertEqual(engine.writes, [])
+            self.assertEqual(engine.warehouses[0]["disabled"], 0, "the same-id warehouse stays enabled")
+
+    def test_check_ready_refuses_a_disable_step_without_a_kind_before_any_write(self) -> None:
         engine = FakeEngine()
         backend = make_backend(engine)
-        backend.execute_step(TENANT, loc_step("location.upsert", "wh_a", "warehouse"))
-        backend.execute_step(TENANT, loc_step("location.disable", "wh_a", None, with_definition=False))
-        self.assertEqual(engine.warehouses[0]["disabled"], 1)
+        with self.assertRaises(FrappeBackendError) as err:
+            backend.check_ready(TENANT, [loc_step("location.disable", "wh_a", None)])
+        self.assertEqual(err.exception.code, "invalid_request")
+        self.assertTrue(err.exception.side_effect_free)
+        backend.check_ready(TENANT, [loc_step("location.disable", "wh_a", "branch"),
+                                     loc_step("location.disable", "wh_a", "warehouse")])  # a recognised kind passes
 
     def test_disabling_an_unknown_warehouse_is_a_no_op_that_commits_nothing(self) -> None:
         engine = FakeEngine()

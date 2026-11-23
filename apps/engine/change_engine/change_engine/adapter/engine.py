@@ -415,9 +415,11 @@ class ChangeEngineAdapter:
         self.recover_interrupted()
 
     @staticmethod
-    def _site_snapshot(site: SiteRecord) -> dict[str, Any]:
+    def _site_snapshot(site: SiteRecord, *, pending: bool = False) -> dict[str, Any]:
+        """The state copy for the tenant database. `pending` writes it as recovery_required: the store has not yet
+        committed the outcome this snapshot describes (BPL-033)."""
         return {
-            "state": site.state,
+            "state": "recovery_required" if pending else site.state,
             "site_class": site.site_class,
             "engine_target": site.engine_target,
             "blueprint_id": site.blueprint_id,
@@ -1581,7 +1583,7 @@ class ChangeEngineAdapter:
             if ready_before and site.state == "applying":
                 site.state = "ready"
 
-        def settle(persist_state: bool) -> dict[str, Any]:
+        def settle(persist_state: bool, *, mark_ready: bool = False) -> dict[str, Any]:
             status, error = state["status"], state["error"]
             outcome: dict[str, Any] = {
                 "operationId": op_id,
@@ -1617,16 +1619,28 @@ class ChangeEngineAdapter:
                     self.store.append_event(*event, tenant_id=site.tenant_id)
                 if persist_state and self.frappe_backend is not None:
                     # BPL-033: the tenant-database copy of the state is written inside the transaction, after the lease
-                    # check, so a failure rolls the outcome back instead of being swallowed after it was committed.
+                    # check, so a failure rolls the outcome back instead of being swallowed after it was committed. The
+                    # backend commits its own connection, so this write goes in as a pending marker (never `ready`): a
+                    # process death before the store commit leaves a copy that matches what lease recovery will record.
                     try:
-                        self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
+                        self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site, pending=True))
                     except Exception as exc:
                         raise _StatePersistFailed() from exc
+            if mark_ready and self.frappe_backend is not None and site.state != "recovery_required":
+                # The store has committed: the copy may now say what the store says. A failure leaves the pending
+                # marker, which blocks the site for a human (fail closed); the committed outcome is true and stands.
+                try:
+                    self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
+                except Exception:
+                    pass
             return outcome
 
         try:
             try:
-                outcome = settle(True)
+                # BPL-033: a run in which no step took effect (readiness refusal, rejection, already applied) leaves the
+                # engine and the tenant-state copy unchanged, so it neither needs the tenant database nor escalates.
+                took_effect = any(st["status"] not in ("not_run", "already_present") for st in steps)
+                outcome = settle(took_effect, mark_ready=took_effect)
             except _StatePersistFailed:
                 # Fail closed: the engine may hold effects the tenant-database state does not describe. Record that in
                 # the outcome, the audit result and the event, block the site for a human (ADR-0028) and say so.

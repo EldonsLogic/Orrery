@@ -661,7 +661,7 @@ class FrappeRuntimeBackend:
                     defn = params.get("definition") or {}
                     # BPL-033: dispatch on the Blueprint location kind. A branch or a department has no engine record
                     # yet (engine-adapter open question 11), so it is an explicit no-op, never a Warehouse.
-                    if self._location_kind(defn.get("kind"), required=True) == "warehouse":
+                    if self._location_kind(defn.get("kind")) == "warehouse":
                         wh_name = str(defn.get("id") or subject.get("id"))
                         explicit_company = defn.get("company") or params.get("company")
                         existing, company = self._find_warehouse(
@@ -684,9 +684,9 @@ class FrappeRuntimeBackend:
                     loc_id = str(subject.get("id") or segs[-1])
                     defn = params.get("definition") if isinstance(params.get("definition"), dict) else {}
                     explicit_company = params.get("company") or defn.get("company")
-                    # A step that names its kind (every compensation step does) never reaches a Warehouse unless the
-                    # kind is warehouse; a disable that carries no definition keeps the company-scoped warehouse lookup.
-                    if self._location_kind(defn.get("kind"), required=False) in (None, "warehouse"):
+                    # BPL-033 (review of PR #301): the kind is required. A disable never defaults to a Warehouse, because
+                    # the Blueprint location may be a branch or department that shares the id; unresolved fails closed.
+                    if self._location_kind(defn.get("kind")) == "warehouse":
                         existing, _company = self._find_warehouse(
                             f,
                             loc_id,
@@ -717,10 +717,9 @@ class FrappeRuntimeBackend:
                 raise
 
     @staticmethod
-    def _location_kind(kind: Any, *, required: bool) -> str | None:
-        """The Blueprint location kind (branch, warehouse, department). Anything else is refused before any write."""
-        if kind is None and not required:
-            return None
+    def _location_kind(kind: Any) -> str:
+        """The Blueprint location kind (branch, warehouse, department). Anything else, including none, is refused before
+        any write."""
         if kind not in LOCATION_KINDS:
             raise FrappeBackendError(
                 "invalid_request", {"fields": ["/params/definition/kind"]}, stage="execute", side_effect_free=True
@@ -731,7 +730,7 @@ class FrappeRuntimeBackend:
         """Read-only readiness check before the first step of an apply or rollback (BPL-033, contract 5.6.1).
 
         Refuses with a side-effect-free error when the engine site cannot take the artifact: its database does not
-        answer, a location step has no kind the adapter knows, or a warehouse step has no resolvable company. The
+        answer, a location upsert or disable step has no kind the adapter knows, or a warehouse step has no resolvable company. The
         engine turns the refusal into ``failed_clean`` (nothing ran) instead of compensating committed steps."""
         with self._site_session(tenant_id) as (f, _site_name):
             try:
@@ -739,11 +738,11 @@ class FrappeRuntimeBackend:
             except Exception as exc:
                 raise FrappeBackendError("engine_unavailable", stage="prepare", side_effect_free=True) from exc
             for step in steps:
-                if step.get("kind") != "location.upsert":
+                if step.get("kind") not in ("location.upsert", "location.disable"):
                     continue
                 params = step.get("params") or {}
-                defn = params.get("definition") or {}
-                if self._location_kind(defn.get("kind"), required=True) != "warehouse":
+                defn = params.get("definition") if isinstance(params.get("definition"), dict) else {}
+                if self._location_kind(defn.get("kind")) != "warehouse" or step["kind"] == "location.disable":
                     continue
                 explicit_company = defn.get("company") or params.get("company")
                 subject = step.get("subject") or {}

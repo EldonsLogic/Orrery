@@ -6,7 +6,9 @@ review's open item `adapter/engine.py:1117,1248`. Synthetic data only.
 from __future__ import annotations
 
 import os
+import time
 import unittest
+from contextlib import contextmanager
 from unittest import mock
 
 from change_engine.adapter import ADAPTER_ID, FrappeBackendError, make_frappe_adapter
@@ -137,7 +139,93 @@ class TestStatePersistenceFailsClosed(Bpl033EngineBase):
         self.backend.persist_site_state = lambda t, snap: (persisted.append(snap["state"]), real(t, snap))[1]
         out = self.apply()
         self.assertEqual(out["status"], "applied", out)
-        self.assertEqual(persisted, ["ready"])
+        # the copy is first written as a pending marker (recovery_required), then marked ready after the store commit
+        self.assertEqual(persisted, ["recovery_required", "ready"])
+        self.assertEqual(self.backend.load_site_state(bpl027.TENANT)["state"], "ready")
+
+    def test_a_clean_refusal_with_no_executed_step_never_rewrites_the_unchanged_state_copy(self) -> None:
+        """Review of PR #301, finding 2: readiness and the state copy both hit an unavailable tenant database."""
+        def unavailable(*args):
+            raise FrappeBackendError("engine_unavailable", stage="prepare", side_effect_free=True)
+
+        writes: list[str] = []
+        self.backend.check_ready = unavailable
+        self.backend.persist_site_state = lambda t, snap: (writes.append(snap["state"]), unavailable())[1]
+        out = self.apply()
+        self.assertEqual(out["status"], "failed_clean", out)
+        self.assertEqual(out["error"]["code"], "engine_unavailable", out)
+        self.assertEqual(out["site"]["state"], "ready", out)
+        self.assertEqual(self.site_state(), "ready")
+        self.assertEqual(writes, [], "nothing took effect, so the tenant-state copy is not rewritten")
+
+    def test_an_already_applied_replay_with_a_broken_state_copy_stays_already_applied(self) -> None:
+        plan = self.adapter.call("plan", bpl027.ctx(), {"artifact": self.art})["result"]
+        inp = {"artifact": self.art, "planToken": plan["planToken"], "approvals": APPROVAL}
+        self.assertEqual(self.adapter.call("apply", bpl027.ctx(), {**inp, "idempotencyKey": "idemp_bpl033_first"})["result"]["status"],
+                         "applied")
+        self.break_state_persistence()
+        out = self.adapter.call("apply", bpl027.ctx(), {**inp, "idempotencyKey": "idemp_bpl033_again"})["result"]
+        self.assertEqual(out["status"], "already_applied", out)
+        self.assertEqual(self.site_state(), "ready")
+
+    def test_a_run_where_a_step_took_effect_still_fails_closed_when_the_copy_cannot_be_written(self) -> None:
+        self.backend.execute_step = lambda tenant_id, step: (_ for _ in ()).throw(
+            FrappeBackendError("site_not_ready", stage="execute", side_effect_free=True)) if step["seq"] == 2 else None
+        self.break_state_persistence()
+        out = self.apply()
+        self.assertEqual(out["status"], "recovery_required", out)
+        self.assertEqual(self.site_state(), "recovery_required")
+
+
+class _Death(BaseException):
+    """A simulated process death: nothing catches it, nothing after it runs."""
+
+
+class TestStateCopyAndStoreStayConsistent(Bpl033EngineBase):
+    def dying_store(self) -> dict:
+        """The store transaction that wrote the tenant-state copy never commits (the process dies first)."""
+        armed = {"v": False}
+        real_tx, real_persist = self.adapter.store.transaction, self.backend.persist_site_state
+        self.backend.persist_site_state = lambda t, snap: (real_persist(t, snap), armed.update(v=True))[0]
+
+        @contextmanager
+        def dying():
+            with real_tx():
+                yield
+                if armed["v"]:
+                    raise _Death()  # leaving the real transaction on an exception rolls it back
+
+        self.adapter.store.transaction = dying
+        return armed
+
+    def test_death_between_the_state_copy_commit_and_the_store_commit_leaves_no_ready_copy(self) -> None:
+        """Review of PR #301, finding 3: the copy must not say ready while lease recovery marks the operation
+        recovery_required."""
+        self.dying_store()
+        plan = self.adapter.call("plan", bpl027.ctx(), {"artifact": self.art})["result"]
+        with self.assertRaises(_Death):
+            self.adapter.call("apply", bpl027.ctx(), {"idempotencyKey": "idemp_bpl033_death", "artifact": self.art,
+                                                      "planToken": plan["planToken"], "approvals": APPROVAL})
+        self.adapter.store.transaction = type(self.adapter.store).transaction.__get__(self.adapter.store)
+        self.adapter.store.clock = lambda: time.time() + 10_000_000  # the dead worker's lease ran out
+        self.assertEqual(self.adapter.recover_interrupted(), 1)
+        self.assertEqual(self.site_state(), "recovery_required")
+        self.assertEqual(self.backend.load_site_state(bpl027.TENANT)["state"], "recovery_required",
+                         "the copy and the operation store must not diverge")
+
+    def test_a_failed_mark_ready_after_the_store_commit_leaves_the_conservative_copy_and_the_stored_outcome(self) -> None:
+        real = self.backend.persist_site_state
+
+        def ready_write_fails(tenant_id, snap):
+            if snap["state"] == "ready":
+                raise RuntimeError("tenant database unavailable")
+            return real(tenant_id, snap)
+
+        self.backend.persist_site_state = ready_write_fails
+        out = self.apply()
+        self.assertEqual(out["status"], "applied", out)  # the outcome is committed and true
+        self.assertEqual(self.site_state(), "ready")
+        self.assertEqual(self.backend.load_site_state(bpl027.TENANT)["state"], "recovery_required", "fail closed")
 
 
 class TestReadinessBeforeExecute(Bpl033EngineBase):
@@ -163,6 +251,33 @@ class TestReadinessBeforeExecute(Bpl033EngineBase):
         self.backend.check_ready = lambda tenant_id, steps: (seen.append([s["seq"] for s in steps]), real(tenant_id, steps))[1]
         self.assertEqual(self.apply()["status"], "applied")
         self.assertEqual(seen, [[1, 2]])
+
+
+class TestDisableNeedsAKindEndToEnd(Bpl033EngineBase):
+    def test_a_schema_valid_disable_without_a_kind_fails_clean_and_leaves_the_warehouse_alone(self) -> None:
+        """Review of PR #301, finding 1: the plan accepts it, so the refusal must come from the adapter, before any write."""
+        base_target = self.art["blueprint"]["target"]
+        self.assertEqual(self.apply()["status"], "applied")  # wh_a exists, as the first revision
+        ran: list[str] = []
+        real = self.backend.execute_step
+        self.backend.execute_step = lambda tenant_id, step: (ran.append(step["kind"]), real(tenant_id, step))[1]
+        disable = {"seq": 1, "phase": 17, "kind": "location.disable", "subject": {"kind": "location", "id": "wh_a", "parents": []},
+                   "pointer": "/locations/wh_a", "impact": "config", "ddlImpact": "none", "reversible": True,
+                   "params": {"definition": {"id": "wh_a", "labels": {"en": "wh_a", "ar": "wh_a"}}}, "sourceOps": ["/locations/wh_a"]}
+        target_2 = {"hash": "sha256:" + "2" * 64, "revision": 2}
+        undo = {**self.art["steps"][0], "seq": 1, "phase": 3}  # the inverse of a disable re-creates the warehouse
+        inverse = bpl027.seal({**self.art, "kind": "inverse", "steps": [undo], "inverse": None,
+                               "blueprint": {**self.art["blueprint"], "base": target_2, "target": base_target}})
+        art = bpl027.seal({**self.art, "steps": [disable], "inverse": inverse,
+                           "blueprint": {**self.art["blueprint"], "base": base_target, "target": target_2}})
+        plan = self.adapter.call("plan", bpl027.ctx(), {"artifact": art})
+        self.assertTrue(plan["ok"], plan)
+        out = self.adapter.call("apply", bpl027.ctx(), {"idempotencyKey": "idemp_bpl033_disable", "artifact": art,
+                                                 "planToken": plan["result"]["planToken"], "approvals": APPROVAL})["result"]
+        self.assertEqual(out["status"], "failed_clean", out)
+        self.assertEqual(out["error"]["code"], "invalid_request", out)
+        self.assertEqual(ran, [], "no step of the refused artifact ran")
+        self.assertEqual(self.journal(), [(1, "execute"), (2, "execute")], "only the first apply is journaled")
 
 
 if __name__ == "__main__":

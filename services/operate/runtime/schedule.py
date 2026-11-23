@@ -16,6 +16,7 @@ import copy
 import logging
 import math
 import re
+import secrets
 import threading
 from dataclasses import dataclass, replace
 
@@ -30,18 +31,40 @@ CODES = frozenset({"invalid_schedule", "not_found", "tenant_mismatch", "owner_mi
                    "tenant_budget_missing", "schedule_limit", "roles_unavailable"})
 FIELDS = ("agent_role", "tools", "cadence_s", "start_at", "run_cap", "period_s", "period_cap")
 # Platform defaults (ADR-0064 item 4; placeholders per Q-156, UNVERIFIED against real pricing).
-MIN_CADENCE_S, MAX_PERIOD_S = 300, 366 * 86400
-MAX_CAP = 50_000_000                    # micro-USD (USD 50) per run and per period window
+MIN_CADENCE_S, MIN_PERIOD_S, MAX_PERIOD_S = 300, 86400, 366 * 86400
+MAX_CAP = 50_000_000                    # micro-USD (USD 50): per run, and per owner over the window (>= a day)
 MAX_SCHEDULES_PER_OWNER = 10            # active schedules
 MAX_RUN_S = 600                         # wall clock per run
-MAX_STEP_S = 31 * 86400                 # largest forward clock step accepted between ticks
+MAX_STEP_S = 31 * 86400                 # a larger forward gap is a fresh start (ledger shifted, nothing caught up)
+REBASE_AFTER = 3                        # consecutive, mutually consistent backward readings before a rebase
 MAX_EPOCH_S = 4_102_444_800             # 2100-01-01: a larger reading is a clock fault
-MAX_FAILURES = 3                        # consecutive failed runs before the schedule is suspended
+MAX_FAILURES = 3                        # consecutive self-caused failed runs before the schedule is suspended
+SELF_CAUSED = frozenset({"run_failed", "tool_not_allowed", "draft_only"})  # platform outages never count
 READ_VERBS = frozenset({"get", "list"})  # `export` is egress (Tool API section 11), not a read
 RIGID_TOKENS = frozenset({"einvoice", "zatca", "fatoora", "wps", "gl", "posting", "tax", "vat", "payroll",
-                          "salary", "payslip", "ledger", "journal", "invoice", "invoices"})
+                          "salary", "payslip", "ledger", "journal", "invoice", "invoices", "generalledger", "zakat",
+                          "gosi", "withholding", "bank"})
 HARD_STOP = (KeyboardInterrupt, SystemExit, GeneratorExit)
 _SPLIT = re.compile(r"[^a-z0-9]+")
+_CAMEL = re.compile(r"([a-z0-9])([A-Z])")
+_RUNS: dict = {}                        # opaque run token -> run state; the agent's functions hold only the token
+
+
+def _tokens(name: str) -> set:
+    return {t for t in _SPLIT.split(_CAMEL.sub(r"\1_\2", name).lower()) if t}
+
+
+def _ctx_functions(token: str):
+    """Plain functions whose only captured value is the token string (no bound method, meter or drafts list)."""
+    def caller():
+        return copy.deepcopy(_RUNS[token]["caller"])
+
+    def complete(request):
+        return _RUNS[token]["complete"](request)
+
+    def draft(tool, args):
+        return _RUNS[token]["draft"](tool, args)
+    return caller, complete, draft
 
 
 class ScheduleRefused(Exception):
@@ -90,6 +113,10 @@ class RunRecord:
     cost: int = 0
     drafts: tuple = ()    # ({tool, args, tainted}) proposals for the human review queue; empty unless completed
     tainted: bool = True  # every scheduled run is tainted (ALP-019)
+
+
+def _owner(sch) -> tuple:
+    return (sch.tenant_id, sch.owner_id)
 
 
 def _int(v, lo, hi) -> bool:
@@ -164,8 +191,9 @@ class Scheduler:
         self._clock, self._emit = clock, emit
         self._s: dict = {}
         self._last_slot: dict = {}
-        self._ledger: dict = {}       # schedule id -> [(time, settled micro-USD)]
-        self._window: dict = {}       # schedule id -> longest period_s ever set (an update never shortens it)
+        self._ledger: dict = {}       # (tenant, owner) -> [(time, settled micro-USD)], kept across schedules
+        self._window: dict = {}       # (tenant, owner) -> longest period_s ever set (never shortened)
+        self._backward: list = []     # consecutive backward clock readings (rebase after REBASE_AFTER)
         self._held: dict = {}
         self._fails: dict = {}
         self._inflight: set = set()
@@ -192,7 +220,7 @@ class Scheduler:
                 raise
             self._audit("schedule.created", sch, who)
             self._s[sch.id] = sch
-            self._window[sch.id] = sch.period_s
+            self._widen(sch)
             return sch
 
     def update(self, who: Principal, schedule_id: str, **changes) -> Schedule:
@@ -209,7 +237,7 @@ class Scheduler:
             changed = sorted(k for k in changes if changes[k] != getattr(old, k))
             self._audit("schedule.updated", sch, who, changed=changed)
             self._s[sch.id] = sch
-            self._window[sch.id] = max(self._window.get(sch.id, 0), sch.period_s)
+            self._widen(sch)
             return sch
 
     def disable(self, who: Principal, schedule_id: str) -> Schedule:
@@ -229,24 +257,50 @@ class Scheduler:
             raise ScheduleRefused("owner_mismatch")
         return sch
 
-    def period_spent(self, who: Principal, schedule_id: str) -> int:
+    def resume(self, who: Principal, schedule_id: str) -> Schedule:
+        """The owner re-activates a suspended or disabled schedule; the owner's spend ledger is kept."""
         with self._lock:
-            sch = self.get(who, schedule_id)
-            return self._spent(sch.id, self._last_now) if self._last_now is not None else 0
+            try:
+                old = self.get(who, schedule_id)
+                if sum(1 for s in self._s.values() if s.active and s.tenant_id == who.tenant_id
+                       and s.owner_id == who.user_id and s.id != old.id) >= MAX_SCHEDULES_PER_OWNER:
+                    raise ScheduleRefused("schedule_limit")
+                sch = replace(old, active=True, version=old.version + 1)
+                self._check(who, sch)
+            except ScheduleRefused as exc:
+                self._refused_change(who, schedule_id, exc)
+                raise
+            self._audit("schedule.resumed", sch, who, spent=self._spent(_owner(sch), self._last_now))
+            self._s[sch.id] = sch
+            self._fails.pop(sch.id, None)
+            return sch
+
+    def period_spent(self, who: Principal, schedule_id: str) -> int:
+        """The owner's spend over the window: one ledger for all of that owner's schedules."""
+        with self._lock:
+            return self._spent(_owner(self.get(who, schedule_id)), self._last_now)
 
     def period_held(self, who: Principal, schedule_id: str) -> int:
         with self._lock:
-            return self._held.get(self.get(who, schedule_id).id, 0)
+            return self._owner_held(_owner(self.get(who, schedule_id)))
 
-    def _spent(self, sid: str, now) -> int:
-        w = self._window.get(sid, MAX_PERIOD_S)
-        return sum(c for t, c in self._ledger.get(sid, ()) if t > now - w)
+    def _widen(self, sch: Schedule) -> None:
+        self._window[_owner(sch)] = max(self._window.get(_owner(sch), 0), sch.period_s)
+
+    def _owner_held(self, key) -> int:
+        return sum(v for sid, v in self._held.items() if _owner(self._s[sid]) == key)
+
+    def _spent(self, key, now) -> int:
+        if now is None:
+            return 0
+        w = self._window.get(key, MAX_PERIOD_S)
+        return sum(c for t, c in self._ledger.get(key, ()) if t > now - w)
 
     def _check(self, who: Principal, s: Schedule) -> None:
         if not isinstance(who, Principal):
             raise ScheduleRefused("role_escalation", "malformed principal")
         if not (isinstance(s.agent_role, str) and _int(s.cadence_s, MIN_CADENCE_S, MAX_PERIOD_S)
-                and _int(s.period_s, s.cadence_s, MAX_PERIOD_S) and _int(s.start_at, 0, MAX_EPOCH_S)
+                and _int(s.period_s, max(s.cadence_s, MIN_PERIOD_S), MAX_PERIOD_S) and _int(s.start_at, 0, MAX_EPOCH_S)
                 and _int(s.period_cap, 1, MAX_CAP) and _int(s.run_cap, 1, s.period_cap)
                 and isinstance(s.tools, tuple) and s.tools and len(set(s.tools)) == len(s.tools)
                 and all(isinstance(t, str) for t in s.tools)):
@@ -276,7 +330,7 @@ class Scheduler:
             return False
         if d.get("kind") != "write" or d.get("entity_class") != "plain":
             return True                                           # missing kind or class is never plain
-        return bool(set(_SPLIT.split(domain.lower())) & RIGID_TOKENS) or A.posting_entity(d, domain)
+        return bool(_tokens(domain) & RIGID_TOKENS) or A.posting_entity(d, domain)
 
     def _record(self, type_: str, tenant_id, subject, data: dict) -> None:
         try:
@@ -305,12 +359,20 @@ class Scheduler:
             now = self._clock()
             last = self._last_now
             if not (isinstance(now, (int, float)) and not isinstance(now, bool) and math.isfinite(now)
-                    and 0 <= now <= MAX_EPOCH_S and (last is None or last <= now <= last + MAX_STEP_S)):
-                try:
-                    self._record("scheduler.clock_fault", None, None, {"last": last})
-                except ScheduleRefused:
-                    log.error("clock fault not audited")
+                    and 0 <= now <= MAX_EPOCH_S):
+                self._clock_event("scheduler.clock_fault", last)
                 raise ScheduleRefused("clock_fault")              # the rejected reading is not stored
+            if last is not None and now < last:
+                self._backward = (self._backward if self._backward and now >= self._backward[-1] else []) + [now]
+                if len(self._backward) < REBASE_AFTER:
+                    self._clock_event("scheduler.clock_fault", last)
+                    raise ScheduleRefused("clock_fault")
+                self._rebase(now, last)                           # the clock is consistently earlier: follow it
+                return []
+            self._backward = []
+            if last is not None and now - last > MAX_STEP_S:      # a long gap: fresh start, spend still counts
+                self._clock_event("scheduler.clock_gap", last)
+                self._shift_ledger(now - last)
             self._last_now = now
             ids = list(self._s)
         out = []
@@ -326,6 +388,25 @@ class Scheduler:
             if rec is not None:
                 out.append(rec)
         return out
+
+    def _clock_event(self, type_: str, last) -> None:
+        try:
+            self._record(type_, None, None, {"last": last})
+        except ScheduleRefused:
+            log.error("%s not audited", type_)
+
+    def _shift_ledger(self, delta) -> None:
+        for key, rows in self._ledger.items():
+            self._ledger[key] = [(t + delta, c) for t, c in rows]
+
+    def _rebase(self, now, last) -> None:
+        """Follow a clock that is consistently earlier: keep every spend row (clamped to now), mark slots done."""
+        self._clock_event("scheduler.clock_rebase", last)
+        self._backward, self._last_now = [], now
+        for key, rows in self._ledger.items():
+            self._ledger[key] = [(min(t, now), c) for t, c in rows]
+        for sid, sch in self._s.items():
+            self._last_slot[sid] = int((now - sch.start_at) // sch.cadence_s) if now >= sch.start_at else -1
 
     def _claim(self, sid: str, now):
         """Under the lock: re-read the schedule and claim its slot, or say why not. Returns (sch, slot, refusal)."""
@@ -347,7 +428,7 @@ class Scheduler:
             return sch, slot, "roles_unavailable"
         if sch.agent_role not in roles:
             return sch, slot, "owner_permission_lost"
-        if self._spent(sid, now) + sch.run_cap > sch.period_cap:
+        if self._spent(_owner(sch), now) + self._owner_held(_owner(sch)) + sch.run_cap > sch.period_cap:
             return sch, slot, "budget_exhausted"
         self._inflight.add(sid)
         self._held[sid] = sch.run_cap
@@ -371,7 +452,7 @@ class Scheduler:
                     self._suspend(sid, why)                       # suspended even if its audit fails
                 kind = "agent.budget_exceeded" if why == "budget_exhausted" else "agent.run_refused"
                 self._audit(kind, sch, None, run_id=run_id, slot=slot, code=why, scope="period",
-                            spent=self._spent(sid, now))
+                            spent=self._spent(_owner(sch), now))
                 return RunRecord(run_id, sid, slot, "refused", why)
         meter, drafts, cost = None, [], 0
         try:
@@ -385,7 +466,10 @@ class Scheduler:
                 raise ScheduleRefused("tenant_mismatch")
             if "tenant" not in tuple(getattr(port, "layers", ())) or "run" not in tuple(getattr(port, "layers", ())):
                 raise ScheduleRefused("tenant_budget_missing")
-            meter = _Meter(port, sch, run_id, self._clock, now + MAX_RUN_S)
+            start = self._clock()                                 # the deadline counts from this run's claim
+            if not (isinstance(start, (int, float)) and not isinstance(start, bool) and math.isfinite(start)):
+                raise ScheduleRefused("clock_fault")
+            meter = _Meter(port, sch, run_id, self._clock, max(start, now) + MAX_RUN_S)
             self._audit("agent.run_started", sch, None, run_id=run_id, slot=slot)
             caller = {k: principal[k] for k in ("tenant_id", "actor_kind", "actor_id", "role_ids", "on_behalf_of",
                                                 "agent_id", "run_id", "thread_id")} | {"correlation_id": run_id}
@@ -395,11 +479,17 @@ class Scheduler:
                 if not isinstance(tool, str) or tool not in sch.tools:
                     raise ScheduleRefused("tool_not_allowed")
                 drafts.append({"tool": tool, "args": copy.deepcopy(args), "tainted": True})
-            agent(RunContext(run_id, lambda: copy.deepcopy(caller), meter.complete, draft))
+            token = secrets.token_hex(16)
+            _RUNS[token] = {"caller": caller, "complete": meter.complete, "draft": draft}
+            try:
+                agent(RunContext(run_id, *_ctx_functions(token)))
+            finally:
+                _RUNS.pop(token, None)
             meter.check_deadline()
             self._check_tools(sch)                                # re-check every draft at the end, too
-            if any(d["tool"] not in sch.tools for d in drafts):
+            if any(not isinstance(d, dict) or d.get("tool") not in sch.tools for d in drafts):
                 raise ScheduleRefused("tool_not_allowed")
+            drafts = [{"tool": d["tool"], "args": copy.deepcopy(d.get("args")), "tainted": True} for d in drafts]
             cost = meter.settled()
             for d in drafts:
                 self._audit("agent.tool_proposed", sch, None, run_id=run_id, slot=slot, tool=d["tool"], tainted=True)
@@ -420,8 +510,9 @@ class Scheduler:
                 log.error("run %s failed and its failure was not audited", run_id)
                 code, detail = "audit_unavailable", code
             with self._lock:
-                self._fails[sid] = self._fails.get(sid, 0) + 1
-                if self._fails[sid] >= MAX_FAILURES and self._s[sid].active:
+                if code in SELF_CAUSED:                           # outages, timeouts and refusals never count
+                    self._fails[sid] = self._fails.get(sid, 0) + 1
+                if self._fails.get(sid, 0) >= MAX_FAILURES and self._s[sid].active:
                     try:
                         self._suspend(sid, "repeated_failures")
                     except ScheduleRefused:
@@ -433,6 +524,6 @@ class Scheduler:
             if meter is not None and cost == 0:
                 cost = meter.settled()
             with self._lock:
-                self._ledger.setdefault(sid, []).append((now, max(0, cost)))   # settle never lowers the total
+                self._ledger.setdefault(_owner(sch), []).append((now, max(0, cost)))  # never lowers the total
                 self._held.pop(sid, None)
                 self._inflight.discard(sid)

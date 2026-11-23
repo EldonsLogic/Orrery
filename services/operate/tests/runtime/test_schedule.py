@@ -31,7 +31,10 @@ DEFS = [tool("sales_order.list", kind="read"), tool("customer_note.create", "R1"
         tool("purchase_order.cancel", "R2"), tool("customer_note.delete", "R1", **W),
         tool("customer_note.update", "R2", **W), tool("gl_posting.create", "R1"),
         tool("customer.export", "R1", **W), tool("einvoice.create", "R1", **W), tool("wps_file.create", "R1", **W),
-        tool("customer_note.transition", "R1", **W), tool("lead.create", "R1", transitions=[], **W)]
+        tool("customer_note.transition", "R1", **W), tool("lead.create", "R1", transitions=[], **W),
+        tool("memo.create", "R1", kind="write"), tool("memo_two.create", "R1", entity_class="plain")] + [
+        tool(n, "R1", **W) for n in ("glPosting.create", "generalledger.create", "zakat_return.create",
+                                     "gosi_contribution.create", "withholding.create", "bank_account.update")]
 
 
 class Clock:
@@ -160,9 +163,9 @@ def test_invalid_metered_cost_settles_at_the_hold(bad):
 class Noisy(FakeModelCallPort):
     def complete(self, request):
         out = super().complete(request)
-        for other in ({"correlation_id": "other", "tenant_id": "t_acme"}, {"tenant_id": "t_other"},
-                      {"type": "meter.other"}):
-            self.events.append(copy.deepcopy(self.events[-1]) | other)
+        genuine = self.events[-1]
+        for other in ({"correlation_id": "other"}, {"tenant_id": "t_other"}, {"type": "meter.other"}):
+            self.events.append(copy.deepcopy(genuine) | other)              # each differs in one field only
         return out
 
 
@@ -247,7 +250,10 @@ def test_role_escalation_and_malformed_principal():
     ("purchase_order.cancel", "draft_only"), ("customer_note.delete", "draft_only"),
     ("customer_note.update", "draft_only"), ("gl_posting.create", "draft_only"), ("customer.export", "draft_only"),
     ("einvoice.create", "draft_only"), ("wps_file.create", "draft_only"),
-    ("customer_note.transition", "draft_only"), ("lead.create", "draft_only")])
+    ("customer_note.transition", "draft_only"), ("lead.create", "draft_only"), ("memo.create", "draft_only"),
+    ("memo_two.create", "draft_only"), ("glPosting.create", "draft_only"), ("generalledger.create", "draft_only"),
+    ("zakat_return.create", "draft_only"), ("gosi_contribution.create", "draft_only"),
+    ("withholding.create", "draft_only"), ("bank_account.update", "draft_only")])
 def test_draft_only_tool_rules(name, code):
     s, _, _, _ = make()
     refused(code, s.create, OWNER, **(SPEC | {"tools": (name,)}))
@@ -353,7 +359,7 @@ def test_clock_edges():
     assert s.tick(digest_agent) == []
     clock.t = 1000 + 5 * DAY                                       # missed slots collapse into one run
     assert len(s.tick(digest_agent)) == 1
-    for bad in (1000 + DAY, math.nan, math.inf, None, True, 1000 + 5 * DAY + S.MAX_STEP_S + 1, S.MAX_EPOCH_S + 1):
+    for bad in (1000 + DAY, math.nan, math.inf, None, True, S.MAX_EPOCH_S + 1):
         clock.t = bad
         refused("clock_fault", s.tick, digest_agent)
     assert events[-1]["type"] == "scheduler.clock_fault"
@@ -437,6 +443,11 @@ def test_limits_and_budget_window_cannot_be_reset_by_update():
         s.create(OWNER, **SPEC)
     refused("schedule_limit", s.create, OWNER, **SPEC)
     refused("invalid_schedule", s.update, OWNER, sch.id, period_cap=S.MAX_CAP + 1)
+    assert S.MAX_CAP == 50_000_000 and S.MIN_PERIOD_S == DAY       # platform defaults pinned (ADR-0064 item 6)
+    assert s.update(OWNER, sch.id, period_cap=S.MAX_CAP, run_cap=S.MAX_CAP).run_cap == S.MAX_CAP
+    refused("invalid_schedule", s.update, OWNER, sch.id, period_s=DAY - 1)
+    other = Principal("t_beta", "u_1", ("sales",))                 # the limit is per tenant and owner
+    assert s.create(other, **SPEC).tenant_id == "t_beta"
 
 
 def test_every_schedule_change_is_logged_and_invalid_specs_refuse():
@@ -449,6 +460,191 @@ def test_every_schedule_change_is_logged_and_invalid_specs_refuse():
     assert log == [("schedule.created", None), ("schedule.updated", ["cadence_s"]), ("schedule.disabled", None)]
     assert all(e["data"]["actor_id"] == "u_1" for e in events)
     for bad in ({"cadence_s": 60}, {"run_cap": 0}, {"run_cap": 6_000}, {"period_s": 3600}, {"tools": ()},
-                {"cadence_s": True}, {"tools": ("sales_order.list", "sales_order.list")}):
+                {"cadence_s": True}, {"tools": ("sales_order.list", "sales_order.list")},
+                {"cadence_s": 300, "period_s": 3600}):                    # window at least a day
         refused("invalid_schedule", s.create, OWNER, **(SPEC | bad))
     assert events[-1]["type"] == "schedule.change_refused"
+
+
+def test_deadline_counts_from_the_claim_not_the_tick():
+    s, clock, _, _ = make(roles=lambda t, u: ("sales",))
+    a = [s.create(OWNER, **(SPEC | {"period_cap": 50_000})) for _ in range(2)]
+    b = s.create(Principal("t_beta", "u_9", ("sales",)), **(SPEC | {"period_cap": 50_000}))
+
+    def agent(ctx):
+        if ctx.caller()["tenant_id"] == "t_acme":
+            clock.t += 301                                           # each A run is slow but inside its own limit
+        digest_agent(ctx)
+    for day in range(S.MAX_FAILURES + 1):
+        clock.t = 1000 + day * DAY
+        recs = {r.schedule_id: r for r in s.tick(agent)}
+        assert recs[b.id].outcome == "completed", recs[b.id]
+        assert all(recs[x.id].code != "run_timeout" for x in a if x.id in recs)
+    assert s._s[b.id].active
+
+
+@pytest.mark.parametrize("port_kw", [{"meter_up": False}, {"kill_switch": True}])
+def test_platform_failures_do_not_count_toward_suspension(port_kw):
+    s, clock, _, _ = make(port_kw=port_kw)
+    sch = s.create(OWNER, **SPEC)
+    for day in range(S.MAX_FAILURES + 1):
+        clock.t = 1000 + day * DAY
+        assert s.tick(digest_agent)[0].code == "port_refused"
+    assert s.get(OWNER, sch.id).active
+
+
+def test_timeouts_and_audit_outages_do_not_count_toward_suspension():
+    state = {"fail": set()}
+
+    def emit(e):
+        if e["type"] in state["fail"]:
+            raise OSError("down")
+    s, clock, _, _ = make(emit=emit)
+    sch = s.create(OWNER, **(SPEC | {"period_cap": 50_000}))
+    state["fail"] = {"agent.run_completed", "agent.run_failed"}
+    for day in range(S.MAX_FAILURES + 1):
+        clock.t = 1000 + day * DAY
+        assert s.tick(digest_agent)[0].code == "audit_unavailable"
+    state["fail"] = set()
+
+    def slow(ctx):
+        clock.t += S.MAX_RUN_S + 1
+    for day in range(S.MAX_FAILURES + 1):
+        clock.t = 1000 + (10 + day) * DAY
+        assert s.tick(slow)[0].code == "run_timeout"
+    assert s.get(OWNER, sch.id).active
+
+
+def test_a_success_resets_the_failure_count():
+    s, clock, _, _ = make()
+    sch = s.create(OWNER, **(SPEC | {"period_cap": 50_000}))
+
+    def boom(ctx):
+        raise RuntimeError("x")
+    plan = [boom, boom, digest_agent, boom, boom]
+    for day, agent in enumerate(plan):
+        clock.t = 1000 + day * DAY
+        s.tick(agent)
+    assert s.get(OWNER, sch.id).active                              # fail, fail, pass, fail, fail: not suspended
+
+
+def test_owner_resume_keeps_the_ledger_and_is_audited():
+    s, clock, events, _ = make()
+    sch = s.create(OWNER, **(SPEC | {"period_cap": 50_000}))
+
+    def boom(ctx):
+        call(ctx)
+        raise RuntimeError("x")
+    for day in range(S.MAX_FAILURES):
+        clock.t = 1000 + day * DAY
+        s.tick(boom)
+    spent = s.period_spent(OWNER, sch.id)
+    assert not s.get(OWNER, sch.id).active and spent > 0
+    refused("owner_mismatch", s.resume, Principal("t_acme", "u_2", ("sales",)), sch.id)
+    refused("role_escalation", s.resume, Principal("t_acme", "u_1", ("viewer",)), sch.id)
+    resumed = s.resume(OWNER, sch.id)
+    assert resumed.active and events[-1]["type"] == "schedule.resumed"
+    assert s.period_spent(OWNER, sch.id) == spent
+    clock.t = 1000 + S.MAX_FAILURES * DAY
+    assert s.tick(boom)[0].code == "run_failed" and s.get(OWNER, sch.id).active   # resume resets the count
+
+
+def test_recreating_schedules_does_not_reset_the_owner_budget():
+    s, clock, _, _ = make()
+    sch = s.create(OWNER, **SPEC)
+    first_run(s, clock)
+    clock.t = 1000 + DAY
+    assert s.tick(digest_agent)[0].outcome == "completed"
+    s.disable(OWNER, sch.id)
+    again = s.create(OWNER, **(SPEC | {"start_at": 1000 + 2 * DAY}))
+    clock.t = 1000 + 2 * DAY
+    assert s.tick(digest_agent)[0].code == "budget_exhausted"
+    assert s.period_spent(OWNER, again.id) == s.period_spent(OWNER, sch.id) > 0
+
+
+def test_context_functions_carry_no_meter_or_drafts():
+    s, clock, _, _ = make()
+    s.create(OWNER, **SPEC)
+    seen = {}
+
+    def nosy(ctx):
+        for fn in (ctx.complete, ctx.draft, ctx.caller):
+            assert not hasattr(fn, "__self__")
+            cells = [c.cell_contents for c in (fn.__closure__ or ())]
+            assert all(isinstance(c, str) for c in cells), cells
+        seen["ok"] = True
+        digest_agent(ctx)
+    rec = first_run(s, clock, nosy)
+    assert seen and rec.drafts[0]["tainted"] is True
+
+
+def test_end_of_run_tool_recheck():
+    defs = list(DEFS)
+    s, clock, _, _ = make(defs=defs)
+    s.create(OWNER, **SPEC)
+
+    def agent(ctx):
+        digest_agent(ctx)
+        defs[1] = tool("customer_note.create", "R1", kind="write", entity_class="ledger")
+    rec = first_run(s, clock, agent)
+    assert (rec.outcome, rec.code, rec.drafts) == ("failed", "draft_only", ())
+
+
+def test_role_store_must_return_a_tuple():
+    s, clock, _, _ = make(roles=lambda t, u: ["sales"])
+    s.create(OWNER, **SPEC)
+    assert first_run(s, clock).code == "roles_unavailable"
+
+
+def test_long_gap_is_a_fresh_start_that_keeps_the_ledger():
+    s, clock, events, _ = make()
+    sch = s.create(OWNER, **SPEC)
+    first_run(s, clock)
+    spent = s.period_spent(OWNER, sch.id)
+    clock.t = 1000 + S.MAX_STEP_S + 2 * DAY
+    assert len(s.tick(digest_agent)) == 1 and any(e["type"] == "scheduler.clock_gap" for e in events)
+    assert s.period_spent(OWNER, sch.id) > spent                    # the earlier run still counts after the gap
+
+
+def test_far_future_first_reading_recovers_without_restart():
+    s, clock, events, _ = make()
+    s.create(OWNER, **SPEC)
+    clock.t = 3_900_000_000                                          # implausible but in range
+    s.tick(digest_agent)
+    outs = []
+    for i in range(S.REBASE_AFTER):
+        clock.t = 1000 + i
+        try:
+            outs.append(len(s.tick(digest_agent)))
+        except ScheduleRefused as exc:
+            outs.append(exc.code)
+    assert outs[:-1] == ["clock_fault"] * (S.REBASE_AFTER - 1) and outs[-1] == 0
+    assert any(e["type"] == "scheduler.clock_rebase" for e in events)
+    clock.t = 1000 + DAY
+    assert len(s.tick(digest_agent)) == 1                            # back on schedule
+
+
+def test_concurrent_holds_of_one_owner_count_against_the_cap():
+    s, clock, _, _ = make()
+    s.create(OWNER, **SPEC)
+    s.create(OWNER, **SPEC)
+    inner = []
+
+    def first(ctx):
+        inner.extend(s.tick(digest_agent))                             # the other schedule is claimed meanwhile
+    assert first_run(s, clock, first).outcome == "completed"
+    assert [r.code for r in inner] == ["budget_exhausted"]            # 0 spent + 2000 held + 2000 > 2500
+
+
+def test_drafts_are_rebuilt_tainted_when_recorded():
+    s, clock, _, _ = make()
+    s.create(OWNER, **SPEC)
+
+    def tamper(ctx):
+        digest_agent(ctx)
+        state = next(iter(S._RUNS.values()))                           # in-process reach, not a sandbox
+        lists = [c.cell_contents for c in state["draft"].__closure__ if isinstance(c.cell_contents, list)]
+        lists[0].append({"tool": "customer_note.create", "args": {"x": 1}, "tainted": False, "extra": 1})
+    rec = first_run(s, clock, tamper)
+    assert [d["tainted"] for d in rec.drafts] == [True, True] and all(set(d) == {"tool", "args", "tainted"}
+                                                                       for d in rec.drafts)

@@ -65,4 +65,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0058-design-confirmations-batch-2.md](ADR-0058-design-confirmations-batch-2.md) | Design confirmations batch 2: compiler scope, connector refusals, fonts, Tool API risk | Proposed |
 | [ADR-0055-purchasing-engine-mapping.md](ADR-0055-purchasing-engine-mapping.md) | Purchasing and price-list engine mapping (contract 0.2.0) | Proposed |
 | [ADR-0059-draft-country-packs-in-sandbox.md](ADR-0059-draft-country-packs-in-sandbox.md) | Draft country packs may run in sandbox and test (synthetic data only); partly supersedes ADR-0034 | Accepted |
-| [ADR-0060-role-assignments-in-regional-store.md](ADR-0060-role-assignments-in-regional-store.md) | Role assignments live in a regional store outside the tenant site; supersedes ADR-0007 item 9 once Accepted (decided by Eldon 2026-11-22, pending security review) | Proposed |
+| [ADR-0060-role-assignments-in-regional-store.md](ADR-0060-role-assignments-in-regional-store.md) | Role assignments live in a regional store outside the tenant site, under the security conditions of the GOV-066 review; supersedes ADR-0007 item 9 | Accepted |

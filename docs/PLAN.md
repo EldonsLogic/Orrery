@@ -385,7 +385,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-035 | Country pack certification rule (Q-560, agreed by both founders on PR #264): secondary evidence counts only with an accountant sign-off, certification needs a named accountant plus one founder, and pack status must match the manifest level and name a reviewer | Compliance | G2 | CMP-034 | partner | todo |
 | OPR-016 | First pilot agent (optional, draft-only), chosen with the lead; role, tools, caps and kill switch per SEC-020 | Operate | G2 | SEC-020,OPR-001 | eldon | todo |
 | PLT-025 | Gateway token metering from the start: count tokens and cost per tenant and per call in services/gateway, so builder session cost is measured | Platform | G1 | - | partner | done |
-| PLT-026 | Model-call interface contract in contracts/ (tier and purpose, budget reservation, refusal codes, metering event) plus a fake port, so Eldon rows build against it while the partner builds the gateway (Q-127, option A) | Platform | G2 | - | eldon | todo |
+| PLT-026 | Model-call interface contract in contracts/ (tier and purpose, budget reservation, refusal codes, metering event) plus a fake port, so Eldon rows build against it while the partner builds the gateway (Q-127, option A) | Platform | G2 | - | eldon | done |
 | GOV-041 | Contracts check script: every contract schema valid, examples validate, refs resolve; CI job | Governance | G0 | GOV-032 | eldon | done |
 | GOV-052 | Plan status hygiene: mark rows done whose work has merged (PLT-005, QA-008, WEB-017, OPR-019) | Governance | G0 | GOV-006 | eldon | done |
 | GOV-053 | Runbook: shipping plan rows with parallel subagents (worktrees, tiers, reviews, collisions) | Governance | G0 | GOV-006 | eldon | done |

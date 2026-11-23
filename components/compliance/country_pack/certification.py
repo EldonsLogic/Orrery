@@ -119,7 +119,8 @@ def _providers(directory: Path) -> list[tuple[str, tuple[int, int, int] | None, 
     return providers
 
 
-_NUMBER = r"(?:0|[1-9][0-9]*)"
+# At most 9 digits per segment: longer numbers do not parse (refused), so int() never hits its digit limit.
+_NUMBER = r"(?:0|[1-9][0-9]{0,8})"
 _VERSION = re.compile(rf"({_NUMBER})\.({_NUMBER})\.({_NUMBER})", re.ASCII)
 _TERM = re.compile(rf"(>=|<=|>|<|=|\^|~)?({_NUMBER}\.{_NUMBER}\.{_NUMBER})", re.ASCII)
 

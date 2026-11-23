@@ -77,6 +77,18 @@ class TestRequiresResolution(_Fixture):
         self.requiring({"component": "compliance.zatca_sa", "versionRange": ">=9999.0.0"}, real_root, False)
         self.requiring({"component": "compliance.zatca_sa", "versionRange": ">=0.1.0 <0.2.0"}, real_root, True)
 
+    def test_oversized_version_numbers_refuse_cleanly(self) -> None:
+        """Re-review at 2ce73b1: a 5,000-digit segment exceeded int()'s digit limit and escaped as ValueError."""
+        huge = "1" + "0" * 5000
+        self.assertFalse(certification.version_in_range(f">={huge}.0.0", "0.1.0"))
+        self.assertFalse(certification.version_in_range(">=0.1.0", f"{huge}.0.0"))
+        root = self.registry(self.provider())
+        self.requiring({"component": "finance.vat_synthetic", "versionRange": f">={huge}.0.0"}, root, False)
+        only_huge = self.registry(self.provider(version=f"{huge}.0.0"))
+        self.requiring({"component": "finance.vat_synthetic", "versionRange": ">=0.1.0"}, only_huge, False)
+        both = self.registry(self.provider(version=f"{huge}.0.0"), self.provider())
+        self.requiring({"component": "finance.vat_synthetic", "versionRange": ">=0.1.0"}, both, True)
+
     def test_version_ranges(self) -> None:
         root = self.registry(self.provider("0.1.0"))
         for rng, ok in (

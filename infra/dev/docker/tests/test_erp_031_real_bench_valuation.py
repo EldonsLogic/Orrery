@@ -8,6 +8,7 @@ real bench in CI, not here.
 """
 from __future__ import annotations
 
+import importlib
 import os
 from pathlib import Path
 import re
@@ -72,20 +73,33 @@ class TestRequireFlagTurnsSkipIntoFailure(unittest.TestCase):
         self.assertTrue(gate({"REQUIRE_ERP014_LIVE": "0"})[0], "only 1 turns the flag on")
 
 
+RAN_OK = "Ran 99 tests in 1.0s\n\nOK\n"
+
+
 class TestRunnerRunsTheValuationLayers(unittest.TestCase):
-    def _run(self, unittest_output: str = "OK\n", unittest_rc: int = 0, reuse: bool = False):
-        compose_calls, unittest_calls = [], []
+    def _run(self, unittest_output: str = RAN_OK, unittest_rc: int = 0, reuse: bool = False, drop_rcs=None,
+             outputs_by_layer=None):
+        """Run the runner with docker and the children faked. ``drop_rcs`` are the exit codes of successive
+        site drops; ``outputs_by_layer`` maps ERP014/ERP015 to that layer's unittest output."""
+        compose_calls, unittest_calls, other_calls = [], [], []
+        drop_rcs = iter(drop_rcs or ())
+        self.compose_calls, self.verifier_calls = compose_calls, other_calls  # visible even when the run raises
 
         def fake_compose(project, compose_file, env, *args, **kwargs):
             compose_calls.append(args)
             if args[:2] == ("ps", "--status"):
                 return subprocess.CompletedProcess([], 0, stdout="engine\nmariadb\nredis-cache\nredis-queue\n", stderr="")
+            if "ce_sec_005_drop" in args:
+                return subprocess.CompletedProcess([], next(drop_rcs, 0), stdout="", stderr="")
             return subprocess.CompletedProcess([], 0, stdout="ok", stderr="")
 
         def fake_subprocess(cmd, **kwargs):
             if "unittest" in cmd:
                 unittest_calls.append((tuple(cmd), kwargs))
-                return subprocess.CompletedProcess(cmd, unittest_rc, stdout=unittest_output, stderr="")
+                layer = "ERP014" if "test_erp_014_accounting_properties" in " ".join(cmd) else "ERP015"
+                out = (outputs_by_layer or {}).get(layer, unittest_output)
+                return subprocess.CompletedProcess(cmd, unittest_rc, stdout=out, stderr="")
+            other_calls.append((tuple(cmd), kwargs))
             return subprocess.CompletedProcess(cmd, 0, stdout="Verified", stderr="")
 
         env = {"ENGINE_INTERNAL_TOKEN": "reused-token-0123456789abcdef", "REDIS_PASSWORD": "reused-redis-0123456789"}
@@ -133,6 +147,41 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
         rc, _, _ = self._run(unittest_output="Ran 12 tests in 1s\n\nOK (skipped=3)\n")
         self.assertNotEqual(rc, 0)
 
+    def test_a_live_layer_that_ran_no_tests_fails_the_run(self) -> None:
+        for layer in LIVE_CLASSES:
+            with self.subTest(layer):
+                rc, _, _ = self._run(outputs_by_layer={layer: "Ran 0 tests in 0.000s\n\nNO TESTS RAN\n"})
+                self.assertNotEqual(rc, 0)
+        rc, _, _ = self._run(unittest_output="OK\n")
+        self.assertNotEqual(rc, 0, "no `Ran N tests` line proves nothing")
+
+    def test_a_live_layer_that_ran_too_few_tests_fails_the_run(self) -> None:
+        """Live discovery removed: only a few pure-looking tests ran, exit status 0, no skip."""
+        for layer, minimum in ((p.upper(), n) for p, _, _, _, _, n in run_real_bench_ci.VALUATION_LAYERS):
+            with self.subTest(layer):
+                rc, _, _ = self._run(outputs_by_layer={layer: f"Ran {minimum - 1} tests in 1s\n\nOK\n"})
+                self.assertNotEqual(rc, 0)
+                rc, _, _ = self._run(outputs_by_layer={layer: f"Ran {minimum} tests in 1s\n\nOK\n"})
+                self.assertEqual(rc, 0, "the expected count passes")
+
+    def test_the_runner_selects_the_live_classes_and_their_minimum_counts_match_the_real_ones(self) -> None:
+        _, _, unittest_calls = self._run()
+        selected = {name for cmd, _ in unittest_calls for name in cmd if name.startswith("change_engine.tests.")}
+        self.assertEqual(selected, set(LIVE_CLASSES.values()), "the live classes, not whole modules")
+        for prefix, live_class, *_rest, minimum in run_real_bench_ci.VALUATION_LAYERS:
+            module, _, cls = live_class.rpartition(".")
+            real = unittest.defaultTestLoader.loadTestsFromTestCase(getattr(importlib.import_module(module), cls))
+            self.assertLessEqual(minimum, real.countTestCases(), prefix)
+            self.assertGreaterEqual(minimum, real.countTestCases(), f"{prefix}: raise the minimum with a new live test")
+
+    def test_the_run_counter(self) -> None:
+        ran = run_real_bench_ci.unittest_tests_run
+        self.assertEqual(ran("Ran 18 tests in 1.1s\n\nOK\n"), 18)
+        self.assertEqual(ran("Ran 1 test in 0.1s\n\nOK\n"), 1)
+        self.assertEqual(ran("Ran 0 tests in 0.0s\n\nNO TESTS RAN\n"), 0)
+        self.assertEqual(ran("OK\n"), 0)
+        self.assertEqual(ran("noise Ran 50 tests in a log line\n"), 0, "only unittest's own summary line counts")
+
     def test_a_failing_live_layer_fails_the_run_and_both_layers_still_run(self) -> None:
         rc, _, unittest_calls = self._run(unittest_rc=1, unittest_output="FAILED (failures=1)\n")
         self.assertEqual(rc, 1)
@@ -144,6 +193,28 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
         dropped = [args[-1] for args in compose_calls if "ce_sec_005_drop" in args]
         self.assertEqual(sorted(dropped), sorted(s for s, _ in self._provisioned(compose_calls)))
 
+    def test_reused_project_attempts_every_drop_when_the_first_fails(self) -> None:
+        with self.assertRaises(RuntimeError) as caught:
+            self._run(reuse=True, drop_rcs=[1, 0, 0])
+        provisioned = [s for s, _ in self._provisioned(self.compose_calls)]
+        dropped = [args[-1] for args in self.compose_calls if "ce_sec_005_drop" in args]
+        self.assertEqual(len(provisioned), 3)
+        self.assertEqual(dropped, provisioned, "every site is dropped even though the first drop failed")
+        self.assertIn(provisioned[0], str(caught.exception))
+
+    def test_reused_project_reports_every_failed_drop(self) -> None:
+        with self.assertRaises(RuntimeError) as caught:
+            self._run(reuse=True, drop_rcs=[1, 0, 2])
+        sites = [s for s, _ in self._provisioned(self.compose_calls)]
+        self.assertIn(sites[0], str(caught.exception))
+        self.assertIn(sites[2], str(caught.exception))
+        self.assertNotIn(sites[1], str(caught.exception))
+
+    def test_the_verifier_gets_its_declared_time_limit(self) -> None:
+        self._run()
+        (_, kwargs), = self.verifier_calls
+        self.assertEqual(kwargs["timeout"], run_real_bench_ci.VERIFIER_TIMEOUT)
+
     def test_skip_detector(self) -> None:
         skipped = run_real_bench_ci.unittest_reported_skips
         self.assertTrue(skipped("OK (skipped=10)"))
@@ -153,9 +224,33 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
 
 
 class TestWorkflowLeavesTimeForTheLiveLayers(unittest.TestCase):
-    def test_workflow_timeout_covers_the_runner_phase_limits(self) -> None:
-        minutes = int(re.search(r"timeout-minutes:\s*(\d+)", WORKFLOW.read_text(encoding="utf-8")).group(1))
-        self.assertGreaterEqual(minutes, run_real_bench_ci.TOTAL_PHASE_LIMIT_SECONDS // 60, "job limit below the runner's")
+    HEADROOM_SECONDS = 300  # Actions setup (checkout, Python) and the runner's own cleanup, outside the phase limits
+
+    def _job_seconds(self) -> int:
+        return int(re.search(r"timeout-minutes:\s*(\d+)", WORKFLOW.read_text(encoding="utf-8")).group(1)) * 60
+
+    def test_every_sequential_phase_is_in_the_budget(self) -> None:
+        names = [name for name, _ in run_real_bench_ci.PHASES]
+        for needed in ("startup", "engine readiness", "http readiness", "verifier", "ce-sec-005 tests", "teardown"):
+            self.assertIn(needed, names)
+        self.assertEqual(sum(n.startswith("provision") for n in names), 1 + len(run_real_bench_ci.VALUATION_LAYERS))
+        self.assertEqual(sum(n.startswith("live layer") for n in names), len(run_real_bench_ci.VALUATION_LAYERS))
+        self.assertEqual(run_real_bench_ci.TOTAL_PHASE_LIMIT_SECONDS, sum(s for _, s in run_real_bench_ci.PHASES))
+
+    def test_declared_limits_are_the_ones_the_code_uses(self) -> None:
+        import inspect
+        limits = dict(run_real_bench_ci.PHASES)
+        defaults = lambda fn, arg: inspect.signature(fn).parameters[arg].default  # noqa: E731
+        self.assertEqual(defaults(run_real_bench_ci._wait_for_engine_ready, "timeout_seconds"), limits["engine readiness"])
+        self.assertEqual(defaults(run_real_bench_ci._verify_http_ready, "timeout_seconds"), limits["http readiness"])
+        self.assertEqual(run_real_bench_ci.VALUATION_TEST_TIMEOUT * len(run_real_bench_ci.VALUATION_LAYERS),
+                         sum(s for n, s in run_real_bench_ci.PHASES if n.startswith("live layer")))
+
+    def test_job_limit_covers_all_phases_plus_setup_and_cleanup_headroom(self) -> None:
+        job = self._job_seconds()
+        total = run_real_bench_ci.TOTAL_PHASE_LIMIT_SECONDS
+        self.assertGreaterEqual(job - total, self.HEADROOM_SECONDS, f"job {job}s, phases {total}s")
+        self.assertLessEqual(job, 90 * 60, "keep the job at or under 90 minutes")
         self.assertIn("python3 infra/dev/docker/run_real_bench_ci.py", WORKFLOW.read_text(encoding="utf-8"))
 
 

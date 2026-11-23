@@ -37,3 +37,10 @@ Unknown.
 
 ## Next step
 Open the PR, read the first real-bench run (ERP-031): confirm the live layers ran (no `skipped`), tune timeouts from the measured time.
+
+## Review fixes (gpt-6.1-sol correctness review at 85998d2, three Medium findings, test-first)
+- Vacuous runs: each live layer now runs only its live class (`TestLiveEngineProperties`, `TestLiveInventoryValuation`) and the runner parses unittest's `Ran N tests` line, failing below the layer's minimum (7 and 10; a test checks they equal the real class sizes). Tests: zero tests, no summary line, one below the minimum.
+- Budget: `PHASES` lists every sequential phase (startup, engine readiness, three provisions, HTTP readiness, verifier, CE-SEC-005 tests, two live layers, diagnostics, teardown) = 3750 s; each limit is a named constant the code uses. Job `timeout-minutes` 60 to 75 (750 s headroom for Actions setup and cleanup; test requires at least 300 s and at most 90 min).
+- Reused project cleanup: every site drop is attempted, errors are collected, then one failure names them all. Tests: first drop fails, remaining drops still run; two failures both reported.
+- Older runner fakes in `test_ce_sec_005_real_bench_ci.py` and `test_inf_015_redis_auth.py` now return a real `Ran N tests` line for unittest children.
+- Ran: `python3 -m unittest discover -s infra/dev/docker/tests` 123 tests OK; hygiene OK; the new tests fail on the old runner (7 failures, 5 errors). The real bench was not run.

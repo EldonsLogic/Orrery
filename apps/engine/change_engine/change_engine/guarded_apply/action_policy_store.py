@@ -109,6 +109,25 @@ class ActionPolicyStore:
                 WHEN EXISTS (SELECT 1 FROM action_policy_outcomes
                              WHERE tenant_id = NEW.tenant_id AND request_id = NEW.request_id)
                 BEGIN SELECT RAISE(ABORT, 'Append-only outcome'); END;
+                -- ERP-029: binds each admitted request to its idempotency key for read-back.
+                CREATE TABLE IF NOT EXISTS action_policy_admission_keys (
+                    tenant_id TEXT NOT NULL, request_id TEXT NOT NULL,
+                    submitter_id TEXT NOT NULL, idempotency_key TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, request_id),
+                    UNIQUE (tenant_id, submitter_id, idempotency_key)
+                );
+                CREATE TRIGGER IF NOT EXISTS action_policy_admission_keys_no_update
+                BEFORE UPDATE ON action_policy_admission_keys
+                BEGIN SELECT RAISE(ABORT, 'Append-only admission key'); END;
+                CREATE TRIGGER IF NOT EXISTS action_policy_admission_keys_no_delete
+                BEFORE DELETE ON action_policy_admission_keys
+                BEGIN SELECT RAISE(ABORT, 'Append-only admission key'); END;
+                CREATE TRIGGER IF NOT EXISTS action_policy_admission_keys_no_replace
+                BEFORE INSERT ON action_policy_admission_keys
+                WHEN EXISTS (SELECT 1 FROM action_policy_admission_keys WHERE tenant_id = NEW.tenant_id
+                             AND (request_id = NEW.request_id OR (submitter_id = NEW.submitter_id
+                                  AND idempotency_key = NEW.idempotency_key)))
+                BEGIN SELECT RAISE(ABORT, 'Append-only admission key'); END;
             """)
         db.close()
 
@@ -149,6 +168,11 @@ class ActionPolicyStore:
                             audit = replace(audit, decision="deny", reason="replay", break_glass=False)
                             break
                     db.execute("RELEASE claims")
+                if audit.decision != "deny":
+                    db.execute(
+                        "INSERT INTO action_policy_admission_keys VALUES (?, ?, ?, ?)",
+                        (audit.tenant_id, audit.request_id, audit.submitter.id, idempotency_key),
+                    )
                 db.execute(
                     "INSERT INTO action_policy_audit (record) VALUES (?)",
                     (json.dumps(asdict(audit), default=_serialize),),
@@ -170,6 +194,25 @@ class ActionPolicyStore:
                 fields["approvers"] = tuple(_principal(actor) for actor in fields["approvers"])
                 records.append(ActionAudit(**fields))
             return tuple(records)
+        finally:
+            db.close()
+
+    def admission_key(self, tenant_id: str, request_id: str) -> tuple[str, str] | None:
+        """Return (submitter_id, idempotency_key) only while both admission claims exist."""
+        db = sqlite3.connect(self._uri, uri=True)
+        try:
+            row = db.execute(
+                "SELECT submitter_id, idempotency_key FROM action_policy_admission_keys "
+                "WHERE tenant_id = ? AND request_id = ?", (tenant_id, request_id),
+            ).fetchone()
+            if row is None:
+                return None
+            claims = db.execute(
+                "SELECT COUNT(*) FROM action_policy_claims WHERE tenant_id = ? AND "
+                "((kind = 'request' AND claim = ?) OR (kind = 'idempotency' AND claim = ?))",
+                (tenant_id, request_id, json.dumps(list(row))),
+            ).fetchone()[0]
+            return (row[0], row[1]) if claims == 2 else None
         finally:
             db.close()
 

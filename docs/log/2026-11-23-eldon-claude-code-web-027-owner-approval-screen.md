@@ -16,13 +16,13 @@ Built the owner approval screen over the DSC-009 view model as a port-based comp
 - web/app/src/components/approval/: OwnerApprovalView, CSS module, approval.test.tsx
 - web/app/src/app/(app)/approval/page.tsx: fixture route, no nav link
 - web/app/messages/{en,ar}.json: `ownerApproval` namespace (from owner_approval/labels.json and quote labels, plus new keys)
-- web/app/README.md, docs/PLAN.md (WEB-027 done), docs/open-questions.md (Q-561)
+- web/app/README.md, docs/PLAN.md (WEB-027 done), docs/open-questions.md (Q-585)
 
 ## Decisions
-- None needing an ADR. Screen requires all three confirmations for every decision (Q-526); see Q-561. Not live until Q-544 and Q-505. Arabic unreviewed. Tier 2 proposed.
+- None needing an ADR. Screen requires all three confirmations for every decision (Q-526); see Q-585. Not live until Q-544 and Q-505. Arabic unreviewed. Tier 2 proposed.
 
 ## Tokens or cost
 Approximate, one Sonnet-class session.
 
 ## Next step
-Q-544 and Q-505 adapters, then wire the port; add step-up prompt and history list (Q-561).
+Q-544 and Q-505 adapters, then wire the port; add step-up prompt and history list (Q-585).

@@ -5,9 +5,10 @@ Used by `.github/workflows/real-bench.yml` and local developers to verify the
 change engine against real Frappe v15 / ERPNext / HRMS / MariaDB 11.4 / Redis
 services instead of mocks. Keeps database, admin and internal credentials out of runner logs.
 
-Startup, provisioning and tests each have a five-minute limit. The normal CI
-path's phase limits total 22.5 minutes, including diagnostics and teardown,
-leaving headroom for readiness polling and setup within the 25-minute CI job.
+Startup, provisioning and the CE-SEC-005 tests each have a five-minute limit. ERP-031 adds the ERP-014 and
+ERP-015 live valuation layers: each gets its own freshly provisioned site (with ``tenant_id``, as the probes
+refuse a used site), runs with its REQUIRE flag so a missing bench is a failure, and a layer that reports any
+skip fails the run. Their limits are ``TOTAL_PHASE_LIMIT_SECONDS`` in all, which the CI job limit must cover.
 """
 from __future__ import annotations
 
@@ -29,6 +30,17 @@ import uuid
 DOCKER_DIR = Path(__file__).resolve().parent
 DEFAULT_COMPOSE_FILE = DOCKER_DIR / "docker-compose.dev.yml"
 SAFE_PROJECT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+REPO_ROOT = DOCKER_DIR.parents[2]
+ENGINE_PYTHONPATH = REPO_ROOT / "apps" / "engine" / "change_engine"
+# ERP-031: (site prefix, test module, bench project var, bench site var, REQUIRE flag) of each live valuation layer.
+VALUATION_LAYERS = (
+    ("erp014", "test_erp_014_accounting_properties.py", "ERP014_COMPOSE_PROJECT", "ERP014_SITE", "REQUIRE_ERP014_LIVE"),
+    ("erp015", "test_erp_015_inventory_valuation.py", "ERP015_COMPOSE_PROJECT", "ERP015_BENCH_SITE", "REQUIRE_ERP015_LIVE"),
+)
+VALUATION_TEST_TIMEOUT = 900
+# startup 300 + three sites at 300 + CE-SEC-005 tests 300 + two live layers + teardown and diagnostics 300.
+TOTAL_PHASE_LIMIT_SECONDS = 300 + 3 * 300 + 300 + len(VALUATION_LAYERS) * VALUATION_TEST_TIMEOUT + 300
+SKIP_RE = re.compile(r"\bskipped=\d+|\.\.\. skipped\b")
 SAFE_SITE_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*\.localhost$")
 SECRET_KEY_PARTS = ("PASSWORD", "SECRET", "TOKEN", "API_KEY")
 # INF-015: the bench's Redis URLs carry the password as redis://:<password>@host.
@@ -227,6 +239,34 @@ def _verify_http_ready(site_name: str, engine_port: int, timeout_seconds: int = 
     raise RuntimeError(f"Engine HTTP endpoint did not respond on 127.0.0.1:{engine_port} for {site_name}")
 
 
+def unittest_reported_skips(output: str) -> bool:
+    """True when unittest output says any test was skipped: a live layer that skips proved nothing (ERP-031)."""
+    return bool(SKIP_RE.search(output))
+
+
+def _run_valuation_layer(env: dict[str, str], project: str, site: str, layer: tuple[str, ...]) -> int:
+    """Run one ERP-014/ERP-015 suite on the host against its own site. Skips and failures both return non-zero."""
+    prefix, module, project_var, site_var, require_var = layer
+    test_file = ENGINE_PYTHONPATH / "change_engine" / "tests" / module
+    print(f"Running {prefix.upper()} live valuation layer against {site}...")
+    res = subprocess.run(
+        [sys.executable, "-m", "unittest", str(test_file), "-v"],
+        cwd=str(REPO_ROOT),
+        env={**env, "PYTHONPATH": str(ENGINE_PYTHONPATH), "PYTHONUNBUFFERED": "1",
+             project_var: project, site_var: site, require_var: "1"},
+        timeout=VALUATION_TEST_TIMEOUT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    output = redact((res.stdout or "") + (res.stderr or ""), env)
+    print(output.rstrip("\n"), file=sys.stdout if res.returncode == 0 else sys.stderr)
+    if res.returncode == 0 and unittest_reported_skips(output):
+        print(f"{prefix.upper()} live layer skipped tests: that is a failure in real-bench CI.", file=sys.stderr)
+        return 1
+    return res.returncode
+
+
 def redact(text: str, env: dict[str, str]) -> str:
     """Hide the stack's credentials, and any credential in a redis:// URL, before printing child output."""
     for key, value in env.items():
@@ -285,7 +325,8 @@ def run_real_bench_ci(
         engine_port=port,
     )
 
-    provisioned = False
+    provisioned_sites: list[str] = []
+    valuation_sites = {layer[0]: f"{layer[0]}-{run_id}.localhost" for layer in VALUATION_LAYERS}
     succeeded = False
     try:
         if not reuse_project:
@@ -301,7 +342,7 @@ def run_real_bench_ci(
         _wait_for_engine_ready(project_name, compose_file, env)
         print(f"Provisioning synthetic site {site} (erpnext, hrms, change_engine)...")
         _provision_site(project_name, compose_file, env, site)
-        provisioned = True
+        provisioned_sites.append(site)
         _verify_http_ready(site, port)
 
         print(f"Running pinned bench verifier for {site}...")
@@ -349,15 +390,25 @@ def run_real_bench_ci(
             timeout=300,
             stream=True,
         )
-        succeeded = test_res.returncode == 0
-        return test_res.returncode
+        results = [test_res.returncode]
+
+        # ERP-031: the live valuation layers, each on a fresh site that carries tenant_id (the event stream needs it).
+        for layer in VALUATION_LAYERS:
+            layer_site = valuation_sites[layer[0]]
+            print(f"Provisioning synthetic site {layer_site} for the {layer[0].upper()} live layer...")
+            _provision_site(project_name, compose_file, env, layer_site)
+            provisioned_sites.append(layer_site)
+            results.append(_run_valuation_layer(env, project_name, layer_site, layer))
+        succeeded = not any(results)
+        return next((rc for rc in results if rc), 0)
     finally:
         if not succeeded:
             _failure_diagnostics(project_name, compose_file, env)
         if not keep_stack:
-            if reuse_project and provisioned:
-                print(f"Dropping ephemeral site {site} from reused project {project_name}...")
-                _drop_site(project_name, compose_file, env, site)
+            if reuse_project and provisioned_sites:
+                for dropped in provisioned_sites:
+                    print(f"Dropping ephemeral site {dropped} from reused project {project_name}...")
+                    _drop_site(project_name, compose_file, env, dropped)
             elif not reuse_project:
                 print(f"Tearing down ephemeral bench stack {project_name}...")
                 cleanup = _run_compose(

@@ -186,7 +186,8 @@ class RunnerPasswordTests(unittest.TestCase):
         verify_envs = []
 
         def fake_run(cmd, **kwargs):
-            verify_envs.append(kwargs.get("env", {}))
+            if "verify_dev_bench.py" in " ".join(map(str, cmd)):  # ERP-031: the live valuation layers run here too
+                verify_envs.append(kwargs.get("env", {}))
             return subprocess.CompletedProcess(cmd, 0)
 
         with (

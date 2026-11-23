@@ -2,6 +2,8 @@ name: Real Bench Integration
 
 # GOV-049 cost control: stands up the real pinned Frappe bench only when engine,
 # component, or Docker bench files change, weekly, or when triggered manually.
+# ERP-031: the run includes the ERP-014 and ERP-015 live layers with their REQUIRE flags set
+# by the runner, so a missing bench or a skipped live test fails the job.
 on:
   pull_request:
     paths:
@@ -24,11 +26,11 @@ permissions:
 jobs:
   real-bench-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.12"
-      - name: Stand up pinned bench and run CE-SEC-005 integration tests
+      - name: Stand up pinned bench; run CE-SEC-005 integration tests and the ERP-014/ERP-015 live valuation layers
         run: python3 infra/dev/docker/run_real_bench_ci.py

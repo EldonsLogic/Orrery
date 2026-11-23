@@ -7,7 +7,7 @@ Related: [ADR-0015](../decisions/ADR-0015-country-packs-calendars-locale.md), [c
 First slice of the CMP-023 row: a deterministic settings module at `components/compliance/company_calendar/`. It reads a country pack only through `resolve_country_pack` (CMP-021) and the Umm al-Qura tables of `hijridate` 2.6.0 (CMP-022). It does not change the pack schema, the Blueprint contract or any pack.
 
 ## 1. Settings model
-`resolve_calendar_settings(country_code, packs_dir, company_locale, version=..., environment=...)` returns an immutable `CompanyCalendarSettings` (nested period labels are read-only views):
+`resolve_calendar_settings(country_code, packs_dir, company_locale, version=..., environment=...)` returns an immutable `CompanyCalendarSettings` (a reduced period's labels are a sorted tuple of `(language, text)` pairs, so the settings can be hashed, copied, pickled and passed through `dataclasses.asdict`; `ReducedPeriod.label(language)` looks one up):
 
 | Field | Source in `company.locale` / pack `localeDefaults` | Notes |
 |---|---|---|
@@ -25,24 +25,30 @@ Behaviour: `is_weekend(d)`, `is_work_day(d)` (weekly pattern only; the holiday c
 Defaults come from the pack's `localeDefaults`. A company may override exactly the paths the pack lists in `overridesPolicy.overridablePaths`; for the four shipped packs that includes every setting above. The module adds no override rules of its own: the framework's allowlist, locked paths and post-merge invariants apply, and `company_locale` keys outside this module (fiscal year, holidays) are validated by the framework and left to their owners (CMP-025, CMP-024).
 
 ## 3. Ramadan
-- Ramadan is Hijri month 9 in the Umm al-Qura tables of the pinned library; the code never computes lunar dates. The library covers 1343 to 1500 AH; a date or year outside it fails closed.
+- Ramadan is Hijri month 9 in the Umm al-Qura tables of the pinned library; the code never computes lunar dates. The library covers 1343 to 1500 AH (Gregorian 1924-08-01 to 2077-11-16, as observed with 2.6.0).
+- Where the tables are used and what happens outside them: `ramadan_range(year)` raises `calendar_range` for a year outside 1343 to 1500 AH. `hours_on(day)` raises `calendar_range` for a date outside the Gregorian span above only when it has to look the date up, that is when the day is a work day and at least one `ramadan` period exists. Without a `ramadan` period, on a non-work day, and in `is_weekend`, `is_work_day`, `week_start_date` and `fixed_dates` periods, no table is read, so an out-of-table date is answered normally.
+- A `ramadan` period takes its dates only from the tables. A `ramadan` period that carries `gregorianFrom` or `gregorianTo` is refused with `invalid_reduced_period` (the pack framework accepts those keys on any rule; this module will not ignore them silently). A company that wants fixed dates uses `fixed_dates`.
+- Ramadan hours are close to labour law, so the table accuracy against the official Saudi calendar is UNVERIFIED beyond the library's own claim: a Saudi accountant should spot-check the Ramadan month starts (and the pack's Ramadan hours) before these dates drive any legal, payroll or tax logic (licence register, hijridate row).
 - The computed range can differ by a day from the announced one (moon sighting). The result carries `source: computed`; the announced-date layer (company override, then pack announced date, then computed, calendars-and-locale.md) arrives with CMP-024 and is not in this slice.
 - A reduced period applies only on work days. If two periods match one date (for example a `ramadan` and an overlapping `fixed_dates` period) the module raises instead of picking one.
 
 ## 4. Validation and failure behaviour
 Fail closed, no silent fallback:
 - Unknown country, missing pack, rejected or locked override, invalid weekday, overlapping work and weekend days, bad `HH:MM`, unknown number system: the framework raises (`UnknownCountryError`, `PackNotFoundError`, `OverrideRejectedError`) and the module lets it propagate.
-- `CalendarSettingsError` with a stable `code` (`invalid_date`, `invalid_year`, `invalid_text`, `calendar_range`, `calendar_unavailable`, `ambiguous_reduced_period`): non-`date` input (timestamps, strings), Hijri year or date outside the tables, a week start before the earliest representable date, library missing, ambiguous period. Messages carry no customer data and no user-facing text; the UI maps codes through i18n.
+- `CalendarSettingsError` with a stable `code` (`invalid_date`, `invalid_year`, `invalid_text`, `calendar_range`, `calendar_unavailable`, `ambiguous_reduced_period`, `invalid_reduced_period`): non-`date` input (timestamps, strings), Hijri year or date outside the tables (where section 3 says the tables are used), a week start before the earliest representable date, library missing, ambiguous period, a `ramadan` period with Gregorian dates. Messages carry no customer data and no user-facing text; the UI maps codes through i18n.
 - Inputs are never mutated; results are frozen.
 
 ## 5. Legal values are data, not code
 The code enforces no statutory rule: no daily or weekly hour cap, no minimum Ramadan reduction, no weekend rule. Every working-time value is pack or company data and inherits the pack's evidence status (all four packs are `unverified`, see each pack's `evidence.json`). Reported figures that conflict with each other, for example Qatar Ramadan hours of 6 or 4 a day, stay UNVERIFIED in [qatar-research.md](../compliance/qatar-research.md) and are not encoded.
 
 ## 6. Tests
-`components/compliance/company_calendar/tests/test_company_calendar.py`, run with `python3 -m unittest discover -s components/compliance/company_calendar/tests -t .` (needs `jsonschema` and `hijridate==2.6.0`). Covers pack defaults for SA, AE, EG, QA, overrides and their rejection, day classification, week start, Ramadan 1447 and 1448 boundaries against the pinned tables, fixed-date periods, ambiguity, out-of-table dates, digits.
+`components/compliance/company_calendar/tests/test_company_calendar.py`, run with `python3 -m unittest discover -s components/compliance/company_calendar/tests -t .` (needs `jsonschema` and `hijridate==2.6.0`). The pin in `.github/workflows/tests.yml` must equal the runtime pin in `apps/engine/change_engine/pyproject.toml`, and the installed library must equal it; a test fails when they differ (one source of truth: the engine package). Covers pack defaults for SA, AE, EG, QA, overrides and their rejection, day classification, week start, Ramadan 1447 and 1448 boundaries against the pinned tables, fixed-date periods, ambiguity, out-of-table dates, digits, hashing, copying and pickling of the settings, the source check for stray statutory or lunar constants, and the pin match.
 
-## Open questions (for the founders, not yet entered in open-questions.md)
-1. May a company remove its Ramadan reduction or set longer hours than the pack default? Statutory minimums per country are UNVERIFIED, so the module allows it today.
-2. Should a moon-sighting announcement shift Ramadan hours the day it is announced? Needs the CMP-024 announced-date layer and a rule on who publishes it.
-3. Should a day that is neither a work day nor a weekend (for example a Friday half day) be modelled as its own setting? Not in this slice.
-4. Reviewer tier: proposed Tier 2 (settings reader, no tax or payroll maths). Raise to Tier 3 if the reviewer treats pack consumption as compliance code.
+## Open questions
+Entered in [open-questions.md](../open-questions.md), owner partner, needed by G2, related CMP-023 and CMP-024:
+1. [Q-606](../open-questions.md): may a company remove its Ramadan reduction or set longer hours than the pack default? Statutory minimums per country are UNVERIFIED, so the module allows it today.
+2. [Q-607](../open-questions.md): should a moon-sighting announcement shift Ramadan hours the day it is announced? Needs the CMP-024 announced-date layer and a rule on who publishes it.
+3. [Q-608](../open-questions.md): should a day that is neither a work day nor a weekend (for example a Friday half day) be modelled as its own setting? Not in this slice.
+
+Still only here:
+- Reviewer tier: proposed Tier 2 (settings reader, no tax or payroll maths). Raise to Tier 3 if the reviewer treats pack consumption as compliance code.

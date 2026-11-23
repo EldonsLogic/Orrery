@@ -88,6 +88,8 @@ describe('record screens content', () => {
     expect(out).toContain('Mobile: +966500000001 to empty');
     expect(out).toContain('Risk level: R2.');
     expect(out).toContain('Confirm');
+    // QA-014 review: the dialog root is focusable so focus has a home while both buttons are disabled (busy).
+    expect(render('en', <ConfirmWrite actionLabel="x" entityLabel="y" risk="R2" sensitive={false} changes={[]} busy onConfirm={() => {}} onCancel={() => {}} />)).toContain('tabindex="-1"');
     expect(render('ar', <ConfirmWrite actionLabel="x" entityLabel="y" risk="R2" sensitive={false} changes={[]} onConfirm={() => {}} onCancel={() => {}} />)).toContain('رجوع');
   });
   it('status badge carries text', () => {

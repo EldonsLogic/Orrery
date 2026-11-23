@@ -33,7 +33,7 @@ export function Checkbox({ label, hint, error, id: idProp, className, ...rest }:
         </div>
       ) : null}
       {error ? (
-        <div id={errorId} className={cx(styles.note, styles.error)}>
+        <div id={errorId} role="alert" className={cx(styles.note, styles.error)}>
           {error}
         </div>
       ) : null}

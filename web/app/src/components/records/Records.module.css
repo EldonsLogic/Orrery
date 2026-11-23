@@ -71,6 +71,8 @@
   background: color-mix(in srgb, var(--color-text) 40%, transparent);
 }
 
+.dialog:focus { outline: none; }
+
 .dialogBody {
   inline-size: min(32rem, 100%);
 }

@@ -25,6 +25,7 @@ from .safety_guardrails import (
     TIER_1_GOVERNANCE_ROLES,
     ZONE_2_LOCKED_DOCTYPES,
     ZoneSafetyViolation,
+    is_locked_doctype,
 )
 from .schema_reconciler import (
     IdempotencyConflictError,
@@ -230,7 +231,7 @@ def validate_workflow_state_machine(
     target_dt = wf_obj.document_type
     if not target_dt:
         errors.append("Target document_type must be specified.")
-    elif target_dt in TIER_0_PROHIBITED_WORKFLOW_DOCTYPES:
+    elif is_locked_doctype(target_dt, TIER_0_PROHIBITED_WORKFLOW_DOCTYPES):
         errors.append(
             f"DocType '{target_dt}' is a protected Tier 0 system/financial DocType. "
             f"Workflows are strictly prohibited on Tier 0 DocTypes under ADR-001 Rev 2.3."
@@ -377,6 +378,28 @@ def validate_workflow_state_machine(
     )
 
 
+def find_workflow_state_collisions(db: Any, state_names: List[str]) -> List[str]:
+    """SEC-022 (ADR-0051): state names the engine already holds under another spelling.
+
+    The engine matches record names without case (MariaDB), so ensuring state 'approved' would silently reuse a
+    built-in 'Approved'. A lookup that returns a record whose stored name differs from the requested one is a
+    collision; the caller refuses the deployment before any write. A failed lookup raises, and so does a database
+    without any lookup: neither is ever read as "no collision" (fail closed)."""
+    collisions: List[str] = []
+    for name in state_names:
+        getter = getattr(db, "get_workflow_state", None)
+        if callable(getter):
+            rec = getter(name)
+        elif frappe and hasattr(frappe, "db") and hasattr(frappe.db, "get_value"):
+            rec = frappe.db.get_value("Workflow State", name, ["name"], as_dict=True)
+        else:
+            raise RuntimeError("workflow state lookup unavailable")
+        stored = rec.get("name") if isinstance(rec, dict) else None
+        if stored is not None and str(stored) != name:
+            collisions.append(name)
+    return collisions
+
+
 def execute_workflow_deployment(
     db: Any,
     deployment_id: str,
@@ -475,6 +498,21 @@ def execute_workflow_deployment(
             "doctype": doctype,
             "workflow_name": wf.workflow_name,
             "execution_time_ms": execution_time_ms,
+        }
+
+    # Step 2.5 (SEC-022): refuse a state name the engine holds under another spelling, before lock and journal
+    collisions = find_workflow_state_collisions(db, [s.state for s in wf.states])
+    if collisions:
+        return {
+            "deployment_id": deployment_id,
+            "status": "REJECTED",
+            "success": False,
+            "stage": "VALIDATE",
+            "disposition": "WORKFLOW_STATE_NAME_COLLISION",
+            "reason": f"Workflow state names collide with existing records under another spelling: {collisions}",
+            "doctype": doctype,
+            "workflow_name": wf.workflow_name,
+            "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
         }
 
     # Step 3: Bounded advisory lock GET_LOCK <= 64 chars (§7.2)

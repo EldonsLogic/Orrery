@@ -12,8 +12,19 @@ for (const app of ['app', 'marketing']) {
   copyFileSync(source, target);
 }
 
-// The brand app icon (existing asset, never redrawn) is served as the web app icon.
-const icon = resolve(here, '../../docs/brand/logo/app-icon.svg');
-const iconTarget = resolve(here, '../app/public/icons/app-icon.svg');
-mkdirSync(dirname(iconTarget), { recursive: true });
-copyFileSync(icon, iconTarget);
+// Brand icons (generated in docs/brand/logo by docs/brand/tools, never redrawn here) are served from /icons/ in each app.
+const logo = resolve(here, '../../docs/brand/logo');
+const ICONS = {
+  'app-icon.svg': 'app-icon.svg',
+  'favicon.svg': 'mark-small.svg',
+  'favicon.ico': 'png/favicon.ico',
+  'apple-touch-icon.png': 'png/apple-touch-icon.png',
+  'icon-192.png': 'png/app-icon-192.png',
+  'icon-512.png': 'png/app-icon-512.png',
+  'maskable-512.png': 'png/maskable-512.png',
+};
+for (const app of ['app', 'marketing']) {
+  const dir = resolve(here, '..', app, 'public/icons');
+  mkdirSync(dir, { recursive: true });
+  for (const [target, src] of Object.entries(ICONS)) copyFileSync(resolve(logo, src), resolve(dir, target));
+}

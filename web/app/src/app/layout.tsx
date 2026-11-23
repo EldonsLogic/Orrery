@@ -11,7 +11,13 @@ import '../styles/mobile.css';
 export const metadata: Metadata = {
   title: messages[defaultLocale].pwa.name,
   description: messages[defaultLocale].pwa.description,
-  icons: { icon: '/icons/app-icon.svg', apple: '/icons/app-icon.svg' },
+  icons: {
+    icon: [
+      { url: '/icons/favicon.ico', sizes: '48x48' },
+      { url: '/icons/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/icons/apple-touch-icon.png',
+  },
   appleWebApp: { capable: true, title: messages[defaultLocale].pwa.shortName, statusBarStyle: 'default' },
 };
 

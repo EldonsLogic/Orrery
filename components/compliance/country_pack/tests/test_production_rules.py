@@ -53,6 +53,20 @@ class _Fixture(unittest.TestCase):
             fact["sources"] = [{"url": "https://example.org/synthetic", "accessed": "2026-01-01"}]
         record["facts"].append({**fact, **extra})
 
+    @staticmethod
+    def valid_provider(component: str, version: str, capability: str) -> dict:
+        """A registered-component manifest that passes the component contract (ADR-0067 `requires`)."""
+        return {
+            "id": component, "version": version, "kind": "rigid", "name": {"ar": "اختبار", "en": "Synthetic provider"},
+            "description": "Synthetic provider fixture only.",
+            "provides": [{"capability": capability, "artifacts": [{"type": "function", "ref": "synthetic_function"}]}],
+            "requires": [], "parameters": [],
+            "tests": [{"id": "synthetic_test", "kind": "unit", "path": "synthetic_test.py", "blocking": True}],
+            "certification": {"level": "draft", "reviewedBy": [], "touchesLedgerOrTax": False},
+            "engineCompatibility": {"adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0"},
+            "licence": {"spdx": "LicenseRef-Proprietary"}, "owner": {"github": "sayegh9"},
+        }
+
     def with_default(self, leaf: str, **extra) -> str:
         v = self.f._write("certified", "verified_official")
         pack, record = self.f._record(v, "pack.json"), self.f._record(v, "evidence.json")
@@ -65,8 +79,8 @@ class TestProductChoiceList(_Fixture):
     """Q1 option C: PLATFORM-DEFAULT backs a locked path only through a named per-market list."""
 
     def test_listed_path_may_be_backed_by_a_platform_default(self) -> None:
-        self.f._assert_loads(self.with_default("tax.roundingRule"))
         self.f._assert_loads(self.with_default("eInvoicing.mode"))
+        self.f._assert_loads(self.with_default("eInvoicing.componentId"))
 
     def test_unlisted_locked_leaf_is_refused(self) -> None:
         v = self.with_default("tax.vatSupported")
@@ -230,8 +244,7 @@ class TestOpenBlockers(_Fixture):
                 self.refuse(v, r"factsOutsideSchema\[0\].*UNVERIFIED.*locked")
 
     def test_outside_entries_that_do_not_name_a_locked_path_do_not_block(self) -> None:
-        for entry in ({"claim": "synthetic", "status": "UNVERIFIED"},
-                      {"claim": "synthetic", "status": "UNVERIFIED", "paths": ["localeDefaults.week.startDay"]},
+        for entry in ({"claim": "synthetic", "status": "UNVERIFIED", "paths": ["localeDefaults.week.startDay"]},
                       {"claim": "synthetic", "status": "SECONDARY", "paths": ["tax"],
                        "sources": [{"url": "https://example.org/synthetic", "accessed": "2026-01-01"}]}):
             with self.subTest(entry=entry):
@@ -282,7 +295,7 @@ class TestEvidenceStatusMatchesLabels(_Fixture):
         self.f._assert_loads(v)
 
     def test_a_listed_platform_default_does_not_break_a_verified_official_claim(self) -> None:
-        self.f._assert_loads(self.with_default("tax.roundingRule"))
+        self.f._assert_loads(self.with_default("eInvoicing.mode"))
 
 
 class TestStrictJson(_Fixture):
@@ -362,8 +375,8 @@ class TestManifestMeaning(_Fixture):
         self.addCleanup(registry.cleanup)
         components = Path(registry.name)
         (components / "finance" / "vat").mkdir(parents=True)
-        (components / "finance" / "vat" / "manifest.json").write_text(json.dumps({
-            "id": "finance.vat_synthetic", "provides": [{"capability": "finance.vat.synthetic_cap"}]}), encoding="utf-8")
+        (components / "finance" / "vat" / "manifest.json").write_text(json.dumps(self.valid_provider(
+            "finance.vat_synthetic", "0.1.0", "finance.vat.synthetic_cap")), encoding="utf-8")
         (components / "bad").mkdir()
         (components / "bad" / "manifest.json").write_text("{", encoding="utf-8")  # unreadable entries register nothing
         ok = [{"component": "finance.vat_synthetic", "versionRange": ">=0.1.0"},

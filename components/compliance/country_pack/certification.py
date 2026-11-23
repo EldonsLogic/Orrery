@@ -96,24 +96,106 @@ def _founders() -> dict[str, str]:
     return founders
 
 
-def _registered(directory: Path) -> tuple[set[Any], set[Any]]:
-    """Ids and capabilities of registered component manifests; country packs never register themselves."""
+def _providers(directory: Path) -> list[tuple[str, tuple[int, int, int] | None, set[str]]]:
+    """(id, version, capabilities) of registered components whose manifest passes the component contract.
+
+    A manifest that is unreadable, malformed, incomplete or contract-invalid registers nothing.
+    Country packs never register themselves. A prerelease version has no comparable key (None).
+    """
     skipped = (COUNTRY_PACK_DIR, directory.parents[1])
-    ids: set[Any] = set()
-    capabilities: set[Any] = set()
+    providers = []
     for path in COMPONENTS_ROOT.glob("**/manifest.json"):
         if any(parent in skipped for parent in path.parents):
             continue
         try:
             record = loads_strict(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, ValueError):
-            continue  # an unreadable manifest registers nothing
-        if isinstance(record, dict):
-            ids.add(record.get("id"))
-            provides = record.get("provides")
-            capabilities.update(p.get("capability") for p in provides if isinstance(p, dict)) \
-                if isinstance(provides, list) else None
-    return ids, capabilities
+            continue
+        if not isinstance(record, dict) or _manifest_refusals(record):
+            continue
+        # Contract-valid: id and version are strings, provides is a list of objects with a capability.
+        capabilities = {p["capability"] for p in record["provides"]}
+        providers.append((record["id"], _release_key(record["version"]), capabilities))
+    return providers
+
+
+_NUMBER = r"(?:0|[1-9][0-9]*)"
+_VERSION = re.compile(rf"({_NUMBER})\.({_NUMBER})\.({_NUMBER})", re.ASCII)
+_TERM = re.compile(rf"(>=|<=|>|<|=|\^|~)?({_NUMBER}\.{_NUMBER}\.{_NUMBER})", re.ASCII)
+
+
+def _release_key(version: Any) -> tuple[int, int, int] | None:
+    match = _VERSION.fullmatch(version) if isinstance(version, str) else None
+    return None if match is None else (int(match[1]), int(match[2]), int(match[3]))
+
+
+def _parse_range(text: Any) -> list[list[tuple[str, tuple[int, int, int]]]] | None:
+    """Strict range parser: `||` between alternatives, one space between comparators; None if unparsable.
+
+    Comparators are `>=`, `<=`, `>`, `<`, `=` (or none), `^` and `~`, each with a full MAJOR.MINOR.PATCH.
+    Wildcards, partial versions, prereleases, hyphen ranges and any other spacing are refused.
+    """
+    if not isinstance(text, str):
+        return None
+    alternatives = []
+    for alternative in text.split(" || "):
+        comparators: list[tuple[str, tuple[int, int, int]]] = []
+        for term in alternative.split(" "):
+            match = _TERM.fullmatch(term)
+            if match is None:
+                return None
+            op, key = match[1] or "=", _release_key(match[2])
+            major, minor, patch = key
+            if op == "^":
+                upper = (major + 1, 0, 0) if major else (0, minor + 1, 0) if minor else (0, 0, patch + 1)
+                comparators += [(">=", key), ("<", upper)]
+            elif op == "~":
+                comparators += [(">=", key), ("<", (major, minor + 1, 0))]
+            else:
+                comparators.append((op, key))
+        alternatives.append(comparators)
+    return alternatives
+
+
+def version_in_range(text: Any, version: Any) -> bool:
+    """Whether `version` (a release, MAJOR.MINOR.PATCH) satisfies the range; any doubt is False."""
+    alternatives = _parse_range(text)
+    key = _release_key(version)
+    if alternatives is None or key is None:
+        return False
+    ops = {">=": key.__ge__, "<=": key.__le__, ">": key.__gt__, "<": key.__lt__, "=": key.__eq__}
+    return any(all(ops[op](bound) for op, bound in comparators) for comparators in alternatives)
+
+
+def _requires_refusals(requires: list[Any], directory: Path) -> list[str]:
+    """Each requirement resolves to a contract-valid registered provider whose version is in range."""
+    reasons: list[str] = []
+    providers = None
+    for index, entry in enumerate(requires):
+        prefix = f"manifest.json.requires[{index}]"
+        if not isinstance(entry, dict):
+            reasons.append(f"{prefix}: must be an object")
+            continue
+        if ("component" in entry) == ("capability" in entry):
+            reasons.append(f"{prefix}: must name exactly one of component or capability")
+            continue
+        kind = "component" if "component" in entry else "capability"
+        name, version_range = entry[kind], entry.get("versionRange")
+        if not isinstance(name, str) or not isinstance(version_range, str):
+            reasons.append(f"{prefix}: {kind} and versionRange must be text")
+            continue
+        if _parse_range(version_range) is None:
+            reasons.append(f"{prefix}: versionRange {version_range!r} is not a supported range")
+            continue
+        providers = _providers(directory) if providers is None else providers
+        if not any(
+            (name == pid if kind == "component" else name in caps)
+            and version is not None and version_in_range(version_range, ".".join(map(str, version)))
+            for pid, version, caps in providers
+        ):
+            reasons.append(f"{prefix}: no registered, contract-valid provider of {kind} {name} "
+                           f"has a version in {version_range!r}")
+    return reasons
 
 
 def _manifest_meaning_refusals(manifest: dict[str, Any], directory: Path) -> list[str]:
@@ -136,16 +218,8 @@ def _manifest_meaning_refusals(manifest: dict[str, Any], directory: Path) -> lis
     if isinstance(lifecycle, dict) and lifecycle.get("status") == "retired":
         reasons.append("manifest.json.lifecycle.status: a retired component cannot be used")
     requires = manifest.get("requires")
-    if isinstance(requires, list):
-        ids, capabilities = _registered(directory)
-        for entry in requires:
-            if not isinstance(entry, dict):
-                continue  # the contract check reports a malformed entry
-            if "component" in entry and entry["component"] not in ids:
-                reasons.append(f"manifest.json.requires: component {entry['component']} is not registered")
-            if "capability" in entry and entry["capability"] not in capabilities:
-                reasons.append(f"manifest.json.requires: capability {entry['capability']} is not provided "
-                               "by any registered component")
+    if isinstance(requires, list):  # a non-list is reported by the contract check
+        reasons.extend(_requires_refusals(requires, directory))
     return reasons
 
 
@@ -169,8 +243,9 @@ def certification_refusals(pack: dict[str, Any], directory: Path) -> list[str]:
     if set(evidence) - EVIDENCE_TOP_LEVEL_KEYS:
         reasons.append("evidence.json: unknown top-level keys are refused: "
                        + ", ".join(sorted(map(str, set(evidence) - EVIDENCE_TOP_LEVEL_KEYS))))
-    reasons.extend(locked_fact_refusals(pack, evidence))
-    reasons.extend(blocker_refusals(pack, evidence, None if founders is None else set(founders)))
+    founder_logins = None if founders is None else set(founders)
+    reasons.extend(locked_fact_refusals(pack, evidence, founder_logins))
+    reasons.extend(blocker_refusals(pack, evidence, founder_logins))
     for filename, record, identity, expected in (
         ("manifest.json", manifest, "id", pack["componentId"]),
         ("evidence.json", evidence, "packId", pack["packId"]),

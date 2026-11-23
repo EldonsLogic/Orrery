@@ -27,6 +27,8 @@ PRODUCT_CHOICE_FILE = Path(__file__).resolve().parent / "product_choice_paths.js
 # The project's first work is dated 2026-11 (docs/log); no read source can predate this floor.
 ACCESS_DATE_FLOOR = "2026-01-01"
 RESOLUTION_KEYS = frozenset({"status", "by", "at"})
+# A provisional product-choice entry also cites the evidence that settled it.
+CHOICE_RESOLUTION_KEYS = RESOLUTION_KEYS | {"ref"}
 
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # A source that was not read in full (a snippet, a search excerpt, not fetched) carries `"read": false`
@@ -136,7 +138,7 @@ def labelled(evidence: dict, label: str) -> set[str]:
     return {eid for eid, entry in evidence_entries(evidence) if entry["status"] == label}
 
 
-def product_choice_entries() -> dict[str, list[dict[str, str]]]:
+def product_choice_entries() -> dict[str, list[dict[str, Any]]]:
     """Return the reviewed per-market product-choice list; raise ValueError if the file is unusable."""
     try:
         data = loads_strict(PRODUCT_CHOICE_FILE.read_text(encoding="utf-8"))
@@ -144,18 +146,32 @@ def product_choice_entries() -> dict[str, list[dict[str, str]]]:
         raise ValueError(f"{PRODUCT_CHOICE_FILE.name} unreadable") from exc
     if not isinstance(data, dict) or set(data) - {"description", "markets"} or not isinstance(data.get("markets"), dict):
         raise ValueError("expected an object with 'markets' (and optional 'description')")
-    markets: dict[str, list[dict[str, str]]] = {}
+    markets: dict[str, list[dict[str, Any]]] = {}
     for market, entries in data["markets"].items():
         if not (isinstance(market, str) and re.fullmatch(r"[A-Z]{2}", market) and isinstance(entries, list)):
             raise ValueError(f"market {market!r} must be a two-letter code with a list of entries")
         for entry in entries:
-            ok = (isinstance(entry, dict) and {"path", "reason"} <= set(entry) <= {"path", "reason", "provisional"}
-                  and all(isinstance(v, str) and v.strip() for v in entry.values()))
+            # `resolution` (checked against the founders when used) is allowed only on a provisional entry.
+            ok = (isinstance(entry, dict) and {"path", "reason"} <= set(entry) <= {"path", "reason", "provisional", "resolution"}
+                  and all(isinstance(entry[k], str) and entry[k].strip() for k in entry if k != "resolution")
+                  and ("resolution" not in entry or "provisional" in entry))
             # At least two segments: a top-level area such as `tax` is never listable.
             if not ok or not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)+", entry["path"]):
                 raise ValueError(f"market {market}: invalid entry {entry!r}")
         markets[market] = entries
     return markets
+
+
+def active_product_choice_paths(market: str, founders: set[str] | None) -> list[str]:
+    """Listed paths that authorise PLATFORM-DEFAULT now; ValueError if the list is unusable.
+
+    A provisional entry is inactive until its `resolution` {status, by, at, ref} is valid (ADR-0067).
+    Without a usable founders map no resolution can be checked, so no provisional entry is active.
+    """
+    return [entry["path"] for entry in product_choice_entries().get(market, [])
+            if "provisional" not in entry
+            or (founders is not None
+                and not resolution_refusals("entry", entry, founders, CHOICE_RESOLUTION_KEYS))]
 
 
 def is_product_choice_path(listed: list[str], path: str) -> bool:
@@ -176,7 +192,8 @@ def _overlaps_locked(path: str, locked: list[str]) -> bool:
     return covered(path, locked) or any(covered(p, [path]) for p in locked)
 
 
-def locked_fact_refusals(pack: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
+def locked_fact_refusals(pack: dict[str, Any], evidence: dict[str, Any],
+                         founders: set[str] | None = None) -> list[str]:
     """Require usable evidence for every present locked leaf and refuse UNVERIFIED overlaps.
 
     Override-policy locale paths are relative to localeDefaults; other locked paths are pack roots.
@@ -184,7 +201,7 @@ def locked_fact_refusals(pack: dict[str, Any], evidence: dict[str, Any]) -> list
     matching the shipped packs. Evidence may name the leaf or an ancestor; indexed facts alone do
     not cover a whole list. Unknown fact paths are refused even outside locked areas. A PLATFORM-DEFAULT
     fact on a locked path needs that path (or a path beneath a listed one) on the market's product-choice list
-    (ADR-0067); and `verified_official` needs official facts (or listed defaults) under every locked leaf.
+    and the entry not provisional unless resolved with evidence (ADR-0067; `founders` checks the record); and `verified_official` needs official facts (or listed defaults) under every locked leaf.
     """
     facts = evidence.get("facts")
     if not isinstance(facts, list) or not facts:
@@ -192,7 +209,7 @@ def locked_fact_refusals(pack: dict[str, Any], evidence: dict[str, Any]) -> list
     locked = locked_paths(pack)
     reasons = []
     try:
-        listed = [e["path"] for e in product_choice_entries().get(pack["countryCode"], [])]
+        listed = active_product_choice_paths(pack["countryCode"], founders)
     except ValueError as exc:
         reasons.append(f"product-choice list unusable: {exc}")
         listed = []
@@ -256,18 +273,24 @@ def _entry_list(evidence: dict[str, Any], key: str, reasons: list[str]) -> list[
     return value
 
 
-def resolution_refusals(prefix: str, entry: Any, founders: set[str] | None) -> list[str]:
-    """An entry stops blocking only with `resolution` {status: resolved, by: founder login, at: date}."""
+def resolution_refusals(prefix: str, entry: Any, founders: set[str] | None,
+                        keys: frozenset[str] = RESOLUTION_KEYS) -> list[str]:
+    """An entry stops blocking only with `resolution` {status: resolved, by: founder login, at: date}.
+
+    `keys` adds `ref` (a nonblank evidence reference) for provisional product-choice entries.
+    """
     if not isinstance(entry, dict):
         return [f"{prefix}: must be an object"]
     if "resolution" not in entry:
         return [f"{prefix}: open (no resolution record)"]
     record = entry["resolution"]
-    if not isinstance(record, dict) or set(record) != RESOLUTION_KEYS:
-        return [f"{prefix}.resolution: must be an object with exactly status, by and at"]
+    if not isinstance(record, dict) or set(record) != keys:
+        return [f"{prefix}.resolution: must be an object with exactly {', '.join(sorted(keys))}"]
     bad = []
     if record["status"] != "resolved":
         bad.append(f"{prefix}.resolution.status: only 'resolved' stops blocking")
+    if "ref" in keys and not (isinstance(record["ref"], str) and record["ref"].strip()):
+        bad.append(f"{prefix}.resolution.ref: must cite the evidence that settled it")
     by = record["by"]
     if founders is not None and not (isinstance(by, str) and by.casefold() in founders):
         bad.append(f"{prefix}.resolution.by: must be a founder GitHub login")
@@ -302,7 +325,12 @@ def blocker_refusals(pack: dict[str, Any], evidence: dict[str, Any], founders: s
         if not isinstance(status, str) or status not in EVIDENCE_LABELS:
             reasons.append(f"{prefix}.status: must be a known evidence label")
             continue
-        paths = fact.get("paths", [])
+        paths = fact.get("paths")
+        if status == "UNVERIFIED" and (not isinstance(paths, list) or not paths):
+            # Omission must not mean "concerns nothing": an unscoped unverified claim blocks (ADR-0067).
+            reasons.append(f"{prefix}: UNVERIFIED fact must list the pack paths it concerns in `paths`")
+            continue
+        paths = [] if paths is None else paths
         if not isinstance(paths, list) or not all(isinstance(p, str) and p for p in paths):
             reasons.append(f"{prefix}.paths: must be a list of pack paths")
             continue

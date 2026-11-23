@@ -30,3 +30,11 @@ Unknown.
 
 ## Next step
 Eldon's Tier 3 review and a different-model security review of this PR. Then, per market, the accountant answers behind the provisional list entries (Q-601) and rework of the Egypt identity-path defaults before any pack is certified.
+
+## Review fixes
+ChatGPT gpt-6.1-sol review of #300 at 1998c4a, fixed test-first (new tests in `tests/test_production_review_fixes.py`, shared helper in `test_production_rules.py`). Implementation sub-agent: claude-code (Sonnet 5.5). No pack JSON, statutory fact or tax maths changed.
+1. High, unscoped `UNVERIFIED` outside-schema entry loaded: `blocker_refusals` now refuses an `UNVERIFIED` `factsOutsideSchema` entry whose `paths` is missing, not a list or empty; replaced the old test that expected acceptance.
+2. High, `requires` checked names only: `certification._providers` registers only manifests that pass the component contract; a requirement needs a provider with a release version in `versionRange`. Strict comparator `version_in_range` (`||`, single-space AND, `>=` `<=` `>` `<` `=` `^` `~` with full `X.Y.Z`; wildcards, partials, prereleases, hyphen ranges, odd spacing refused). `compliance.zatca_sa >=9999.0.0` now refuses against the real registry; the old test's incomplete provider now uses a contract-valid one.
+3. High, provisional product-choice entries authorised defaults: new `active_product_choice_paths`; a provisional entry needs `resolution` {`status`, `by`, `at`, `ref`} (same checks as a blocker resolution plus a nonblank `ref`) or it is inactive in production. SA, AE and QA rounding entries stay in the list, marked provisional; tests that loaded a rounding default now use `eInvoicing.mode`.
+4. Medium, TypeError on malformed `requires` and scanned manifests: type guards return refusal reasons; loader-level tests cover `component: {}`, `capability: []`, both or neither key, bad `versionRange`, non-list `requires`, registered manifests with `id: {}` and other bad shapes, plus a mutation sweep of manifest and evidence fields that asserts only `PackValidationError` escapes.
+ADR-0067 (Proposed) and the framework doc now state these readings. Tests proving each finding failed on 1998c4a before the fixes (run against the unfixed code); the sweep tests and a few guards passed before and stay as regressions.

@@ -43,3 +43,6 @@ Tests first. N1: refusals logged once per key and reason until the key is admitt
 - Low (ordering): `test_later_rule_refusal_leaves_earlier_counters_unchanged`. Confirmed by mutation (recording right after each check) that it fails.
 - Q-562 wording (partner's "limits divided by the number of servers") is not changed yet: pending a founder decision.
 - Checks: operate tests 705 passed, 1 skipped; check_docs, check_repo_hygiene and check_plan_independence pass.
+
+## Correction (2026-11-23): Q-562 supersedes the statement at line 38
+The line-38 statement ("shared cache with per-instance fallback on outage") is superseded, historical text kept. Decided by both founders (partner's answer on #270, accepted by Eldon): counters live in the platform's shared cache; on a cache outage each server counts on its own with every limit divided by the number of servers, so the effective limit does not multiply. Not built yet, pending the shared cache. Q-562, the design note and the `ratelimit.py` docstring now say this.

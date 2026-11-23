@@ -43,7 +43,7 @@ Builds on [03-regulations.md](03-regulations.md) (KSA and UAE matrix, 2026-11-04
 - ZATCA News has an RSS feed. The listing page links "View RSS feed" at `https://zatca.gov.sa/_layouts/15/feed.aspx?xsl=1&web=%2Fen%2FMediaCenter%2FNews&...`; the full URL was truncated in our fetch, so the exact feed URL is UNVERIFIED. A newsletter sign-up is at https://zatca.gov.sa/en/MediaCenter/NewsLetters/Pages/SubscribeNewsLetters.aspx (FETCHED as a link, not opened).
 - E-invoice specifications change by publishing new dated files with a `vTrack` redline. The page's "Last Update" line moves when files change.
 - The SDK has no public version list on the download page; the developer portal reportedly has one (UNVERIFIED).
-- Frequency seen: waves are announced every few months (Wave 24 deadline 2026-06-30, Wave 25 deadline 2027-02-01, both SECONDARY or SEARCH-ONLY); VAT deadline news monthly; specs last changed 2023-05-19.
+- Frequency seen: waves are announced every few months (Wave 24 deadline 2026-06-30 (no source URL identified; UNVERIFIED), Wave 25 deadline 2027-02-01 (SECONDARY or SEARCH-ONLY)); VAT deadline news monthly; specs last changed 2023-05-19.
 
 ---
 
@@ -85,15 +85,15 @@ Builds on [03-regulations.md](03-regulations.md) (KSA and UAE matrix, 2026-11-04
 | VAT law and executive regulations | ETA | https://www.eta.gov.eg/en/content/value-added-tax-law; VAT executive instructions (Arabic) https://www.eta.gov.eg/ar/content/qwanyn-aldrybt-ly-alqymt-almdaft | HTML, PDF | No | No version list | Links FETCHED from https://www.eta.gov.eg/en/home; pages not opened. Rates stay as in the EG pack (UNVERIFIED) |
 | Periodic instructions and circulars | ETA | https://www.eta.gov.eg/en/periodic-books-instruction/periodical-books | HTML, PDF | No | Dated items | Link FETCHED, page not opened |
 | E-invoicing mandate (which taxpayers, by decision) | ETA | Guide https://www.eta.gov.eg/en/node/30; taxpayers-in-decisions inquiry `/einvoice-inquiry` on www.eta.gov.eg | HTML lookup | No | Mandates are by ministerial decision per taxpayer group | Links FETCHED; not opened. UNVERIFIED |
-| Invoice format and document types | ETA | https://sdk.invoicing.eta.gov.eg/types/ : invoice, credit note, debit note at v0.9 and v1.0 (v0.9 has signature validation disabled); export invoice and notes at v1.0; e-receipt types at v1.2 (v1.0 and v1.1 retired) | HTML spec per document type, JSON and XML (stated in the pack evidence, not re-checked) | **Yes** (documented structures; formal JSON schema files not seen) | Yes, versioned document types with retirement | FETCHED |
-| Code tables | ETA | https://sdk.invoicing.eta.gov.eg/codes/ | HTML tables | Partly (tables, not a download confirmed) | Unknown | Linked, not opened |
-| Invoicing and receipt API | ETA | https://sdk.invoicing.eta.gov.eg/api/ , `/einvoicingapi/`, `/ereceiptapi/`, `/apigovernance/` on the same host | HTML API reference | Yes (structured reference; OpenAPI file not seen) | Yes, see release notes | Linked from https://sdk.invoicing.eta.gov.eg/start/ (FETCHED). Environment base URLs not on the start page: UNVERIFIED |
+| Invoice format and document types | ETA | https://sdk.invoicing.eta.gov.eg/types/ : invoice, credit note, debit note at v0.9 and v1.0 (v0.9 has signature validation disabled); export invoice and notes at v1.0; e-receipt types at v1.2 (v1.0 and v1.1 retired) | HTML spec per document type, JSON and XML (stated in the pack evidence, not re-checked) | **No** (HTML documentation only; no JSON schema or XSD found; documentation pending executable artifacts) | Yes, versioned document types with retirement | FETCHED |
+| Code tables | ETA | https://sdk.invoicing.eta.gov.eg/codes/ | HTML tables | No (HTML tables; no download confirmed; documentation pending executable artifacts) | Unknown | Linked, not opened |
+| Invoicing and receipt API | ETA | https://sdk.invoicing.eta.gov.eg/api/ , `/einvoicingapi/`, `/ereceiptapi/`, `/apigovernance/` on the same host | HTML API reference | No (HTML documentation only; no OpenAPI or Swagger file found; documentation pending executable artifacts) | Yes, see release notes | Linked from https://sdk.invoicing.eta.gov.eg/start/ (FETCHED). Environment base URLs not on the start page: UNVERIFIED |
 | Rounding | ETA | Not found | - | - | - | UNVERIFIED |
 | Social insurance | NOSI | Official site not found by search | - | - | - | UNVERIFIED. Law 148 of 2019 amended by Law 8 of 2024 (SECONDARY: ILO NATLEX https://natlex.ilo.org/dyn/natlex2/r/natlex/fe/details?p3_isn=115545, not opened) |
 | Holidays | Cabinet / Prime Minister decisions | Not found | - | - | - | UNVERIFIED |
 
 ### 3.2 Coverage
-- **Automatic:** ETA document type definitions, code tables and API reference (the most code-friendly of the four authorities); the release-notes page as a version signal.
+- **Automatic:** none confirmed. The ETA document types, code tables and API reference are HTML documentation pending executable artifacts (XSD, JSON schema, OpenAPI or a downloadable code list); until one is found they need a human reading. The release-notes page is a version signal only.
 - **Human plus accountant:** VAT law and instructions (mostly Arabic PDFs), which taxpayers are mandated, social insurance, holidays.
 
 ### 3.3 Change signals
@@ -108,7 +108,7 @@ Builds on [03-regulations.md](03-regulations.md) (KSA and UAE matrix, 2026-11-04
 
 | Fact kind | Authority | Official URL | Format | Machine-readable | Versions or change notices | Evidence |
 |---|---|---|---|---|---|---|
-| Taxes in force (no VAT) | GTA | https://www.gta.gov.qa/en lists global minimum tax, income tax, capital gains tax, withholding tax and excise tax; no VAT | HTML | No | - | FETCHED (matches the QA pack, which marks the absence of VAT VERIFIED and "no VAT date" UNVERIFIED) |
+| Taxes in force (VAT not found) | GTA | https://www.gta.gov.qa/en lists global minimum tax, income tax, capital gains tax, withholding tax and excise tax; VAT not found on this page; UNVERIFIED | HTML | No | - | FETCHED (one page only). The QA pack verifies only that VAT is absent from this page; Qatar's VAT legal status is UNVERIFIED |
 | Tax laws, decisions, circulars | GTA | https://gta.gov.qa/en/laws ; https://gta.gov.qa/en/decisions ; https://gta.gov.qa/en/circulars | HTML, PDF | No | Dated items (not opened) | Links FETCHED |
 | E-invoicing law | MoF with GTA | No official text found. Cabinet approved a draft law and executive regulations on 2026-05-06 (SECONDARY: EY https://www.ey.com/en_gl/technical/tax-alerts/qatar-approves-draft-e-invoicing-law-and-implementing-regulations, cited in the QA pack, accessed 2026-11-18) | - | - | Will appear in the Official Gazette (Al Meezan) once issued | UNVERIFIED; not promulgated as far as found |
 | Legislation portal and gazette | Ministry of Justice | https://www.almeezan.qa/ | JavaScript app | No content reached | Unknown | BLOCKED |
@@ -117,7 +117,7 @@ Builds on [03-regulations.md](03-regulations.md) (KSA and UAE matrix, 2026-11-04
 | Holidays | MoL / Amiri Diwan | Announced per holiday by news (QA pack cites The Peninsula, SECONDARY) | HTML news | No | Per announcement | UNVERIFIED |
 
 ### 4.2 Coverage
-- **Automatic:** nothing today. Qatar publishes no e-invoicing spec yet.
+- **Automatic:** nothing today. No e-invoicing spec found; UNVERIFIED.
 - **Human plus accountant:** all of it. The watch matters most here: the e-invoicing law and its technical spec are the next big change.
 
 ### 4.3 Change signals
@@ -151,8 +151,8 @@ This is input only. Q-601 stays open; the accountant decides whether `tax.roundi
 |---|---|---|---|
 | SA | SDK (validation), Data Dictionary XLSX, Swagger (UNVERIFIED) | Dated spec files with redlines; news RSS (URL UNVERIFIED) | VAT, waves, retention, GOSI, labour law, holidays |
 | AE | PINT AE schematron and code lists | PINT AE release notes; MoF page document list and footer date | MoF decisions, FTA rates and clarifications, WPS, holidays |
-| EG | ETA document types, code tables, API reference | SDK release notes (none after 2023-08) | VAT law, mandate decisions, social insurance, holidays |
-| QA | None yet | GTA news; Official Gazette | Everything, including the pending e-invoicing law |
+| EG | None confirmed (ETA HTML documentation pending executable artifacts) | SDK release notes (none after 2023-08) | VAT law, mandate decisions, social insurance, holidays |
+| QA | None found; UNVERIFIED | GTA news; Official Gazette | Everything, including the e-invoicing law (status UNVERIFIED) |
 
 Gaps to close (each needs a human with a browser or portal access): ZATCA developer portal and SDK contents; uaelegislation.gov.ae, mohre.gov.ae, laws.boe.gov.sa, gosi.gov.sa and almeezan.qa blocked our fetcher; NOSI official site not found; no official holiday source for SA, EG or QA.
 
@@ -167,7 +167,7 @@ A **source registry** (one entry per URL in sections 1 to 4) with: `id`, `market
 
 | Source class | Examples | Poll | Change test |
 |---|---|---|---|
-| Executable specs | PINT AE release notes and `resources.zip`; ZATCA SDK; ETA document types | Daily | New version id, or file hash change |
+| Executable specs | PINT AE release notes and `resources.zip`; ZATCA SDK; ETA document types (documentation only, pending executable artifacts) | Daily | New version id, or file hash change |
 | Spec listings | ZATCA E-Invoice specifications page; MoF e-invoicing page | Daily | New or removed document link; footer date change |
 | Legislation listings | FTA legislation; GTA laws, decisions, circulars; ETA periodical books | Daily | New item (issue and publish date) |
 | News feeds | ZATCA News RSS; GTA news; MoF news; ETA news | Every few hours | New item whose title or body matches a market keyword list (e-invoicing, VAT, wave, threshold, rate, WPS, holiday) |

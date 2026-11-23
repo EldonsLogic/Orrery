@@ -32,6 +32,7 @@ Live coordinator log for the partner's lane (RULES 51, created mid-session when 
 
 ## Decisions
 - Q-311 (tenant id format): the partner agrees the event-stream format (letters, digits, underscore) is canonical and provisioning refuses hyphens. Needs Eldon's confirmation before ERP-009 or provisioning changes.
+- Final name (ADR-0066, #296): the partner agrees to Seshna, the Nuqta S mark and Cairo typefaces, and to the name being public before domain registration and trademark clearance (2026-11-23, recorded on #296).
 - The partner's other answers (#282, #268, #269, #230, #270) were recorded on those PRs by the side chat.
 
 ## Tokens or cost

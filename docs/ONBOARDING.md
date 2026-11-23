@@ -3,7 +3,7 @@
 Status: accepted
 Owner: eldon
 
-Everything a founder needs to start working here, with no separate message. Read it once, then work from [STATUS.md](STATUS.md). Agents: if the person you are working with has not completed section 1, walk them through it first.
+Everything a founder needs to start working on Seshna, with no separate message. The product name is Seshna ([ADR-0066](decisions/ADR-0066-final-name-seshna-and-nuqta-s-mark.md)); the repo URL and the `ORRERY_FOUNDER` variable keep the old name until GOV-002 renames the repo. Read it once, then work from [STATUS.md](STATUS.md). Agents: if the person you are working with has not completed section 1, walk them through it first.
 
 ## Which founder are you?
 | Founder | GitHub | Log author | Lane |

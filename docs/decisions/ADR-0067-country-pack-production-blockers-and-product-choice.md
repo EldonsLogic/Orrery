@@ -1,0 +1,43 @@
+# ADR-0067: Country pack production blockers, product-choice defaults and record checks
+
+Status: Proposed
+Owner: partner
+Approved by: pending (Eldon answered Q1 and Q2 for both founders on PR #282, 2026-11-23; this ADR records them and awaits the partner's acceptance and Eldon's Tier 3 review)
+Plan ID: CMP-036
+
+## Context
+[ADR-0063](ADR-0063-country-pack-certification-record.md) left two decisions open: whether `PLATFORM-DEFAULT` may back statutory locked leaves, and how `goLiveBlockers` are handled. Eldon's review of PR #282 (Claude Fable, at 0d38f5a) also found record checks that read more into a file than it says. Eldon decided both open questions on #282 for both founders. This ADR records them and the Low fixes, and amends ADR-0063 (and, through it, [ADR-0059](ADR-0059-draft-country-packs-in-sandbox.md) Decision 2's production rules). ADR-0063 is Accepted and is not edited.
+
+## Decision
+All rules apply in production only. Sandbox and test behave as ADR-0059 says. Everything fails closed.
+
+1. **Q1, option C: a named product-choice list per market.** A `PLATFORM-DEFAULT` fact may back a locked pack path only if that path equals a path on the market's product-choice list or lies beneath one. A listed path never authorises an ancestor: listing `tax.roundingRule` does not let a default back `tax`. A `PLATFORM-DEFAULT` fact on any other locked path (or on an ancestor of one) is refused, even when another fact also covers the path. Facts outside locked areas are unaffected.
+   - The list is data: `components/compliance/country_pack/product_choice_paths.json`, one list per market (`SA`, `AE`, `EG`, `QA`), each entry a `path`, a `reason` and an optional `provisional` note. Entries need at least two path segments, so a top-level area is never listable. A missing, malformed, duplicate-key or wrongly shaped file refuses production loading. A market with no entry allows nothing.
+   - Shipped entries are exactly the paths the four packs use a default for today, and `components/compliance/country_pack/tests/test_production_rules.py` pins them: Saudi `eInvoicing.componentId`, `eInvoicing.mode`, `tax.roundingRule`; UAE and Qatar `tax.roundingRule`; Egypt none (its identity-path defaults are refused until its evidence is reworked).
+   - Saudi `tax.roundingRule` is **provisional**: [Q-601](../open-questions.md) (does ZATCA mandate invoice rounding?) is open for the accountant. If the answer is yes, the entry comes off the list and the fact needs official or signed secondary evidence. The UAE and Qatar entries are provisional too: whether their law is silent on rounding is UNVERIFIED and Q-601 covers Saudi Arabia only. Each entry carries a `provisional` note saying so.
+2. **Q2, option A: open blockers refuse production.** A pack is refused while any `goLiveBlockers` or `pendingRefs` entry is open, or while any `UNVERIFIED` `factsOutsideSchema` entry names a locked path. An entry is open until it carries a resolution record; only a valid record stops it blocking.
+   - Record format, a `resolution` object inside the entry in `evidence.json`, with exactly these keys: `status` (must be `"resolved"`), `by` (a founder GitHub login from the `founders` map in `scripts/lanes.json`, matched case-insensitively) and `at` (a real `YYYY-MM-DD` date, not in the future, not before 2026-01-01). Any other key, a missing key, or a wrong value leaves the entry refused. The existing `status` field on a blocker is an evidence label and is unchanged.
+   - `factsOutsideSchema` entries name pack paths in an optional `paths` list (full pack-root dotted paths, which must exist). An entry without `paths` concerns nothing in the pack and does not block; an author who writes about a pack path must declare it. Sourced labels on these entries follow the same source rule as `facts`.
+   - Resolving a blocker records a decision; it does not check that the underlying fix was made. The founder who signs `resolution.by` verifies that.
+3. **Lows from the #282 review (all production-only record checks).**
+   - Evidence status: `evidenceStatus: verified_official` needs every locked leaf backed by a `VERIFIED-OFFICIAL` fact or a listed product-choice default. A leaf backed only by `SECONDARY` facts refuses. `secondary` keeps accepting any non-`UNVERIFIED` label.
+   - JSON hygiene: `pack.json`, `manifest.json`, `evidence.json` and the manifest contract parse with duplicate keys refused (this applies to `pack.json` in every environment, as it is read before any environment rule). Nesting too deep for the parser, or for a validator, is a clean refusal, not a crash.
+   - Manifest meaning: `kind` must be `rigid`, `certification.touchesLedgerOrTax` must be `true`, `lifecycle.status` must not be `retired`, `certification.certifiedAt` must not be in the future, and every `requires` entry must resolve to a registered component id or provided capability (manifests under `components/`, excluding country packs). The version range is not evaluated.
+   - Closed key set: `evidence.json` permits only `packId`, `version`, `purpose`, `facts`, `factsOutsideSchema`, `pendingRefs`, `goLiveBlockers`, `arabicLabels`, `arabicReviewNote` and `certification`. Any other key (for example `revoked`) refuses.
+   - People: `owner.github` and every `reviewedBy` entry must be a founder login (the `founders` map in `scripts/lanes.json`, matched case-insensitively; ADR-0034 requires a human reviewer and this repo has two). `certification.founder` must be the founder that `owner.github` maps to; the other founder reviews, and the existing rule that the owner cannot review their own pack stays. An unreadable or invalid founders map refuses.
+   - Hygiene: a read source's `accessed` date may not be before 2026-01-01 (the project's work starts in 2026-11); the date is a named constant.
+
+## Alternatives rejected
+- **Allow `PLATFORM-DEFAULT` on any locked path with a `ref` (ADR-0063's interim rule).** A `ref` proves nothing about the choice being ours rather than the law's.
+- **Put the list inside each pack.** The pack under review would name its own exceptions. The list lives beside the loader, outside every pack version.
+- **Treat a pack's own blocker `status` as resolution.** That field already holds an evidence label; a separate `resolution` record keeps who and when auditable.
+- **Resolver is any named person.** A founder login ties the resolution to the same identity binding as the approval; an accountant is already recorded in `certification.accountant`.
+
+## Consequences
+- The four shipped packs stay refused in production (open `pendingRefs` and `goLiveBlockers`, unlisted defaults) and load in sandbox and test. No pack JSON changes in this row.
+- The founder approving a pack is its manifest owner; the other founder is its reviewer. A pack owned and reviewed by one person cannot pass.
+- Per-market list entries are reviewed one at a time. Adding one, or settling Q-601, is a data change plus a test update.
+- Still true, as in ADR-0063: these checks validate recorded approvals, not accountant credentials or signatures. Tier 3 line-by-line review and a different-model security review are required before merge; neither is claimed here.
+
+## Supersedes
+Amends [ADR-0063](ADR-0063-country-pack-certification-record.md), replacing its "Open founder decisions" section with the rules above, and [ADR-0059](ADR-0059-draft-country-packs-in-sandbox.md) Decision 2's production requirements as ADR-0063 already amended them. Nothing is superseded in full.

@@ -19,6 +19,7 @@ from components.compliance.country_pack.evidence import (
     get,
     labelled,
     leaves,
+    resolution_refusals,
     source_violations,
 )
 
@@ -177,7 +178,9 @@ def manifest_text_violations(manifest: dict) -> list[str]:
 
 
 def pending(evidence: dict) -> list:
-    return [*evidence.get("pendingRefs", []), *evidence.get("goLiveBlockers", [])]
+    """Open entries only: one with a resolution record no longer blocks (ADR-0067, same rule as production)."""
+    return [entry for key in ("pendingRefs", "goLiveBlockers") for entry in evidence.get(key, [])
+            if resolution_refusals("entry", entry, None)]
 
 
 def certifiability_violations(pack: dict, manifest: dict, evidence: dict) -> list[str]:

@@ -1,0 +1,35 @@
+{
+  "description": "Per-market product-choice paths (CMP-036, ADR-0067). A PLATFORM-DEFAULT fact may back a locked pack path only if the path equals a listed path or lies beneath one; a listed path never authorises an ancestor. Entries are reviewed one by one; an entry marked provisional is not settled.",
+  "markets": {
+    "SA": [
+      {
+        "path": "eInvoicing.componentId",
+        "reason": "Design choice: which platform component implements the market's e-invoicing."
+      },
+      {
+        "path": "eInvoicing.mode",
+        "reason": "Design choice: which e-invoicing mode the pack locks (Q-559 asks who decides it)."
+      },
+      {
+        "path": "tax.roundingRule",
+        "reason": "Platform rounding rule, listed only if the law is silent on invoice rounding.",
+        "provisional": "Q-601: UNVERIFIED whether ZATCA mandates invoice rounding; if it does, this entry comes off the list."
+      }
+    ],
+    "AE": [
+      {
+        "path": "tax.roundingRule",
+        "reason": "Platform rounding rule, listed only if the law is silent on invoice rounding.",
+        "provisional": "UNVERIFIED whether UAE law is silent on invoice rounding; ask the market accountant (Q-601 covers Saudi Arabia only)."
+      }
+    ],
+    "EG": [],
+    "QA": [
+      {
+        "path": "tax.roundingRule",
+        "reason": "Platform rounding rule, listed only if the law is silent on invoice rounding.",
+        "provisional": "UNVERIFIED whether Qatari law is silent on invoice rounding; ask the market accountant (Q-601 covers Saudi Arabia only)."
+      }
+    ]
+  }
+}

@@ -363,6 +363,7 @@ jobs:
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_4.py
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_5.py
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_6.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_7.py
 
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

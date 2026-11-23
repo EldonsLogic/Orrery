@@ -7,7 +7,7 @@ import unicodedata
 from exceptions.errors import ExceptionsError  # noqa: E402  (services/blueprint is on the path)
 from exceptions.sanitize import clean, scan  # noqa: E402
 
-__all__ = ["clean", "slug", "injection", "scope_hits", "per_client", "personal_data", "fold", "tokens", "stems", "foreign_letters", "sensitive_hits"]
+__all__ = ["clean", "slug", "injection", "scope_hits", "ar_forms", "per_client", "personal_data", "fold", "tokens", "stems", "foreign_letters", "sensitive_hits"]
 
 _INJECTION = re.compile(
     r"(?i)(ignore (all |any |the )?(previous|prior|above)|disregard|system prompt|you are (now )?an? |new instructions?|"
@@ -50,7 +50,7 @@ def slug(text: str, limit: int = 60) -> str:
 
 
 # ---- scope detection (backstop only: the structural control is policy.py, which derives the risk class) -------------------
-_AR_FOLD = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ة": "ه", "ى": "ي", "ی": "ي", "ئ": "ي", "ؤ": "و", "ک": "ك", "ۀ": "ه", "ٹ": "ت"})
+_AR_FOLD = str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ة": "ه", "ى": "ي", "ی": "ي", "ئ": "ي", "ؤ": "و", "ک": "ك", "ۀ": "ه", "ٹ": "ت", "ڞ": "ض"})
 _CONFUSABLE = str.maketrans({
     "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "к": "k", "і": "i", "ј": "j", "ѕ": "s", "һ": "h",
     "т": "t", "м": "m", "н": "h", "в": "b", "ԁ": "d", "ɡ": "g", "ɑ": "a", "ο": "o", "α": "a", "ν": "v", "τ": "t", "ρ": "p",
@@ -68,7 +68,7 @@ _EN_CONCAT = ("payroll", "payslip", "ledger", "zatca", "fatoora", "einvoic", "el
               "endofservice", "chartofaccounts", "trialbalance", "grosspay", "netpay", "salestax", "taxcode", "taxrate", "taxid",
               "auditlog", "audittrail", "withholdingtax", "wagesheet", "salary", "salaries", "journal", "zakah", "zakat")
 _AR_STEMS = ("ضريب", "ضرائب", "زكا", "دفتر", "قيد", "قيود", "رواتب", "راتب", "مرتب", "مسير", "تدقيق", "محاسب", "فوتر", "فاتور", "اجور",
-            "تاميني", "ترحيل", "ذمم", "استقطاع", "جمارك", "جمرك", "اهلاك", "ٹیکس")
+            "تاميني", "ترحيل", "ذمم", "استقطاع", "جمارك", "جمرك", "اهلاك", "ٹیکس", "زكو")
 _AR_EXACT = {"اجر", "اجره", "اجرة"}
 _AR_CONCAT = ("دفترالاستاذ", "نهايهالخدمه", "فاتورهالكترونيه", "قيديوميه", "مراجعهحسابات", "كشفحساب")
 
@@ -140,13 +140,16 @@ def _ar_forms(w: str) -> set[str]:
     return out
 
 
+ar_forms = _ar_forms
+
+
 def scope_hits(*texts: str) -> list[str]:
     """Words for ledger, tax, e-invoicing, payroll maths or audit, after normalising. A backstop: a miss proves nothing."""
     found: set[str] = set()
     for t in texts:
         for variant in (t, t.translate(_LEET), t.replace("I", "l")):
             toks = tokens(variant)
-            toks_ar = sorted({f for w in toks for f in _ar_forms(w)})
+            toks_ar = sorted({f for w in toks + [a + b for a, b in zip(toks, toks[1:])] for f in _ar_forms(w)})  # "ضر يبة"
             concat = "".join(toks)
             found.update(w for w in toks if _EN_TOKEN.match(w))
             found.update(a + b for a, b in zip(toks, toks[1:]) if _EN_TOKEN.match(a + b))   # "ta x"

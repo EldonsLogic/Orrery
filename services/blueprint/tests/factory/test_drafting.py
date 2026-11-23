@@ -2,6 +2,7 @@
 Probes from the Fable review of PR 287 (H1 to H4, M1 to M4, L1, L4) are marked with their finding."""
 import copy
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -254,3 +255,93 @@ def test_existing_draft_is_refused_before_the_model_call(env):                  
 def test_sandbox_root_inside_repo_is_refused(env):
     out = env(root=ROOT / "components")[0].draft(req(), NOW)
     assert (out.code, out.reason) == (D.SANDBOX, "sandbox_root_in_repo")
+
+
+# ---- re-review of PR 287 at a6db4ee (N1 to N3 and follow-ups) ------------------------------------------------------
+def _jf(path, doc):
+    return draft_doc(files=FILES + [{"path": path, "content": doc if isinstance(doc, str) else json.dumps(doc)}])
+
+
+@pytest.mark.parametrize("reply", [
+    _jf("screen.JSON", {"fields": [{"name": "markup", "type": "percent"}]}),                           # N1
+    _jf("screen.json", {"fields": [{"id": "x", "kind": "percent"}]}),
+    _jf("screen.json", {"fields": [{"id": "x", "kind": "text", "calc": "net * 0.15"}]}),
+    _jf("screen.json", {"fields": [{"name": "x", "type": "text", "depends_on": "eval:doc.net > 0"}]}),
+    _jf("screen.json", {"fields": [{"name": "x", "type": "text", "default": "{{ doc.net*0.15 }}"}]}),
+    _jf("report.json", {"query": "select net * 0.15 from visits"}),
+    _jf("notes.json", {"text": "{% if x %}y{% endif %}"}),
+    _jf("screen.yaml", "fields:\n  - name: markup\n    type: percent\n"),
+    _jf("screen.html", "<input name='markup' type='percent'>"),
+])
+def test_field_script_and_file_type_bypasses_are_refused(env, tmp_path, reply):
+    out = env(reply=reply)[0].draft(req(), NOW)
+    assert out.status == "refused" and out.code in (D.RIGID, D.MALFORMED), out.code
+    assert empty(tmp_path)
+
+
+@pytest.mark.parametrize("words", [                                                                 # N2
+    "رصيد", "خصم", "سعر", "المبلغ", "عمولة", "دائن ومدين", "سند قبض", "أرباح", "الميزانية", "بدل سكن", "رسوم", "بنك",
+    "مصادقة", "مستخدم", "أدوار", "جلسة", "تفويض", "ضر يبة", "ڞريبة", "زكوة",
+    "authenticate", "passwd", "2FA", "API key", "billing", "pricing", "margin", "bank", "treasury", "fiscal", "post to",
+])
+def test_more_rigid_words_route_to_human(env, words):
+    drafter, _, sent, _ = env()
+    out = drafter.draft(req(description=f"Visit checklist: {words}"), NOW)
+    assert out.code == D.RIGID and sent == []
+
+
+@pytest.mark.parametrize("cid", ["sales.visit_checklist", "hr.visit_checklist", "engine.visit_checklist",      # N3
+                                 "registry.visit_checklist", "factory.visit_checklist", "components.visit_checklist",
+                                 "hr.skeleton.configure"])
+def test_namespaces_in_use_are_reserved(env, cid):
+    drafter, _, sent, _ = env()
+    assert drafter.draft(req(component_id=cid), NOW).code == D.RESERVED_ID and sent == []
+
+
+def test_arabic_auth_words_match_per_word_not_across_words(env):
+    out = env()[0].draft(req(description="ملاحظات الأستاذ نبيل عن الزيارات"), NOW)
+    assert out.status == "drafted", (out.code, out.record["hits"])
+
+
+@pytest.mark.parametrize("words", ["on duty", "job postings", "سجل دخول الزوار", "قيد التنفيذ", "إذن"])
+def test_known_over_refusals_still_refuse(env, words):       # listed in ADR-0065 as known over-refusals
+    assert env()[0].draft(req(description=f"Visit checklist {words}"), NOW).status == "refused"
+
+
+def test_rtl_verified_is_forced_false(env):
+    out = env(reply=draft_doc(lambda m: m["i18n"].update(rtlVerified=True)))[0].draft(req(), NOW)
+    assert json.loads((out.draft_dir / "component" / "manifest.json").read_text())["i18n"]["rtlVerified"] is False
+
+
+def test_audit_gets_a_copy_and_drafted_only_after_the_rename(env, tmp_path):
+    seen = []
+
+    def sink(rec):
+        seen.append(rec)
+        if rec["outcome"] == "drafted":
+            assert Path(rec["draft_dir"], "component", "manifest.json").is_file()
+            raise OSError("audit store down")
+    out = env(sink=sink)[0].draft(req(), NOW)
+    assert (out.code, out.reason) == (D.INTERNAL, "OSError") and empty(tmp_path)
+    assert [r["outcome"] for r in seen] == ["drafted", "refused"] and seen[-1] is not out.record
+
+
+def test_target_created_during_the_call_is_not_overwritten(env, tmp_path):
+    final = tmp_path / "sbx" / f"crq_visit_1-{D._sha(REQ)[:8]}"
+
+    def race(reply):
+        final.mkdir()
+        (final / "other").write_text("keep")
+        return reply
+    out = env(wrap=race)[0].draft(req(), NOW)
+    assert (out.code, out.reason) == (D.SANDBOX, "draft_exists")
+    assert [p.name for p in (tmp_path / "sbx").iterdir()] == [final.name] and (final / "other").read_text() == "keep"
+
+
+def test_stale_temp_folders_are_cleaned(env, tmp_path):
+    old, new = tmp_path / "sbx" / ".tmp-old", tmp_path / "sbx" / ".tmp-new"
+    for d in (old, new):
+        d.mkdir(parents=True)
+    os.utime(old, (0, 0))
+    assert env()[0].draft(req(), NOW).status == "drafted"
+    assert not old.exists() and new.exists()

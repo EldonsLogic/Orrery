@@ -11,12 +11,15 @@ named reviewer who is not the requester (ADR-0034). Every outcome, including an 
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
 import posixpath
 import secrets
 import shutil
+import stat
+import time
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +27,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from component_request import policy
-from component_request.text import fold, injection, per_client, personal_data, scope_hits, stems, tokens
+from component_request.text import ar_forms, fold, injection, per_client, personal_data, scope_hits, stems, tokens
 from registry.admission import admit
 from registry.store import RawManifest
 
@@ -38,17 +41,30 @@ PROMPT_VERSION, PROMPT_BLOCK = "factory.drafter.v1", "p_factory_drafter"
 TIER, PURPOSE, MAX_OUT, MIN_OUT = "mid", "build", 8000, 2000
 MAX_FILES, MAX_BYTES = 20, 200_000
 MODEL_KEYS = {"version", "name", "description", "provides", "parameters", "tests", "engineCompatibility", "i18n"}
-RESERVED_NAMESPACES = {"core", "country", "compliance", "platform", "system", "library"}
-SCRIPT_KEYS = {"formula", "expression", "script", "server_script", "python", "code", "condition", "eval"}
+RESERVED_NAMESPACES = {"core", "country", "compliance", "platform", "system", "library", "engine", "registry", "factory",
+                       "components"}            # plus the first segment of every id and capability in components/
+SCRIPT_KEYS = {"formula", "expression", "script", "server_script", "python", "code", "condition", "eval", "depends_on",
+               "query", "sql", "calc", "template", "default"}
+TYPE_KEYS = ("fieldtype", "type", "kind")          # any object with one of these is a field
+NAME_KEYS = ("fieldname", "name", "id", "label")
+FILE_TYPES = {".py", ".json"}
+TEMPLATE_MARKS = ("eval:", "{{", "{%")
+STALE_TMP_SECONDS = 3600
 PARAM_TYPES = {"string": "text", "enum": "select"}       # other manifest parameter types are never plain here
 # Secondary deny lists (a hit refuses, a miss proves nothing): auth and tenancy words, plus money words the shared
 # BPL-016 scope list leaves out on purpose (it allows a link to a sales invoice).
 AUTH_TOKENS = {"auth", "authentication", "authorization", "authorisation", "login", "logon", "logout", "signin",
                "password", "passcode", "permission", "privilege", "role", "rbac", "acl", "accesscontrol", "admin",
                "administrator", "superuser", "sudo", "tenant", "tenancy", "session", "sso", "mfa", "otp", "oauth", "jwt",
-               "credential", "token"}
-AUTH_AR = ("صلاحي", "مستاجر", "دخول", "كلمهالمرور", "كلمهالسر", "اذون", "اذن")
-MONEY_TOKENS = policy.RESTRICTED_TOKENS | policy.FINANCIAL_TOKENS | {"invoice", "debit", "credit", "posting", "levy"}
+               "credential", "token", "authenticate", "authenticated", "authenticating", "passwd", "2fa", "apikey",
+               "user"}
+MONEY_TOKENS = policy.RESTRICTED_TOKENS | policy.FINANCIAL_TOKENS | {
+    "invoice", "debit", "credit", "posting", "levy", "billing", "pricing", "margin", "bank", "treasury", "fiscal", "postto"}
+# Arabic stems, matched per word (and adjacent word pair) after prefix removal, never across word boundaries.
+AUTH_AR = tuple(fold(x) for x in ("صلاحي", "مستاجر", "دخول", "كلمهالمرور", "كلمهالسر", "اذون", "اذن", "مصادق",
+                                  "مستخدم", "ادوار", "جلسه", "جلسات", "تفويض", "تسجيلالدخول"))
+MONEY_AR = tuple(fold(x) for x in ("رصيد", "خصم", "سعر", "اسعار", "مبلغ", "عموله", "دائن", "مدين", "قبض", "ارباح", "ربح",
+                                   "ميزانيه", "بدل", "رسوم", "بنك", "نقد", "مصروف", "ايراد", "دفع", "سداد", "تسويه"))
 
 (INVALID, INJECTION, RIGID, UNPROVEN, MODEL_REFUSED, MALFORMED, OUTSIDE, MANIFEST, SANDBOX, INTERNAL, PER_CLIENT,
  PERSONAL, CHECK_FAILED, RESERVED_ID) = (f"FDR-{i:03d}" for i in range(1, 15))
@@ -92,7 +108,11 @@ def rigid_hits(*texts: str) -> list[str]:
         toks = tokens(t)
         words = {s for w in toks + [a + b for a, b in zip(toks, toks[1:])] for s in stems(w)}
         hits.update(words & (AUTH_TOKENS | MONEY_TOKENS))
-        hits.update(a for a in AUTH_AR if a in "".join(toks))
+        forms = {f for w in toks + [a + b for a, b in zip(toks, toks[1:])] for f in ar_forms(w)}
+        hits.update(a for a in AUTH_AR + MONEY_AR if any(f.startswith(a) for f in forms))
+        if policy.financial_hit(t):
+            hits.add("financial")
+        hits.update(m for m in TEMPLATE_MARKS if m in t)
     return sorted(hits)
 
 
@@ -102,13 +122,13 @@ def _deny(code: str, *texts: str) -> None:
         raise Refused(code, "route_to_human", hits=hits)
 
 
-def existing_ids() -> set[str]:
+def existing_names() -> set[str]:
+    """Every component id and capability already in components/ (a manifest that cannot be read fails closed)."""
     out = set()
     for p in (REPO / "components").rglob("manifest.json"):
-        try:
-            out.add(json.loads(p.read_text(encoding="utf-8")).get("id"))
-        except (OSError, ValueError, AttributeError):
-            continue
+        m = json.loads(p.read_text(encoding="utf-8"))
+        out.add(m["id"])
+        out.update(x["capability"] for x in m.get("provides", []))
     return out
 
 
@@ -128,7 +148,8 @@ def check_request(req) -> None:
         raise Refused(RIGID, "route_to_human", hits=policy.identifier_hits(cid) + policy.identifier_hits(ref))
     if policy.classify(req["need"]["kind"], ref)[0] != "plain":
         raise Refused(UNPROVEN, "route_to_human")
-    if cid.split(".")[0] in RESERVED_NAMESPACES or cid in existing_ids():
+    names = existing_names()
+    if cid.split(".")[0] in RESERVED_NAMESPACES | {n.split(".")[0] for n in names} or cid in names:
         raise Refused(RESERVED_ID, "reserved_or_existing_component_id")
 
 
@@ -167,11 +188,15 @@ def _json_fields(rel: str, content: str) -> None:
         if isinstance(node, list):
             stack.extend(node)
         elif isinstance(node, dict):
-            if SCRIPT_KEYS & {str(k).lower() for k in node}:
+            keys = {str(k).casefold() for k in node}
+            if SCRIPT_KEYS & keys:
                 raise Refused(RIGID, "route_to_human", hits=[f"{rel}:script"])
-            name, typ = node.get("fieldname", node.get("name")), node.get("fieldtype", node.get("type"))
-            if isinstance(name, str) and isinstance(typ, str):
-                f = {"name": name, "type": typ.lower(), "options": node.get("options"), "target": node.get("target")}
+            low = {str(k).casefold(): v for k, v in node.items()}
+            typ = next((low[k] for k in TYPE_KEYS if k in low), None)
+            if any(k in low for k in TYPE_KEYS):
+                name = next((low[k] for k in NAME_KEYS if isinstance(low.get(k), str)), "")
+                f = {"name": name, "type": typ.casefold() if isinstance(typ, str) else "?", "options": low.get("options"),
+                     "target": low.get("target")}
                 if policy.field_verdict(set(), f)[0] != "plain":
                     raise Refused(RIGID, "route_to_human", hits=[f"{rel}:{name}"])
             stack.extend(node.values())
@@ -204,6 +229,8 @@ def check_draft(req: dict, text: str, owner: str) -> tuple[dict, list]:
     if size > MAX_BYTES:
         raise Refused(MALFORMED, "too_big")
     _layout(out)
+    if any(posixpath.splitext(r)[1].casefold() not in FILE_TYPES for r, _ in out):   # .py and .json only here
+        raise Refused(MALFORMED, "file_type")
     if m.get("provides") != expected_provides(req):    # exactly the requested need: no extra artifact or capability
         raise Refused(RIGID, "provides_not_the_request")
     for a in m["provides"][0]["artifacts"]:
@@ -223,11 +250,12 @@ def check_draft(req: dict, text: str, owner: str) -> tuple[dict, list]:
             for t in tests):
         raise Refused(MALFORMED, "tests")
     for rel, content in out:
-        if rel.endswith(".json"):
+        if rel.casefold().endswith(".json"):
             _json_fields(rel, content)
     _deny(RIGID, *_strings(m), *(c for _, c in out), *paths)
     manifest = dict(m, id=req["component_id"], kind="configurable", requires=[], owner={"github": owner},
-                    tests=[dict(t, blocking=True) for t in tests], licence={"spdx": "LicenseRef-Proprietary"},
+                    tests=[dict(t, blocking=True) for t in tests],
+                    **({"i18n": dict(m["i18n"], rtlVerified=False)} if isinstance(m.get("i18n"), dict) else {}), licence={"spdx": "LicenseRef-Proprietary"},
                     origin={"source": "component_factory", "requestId": req["request_id"]},
                     dataHandling={"storesPersonalData": False, "sendsDataToModels": False,
                                   "promotableToLibrary": False},
@@ -255,7 +283,7 @@ class Drafter:
                "manifest_sha256": None, "files_sha256": None, "sandbox": None, "hits": [], "draft_dir": None,
                "reviewed": False, "promotable": False,
                "promotion": "manual only: a named reviewer who is not the requester (ADR-0034)"}
-        tmp = None
+        tmp = placed = None
         try:
             rec.update(tenant_id=self.principal["tenant_id"], requester=self.principal["actor_id"])
             rec["request_sha256"] = _sha(req)
@@ -280,11 +308,17 @@ class Drafter:
             rec.update(outcome="drafted", status="draft", code=None, reason=None, draft_dir=str(final))
             (tmp / "draft.json").write_text(json.dumps(rec, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
                                             encoding="utf-8")
-            self.audit(rec)                            # a failing sink means no draft
-            if os.path.lexists(final):
+            try:
+                os.mkdir(final)                        # atomic reservation: refused if anything is already there
+            except FileExistsError:
                 raise Refused(SANDBOX, "draft_exists")
-            os.rename(tmp, final)
+            placed = final
+            os.rename(tmp / "component", final / "component")
+            os.rename(tmp / "draft.json", final / "draft.json")
+            os.rmdir(tmp)
             tmp = None
+            self.audit(copy.deepcopy(rec))             # `drafted` only after the rename; a failing sink removes it
+            placed = None
             return Outcome("drafted", None, None, rec, final)
         except Refused as exc:
             rec.update(outcome=exc.status, status=exc.status, code=exc.code, reason=exc.reason, hits=exc.hits,
@@ -292,9 +326,10 @@ class Drafter:
         except Exception as exc:                       # fail closed: any crash is a refusal with an audit record
             rec.update(outcome="refused", status="refused", code=INTERNAL, reason=type(exc).__name__, draft_dir=None)
         finally:
-            if tmp is not None:
-                shutil.rmtree(tmp, ignore_errors=True)
-        self.audit(rec)
+            for d in (tmp, placed):
+                if d is not None:
+                    shutil.rmtree(d, ignore_errors=True)
+        self.audit(copy.deepcopy(rec))
         return Outcome(rec["outcome"], rec["code"], rec["reason"], rec)
 
     def _root(self) -> Path:
@@ -304,6 +339,10 @@ class Drafter:
         r = root.resolve()
         if r == REPO or REPO in r.parents:          # never components/, the library or anywhere in the repo
             raise Refused(SANDBOX, "sandbox_root_in_repo")
+        for d in r.glob(".tmp-*"):                  # leftovers of a crashed run
+            st = os.lstat(d)
+            if stat.S_ISDIR(st.st_mode) and time.time() - st.st_mtime > STALE_TMP_SECONDS:
+                shutil.rmtree(d, ignore_errors=True)
         return r
 
     def _call(self, req: dict, rec: dict) -> dict:

@@ -1,5 +1,6 @@
 """SEC-009 (chat side): per-tenant and per-user rate limits, tool-call limiter, budget guard over the PLT-026 port."""
 import threading
+from collections import deque
 
 import evstream  # noqa: F401  on the path via conftest; a missing package fails, never skips
 import pytest
@@ -60,6 +61,44 @@ def test_refused_event_is_not_recorded():
     assert reason(lim, "turn", "t_a", "u_3").reason == "tenant_limit"
     clock.advance(60)
     lim.admit("turn", "t_a", "u_1")
+
+
+def test_later_rule_refusal_leaves_earlier_counters_unchanged():
+    """Tenant rule (the second turn rule) refuses; the user rule checked first must not have been charged."""
+    lim, _ = limiter()
+    lim.admit("turn", "t_a", "u_2")
+    lim.admit("turn", "t_a", "u_3")
+    lim.admit("turn", "t_a", "u_4")  # tenant counter is full (3); u_1 has none
+    for _ in range(4):
+        assert reason(lim, "turn", "t_a", "u_1").reason == "tenant_limit"
+    u1_hits = {k: len(q) for k, q in lim._hits.items() if k[4] == "u_1"}
+    assert all(n == 0 for n in u1_hits.values())
+    lim2, _ = limiter()
+    lim2.admit("turn", "t_b", "u_1")
+    lim2.admit("turn", "t_b", "u_1")  # u_1 at 2/2 in t_b
+    assert reason(lim2, "turn", "t_b", "u_1").reason == "user_limit"
+    lim2.admit("turn", "t_b", "u_2")  # tenant counter shows 3 only if the refused calls were never recorded
+    assert reason(lim2, "turn", "t_b", "u_3").reason == "tenant_limit"
+
+
+def test_failed_append_rolls_back_counters_already_charged():
+    """Fault injection: the second counter's append fails; the first must be unchanged and the result store_error."""
+    lim, _ = limiter()
+
+    class FailingDeque(deque):
+        def append(self, _):
+            raise OSError("store down")
+
+    tenant_key = ("turn", "tenant", 60.0, "t_a", "")
+    user_key = ("turn", "user", 60.0, "t_a", "u_1")
+    lim._hits[tenant_key] = FailingDeque()
+    e = reason(lim, "turn", "t_a", "u_1")
+    assert (e.reason, e.retryable) == ("store_error", False)
+    assert len(lim._hits[user_key]) == 0 and len(lim._hits[tenant_key]) == 0
+    lim._hits[tenant_key] = deque()
+    lim.admit("turn", "t_a", "u_1")  # the failed call cost nothing: two admits still fit
+    lim.admit("turn", "t_a", "u_1")
+    assert reason(lim, "turn", "t_a", "u_1").reason == "user_limit"
 
 
 @pytest.mark.parametrize("tenant,user", [("", "u_1"), ("t_a", ""), (None, "u_1"), ("t_a", 7), (" ", "u_1")])

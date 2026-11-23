@@ -151,8 +151,18 @@ class RateLimiter:
                         q.popleft()
                     if len(q) >= r.limit:
                         raise RateLimited(f"{r.scope}_limit", max(1, math.ceil(q[0] + r.window_s - now)))
-                for _, key in keyed:
-                    self._hits[key].append(now)
+                charged = []
+                try:
+                    for _, key in keyed:
+                        self._hits[key].append(now)
+                        charged.append(key)
+                except Exception:  # atomic: undo the counters already charged, so a failed event costs nothing
+                    for key in charged:
+                        try:
+                            self._hits[key].pop()
+                        except Exception:
+                            log.error("rate counter rollback failed key=%s", key)
+                    raise
                 self._calls += 1
                 if self._calls % self.sweep_every == 0:
                     self._sweep(now)

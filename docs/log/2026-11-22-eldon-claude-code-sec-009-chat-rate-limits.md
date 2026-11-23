@@ -36,3 +36,10 @@ Tests first; all four Medium and ten Low findings addressed. 20 targeted mutants
 ## Approval Lows (review of df69da2)
 Tests first. N1: refusals logged once per key and reason until the key is admitted again (repeats counted, one summary line), chat audit only on the first refusal and emitted after `ChatService._lock` is released. N2: Q-262 notes `chat.rate_limited` needs registering. N3: backwards steps up to 5 s clamped; larger ones rebase later hits to the new value, so one spurious high reading cannot freeze the limiter. N4: `sweep_every` validated at construction (invalid is `policy_missing`, nothing recorded). N5: tests for live keys surviving a sweep, the refusal log line and tool keying on argument fields; 27 of 27 targeted mutants killed. N6: recorded in the design note section 6.
 - Q-561 and Q-562 answered by Eldon in chat (2026-11-22): defaults accepted for every plan; shared cache with per-instance fallback on outage (not built yet). Design note, module docstring and open-questions updated.
+
+## Review fixes (partner review of #270 at 7e8473c, 2026-11-23)
+- Merged origin/main; only `docs/open-questions.md` conflicted, both sides kept (5 cells per row).
+- Medium (atomic writes): `RateLimiter._admit` now rolls back counters already charged if a later append fails, so an errored event costs nothing. Fault-injection test `test_failed_append_rolls_back_counters_already_charged` (second counter's append fails: first unchanged, `store_error`); it failed before the fix.
+- Low (ordering): `test_later_rule_refusal_leaves_earlier_counters_unchanged`. Confirmed by mutation (recording right after each check) that it fails.
+- Q-562 wording (partner's "limits divided by the number of servers") is not changed yet: pending a founder decision.
+- Checks: operate tests 705 passed, 1 skipped; check_docs, check_repo_hygiene and check_plan_independence pass.

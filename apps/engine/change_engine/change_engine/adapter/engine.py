@@ -468,6 +468,9 @@ class ChangeEngineAdapter:
             if site is None or site.lock is not None:
                 return
             want = self._site_snapshot(site)
+            # A site the store holds blocked is fenced on every repair, even when the copy already matches: a rotation
+            # that failed once is retried by the next sweep, so no earlier writer can promote the copy (re-review 3).
+            rotate = rotate or site.state == "recovery_required"
             if (not rotate and seen is not None
                     and self._mirror_key(seen, with_state=True) == self._mirror_key(want, with_state=True)):
                 return

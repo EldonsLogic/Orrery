@@ -490,6 +490,46 @@ class TestRecoveryRotatesTheCopyToken(Bpl033EngineBase):
         self._assert_blocked_everywhere()
 
 
+class TestBlockedSitesAreAlwaysFenced(TestRecoveryRotatesTheCopyToken):
+    """Re-review 3 at 70c569d: when the recovery's rotation write failed once, a later sweep closed nothing, forgot to
+    rotate and skipped the matching copy, so the paused writer's compare-and-set still won. Every repair of a site the
+    store holds blocked now rotates the copy, so the fence is retried on each sweep until it lands."""
+
+    def _pause_and_fail_the_first_fence(self):
+        real = self.backend.persist_site_state
+        state = {"entered": False, "failed": False}
+
+        def write(tenant, snap):
+            if snap["state"] == "ready" and not state["entered"]:
+                state["entered"] = True
+                self._second_worker_dies_and_is_recovered()
+                self.assertTrue(state["failed"], "the recovery's fence write failed once")
+                self.adapter.recover_interrupted()  # a later sweep: closes nothing, must still fence
+                return real(tenant, snap)
+            if (state["entered"] and not state["failed"] and snap["state"] == "recovery_required"
+                    and "expect_token" in snap):
+                state["failed"] = True
+                raise OSError("one transient failure writing the recovery fence")
+            return real(tenant, snap)
+
+        return mock.patch.object(self.backend, "persist_site_state", side_effect=write)
+
+    def test_a_failed_fence_is_retried_before_a_paused_mark_ready_resumes(self) -> None:
+        with self._pause_and_fail_the_first_fence():
+            self.assertEqual(self.apply("idemp_bpl033_fence_first")["status"], "applied")
+        self._assert_blocked_everywhere()
+
+    def test_a_failed_fence_is_retried_before_a_paused_repair_resumes(self) -> None:
+        self.crash_before_mark_ready("idemp_bpl033_fence_crash")
+        with self._pause_and_fail_the_first_fence():
+            self.adapter._repair_state_copy(bpl027.TENANT)
+        self._assert_blocked_everywhere()
+
+    # The inherited round-2 tests run in TestRecoveryRotatesTheCopyToken already.
+    test_a_paused_mark_ready_cannot_promote_the_copy_after_a_later_recovery = None
+    test_a_paused_repair_cannot_promote_the_copy_after_a_later_recovery = None
+
+
 class TestReadinessBeforeExecute(Bpl033EngineBase):
     def test_a_site_that_is_not_ready_fails_clean_before_any_step_runs(self) -> None:
         ran: list[int] = []

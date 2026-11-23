@@ -2,15 +2,20 @@
 
 A schedule belongs to one tenant and one owner, both from the verified principal; its agent role must be one of the
 owner's own roles, and its tools must be on that role's agent menu (`allowlist.resolve_allowlist`) and pass the
-draft-only rule. At run time the owner's roles are re-read: losing the role suspends the schedule (ALP-026).
-A run is always tainted (ALP-019), acts on behalf of the owner, and only drafts: `ctx.draft` records a proposal for
-a human, nothing executes, and no ledger, stock, tax, e-invoice or payroll write is ever allowed as a tool.
-Budget: the run cap is held against the per-period cap before the run and becomes the `run` layer of the PLT-026
-model-call port, which reserves and meters every call; after the run the hold is settled to the metered cost.
-Any error fails closed (no drafts delivered, metered spend still counted). Every change and run is audited."""
+draft-only rule. At run time the owner's roles and the tools are re-checked: losing the role suspends (ALP-026).
+A run only sees a `RunContext` (caller, complete, draft): the model-call port sits behind a private wrapper that forces
+taint (ALP-019), meters the run from the port's own events and enforces the wall-clock limit. Drafts are re-checked,
+copied and marked tainted; nothing executes; no ledger, stock, tax, e-invoice or payroll write is a schedulable tool.
+Budget: the run cap is held against the schedule's trailing window before the run and is the `run` layer of the PLT-026
+port, which must also carry a `tenant` layer; after the run the hold settles to the metered cost, never below zero and
+at the full hold when the cost cannot be attributed. Any error fails closed. Every change, refusal and run is audited.
+This is defence in depth inside one process, not a sandbox: agent code is platform code, never model output."""
 from __future__ import annotations
 
+import copy
+import logging
 import math
+import re
 import threading
 from dataclasses import dataclass, replace
 
@@ -18,12 +23,25 @@ from . import authority as A
 from .allowlist import resolve_allowlist
 from .model_call_fake import ModelCallRefused
 
+log = logging.getLogger("schedule")
 CODES = frozenset({"invalid_schedule", "not_found", "tenant_mismatch", "owner_mismatch", "role_escalation",
                    "tool_not_allowed", "draft_only", "owner_permission_lost", "budget_exhausted", "overlap",
-                   "clock_fault", "port_refused", "run_failed", "audit_unavailable"})
+                   "clock_fault", "port_refused", "run_failed", "run_timeout", "audit_unavailable",
+                   "tenant_budget_missing", "schedule_limit", "roles_unavailable"})
 FIELDS = ("agent_role", "tools", "cadence_s", "start_at", "run_cap", "period_s", "period_cap")
-MIN_CADENCE_S, MAX_PERIOD_S, MAX_CAP = 300, 366 * 86400, 10**12
-READ_VERBS = frozenset({"get", "list", "export"})
+# Platform defaults (ADR-0064 item 4; placeholders per Q-156, UNVERIFIED against real pricing).
+MIN_CADENCE_S, MAX_PERIOD_S = 300, 366 * 86400
+MAX_CAP = 50_000_000                    # micro-USD (USD 50) per run and per period window
+MAX_SCHEDULES_PER_OWNER = 10            # active schedules
+MAX_RUN_S = 600                         # wall clock per run
+MAX_STEP_S = 31 * 86400                 # largest forward clock step accepted between ticks
+MAX_EPOCH_S = 4_102_444_800             # 2100-01-01: a larger reading is a clock fault
+MAX_FAILURES = 3                        # consecutive failed runs before the schedule is suspended
+READ_VERBS = frozenset({"get", "list"})  # `export` is egress (Tool API section 11), not a read
+RIGID_TOKENS = frozenset({"einvoice", "zatca", "fatoora", "wps", "gl", "posting", "tax", "vat", "payroll",
+                          "salary", "payslip", "ledger", "journal", "invoice", "invoices"})
+HARD_STOP = (KeyboardInterrupt, SystemExit, GeneratorExit)
+_SPLIT = re.compile(r"[^a-z0-9]+")
 
 
 class ScheduleRefused(Exception):
@@ -39,6 +57,11 @@ class Principal:
     user_id: str
     role_ids: tuple
 
+    def __post_init__(self):
+        if not (isinstance(self.tenant_id, str) and self.tenant_id and isinstance(self.user_id, str) and self.user_id
+                and isinstance(self.role_ids, tuple) and all(isinstance(r, str) and r for r in self.role_ids)):
+            raise ScheduleRefused("role_escalation", "malformed principal")
+
 
 @dataclass(frozen=True)
 class Schedule:
@@ -51,7 +74,7 @@ class Schedule:
     start_at: int
     run_cap: int          # micro-USD, the PLT-026 `run` layer
     period_s: int
-    period_cap: int       # micro-USD per period window, held and settled here
+    period_cap: int       # micro-USD per trailing window, held and settled here
     version: int = 1
     active: bool = True
 
@@ -65,72 +88,128 @@ class RunRecord:
     code: str = ""
     detail: str = ""
     cost: int = 0
-    drafts: tuple = ()    # (tool, args) proposals for the human review queue; empty unless completed
+    drafts: tuple = ()    # ({tool, args, tainted}) proposals for the human review queue; empty unless completed
+    tainted: bool = True  # every scheduled run is tainted (ALP-019)
 
 
 def _int(v, lo, hi) -> bool:
     return type(v) is int and lo <= v <= hi
 
 
-class RunContext:
-    def __init__(self, sch: Schedule, run_id: str, port):
-        self.schedule, self.run_id, self.port, self.calls, self.drafts = sch, run_id, port, 0, []
+class _Meter:
+    """Private wrapper around the port: forces taint, attributes committed cost to this run, enforces the deadline."""
 
-    def caller(self) -> dict:
-        p = self.port.principal
-        return {k: p[k] for k in ("tenant_id", "actor_kind", "actor_id", "role_ids", "on_behalf_of", "agent_id",
-                                  "run_id", "thread_id")} | {"correlation_id": self.run_id}
+    def __init__(self, port, sch: Schedule, run_id: str, clock, deadline):
+        self._port, self._sch, self._run_id, self._clock, self._deadline = port, sch, run_id, clock, deadline
+        self.cost, self.unattributed, self.calls = 0, False, 0
+
+    def check_deadline(self):
+        now = self._clock()
+        if not (isinstance(now, (int, float)) and math.isfinite(now) and now <= self._deadline):
+            raise ScheduleRefused("run_timeout")
 
     def complete(self, request: dict) -> dict:
+        self.check_deadline()
         self.calls += 1
-        return self.port.complete(dict(request, thread_tainted=True))       # scheduled runs start tainted
+        before, charged = self._seen(), True
+        try:
+            return copy.deepcopy(self._port.complete(dict(request, thread_tainted=True)))
+        except ModelCallRefused as exc:
+            charged = not exc.reservation_released
+            raise
+        finally:
+            self._attribute(before, charged)
 
-    def draft(self, tool: str, args: dict) -> None:
-        if tool not in self.schedule.tools:
-            raise ScheduleRefused("tool_not_allowed")
-        self.drafts.append((tool, args))
+    def _seen(self):
+        try:
+            return len(self._port.events)
+        except Exception:
+            return None
+
+    def _attribute(self, before, charged: bool) -> None:
+        """Only meter.ai_usage events of this tenant and run, new since the call began, with an int cost >= 0."""
+        if before is None:
+            self.unattributed = True
+            return
+        try:
+            new = [e for e in self._port.events[before:] if isinstance(e, dict) and e.get("type") == "meter.ai_usage"
+                   and e.get("tenant_id") == self._sch.tenant_id and e.get("correlation_id") == self._run_id]
+            costs = [e["data"]["cost_micro_usd"] for e in new]
+        except Exception:
+            self.unattributed = True
+            return
+        if any(not _int(c, 0, MAX_CAP) for c in costs) or (charged and not costs):
+            self.unattributed = True      # settle at the full hold (F1, F6)
+        self.cost += sum(c for c in costs if _int(c, 0, MAX_CAP))
+
+    def settled(self) -> int:
+        return max(self.cost, self._sch.run_cap) if self.unattributed else self.cost
+
+
+class RunContext:
+    """What an agent gets. No port, drafts list or schedule is reachable as an attribute."""
+    __slots__ = ("run_id", "caller", "complete", "draft")
+
+    def __init__(self, run_id, caller, complete, draft):
+        self.run_id, self.caller, self.complete, self.draft = run_id, caller, complete, draft
 
 
 class Scheduler:
     """`tool_defs(tenant)` and `roles_of(tenant, user)` read trusted stores; `port_factory(principal, budgets)` returns
-    a model-call port bound to that principal; `clock()` gives epoch seconds; `emit(record)` is the audit sink."""
+    a model-call port bound to that principal with at least a `tenant` and a `run` layer; `clock()` gives epoch
+    seconds; `emit(record)` is the audit sink."""
 
     def __init__(self, tool_defs, roles_of, port_factory, clock, emit):
         self._defs, self._roles_of, self._factory = tool_defs, roles_of, port_factory
         self._clock, self._emit = clock, emit
         self._s: dict = {}
         self._last_slot: dict = {}
-        self._spent: dict = {}        # (schedule id, period index) -> settled micro-USD
-        self._held: dict = {}         # schedule id -> open hold
+        self._ledger: dict = {}       # schedule id -> [(time, settled micro-USD)]
+        self._window: dict = {}       # schedule id -> longest period_s ever set (an update never shortens it)
+        self._held: dict = {}
+        self._fails: dict = {}
         self._inflight: set = set()
-        self._last_now = -math.inf
+        self._last_now = None
         self._lock = threading.RLock()
 
     # -- schedule changes -------------------------------------------------------------------------------------------
     def create(self, who: Principal, *, tenant_id=None, owner_id=None, **spec) -> Schedule:
-        if tenant_id is not None and tenant_id != who.tenant_id:
-            raise ScheduleRefused("tenant_mismatch")
-        if owner_id is not None and owner_id != who.user_id:
-            raise ScheduleRefused("owner_mismatch")
-        if set(spec) != set(FIELDS):
-            raise ScheduleRefused("invalid_schedule")
         with self._lock:
-            sch = Schedule(f"sch_{len(self._s) + 1}", who.tenant_id, who.user_id, **spec)
-            self._check(who, sch)
+            try:
+                if tenant_id is not None and tenant_id != who.tenant_id:
+                    raise ScheduleRefused("tenant_mismatch")
+                if owner_id is not None and owner_id != who.user_id:
+                    raise ScheduleRefused("owner_mismatch")
+                if set(spec) != set(FIELDS):
+                    raise ScheduleRefused("invalid_schedule")
+                if sum(1 for s in self._s.values() if s.active and s.tenant_id == who.tenant_id
+                       and s.owner_id == who.user_id) >= MAX_SCHEDULES_PER_OWNER:
+                    raise ScheduleRefused("schedule_limit")
+                sch = Schedule(f"sch_{len(self._s) + 1}", who.tenant_id, who.user_id, **spec)
+                self._check(who, sch)
+            except ScheduleRefused as exc:
+                self._refused_change(who, None, exc)
+                raise
             self._audit("schedule.created", sch, who)
             self._s[sch.id] = sch
+            self._window[sch.id] = sch.period_s
             return sch
 
     def update(self, who: Principal, schedule_id: str, **changes) -> Schedule:
-        if not changes or not set(changes) <= set(FIELDS):
-            raise ScheduleRefused("invalid_schedule")
         with self._lock:
-            old = self.get(who, schedule_id)
-            sch = replace(old, version=old.version + 1, **changes)
-            self._check(who, sch)
+            try:
+                if not changes or not set(changes) <= set(FIELDS):
+                    raise ScheduleRefused("invalid_schedule")
+                old = self.get(who, schedule_id)
+                sch = replace(old, version=old.version + 1, **changes)
+                self._check(who, sch)
+            except ScheduleRefused as exc:
+                self._refused_change(who, schedule_id, exc)
+                raise
             changed = sorted(k for k in changes if changes[k] != getattr(old, k))
             self._audit("schedule.updated", sch, who, changed=changed)
             self._s[sch.id] = sch
+            self._window[sch.id] = max(self._window.get(sch.id, 0), sch.period_s)
             return sch
 
     def disable(self, who: Principal, schedule_id: str) -> Schedule:
@@ -141,6 +220,8 @@ class Scheduler:
             return sch
 
     def get(self, who: Principal, schedule_id: str) -> Schedule:
+        if not isinstance(who, Principal):
+            raise ScheduleRefused("role_escalation", "malformed principal")
         sch = self._s.get(schedule_id)
         if sch is None or sch.tenant_id != who.tenant_id:
             raise ScheduleRefused("not_found")                    # no cross-tenant existence oracle
@@ -148,21 +229,29 @@ class Scheduler:
             raise ScheduleRefused("owner_mismatch")
         return sch
 
-    def period_spent(self, schedule_id: str) -> int:
-        sch = self._s[schedule_id]
-        return self._spent.get((sch.id, self._period(sch, self._last_now)), 0)
+    def period_spent(self, who: Principal, schedule_id: str) -> int:
+        with self._lock:
+            sch = self.get(who, schedule_id)
+            return self._spent(sch.id, self._last_now) if self._last_now is not None else 0
 
-    def period_held(self, schedule_id: str) -> int:
-        return self._held.get(schedule_id, 0)
+    def period_held(self, who: Principal, schedule_id: str) -> int:
+        with self._lock:
+            return self._held.get(self.get(who, schedule_id).id, 0)
+
+    def _spent(self, sid: str, now) -> int:
+        w = self._window.get(sid, MAX_PERIOD_S)
+        return sum(c for t, c in self._ledger.get(sid, ()) if t > now - w)
 
     def _check(self, who: Principal, s: Schedule) -> None:
+        if not isinstance(who, Principal):
+            raise ScheduleRefused("role_escalation", "malformed principal")
         if not (isinstance(s.agent_role, str) and _int(s.cadence_s, MIN_CADENCE_S, MAX_PERIOD_S)
-                and _int(s.period_s, s.cadence_s, MAX_PERIOD_S) and _int(s.start_at, 0, 10**11)
+                and _int(s.period_s, s.cadence_s, MAX_PERIOD_S) and _int(s.start_at, 0, MAX_EPOCH_S)
                 and _int(s.period_cap, 1, MAX_CAP) and _int(s.run_cap, 1, s.period_cap)
                 and isinstance(s.tools, tuple) and s.tools and len(set(s.tools)) == len(s.tools)
                 and all(isinstance(t, str) for t in s.tools)):
             raise ScheduleRefused("invalid_schedule")
-        if s.agent_role not in who.role_ids:                     # roles only from the verified principal
+        if s.agent_role not in who.role_ids:                     # roles only from the verified principal (a tuple)
             raise ScheduleRefused("role_escalation")
         self._check_tools(s)
 
@@ -171,95 +260,179 @@ class Scheduler:
         for name in s.tools:
             if name not in allow.menu:
                 raise ScheduleRefused("tool_not_allowed")
-            d, (domain, _, verb) = allow.defs[name], name.partition(".")
-            if (A.tool_refusal(name, d) or allow.menu[name].risk_class == "R2"
-                    or (verb not in READ_VERBS and A.posting_entity(d, domain))):
-                raise ScheduleRefused("draft_only")              # no posting write, even as a draft
+            if self._draft_only_refusal(name, allow.defs[name], allow.menu[name].risk_class):
+                raise ScheduleRefused("draft_only")
 
-    def _audit(self, type_: str, sch: Schedule, who: Principal | None, **data) -> None:
-        rec = {"type": type_, "tenant_id": sch.tenant_id, "subject": sch.id,
-               "data": {"actor_id": who.user_id if who else "scheduler", "version": sch.version,
-                        "agent_role": sch.agent_role, "tools": list(sch.tools), "run_cap": sch.run_cap,
-                        "period_cap": sch.period_cap, "cadence_s": sch.cadence_s, **data}}
+    @staticmethod
+    def _draft_only_refusal(name: str, d: dict, risk: str) -> bool:
+        domain, _, verb = name.partition(".")
+        if A.tool_refusal(name, d) or risk == "R2":
+            return True
+        if verb == "export":
+            return True                                           # egress always needs a human (Tool API section 11)
+        if name.endswith(".transition") or verb == "transition" or "transitions" in d:
+            return True                                           # a move is chosen per call; never scheduled
+        if verb in READ_VERBS and d.get("kind") == "read":
+            return False
+        if d.get("kind") != "write" or d.get("entity_class") != "plain":
+            return True                                           # missing kind or class is never plain
+        return bool(set(_SPLIT.split(domain.lower())) & RIGID_TOKENS) or A.posting_entity(d, domain)
+
+    def _record(self, type_: str, tenant_id, subject, data: dict) -> None:
         try:
-            self._emit(rec)
+            self._emit({"type": type_, "tenant_id": tenant_id, "subject": subject, "data": data})
         except Exception as exc:                                  # no audit, no change and no run
             raise ScheduleRefused("audit_unavailable") from exc
 
-    # -- runs -------------------------------------------------------------------------------------------------------
-    def _period(self, s: Schedule, now) -> int:
-        return int((now - s.start_at) // s.period_s)
+    def _audit(self, type_: str, sch: Schedule, who: Principal | None, **data) -> None:
+        self._record(type_, sch.tenant_id, sch.id, {
+            "actor_id": who.user_id if who else "scheduler", "owner_id": sch.owner_id, "on_behalf_of": sch.owner_id,
+            "at": self._last_now, "version": sch.version, "agent_role": sch.agent_role, "tools": list(sch.tools),
+            "run_cap": sch.run_cap, "period_cap": sch.period_cap, "cadence_s": sch.cadence_s, **data})
 
+    def _refused_change(self, who, schedule_id, exc: ScheduleRefused) -> None:
+        if exc.code == "audit_unavailable" or not isinstance(who, Principal):
+            return
+        try:
+            self._record("schedule.change_refused", who.tenant_id, schedule_id,
+                         {"actor_id": who.user_id, "code": exc.code, "at": self._last_now})
+        except ScheduleRefused:
+            log.error("schedule change refusal not audited: %s", exc.code)
+
+    # -- runs -------------------------------------------------------------------------------------------------------
     def tick(self, agent) -> list:
-        now = self._clock()
-        if not (isinstance(now, (int, float)) and not isinstance(now, bool) and math.isfinite(now)
-                and now >= self._last_now):
-            raise ScheduleRefused("clock_fault")                  # a broken or backwards clock runs nothing
-        self._last_now = now
+        with self._lock:
+            now = self._clock()
+            last = self._last_now
+            if not (isinstance(now, (int, float)) and not isinstance(now, bool) and math.isfinite(now)
+                    and 0 <= now <= MAX_EPOCH_S and (last is None or last <= now <= last + MAX_STEP_S)):
+                try:
+                    self._record("scheduler.clock_fault", None, None, {"last": last})
+                except ScheduleRefused:
+                    log.error("clock fault not audited")
+                raise ScheduleRefused("clock_fault")              # the rejected reading is not stored
+            self._last_now = now
+            ids = list(self._s)
         out = []
-        for sch in list(self._s.values()):
-            slot = int((now - sch.start_at) // sch.cadence_s) if now >= sch.start_at else -1
-            if sch.active and slot >= 0 and slot > self._last_slot.get(sch.id, -1):
-                out.append(self._run(sch, slot, now, agent))
+        for sid in ids:
+            try:
+                rec = self._run(sid, now, agent)
+            except HARD_STOP:
+                raise
+            except Exception as exc:                               # one schedule never ends the tick for others
+                log.error("schedule %s failed: %s", sid, type(exc).__name__)
+                rec = RunRecord(f"srun_{sid}_x", sid, -1, "failed",
+                                exc.code if isinstance(exc, ScheduleRefused) else "run_failed")
+            if rec is not None:
+                out.append(rec)
         return out
 
-    def _run(self, sch: Schedule, slot: int, now, agent) -> RunRecord:
-        run_id = f"srun_{sch.id}_{slot}"
-        refuse = lambda code: RunRecord(run_id, sch.id, slot, "refused", code)  # noqa: E731
+    def _claim(self, sid: str, now):
+        """Under the lock: re-read the schedule and claim its slot, or say why not. Returns (sch, slot, refusal)."""
+        sch = self._s.get(sid)
+        if sch is None or not sch.active or now < sch.start_at:
+            return None, -1, None
+        slot = int((now - sch.start_at) // sch.cadence_s)
+        if slot <= self._last_slot.get(sid, -1):
+            return None, -1, None
+        if sid in self._inflight:
+            return sch, slot, "overlap"
+        self._last_slot[sid] = slot
+        try:
+            roles = self._roles_of(sch.tenant_id, sch.owner_id)
+            roles = tuple(roles) if isinstance(roles, tuple) else None
+        except Exception:
+            roles = None
+        if roles is None:
+            return sch, slot, "roles_unavailable"
+        if sch.agent_role not in roles:
+            return sch, slot, "owner_permission_lost"
+        if self._spent(sid, now) + sch.run_cap > sch.period_cap:
+            return sch, slot, "budget_exhausted"
+        self._inflight.add(sid)
+        self._held[sid] = sch.run_cap
+        return sch, slot, None
+
+    def _suspend(self, sid: str, reason: str) -> None:
+        cur = self._s[sid]
+        try:
+            self._audit("schedule.suspended", cur, None, reason=reason)
+        finally:                                                  # suspend even if the audit fails
+            self._s[sid] = replace(self._s[sid], active=False)
+
+    def _run(self, sid: str, now, agent):
         with self._lock:
-            if sch.id in self._inflight:
-                return refuse("overlap")
-            self._last_slot[sch.id] = slot
-            if sch.agent_role not in tuple(self._roles_of(sch.tenant_id, sch.owner_id) or ()):
-                self._s[sch.id] = replace(sch, active=False)
-                self._audit("schedule.suspended", sch, None, reason="owner_permission_lost")
-                return refuse("owner_permission_lost")
-            key = (sch.id, self._period(sch, now))
-            if self._spent.get(key, 0) + sch.run_cap > sch.period_cap:
-                self._audit("agent.budget_exceeded", sch, None, run_id=run_id, scope="period",
-                            spent=self._spent.get(key, 0))
-                return refuse("budget_exhausted")
-            self._inflight.add(sch.id)
-            self._held[sch.id] = sch.run_cap
-        port, cost = None, 0
+            sch, slot, why = self._claim(sid, now)
+            if sch is None:
+                return None
+            run_id = f"srun_{sid}_{slot}"
+            if why is not None:
+                if why == "owner_permission_lost":
+                    self._suspend(sid, why)                       # suspended even if its audit fails
+                kind = "agent.budget_exceeded" if why == "budget_exhausted" else "agent.run_refused"
+                self._audit(kind, sch, None, run_id=run_id, slot=slot, code=why, scope="period",
+                            spent=self._spent(sid, now))
+                return RunRecord(run_id, sid, slot, "refused", why)
+        meter, drafts, cost = None, [], 0
         try:
             self._check_tools(sch)
             principal = {"service": "operate", "tenant_id": sch.tenant_id, "actor_kind": "agent",
-                         "actor_id": f"agent_{sch.id}", "role_ids": [sch.agent_role], "on_behalf_of": sch.owner_id,
-                         "agent_id": f"agent_{sch.id}", "run_id": run_id, "thread_id": run_id,
+                         "actor_id": f"agent_{sid}", "role_ids": [sch.agent_role], "on_behalf_of": sch.owner_id,
+                         "agent_id": f"agent_{sid}", "run_id": run_id, "thread_id": run_id,
                          "tool_grant": list(sch.tools)}
-            port = self._factory(principal, {"run": sch.run_cap})
+            port = self._factory(copy.deepcopy(principal), {"run": sch.run_cap})
             if getattr(port, "principal", {}).get("tenant_id") != sch.tenant_id:
                 raise ScheduleRefused("tenant_mismatch")
-            self._audit("agent.run_started", sch, None, run_id=run_id)
-            ctx = RunContext(sch, run_id, port)
-            agent(ctx)
-            cost = self._metered(port, sch.run_cap)
-            for tool, _ in ctx.drafts:
-                self._audit("agent.tool_proposed", sch, None, run_id=run_id, tool=tool)
-            self._audit("agent.run_completed", sch, None, run_id=run_id, cost=cost, drafts=len(ctx.drafts),
-                        overrun=cost > sch.run_cap)
-            return RunRecord(run_id, sch.id, slot, "completed", cost=cost, drafts=tuple(ctx.drafts))
-        except Exception as exc:                                  # fail closed: drafts discarded
+            if "tenant" not in tuple(getattr(port, "layers", ())) or "run" not in tuple(getattr(port, "layers", ())):
+                raise ScheduleRefused("tenant_budget_missing")
+            meter = _Meter(port, sch, run_id, self._clock, now + MAX_RUN_S)
+            self._audit("agent.run_started", sch, None, run_id=run_id, slot=slot)
+            caller = {k: principal[k] for k in ("tenant_id", "actor_kind", "actor_id", "role_ids", "on_behalf_of",
+                                                "agent_id", "run_id", "thread_id")} | {"correlation_id": run_id}
+
+            def draft(tool, args):
+                meter.check_deadline()
+                if not isinstance(tool, str) or tool not in sch.tools:
+                    raise ScheduleRefused("tool_not_allowed")
+                drafts.append({"tool": tool, "args": copy.deepcopy(args), "tainted": True})
+            agent(RunContext(run_id, lambda: copy.deepcopy(caller), meter.complete, draft))
+            meter.check_deadline()
+            self._check_tools(sch)                                # re-check every draft at the end, too
+            if any(d["tool"] not in sch.tools for d in drafts):
+                raise ScheduleRefused("tool_not_allowed")
+            cost = meter.settled()
+            for d in drafts:
+                self._audit("agent.tool_proposed", sch, None, run_id=run_id, slot=slot, tool=d["tool"], tainted=True)
+            self._audit("agent.run_completed", sch, None, run_id=run_id, slot=slot, cost=cost, drafts=len(drafts),
+                        overrun=cost > sch.run_cap, tainted=True)
+            with self._lock:
+                self._fails.pop(sid, None)
+            return RunRecord(run_id, sid, slot, "completed", cost=cost, drafts=tuple(drafts))
+        except BaseException as exc:                              # fail closed: drafts discarded, spend settled
             code = exc.code if isinstance(exc, ScheduleRefused) else (
                 "port_refused" if isinstance(exc, ModelCallRefused) else "run_failed")
             detail = exc.code if isinstance(exc, ModelCallRefused) else ""
-            cost = self._metered(port, sch.run_cap)
+            cost = meter.settled() if meter is not None else 0
             try:
-                self._audit("agent.run_failed", sch, None, run_id=run_id, code=code, detail=detail, cost=cost)
+                self._audit("agent.run_failed", sch, None, run_id=run_id, slot=slot, code=code, detail=detail,
+                            cost=cost)
             except ScheduleRefused:
-                pass                                              # already failing; the record below still says so
-            return RunRecord(run_id, sch.id, slot, "failed", code, detail, cost)
-        finally:
+                log.error("run %s failed and its failure was not audited", run_id)
+                code, detail = "audit_unavailable", code
             with self._lock:
-                self._spent[key] = self._spent.get(key, 0) + cost   # settle: hold -> metered spend
-                self._held.pop(sch.id, None)
-                self._inflight.discard(sch.id)
-
-    @staticmethod
-    def _metered(port, hold: int) -> int:
-        """Committed spend from the port's meter.ai_usage events (contract section 8); unreadable counts the hold."""
-        try:
-            return sum(e["data"]["cost_micro_usd"] for e in (port.events if port is not None else ()))
-        except Exception:
-            return hold
+                self._fails[sid] = self._fails.get(sid, 0) + 1
+                if self._fails[sid] >= MAX_FAILURES and self._s[sid].active:
+                    try:
+                        self._suspend(sid, "repeated_failures")
+                    except ScheduleRefused:
+                        log.error("schedule %s suspended without an audit record", sid)
+            if isinstance(exc, HARD_STOP):
+                raise
+            return RunRecord(run_id, sid, slot, "failed", code, detail, cost)
+        finally:
+            if meter is not None and cost == 0:
+                cost = meter.settled()
+            with self._lock:
+                self._ledger.setdefault(sid, []).append((now, max(0, cost)))   # settle never lowers the total
+                self._held.pop(sid, None)
+                self._inflight.discard(sid)

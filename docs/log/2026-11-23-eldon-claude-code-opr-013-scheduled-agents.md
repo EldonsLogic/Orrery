@@ -28,3 +28,19 @@ Unknown.
 - Partner line-by-line review and a different-model security review of ADR-0064 and `schedule.py`.
 - OPR-013 next slices: durable schedule store, host tick and real gateway port, kill switch and ALP-025 trigger drop, Q-597 and Q-598 decisions.
 - UNVERIFIED: the settle step reads the fake port's `events`; the real gateway port must expose committed cost per run the same way.
+
+## Review fixes (Fable security review of PR #286 at cf31419)
+#244 merged; `origin/main` merged in (conflicts in INDEX.md and open-questions.md resolved by keeping both sides). All twelve findings fixed in `schedule.py`, with tests in `test_schedule.py` (now 41 tests):
+- F1: per-event costs only `int` 0..cap, otherwise the run settles at the full hold; a settle never lowers the total.
+- F2: private `_Meter` wrapper forces taint and meters the run; `RunContext` exposes only `caller`, `complete`, `draft` (slots); drafts re-checked at the end, args deep-copied, drafts and `RunRecord` marked tainted.
+- F3: clock check, schedule re-read, active and slot claim atomic under the lock; write-backs read the current schedule; two-thread test.
+- F4: port must carry a `tenant` layer; spend kept in a ledger over a trailing window of the longest `period_s` ever set; at most 10 active schedules per owner; `MAX_CAP` USD 50 (defaults in ADR-0064 item 6, UNVERIFIED for pricing).
+- F5: transition tools, `transitions[]`, `export`, missing kind or class on non-read tools and rigid-zone name tokens refused; reads are `get`/`list` with `kind: read`.
+- F6: events filtered by type, tenant and run id, only new ones per call; Q-599 (partner) for a contract method.
+- F7: suspension audited first and still applied if the audit fails; per-schedule isolation in `tick`; `roles_unavailable` recorded; `BaseException` settles spend and hard stops re-raise; unaudited failure reported as `audit_unavailable`; refused changes, overlap and clock faults audited; owner, on-behalf-of, time and slot in records.
+- F8: forward step bounded (31 days) and an epoch ceiling; rejected readings not stored.
+- F9 to F12: 600 s wall-clock limit (`run_timeout`); three consecutive failures suspend (`repeated_failures`; notification not built, in ADR); principal required for `period_spent`/`period_held`; `Principal.role_ids` must be a tuple; the six surviving mutations plus 12 more were re-run and all are killed.
+- Q-597 and Q-598: Fable's opinions recorded as suggestions; still open for Eldon.
+- Test-first note: tests were written with the fixes in one pass; each was then confirmed to fail with its fix reverted (mutation run, 18 of 18 killed).
+
+Tests: `python3 -m pytest services/operate/tests -q`: 666 passed, 1 skipped.

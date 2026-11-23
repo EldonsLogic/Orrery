@@ -65,3 +65,7 @@ Eldon's Tier 3 line-by-line and different-model security review of CMP-035 and P
 
 ## Review fixes, round 4 (coordinator, Claude Opus 5.5)
 The round 3 Claude Opus re-review approved, with one Low: a PLATFORM-DEFAULT `ref` only had to be truthy, so `" "`, `True` and `["x"]` passed, although the docs say "nonempty". It now has to be a string that is not blank after `strip()`. Tests first: 6 failing subtests before the change, none after. The Nits are left as is: the host-local date, no test for `accessed == today`, and an invalid port being accepted.
+
+## Founder acceptance (2026-11-23)
+
+Eldon approved the PR at `0d38f5a` (Tier 3, line-by-line read posted). The partner agreed Eldon's two answers (PLATFORM-DEFAULT only on a named per-market product-choice list; open `goLiveBlockers`, `pendingRefs` or UNVERIFIED locked `factsOutsideSchema` entries refuse production), which are built in CMP-036, and accepted ADR-0063. ADR-0063 status and its INDEX row are now Accepted. The merge with main in `1c9c370` was clean apart from PLAN rows.

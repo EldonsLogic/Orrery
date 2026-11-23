@@ -1,8 +1,8 @@
 # ADR-0063: Country pack certification records
 
-Status: Proposed
+Status: Accepted
 Owner: partner
-Approved by: pending Tier 3 founder and cross-model security review
+Approved by: the partner founder (sayegh9), 2026-11-23, and Eldon's Tier 3 approval of PR #282 at 0d38f5a (line-by-line read and Claude Fable cross-model security review); cross-model reviews for the partner by Claude Opus. Eldon's answers on PLATFORM-DEFAULT (per-market product-choice list) and open go-live blockers, agreed by the partner on #282, are built and recorded under CMP-036
 Plan ID: CMP-035
 
 ## Context

@@ -60,3 +60,5 @@ Unknown.
   - Fixes dispatched: Claude Sonnet, test-first, in the #299 checkout only; allowed `run_real_bench_ci.py`, `infra/dev/docker/tests/**`, `real-bench.yml`, the PR's own log; no git.
 - CMP-036 returned: Q1-C product-choice list, Q2-A open blockers with a resolution record, Lows 2 to 7, ADR-0067 (Proposed), 44 new tests; shipped packs still refused in production. The coordinator cut `cmp-036-pack-production-rules` from main, applied the diff, set CMP-035 `done` and CMP-036 `doing`, re-ran the suite (173 OK) and opened PR #300 at `1998c4a` (Tier 3).
   - Review dispatched: ChatGPT gpt-6.1-sol (high), code-correctness review of #300 at `1998c4a`, read-only, focused on fail-open paths and the author's stated readings.
+  - #299 fixes returned and pushed at `dd60720`: live classes only with minimum `Ran N` counts, full phase budget (3,750 s) with job limit 75 minutes, every site drop attempted. 12 of 19 new tests fail on the old code; infra suite 123 OK. Fixes table posted on #299.
+  - Re-review dispatched: gpt-6.1-sol (high), `85998d2..dd60720`, read-only.

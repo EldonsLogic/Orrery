@@ -35,6 +35,6 @@ BPL-017 next slices: the promotion step with a reviewer-not-requester check (ADR
 - H3: the record is built inside the try; any exception is `FDR-010` with an audit record; temp folder then atomic rename, removed on any failure; paths compared after normpath, NFC and casefold, `.` and file/folder clashes refused before writing; audit written before the rename, so a failing sink leaves no draft.
 - H4: `run_candidate_tests` removed; candidate code never runs in this slice (FAC-012 expected).
 - M1 forced `dataHandling`, `blocking: true`, reserved and existing ids refused. M2 richer audit, refused records carry their own status, meter event id and `mid` tier required. M3 per-client and personal-data checks. M4 a HIGH static finding or level `none` refuses and removes the draft. M5 ADR-0065 items 2, 3, 5, 6, 7 reworded; L2 and L6 as ADR notes.
-- L1 filter also on folded text, described as a backstop. L3 CI blueprint filter now covers `services/operate/runtime/` and `contracts/model-call*`. L4 `draft_exists` before the model call. L5 no requester role exists: Q-599 added.
+- L1 filter also on folded text, described as a backstop. L3 CI blueprint filter now covers `services/operate/runtime/` and `contracts/model-call*`. L4 `draft_exists` before the model call. L5 no requester role exists: Q-600 added (renumbered from Q-599, which #286 took).
 - Tests: `test_drafting.py` 84 passed; `services/blueprint/tests` 2165 passed.
 - Lanes: own lane only (`.github/` and `docs/open-questions.md` are shared paths and need the partner's review).

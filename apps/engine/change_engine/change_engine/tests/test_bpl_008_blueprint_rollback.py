@@ -16,6 +16,7 @@ from change_engine.adapter import (
     SimulatedFrappeRuntime,
 )
 from change_engine.adapter import contracts_support as cs
+from change_engine.adapter.mapping import engine_state_name
 from change_engine.api.endpoints import (
     FrappeDeploymentAdapter,
     apply_configuration_change,
@@ -536,7 +537,7 @@ class TestBpl008BlueprintRollback(unittest.TestCase):
         self.assertTrue(res["ok"] and res["result"]["status"] == "applied", res)
         wf_doc = site_db.rows["tabWorkflow"]["sales_order_flow"]
         self.assertEqual(len(wf_doc["states"]), 6)
-        self.assertTrue(any(s["state"] == "on_hold" for s in wf_doc["states"]))
+        self.assertTrue(any(s["state"] == engine_state_name("on_hold") for s in wf_doc["states"]))  # ADR-0051 name
         self.assertGreater(len(wf_doc["transitions"]), pre_transitions)
 
         rb = adapter.call(
@@ -553,7 +554,7 @@ class TestBpl008BlueprintRollback(unittest.TestCase):
         self.assertEqual(rb["result"]["exportHash"], pre_hash)
         wf_doc_after = site_db.rows["tabWorkflow"]["sales_order_flow"]
         self.assertEqual(len(wf_doc_after["states"]), 5)
-        self.assertFalse(any(s["state"] == "on_hold" for s in wf_doc_after["states"]))
+        self.assertFalse(any(s["state"] == engine_state_name("on_hold") for s in wf_doc_after["states"]))
         self.assertEqual(len(wf_doc_after["transitions"]), pre_transitions)
 
     def test_03_restarted_adapter_hydrates_persisted_state_and_rolls_back(self) -> None:

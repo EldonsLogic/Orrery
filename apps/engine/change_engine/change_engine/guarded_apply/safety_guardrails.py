@@ -14,7 +14,8 @@ Implements ADR-001 (Rev 2.3) Section 5 & Section 5.1:
 """
 
 import re
-from typing import Dict, Any, Set
+import unicodedata
+from typing import Dict, Any, Iterable, Optional, Set
 
 
 class ZoneSafetyViolation(Exception):
@@ -60,6 +61,61 @@ ZONE_2_LOCKED_DOCTYPES: Set[str] = {
     "System Settings",
     "Change Engine Settings",
 }
+
+
+RESTRICTED_LINK_DOCTYPES: Set[str] = {
+    "GL Entry",
+    "Payment Ledger Entry",
+    "Change Engine Audit Log",
+}
+
+
+def _strip_format_and_nfkc(name: str) -> str:
+    nfkc = unicodedata.normalize("NFKC", name)
+    return "".join(ch for ch in nfkc if unicodedata.category(ch) != "Cf")
+
+
+def _has_control_char(text: str) -> bool:
+    return any(unicodedata.category(ch) == "Cc" for ch in text)
+
+
+def _has_non_ascii_letter_or_mark(text: str) -> bool:
+    return any(not ch.isascii() and unicodedata.category(ch)[:1] in ("L", "M") for ch in text)
+
+
+def _normalize_doctype_name(name: str) -> str:
+    return re.sub(r"\s+", " ", _strip_format_and_nfkc(name).strip()).casefold()
+
+
+def _matches_doctype_set(name: Any, doctypes: Iterable[str]) -> bool:
+    if not isinstance(name, str):
+        return True
+    cleaned = _strip_format_and_nfkc(name)
+    if _has_control_char(cleaned) or _has_non_ascii_letter_or_mark(cleaned):
+        return True
+    key = re.sub(r"\s+", " ", cleaned.strip()).casefold()
+    return any(key == _normalize_doctype_name(d) for d in doctypes)
+
+
+def is_locked_doctype(name: Any, extra_locked: Optional[Iterable[str]] = None) -> bool:
+    """Fail-closed Tier 0 locked-DocType check: NFKC, drop Cf, fail closed on Cc control characters
+    and non-ASCII letters/marks, collapse whitespace and casefold both sides."""
+    if _matches_doctype_set(name, ZONE_2_LOCKED_DOCTYPES):
+        return True
+    if extra_locked:
+        return _matches_doctype_set(name, extra_locked)
+    return False
+
+
+def is_restricted_link_doctype(name: Any) -> bool:
+    """Fail-closed direct-path restricted Link target check (ledger/audit tables only).
+
+    Uses the same NFKC, Cf-stripping, Cc control-character and non-ASCII fail-closed, and
+    whitespace/casefold matching as `is_locked_doctype`, scoped to `RESTRICTED_LINK_DOCTYPES`
+    (kept at the three ledger/audit DocTypes by founder decision on PR #262, 2026-11-22, so
+    ordinary links such as User keep working; the plan path stays stricter).
+    """
+    return _matches_doctype_set(name, RESTRICTED_LINK_DOCTYPES)
 
 PROTECTED_STANDARD_FIELDS: Set[str] = {
     # Parent Financial & Tax Totals
@@ -274,7 +330,7 @@ def validate_mutation_safety(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"Unapproved Mutation Intent Violation (§5): Intent '{intent}' is not in the allowlist {sorted(ALLOWED_MUTATION_INTENTS)}."
         )
 
-    if target_doctype in ZONE_2_LOCKED_DOCTYPES:
+    if is_locked_doctype(target_doctype):
         raise ZoneSafetyViolation(
             f"Zone 2 Compliance Lock Violation (Tier 0 Invariant): DocType '{target_doctype}' is protected."
         )
@@ -327,7 +383,7 @@ def validate_mutation_safety(payload: Dict[str, Any]) -> Dict[str, Any]:
                     f"in custom field proposal. Only {sorted(ALLOWED_CUSTOM_FIELD_KEYS)} are permitted."
                 )
 
-            if not VALID_FIELDNAME_RE.match(raw_fieldname):
+            if not VALID_FIELDNAME_RE.fullmatch(raw_fieldname):
                 raise ZoneSafetyViolation(
                     f"Canonical Fieldname Violation (§5.1): '{raw_fieldname}' must match '^custom_[a-z][a-z0-9_]{{1,50}}$'."
                 )
@@ -372,10 +428,11 @@ def validate_mutation_safety(payload: Dict[str, Any]) -> Dict[str, Any]:
 
             # Validate Link target resolution (§5.1)
             if fieldtype == "Link":
-                link_target = str(change.get("options", "")).strip()
-                if not link_target:
+                raw_options = change.get("options")
+                if not isinstance(raw_options, str) or not raw_options.strip():
                     raise ZoneSafetyViolation(f"Invalid Link Target: '{raw_fieldname}' requires a target DocType in 'options'.")
-                if link_target in ZONE_2_LOCKED_DOCTYPES and link_target in ("GL Entry", "Payment Ledger Entry", "Change Engine Audit Log"):
+                link_target = raw_options.strip()
+                if is_restricted_link_doctype(link_target):
                     raise ZoneSafetyViolation(f"Restricted Link Target: Cannot link directly to ledger/audit table '{link_target}'.")
                 if allowed_link_doctypes and link_target not in allowed_link_doctypes:
                     raise ZoneSafetyViolation(f"Unresolved Link Target: DocType '{link_target}' is not in allowed targets.")

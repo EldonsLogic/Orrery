@@ -135,7 +135,7 @@ nav .link {
 
 .node {
   fill: var(--color-surface);
-  stroke: color-mix(in srgb, var(--color-text) 45%, transparent);
+  stroke: color-mix(in srgb, var(--color-text) 50%, transparent);
   stroke-width: 1.5;
 }
 

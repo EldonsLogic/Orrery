@@ -1,0 +1,213 @@
+{
+  "packId": "eg",
+  "version": "0.1.0",
+  "purpose": "Per-fact evidence for pack.json (CMP-028), moved from the source table of the former README.md. Status: tested (evidenceStatus: unverified, testOnly: false, certification level tested awaiting named human and counsel review per ADR-0031 and ADR-0034). Owner: partner (sayegh9). Primary research source: docs/compliance/egypt-research.md (external URLs accessed 2026-11-18), docs/compliance/country-matrix.md and docs/architecture/calendars-and-locale.md. Anything without a verified primary source is UNVERIFIED. Labels: VERIFIED-OFFICIAL, SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim); recordedStatus keeps the former README status text verbatim. Sources that egypt-research.md marks as snippets or PRIMARY-SNIPPET (page not read in full) carry read: false and no access date. The pack contains no tax, e-invoicing or payroll maths (principle 3, ADR-0031). NOT legal advice.",
+  "facts": [
+    {
+      "paths": ["countryCode", "packId", "componentId"],
+      "claim": "Identity: countryCode EG, packId eg, componentId country.eg. Phase-1 operating market.",
+      "status": "PLATFORM-DEFAULT",
+      "recordedStatus": "Internal decision",
+      "ref": "docs/decisions/ADR-0024-four-phase-1-markets.md"
+    },
+    {
+      "paths": ["coaTemplate"],
+      "claim": "Chart of accounts: coaTemplate finance.coa_eg (eg_unified_coa_unverified). Official unified chart of accounts lead.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (research needed)",
+      "ref": "docs/compliance/country-matrix.md"
+    },
+    {
+      "paths": ["tax.vatSupported", "tax.taxCodesRef"],
+      "claim": "VAT: vatSupported true, taxCodesRef eg.tax_codes_unverified (no inline rates). Standard VAT 14%; 5% for production machinery/equipment (Law 149/2026 reported); separate schedule tax; Law 157/2025 moved construction from 5% schedule tax to 14% VAT; registration threshold EGP 500,000; reverse charge on non-resident services.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (secondary; ETA PDF PRIMARY-SNIPPET, unread)",
+      "ref": "docs/compliance/egypt-research.md section 2",
+      "sources": [
+        {"url": "https://taxsummaries.pwc.com/egypt/corporate/other-taxes", "accessed": "2026-11-18"},
+        {"url": "https://taxnews.ey.com/news/2025-2316-egypt-introduces-significant-updates-to-vat-provisions", "accessed": "2026-11-18"},
+        {"url": "https://eg.andersen.com/egypts-vat-amendments-2026/", "read": false, "note": "snippet per egypt-research.md 2.4, page not read in full (search of 2026-11-18)"},
+        {"url": "https://lookuptax.com/tax-changes/egypt/vat-exempt-schedule-law-149-2026", "read": false, "note": "snippet per egypt-research.md 2.4, page not read in full (search of 2026-11-18)"},
+        {"url": "https://www.eta.gov.eg/sites/default/files/2024-02/VAT-Executive-Regulations-English.pdf", "read": false, "note": "PRIMARY-SNIPPET per egypt-research.md 2.5, document not read (search of 2026-11-18)"}
+      ]
+    },
+    {
+      "paths": ["tax.filingPeriods"],
+      "claim": "VAT filing: filingPeriods [monthly]. Monthly electronic VAT returns and payment due by the end of the following month.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (secondary)",
+      "sources": [
+        {"url": "https://taxsummaries.pwc.com/egypt/corporate/other-taxes", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["tax.roundingRule"],
+      "claim": "Rounding: roundingRule half_away_from_zero. Platform Commercial Rounding rule (ADR-0033); Egypt statutory VAT rounding unconfirmed; ETA e-invoicing spec decimal precision not yet researched (explicit research gap).",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (Egypt VAT rounding & ETA decimal precision not researched)",
+      "ref": "docs/decisions/ADR-0033-v1-valuation-rounding-and-arabic-review.md"
+    },
+    {
+      "paths": ["tax.vatNumberPattern", "tax.crNumberPattern"],
+      "claim": "Tax and CR number patterns: vatNumberPattern, crNumberPattern (^[0-9A-Za-z/-]{1,64}$). Entity and commercial register formats not yet researched (E9).",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (research needed)",
+      "ref": "docs/compliance/egypt-research.md section 5.5"
+    },
+    {
+      "paths": ["eInvoicing.authority"],
+      "claim": "E-invoicing authority and API: authority Egyptian Tax Authority (ETA). ETA runs eInvoicing and eReceipt APIs; taxpayer registers ERP/POS system; CAdES-BES Base64 signature over SHA-256 of canonical UTF-8 document; PreProd and Prod environments exist.",
+      "status": "VERIFIED-OFFICIAL",
+      "recordedStatus": "VERIFIED (SDK API docs)",
+      "ref": "docs/compliance/egypt-research.md items 1.1 to 1.4",
+      "sources": [
+        {"url": "https://sdk.invoicing.eta.gov.eg/", "accessed": "2026-11-18"},
+        {"url": "https://sdk.invoicing.eta.gov.eg/start/", "accessed": "2026-11-18"},
+        {"url": "https://sdk.invoicing.eta.gov.eg/signature-creation/", "accessed": "2026-11-18"},
+        {"url": "https://sdk.invoicing.eta.gov.eg/faq/", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["eInvoicing.required", "eInvoicing.mode", "eInvoicing.componentId"],
+      "claim": "E-invoicing mandate and rollout: required true, mode eg_e_invoice, componentId compliance.eta_eg. Ministerial Decision 188 of 2020; ETA home page states all taxpayers from 2022-12-15 / customs 2023-04-01; phased rollout and 2026 decree conflict; HSM/USB token requirement reported by vendors only.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (snippets & conflicting secondary sources)",
+      "ref": "docs/compliance/egypt-research.md items 1.5, 1.7, 1.9 and 1.10",
+      "sources": [
+        {"url": "https://www.eta.gov.eg/en/home", "read": false, "note": "PRIMARY-SNIPPET per egypt-research.md 1.5 (snippets only), page not read (search of 2026-11-18)"},
+        {"url": "https://eta.gov.eg/en/content/guides-dealing-electronic-invoices-system", "read": false, "note": "PRIMARY-SNIPPET per egypt-research.md 1.5, page not read (search of 2026-11-18)"},
+        {"url": "https://www.fonoa.com/resources/country-tax-guides/egypt/e-invoicing-and-digital-reporting", "accessed": "2026-11-18"},
+        {"url": "https://taxsummaries.pwc.com/egypt/corporate/other-taxes", "accessed": "2026-11-18"},
+        {"url": "https://vatit.com/e-invoicing-guide/egypt/", "read": false, "note": "403, snippet only per egypt-research.md 1.7, page not read (search of 2026-11-18)"},
+        {"url": "https://www.storecove.com/blog/en/e-invoicing-regulations-egypt/", "read": false, "note": "snippet only per egypt-research.md 1.10, page not read (search of 2026-11-18)"}
+      ]
+    },
+    {
+      "paths": ["eInvoicing.mode"],
+      "claim": "E-receipt (B2C POS): covered under mode eg_e_invoice (POS integration is a G2 scope decision). Receipts are JSON only, not issuer-signed; buyer national ID threshold 50,000 EGP (v1.0-1.1) / 150,000 EGP (v1.2+).",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (snippets + vendor)",
+      "ref": "docs/compliance/egypt-research.md item 1.6",
+      "sources": [
+        {"url": "https://sdk.invoicing.eta.gov.eg/receiptissuancefaq/", "read": false, "note": "snippet per egypt-research.md 1.6, page not read in full (search of 2026-11-18)"},
+        {"url": "https://sdk.invoicing.eta.gov.eg/documents/receipt-v1-2/", "read": false, "note": "snippet per egypt-research.md 1.6, page not read in full (search of 2026-11-18)"},
+        {"url": "https://www.fonoa.com/resources/country-tax-guides/egypt/e-invoicing-and-digital-reporting", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["eInvoicing.archiveRetentionYears"],
+      "claim": "Archive retention: archiveRetentionYears 5. Tax records kept 5 years from return date (6 years in evasion cases); Law 7/2025 effect unchecked.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (secondary)",
+      "sources": [
+        {"url": "https://taxnews.ey.com/news/2020-2532-egypt-introduces-unified-tax-procedures-law", "accessed": "2026-11-18"},
+        {"url": "https://www.pwc.com/m1/en/tax/documents/2021/egypt-egyptian-government-issues-executive-regulation-286-unified-tax-procedures-law-206-2020.pdf", "accessed": "2026-11-18"},
+        {"url": "https://www.fonoa.com/resources/country-tax-guides/egypt/e-invoicing-and-digital-reporting", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.timezone"],
+      "claim": "Timezone and DST: timezone Africa/Cairo. Stored UTC, displayed in Africa/Cairo via IANA tz database (no fixed offset); Egypt reintroduced daylight saving time in 2023 (monitor tzdata updates).",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED",
+      "ref": "docs/architecture/calendars-and-locale.md; docs/compliance/country-matrix.md; docs/compliance/egypt-research.md section 5.5"
+    },
+    {
+      "paths": ["localeDefaults.calendar"],
+      "claim": "Calendar: primary gregorian, secondaryDisplay none. Gregorian used in practice for commerce and tax; Hijri used for religious dates/holidays (with Egypt-specific moon-sighting announcements); Coptic not planned for v1.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED",
+      "ref": "docs/architecture/calendars-and-locale.md; docs/compliance/country-matrix.md; docs/compliance/egypt-research.md section 5.3"
+    },
+    {
+      "paths": ["localeDefaults.week", "localeDefaults.workingTime"],
+      "claim": "Week and weekend: startDay sun, weekendDays [fri, sat], workDays [sun, mon, tue, wed, thu], hours 09:00-17:00. Default Fri-Sat weekend; overridable per company; work-week and hours not yet officially researched.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (research needed)",
+      "ref": "docs/architecture/calendars-and-locale.md; docs/compliance/egypt-research.md section 5.5"
+    },
+    {
+      "paths": ["localeDefaults.fiscalYear"],
+      "claim": "Fiscal year: type gregorian, startMonth 1, startDay 1 (allowedFiscalYearTypes [gregorian], overridable). Gregorian fiscal year; commercial Jan 1 default (companies using July 1 can override, UNVERIFIED).",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED",
+      "ref": "docs/architecture/calendars-and-locale.md"
+    },
+    {
+      "paths": ["localeDefaults.holidays"],
+      "claim": "Holidays: calendarRef eg.holidays@0.1.0, announcedDates []. Public holidays not yet researched.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (research needed)",
+      "ref": "docs/compliance/egypt-research.md section 5.5"
+    },
+    {
+      "paths": ["localeDefaults.numberSystem", "formats.numberSystem", "formats.decimalSeparator", "formats.thousandsSeparator"],
+      "claim": "Number system and formats: numberSystem western, decimalSeparator \".\", thousandsSeparator \",\". Western vs Eastern Arabic digits per-company setting; digit style not researched (E6).",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (research needed)",
+      "ref": "docs/compliance/country-matrix.md; docs/compliance/egypt-research.md section 5.3"
+    },
+    {
+      "paths": ["localeDefaults.currency", "formats.currency", "formats.currencyDecimals"],
+      "claim": "Currency: currency EGP, currencyDecimals 2. EGP legal currency (general knowledge, unsourced in research); FX rules not researched (E7).",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (research needed)",
+      "ref": "docs/compliance/egypt-research.md section 5.2"
+    },
+    {
+      "paths": ["eInvoicing.mandatoryDocumentLanguages", "printFormats.mandatoryLanguages"],
+      "claim": "Document and print languages: eInvoicing.mandatoryDocumentLanguages [ar], printFormats.mandatoryLanguages [ar]. Arabic requirement on invoices and contracts not researched (E6; open counsel question, research Q11: whether Arabic is required on invoices/contracts and whether foreign-currency invoices are allowed).",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED (research needed; counsel Q11 open)",
+      "ref": "docs/compliance/egypt-research.md sections 5.3 and 8 Q11"
+    },
+    {
+      "paths": ["payrollHooks"],
+      "claim": "Payroll and social insurance: wpsEnabled false, wpsFormatRef null, socialInsuranceRef null, eosbRuleRef null. Out of v1 scope (Later in matrix E4). Research notes Law 148/2019 (11% employee / 18.75% employer, EGP 2,700-16,700 floor/ceiling from Jan 2026), Law 7/2024 income tax (EGP 20,000 exemption, 0-27.5% bands), Law 14/2025 labour law (in force 2025-09-01); none active in v1.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "Disabled in v1 (UNVERIFIED research notes)",
+      "ref": "docs/compliance/egypt-research.md section 4; docs/compliance/country-matrix.md E4"
+    },
+    {
+      "paths": ["formats.gregorianDateFormat", "formats.hijriDateFormat"],
+      "claim": "Date display formats: gregorianDateFormat YYYY-MM-DD, hijriDateFormat iYYYY-iMM-iDD. The former README source table had no row for these values and recorded no source; this entry was added in the evidence.json conversion so every leaf has an entry. No value changed.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "none (no README row)"
+    },
+    {
+      "paths": ["printFormats.templates", "printFormats.legalLayoutPrecedence"],
+      "claim": "Print templates and legal layout: three templates (tax_invoice, credit_note, debit_note) owned by compliance.eta_eg, which does not exist yet (review of #256, item 4); legalLayoutPrecedence true is fixed by the pack schema (const: true), not an Egypt fact. The former README source table had no row for these values and recorded no source; this entry was added in the evidence.json conversion. No value changed.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "none (no README row)"
+    }
+  ],
+  "factsOutsideSchema": [
+    {
+      "claim": "Data protection (Law 151/2020, PDPC licensing, 72-hour breach notice, cross-border transfer permit) is tracked at the tenant residency/privacy layer rather than inside pack.schema.json.",
+      "status": "UNVERIFIED",
+      "recordedStatus": "UNVERIFIED",
+      "ref": "docs/compliance/egypt-research.md section 3"
+    }
+  ],
+  "pendingRefs": [
+    {"path": "coaTemplate.componentId", "value": "finance.coa_eg", "blockedBy": "Component not registered; the Egypt chart of accounts is UNVERIFIED (research needed)."},
+    {"path": "coaTemplate.artifactRef", "value": "eg_unified_coa_unverified", "blockedBy": "No reviewed Egypt chart of accounts exists (research needed)."},
+    {"path": "tax.taxCodesRef", "value": "eg.tax_codes_unverified", "blockedBy": "No reviewed Egypt tax codes exist; VAT facts are UNVERIFIED."},
+    {"path": "eInvoicing.componentId", "value": "compliance.eta_eg", "blockedBy": "No Egypt e-invoicing component is registered; the manifest requires it so a compile binding country.eg is refused until it exists."},
+    {"path": "printFormats.templates[0].templateRef", "value": "eg_tax_invoice_template_unverified", "blockedBy": "Template owned by compliance.eta_eg, which does not exist yet."},
+    {"path": "printFormats.templates[0].componentId", "value": "compliance.eta_eg", "blockedBy": "No Egypt e-invoicing component is registered."},
+    {"path": "printFormats.templates[1].templateRef", "value": "eg_credit_note_template_unverified", "blockedBy": "Template owned by compliance.eta_eg, which does not exist yet."},
+    {"path": "printFormats.templates[1].componentId", "value": "compliance.eta_eg", "blockedBy": "No Egypt e-invoicing component is registered."},
+    {"path": "printFormats.templates[2].templateRef", "value": "eg_debit_note_template_unverified", "blockedBy": "Template owned by compliance.eta_eg, which does not exist yet."},
+    {"path": "printFormats.templates[2].componentId", "value": "compliance.eta_eg", "blockedBy": "No Egypt e-invoicing component is registered."},
+    {"path": "localeDefaults.holidays.calendarRef.id", "value": "eg.holidays", "blockedBy": "No Egypt holiday calendar exists; public holidays not yet researched (CMP-024 holiday calendars)."}
+  ],
+  "goLiveBlockers": [],
+  "arabicLabels": [
+    {"file": "pack.json", "path": "name.ar", "text": "حزمة دولة مصر", "review": "unreviewed", "rule": "ADR-0033", "meaning": "Egypt Country Pack"},
+    {"file": "manifest.json", "path": "name.ar", "text": "حزمة دولة مصر", "review": "unreviewed", "rule": "ADR-0033", "meaning": "Egypt Country Pack"},
+    {"file": "strings.json", "path": "labels.country.eg.name.ar", "text": "حزمة دولة مصر", "review": "unreviewed", "rule": "ADR-0033", "meaning": "Egypt Country Pack"},
+    {"file": "strings.json", "path": "labels.country.eg.authority.ar", "text": "مصلحة الضرائب المصرية", "review": "unreviewed", "rule": "ADR-0033", "meaning": "Egyptian Tax Authority (ETA)"}
+  ],
+  "arabicReviewNote": "All Arabic strings in pack.json, manifest.json and strings.json are machine-assisted drafts awaiting native Arabic speaker review (ADR-0033)."
+}

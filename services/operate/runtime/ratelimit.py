@@ -5,7 +5,7 @@ Keys are (tenant, user) from the verified principal only, never from a request b
 Every check fails closed: a missing identity, a kind with no valid rule, an invalid rule set, a clock value that is
 not a finite number in range, or any store error refuses. Over a limit is the Tool API code `rate_limited`
 (retryable, with `retry_after_s`); the model-call contract has no rate code. The default numbers are proposed
-defaults (accepted as starting values, Q-561; not measured). State is in process memory; a multi-instance host uses the shared cache with a per-server fallback on cache outage, every limit divided by the number of servers (Q-562, not built yet)."""
+defaults (accepted as starting values, Q-561; not measured). State is in process memory. A call is atomic: every rule is checked first, then each key's new window is built as a copy and all are published together under the counter lock by one `dict.update` of finished deques, so a failure while building leaves every live counter as it was and no rollback exists to fail (a refused or errored event costs nothing); a multi-instance host uses the shared cache with a per-server fallback on cache outage, every limit divided by the number of servers (Q-562, not built yet)."""
 from __future__ import annotations
 
 import logging
@@ -151,18 +151,10 @@ class RateLimiter:
                         q.popleft()
                     if len(q) >= r.limit:
                         raise RateLimited(f"{r.scope}_limit", max(1, math.ceil(q[0] + r.window_s - now)))
-                charged = []
-                try:
-                    for _, key in keyed:
-                        self._hits[key].append(now)
-                        charged.append(key)
-                except Exception:  # atomic: undo the counters already charged, so a failed event costs nothing
-                    for key in charged:
-                        try:
-                            self._hits[key].pop()
-                        except Exception:
-                            log.error("rate counter rollback failed key=%s", key)
-                    raise
+                staged = {}  # key -> new window, built off to the side
+                for _, key in keyed:
+                    staged[key] = self._stage(self._hits[key], now)
+                self._hits.update(staged)  # publish: one dict.update of finished windows, nothing to roll back
                 self._calls += 1
                 if self._calls % self.sweep_every == 0:
                     self._sweep(now)
@@ -170,6 +162,13 @@ class RateLimiter:
             raise
         except Exception as exc:  # a broken clock or store refuses, never admits
             raise RateLimited("store_error") from exc
+
+    @staticmethod
+    def _stage(q: deque, now: float) -> deque:
+        """The key's window with this hit added, as a new deque (the live one is not touched)."""
+        new = deque(q)
+        new.append(now)
+        return new
 
     def _rebase(self, now: float) -> None:
         """Clock reset: hits stamped after `now` are moved to `now` (the caller holds the lock)."""

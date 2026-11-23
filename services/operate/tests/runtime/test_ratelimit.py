@@ -81,22 +81,58 @@ def test_later_rule_refusal_leaves_earlier_counters_unchanged():
     assert reason(lim2, "turn", "t_b", "u_3").reason == "tenant_limit"
 
 
-def test_failed_append_rolls_back_counters_already_charged():
-    """Fault injection: the second counter's append fails; the first must be unchanged and the result store_error."""
+class WriteThenRaise(deque):
+    """An append that lands and then raises."""
+    def append(self, x):
+        super().append(x)
+        raise OSError("lost ack")
+
+
+class RaiseOnAppend(deque):
+    def append(self, _):
+        raise OSError("store down")
+
+    def pop(self):
+        raise OSError("rollback down")
+
+
+def test_rollback_failure_does_not_leave_the_call_charged():
+    """The old append-then-undo design: append fails on a counter and the undo (pop) would fail too, leaving the
+    first counter charged. Counters are now published only as finished copies, so a window whose append or pop is
+    broken is never written, nothing needs undoing, and the limit of 2 still gives exactly 2 admits."""
     lim, _ = limiter()
+    lim._hits[("turn", "tenant", 60.0, "t_a", "")] = RaiseOnAppend()
+    lim.admit("turn", "t_a", "u_1")
+    lim.admit("turn", "t_a", "u_1")
+    assert reason(lim, "turn", "t_a", "u_1").reason == "user_limit"
 
-    class FailingDeque(deque):
-        def append(self, _):
-            raise OSError("store down")
 
-    tenant_key = ("turn", "tenant", 60.0, "t_a", "")
-    user_key = ("turn", "user", 60.0, "t_a", "u_1")
-    lim._hits[tenant_key] = FailingDeque()
-    e = reason(lim, "turn", "t_a", "u_1")
-    assert (e.reason, e.retryable) == ("store_error", False)
-    assert len(lim._hits[user_key]) == 0 and len(lim._hits[tenant_key]) == 0
-    lim._hits[tenant_key] = deque()
-    lim.admit("turn", "t_a", "u_1")  # the failed call cost nothing: two admits still fit
+def test_append_that_writes_then_raises_stays_uncharged():
+    """An append that lands and then raises must not leave a phantom hit: the live window is never appended to."""
+    lim, _ = limiter()
+    lim._hits[("turn", "user", 60.0, "t_a", "u_1")] = WriteThenRaise()
+    lim.admit("turn", "t_a", "u_1")
+    lim.admit("turn", "t_a", "u_1")
+    assert reason(lim, "turn", "t_a", "u_1").reason == "user_limit"
+    assert len(lim._hits[("turn", "user", 60.0, "t_a", "u_1")]) == 2  # exactly the two admitted hits
+
+
+def test_staging_failure_midway_publishes_nothing(monkeypatch):
+    """Whatever fails while the new windows are built, no counter changes and the retry budget is intact."""
+    lim, _ = limiter()
+    real, n = RateLimiter._stage, {"i": 0}
+
+    def flaky(q, now):
+        n["i"] += 1
+        if n["i"] == 2:
+            raise OSError("boom")
+        return real(q, now)
+
+    monkeypatch.setattr(RateLimiter, "_stage", staticmethod(flaky))
+    assert reason(lim, "turn", "t_a", "u_1").reason == "store_error"
+    monkeypatch.undo()
+    assert all(len(q) == 0 for q in lim._hits.values())
+    lim.admit("turn", "t_a", "u_1")
     lim.admit("turn", "t_a", "u_1")
     assert reason(lim, "turn", "t_a", "u_1").reason == "user_limit"
 

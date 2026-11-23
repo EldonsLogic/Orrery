@@ -46,3 +46,8 @@ Tests first. N1: refusals logged once per key and reason until the key is admitt
 
 ## Correction (2026-11-23): Q-562 supersedes the statement at line 38
 The line-38 statement ("shared cache with per-instance fallback on outage") is superseded, historical text kept. Decided by both founders (partner's answer on #270, accepted by Eldon): counters live in the platform's shared cache; on a cache outage each server counts on its own with every limit divided by the number of servers, so the effective limit does not multiply. Not built yet, pending the shared cache. Q-562, the design note and the `ratelimit.py` docstring now say this.
+
+## Review fixes, round 2 (partner re-review at 4311b39, 2026-11-23)
+- Medium (a failed rollback left the call charged; an append that wrote then raised stayed charged): the append-then-undo design is replaced. `RateLimiter._admit` checks every rule, builds each key's new window as a copy (`_stage`), then publishes all of them with one `dict.update` under the counter lock. A failure while building changes no live counter, and no rollback exists. The module docstring says why this is atomic.
+- Tests written first, each failing on 4311b39: rollback failure, append that writes then raises, staging failure midway; each ends with the limit-2 retry case (exactly two admits). The earlier append-failure test is replaced by the staging one.
+- Checks: operate tests, check_docs, check_repo_hygiene and check_plan_independence pass.

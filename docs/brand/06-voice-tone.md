@@ -1,6 +1,6 @@
 # 06 Voice and tone (PDF p.11)
 
-Orrery speaks like a capable operations lead: direct, confident, exact. It leads with the result, uses numbers instead of adjectives, and always says what happens next.
+Seshna speaks like a capable operations lead: direct, confident, exact. It leads with the result, uses numbers instead of adjectives, and always says what happens next.
 - **Direct.** Lead with the outcome. One message, one action.
 - **Confident.** No hedging filler and no hype. When unsure, say exactly what is missing.
 - **Exact.** Numbers, dates, names and amounts. Never "some", "soon" or "a few".

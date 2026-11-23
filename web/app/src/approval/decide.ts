@@ -22,8 +22,8 @@ export function buildRequest(view: ReviewModel, form: Form): DecisionRequest | n
   if (!opt || !opt.allowed || (form.decision === 'approve' && !view.canDecide)) return null;
   if (!opt.reasons.some((r) => r.value === form.reason)) return null;
   if (form.note.length > view.noteLimit || (opt.noteRequired && form.note.trim() === '')) return null;
-  // Q-526: never a decision without all three read confirmations.
-  const need = view.confirmations.map((c) => c.key);
+  // Q-585: the three read confirmations are required to approve only; reject and request changes need none.
+  const need = form.decision === 'approve' ? view.confirmations.map((c) => c.key) : [];
   if (need.some((k) => !form.confirmed.includes(k))) return null;
   return {
     tenantId: view.tenantId, blueprintId: view.blueprintId, decision: form.decision, reason: form.reason, note: form.note,

@@ -259,17 +259,19 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
                   value={form?.note ?? ''}
                   onChange={(e) => patch({ note: e.target.value })}
                 />
-                <fieldset>
-                  <legend>{t('ui.confirmHeading')}</legend>
-                  {view.confirmations.map((c) => (
-                    <Checkbox
-                      key={c.key}
-                      label={say(c.labelKey)}
-                      checked={form?.confirmed.includes(c.key) ?? false}
-                      onChange={(e) => patch({ confirmed: e.target.checked ? [...(form?.confirmed ?? []), c.key] : (form?.confirmed ?? []).filter((k) => k !== c.key) })}
-                    />
-                  ))}
-                </fieldset>
+                {opt.key === 'approve' ? (
+                  <fieldset>
+                    <legend>{t('ui.confirmHeading')}</legend>
+                    {view.confirmations.map((c) => (
+                      <Checkbox
+                        key={c.key}
+                        label={say(c.labelKey)}
+                        checked={form?.confirmed.includes(c.key) ?? false}
+                        onChange={(e) => patch({ confirmed: e.target.checked ? [...(form?.confirmed ?? []), c.key] : (form?.confirmed ?? []).filter((k) => k !== c.key) })}
+                      />
+                    ))}
+                  </fieldset>
+                ) : null}
                 <Button disabled={!ready} loading={status.kind === 'sending'} onClick={send}>
                   {t('ui.submit', { decision: say(opt.labelKey) })}
                 </Button>

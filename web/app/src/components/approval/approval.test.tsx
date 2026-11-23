@@ -101,9 +101,21 @@ describe('owner approval decisions', () => {
       seenQuoteDigest: fixtureReview.quoteDigest, confirmations: ALL, note: 'ok',
     });
   });
-  it('sends nothing without all three confirmations, a listed reason, or inside the note limit', async () => {
+  it('needs the three confirmations only to approve (Q-585)', async () => {
     const port = fakePort();
-    for (const f of [form('approve', { confirmed: ALL.slice(1) }), form('approve', { reason: '' }), form('reject', { reason: 'agree' }),
+    expect(buildRequest(fixtureReview, form('approve', { confirmed: [] }))).toBeNull();
+    for (const d of ['reject', 'request_changes'] as const) {
+      expect(await submitDecision(port, fixtureReview, form(d, { confirmed: [] }))).toEqual({ ok: true });
+    }
+    expect(port.calls.map((c) => c.confirmations)).toEqual([[], []]);
+    const out = page(fixtureReview, 'en', 'reject');
+    expect(out).not.toContain(messages.en.ownerApproval.ui.confirmHeading);
+    expect(page(fixtureReview, 'en', 'request_changes')).not.toContain(messages.en.ownerApproval.ui.confirmHeading);
+    expect(page(fixtureReview, 'en', 'approve')).toContain(messages.en.ownerApproval.ui.confirmHeading);
+  });
+  it('sends nothing without all three confirmations (approve), a listed reason, or inside the note limit', async () => {
+    const port = fakePort();
+    for (const f of [form('approve', { confirmed: ALL.slice(1) }), form('approve', { confirmed: [] }), form('approve', { reason: '' }), form('reject', { reason: 'agree' }),
       form('reject', { note: 'x'.repeat(fixtureReview.noteLimit + 1) })]) {
       expect(buildRequest(fixtureReview, f)).toBeNull();
       expect(await submitDecision(port, fixtureReview, f)).toEqual({ ok: false, code: 'OA-001' });

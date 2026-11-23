@@ -29,3 +29,6 @@ Q-544 and Q-505 adapters, then wire the port; add step-up prompt and history lis
 
 ## Review fixes (Fable review of 853663a)
 R1: the form is bound to the view digests (`Form.for`, `emptyForm`); a form made for another view never sends and the screen drops it. R2: tests for `percentText`, per-decision `allowed`, `nextStatus`, reason, note limit, `noteRequired`, `messagePath`, bdi. Lows: `ready` from `buildRequest`, form locked after OA-006, neutral label for unknown keys, compliance and counts shown, cut marker, isolates on params and requirement, blocked fixture now a state the model emits, unused ui keys removed, sample-data notice. Web tests 298 pass; lint, typecheck, build, check_docs and hygiene pass.
+
+## Q-585 applied
+Eldon decided Q-585 (2026-11-23): the three read confirmations are required only to approve. `buildRequest` sends reject and request changes without them (empty list) and the screen hides the ticks for those choices. Q-585 marked resolved.

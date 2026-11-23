@@ -27,7 +27,7 @@ Live coordinator log for the partner's lane (RULES 51, created mid-session when 
 - #294 GOV-067: REQUEST_CHANGES at `95a097b` (the log named the candidate); fix checked by the coordinator; APPROVED at `2c931f9`; merged.
 - #230 GOV-056: APPROVED at `9c97b0c` (all 14 earlier log versions preserved); merged.
 - #268 GOV-064: REQUEST_CHANGES at `fa09d47` (side chat); re-review at `dbb17fa`: both findings closed. Sol found `action_policy_enforcer.py:313` (partner lane, ERP-023) still denies sole-owner R1 to R3 self-approval (stricter than Q-563, fails closed). Not a defect in #268: new partner row ERP-033 owns the alignment. APPROVED at `dbb17fa`.
-- #270 SEC-009: REQUEST_CHANGES at `4311b39`. Q-562 wording now matches the partner's answer (accepted by Eldon); a failed rollback still leaves a refused call charged.
+- #270 SEC-009: REQUEST_CHANGES at `4311b39`. Q-562 wording now matches the partner's answer (accepted by Eldon); a failed rollback still leaves a refused call charged. Re-review at `d2b79e9` (staged publish under the lock): Medium closed, one non-blocking Low (test placement). APPROVED at `d2b79e9`.
 
 ## Decisions
 - Q-311 (tenant id format): the partner agrees the event-stream format (letters, digits, underscore) is canonical and provisioning refuses hyphens. Needs Eldon's confirmation before ERP-009 or provisioning changes.
@@ -40,5 +40,4 @@ Unknown.
 - Merge #280, #281, #284 after Eldon's Tier 3 read and the partner's say-so.
 - ERP-031 (real-bench valuation layers) is unblocked by the SEC-004 fix; PLT-009 (gateway) is unblocked by PLT-026 (#244); order to be chosen by the partner.
 - CMP-036 (follow-up to #282) is ready in the partner's lane.
-- #270: Eldon pushed `d2b79e9` (staged publish, no rollback path); Sol re-review dispatched.
 - ERP-033: align the enforcer with Q-563 (partner lane).

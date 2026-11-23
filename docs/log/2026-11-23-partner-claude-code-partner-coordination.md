@@ -45,3 +45,6 @@ Unknown.
 - ERP-031 (real-bench valuation layers) is unblocked by the SEC-004 fix; PLT-009 (gateway) is unblocked by PLT-026 (#244); order to be chosen by the partner.
 - CMP-036 (follow-up to #282) is ready in the partner's lane.
 - ERP-033: align the enforcer with Q-563 (partner lane).
+
+## Handover to a new coordinator thread (2026-11-23)
+- The earlier coordinator thread stopped; a new Claude Code (Opus) thread owns this branch and log. State at handover: #296 changes requested at `733b470`, #297 approved at `7091c78`, #298 changes requested at `658df11`; no new pushes from Eldon yet. #280, #281, #284 approved by Eldon, waiting for the partner's Tier 3 say-so. GitHub watcher restarted.

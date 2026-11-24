@@ -149,7 +149,7 @@ def _stream(deps, p: Principal, req: RunRequest, server_state: dict, locale: str
             if out["type"] in ("RUN_STARTED", "RUN_FINISHED", "RUN_ERROR"):
                 continue  # the endpoint owns the run envelope
             yield ev.sse_frame(out)
-        interrupts = _interrupts(deps, p, ctx if req.user_text else None)
+        interrupts = [ev.interrupt(a.id, message=a.summary or None) for a in deps.approvals.pending(p)]
     except GeneratorExit:
         raise
     except Exception as exc:
@@ -157,17 +157,6 @@ def _stream(deps, p: Principal, req: RunRequest, server_state: dict, locale: str
         return
     deps.auditor.run_event(p, run_id, "completed")
     yield ev.sse_frame(ev.run_finished(req.thread_id, run_id, interrupts))
-
-
-def _interrupts(deps, p: Principal, ctx) -> list:
-    """A runtime that reports its approvals (`reports_approvals`) interrupts only on approvals this run created;
-    others keep the earlier behaviour (every pending approval of the principal)."""
-    pending = list(deps.approvals.pending(p))
-    if not getattr(deps.runtime, "reports_approvals", False):
-        return [ev.interrupt(a.id, message=a.summary or None) for a in pending]
-    by_id = {a.id: a for a in pending}
-    ids = list(dict.fromkeys(i for i in (ctx.run_approvals if ctx else ()) if isinstance(i, str) and i))
-    return [ev.interrupt(i, message=(by_id[i].summary if i in by_id else "") or None) for i in ids]
 
 
 def _ordered(out: dict, msgs: set, calls: set) -> bool:

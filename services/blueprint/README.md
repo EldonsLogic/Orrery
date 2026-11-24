@@ -1,6 +1,6 @@
 # services/blueprint
 
-Status: draft (validator implemented, BPL-003; compiler implemented, BPL-004; token resolver implemented, BRD-004; simulator implemented, BPL-018, see [simulator.md](../../docs/architecture/simulator.md); diff, registry, factory queue not started)
+Status: draft (validator implemented, BPL-003; compiler implemented, BPL-004; token resolver implemented, BRD-004; diff, simulator, registry, factory queue not started)
 Owner: unassigned
 
 Purpose: Part 2 service layer. Blueprint validator, compiler (neutral form + adapter calls), simulator, registry, factory queue, branding token resolver. The change engine itself lives in [apps/engine](../../apps/engine/README.md). Spec: [02-blueprint-and-library](../../docs/specs/02-blueprint-and-library.md).

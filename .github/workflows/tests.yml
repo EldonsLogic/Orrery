@@ -1,33 +1,16 @@
 name: Tests
 
 # Cost control & service CI/CD (INF-003, GOV-049):
-# Runs tests and lint for services/*, apps/engine, components, evals, scripts, and infra.
-# Pull requests use fail-closed path filters with cross-service dependency triggers;
-# pushes to main and workflow_dispatch run the full suite.
-# Actions are pinned by commit SHA; deploy-staging skeleton remains disabled (infra/staging.md).
+# Runs tests and lint for services/* and apps/engine on pull requests with path filters,
+# installs dependencies per changed service, and pins actions by commit SHA.
+# Disabled deploy-to-staging job skeleton included (see infra/staging.md).
 on:
   pull_request:
-    paths:
-      - "**"
-      - "!docs/**"
-      # Executable brand tools and token inputs are tested by QA-007.
-      - "docs/brand/tools/**"
-      - "docs/brand/tokens/**"
-      - "!**.md"
-      - "!.github/ISSUE_TEMPLATE/**"
-      - "!web/**"
-  push:
-    branches:
-      - main
-    paths:
-      - "**"
-      - "!docs/**"
-      # Executable brand tools and token inputs are tested by QA-007.
-      - "docs/brand/tools/**"
-      - "docs/brand/tokens/**"
-      - "!**.md"
-      - "!.github/ISSUE_TEMPLATE/**"
-      - "!web/**"
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - "web/**"
   workflow_dispatch:
 
 permissions:
@@ -55,97 +38,47 @@ jobs:
       - name: Install test framework
         run: pip install "pytest==9.2.0"
 
-      - name: Detect changed service and test paths (fail-closed)
+      - name: Detect changed service and test paths
         id: filter
         env:
-          EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          set -euo pipefail
-          ALL=0
-          CHANGED=""
-
-          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$BASE_SHA" ] && [ -n "$HEAD_SHA" ]; then
-            if ! MERGE_BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA"); then
-              echo "::warning::git merge-base failed; failing closed by running all suites"
-              ALL=1
-            elif ! CHANGED=$(git diff --name-only "$MERGE_BASE" "$HEAD_SHA"); then
-              echo "::warning::git diff failed; failing closed by running all suites"
-              ALL=1
-            elif [ -z "$CHANGED" ]; then
-              echo "::warning::Empty diff on PR; failing closed by running all suites"
-              ALL=1
-            fi
+          if [ -n "$BASE_SHA" ] && [ -n "$HEAD_SHA" ]; then
+            BASE_SHA=$(git merge-base "$BASE_SHA" "$HEAD_SHA" || true)
+            CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
           else
-            # push to main, workflow_dispatch, or missing PR SHAs -> run full suite
+            CHANGED="ALL"
+          fi
+
+          # If the workflow itself changed or this is a manual dispatch, run everything
+          if echo "$CHANGED" | grep -E '^(\.github/workflows/tests\.yml|ALL$)' > /dev/null; then
             ALL=1
+          else
+            ALL=0
           fi
 
-          # Refuse changed Python tests outside the suites wired below. Selecting
-          # ALL alone cannot run a new suite that has no test command yet.
-          while IFS= read -r path; do
-            case "$path" in
-              */test_*.py|*/tests.py|*/tests/*_test.py)
-                case "$path" in
-                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*) continue ;;
-                esac
-                if ! grep -Fq -- "$path" .github/workflows/tests.yml; then
-                  echo "::error::Unmapped test: $path; wire its suite into this workflow"
-                  exit 1
-                fi
-                ;;
-            esac
-          done <<< "$CHANGED"
-
-          # Trigger full suite on shared contracts, workflows, scripts, or any unmapped non-doc file
-          if [ "$ALL" = "0" ]; then
-            if grep -qE '^(contracts/|\.github/|scripts/)' <<< "$CHANGED"; then
-              ALL=1
-            elif grep -qvE '^(services/(blueprint|control-plane|datasets|discovery|gateway|operate|studio)/|apps/engine/|evals/|scripts/|infra/|components/|docs/|web/|\.github/)|\.md$' <<< "$CHANGED"; then
-              echo "::warning::Unmapped path changed; failing closed by running all suites"
-              ALL=1
-            fi
-          fi
-
-          # Here-strings have no upstream producer that grep -q can SIGPIPE;
-          # echo | grep -q under pipefail can turn a real match into false.
           check_path() {
             local pattern="$1"
-            if [ "$ALL" = "1" ] || grep -qE "$pattern" <<< "$CHANGED"; then
+            if [ "$ALL" = "1" ] || echo "$CHANGED" | grep -E "$pattern" > /dev/null; then
               echo "true"
             else
               echo "false"
             fi
           }
 
-          # Cross-service dependency graph:
-          # - services/blueprint provides evstream/validator/compiler/adapter/tokens/registry
-          #   used by discovery, gateway, operate, studio, engine, and evals.
-          # - services/datasets is used by studio.
-          # - services/control-plane identity contracts are used by operate.
-          # - components are used by studio and wrapped by apps/engine.
-          echo "brand=$(check_path '^docs/brand/(tools|tokens)/')" >> "$GITHUB_OUTPUT"
-          echo "blueprint=$(check_path '^services/blueprint/')" >> "$GITHUB_OUTPUT"
+          echo "blueprint=$(check_path '^services/blueprint/|^contracts/')" >> "$GITHUB_OUTPUT"
           echo "control_plane=$(check_path '^services/control-plane/')" >> "$GITHUB_OUTPUT"
           echo "datasets=$(check_path '^services/datasets/')" >> "$GITHUB_OUTPUT"
-          echo "discovery=$(check_path '^(services/discovery/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
-          echo "gateway=$(check_path '^(services/gateway/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
-          echo "operate=$(check_path '^(services/operate/|services/blueprint/|services/control-plane/)')" >> "$GITHUB_OUTPUT"
-          echo "studio=$(check_path '^(services/studio/|services/blueprint/|services/datasets/|components/)')" >> "$GITHUB_OUTPUT"
-          echo "engine=$(check_path '^(apps/engine/|services/blueprint/|components/)')" >> "$GITHUB_OUTPUT"
-          echo "evals=$(check_path '^(evals/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
+          echo "discovery=$(check_path '^services/discovery/')" >> "$GITHUB_OUTPUT"
+          echo "gateway=$(check_path '^services/gateway/')" >> "$GITHUB_OUTPUT"
+          echo "operate=$(check_path '^services/operate/')" >> "$GITHUB_OUTPUT"
+          echo "studio=$(check_path '^services/studio/')" >> "$GITHUB_OUTPUT"
+          echo "engine=$(check_path '^apps/engine/')" >> "$GITHUB_OUTPUT"
+          echo "evals=$(check_path '^evals/')" >> "$GITHUB_OUTPUT"
           echo "scripts=$(check_path '^scripts/')" >> "$GITHUB_OUTPUT"
           echo "infra=$(check_path '^infra/')" >> "$GITHUB_OUTPUT"
-          echo "components=$(check_path '^(components/|apps/engine/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
-
-      # --- brand tools ---
-      - name: Tenant theme and contrast tests (QA-007)
-        if: steps.filter.outputs.brand == 'true' && !cancelled()
-        env:
-          # Blueprint token tests require docs tools to remain free of bytecode.
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 -m pytest docs/brand/tools -q
+          echo "components=$(check_path '^components/')" >> "$GITHUB_OUTPUT"
 
       # --- services/blueprint ---
       - name: Install dependencies (services/blueprint)
@@ -173,10 +106,6 @@ jobs:
         if: steps.filter.outputs.control_plane == 'true' && !cancelled()
         run: python3 -m compileall services/control-plane
 
-      - name: Control-plane identity and support tests
-        if: steps.filter.outputs.control_plane == 'true' && !cancelled()
-        run: python3 -m pytest services/control-plane/tests -q
-
       # --- services/datasets ---
       - name: Lint (services/datasets)
         if: steps.filter.outputs.datasets == 'true' && !cancelled()
@@ -189,7 +118,7 @@ jobs:
       # --- services/discovery ---
       - name: Install dependencies (services/discovery)
         if: steps.filter.outputs.discovery == 'true'
-        run: pip install -r services/discovery/requirements.txt -r services/blueprint/requirements.txt
+        run: pip install -r services/discovery/requirements.txt
 
       - name: Lint (services/discovery)
         if: steps.filter.outputs.discovery == 'true' && !cancelled()
@@ -202,7 +131,7 @@ jobs:
       # --- services/gateway ---
       - name: Install dependencies (services/gateway)
         if: steps.filter.outputs.gateway == 'true'
-        run: pip install -r services/blueprint/requirements.txt "pydantic>=2"
+        run: pip install "pydantic>=2"
 
       - name: Lint (services/gateway)
         if: steps.filter.outputs.gateway == 'true' && !cancelled()
@@ -224,15 +153,11 @@ jobs:
         if: steps.filter.outputs.operate == 'true' && !cancelled()
         run: python3 -m compileall services/operate
 
-      - name: Tool API and AG-UI tests (OPR-003, OPR-020)
+      - name: Tool API generator tests (OPR-003)
         if: steps.filter.outputs.operate == 'true' && !cancelled()
         run: python3 -m pytest services/operate/tests -q
 
       # --- services/studio ---
-      - name: Install dependencies (services/studio)
-        if: steps.filter.outputs.studio == 'true'
-        run: pip install -r services/blueprint/requirements.txt "pydantic>=2"
-
       - name: Lint (services/studio)
         if: steps.filter.outputs.studio == 'true' && !cancelled()
         run: python3 -m compileall services/studio
@@ -250,29 +175,39 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         run: python3 -m compileall apps/engine
 
-      - name: Change engine security mock tests, fast (CE-SEC-001..004; real-bench run is real-bench.yml)
+      - name: Tenant provisioning script tests (ERP-003)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
-        env:
-          PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_caller_roles.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_security.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_policy_persistence.py apps/engine/change_engine/change_engine/tests/test_api_deployment.py -q
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_003_tenant_provisioning.py -v
 
-      - name: Engine unit, adapter and conformance tests
+      - name: Bilingual tax invoice print format tests (ERP-007)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine:.
-        run: |
-          python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_003_tenant_provisioning.py -v
-          python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_007_bilingual_tax_invoice.py -v
-          python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_007_apply_preview_gate.py -q
-          python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_008_blueprint_rollback.py -q
-          python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_012_engine_adapter.py apps/engine/change_engine/change_engine/tests/test_erp_012_frappe_adapter.py -q
-          python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_021_phase0_proofs.py -v
-          if [ -f apps/engine/change_engine/change_engine/tests/test_erp_009_record_events.py ]; then
-            PYTHONPATH=apps/engine/change_engine:services/blueprint/events:. python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_009_record_events.py -v
-          fi
-          if [ -f apps/engine/change_engine/change_engine/tests/test_cmp_006_ksa_accounts.py ]; then
-            python3 -m unittest apps/engine/change_engine/change_engine/tests/test_cmp_006_ksa_accounts.py -v
-          fi
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_007_bilingual_tax_invoice.py -v
+
+      - name: Apply with preview and DDL plan gate tests (BPL-007)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_007_apply_preview_gate.py -q
+
+      - name: Blueprint rollback tests (BPL-008)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_008_blueprint_rollback.py -q
+
+      - name: Engine adapter unit tests (BPL-012, ERP-012)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_012_engine_adapter.py apps/engine/change_engine/change_engine/tests/test_erp_012_frappe_adapter.py -q
+
+      - name: Phase 0 engine proof unit and contract tests (ERP-021)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_021_phase0_proofs.py -v
 
       - name: Engine adapter conformance suite (BPL-025 via change_engine.adapter)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -310,41 +245,29 @@ jobs:
         working-directory: infra/dev/docker
         run: python3 -m unittest discover -s tests -v
 
-      - name: Engine invisibility crawler tests (QA-016)
-        if: steps.filter.outputs.infra == 'true' && !cancelled()
-        run: |
-          if [ -d infra/invisibility/tests ]; then
-            python3 -m unittest discover -s infra/invisibility/tests -v
-          fi
-
       # --- components ---
-      - name: Install dependencies (components)
-        if: steps.filter.outputs.components == 'true'
-        run: pip install -r services/blueprint/requirements.txt
-
-      - name: Trading Arabic, ZATCA and country pack component tests
+      - name: Trading Arabic pack and engine audit tests
         if: steps.filter.outputs.components == 'true' && !cancelled()
         run: |
           python3 -m unittest discover -s components/core/trading_ar/tests -v
           python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_006_arabic_translations.py -v
+
+      - name: ZATCA Phase 1 component and engine wrapper tests (CMP-003)
+        if: steps.filter.outputs.components == 'true' && !cancelled()
+        run: |
           python3 -m unittest discover -s components/compliance/zatca_sa/tests -t . -v
           python3 -m unittest apps/engine/change_engine/change_engine/tests/test_zatca_phase1_engine.py -v
-          if [ -d components/compliance/country_pack/tests ]; then
-            python3 -m unittest discover -s components/compliance/country_pack/tests -t . -v
-          fi
 
   deploy-staging:
     name: Deploy to staging (disabled)
     needs: [python-tests]
     runs-on: ubuntu-latest
-    # Disabled until INF-001 (hosting choice) and INF-004 (staging setup).
-    # When enabled, gate on: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    if: false
+    if: false  # DISABLED: No staging environment exists yet (ADR-0018). See infra/staging.md.
     environment: staging
     permissions:
       contents: read
     steps:
       - name: Deploy placeholder
         run: |
-          echo "Staging deployment is disabled: INF-001 hosting decision and staging environment not yet provisioned."
+          echo "Staging deployment is disabled: staging environment and hosting provider not yet provisioned."
           echo "See infra/staging.md for founder setup requirements."

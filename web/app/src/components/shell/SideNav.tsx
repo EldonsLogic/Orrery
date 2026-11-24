@@ -5,8 +5,6 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { buildNav } from '../../lib/navigation';
 import { callerOf, type SessionClaims } from '../../lib/session';
-import { canViewBlueprint } from '../../blueprint/access';
-import { fixtureBlueprint } from '../../blueprint/fixture';
 import { fixtureData } from '../../records/fixture/rows';
 import styles from './Shell.module.css';
 
@@ -14,12 +12,7 @@ export function SideNav({ claims, onNavigate }: { claims: SessionClaims; onNavig
   const t = useTranslations('shell.nav');
   const locale = useLocale();
   const pathname = usePathname() ?? '';
-  const caller = callerOf(claims);
-  const sections = buildNav(fixtureData, caller, locale, { home: t('home') }).map((s) =>
-    s.id === 'workspace' && canViewBlueprint(fixtureBlueprint, caller)
-      ? { ...s, items: [...s.items, { id: 'blueprint', label: t('blueprint'), href: '/blueprint/' }] }
-      : s,
-  );
+  const sections = buildNav(fixtureData, callerOf(claims), locale, { home: t('home') });
   const hasRecords = sections.some((s) => s.id === 'records');
   return (
     <nav aria-label={t('label')} className={styles.nav}>

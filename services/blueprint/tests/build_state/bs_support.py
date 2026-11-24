@@ -130,24 +130,6 @@ class Engine:
         return r
 
 
-QD = hashlib.sha256(b"quote-1").hexdigest()
-
-
-class OwnerApprovals:
-    """Mimics the DSC-009 `verify` port. `by` is the owner whose sealed approval exists (set by World.approve)."""
-    def __init__(self):
-        self.by, self.blocked, self.quote_current, self.raises, self.patch, self.calls = None, False, True, False, {}, []
-
-    def verify(self, t, bp, dg, qd, subject):
-        self.calls.append((t, bp, dg, qd, subject))
-        if self.raises:
-            raise RuntimeError("down")
-        ev = {"tenantId": t, "blueprintId": bp, "contentDigest": dg, "quoteDigest": qd, "approvedBy": subject if self.by == subject else None,
-              "blocked": self.blocked, "quoteCurrent": self.quote_current}
-        ev.update(self.patch)
-        return ev
-
-
 class Clock:
     def __init__(self):
         self.t = 1_800_000_000
@@ -163,13 +145,12 @@ class Clock:
 class World:
     def __init__(self, roles=("owner",), keys=KEYS):
         self.idn, self.bps, self.rev, self.sims, self.engine, self.clock = Identity(), Blueprints(), Reviews(), Sims(), Engine(), Clock()
-        self.oa = OwnerApprovals()
         self.ledger = SignOffLedger(keys, "k1")
         self.errors = []
         self.audit = []
         self.m = BuildStateMachine(identity=self.idn, blueprints=self.bps, validator=lambda c: list(self.errors), reviews=self.rev,
                                    simulations=self.sims, signoffs=self.ledger, engine=self.engine, clock=self.clock,
-                                   owner_approvals=self.oa, integrity_keys=keys, key_id="k1", required_signoff_roles=roles, audit=self.audit.append)
+                                   integrity_keys=keys, key_id="k1", required_signoff_roles=roles, audit=self.audit.append)
         self.report = copy.deepcopy(h.run(blueprint_id=BP, blueprint_digest=content_digest(content()))[0])
         self.sims.put(self.report)
         self.sim_id = self.report["simulationId"]
@@ -197,12 +178,8 @@ class World:
     def create(self, who="author", **kw):
         return self.m.create(who, **self.args(**kw))
 
-    def approve(self, who="owner", **over):
-        self.oa.by = self.idn.table[who].subject
-        c = self.bps.d.get((T, BP))
-        kw = dict(confirmations=["summary", "quote", "gaps"], expected_digest=content_digest(c) if c else "0" * 64, quote_digest=QD)
-        kw.update(over)
-        return self.m.approve_owner(who, **self.args(**kw))
+    def approve(self, who="owner"):
+        return self.m.approve_owner(who, **self.args(confirmations=["summary", "quote", "gaps"]))
 
     def review(self, who="rev"):
         self.rev.approve(self.bps.d[(T, BP)])

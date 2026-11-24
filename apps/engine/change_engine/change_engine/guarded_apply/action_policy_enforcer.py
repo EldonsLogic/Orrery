@@ -316,9 +316,16 @@ def _check_permission_change(
 def _sole_owner(
     row: PolicyRow, context: ActionContext, approval: Approval, required: int,
 ) -> bool:
-    """Q-41 and Q-563: the tenant owner is the only human holding any approving role of this R1 to R3 row."""
+    """Q-41 and Q-563: the tenant owner is the only human holding any approving role of this R1 to R3 row.
+
+    The exclusion is lifted only for an owner who initiated the request (Q-41) or who owns the drafting
+    agent and did not also edit it (Q-563). Authoring or editing somebody else's request stays excluded.
+    """
     actor, holders = approval.approver, context.tenant_role_holders
+    own_agent = (context.drafter.kind == "agent" and context.drafter.owner_id == actor.id
+                 and not (row.author_sod and actor.id in context.editor_ids))
     if (row.action_id not in _SOLE_OWNER_ROWS or required != 1 or approval.step_up is not True
+            or not (actor.id == context.submitter.id or own_agent)
             or "owner" not in actor.roles or type(holders) is not dict
             or not all(role in holders for role in row.approvers)):
         return False

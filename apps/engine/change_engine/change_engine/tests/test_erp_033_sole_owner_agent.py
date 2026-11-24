@@ -227,3 +227,218 @@ def test_flag_survives_the_audit_store_and_only_marks_admitted_fallbacks(policy,
     assert admit(guard_for(policy, denied, path), other) is None
     reopened = policy.ActionPolicyStore(path).audit_log()
     assert [(entry.decision, entry.self_approved) for entry in reopened] == [("allow", True), ("deny", False)]
+
+
+# --- Review fixes (#306) -------------------------------------------------------------------------
+# Finding 1: the exclusion is lifted only for the initiator (Q-41) or the owner of the drafting agent
+# (Q-563), never because the owner authored or edited somebody else's request.
+
+OWNER = {"id": "owner-a", "kind": "human", "roles": frozenset({"owner"})}
+
+
+def rebind(policy, request, context, **changes):
+    """Replace context fields and re-bind the approval to the (possibly new) submitter."""
+    context = replace(context, **changes)
+    approval = replace(context.approvals[0], payload_hash=policy.payload_hash(request, context.submitter.id))
+    return replace(context, approvals=(approval,))
+
+
+def staff(policy, name, action):
+    role = "finance" if action == "AP-FIN-01" else "warehouse"
+    return policy.Principal(name, "human", frozenset({role}))
+
+
+@pytest.mark.parametrize("action", ["AP-FIN-01", "AP-STOCK-01"])
+def test_staff_initiated_draft_authored_by_the_owner_is_denied(policy, tmp_path, action):
+    request, context, path = build(policy, tmp_path, action)
+    context = rebind(policy, request, context, submitter=staff(policy, "staff-a", action),
+                     drafter=policy.Principal(**OWNER))
+    guard = guard_for(policy, context, path)
+    assert admit(guard, request) is None
+    assert last_reason(guard) == "ineligible_approver"
+    assert guard.store.audit_log()[-1].self_approved is False
+
+
+@pytest.mark.parametrize("drafter", [
+    pytest.param("staff-a", id="drafted-by-submitter"),
+    pytest.param("staff-b", id="drafted-by-another-human"),
+])
+def test_staff_initiated_human_draft_edited_by_the_owner_is_denied(policy, tmp_path, drafter):
+    request, context, path = build(policy, tmp_path, "AP-FIN-01")
+    context = rebind(policy, request, context, submitter=staff(policy, "staff-a", "AP-FIN-01"),
+                     drafter=staff(policy, drafter, "AP-FIN-01"), editor_ids=frozenset({"owner-a"}))
+    guard = guard_for(policy, context, path)
+    assert admit(guard, request) is None
+    assert last_reason(guard) == "ineligible_approver"
+
+
+@pytest.mark.parametrize("agent_owner", ["owner-b", "owner-a"])
+def test_agent_draft_edited_by_the_owner_is_denied(policy, tmp_path, agent_owner):
+    # Another person's agent, or the approver's own agent that the approver then edited: still not a second person.
+    request, context, path = build(policy, tmp_path, "AP-FIN-01")
+    context = replace(context, drafter=replace(context.drafter, owner_id=agent_owner),
+                      editor_ids=frozenset({"owner-a"}))
+    guard = guard_for(policy, context, path)
+    assert admit(guard, request) is None
+    assert last_reason(guard) == "ineligible_approver"
+
+
+@pytest.mark.parametrize("action", ["AP-FIN-01", "AP-STOCK-01"])
+def test_owner_initiator_may_self_approve_whoever_drafted(policy, tmp_path, action):
+    # Q-41: the initiator is the owner; a staff member or another owner's agent drafted it.
+    request, context, path = build(policy, tmp_path, action)
+    owner = policy.Principal("owner-a", "human", frozenset({"owner"}) | staff(policy, "x", action).roles)
+    context = rebind(policy, request, context, submitter=owner, drafter=staff(policy, "staff-b", action))
+    admitted = admit(guard_for(policy, context, path), request)
+    assert admitted is not None and admitted.self_approved is True
+
+
+def test_owner_initiator_who_also_edited_may_self_approve(policy, tmp_path):
+    request, context, path = build(policy, tmp_path, "AP-FIN-01", "human")
+    context = replace(context, editor_ids=frozenset({"owner-a"}))
+    admitted = admit(guard_for(policy, context, path), request)
+    assert admitted is not None and admitted.self_approved is True
+
+
+def test_owner_initiator_with_another_owners_agent_draft_may_self_approve(policy, tmp_path):
+    request, context, path = build(policy, tmp_path, "AP-FIN-01")
+    owner = policy.Principal("owner-a", "human", frozenset({"owner", "finance"}))
+    context = rebind(policy, request, context, submitter=owner,
+                     drafter=replace(context.drafter, owner_id="owner-b"))
+    admitted = admit(guard_for(policy, context, path), request)
+    assert admitted is not None and admitted.self_approved is True
+
+
+# Finding 3: a self-approved allow that the store downgrades to a deny never keeps the flag.
+
+def clock_from(*steps):
+    """First call is the enforcer's read, the next the store's re-check; a callable step raises or returns."""
+    queue = list(steps)
+
+    def clock():
+        step = queue.pop(0) if len(queue) > 1 else queue[0]
+        if isinstance(step, Exception):
+            raise step
+        return step
+    return clock
+
+
+@pytest.mark.parametrize("second, reason", [
+    pytest.param(NOW + timedelta(hours=2), "expired", id="expiry"),
+    pytest.param(RuntimeError("clock down"), "clock_unavailable", id="clock-failure"),
+    pytest.param(datetime(2026, 11, 22), "clock_unavailable", id="naive-clock"),
+    pytest.param(NOW - timedelta(seconds=1), "clock_unavailable", id="clock-went-back"),
+])
+def test_downgraded_self_approval_is_a_flagless_denial(policy, tmp_path, second, reason):
+    request, context, path = build(policy, tmp_path)
+    guard = policy.ActionPolicyEnforcer(
+        lambda: policy.starter_table(stock_cap="100.00", invoice_cap="100.00", currency="SAR"),
+        lambda session, req: context, policy.ActionPolicyStore(path), clock=clock_from(NOW, second))
+    assert admit(guard, request) is None
+    record = guard.store.audit_log()[-1]
+    assert (record.decision, record.reason, record.self_approved) == ("deny", reason, False)
+
+
+def test_replayed_self_approval_is_a_flagless_denial(policy, tmp_path):
+    request, context, path = build(policy, tmp_path)
+    guard = guard_for(policy, context, path)
+    assert admit(guard, request) is not None
+    assert admit(guard, request) is None
+    first, replay = guard.store.audit_log()
+    assert (first.decision, first.self_approved) == ("allow", True)
+    assert (replay.decision, replay.reason, replay.self_approved) == ("deny", "replay", False)
+
+
+# Finding 2: the periodic review report input, read from the persisted journal.
+
+def variant(policy, request, context, name, *, tenant="tenant-a", **changes):
+    """Another admissible request of the same shape: its own ids, bound hash and (optionally) tenant."""
+    request = replace(request, tenant_id=tenant, request_id=f"request-{name}", idempotency_key=f"key-{name}")
+    context = replace(context, tenant_id=tenant, request_id=f"request-{name}", **changes)
+    approval = replace(context.approvals[0], id=f"approval-{name}", tenant_id=tenant,
+                       payload_hash=policy.payload_hash(request, context.submitter.id))
+    return request, replace(context, approvals=(approval,))
+
+
+def admit_at(policy, path, request, context, when, tenant="tenant-a"):
+    guard = policy.ActionPolicyEnforcer(
+        lambda: policy.starter_table(stock_cap="100.00", invoice_cap="100.00", currency="SAR"),
+        lambda session, req: context, policy.ActionPolicyStore(path), clock=lambda: when)
+    return guard.authorize("trusted-session", request, session_tenant_id=tenant)
+
+
+def ids(report):
+    return [record.request_id for record in report]
+
+
+def test_self_approved_report_lists_only_this_tenants_allowed_self_approvals(policy, tmp_path):
+    request, context, path = build(policy, tmp_path)
+    assert admit_at(policy, path, *variant(policy, request, context, "self"), NOW) is not None
+    # A normal approval by a different owner, a denial and another tenant's self-approval.
+    normal_request, normal = variant(policy, request, context, "normal")
+    other = replace(normal.approvals[0].approver, id="owner-c")
+    normal = replace(normal, approvals=(replace(normal.approvals[0], approver=other),))
+    assert admit_at(policy, path, normal_request, normal, NOW) is not None
+    denied_request, denied = variant(policy, request, context, "denied")
+    denied = replace(denied, approvals=(replace(denied.approvals[0], step_up=False),))
+    assert admit_at(policy, path, denied_request, denied, NOW) is None
+    foreign = variant(policy, request, context, "foreign", tenant="tenant-b")
+    assert admit_at(policy, path, *foreign, NOW, tenant="tenant-b") is not None
+
+    store = policy.ActionPolicyStore(path)
+    window = (NOW - timedelta(days=1), NOW + timedelta(days=1))
+    report = store.self_approved_report("tenant-a", *window)
+    assert ids(report) == ["request-self"]
+    assert all(r.tenant_id == "tenant-a" and r.decision == "allow" and r.self_approved for r in report)
+    assert ids(store.self_approved_report("tenant-b", *window)) == ["request-foreign"]
+    assert store.self_approved_report("tenant-c", *window) == ()
+
+
+def test_self_approved_report_window_is_half_open_and_time_ordered(policy, tmp_path):
+    request, context, path = build(policy, tmp_path)
+    minutes = {"late": 20, "early": 0, "middle": 10}  # appended out of time order on purpose
+    for name, minute in minutes.items():
+        assert admit_at(policy, path, *variant(policy, request, context, name),
+                        NOW + timedelta(minutes=minute)) is not None
+    store = policy.ActionPolicyStore(path)
+    everything = store.self_approved_report("tenant-a", NOW, NOW + timedelta(hours=1))
+    assert ids(everything) == ["request-early", "request-middle", "request-late"]
+    assert ids(store.self_approved_report("tenant-a", NOW + timedelta(minutes=10), NOW + timedelta(minutes=20))) \
+        == ["request-middle"]
+    assert ids(store.self_approved_report("tenant-a", NOW - timedelta(minutes=5), NOW)) == []
+
+
+def test_self_approved_report_excludes_downgraded_records(policy, tmp_path):
+    request, context, path = build(policy, tmp_path)
+    assert admit_at(policy, path, *variant(policy, request, context, "ok"), NOW) is not None
+    # Same approval replayed on a new request: denied as a replay, flag cleared.
+    again_request, again = variant(policy, request, context, "again")
+    again = replace(again, approvals=(replace(again.approvals[0], id="approval-ok"),))
+    assert admit_at(policy, path, again_request, again, NOW) is None
+    store = policy.ActionPolicyStore(path)
+    assert ids(store.self_approved_report("tenant-a", NOW - timedelta(days=1), NOW + timedelta(days=1))) == ["request-ok"]
+
+
+@pytest.mark.parametrize("tenant, since, until", [
+    pytest.param("", NOW, NOW + timedelta(days=1), id="blank-tenant"),
+    pytest.param(None, NOW, NOW + timedelta(days=1), id="no-tenant"),
+    pytest.param(7, NOW, NOW + timedelta(days=1), id="non-text-tenant"),
+    pytest.param("tenant-a", datetime(2026, 11, 22), NOW + timedelta(days=1), id="naive-since"),
+    pytest.param("tenant-a", NOW, datetime(2026, 11, 23), id="naive-until"),
+    pytest.param("tenant-a", "2026-11-22", NOW + timedelta(days=1), id="text-since"),
+    pytest.param("tenant-a", NOW + timedelta(days=1), NOW, id="reversed-window"),
+    pytest.param("tenant-a", NOW, NOW, id="empty-window"),
+])
+def test_self_approved_report_rejects_invalid_arguments(policy, tmp_path, tenant, since, until):
+    request, context, path = build(policy, tmp_path)
+    assert admit_at(policy, path, *variant(policy, request, context, "ok"), NOW) is not None
+    with pytest.raises(ValueError):
+        policy.ActionPolicyStore(path).self_approved_report(tenant, since, until)
+
+
+def test_self_approved_report_exposes_no_payload(policy, tmp_path):
+    request, context, path = build(policy, tmp_path)
+    assert admit_at(policy, path, *variant(policy, request, context, "ok"), NOW) is not None
+    (record,) = policy.ActionPolicyStore(path).self_approved_report("tenant-a", NOW, NOW + timedelta(days=1))
+    assert type(record).__name__ == "ActionAudit" and not hasattr(record, "payload")
+    assert "customer-a" not in repr(record)

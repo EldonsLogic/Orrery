@@ -5,7 +5,7 @@ import { createFixturePort } from '../../chat/fixture';
 import { useSession } from '../shell/SessionProvider';
 import { ChatScreen } from './ChatScreen';
 
-/** The /chat route body. Fixture port until the AG-UI client (WEB-026) is wired. */
+/** The /chat route body. Fixture port: the AG-UI client (`createAguiPort`, WEB-026) is built but needs the session's access token (Q-270). */
 export function ChatView() {
   const { session } = useSession();
   const port = useMemo(() => createFixturePort(), []);

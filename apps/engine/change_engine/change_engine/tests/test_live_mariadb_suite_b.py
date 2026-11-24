@@ -230,6 +230,7 @@ class RealMariaDBDeploymentAdapter:
             doctype=doctype,
             field_def=field_def,
             existing_columns_desc=cols,
+            offline_simulator=True,  # pymysql harness without a Frappe bench: explicit offline mode
         )
 
     def persist_prepare_and_audit_intent(self, record: Dict[str, Any]) -> None:

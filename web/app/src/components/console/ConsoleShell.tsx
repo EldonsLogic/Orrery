@@ -31,6 +31,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const links = [
     can(roles, 'tenants.view') ? { href: '/console/', key: 'tenants' } : null,
     canSeeGrants(roles) ? { href: '/console/grants/', key: 'grants' } : null,
+    can(roles, 'factory.view') ? { href: '/console/components/', key: 'components' } : null,
     canSeeAudit(roles) ? { href: '/console/audit/', key: 'audit' } : null,
   ].filter((x): x is { href: string; key: string } => x !== null);
 

@@ -38,7 +38,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: headless
     restart: unless-stopped
     depends_on:
       mariadb:
@@ -57,7 +56,6 @@ services:
       - SITE_NAME=${SITE_NAME:-dev.localhost}
       # Shared secret the gateway presents on internal API calls (route guard, X-Internal-Token).
       - ENGINE_INTERNAL_TOKEN=${ENGINE_INTERNAL_TOKEN:?set ENGINE_INTERNAL_TOKEN (32+ chars) in the environment}
-      - ENGINE_INTERNAL_TOKEN_PREVIOUS=${ENGINE_INTERNAL_TOKEN_PREVIOUS:-}
     volumes:
       - ../../../apps/engine/change_engine:/home/frappe/frappe-bench/apps/change_engine:rw
       - ../../../components:/home/frappe/frappe-bench/components:ro
@@ -69,11 +67,12 @@ services:
       - sh
       - -c
       - >-
-        python3 -m change_engine.api.route_guard &&
         exec gunicorn --chdir="$$HOME/frappe-bench/sites" --bind=0.0.0.0:8000 --threads=4 --workers=2
         --worker-class=gthread --worker-tmp-dir=/dev/shm --timeout=120 change_engine.wsgi:application
-    # Editable install uses only the build backend already baked into the image.
-    networks: [data, engine_internal]
+    # `egress` is dev-only: the dev entrypoint pip-installs the mounted app at start and needs the
+    # package index. It is outbound only (no port is published). A hosted image bakes the app in and
+    # must drop `egress`, leaving the engine with internal networks only.
+    networks: [data, engine_internal, egress]
 
 volumes:
   mariadb_data:
@@ -86,3 +85,4 @@ networks:
     internal: true
   engine_internal:
     internal: true
+  egress: {}

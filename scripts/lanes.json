@@ -25,8 +25,7 @@
       "apps/engine/",
       "infra/",
       "components/",
-      "services/gateway/",
-    "services/provisioning/"
+      "services/gateway/"
     ]
   },
   "note": "Everything not listed is shared (docs/PLAN.md, docs/RULES.md, AGENTS.md, docs/decisions/, docs/log/, docs/security/, docs/compliance/, docs/legal/, scripts/, .github/). Shared paths are open to both founders but need the other's review. Plan rows follow these lanes and never block each other inside a gate (ADR-0025, scripts/check_plan_independence.py)."

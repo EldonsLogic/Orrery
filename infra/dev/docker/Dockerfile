@@ -1,7 +1,7 @@
 # Development engine image for the platform (ERP-001)
 # Extends official Frappe ERPNext v15 with pinned Frappe HRMS and change_engine
 
-FROM frappe/erpnext@sha256:6e016c0fc3aec5b32c14ff7c2ac97523cc864748c83ce75197779b8fe5a665a8 AS bench
+FROM frappe/erpnext@sha256:6e016c0fc3aec5b32c14ff7c2ac97523cc864748c83ce75197779b8fe5a665a8
 
 USER frappe
 
@@ -37,13 +37,3 @@ WORKDIR /home/frappe/frappe-bench
 
 ENTRYPOINT ["/home/frappe/entrypoint.sh"]
 CMD ["start"]
-
-# The headless runtime has no outbound network. Its declared build backend must
-# already be installed so mounting the app never needs package-index access.
-FROM bench AS headless
-RUN pip install --no-cache-dir --no-deps \
-    'https://files.pythonhosted.org/packages/f2/65/b6ba90634c984a4fcc02c7e3afe523fef500c4980fec67cc27536ee50acf/flit_core-3.12.0-py3-none-any.whl#sha256=e7a0304069ea895172e3c7bb703292e992c5d1555dd1233ab7b5621b5b69e62c'
-ENV ENGINE_OFFLINE_INSTALL=1
-
-# Preserve the existing developer image as the default build target.
-FROM bench AS development

@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test dependencies
-        run: pip install -r services/blueprint/requirements.txt -r evals/requirements.txt -r services/discovery/requirements.txt "pydantic>=2" "werkzeug==3.1.3"
+        run: pip install -r services/blueprint/requirements.txt -r evals/requirements.txt -r services/discovery/requirements.txt "pydantic>=2"
       - name: Blueprint validator, compiler and adapter tests
         run: python3 -m pytest services/blueprint/tests -q
       - name: Contract example validates
@@ -85,10 +85,6 @@ jobs:
         env:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_012_engine_adapter.py apps/engine/change_engine/change_engine/tests/test_erp_012_frappe_adapter.py -q
-      - name: Headless request guard tests (ERP-020)
-        if: ${{ !cancelled() }}
-        working-directory: apps/engine/change_engine
-        run: python3 -m unittest change_engine.tests.test_erp_020_route_guard change_engine.tests.test_erp_020_wsgi_guard -v
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         if: ${{ !cancelled() }}
         env:

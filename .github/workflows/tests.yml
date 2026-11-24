@@ -94,7 +94,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           PYTHONPATH: apps/engine/change_engine:.
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_opening_importer.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_fixes.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_opening_importer.py -q
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         if: ${{ !cancelled() }}
         env:

@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from typing import Callable, ContextManager, Protocol
 
 from .errors import ImportFailure
-from .validation import MASTER_FIELDS, OPENING_FIELDS, canonical
+from .validation import canonical
 
 
 class ImportBackend(Protocol):
@@ -22,15 +22,10 @@ class ImportBackend(Protocol):
     transaction serializes competing batches and rolls back ALL writes, including
     updates and the journal, on exceptions. A failed rollback must raise recovery.
     write must preserve Decimal values, use native permission checks in a runtime
-    implementation, and must not commit. Journal uniqueness is tenant/batch;
-    claim_opening must also serialize opening claims per tenant/company (including
-    any legacy postings). identity exposes mapped capabilities, not engine roles.
-    master reads and prior-value audit snapshots share that transaction.
+    implementation, and must not commit. Journal uniqueness is tenant/batch.
     """
 
     def identity(self) -> dict: ...
-    def master(self, tenant_id: str, company: str, entity: str, key: str) -> dict | None: ...
-    def claim_opening(self, tenant_id: str, company: str, batch_id: str) -> None: ...
     def transaction(self) -> ContextManager: ...
     def journal(self, tenant_id: str, batch_id: str) -> dict | None: ...
     def write(self, tenant_id: str, company: str, entity: str, key: str, row: dict) -> None: ...
@@ -60,36 +55,15 @@ class SQLiteImportBackend:
                 tenant_id TEXT NOT NULL, batch_id TEXT NOT NULL, company TEXT NOT NULL,
                 plan_hash TEXT NOT NULL, confirmed_by TEXT NOT NULL, status TEXT NOT NULL,
                 PRIMARY KEY (tenant_id, batch_id));
-            CREATE TABLE IF NOT EXISTS import_openings (
-                tenant_id TEXT NOT NULL, company TEXT NOT NULL, batch_id TEXT NOT NULL,
-                PRIMARY KEY (tenant_id, company));
-            CREATE TABLE IF NOT EXISTS import_master_changes (
-                tenant_id TEXT NOT NULL, batch_id TEXT NOT NULL, entity TEXT NOT NULL,
-                business_key TEXT NOT NULL, before_json TEXT NOT NULL, after_json TEXT NOT NULL,
-                PRIMARY KEY (tenant_id, batch_id, entity, business_key));
             CREATE TABLE IF NOT EXISTS import_failures (
                 seq INTEGER PRIMARY KEY, tenant_id TEXT NOT NULL, batch_id TEXT NOT NULL,
                 plan_hash TEXT NOT NULL, code TEXT NOT NULL);
         """)
-        # Older offline databases keep their journal; missing source evidence fails
-        # closed on retries. Existing opening records are checked by claim_opening.
-        if "source_digest" not in {r[1] for r in self.conn.execute("PRAGMA table_info(import_batches)")}:
-            self.conn.execute("ALTER TABLE import_batches ADD COLUMN source_digest TEXT")
 
     def identity(self) -> dict:
         """Resolve the trusted session; callback errors never grant permissions."""
         try:
-            session = self._session() if self._session else {}
-            if not isinstance(session, dict):
-                return {}
-            identity = dict(session)
-            # Offline compatibility mapping only. Live mapping needs Q-290 /
-            # ADR-0039 verification; no role/capability is accepted from payloads.
-            roles = identity.get("roles", ())
-            if "capabilities" not in identity:
-                identity["capabilities"] = (["opening_import"] if isinstance(roles, (list, tuple, set, frozenset))
-                                             and {"Accounts Manager", "System Manager"}.intersection(roles) else [])
-            return identity
+            return self._session() if self._session else {}
         except Exception:
             raise ImportFailure("IMP-AUTH") from None
 
@@ -112,41 +86,7 @@ class SQLiteImportBackend:
         """Read the committed identity (caller holds transaction during apply)."""
         row = self.conn.execute("SELECT * FROM import_batches WHERE tenant_id=? AND batch_id=?",
                                 (tenant_id, batch_id)).fetchone()
-        if not row:
-            return None
-        result = dict(row)
-        result["master_changes"] = [{"entity": r["entity"], "key": r["business_key"],
-                                     "before": json.loads(r["before_json"]), "after": json.loads(r["after_json"])}
-                                    for r in self.conn.execute("""SELECT * FROM import_master_changes
-                                        WHERE tenant_id=? AND batch_id=? ORDER BY entity,business_key""", (tenant_id, batch_id))]
-        return result
-
-    def master(self, tenant_id: str, company: str, entity: str, key: str) -> dict | None:
-        """Read one exact master key, scoped to the authenticated company."""
-        if entity not in MASTER_FIELDS:
-            raise ImportFailure("IMP-REFERENCE")
-        with self._lock:
-            row = self.conn.execute("""SELECT row_json FROM import_records
-                WHERE tenant_id=? AND company=? AND entity=? AND business_key=?""",
-                                    (tenant_id, company, entity, key)).fetchone()
-        return json.loads(row[0]) if row else None
-
-    def claim_opening(self, tenant_id: str, company: str, batch_id: str) -> None:
-        """Claim once per company inside the write transaction, including old DBs.
-
-        No supersede/reversal path is implemented; a later opening fails closed.
-        Master-only imports do not claim an opening.
-        """
-        placeholders = ",".join("?" for _ in OPENING_FIELDS)
-        legacy = self.conn.execute(f"""SELECT 1 FROM import_records
-            WHERE tenant_id=? AND company=? AND entity IN ({placeholders}) LIMIT 1""",
-                                   (tenant_id, company, *OPENING_FIELDS)).fetchone()
-        if legacy:
-            raise ImportFailure("IMP-OPENING-CONFLICT")
-        try:
-            self.conn.execute("INSERT INTO import_openings VALUES (?,?,?)", (tenant_id, company, batch_id))
-        except sqlite3.IntegrityError:
-            raise ImportFailure("IMP-OPENING-CONFLICT") from None
+        return dict(row) if row else None
 
     def write(self, tenant_id: str, company: str, entity: str, key: str, row: dict) -> None:
         """Upsert a master or batch-scoped opening record without committing."""
@@ -156,23 +96,14 @@ class SQLiteImportBackend:
 
     def commit_batch(self, plan: dict, plan_hash: str, user_id: str) -> None:
         """Journal confirmation in the SAME transaction as the business writes."""
-        self.conn.execute("""INSERT INTO import_batches
-            (tenant_id,batch_id,company,plan_hash,confirmed_by,status,source_digest) VALUES (?, ?, ?, ?, ?, 'applied', ?)""",
-                          (plan["tenant_id"], plan["batch_id"], plan["company"], plan_hash, user_id, plan["source_digest"]))
-        for change in plan["master_changes"]:
-            self.conn.execute("INSERT INTO import_master_changes VALUES (?,?,?,?,?,?)",
-                              (plan["tenant_id"], plan["batch_id"], change["entity"], change["key"],
-                               canonical(change["before"]), canonical(change["after"])))
+        self.conn.execute("INSERT INTO import_batches VALUES (?, ?, ?, ?, ?, 'applied')",
+                          (plan["tenant_id"], plan["batch_id"], plan["company"], plan_hash, user_id))
 
     def record_failure(self, tenant_id: str, batch_id: str, plan_hash: str, code: str) -> None:
         """Persist a sanitized failed-attempt record after successful rollback."""
-        with self.transaction():
+        with self._lock:
             self.conn.execute("INSERT INTO import_failures(tenant_id,batch_id,plan_hash,code) VALUES(?,?,?,?)",
                               (tenant_id, batch_id, plan_hash, code))
-            # Bounded ring per tenant; validation/auth refusals never reach here.
-            self.conn.execute("""DELETE FROM import_failures WHERE tenant_id=? AND seq NOT IN
-                (SELECT seq FROM import_failures WHERE tenant_id=? ORDER BY seq DESC LIMIT 256)""",
-                              (tenant_id, tenant_id))
 
     def records(self, tenant_id: str, company: str) -> list:
         """Internal, tenant-filtered probe for the offline conformance harness."""

@@ -11,8 +11,6 @@ MESSAGES = {
     "IMP-AUTH": ("An authorised human session is required for this company.", "تلزم جلسة بشرية مخولة لهذه الشركة."),
     "IMP-CONFIRM": ("Confirm the exact preview using your authenticated identity.", "أكد المعاينة الدقيقة باستخدام هويتك الموثقة."),
     "IMP-CONFLICT": ("Batch identity already belongs to a different plan.", "هوية الدفعة مرتبطة بخطة مختلفة بالفعل."),
-    "IMP-OPENING-CONFLICT": ("Opening balances already exist for this company.", "توجد أرصدة افتتاحية لهذه الشركة بالفعل."),
-    "IMP-REFERENCE": ("Unknown or inconsistent master reference.", "مرجع البيانات الأساسية غير معروف أو غير متسق."),
     "IMP-WRITE": ("Import failed; its transaction was rolled back.", "فشل الاستيراد وتم التراجع عن معاملته."),
     "IMP-RECOVERY": ("Import outcome requires operator recovery before retry.", "تتطلب نتيجة الاستيراد معالجة المشغل قبل إعادة المحاولة."),
 }

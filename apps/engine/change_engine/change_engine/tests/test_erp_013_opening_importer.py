@@ -27,8 +27,6 @@ def batch(datasets=None, **changes):
     """Build a source-bound batch using the upstream prevalidation contract."""
     datasets = datasets if datasets is not None else {
         "Customer": [{"customer_code": "C1", "customer_name": "Synthetic buyer"}],
-        "Account": [{"account_number": "1100", "account_type": "Receivable"},
-                    {"account_number": "3000", "account_type": "Other"}],
         "TrialBalance": [
             {"account": "1100", "account_type": "Receivable", "debit": "0.1", "credit": "0"},
             {"account": "1100", "account_type": "Receivable", "debit": "0.2", "credit": "0"},
@@ -107,11 +105,7 @@ def test_subledger_and_stock_reconciliation(backend, kind):
         "item_code": "KEY", "warehouse": "W1", "qty": "1", "valuation_rate": "1.005"}
     source = batch({"TrialBalance": [dict(account="control", account_type=control, **{side: amount, other: "0"}),
                                     dict(account="offset", account_type="Other", **{side: "0", other: amount})],
-                    kind: [line],
-                    "Account": [{"account_number": "control", "account_type": control},
-                                {"account_number": "offset", "account_type": "Other"}],
-                    "Customer": [{"customer_code": "KEY"}], "Supplier": [{"supplier_code": "KEY"}],
-                    "Item": [{"item_code": "KEY"}], "Warehouse": [{"warehouse_name": "W1"}]})
+                    kind: [line]})
     importer = OpeningImporter(backend)
     assert importer.preview(source)["reconciliations"][kind.lower()] is True
     apply(importer, source)
@@ -173,7 +167,7 @@ def test_backend_authentication_and_tenant_scope(session):
     with SQLiteImportBackend(session=lambda: session) as store:
         importer, source = OpeningImporter(store), batch()
         with pytest.raises(ImportFailure, match="IMP-AUTH"):
-            importer.apply(source, confirmed_by="reviewer", plan_hash="0" * 64)
+            importer.apply(source, confirmed_by="reviewer", plan_hash=importer.preview(source)["plan_hash"])
         assert store.records("tenant-a", "Synthetic Trading") == []
 
 
@@ -184,9 +178,8 @@ def test_confirmation_hash_binding_conflict_and_master_upsert(backend):
                          {"confirmed_by": "reviewer", "plan_hash": "0" * 64}):
         with pytest.raises(ImportFailure, match="IMP-CONFIRM"):
             importer.apply(source, **confirmation)
-    for key, val in (("tenant_id", "tenant-b"), ("company", "Other")):
-        refuses(importer, dict(source, **{key: val}), "IMP-AUTH")
-    for key, val in (("batch_id", "other"), ("posting_date", "2026-01-02"), ("currency_precision", 3)):
+    for key, val in (("tenant_id", "tenant-b"), ("company", "Other"), ("batch_id", "other"),
+                     ("posting_date", "2026-01-02"), ("currency_precision", 3)):
         assert importer.preview(dict(source, **{key: val}))["plan_hash"] != preview["plan_hash"]
     apply(importer, source)
     mutated = batch({"Customer": [{"customer_code": "C1", "customer_name": "Two"}]})
@@ -231,7 +224,7 @@ def test_durable_journal_restart_and_competing_connections(tmp_path):
         apply(OpeningImporter(store), batch())
     with SQLiteImportBackend(path, session=session) as store:
         assert apply(OpeningImporter(store), batch())["status"] == "already_applied"
-    source = batch({"Customer": [{"customer_code": "C2", "customer_name": "Different buyer"}]}, batch_id="competing")
+    source = batch(batch_id="competing")
 
     def competing(_):
         with SQLiteImportBackend(path, session=session) as store:
@@ -357,10 +350,12 @@ def test_auth_lookup_failure_and_company_scope_fail_closed(backend):
         raise RuntimeError("private session failure")
 
     backend._session = broken_session
-    refuses(OpeningImporter(backend), batch(), "IMP-AUTH")
+    with pytest.raises(ImportFailure, match="IMP-AUTH"):
+        apply(OpeningImporter(backend), batch())
     backend._session = lambda: {"user_id": "reviewer", "human": True, "tenant_id": "tenant-a",
                                 "companies": ["Different"], "roles": ["System Manager"]}
-    refuses(OpeningImporter(backend), batch(), "IMP-AUTH")
+    with pytest.raises(ImportFailure, match="IMP-AUTH"):
+        apply(OpeningImporter(backend), batch())
 
 
 def test_multicurrency_and_inconsistent_control_classification_rejected(backend):
@@ -369,28 +364,21 @@ def test_multicurrency_and_inconsistent_control_classification_rejected(backend)
     refuses(OpeningImporter(backend), source, "IMP-SCHEMA")
     source = batch()
     source["datasets"]["TrialBalance"][1]["account_type"] = "Other"
-    refuses(OpeningImporter(backend), source, "IMP-REFERENCE")
+    refuses(OpeningImporter(backend), source, "IMP-SCHEMA")
 
 
 def test_large_exact_arithmetic_and_rounding_at_configured_precision(backend):
     source = batch({"TrialBalance": [
         {"account": "1", "account_type": "Other", "debit": "12345678901234567890.123456789", "credit": "0"},
         {"account": "2", "account_type": "Other", "debit": "0", "credit": "12345678901234567890.123456789"}],
-        "Stock": [{"item_code": "I1", "warehouse": "W1", "qty": "3", "valuation_rate": "0.0005"}],
-        "Account": [{"account_number": "1", "account_type": "Other"}, {"account_number": "2", "account_type": "Other"},
-                    {"account_number": "stock", "account_type": "Stock"}, {"account_number": "offset", "account_type": "Other"}],
-        "Item": [{"item_code": "I1"}], "Warehouse": [{"warehouse_name": "W1"}]}, currency_precision=3)
-    source["datasets"]["TrialBalance"] += [
-        {"account": "stock", "account_type": "Stock", "debit": "0.002", "credit": "0"},
-        {"account": "offset", "account_type": "Other", "debit": "0", "credit": "0.002"}]
-    source["prevalidation"] = report([r for rows in source["datasets"].values() for r in rows])
+        "Stock": [{"item_code": "I1", "warehouse": "W1", "qty": "3", "valuation_rate": "0.0005"}]}, currency_precision=3)
     with localcontext() as ctx:
         ctx.prec = 2
         ctx.Emax = 2
         ctx.traps[Inexact] = True
         result = OpeningImporter(backend).preview(source)
     assert result["ok"]
-    assert result["totals"]["debit"] == "12345678901234567890.125456789"
+    assert result["totals"]["debit"] == "12345678901234567890.123456789"
     assert result["totals"]["stock"] == "0.002"
 
 

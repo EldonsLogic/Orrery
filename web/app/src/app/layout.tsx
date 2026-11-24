@@ -6,6 +6,7 @@ import { Providers } from '../components/Providers';
 import { defaultLocale, directionOf, messages } from '../i18n';
 import { themeColorsFromTokens } from '../pwa/manifest';
 import '../styles/tokens.generated.css';
+import '../styles/tokens.proposed.generated.css';
 import '../styles/mobile.css';
 
 export const metadata: Metadata = {

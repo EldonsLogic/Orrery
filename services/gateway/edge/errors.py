@@ -19,7 +19,6 @@ ERROR_CODES: dict[str, tuple[int, bool]] = {
     "rate_limited": (429, True),
     "engine_error": (502, False),
     "internal_error": (500, False),
-    "audit_unavailable": (503, True),  # local edge availability error; contract follow-up in Q-300
 }
 
 # Fixed table of engine exception types we recognise. Anything else falls back to the HTTP status.

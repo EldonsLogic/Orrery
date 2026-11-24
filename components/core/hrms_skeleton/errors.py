@@ -49,8 +49,6 @@ ERROR_CODES = frozenset(
         "decision_invalid",
         "self_approval_forbidden",
         "not_designated_approver",
-        "applicant_identity_unresolved",
-        "identity_binding_protected",
         "leave_application_not_open",
         "leave_application_already_decided",
         "operation_failed",

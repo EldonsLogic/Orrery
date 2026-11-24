@@ -24,41 +24,6 @@ _DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", re.ASCII)
 _MIN_YEAR, _MAX_YEAR = 1900, 2100
 
 
-def decimal_places(number: Decimal) -> int:
-    """Decimal places actually needed, read from the digits and exponent (no context rounding)."""
-    _, digits, exponent = number.as_tuple()
-    if not isinstance(exponent, int) or exponent >= 0 or not any(digits):
-        return 0
-    trailing = 0
-    for digit in reversed(digits):
-        if digit != 0 or trailing >= -exponent:
-            break
-        trailing += 1
-    return -exponent - trailing
-
-
-def canonical_decimal(number: Decimal) -> str:
-    """Exact plain-notation string without trailing fraction zeros, ignoring the ambient context.
-
-    `Decimal.normalize()` and `format()` round to the current context precision, which would
-    silently change a stored figure, so the string is built from the sign, digits and exponent.
-    """
-    sign, digits, exponent = number.as_tuple()
-    if not isinstance(exponent, int):
-        raise ValueError("not a finite decimal")
-    if not any(digits):
-        return "0"
-    text = "".join(map(str, digits))
-    if exponent >= 0:
-        text += "0" * exponent
-    else:
-        text = text.rjust(-exponent + 1, "0")
-        whole, fraction = text[:exponent], text[exponent:]
-        fraction = fraction.rstrip("0")
-        text = f"{whole}.{fraction}" if fraction else whole
-    return f"-{text}" if sign else text
-
-
 def parse_decimal(value: Any, rule: Rule, field: str) -> Decimal:
     """Return a finite, in-range `Decimal` with at most `rule.scale` decimal places."""
     if isinstance(value, bool) or isinstance(value, float):
@@ -81,7 +46,7 @@ def parse_decimal(value: Any, rule: Rule, field: str) -> Decimal:
         rule.maximum is not None and number > rule.maximum
     ):
         raise HrmsError("decimal_out_of_range", field=field)
-    if decimal_places(number) > rule.scale:
+    if max(0, -number.normalize().as_tuple().exponent) > rule.scale:
         raise HrmsError("decimal_precision_exceeded", field=field)
     return number
 
@@ -127,7 +92,7 @@ def normalise_value(value: Any, rule: Rule, field: str) -> Any:
             raise HrmsError("invalid_boolean", field=field)
         return value
     if rule.kind == "decimal":
-        return canonical_decimal(parse_decimal(value, rule, field))
+        return format(parse_decimal(value, rule, field).normalize(), "f")
     if rule.kind == "enum":
         if not isinstance(value, str) or value not in rule.choices:
             raise HrmsError("invalid_choice", field=field)

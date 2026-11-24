@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import copy
-import threading
-from contextlib import contextmanager
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 
 class StaticSession:
@@ -33,10 +31,6 @@ class StaticSession:
     def company_permitted(self, company: str) -> bool:
         return company in self._companies
 
-    def revoke_company(self, company: str) -> None:
-        """Simulate the company being withdrawn from this user mid-session."""
-        self._companies = self._companies - {company}
-
     def has_permission(self, doctype: str, ptype: str) -> bool:
         if self._permissions is None:
             return True
@@ -54,50 +48,22 @@ class InMemoryStore:
         self.tenant = tenant
         self.rows: dict[str, dict[str, dict[str, Any]]] = {}
         self.writes = 0
-        # Protected store for captured applicant principals, kept apart from `rows` so no payload
-        # or ordinary update can reach it (the engine adapter uses a protected custom field).
-        self.applicant_identities: dict[tuple[str, str], Any] = {}
-        self._mutex = threading.RLock()  # guards `rows`; `key_lock` serialises one business key
-        self._key_locks: dict[tuple[str, ...], threading.Lock] = {}
-
-    @contextmanager
-    def key_lock(self, doctype: str, scope: Sequence[str]) -> Iterator[None]:
-        with self._mutex:
-            lock = self._key_locks.setdefault((doctype, *scope), threading.Lock())
-        with lock:
-            yield
 
     def find(self, doctype: str, filters: Mapping[str, Any]) -> list[dict[str, Any]]:
-        with self._mutex:
-            rows = list(self.rows.get(doctype, {}).values())
-            hits = [r for r in rows if all(r.get(k) == v for k, v in filters.items())]
-            return [copy.deepcopy(r) for r in hits[:2]]
-
-    def find_current(self, doctype: str, filters: Mapping[str, Any]) -> list[dict[str, Any]]:
-        return self.find(doctype, filters)  # one consistent copy: every read is already current
-
-    def record_applicant_identity(self, doctype: str, name: str, principal: str) -> None:
-        with self._mutex:
-            if self.applicant_identities.get((doctype, name)) not in (None, ""):
-                raise ValueError("applicant identity already recorded")
-            self.applicant_identities[(doctype, name)] = principal
-
-    def get_applicant_identity(self, doctype: str, name: str) -> Any:
-        with self._mutex:
-            return self.applicant_identities.get((doctype, name))
+        rows = self.rows.get(doctype, {}).values()
+        hits = [r for r in rows if all(r.get(k) == v for k, v in filters.items())]
+        return [copy.deepcopy(r) for r in hits[:2]]
 
     def insert(self, doctype: str, values: Mapping[str, Any]) -> dict[str, Any]:
-        with self._mutex:
-            table = self.rows.setdefault(doctype, {})
-            name = str(values.get("name") or f"{doctype[:3].upper()}-{len(table) + 1:05d}")
-            record = {**copy.deepcopy(dict(values)), "name": name}
-            table[name] = record
-            self.writes += 1
-            return copy.deepcopy(record)
+        table = self.rows.setdefault(doctype, {})
+        name = str(values.get("name") or f"{doctype[:3].upper()}-{len(table) + 1:05d}")
+        record = {**copy.deepcopy(dict(values)), "name": name}
+        table[name] = record
+        self.writes += 1
+        return copy.deepcopy(record)
 
     def update(self, doctype: str, name: str, values: Mapping[str, Any]) -> dict[str, Any]:
-        with self._mutex:
-            record = self.rows[doctype][name]
-            record.update(copy.deepcopy(dict(values)))
-            self.writes += 1
-            return copy.deepcopy(record)
+        record = self.rows[doctype][name]
+        record.update(copy.deepcopy(dict(values)))
+        self.writes += 1
+        return copy.deepcopy(record)

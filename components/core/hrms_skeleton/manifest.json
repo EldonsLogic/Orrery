@@ -42,7 +42,6 @@
     { "id": "test_manifest_and_scope", "kind": "unit", "path": "tests/test_manifest_and_scope.py", "blocking": true },
     { "id": "test_validation", "kind": "unit", "path": "tests/test_validation.py", "blocking": true },
     { "id": "test_service", "kind": "security", "path": "tests/test_service.py", "blocking": true },
-    { "id": "test_service_hardening", "kind": "security", "path": "tests/test_service_hardening.py", "blocking": true },
     { "id": "test_frappe_backend", "kind": "integration", "path": "tests/test_frappe_backend.py", "blocking": true },
     { "id": "test_strings", "kind": "arabic_text", "path": "tests/test_strings.py", "blocking": true }
   ],

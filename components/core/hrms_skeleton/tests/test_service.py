@@ -10,8 +10,7 @@ from components.core.hrms_skeleton import HrmsError, HrmsService
 from components.core.hrms_skeleton.memory import InMemoryStore, StaticSession
 
 T, CO = "tenant-a", "Acme Trading"
-EMP = {"employee_number": "E-100", "first_name": "Lina", "gender": "Female", "date_of_birth": "1990-04-02",
-       "date_of_joining": "2026-01-05", "user_id": "lina@example.invalid"}
+EMP = {"employee_number": "E-100", "first_name": "Lina", "date_of_joining": "2026-01-05", "user_id": "lina@example.invalid"}
 APPLICATION = {"employee": "EMP-00001", "leave_type": "Annual", "from_date": "2026-03-01", "to_date": "2026-03-05"}
 
 
@@ -274,7 +273,7 @@ class LeaveApplicationTests(unittest.TestCase):
         self.assertEqual(self.decide("approve").action, "approved")
         self.assertEqual(self.decide("approve").action, "unchanged")
         refused(self, "leave_application_already_decided", self.decide, "reject")
-        self.hr.upsert("Leave Application", {**APPLICATION, "to_date": "2026-03-06", "leave_approver": "boss@example.invalid"})
+        self.hr.upsert("Leave Application", {**APPLICATION, "to_date": "2026-03-06"})
         key = {**APPLICATION, "to_date": "2026-03-06"}
         svc, _, _ = make(roles=("Leave Approver",), user="boss@example.invalid", store=self.store)
         self.assertEqual(svc.decide_leave_application(key, "reject").action, "rejected")

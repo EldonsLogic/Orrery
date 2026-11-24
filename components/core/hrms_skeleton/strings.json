@@ -123,14 +123,6 @@
       "en": "You are not the approver assigned to this request.",
       "ar": "لست المعتمِد المعيَّن لهذا الطلب."
     },
-    "applicant_identity_unresolved": {
-      "en": "The applicant's sign-in identity is missing or has changed, so this request cannot be decided.",
-      "ar": "هوية دخول مقدّم الطلب غير متوفرة أو تغيّرت، لذلك لا يمكن البتّ في هذا الطلب."
-    },
-    "identity_binding_protected": {
-      "en": "An employee's linked sign-in account cannot be changed here, and you cannot link your own account.",
-      "ar": "لا يمكن تغيير حساب الدخول المرتبط بالموظف من هنا، ولا يمكنك ربط حسابك الخاص."
-    },
     "leave_application_not_open": {
       "en": "This leave request is no longer open for changes.",
       "ar": "طلب الإجازة لم يعد مفتوحًا للتعديل."

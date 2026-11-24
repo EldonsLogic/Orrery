@@ -103,14 +103,12 @@ class TextAndChoiceTests(unittest.TestCase):
 class RecordTests(unittest.TestCase):
     def test_employee_company_is_filled_in(self):
         rec = normalise_record(SPECS["Employee"], {"employee_number": "E1", "first_name": "Lina",
-                                                    "gender": "Female", "date_of_birth": "1990-04-02",
                                                     "date_of_joining": "2026-01-05"}, CO)
         self.assertEqual(rec["company"], CO)
 
     def test_company_mismatch_and_unknown_company_field(self):
         spec = SPECS["Employee"]
-        base = {"employee_number": "E1", "first_name": "Lina", "gender": "Female", "date_of_birth": "1990-04-02",
-                "date_of_joining": "2026-01-05"}
+        base = {"employee_number": "E1", "first_name": "Lina", "date_of_joining": "2026-01-05"}
         self.assertEqual(code(normalise_record, spec, {**base, "company": "Other Co"}, CO), "company_mismatch")
         self.assertEqual(normalise_record(spec, {**base, "company": CO}, CO)["company"], CO)
         # A doctype with no company field refuses one outright.

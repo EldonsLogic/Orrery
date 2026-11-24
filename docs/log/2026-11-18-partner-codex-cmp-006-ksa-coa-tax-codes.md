@@ -17,7 +17,7 @@ Implement CMP-006 for Saudi trading and distribution SMEs. Deliver a bilingual e
 
 - `apps/engine/compliance/ksa/` holds the native chart, number-based company defaults and VAT treatments.
 - `apps/engine/change_engine/change_engine/tests/test_cmp_006_ksa_accounts.py` checks the JSON, tree, account types, bilingual labels, defaults and VAT links.
-- [Design and sources](../compliance/ksa-coa-and-tax-codes.md) and [open questions](../open-questions.md) record Q-8 and Q-262. PLAN claims CMP-006 for the partner.
+- [Design and sources](../compliance/ksa-coa-and-tax-codes.md) and [open questions](../open-questions.md) record Q-8 and Q-168. PLAN claims CMP-006 for the partner.
 
 ## Verification
 
@@ -25,7 +25,6 @@ Implement CMP-006 for Saudi trading and distribution SMEs. Deliver a bilingual e
 - Pinned engine `v15.124.5` on a fresh synthetic site imported 58 accounts and saved 20 company defaults and four tax templates. Native GL validation accepted account `2170` for an opening entry. The smoke check substituted the chart lookup and called the native Company creation path. The initial bench attempt needed the `Transit` warehouse type from normal site setup. The smoke check seeded it in the rolled-back transaction.
 - The full engine suite with a disposable MariaDB 11.4 database passed 184 tests and 61 subtests. One PDF test skipped for lack of a rendering backend. A prior attempt without the disposable database failed to connect for five live tests.
 - Docs, plan independence, repository hygiene and secret scan passed.
-- Review reconciliation (2026-11-18): added `"status": "draft"`, `"version": "0.1.0"`, and `"review": "unreviewed"` across all three JSON files; replaced paraphrased Z/E reason strings with ZATCA XML Implementation Standard §11.2.4 wording verbatim; documented fail-closed loader behavior, category splitting on `2210` for `CMP-010`, unlinked `1170`/`2150` advances, deferred zakat/EOSB/GOSI/salaries/withholding under `Q-8` (assigned owner `partner`), renumbered `Q-168` -> `Q-262`, and wired `test_cmp_006_ksa_accounts.py` into `.github/workflows/tests.yml`.
 
 ## Decisions
 
@@ -38,4 +37,4 @@ Unknown.
 
 ## Next step
 
-Record line-by-line human review by the founder who did not prompt the change, independent security and cross-model review, and an Arabic-speaking accountant's review. Resolve the chart adoption decision in Q-8 and invoice and posting questions in Q-262 before enabling the data for tenants.
+Record line-by-line human review by the founder who did not prompt the change, independent security and cross-model review, and an Arabic-speaking accountant's review. Resolve the chart adoption decision in Q-8 and invoice and posting questions in Q-168 before enabling the data for tenants.

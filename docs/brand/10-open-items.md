@@ -36,4 +36,4 @@ Each needs its owner's plan row.
 - Destructive button in dark mode: white on #FF6B81 is about 2.7:1. PROPOSED fix in `11-v1.1-additions.md` section 4.
 
 ## v1.1 and tenant theming
-Everything in `11-v1.1-additions.md`, `12-tenant-theming.md` and `tokens/tokens.proposed.*` stays PROPOSED until the founders accept each section.
+Everything in `11-v1.1-additions.md` and `12-tenant-theming.md` stays PROPOSED until the founders accept each section. The token files `tokens/tokens.proposed.*` were ACCEPTED as the active layer on 2026-11-22 (Q-70). The Quadrant-era v1.1 status table is retired with the Quadrant mark (ADR-0066); its open founder and designer items for spacing, states, charts and tenant limits remain in sections 1 to 12 of `11-v1.1-additions.md`.

@@ -272,7 +272,7 @@ class TestOwnEntityGrantsAgreeAcrossBackends(unittest.TestCase):
         steps = [
             _entity(1, "widget"),
             _role(2, "r_wid", "widget"),        # own entity of this Blueprint: allowed
-            _role(3, "r_sup", "supplier"),      # unmapped built-in, not created here: refused
+            _role(3, "r_sup", "payment_entry"), # unmapped built-in, not created here: refused (supplier is mapped since BPL-032)
             _role(4, "r_cust", "customer"),     # reviewed mapped entity: allowed
         ]
         seen = {}

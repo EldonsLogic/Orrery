@@ -284,6 +284,10 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_003_tenant_provisioning.py -v
 
+      - name: Live isolation suite decision helpers, offline (SEC-004)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_sec_004_live_helpers.py -v
+
       - name: Bilingual tax invoice print format tests (ERP-007)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
@@ -359,6 +363,8 @@ jobs:
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_4.py
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_5.py
           apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_6.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_7.py
+          apps/engine/change_engine/change_engine/tests/test_bpl_032_purchasing_mapping.py
 
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

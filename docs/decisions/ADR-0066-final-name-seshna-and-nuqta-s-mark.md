@@ -34,3 +34,6 @@ Counsel's trademark clearance (LEG-008) has not happened, and the domain is not 
 ## Supersedes
 - ADR-0001: the working-name rule ("say 'the platform' in new text") and the wait for clearance before naming the product. Its rule against "ERPNext" or "Frappe" in a product name stays.
 - ADR-0011, in part: the placeholder logo and the Quadrant mark, and Alexandria as the heading and wordmark typeface in brand guidelines v1. The palette and the rest of the interim design system stay.
+
+## Addendum 2026-11-24 (source for the Cairo licence)
+Added after the partner's review of the GOV-069 PR; the decision above is unchanged. Cairo is licensed under the SIL Open Font License 1.1, "Copyright 2009 The Cairo Project Authors": `ofl/cairo/OFL.txt` in google/fonts at commit a2c83daed9bc723922de8d0a9512990bd3d91df4 (https://github.com/google/fonts/blob/a2c83daed9bc723922de8d0a9512990bd3d91df4/ofl/cairo/OFL.txt, accessed 2026-11-24). Cairo is not yet in the licence register; BRD-014 registers it (Readex Pro is already registered).

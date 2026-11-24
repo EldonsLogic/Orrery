@@ -265,6 +265,43 @@ def min_pointer_segments(kind: str) -> int:
     return 2
 
 
+# SEC-022 (ADR-0051 items 3, 7 and 8): `entity.*` steps address the entity itself, `/entities/<id>`, exactly. A
+# set_property step names only a Blueprint property of its element (`contracts/blueprint.schema.json`, where each of
+# these has `additionalProperties: false`), never the identity (`id`: renaming a field onto another's id defeats the
+# checks keyed on it) nor an entity's element lists (`fields`, `relations`: only the `field.*` and `relation.*` kinds
+# change those, each with its own checks). An allow list, so a case or encoding variant (`/Fields`, `/%66ields`) is
+# refused too. `tests/test_sec_022_review_followups_7.py` pins these sets to the schema.
+SETTABLE_PROPERTIES = {
+    "entity.set_property": frozenset({"labels", "pluralLabels", "kind", "numbering", "workflow", "components", "provenance"}),
+    "field.set_property": frozenset({
+        "type", "required", "unique", "maxLength", "precision", "min", "max", "options", "target", "computed",
+        "readOnly", "labels", "default", "visibleToRoles",
+    }),
+    # `options` on a relation is not a Blueprint property: it is the engine link target, which `frappe_backend` maps and
+    # the `/options` target checks in `_judge` guard (SEC-022 follow-up 4), so it stays settable.
+    "relation.set_property": frozenset({"labels", "target", "kind", "cardinality", "onDelete", "required", "options"}),
+}
+# The kinds that carry `params.property` (contract: a pointer below the subject, pattern `^(/[^/]+)+$`). `_segs` drops
+# any text before the first `/`, so `_judge` needs a well-formed pointer itself: schema validation can be skipped.
+PROPERTY_KINDS = frozenset({
+    "settings.set", "component.configure", "entity.set_property", "field.set_property", "relation.set_property",
+})
+# Element properties with their own checks keyed on the exact spelling (`/type` gated and recorded, `/options` and
+# `/target` target checks): any other spelling that reaches them (`/type/x`, `/options/0`) is refused.
+EXACT_ELEMENT_PROPERTIES = {
+    "field.set_property": frozenset({"type", "options", "target"}),
+    "relation.set_property": frozenset({"options", "target"}),
+}
+
+
+def _property_head(prop: Any) -> str | None:
+    """The first decoded segment of a step's `property` pointer, or None when it is not a well-formed pointer."""
+    if not isinstance(prop, str) or not prop.startswith("/"):
+        return None
+    parts = _segs(prop)
+    return parts[0] if parts and "" not in parts else None
+
+
 def _cfg_segs(pointer: str) -> list[str]:
     segs = _segs(pointer)
     return ["settings"] + segs if segs and segs[0] in SETTINGS else segs
@@ -1047,7 +1084,7 @@ class ChangeEngineAdapter:
             return "unsupported", "unsupported_step_kind", ddl
         if kind in ("field.add", "relation.add", "entity.add") and ddl == "none":
             ddl = "additive"
-        if kind.endswith("set_property") and params.get("property") in SEMANTIC_PROPS:
+        if kind.endswith("set_property") and isinstance(params.get("property"), str) and params["property"] in SEMANTIC_PROPS:
             ddl = "semantic"
         if has_prohibited_expression(params):
             return "blocked", "prohibited_expression", ddl
@@ -1061,8 +1098,20 @@ class ChangeEngineAdapter:
             or segs[0] not in KIND_ROOTS.get(kind, frozenset())
             # field.* and relation.* keep their exact-length check below (definition_conflict).
             or (len(segs) < min_pointer_segments(kind) and not kind.startswith(("field.", "relation.")))
+            # entity.* addresses exactly /entities/<id>: a deeper pointer reaches a field, relation or option.
+            or (kind.startswith("entity.") and len(segs) != 2)
         ):
             return "blocked", "unsupported_value_type", ddl
+        if kind in PROPERTY_KINDS:
+            prop = params.get("property")
+            head = _property_head(prop)
+            if (
+                head is None
+                or (kind in SETTABLE_PROPERTIES and head not in SETTABLE_PROPERTIES[kind])
+                # A field's type changes only as exactly `/type` (gated, and recorded in the `/type` history).
+                or (head in EXACT_ELEMENT_PROPERTIES.get(kind, ()) and prop != "/" + head)
+            ):
+                return "blocked", "unsupported_value_type", ddl
         if segs[:1] == ["entities"] and len(segs) > 1:
             ids: list[Any] = [segs[1]]
             subject = step["subject"]

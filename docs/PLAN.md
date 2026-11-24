@@ -76,7 +76,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-006 | Brand asset upload enforcement in storage: PNG/JPG/SVG only, size limits, SVG sanitiser, malware scan, per-tenant storage (rules from SEC-018) | Security | G2 | PLT-017,SEC-018 | partner | todo |
 | SEC-007 | Dependency and SBOM scanning for Python and Node (beyond dependabot actions) | Security | G2 | GOV-006 | eldon | done |
 | SEC-008 | Audit log integrity: append-only, hash-chained, exported off-box | Security | G2 | PLT-015 | eldon | todo |
-| SEC-009 | Rate limits and abuse controls on chat and gateway | Security | G2 | PLT-026 | eldon | todo |
+| SEC-009 | Rate limits and abuse controls on chat and gateway | Security | G2 | PLT-026 | eldon | doing |
 | SEC-010 | Sandbox and static analysis for factory-built components | Security | G2 | BPL-015 | eldon | done |
 | SEC-011 | Encryption at rest and in transit; per-tenant key management | Security | G3 | INF-005 | partner | todo |
 | SEC-012 | Security baseline checklist for paying customers | Security | G3 | SEC-004,SEC-008 | eldon | todo |
@@ -231,7 +231,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | INF-014 | OS-level sandbox for untrusted uploads (container or VM with no network, read-only mount, CPU, memory and time limits, seccomp) that runs the intake parsers; required before any real customer upload (Q-133 to Q-140 follow-ups, connector runtime is only logically sandboxed today) | Infrastructure | G2 | INF-004,DSC-010 | partner | todo |
 | BRD-001 | Brand guidelines v1 (Quadrant) and placeholder logo | Brand | G0 | - | eldon | done |
 | BRD-002 | Design tokens: light and dark, CSS and JSON | Brand | G0 | BRD-001 | eldon | done |
-| BRD-003 | Identity decision: final name, logo direction, Arabic spelling. Decided 2026-11-23 (ADR-0066): Seshna, Latin letters only, Nuqta S mark, Cairo headings; counsel clearance stays under LEG-008 | Brand | G1 | LEG-008 | eldon | done |
+| BRD-003 | Identity decision: final name, logo direction, Arabic spelling. Decided 2026-11-23 (ADR-0066): Seshna, Latin letters only, Nuqta S mark, Cairo headings; the name was adopted before clearance, which is tracked under LEG-008 as a rollout risk (ADR-0066, R-034) | Brand | G1 | - | eldon | done |
 | BRD-004 | Token layering: base, product theme, tenant overrides, user preference | Brand | G1 | BRD-002 | eldon | done |
 | BRD-005 | Theme engine: light, dark, system, per-user persistence | Brand | G2 | BRD-004 | eldon | done |
 | BRD-006 | Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject | Brand | G1 | BRD-004 | eldon | done |
@@ -329,6 +329,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-029 | Reconciliation of engine action outcomes (applied, failed, unknown) before OPR-004/OPR-007 enable a live handler | Runtime | G2 | ERP-023 | partner | doing |
 | ERP-031 | Run the ERP-014 and ERP-015 live valuation layers in real-bench CI (runner sets tenant_id on its site; REQUIRE flag so they cannot skip); add a live back-dated issue and transfer, and fail when a repost reports `Skipped` | Runtime | G2 | ERP-015 | partner | todo |
 | ERP-032 | Audited closing entry for stuck or conflicting action outcomes (Q-558 (d), agreed by both founders on PR #266): an authorised person closes one with a reason in a tamper-evident, HMAC-chained entry; nothing closes automatically | Runtime | G2 | ERP-029 | partner | todo |
+| ERP-033 | Align the action-policy enforcer with Q-563 (GOV-064): `action_policy_enforcer.py` still excludes the submitter and agent owner unconditionally; allow a sole owner to approve their own agent's R1 to R3 drafts only when flagged, with step-up and a periodic review report, never R4 and never when a second eligible person exists; regression tests for allowed and denied cases (TC-22, TC-23); until then the stricter deny stays | Runtime | G2 | ERP-023,GOV-064 | partner | todo |
 | QA-015 | Evals and property tests for date handling (conversion, week and fiscal rules, overrides, timezones) | Quality | G2 | CMP-022,QA-001 | eldon | done |
 | QA-016 | Engine-invisibility crawl test on staging: pages, API responses, headers, cookies, bundles contain no engine markers (ADR-0016) | Quality | G1 | PLT-001 | partner | doing |
 | QA-017 | Smoke check that a preview URL loads and shows no engine markers (ADR-0016, ADR-0018) | Quality | G1 | INF-013 | eldon | todo |
@@ -411,7 +412,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-061 | Record founder answers given in chat (16 questions: Q-560, Q-70, Q-312, Q-23, Q-25, Q-29, Q-123, Q-43, Q-42, Q-41, Q-128, Q-294, Q-296, Q-291, Q-292, Q-293) and accept ADR-0027 with the three Q-294 checks | Governance | G1 | - | eldon | done |
 | GOV-062 | Supersede ADR-0034's sandbox rule so draft country packs may run in sandbox (Eldon's Q-560 answer) | Governance | G1 | GOV-061 | eldon | done |
 | GOV-063 | Apply Eldon's Q-292 and Q-293 answers: ADR superseding ADR-0007 item 9 (regional role store), align the phase table, GOV-039 wording and `phase-exit-criteria.json` with readiness order | Governance | G1 | GOV-061 | eldon | done |
-| GOV-064 | Apply Eldon's Q-41, Q-42, Q-43 answers to `docs/security/action-policy-table.md` (drop "until Q-41 is decided", "proposal", "Proposed defaults"; record that R4 rows have no self-approval, so onboarding needs a second eligible person to cancel posted invoices or change roles); update RULES 21 to 23 wording to ADR-0027 (ADR-0027 Consequences); make `tokens.proposed.*` the active token set (Q-70) | Governance | G1 | GOV-061 | eldon | todo |
+| GOV-064 | Apply Eldon's Q-41, Q-42, Q-43 answers to `docs/security/action-policy-table.md` (drop "until Q-41 is decided", "proposal", "Proposed defaults"; record that R4 rows have no self-approval, so onboarding needs a second eligible person to cancel posted invoices or change roles); update RULES 21 to 23 wording to ADR-0027 (ADR-0027 Consequences); make `tokens.proposed.*` the active token set (Q-70) | Governance | G1 | GOV-061 | eldon | done |
 | GOV-066 | Security review of Proposed ADR-0060 (who writes the store, syncVersion integrity, per-tenant keying, deny on outage) with a different model, then mark it Accepted (RULES 42, ADR-0035 Tier 3) | Governance | G1 | GOV-063 | eldon | done |
 | SEC-024 | Regional role-assignment store: design ADR (schema, writers, per-tenant keying, syncVersion binding, revocation, audit, deletion) and its security review before any implementation (ADR-0060 item 15; ERP-008 and PLT-003 consume it) | Security | G1 | GOV-066 | eldon | todo |
 | GOV-067 | Rule 52: candidate names and their screening stay out of the public repo until domains and handles are reserved and counsel clears the name (Eldon's answer on #292, given for both founders) | Governance | G1 | - | eldon | done |

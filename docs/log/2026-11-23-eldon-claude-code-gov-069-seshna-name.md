@@ -31,3 +31,11 @@ Unknown.
 - BRD-009: regenerate `docs/brand/` from the Nuqta S kit (other agent's scope); `docs/brand/04-typography.md` still names Alexandria.
 - WEB-028: self-host Cairo and Readex Pro.
 - GOV-002: rename the repo, organisation and internal identifiers (env vars `SESHNA_FOUNDER` and `SESHNA_ALLOW_MAIN_PUSH` are renamed under GOV-070).
+
+## Update 2026-11-24 (partner review at ae56bf2, changes requested)
+- Merged origin/main (#268, #270); resolved an open-questions.md conflict by keeping Q-563 from main and Q-602 from this branch.
+- ONBOARDING keeps `SESHNA_FOUNDER`; this PR merges together with #297 (GOV-070), which renames the variable in `scripts/check_lanes.py`.
+- PLAN BRD-003: Depends set to `-`; clearance tracked under LEG-008 as a rollout risk (ADR-0066, R-034).
+- ADR-0066: dated addendum citing the Cairo OFL 1.1 source (google/fonts commit a2c83dae, checked 2026-11-24); registration in the licence register under BRD-014. The decision text is unchanged.
+- 00-START-HERE: current brand assets described as legacy, replaced under BRD-014 and ADR-0066.
+- Earlier the same day: R-014 now points to R-034 and ADR-0066; INDEX marks ADR-0001 and ADR-0011 as superseded (partly for ADR-0011) by ADR-0066.

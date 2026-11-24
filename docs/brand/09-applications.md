@@ -19,7 +19,9 @@ The Latin lockup is used unchanged in Arabic layouts and is never mirrored.
 
 ## State marks in the product (BRD-014)
 
-The mark's two halves carry product state (kit "Extending the system", guidelines p.10). Component: `web/app/src/ui/Mark.tsx` renders the halves from the master and small-cut paths (`logo/mark-primary.svg`, `logo/mark-small.svg`); each half is solid or outline, the outline drawn inside the half's own silhouette so both states have the same footprint. Colour is `--color-primary` (Cobalt, #86A0FF in dark) from the tokens; below 24 px the small-size cut is used.
+The mark's two halves carry product state (kit "Extending the system", guidelines p.10). Component: `web/app/src/ui/Mark.tsx` renders the halves from the master and small-cut paths (`logo/mark-primary.svg`, `logo/mark-small.svg`); each half is solid or outline, the outline drawn inside the half's own silhouette so both states have the same footprint. Colour is `--seshna-mark` (Cobalt #2443D0, #86A0FF in dark) and, for the one accent bullet, `--seshna-mark-accent` (Coral #E0552C, #FF8A63 in dark), from `tokens.json` `brandMark`. Below 24 px the small-size cut is used.
+
+**Never tenant-coloured** (both founders, 2026-11-24): the state marks are the Seshna logo, so they stay Seshna Cobalt and Coral in tenant-branded workspaces too. Tenant overrides change `--color-primary` and `--color-accent` only; the tenant theme generator refuses to set `--seshna-*` (`12-tenant-theming.md`).
 
 | Use | Rule | Component and where |
 |---|---|---|

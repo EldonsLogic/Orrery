@@ -45,9 +45,37 @@ describe('Mark', () => {
     expect(out).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(out).not.toMatch(MOTION);
     const sheet = css('../../ui/Mark.module.css');
-    expect(sheet).toContain('var(--color-primary)');
-    expect(sheet).toContain('var(--color-accent)');
+    expect(sheet).toContain('var(--seshna-mark)');
+    expect(sheet).toContain('var(--seshna-mark-accent)');
+    expect(sheet).not.toContain('--color-');
     expect(sheet).not.toMatch(MOTION);
+  });
+});
+
+describe('Mark colour under a tenant theme (founders, 2026-11-24)', () => {
+  const brand = join(__dirname, '../../../../../docs/brand/tokens');
+  const tokens = JSON.parse(readFileSync(join(brand, 'tokens.json'), 'utf8'));
+  const base = readFileSync(join(brand, 'tokens.css'), 'utf8');
+  const mark = tokens.brandMark;
+  // A tenant override block in the shape derive_tenant_theme.py writes (layer 2, loaded after the base tokens),
+  // with colours that are not Cobalt or Coral (Jade and Ochre stand in for a tenant's brand).
+  const tenant = `:root[data-tenant="acme"] {\n  --color-primary: ${tokens.color.light.success.hex};\n  --color-accent: ${tokens.color.light.warning.hex};\n}\n`;
+  const decls = (text: string) => Object.fromEntries([...text.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2]!.trim()]));
+  const resolve = (value: string, vars: Record<string, string>): string => {
+    const m = /^var\((--[a-z0-9-]+)\)$/.exec(value);
+    return m ? resolve(vars[m[1]!] ?? '', vars) : value;
+  };
+  it('keeps Seshna Cobalt and Coral when a tenant overrides the primary and accent', () => {
+    const vars = { ...decls(base.slice(0, base.indexOf('@media'))), ...decls(tenant) };
+    const sheet = css('../../ui/Mark.module.css');
+    const colours = [...sheet.matchAll(/(?:^|\s)color:\s*([^;]+);/g)].map((m) => resolve(m[1]!.trim(), vars));
+    expect(colours).toEqual([mark.light.mark.hex, mark.light.markAccent.hex]);
+    expect(resolve('var(--color-primary)', vars)).toBe(tokens.color.light.success.hex);
+    expect(Object.keys(decls(tenant)).some((k) => k.startsWith('--seshna-'))).toBe(false);
+  });
+  it('has dark values for the mark tokens in both dark blocks', () => {
+    expect(base.split(`--seshna-mark: ${mark.dark.mark.hex};`)).toHaveLength(3);
+    expect(base.split(`--seshna-mark-accent: ${mark.dark.markAccent.hex};`)).toHaveLength(3);
   });
 });
 

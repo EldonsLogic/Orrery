@@ -33,7 +33,7 @@ export type MarkProps = {
   lower?: MarkFill;
   /** Rendered size in px (square). */
   size?: number;
-  /** Cobalt (primary) by default; Coral (accent) at most once per view, always beside a text label. */
+  /** Seshna Cobalt by default; Seshna Coral at most once per view, always beside a text label. Never tenant colours. */
   tone?: MarkTone;
   className?: string;
   /** Accessible name. Omit when visible text next to the mark already says what it means (the usual case). */

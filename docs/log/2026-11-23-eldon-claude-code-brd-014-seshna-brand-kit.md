@@ -41,3 +41,11 @@ Eldon asked for the kit's state marks (guidelines p.10, kit "Extending the syste
 - Docs: `docs/brand/09-applications.md` (state marks, PROPOSED loading), `10-open-items.md` (loading awaits founder approval; inferred stroke and sizes; tenant colour question), `07-graphic-elements.md` pointer.
 - Not mapped: the owner approval screen (WEB-027) is not on main yet, so it has no status mark; it should use `StatusMark` and `ProgressMarks` when built. No screen shows Discovery progress before a Blueprint exists.
 - Checks: web tests 294 (vitest, 16 new in marks.test.tsx) and 133 script tests, lint (eslint, tokens-only, rtl, css-vars, contrast), typecheck app and marketing, next build app and marketing: pass. check_docs and check_repo_hygiene: pass.
+
+## Addendum: state marks never tenant-coloured (BRD-014)
+- Decision (both founders, 2026-11-24, relayed by Eldon): Status, Progress, Loading and bullet marks always stay Seshna Cobalt (Coral for the one accent bullet), even in tenant-branded workspaces; the mark is the Seshna logo.
+- `docs/brand/tokens/tokens.json`: new `brandMark` group, `--seshna-mark` and `--seshna-mark-accent` with dark values; `tools/build_tokens_css.py` emits them in every theme block; `tokens.css` regenerated.
+- `tools/derive_tenant_theme.py` refuses to emit any `--seshna-*` variable; `test_derive_tenant_theme.py` checks it.
+- `web/app/src/ui/Mark.module.css` uses the new tokens; `marks.test.tsx` resolves the mark colour under a tenant override of `--color-primary` and `--color-accent` and gets Cobalt and Coral.
+- Docs: `12-tenant-theming.md` locked-items row, `09-applications.md` colour rule, `10-open-items.md` item closed.
+- Checks: web tests 296 and 133 script tests, lint, typecheck and build (app and marketing), check_docs, brand tools (test_derive_tenant_theme, test_tenant_contrast, check_contrast, check_proposed): pass.

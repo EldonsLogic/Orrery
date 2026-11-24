@@ -1,0 +1,57 @@
+{
+  "TRD-CONTEXT": {
+    "ar": "يلزم سياق مستخدم ومستأجر صالح وثابت.",
+    "en": "A valid, unchanged user and tenant context is required.",
+    "review": "unreviewed"
+  },
+  "TRD-TEXT": {
+    "ar": "مرجع السجل غير صالح.",
+    "en": "The record reference is invalid.",
+    "review": "unreviewed"
+  },
+  "TRD-NUMBER": {
+    "ar": "أدخل قيمة عشرية صريحة ضمن النطاق المسموح.",
+    "en": "Enter an explicit decimal within the allowed range.",
+    "review": "unreviewed"
+  },
+  "TRD-PRICE": {
+    "ar": "يلزم تفعيل قائمة أسعار البيع ومنع تعديل سعر القائمة.",
+    "en": "An enabled selling list with list-rate editing disabled is required.",
+    "review": "unreviewed"
+  },
+  "TRD-CURRENCY": {
+    "ar": "يجب أن تطابق عملة القائمة عملة الشركة.",
+    "en": "The list currency must match the company currency.",
+    "review": "unreviewed"
+  },
+  "TRD-CREDIT": {
+    "ar": "يلزم تصحيح حدود الائتمان المكررة للشركة.",
+    "en": "Duplicate company credit limits must be corrected.",
+    "review": "unreviewed"
+  },
+  "TRD-REP": {
+    "ar": "يلزم مندوب مبيعات نشط وليس مجموعة وبنسبة عمولة صالحة.",
+    "en": "An enabled non-group sales representative with a valid commission rate is required.",
+    "review": "unreviewed"
+  },
+  "TRD-DRAFT": {
+    "ar": "يمكن تغيير فريق المبيعات في مسودة الطلب فقط.",
+    "en": "Sales attribution can only change on a draft order.",
+    "review": "unreviewed"
+  },
+  "TRD-TEAM": {
+    "ar": "يلزم فريق دون تكرار بمساهمات مجموعها مئة بالمئة.",
+    "en": "A unique sales team with shares totalling 100 percent is required.",
+    "review": "unreviewed"
+  },
+  "TRD-FIELD": {
+    "ar": "لا تملك صلاحية قراءة أو تعديل الحقل المطلوب.",
+    "en": "You cannot read or change the required field.",
+    "review": "unreviewed"
+  },
+  "TRD-ROLE": {
+    "ar": "يلزم دور مخوّل لاعتماد حدود الائتمان لتعديل حد الائتمان.",
+    "en": "A credit-authorising role is required to change a customer credit limit.",
+    "review": "unreviewed"
+  }
+}

@@ -25,8 +25,8 @@ Nothing here is built. Every behaviour below is a design requirement, not a desc
 
 ## 3. Agent identity
 ### 3.1 The agent is its own principal
-1. An agent is a principal of kind `agent` with its own id, in exactly one tenant. It never uses a human's session, token, cookie or shadow engine user.
-2. The agent's engine identity is a separate shadow user carrying only the agent's Blueprint role (`service_role`), provisioned like ADR-0007 item 4. It has no password, no API key and no email delivery.
+1. An agent is a principal of kind `agent` with its own id, in exactly one tenant. It never uses a human's session, token, cookie or human shadow engine user.
+2. The agent's engine identity is a separate draft-only agent engine user (distinct from any human shadow engine user) carrying one grant-intersected managed role per agent grant (the agent-eligible Blueprint role intersected with the grant, per [ADR-0039](../decisions/ADR-0039-role-and-permission-mapping.md); resolves OQ-2), provisioned like ADR-0007 item 4. It has no password, no API key and no email delivery.
 3. Agent runs get a short-lived run token from the identity service (PLT-005): tenant claim, audience, agent id, grant id, grant version, run id, on-behalf-of user id. Like human tokens (ADR-0007 item 2), it carries no roles or permissions; the gateway resolves them on every call.
 4. A run token for tenant X is rejected by tenant Y and by any service that does not check the tenant claim (T50). A human token is never accepted where an agent token is expected, and the reverse.
 5. Identity, role, grant and tenant are never read from a request body, model output, trigger payload or tool result (T41, PI-015).
@@ -190,7 +190,7 @@ Every transition is an event. Only `active` may make calls; every other state re
 ## 18. Requirements
 | ID | Requirement | Later row |
 |---|---|---|
-| ALP-001 | An agent is a principal of kind `agent` with its own id in exactly one tenant; it never uses a human session, token or shadow user | PLT-005, ERP-008 |
+| ALP-001 | An agent is a principal of kind `agent` with its own id in exactly one tenant; it never uses a human session, human token or human shadow engine user; it gets a separate draft-only agent engine user | PLT-005, ERP-008 |
 | ALP-002 | Run tokens carry tenant, audience, agent id, grant id and version, run id, on-behalf-of; no roles or permissions | PLT-005 |
 | ALP-003 | A run token for one tenant is rejected by every other tenant and by every service (isolation test) | PLT-005, SEC-004 |
 | ALP-004 | Human and agent tokens are not interchangeable at any endpoint | PLT-005, gateway |
@@ -274,7 +274,7 @@ Every transition is an event. Only `active` may make calls; every other state re
 ## 21. Open questions
 Not added to [../open-questions.md](../open-questions.md); for the founders to place.
 1. **OQ-1** For scheduled runs the on-behalf-of user is the owner. Is that right when the owner is away for long periods, or should such runs pause?
-2. **OQ-2** Does an agent's shadow engine user need its own Blueprint role per agent, or one shared agent role per definition per tenant? Per agent is stricter; shared is simpler.
+2. **OQ-2** *(Proposed resolution in ADR-0039, pending Eldon's review)* Does an agent's separate draft-only agent engine user need its own managed role per agent grant, or one shared agent role per definition per tenant? Resolved in ADR-0039 item 10: one grant-intersected managed role per agent grant (`agent-eligible Blueprint role ∩ grant`), the stricter option.
 3. **OQ-3** Should the tenant see a single "agents" page listing grants, caps, expiry, last run and the kill switch (WEB scope not yet planned)?
 4. **OQ-4** Who is platform on-call while only two founders exist, and can one founder engage a tenant kill switch without the tenant's knowledge (notice timing)?
 5. **OQ-5** Is reading C3 data by an agent ever acceptable in phase 1 (payroll is out of current scope)? If not, ban it outright.

@@ -90,3 +90,16 @@ python3 -m evals.harness.sim_accuracy       # JSON score, exit 1 unless the gate
 python3 -m pytest evals/tests/test_sim_accuracy.py -q
 ```
 Needs `jsonschema` and `pydantic>=2` only through the simulator import. The fake engine is no evidence about the real one (Q-242, Q-362).
+
+## Release gate (QA-010)
+`python3 -m evals.gate` runs every deterministic suite offline (about 6 seconds, no model calls): agent_behaviour, arabic_core (oracle and null adapters), injection (oracle, with the permissive adapter as a control that must keep failing), intent_routing (rules arm), redteam_uploads and sim_accuracy. It prints a compact table and exits 1 when anything fails; CI runs it in the `Eval harness` job of `.github/workflows/tests.yml`.
+
+It fails on: a suite missing or crashed; any metric under its floor or over its ceiling (`gate/thresholds.json`; agent_behaviour reads `sets/agent_behaviour/thresholds.json`, so 100 percent per category with no tolerance, Q-351); a case count under `min_cases`; any failing case that is not listed in the suite's committed `known_gaps`; a metric moving the wrong way by more than `max_regression` against `gate/baseline.json`; a case that was in the baseline and is gone (a silent skip or deletion); a pass that became a known gap; and, by a static scan of `evals/tests`, a new `skip` marker or fewer `xfail` markers than the baseline (an xfail must not quietly become a skip).
+
+Output is sorted with no clocks; `--json PATH` writes the compared report. `--suite NAME` runs a subset for debugging (not a release run).
+
+Updating the baseline (only when a change is intended, for example a new case set or a closed known gap):
+```
+python3 -m evals.gate --update-baseline --reason "why"
+```
+It needs a full run, refuses while any floor, ceiling, minimum or failing case is broken, refuses when `CI` is set, appends who, when, why and the metric changes to `gate/baseline-history.json`, and you then name the change in your session log and commit `baseline.json` with it. The 0.85 `min_pass_rate` of `sets/arabic_core` is the real-model floor and is not enforced offline (Q-460).

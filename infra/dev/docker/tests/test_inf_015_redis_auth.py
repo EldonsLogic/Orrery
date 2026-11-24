@@ -186,8 +186,10 @@ class RunnerPasswordTests(unittest.TestCase):
         verify_envs = []
 
         def fake_run(cmd, **kwargs):
-            verify_envs.append(kwargs.get("env", {}))
-            return subprocess.CompletedProcess(cmd, 0)
+            if "verify_dev_bench.py" in " ".join(map(str, cmd)):  # ERP-031: the live valuation layers run here too
+                verify_envs.append(kwargs.get("env", {}))
+            return subprocess.CompletedProcess(cmd, 0, stdout="Ran 99 tests in 1.0s\n\nOK\n",
+                                               stderr="Ran 99 tests in 1.0s\n\nOK\n")  # run count on stderr (ERP-031)
 
         with (
             mock.patch.dict(os.environ, {"REDIS_PASSWORD": "inherited-weak"}),

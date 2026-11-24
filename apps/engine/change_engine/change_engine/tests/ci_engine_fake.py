@@ -32,6 +32,9 @@ ENGINE_DOCTYPES = {
     "Payment Entry": "Accounts", "Session": "Core", "GL Entry": "Accounts",
     "Supplier": "Buying", "Delivery Note": "Stock", "Price List": "Stock",
     "Purchase Order": "Buying", "Purchase Receipt": "Stock", "Purchase Invoice": "Accounts",
+    # BPL-031: built-ins the mapping contract names that the simulator's core set lacks (child tables and prices).
+    "Delivery Note Item": "Stock", "Item Price": "Stock", "Purchase Order Item": "Buying",
+    "Purchase Receipt Item": "Stock", "Purchase Invoice Item": "Accounts",
 }
 
 

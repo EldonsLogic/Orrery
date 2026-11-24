@@ -285,7 +285,7 @@ Interviews do not fill a tenant's Blueprint (GTM-002 is research); they decide w
 - Competitors' pricing from NDA material or under-the-table information.
 - Political, religious or family matters beyond who decides in the business.
 - Sales commitments: no discounts, pilots, dates or promises.
-- Our brand name: say "the platform" (the working name is not cleared, [../../AGENTS.md](../../AGENTS.md)).
+- Our brand name: Seshna (ADR-0066), always written in Latin script, also inside Arabic text.
 
 ## 12. Open points
 - Native Arabic review of every Arabic string (ADR-0033); until then, English is canonical.

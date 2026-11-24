@@ -49,3 +49,12 @@ Eldon asked for the kit's state marks (guidelines p.10, kit "Extending the syste
 - `web/app/src/ui/Mark.module.css` uses the new tokens; `marks.test.tsx` resolves the mark colour under a tenant override of `--color-primary` and `--color-accent` and gets Cobalt and Coral.
 - Docs: `12-tenant-theming.md` locked-items row, `09-applications.md` colour rule, `10-open-items.md` item closed.
 - Checks: web tests 296 and 133 script tests, lint, typecheck and build (app and marketing), check_docs, brand tools (test_derive_tenant_theme, test_tenant_contrast, check_contrast, check_proposed): pass.
+
+## Addendum: review fixes for #305 (Sonnet review)
+- `ProgressMarks`: `role="list"` on the `<ol>` (list-style none drops list semantics in Safari); test updated.
+- `web/app/tsconfig.json` back to main's version (an earlier `next build` had rewritten jsx, the arrays and added `.next/dev/types`). `next build` still passes; it rewrites both tsconfig files on every run, so they were restored again after the build and must not be committed from a build.
+- `docs/brand/10-open-items.md`: any runtime path that writes tenant CSS variables needs the same `--seshna-` guard.
+- `web/app/src/brandName.test.ts`: fails if "Seshna" appears in Arabic script (سيشنا, سشنا and variants) or glued to Arabic letters in app or marketing en/ar messages.
+- `marks.test.tsx`: `brandMark` hexes equal `color.light/dark` primary and accent.
+- Product name in mixed-direction text: the only inline surface is the document title (`RouteTitle`, "page | Seshna"); it now isolates the name with FSI/PDI (the plain-text form of `<bdi>`, which a title cannot hold). The marketing heading already uses `<bdi>`; the manifest and metadata title are the name alone.
+- Checks: web tests 303 and 133 script tests, lint, typecheck and build (app and marketing), check_docs: pass.

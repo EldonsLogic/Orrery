@@ -73,6 +73,12 @@ describe('Mark colour under a tenant theme (founders, 2026-11-24)', () => {
     expect(resolve('var(--color-primary)', vars)).toBe(tokens.color.light.success.hex);
     expect(Object.keys(decls(tenant)).some((k) => k.startsWith('--seshna-'))).toBe(false);
   });
+  it('uses exactly the palette Cobalt and Coral in both themes', () => {
+    for (const m of ['light', 'dark'] as const) {
+      expect(mark[m].mark.hex).toBe(tokens.color[m].primary.hex);
+      expect(mark[m].markAccent.hex).toBe(tokens.color[m].accent.hex);
+    }
+  });
   it('has dark values for the mark tokens in both dark blocks', () => {
     expect(base.split(`--seshna-mark: ${mark.dark.mark.hex};`)).toHaveLength(3);
     expect(base.split(`--seshna-mark-accent: ${mark.dark.markAccent.hex};`)).toHaveLength(3);
@@ -122,7 +128,7 @@ describe('ProgressMarks', () => {
       'upper:outline', 'lower:outline',
     ]);
     expect(out.match(/aria-current="step"/g)).toHaveLength(1);
-    expect(out).toContain('<ol');
+    expect(out).toContain('<ol role="list"');
     for (const s of BUILD_STAGES) expect(out).toContain(messages.en.marks.progress.stage[s]);
     expect(out).toContain(messages.en.marks.progress.state.current);
   });

@@ -13,7 +13,8 @@ export function ProgressMarks({ buildState, size = 24 }: { buildState: string | 
   const t = useTranslations('marks.progress');
   const current = stageProgress(buildState);
   return (
-    <ol className={styles.progress} aria-label={t('title')}>
+    // role="list": list-style none drops list semantics in Safari and VoiceOver.
+    <ol role="list" className={styles.progress} aria-label={t('title')}>
       {BUILD_STAGES.map((stage, i) => {
         const state = i < current ? 'done' : i === current ? 'current' : 'upcoming';
         return (

@@ -5,8 +5,7 @@ folded state, the control plane's log is the source of truth):
 
     (none) -> draft                       created (author: human or agent)
     draft  -> draft                       revised (author), approvals reset
-    draft  -> owner_approved              GATE: the owner, a human with a fresh step-up, AND a current sealed owner approval
-                                          (DSC-009) for this content digest and quote digest, re-checked at every later gate
+    draft  -> owner_approved              GATE: the owner, a human with a fresh step-up
     owner_approved -> team_reviewed       GATE: a named team reviewer, a human with a fresh step-up
     team_reviewed -> built_in_sandbox     sandbox build through the engine port (outcome confirmed by the port)
     built_in_sandbox -> simulated         GATE: a team reviewer confirms the simulation report
@@ -71,7 +70,7 @@ EARLIEST, LATEST = 1_577_836_800, 4_102_444_800  # 2020-01-01 and 2100-01-01 in 
 _STAGE = {"owner": 1, "review": 2, "sandbox": 3, "sim": 4, "cutover": 4}  # a stage survives rollback to this index or later
 _DATA = {
     "created": {"digest", "revision", "involved"}, "revised": {"digest", "revision", "involved"},
-    "owner_approved": {"digest", "confirmations", "quoteDigest"},
+    "owner_approved": {"digest", "confirmations"},
     "team_reviewed": {"digest", "itemId", "pinSeq", "pinHead", "reviewDigest", "approvedBy"},
     "rolled_back": {"from", "to", "reason", "digest"}, "recovery_cleared": {"kind", "key", "digest"},
     "apply_started": {"kind", "key", "digest", "attempt", "simulationId", "reportDigest"},
@@ -100,7 +99,6 @@ class _B:
     last_at: int = 0
     head_seq: int = 0
     head_seal: str = ""
-    rollbacks: int = 0              # rollbacks so far (an owner approval with no outcome sealed before the last one is spent)
 
 
 def idempotency_key(tenant_id, bp, kind, digest, attempt) -> str:
@@ -112,7 +110,7 @@ def _bad(code="BS-011", why="record"):
 
 
 class BuildStateMachine:
-    def __init__(self, *, identity, blueprints, validator, reviews, simulations, signoffs, engine, clock, owner_approvals,
+    def __init__(self, *, identity, blueprints, validator, reviews, simulations, signoffs, engine, clock,
                  integrity_keys: dict | None = None, key_id: str | None = None, required_signoff_roles=("owner",), audit=None):
         keys = integrity_keys if integrity_keys is not None else {}
         roles = tuple(required_signoff_roles) if type(required_signoff_roles) in (tuple, list) else ()
@@ -120,12 +118,11 @@ class BuildStateMachine:
             raise BuildStateError("BS-001", "required_signoff_roles")
         if not isinstance(signoffs, SignOffLedger):
             raise BuildStateError("BS-001", "signoffs")
-        if any(p is None for p in (identity, blueprints, validator, reviews, simulations, signoffs, engine, clock, owner_approvals)):
+        if any(p is None for p in (identity, blueprints, validator, reviews, simulations, signoffs, engine, clock)):
             raise BuildStateError("BS-001", "ports")
         self._log = SealedLog(keys, key_id if key_id is not None else (list(keys)[-1] if keys else ""), "orrery.buildstate.log.v1")
         self._idn, self._bps, self._validate, self._reviews, self._sims = identity, blueprints, validator, reviews, simulations
         self._ledger, self._engine, self._clock, self._audit_cb = signoffs, engine, clock, audit
-        self._owner_ap = owner_approvals
         self._policy = roles
 
     # ----- host clock, audit, actor --------------------------------------------------------------------------
@@ -265,8 +262,7 @@ class BuildStateMachine:
             if type(d["confirmations"]) is not list or tuple(sorted(d["confirmations"])) != CONFIRMATIONS:
                 raise BuildStateError("BS-009")
             self._sod(n, a, OWNER)
-            _digest(d["quoteDigest"])
-            n.state, n.att["owner"] = "owner_approved", {"actor": a["subject"], "digest": d["digest"], "quoteDigest": d["quoteDigest"]}
+            n.state, n.att["owner"] = "owner_approved", {"actor": a["subject"], "digest": d["digest"]}
         elif typ == "team_reviewed":
             if S != "owner_approved":
                 raise BuildStateError("BS-005")
@@ -286,7 +282,7 @@ class BuildStateMachine:
                 raise BuildStateError("BS-008")
             if d["reason"] == "simulation_rejected" and "sim" in n.att:
                 n.rejected_reports.add(n.att["sim"]["reportDigest"])   # a rejected simulation stays rejected
-            n.state, n.rollbacks = d["to"], n.rollbacks + 1
+            n.state = d["to"]
             n.att = {k: v for k, v in n.att.items() if _STAGE[k] <= _IDX[d["to"]]}
         elif typ == "apply_started":
             kind = d["kind"]
@@ -454,31 +450,11 @@ class BuildStateMachine:
             raise BuildStateError("BS-006", "review")
         return {**ev, "itemId": item_id}
 
-    def _owner_approval(self, t, bp, dg, quote_digest, subject):
-        """Re-derive the owner's sealed approval (DSC-009, ADR-0050 amendment) through the port. It must name `subject`
-        as the approving owner for exactly this content digest (computed here) and quote digest, the quote must still be
-        the current one, and nothing may block it (a rejection, a request for changes or a hold). Any error refuses."""
-        _digest(quote_digest, "quote_digest")
-        try:
-            ev = self._owner_ap.verify(t, bp, dg, quote_digest, subject)
-        except Exception:
-            raise BuildStateError("BS-006", "owner_approval_port") from None
-        keys = {"tenantId", "blueprintId", "contentDigest", "quoteDigest", "approvedBy", "blocked", "quoteCurrent"}
-        if type(ev) is not dict or set(ev) != keys or ev["tenantId"] != t or ev["blueprintId"] != bp or ev["contentDigest"] != dg \
-                or ev["quoteDigest"] != quote_digest or type(ev["blocked"]) is not bool or type(ev["quoteCurrent"]) is not bool:
-            raise BuildStateError("BS-006", "owner_approval")
-        if ev["quoteCurrent"] is not True:
-            raise BuildStateError("BS-008", "quote")
-        if ev["blocked"] is not False or type(ev["approvedBy"]) is not str or ev["approvedBy"] != subject:
-            raise BuildStateError("BS-006", "owner_approval")
-
     def _upstream(self, t, bp, b, content, dg, through):
         """Re-derive every approval below `through` that the current state implies (owner, team review)."""
         self._fresh(b, dg)
-        o = b.att.get("owner", {})
-        if o.get("digest") != dg:
+        if b.att.get("owner", {}).get("digest") != dg:
             raise BuildStateError("BS-008")
-        self._owner_approval(t, bp, dg, o["quoteDigest"], o["actor"])
         if through >= _IDX["team_reviewed"]:
             r = b.att.get("review")
             if not r:
@@ -585,10 +561,8 @@ class BuildStateMachine:
             return self.status(t, bp)
         return self._run("revise", tenant_id, blueprint_id, claims, go)
 
-    def approve_owner(self, claims, *, tenant_id, blueprint_id, confirmations, expected_digest, quote_digest):
-        """draft -> owner_approved. GATE: the owner (human, step-up) confirms the summary, the quote and the gaps. The
-        content digest is computed here and must equal `expected_digest` (the one the owner saw); a current sealed owner
-        approval for that digest and `quote_digest` by this very owner must exist and nothing may block it."""
+    def approve_owner(self, claims, *, tenant_id, blueprint_id, confirmations):
+        """draft -> owner_approved. GATE: the owner (human, step-up) confirms the summary, the quote and the gaps."""
         def go():
             t, bp = _tenant(tenant_id), ident(blueprint_id, "blueprint")
             p, role = self._actor(claims, t, (OWNER,), gate=True)
@@ -599,10 +573,7 @@ class BuildStateMachine:
             self._valid(content)
             if type(confirmations) not in (list, tuple) or tuple(sorted(confirmations)) != CONFIRMATIONS:
                 raise BuildStateError("BS-009")
-            if type(expected_digest) is not str or expected_digest != dg:
-                raise BuildStateError("BS-008", "expected_digest")
-            self._owner_approval(t, bp, dg, quote_digest, p.subject)
-            self._write(b, t, bp, p, role, at, "owner_approved", {"digest": dg, "confirmations": sorted(confirmations), "quoteDigest": quote_digest})
+            self._write(b, t, bp, p, role, at, "owner_approved", {"digest": dg, "confirmations": sorted(confirmations)})
             return self.status(t, bp)
         return self._run("owner_approve", tenant_id, blueprint_id, claims, go)
 
@@ -816,8 +787,7 @@ class BuildStateMachine:
                 "pending": None if not pend else {"kind": pend["kind"], "status": "unknown" if pend["outcome"] == "unknown" else "applying",
                                                   "kindKey": f"bs.pending.{pend['kind']}",
                                                   "statusKey": f"bs.pending.{'unknown' if pend['outcome'] == 'unknown' else 'applying'}"},
-                "recovery": None if not b.recovery else {"kind": b.recovery["kind"], "needsRecovery": True}, "cutoverStarted": "cutover" in b.att, "approvals": sorted(b.att),
-                "owner": None if "owner" not in b.att else dict(b.att["owner"]), "rollbacks": b.rollbacks}
+                "recovery": None if not b.recovery else {"kind": b.recovery["kind"], "needsRecovery": True}, "cutoverStarted": "cutover" in b.att, "approvals": sorted(b.att)}
 
     def verify_tenant(self, tenant_id) -> list:
         """(blueprint id, code) for every build of the tenant whose log fails; an unreadable manifest raises BS-011."""

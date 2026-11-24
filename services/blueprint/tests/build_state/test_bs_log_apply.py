@@ -91,7 +91,7 @@ def test_a_violating_record_with_a_valid_seal_is_still_refused():
     log.append(T, BP, forged)                              # sealed fine, but a draft cannot jump to team_reviewed
     assert code(w.m.status, T, BP) == "BS-011"
     w2 = World().to("draft")
-    w2.m._log.append(T, BP, {**forged, "type": "owner_approved", "data": {"digest": w2.status()["contentDigest"], "confirmations": ["gaps", "quote", "summary"], "quoteDigest": "0" * 64},
+    w2.m._log.append(T, BP, {**forged, "type": "owner_approved", "data": {"digest": w2.status()["contentDigest"], "confirmations": ["gaps", "quote", "summary"]},
                              "actor": {"subject": "agent-1", "kind": "agent", "realm": "tenant", "role": "owner"}})
     assert code(w2.m.status, T, BP) == "BS-011"            # an agent owner-approval is not a promotion, even sealed
 
@@ -300,7 +300,7 @@ def test_audit_records_the_verified_actor_for_allow_and_deny():
     w.approve()
     assert [(a["action"], a["code"], a["subject"]) for a in w.audit] == [
         ("build.create", "OK", "u-author"), ("build.owner_approve", "BS-003", "agent-1"), ("build.owner_approve", "OK", "u-owner")]
-    assert code(w.m.approve_owner, "nobody", **w.args(confirmations=[], expected_digest="0" * 64, quote_digest="0" * 64)) is not None
+    assert code(w.m.approve_owner, "nobody", **w.args(confirmations=[])) is not None
     def boom(_):
         raise RuntimeError
     w.m._audit_cb = boom
@@ -381,7 +381,7 @@ def test_r6_interleaved_calls_log_the_right_user():
     orig = w.engine.apply
     def apply(t, kind, key, dg):
         w.m.create("author", tenant_id=T, blueprint_id="bp-two")      # another user's call inside this one
-        code(w.m.approve_owner, "agent", tenant_id=T, blueprint_id="bp-two", confirmations=[], expected_digest="0" * 64, quote_digest="0" * 64)
+        code(w.m.approve_owner, "agent", tenant_id=T, blueprint_id="bp-two", confirmations=[])
         return orig(t, kind, key, dg)
     w.engine.apply = apply
     w.sandbox("runner")

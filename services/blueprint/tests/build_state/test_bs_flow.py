@@ -159,7 +159,7 @@ def test_validator_must_pass_and_confirmations_are_exact():
     w.errors = []
     for bad in (["summary"], ["summary", "quote"], ["summary", "quote", "gaps", "x"], "summary", None, {"summary", "quote", "gaps"} - {"gaps"},
                 iter(["summary", "quote", "gaps"]), ["summary", "summary", "quote"]):
-        assert code(lambda: w.m.approve_owner("owner", **w.args(confirmations=bad, expected_digest="0" * 64, quote_digest="0" * 64))) in ("BS-009",)
+        assert code(lambda: w.m.approve_owner("owner", **w.args(confirmations=bad))) in ("BS-009",)
     assert w.state() == "draft"
     w.errors = "not a list"
     assert code(w.approve) == "BS-006"

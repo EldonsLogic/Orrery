@@ -28,7 +28,6 @@ from components.compliance.country_pack.tests.pack_checks import (
     certifiability_violations,
     covered,
     evidence_entries,
-    fact_source_violations,
     get,
     keys,
     labelled,
@@ -126,7 +125,11 @@ class TestEvidence(_AllPacks):
                     self.assertTrue(fact["claim"])
                     for path in fact.get("paths", [fact["backs"]] if fact.get("backs") else []):
                         get(pack, path)  # every cited path exists in the pack
-                    self.assertEqual(fact_source_violations(fact, today), [])
+                    sources = fact.get("sources", [])
+                    self.assertEqual([v for s in sources for v in source_violations(s, today)], [])
+                    if fact["status"] in ("VERIFIED-OFFICIAL", "SECONDARY"):
+                        read = [s for s in sources if "accessed" in s]
+                        self.assertTrue(read, f"{fact['status']} needs a read source with an access date")
                     if fact["status"] == "PLATFORM-DEFAULT":
                         self.assertTrue(fact.get("ref"), "a platform default names the decision or doc")
 

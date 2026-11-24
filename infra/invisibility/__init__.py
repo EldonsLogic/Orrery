@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ["CrawlError", "Finding", "InvisibilityCrawler", "Marker", "run_crawl"]
+__all__ = ["Finding", "InvisibilityCrawler", "Marker", "run_crawl"]
 
 
 def __getattr__(name: str) -> Any:

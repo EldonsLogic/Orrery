@@ -21,11 +21,6 @@ The tool consists of:
   4. Max-pages constraint test: verifies that crawling halts at `--max-pages`.
   5. CLI test: verifies `--json` format and non-zero exit code on failure.
 
-A pass requires inspection of every queued target. Missing linked assets, page or
-queue limit exhaustion, empty explicit API paths, and HTTP 401/403 responses when
-credentials were supplied fail the crawl. Anonymous 401/403 responses are still
-inspected for leaks. Increase `--max-pages` when coverage is incomplete.
-
 ## How to run
 
 ### Unit tests (local stub servers)
@@ -43,15 +38,6 @@ python3 -m infra.invisibility \
   --base-url http://localhost:8080 \
   --api-paths /api/v1/health,/api/v1/auth/session \
   --max-pages 50
-```
-
-For an authenticated crawl pass (credentials are never printed in reports):
-```bash
-python3 -m infra.invisibility \
-  --base-url http://localhost:8080 \
-  --api-paths /api/v1/health,/api/v1/customers \
-  --auth-header "Authorization: Bearer $TOKEN" \
-  --cookie "session=$SESSION_COOKIE"
 ```
 
 To output machine-readable JSON:
@@ -74,4 +60,4 @@ python3 -m infra.invisibility \
 
 ## Disabled-until-staging note
 
-Staging does not exist yet (INF-003 / ADR-0018). Staging hosts must not be invented or assumed. The crawler tool and its unit tests are fully implemented and verified locally, but plan row QA-016 remains open (`doing`) until real staging infrastructure is deployed and the test is executed against the live staging URL. This requirement is tracked in [docs/open-questions.md](../../docs/open-questions.md) as question Q-261.
+Staging does not exist yet (INF-003 / ADR-0018). Staging hosts must not be invented or assumed. The crawler tool and its unit tests are fully implemented and verified locally, but plan row QA-016 remains open (`doing`) until real staging infrastructure is deployed and the test is executed against the live staging URL. This requirement is tracked in [docs/open-questions.md](../../docs/open-questions.md) as question Q-167.

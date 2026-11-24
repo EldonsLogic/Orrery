@@ -6,12 +6,10 @@ customer audience names that tenant. Staff tokens carry no tenant. Every check
 fails closed with a typed IDN code."""
 
 import base64
-import contextvars
 import json
 import re
 import secrets
-import weakref
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import Optional
 
 from .errors import IdentityError
@@ -46,16 +44,8 @@ class RealmConfig:
         return self.audience
 
 
-_MINTING = contextvars.ContextVar("identity_minting_claims", default=False)
-
-
 @dataclass(frozen=True)
 class AccessClaims:
-    """Claims of a token that `decode` verified. Callers cannot build one: direct
-    construction, `replace` and copies raise IDN-006, and consumers re-check on
-    every use (`check_live`) that this exact object came from `decode` with these
-    exact values, and that it is inside its time window. Best-effort in-process
-    guard, not a security boundary; the signature is the boundary (Q-152)."""
     issuer: str
     audience: str
     subject: str
@@ -68,78 +58,6 @@ class AccessClaims:
     not_before: int
     expires_at: int
     token_id: str
-
-    def __post_init__(self):
-        if not _MINTING.get():
-            raise IdentityError("IDN-006")
-
-    def __copy__(self):
-        raise IdentityError("IDN-006")
-
-    def __deepcopy__(self, memo):
-        raise IdentityError("IDN-006")
-
-    def __reduce_ex__(self, protocol):
-        raise IdentityError("IDN-006")
-
-
-VerifiedClaims = AccessClaims  # the name consumers should use
-_FIELDS = tuple(f.name for f in fields(AccessClaims))
-
-
-def _mint_claims(*args) -> AccessClaims:
-    """Build an instance. It is not registered, so it fails `check_live`; only
-    `decode` registers what it builds."""
-    token = _MINTING.set(True)
-    try:
-        return AccessClaims(*args)
-    finally:
-        _MINTING.reset(token)
-
-
-def _registry():
-    """Private registry: object id -> (weak reference, typed field values) for every
-    instance `decode` minted. Binding the object identity and its values means a
-    `__dict__` copy, an in-place `object.__setattr__`, a subclass or a `__class__`
-    swap all fail. Python cannot hide it from deliberate introspection (Q-152)."""
-    live = {}
-
-    def values(claims):
-        state = object.__getattribute__(claims, "__dict__")
-        return tuple((type(state.get(n)), state.get(n)) for n in _FIELDS)
-
-    def register(claims):
-        key = id(claims)
-
-        def gone(ref, key=key):
-            if live.get(key, (None,))[0] is ref:
-                del live[key]
-
-        live[key] = (weakref.ref(claims, gone), values(claims))
-        return claims
-
-    def registered(claims) -> bool:
-        if type(claims) is not AccessClaims:
-            return False
-        entry = live.get(id(claims))
-        return entry is not None and entry[0]() is claims and entry[1] == values(claims)
-
-    return register, registered
-
-
-_register, _registered = _registry()
-
-
-def check_live(claims, now: int) -> AccessClaims:
-    """Verify-on-use: this exact object came from `decode`, unchanged, and is
-    inside its time window."""
-    if not _registered(claims):
-        raise IdentityError("IDN-006")
-    if claims.not_before > now or claims.issued_at > now:
-        raise IdentityError("IDN-005")
-    if claims.expires_at <= now:
-        raise IdentityError("IDN-004")
-    return claims
 
 
 def _b64e(raw: bytes) -> str:
@@ -250,6 +168,5 @@ def decode(token, cfg: RealmConfig, *, now: int, tenant: Optional[str]) -> Acces
         raise IdentityError("IDN-004")
     if c["exp"] - c["iat"] > MAX_TTL or c["auth_time"] > c["iat"]:
         raise IdentityError("IDN-008")
-    return _register(_mint_claims(c["iss"], c["aud"], c["sub"], c["tid"], realm, c["sv"],
-                                  c["mfa"], c["auth_time"], c["iat"], c["nbf"], c["exp"],
-                                  c["jti"]))
+    return AccessClaims(c["iss"], c["aud"], c["sub"], c["tid"], realm, c["sv"], c["mfa"],
+                        c["auth_time"], c["iat"], c["nbf"], c["exp"], c["jti"])

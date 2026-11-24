@@ -6,20 +6,15 @@ implementation must make `mark_invite_used` and `mark_refresh_used` atomic
 compare-and-set operations, or single use and reuse detection break. Family
 revocation is a durable tombstone: `put_refresh` must check it and store in one
 atomic step, so a rotation racing reuse detection cannot mint a live token in a
-revoked family. `transition_grant` must be one atomic compare-and-set (a
-conditional UPDATE or single transaction) that sets only the named fields on the
-current row; support grant approve and revoke rely on it. `put_grant_if_under_cap`
-must count the live pending requests and insert in one atomic step (a single
-transaction or conditional insert), or concurrent requests bypass the cap. A real
-store should take `now` from the database clock for these. The session high-water mark per person and tenant must survive
+revoked family. The session high-water mark per person and tenant must survive
 membership removal and never go down."""
 
 from abc import ABC, abstractmethod
 from dataclasses import replace
 from typing import Optional
 
-from .models import (GrantStatus, Invite, Membership, Person, RefreshRecord,
-                     StaffIdentity, SupportGrant, TenantState)
+from .models import (Invite, Membership, Person, RefreshRecord, StaffIdentity,
+                     SupportGrant, TenantState)
 
 
 class Repository(ABC):
@@ -75,22 +70,6 @@ class Repository(ABC):
     def put_grant(self, grant: SupportGrant) -> None: ...
     @abstractmethod
     def get_grant(self, grant_id: str) -> Optional[SupportGrant]: ...
-    @abstractmethod
-    def transition_grant(self, grant_id: str, from_statuses: frozenset,
-                         changes: dict) -> Optional[SupportGrant]:
-        """Atomically apply `changes` (which must include `status`) to the current
-        row only if its status is in `from_statuses`; only status, approved_by,
-        approved_at and expires_at may change, other fields keep their stored
-        values. Return the new row, or None if unknown or already moved on."""
-    @abstractmethod
-    def put_grant_if_under_cap(self, grant: SupportGrant, max_pending: int, now: int,
-                               pending_ttl: int) -> bool:
-        """Atomically insert `grant` only if fewer than `max_pending` PENDING grants
-        with `requested_at + pending_ttl > now` exist for its staff member and tenant;
-        False if the cap is reached."""
-
-
-_MUTABLE_GRANT_FIELDS = frozenset({"status", "approved_by", "approved_at", "expires_at"})
 
 
 class InMemoryRepository(Repository):
@@ -185,21 +164,3 @@ class InMemoryRepository(Repository):
 
     def get_grant(self, grant_id):
         return self._grants.get(grant_id)
-
-    def transition_grant(self, grant_id, from_statuses, changes):
-        cur = self._grants.get(grant_id)
-        if (cur is None or cur.status not in from_statuses or "status" not in changes
-                or not set(changes) <= _MUTABLE_GRANT_FIELDS):
-            return None
-        new = replace(cur, **changes)
-        self._grants[grant_id] = new
-        return new
-
-    def put_grant_if_under_cap(self, grant, max_pending, now, pending_ttl):
-        live = sum(1 for g in self._grants.values()
-                   if g.staff_id == grant.staff_id and g.tenant_id == grant.tenant_id
-                   and g.status is GrantStatus.PENDING and g.requested_at + pending_ttl > now)
-        if live >= max_pending or grant.grant_id in self._grants:
-            return False
-        self._grants[grant.grant_id] = grant
-        return True

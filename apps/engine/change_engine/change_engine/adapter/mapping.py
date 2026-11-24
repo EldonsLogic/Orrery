@@ -42,23 +42,6 @@ ENTITY_TO_DOCTYPE = {
     "session_token": "Session",
 }
 
-# BPL-031 / BPL-034: entities that the mapping contract (contracts/engine-mapping.md 0.2.0, purchasing example) maps to a
-# built-in engine document type but that the reviewed grant table above does not list yet. They resolve to the built-in
-# name so entity.add and field.add never make a custom twin of it ("Purchase Order Line" beside "Purchase Order Item").
-# They are NOT in the grant allowlist (SEC-022, ADR-0051 item 3): a role grant on them stays refused until the BPL-034
-# follow-up reviews them and moves them into ENTITY_TO_DOCTYPE. Engine names are UNVERIFIED until a bench run.
-CONTRACT_ENTITY_TO_DOCTYPE = {
-    "supplier": "Supplier",
-    "price_list": "Price List",
-    "price_list_item": "Item Price",
-    "purchase_order": "Purchase Order",
-    "purchase_order_line": "Purchase Order Item",
-    "purchase_receipt": "Purchase Receipt",
-    "purchase_receipt_line": "Purchase Receipt Item",
-    "purchase_invoice": "Purchase Invoice",
-    "purchase_invoice_line": "Purchase Invoice Item",
-}
-
 # BPL-031 review: where the mapping contract (contracts/examples/engine-mapping-*.json) stores a Blueprint field under a
 # name other than its own, {(entity, field): engineField}; None when the contract names no field on the entity's own type
 # (the data is stored on another record, such as Item.selling_price on Item Price). A Blueprint hiddenFields mask must land
@@ -223,14 +206,12 @@ def rule_flags(actions: Any, *, masked: bool, submittable: bool) -> dict[str, in
 def entity_to_doctype(entity_id: str) -> str:
     if entity_id in ENTITY_TO_DOCTYPE:
         return ENTITY_TO_DOCTYPE[entity_id]
-    if entity_id in CONTRACT_ENTITY_TO_DOCTYPE:
-        return CONTRACT_ENTITY_TO_DOCTYPE[entity_id]
     return " ".join(part.capitalize() for part in str(entity_id).replace("-", "_").split("_") if part) or "Custom Entity"
 
 
 def is_contract_mapped_entity(entity_id: Any) -> bool:
     """True when the mapping contract maps this entity to a built-in engine document type (BPL-031)."""
-    return isinstance(entity_id, str) and (entity_id in ENTITY_TO_DOCTYPE or entity_id in CONTRACT_ENTITY_TO_DOCTYPE)
+    return isinstance(entity_id, str) and entity_id in ENTITY_TO_DOCTYPE
 
 
 # The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
@@ -261,11 +242,20 @@ def _protected_key(name: Any) -> str:
     return re.sub(r"[\s_]+", "_", str(name).strip()).casefold()
 
 
+# The adapter's own tables (`Change Engine Audit`, `... Blueprint State`, `... Entity Field`, ...) share this name prefix.
+# A Blueprint entity whose id or derived type name starts with it would take one of them over, so none may be named so.
+_INTERNAL_NAME_PREFIX = "change_engine_"
+
+
 def is_protected_entity(entity_id: str) -> bool:
-    """Compared on a normalised key: `gl_entry`, `GL Entry` and `gl_entry ` are one protected entity."""
+    """Compared on a normalised key: `gl_entry`, `GL Entry` and `gl_entry ` are one protected entity. The adapter's own
+    internal table names are reserved the same way (BPL-031 review)."""
     if _protected_key(entity_id) in {_protected_key(i) for i in PROTECTED_ENTITY_IDS}:
         return True
-    return is_locked_doctype(entity_to_doctype(entity_id))
+    doctype = entity_to_doctype(entity_id)
+    if _protected_key(entity_id).startswith(_INTERNAL_NAME_PREFIX) or _protected_key(doctype).startswith(_INTERNAL_NAME_PREFIX):
+        return True
+    return is_locked_doctype(doctype)
 
 
 # SEC-022 / ADR-0051 item 3: the document types a Blueprint role may get permission rules on are an allowlist:

@@ -13,7 +13,6 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
-import logging
 import os
 import re
 from typing import Any, Callable, Iterator
@@ -53,7 +52,6 @@ from change_engine.guarded_apply.workflow_engine import (
     execute_workflow_deployment,
 )
 
-_LOGGER = logging.getLogger(__name__)
 
 COUNTRY_DEFAULTS: dict[str, dict[str, str]] = {
     "sa": {"country": "Saudi Arabia", "currency": "SAR", "language": "ar", "timezone": "Asia/Riyadh"},
@@ -608,6 +606,7 @@ class FrappeRuntimeBackend:
             try:
                 if kind == "entity.add":
                     entity_id = str(subject.get("id") or (segs[1] if len(segs) > 1 else "entity"))
+                    self._refuse_protected_entity(entity_id)
                     doctype = entity_to_doctype(entity_id)
                     self._add_entity(f, dep, tenant_id, entity_id, doctype, params.get("definition") or {})
 
@@ -619,6 +618,7 @@ class FrappeRuntimeBackend:
                 elif kind in ("field.add", "relation.add"):
                     parents = subject.get("parents") or []
                     entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
+                    self._refuse_protected_entity(entity_id)
                     doctype = entity_to_doctype(entity_id)
                     defn = params.get("definition") or {"id": subject.get("id") or "field", "type": "string"}
                     if kind == "relation.add":
@@ -850,6 +850,12 @@ class FrappeRuntimeBackend:
             return None, None
         existing = f.db.get_value("Warehouse", {"warehouse_name": wh_name, "company": company}, "name")
         return (str(existing) if existing else None), company
+
+    def _refuse_protected_entity(self, entity_id: str) -> None:
+        """No field or type is added to a protected or locked entity, or to a reserved internal name, whatever the plan
+        said (SEC-022, ADR-0051; BPL-031 review). Raised before any write."""
+        if is_protected_entity(entity_id):
+            raise self._refuse("protected_subject")
 
     def _add_entity(self, f: Any, dep: FrappeDeploymentAdapter, tenant_id: str, entity_id: str, doctype: str,
                     defn: dict[str, Any]) -> None:

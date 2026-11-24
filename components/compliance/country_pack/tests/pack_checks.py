@@ -15,11 +15,7 @@ from components.compliance.country_pack.evidence import (
     EVIDENCE_LABELS,
     covered,
     evidence_entries,
-    fact_source_violations,
-    get,
     labelled,
-    leaves,
-    source_violations,
 )
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
@@ -28,6 +24,11 @@ REPO_ROOT = PACKAGE_DIR.parents[2]
 MANIFEST_SCHEMA = REPO_ROOT / "contracts" / "component.manifest.schema.json"
 BLUEPRINT_SCHEMA = REPO_ROOT / "contracts" / "blueprint.schema.json"
 
+ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# A source that was not read in full (a snippet, a search excerpt, not fetched) carries `"read": false`
+# and no access date; every other source carries an access date. This note pattern is only a backstop
+# that catches a read source whose note says otherwise.
+UNREAD_NOTE = re.compile(r"snippet|excerpt|not (fetched|read)", re.I)
 # Areas whose every leaf must be backed by an evidence entry.
 EVIDENCED_AREAS = ("coaTemplate", "tax", "eInvoicing", "localeDefaults", "formats", "payrollHooks", "printFormats")
 # Keys that would mean a pack carries tax, ledger or invoice maths (principle 3, ADR-0031).
@@ -74,6 +75,15 @@ def load_triplet(vdir: Path) -> tuple[dict, dict, dict]:
     return tuple(read_json(vdir / n) for n in ("pack.json", "manifest.json", "evidence.json"))
 
 
+def leaves(obj, prefix: str = ""):
+    """(dotted path, value) for every leaf; lists are leaves."""
+    if isinstance(obj, dict):
+        for key, val in obj.items():
+            yield from leaves(val, f"{prefix}.{key}" if prefix else key)
+    else:
+        yield prefix, obj
+
+
 def all_leaves(obj, prefix: str = ""):
     """Like `leaves`, but also walks lists (`name[0]`)."""
     if isinstance(obj, dict):
@@ -94,6 +104,16 @@ def keys(obj):
     elif isinstance(obj, list):
         for item in obj:
             yield from keys(item)
+
+
+def get(obj: dict, dotted: str):
+    """Resolve a dotted path; `name[0]` indexes a list."""
+    for part in dotted.split("."):
+        key, _, idx = part.partition("[")
+        obj = obj[key]
+        if idx:
+            obj = obj[int(idx.rstrip("]"))]
+    return obj
 
 
 def blueprint_modes() -> set[str]:
@@ -143,6 +163,28 @@ def rate_like_violations(pack: dict, modes: set[str]) -> list[str]:
     for path, val in all_leaves({"notes": pack.get("notes", ""), "name": pack.get("name", {})}):
         if isinstance(val, str):
             bad += free_text_violations(path, val)
+    return bad
+
+
+def source_violations(src: dict, today: str) -> list[str]:
+    """Structural read rule: `"read": false` and an access date never go together, and one of them is set."""
+    bad = []
+    if not src.get("url", "").startswith("https://"):
+        bad.append(f"{src.get('url')!r}: not an https URL")
+    if "read" in src and src["read"] is not False:
+        bad.append(f"{src['url']}: read may only be false")
+    if src.get("read") is False:
+        if "accessed" in src:
+            bad.append(f"{src['url']}: unread source has an access date")
+        if not src.get("note"):
+            bad.append(f"{src['url']}: unread source needs a note saying why")
+        return bad
+    if not ISO_DATE.match(str(src.get("accessed", ""))):
+        bad.append(f"{src['url']}: read source needs an ISO access date (or read: false)")
+    elif src["accessed"] > today:
+        bad.append(f"{src['url']}: access date in the future")
+    if UNREAD_NOTE.search(src.get("note", "")):
+        bad.append(f"{src['url']}: note says unread but the source is not marked read: false")
     return bad
 
 

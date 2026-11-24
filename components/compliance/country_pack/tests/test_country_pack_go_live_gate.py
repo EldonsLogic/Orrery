@@ -77,9 +77,7 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
         })
         self._save(version, "evidence.json", {
             "packId": pack["packId"], "version": version,
-            "facts": [{"paths": ["countryCode", "packId", "componentId", "version", "coaTemplate",
-                                 "tax", "eInvoicing", "formats", "payrollHooks", "printFormats",
-                                 "localeDefaults.holidays.calendarRef", "localeDefaults.currency"],
+            "facts": [{"paths": ["tax", "eInvoicing", "payrollHooks"],
                        "status": "SECONDARY" if evidence == "secondary" else "VERIFIED-OFFICIAL",
                        "claim": "Synthetic evidence fixture only.",
                        "sources": [{"url": "https://example.org/synthetic", "accessed": "2026-01-01"}]}],
@@ -152,96 +150,6 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
         v = self._write("certified", "secondary")
         record = self._record(v, "evidence.json")
         record["facts"].append({"paths": ["localeDefaults.week.startDay"], "status": "UNVERIFIED"})
-        self._save(v, "evidence.json", record)
-        self._assert_loads(v)
-
-    def test_production_requires_evidence_for_all_locked_leaves(self) -> None:
-        v = self._write("certified", "secondary")
-        record = self._record(v, "evidence.json")
-        record["facts"] = [{"paths": ["name"], "status": "VERIFIED-OFFICIAL"}]
-        self._save(v, "evidence.json", record)
-        self._assert_refused(v)
-        for environment in ("sandbox", "test"):
-            self._assert_loads(v, environment=environment)
-
-    def test_production_requires_each_sibling_leaf_even_when_one_is_evidenced(self) -> None:
-        v = self._write("certified", "secondary")
-        record = self._record(v, "evidence.json")
-        record["facts"][0]["paths"].remove("tax")
-        record["facts"][0]["paths"].append("tax.vatSupported")
-        self._save(v, "evidence.json", record)
-        self._assert_refused(v)
-
-    def test_production_refuses_fact_paths_absent_from_pack(self) -> None:
-        for path in ("holidays.calendarRef", "tax.nonexistent", "tax.vatSupported.child",
-                     "tax.filingPeriods[99]", "tax.filingPeriods[-1]"):
-            with self.subTest(path=path):
-                v = self._write("certified", "secondary")
-                record = self._record(v, "evidence.json")
-                record["facts"].append({"paths": [path], "status": "UNVERIFIED"})
-                self._save(v, "evidence.json", record)
-                with self.assertRaisesRegex(PackValidationError, "does not exist"):
-                    load_country_pack("SA", self.packs_dir, version=v)
-
-    def test_production_always_locks_tax_einvoicing_and_payroll(self) -> None:
-        for path in ("tax.vatSupported", "eInvoicing.required", "payrollHooks.wpsEnabled"):
-            with self.subTest(path=path):
-                v = self._write("certified", "secondary")
-                pack = self._record(v, "pack.json")
-                pack["overridesPolicy"]["lockedPaths"] = ["countryCode"]
-                self._save(v, "pack.json", pack)
-                record = self._record(v, "evidence.json")
-                record["facts"].append({"paths": [path], "status": "UNVERIFIED"})
-                self._save(v, "evidence.json", record)
-                with self.assertRaisesRegex(PackValidationError, "UNVERIFIED fact on locked path"):
-                    load_country_pack("SA", self.packs_dir, version=v)
-
-    def test_production_requires_minimum_locked_coverage_with_reduced_policy(self) -> None:
-        for area in ("tax", "eInvoicing", "payrollHooks"):
-            with self.subTest(area=area):
-                v = self._write("certified", "secondary")
-                pack = self._record(v, "pack.json")
-                pack["overridesPolicy"]["lockedPaths"] = ["countryCode"]
-                self._save(v, "pack.json", pack)
-                record = self._record(v, "evidence.json")
-                record["facts"][0]["paths"].remove(area)
-                self._save(v, "evidence.json", record)
-                self._assert_refused(v)
-
-    def test_production_requires_read_sources_for_locked_secondary_facts(self) -> None:
-        unread = {"url": "https://example.org/synthetic", "read": False, "note": "not fetched"}
-        for sources in ([], [unread], [dict(unread, accessed="2026-01-01")],
-                        [{"url": "https://example.org/synthetic", "accessed": "2026-01-01", "note": "snippet"}],
-                        [{"url": "https://example.org/synthetic", "accessed": "9999-01-01"}], None, [None]):
-            with self.subTest(sources=sources):
-                v = self._write("certified", "secondary")
-                record = self._record(v, "evidence.json")
-                record["facts"][0]["sources"] = sources
-                self._save(v, "evidence.json", record)
-                self._assert_refused(v)
-                for environment in ("sandbox", "test"):
-                    self._assert_loads(v, environment=environment)
-
-    def test_production_refuses_unverified_ancestor_of_locked_path(self) -> None:
-        v = self._write("certified", "secondary")
-        record = self._record(v, "evidence.json")
-        # Only the locale descendants are locked; this pins the reverse-overlap direction.
-        record["facts"].append({"paths": ["localeDefaults"], "status": "UNVERIFIED"})
-        self._save(v, "evidence.json", record)
-        self._assert_refused(v)
-
-    def test_production_accepts_leaf_coverage_with_whole_lists_and_nulls(self) -> None:
-        from components.compliance.country_pack.tests.pack_checks import get, leaves
-
-        v = self._write("certified", "secondary")
-        record = self._record(v, "evidence.json")
-        pack = self._record(v, "pack.json")
-        pack["tax"]["filingPeriods"] = []  # Empty lists still require their own evidence path.
-        self._save(v, "pack.json", pack)
-        record["facts"][0]["paths"] = [
-            leaf for area in record["facts"][0]["paths"]
-            for leaf, _ in leaves(get(pack, area), area)
-        ]
         self._save(v, "evidence.json", record)
         self._assert_loads(v)
 

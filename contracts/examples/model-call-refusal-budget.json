@@ -1,8 +1,0 @@
-{
-  "kind": "refusal",
-  "call_id": "call_run_1_step_2",
-  "code": "budget_refused",
-  "reason": "exceeded",
-  "retryable": false,
-  "reservation_released": true
-}

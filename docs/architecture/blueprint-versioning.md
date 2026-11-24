@@ -24,7 +24,7 @@ These are independent. A schema migration changes the encoding of a document, no
 - When the target is the schema's current version, the result is run through the validator. A result that fails is refused (`MIG-VALID-001`); no partial output.
 
 ### Revision decision
-A migration does not bump `meta.revision`. The revision counts approved business changes; a re-encoding is not one, and bumping it would make the diff between revisions show a change nobody decided. The cost is that two byte-different documents can share a revision, so anything that needs to detect the difference compares `schemaVersion` as well as the revision. ADR-0057 confirms this (Q-86); a control-plane migration marker can be added later without changing the rule.
+A migration does not bump `meta.revision`. The revision counts approved business changes; a re-encoding is not one, and bumping it would make the diff between revisions show a change nobody decided. The cost is that two byte-different documents can share a revision, so anything that needs to detect the difference compares `schemaVersion` as well as the revision. Open question Q-86 asks whether the control plane should record a migration marker instead.
 
 ### Build state decision
 Only a `draft` is migrated by default. After `owner_approved` the revision is frozen and the owner approved what they saw; changing its bytes silently would break that approval. A non-draft migration needs an explicit flag (`allow_non_draft`) and is meant for the control plane, which must then decide whether approvals reset (Q-87). Open drafts are cheap to migrate and are re-approved anyway.

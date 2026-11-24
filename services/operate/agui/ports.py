@@ -43,7 +43,6 @@ class RuntimeContext:
     user_text: str
     server_state: dict = field(default_factory=dict)
     locale: str = "en"
-    run_approvals: list = field(default_factory=list)  # approval ids this run created (runtime appends; M7)
 
 
 class TokenVerifier(Protocol):

@@ -12,11 +12,6 @@ from unicodedata import category
 class TradingError(ValueError):
     """Stable i18n key; the platform renders it using strings.json."""
 
-    def __init__(self, key, *, reason=None):
-        """Keep the renderable key separate from safe, non-customer diagnostic codes."""
-        super().__init__(key)
-        self.reason = reason
-
 
 def _text(value):
     """Accept bounded Arabic/English record names as data, excluding control characters."""
@@ -29,14 +24,11 @@ def _text(value):
 def _number(value, *, percent=False, zero=False):
     """Validate an explicit decimal without float conversion, rounding or money maths."""
     if not isinstance(value, str) or not re.fullmatch(r'[0-9]{1,12}(\.[0-9]{1,9})?', value):
-        raise TradingError('TRD-NUMBER', reason='expected_decimal_string')
+        raise TradingError('TRD-NUMBER')
     number = Decimal(value)
     if number < 0 or (number == 0 and not zero) or (percent and number > 100):
-        raise TradingError('TRD-NUMBER', reason='outside_allowed_range')
+        raise TradingError('TRD-NUMBER')
     return value
-
-
-_CREDIT_ROLES = frozenset({'Credit Controller', 'Accounts Manager', 'System Manager'})
 
 
 class TradingPack:
@@ -57,19 +49,6 @@ class TradingPack:
         if (not self.site or not self.user or self.user == 'Guest'
                 or self.engine.local.site != self.site or self.engine.session.user != self.user):
             raise TradingError('TRD-CONTEXT')
-
-    def _require_credit_role(self):
-        """Require a current credit-management role; fail closed on role-store errors."""
-        self._context()
-        try:
-            roles = self.engine.get_roles(self.user)
-        except Exception:
-            # Role-store failures must neither grant access nor leak engine details.
-            raise TradingError('TRD-ROLE') from None
-        self._context()
-        if (not isinstance(roles, (list, tuple, set, frozenset))
-                or not any(isinstance(role, str) and role in _CREDIT_ROLES for role in roles)):
-            raise TradingError('TRD-ROLE')
 
     def _doc(self, doctype, name, action='read'):
         self._context()
@@ -92,11 +71,9 @@ class TradingPack:
         saved = doc.insert() if create else doc.save()
         return saved.name
 
-    def _create(self, doctype, values, *, children=()):
+    def _create(self, doctype, values):
         doc = self.engine.new_doc(doctype)
         self._fields(doc, values)
-        for child_doctype, child_fields in children:
-            self._fields(doc, child_fields, doctype=child_doctype)
         doc.update(values)
         return self._save(doc, create=True)
 
@@ -119,8 +96,7 @@ class TradingPack:
         """Create a selling-only list; duplicate handling remains engine-owned."""
         self._doc('Currency', currency)
         # Native creation can set the default list; require permission for that setting too.
-        settings = self._doc('Selling Settings', 'Selling Settings', 'write')
-        self._fields(settings, ['selling_price_list'])
+        self._doc('Selling Settings', 'Selling Settings', 'write')
         return self._create('Price List', dict(price_list_name=_text(name), currency=currency,
                                                selling=1, buying=0, enabled=1))
 
@@ -136,8 +112,6 @@ class TradingPack:
     def create_volume_discount(self, title, company, price_list, item, min_qty, discount):
         """Create a company/item/list scoped quantity discount with no executable condition."""
         min_qty, discount = _number(min_qty), _number(discount, percent=True)
-        if Decimal(discount) >= 100:
-            raise TradingError('TRD-NUMBER', reason='outside_allowed_range')
         company_doc = self._doc('Company', company)
         price = self._price_list(price_list)
         self._doc('Item', item)
@@ -147,19 +121,15 @@ class TradingPack:
             title=_text(title), company=company, currency=price.get('currency'),
             for_price_list=price_list, apply_on='Item Code', items=[{'item_code': item}],
             selling=1, buying=0, price_or_product_discount='Price',
-            rate_or_discount='Discount Percentage', min_qty=min_qty, discount_percentage=discount),
-            children=(('Pricing Rule Item Code', ('item_code',)),))
+            rate_or_discount='Discount Percentage', min_qty=min_qty, discount_percentage=discount))
 
     def set_credit_limit(self, customer, company, limit):
         """Upsert one company limit, retaining other companies and clearing the bypass.
 
         Zero is refused: native zero can mean unlimited rather than a credit hold.
-        A credit-management session role is required in addition to native permissions.
-        Human approval binding remains a host activation gate (ERP-023 / ERP-008).
         Existing Accounts Settings.credit_controller exemptions remain untouched.
         Native submission hooks alone enforce exposure and receivable calculations.
         """
-        self._require_credit_role()
         limit = _number(limit)
         self._doc('Company', company)
         doc = self._doc('Customer', customer, 'write')
@@ -198,8 +168,6 @@ class TradingPack:
         """
         doc = self._doc('Sales Order', order, 'write')
         self._fields(doc, ['sales_team'])
-        self._fields(doc, ['sales_person', 'allocated_percentage', 'commission_rate'],
-                     doctype='Sales Team')
         if doc.get('docstatus') != 0:
             raise TradingError('TRD-DRAFT')
         self._doc('Company', doc.get('company'))

@@ -5,34 +5,8 @@ Registers runtime policy enforcement and the business record outbox.
 No Desk UI assets, no branding, no landing-page routing (the product UI is a separate service).
 """
 
-_RECORD_DOCTYPES = (
-    "Customer",
-    "Sales Order",
-    "Sales Invoice",
-    "Delivery Note",
-    "Item",
-    "Item Price",
-    "Price List",
-    "Warehouse",
-    "Stock Entry",
-    "Stock Entry Type",
-    "Stock Reconciliation",
-    "Account",
-    "Journal Entry",
-    "Fiscal Year",
-    "Company",
-    "Address",
-    "Contact",
-)
-_RECORD_HOOK_METHODS = (
-    "after_insert",
-    "on_update",
-    "on_submit",
-    "on_cancel",
-    "on_update_after_submit",
-    "on_trash",
-    "after_rename",
-)
+from change_engine.adapter.record_events import RECORD_ENTITIES as _record_entities
+from change_engine.adapter.record_events import RECORD_HOOKS as _record_hooks
 
 app_name = "change_engine"
 app_title = "Change Engine"
@@ -57,8 +31,8 @@ doc_events = {
     },
     **{
         doctype: {method: "change_engine.adapter.record_events.record_document_event"
-                  for method in _RECORD_HOOK_METHODS}
-        for doctype in _RECORD_DOCTYPES
+                  for method in _record_hooks}
+        for doctype in _record_entities
     },
 }
 

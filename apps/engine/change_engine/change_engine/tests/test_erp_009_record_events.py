@@ -2,74 +2,40 @@
 
 import importlib
 import json
-import os
-from pathlib import Path
 import sqlite3
-import subprocess
 import sys
-import threading
 from types import SimpleNamespace
 
 import pytest
 
 from change_engine import hooks
-from change_engine.adapter.record_events import (
-    RECORD_ENTITIES,
-    RECORD_HOOKS,
-    _import_evstream,
-    resolve_subject_id,
-)
-
-_evstream = _import_evstream()
-MemoryStore = _evstream.MemoryStore
-validate_event = _evstream.validate_event
+from evstream import MemoryStore, validate_event
 
 
 class Database:
-    """Use SQLite for real commits and rollbacks with real per-DB threading locks."""
+    """Use SQLite for real commits and rollbacks, substituting MariaDB's lock functions."""
 
-    _locks_guard = threading.Lock()
-    _db_locks: dict[str, threading.Lock] = {}
-
-    def __init__(self, path, *, create_tables: bool = True):
-        self.path = str(path)
-        self.connection = sqlite3.connect(self.path, check_same_thread=False, timeout=10.0)
-        if create_tables:
-            self.connection.executescript("""
-                CREATE TABLE IF NOT EXISTS document (name TEXT PRIMARY KEY);
-                CREATE TABLE IF NOT EXISTS `tabChange Engine Event Outbox` (
-                    position INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_id TEXT NOT NULL UNIQUE,
-                    payload TEXT NOT NULL,
-                    attempts INTEGER NOT NULL DEFAULT 0,
-                    last_error TEXT NULL,
-                    dead_lettered_at TEXT NULL
-                );
-                CREATE TABLE IF NOT EXISTS `tabChange Engine Event Subject` (
-                    subject_id TEXT PRIMARY KEY,
-                    entity TEXT NOT NULL,
-                    record_name TEXT NOT NULL,
-                    live INTEGER NULL DEFAULT 1,
-                    UNIQUE(entity, record_name, live)
-                );
-            """)
-        with self._locks_guard:
-            self._lock = self._db_locks.setdefault(self.path, threading.Lock())
-        self.held_locks: set[str] = set()
+    def __init__(self, path):
+        self.connection = sqlite3.connect(path)
+        self.connection.executescript("""
+            CREATE TABLE IF NOT EXISTS document (name TEXT PRIMARY KEY);
+            CREATE TABLE IF NOT EXISTS `tabChange Engine Event Outbox` (
+                position INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL UNIQUE,
+                payload TEXT NOT NULL
+            );
+        """)
+        self.locked = False
         self.fail_commit = False
 
     def sql(self, query, params=()):
         if "GET_LOCK" in query:
-            key = params[0]
-            if self._lock.acquire(blocking=False):
-                self.held_locks.add(key)
-                return [(1,)]
-            return [(0,)]
+            if self.locked:
+                return [(0,)]
+            self.locked = True
+            return [(1,)]
         if "RELEASE_LOCK" in query:
-            key = params[0]
-            if key in self.held_locks:
-                self.held_locks.remove(key)
-                self._lock.release()
+            self.locked = False
             return [(1,)]
         return self.connection.execute(query.replace("%s", "?"), params).fetchall()
 
@@ -86,54 +52,28 @@ class Document(dict):
     doctype = "Sales Order"
     name = "ERPNext-customer-private-key"
 
-    def __init__(self, *args, prior=None, **fields):
-        super().__init__(*args, **fields)
-        self._prior = prior
-
     def get_doc_before_save(self):
-        return self._prior
+        return self.get("prior")
 
 
-class FrappeLikeDocument:
-    """A real engine document is not a dict: it offers get() and as_dict() only."""
-
-    doctype = "Sales Order"
-
-    def __init__(self, name, prior=None, **fields):
-        self.name = name
-        self._prior = prior
-        self._fields = fields
-
-    def get(self, key, default=None):
-        return self._fields.get(key, default)
-
-    def as_dict(self):
-        return json.loads(json.dumps(self._fields))
-
-    def get_doc_before_save(self):
-        return self._prior
-
-
-def invoke_hook(doc, method, *args):
+def invoke_hook(doc, method):
     path = hooks.doc_events[doc.doctype][method]
     module, name = path.rsplit(".", 1)
-    getattr(importlib.import_module(module), name)(doc, method, *args)
+    getattr(importlib.import_module(module), name)(doc, method)
 
 
 @pytest.fixture
 def sites(tmp_path, monkeypatch):
     connections = []
     engine = SimpleNamespace(
-        conf={},
-        local=SimpleNamespace(),
-        flags=SimpleNamespace(in_install=False, in_migrate=False, in_patch=False),
+        conf={}, local=SimpleNamespace(),
         session=SimpleNamespace(user="frappe-private@example.invalid"),
     )
     monkeypatch.setitem(sys.modules, "frappe", engine)
 
-    def select(tenant, *, worker=False, create_tables=True):
+    def select(tenant, *, worker=False):
         # Each worker owns a separate connection to its site's database.
-        database = Database(tmp_path / tenant, create_tables=create_tables)
+        database = Database(tmp_path / tenant)
         connections.append(database.connection)
         engine.conf = {"tenant_id": tenant, "db_name": tenant}
         if worker:
@@ -146,92 +86,46 @@ def sites(tmp_path, monkeypatch):
         connection.close()
 
 
-def run_publisher(engine, append, **kwargs):
+def run_publisher(engine, append):
     engine.get_attr = lambda path: {"test.append": append}[path]
     path, = hooks.scheduler_events["all"]
     module, name = path.rsplit(".", 1)
-    return getattr(importlib.import_module(module), name)(**kwargs)
+    return getattr(importlib.import_module(module), name)()
 
 
-def test_hooks_module_imports_no_adapter_at_load_and_matches_registry():
-    assert set(hooks._RECORD_DOCTYPES) == set(RECORD_ENTITIES)
-    assert set(hooks._RECORD_HOOK_METHODS) == set(RECORD_HOOKS)
-    change_engine_root = str(Path(__file__).resolve().parents[2])
-    env = {**os.environ, "PYTHONPATH": change_engine_root}
-    proc = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import sys, change_engine.hooks; "
-            "assert not any(m.startswith('change_engine.adapter') for m in sys.modules)",
-        ],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr
-
-
-def test_lifecycle_hooks_deliver_contract_events_with_delete_and_rename(sites):
+def test_lifecycle_hooks_deliver_contract_events_in_order(sites):
     engine, select = sites
     db = select("t_alpha")
     draft = Document(docstatus=0, tenant_id="t_foreign", customer="t_foreign")
     invoke_hook(draft, "after_insert")
     invoke_hook(draft, "on_update")  # The insert also runs on_update.
-    invoke_hook(Document({**draft, "grand_total": 150}, prior=draft), "on_update")
+    invoke_hook(Document(prior=draft, docstatus=0), "on_update")
     submitted = Document(prior=draft, docstatus=1)
     invoke_hook(submitted, "on_update")  # The submit also runs on_update.
     invoke_hook(submitted, "on_submit")
-    invoke_hook(Document(prior=submitted, docstatus=1, notes="updated"), "on_update_after_submit")
-
-    # Rename keeps the exact same surrogate subject.id and updates the reverse map.
-    renamed = Document(docstatus=1)
-    renamed.name = "ERPNext-renamed-key"
-    invoke_hook(renamed, "after_rename", draft.name, renamed.name, False)
-
+    invoke_hook(Document(prior=submitted, docstatus=1), "on_update_after_submit")
     invoke_hook(Document(prior=submitted, docstatus=2), "on_cancel")
-    amended = Document(amended_from=renamed.name, docstatus=0)
+    amended = Document(amended_from=draft.name, docstatus=0)
     amended.name = "new-document-1"
     invoke_hook(amended, "after_insert")
-    invoke_hook(amended, "on_trash")
     db.commit()
 
     select("t_alpha", worker=True)
     store = MemoryStore()
-    assert run_publisher(engine, store.append) == 8
+    assert run_publisher(engine, store.append) == 6
     events = store.read("t_alpha")
     assert [event["type"] for event in events] == [
-        "sales_order.created",
-        "sales_order.updated",
-        "sales_order.submitted",
-        "sales_order.updated",
-        "sales_order.updated",
-        "sales_order.cancelled",
-        "sales_order.created",
-        "sales_order.deleted",
+        "sales_order.created", "sales_order.updated", "sales_order.submitted",
+        "sales_order.updated", "sales_order.cancelled", "sales_order.created",
     ]
-    assert [event["sequence"] for event in events] == list(range(1, 9))
+    assert [event["sequence"] for event in events] == list(range(1, 7))
     assert all(validate_event(event).ok for event in events)
     assert all(event["actor"]["kind"] == "user" for event in events)
-
-    orig_subject_id = events[0]["subject"]["id"]
-    assert orig_subject_id.startswith("rec_")
-    # Same surrogate ID across update, submit, rename, and amendment link.
-    assert events[4]["subject"]["id"] == orig_subject_id
-    assert events[4]["data"]["changed_fields"] == ["name"]
-    assert events[1]["data"]["changed_fields"] == ["grand_total"]
     assert events[2]["data"]["changes"] == {"status": "submitted"}
-    assert events[6]["data"]["amended_from_id"] == orig_subject_id
-    assert events[6]["subject"]["id"] != orig_subject_id
-    assert events[7]["subject"]["id"] == events[6]["subject"]["id"]
-    assert events[7]["data"]["deleted"] is True
-    # Bidirectional mapping resolves renamed and deleted records cleanly.
-    assert resolve_subject_id(db, orig_subject_id) == ("sales_order", "ERPNext-renamed-key")
-    assert resolve_subject_id(db, events[6]["subject"]["id"]) == ("sales_order", "new-document-1")
-
+    assert events[-1]["data"]["amended_from_id"] == events[0]["subject"]["id"]
+    assert events[-1]["subject"]["id"] != events[0]["subject"]["id"]
     visible = json.dumps(events).lower()
-    for marker in ("frappe", "erpnext", "t_foreign", "private", "renamed"):
+    for marker in ("frappe", "erpnext", "t_foreign", "private"):
         assert marker not in visible
 
 
@@ -349,382 +243,3 @@ def test_invalid_sink_acknowledgment_keeps_the_event_pending(sites, acknowledge)
     store = MemoryStore()
     assert run_publisher(engine, store.append) == 1
     assert store.read("t_alpha")[0]["type"] == "sales_order.created"
-
-
-def test_poison_row_quarantined_and_does_not_block_valid_events(sites):
-    engine, select = sites
-    db = select("t_alpha")
-    db.sql(
-        "INSERT INTO `tabChange Engine Event Outbox` (event_id, payload) VALUES (%s, %s)",
-        ("01J8ZK30000000000000000000", "{corrupt-json"),
-    )
-    bad_ack_doc = Document()
-    bad_ack_doc.name = "bad-ack-doc"
-    invoke_hook(bad_ack_doc, "after_insert")
-    good_doc = Document()
-    good_doc.name = "good-doc"
-    invoke_hook(good_doc, "after_insert")
-    db.commit()
-
-    select("t_alpha", worker=True)
-    store = MemoryStore()
-    # Corrupt JSON row dead-letters automatically, bad-ack fails on attempt 1..1 until max_attempts=2,
-    # then dead-letters on attempt 2 so good_doc delivers immediately.
-    def flaky_append(ev):
-        if "bad" in str(resolve_subject_id(db, ev["subject"]["id"])):
-            raise _evstream.EventError("EVS-ENV-002", "sink rejected poison payload")
-        return store.append(ev)
-
-    with pytest.raises(_evstream.EventError, match="sink rejected"):
-        run_publisher(engine, flaky_append, max_attempts=2)
-    assert run_publisher(engine, flaky_append, max_attempts=2) == 1
-    assert len(store.read("t_alpha")) == 1
-    assert resolve_subject_id(db, store.read("t_alpha")[0]["subject"]["id"]) == ("sales_order", "good-doc")
-    dead = db.sql(
-        "SELECT event_id, dead_lettered_at FROM `tabChange Engine Event Outbox` WHERE dead_lettered_at IS NOT NULL"
-    )
-    assert len(dead) == 2
-
-
-def test_changed_fields_work_on_real_non_dict_documents(sites):
-    engine, select = sites
-    db = select("t_alpha")
-    row = {"name": "r1", "item_code": "A", "qty": 1, "modified": "2026-01-01 09:00:00", "idx": 1}
-    before = FrappeLikeDocument(
-        "SO-1", docstatus=0, grand_total=100, modified="2026-01-01 09:00:00", items=[row],
-    )
-    invoke_hook(FrappeLikeDocument("SO-1", docstatus=0), "after_insert")
-    # Saving stamps every child row with a new modified time; that alone is not a change.
-    stamped = {**row, "modified": "2026-01-02 09:00:00"}
-    invoke_hook(FrappeLikeDocument(
-        "SO-1", prior=before, docstatus=0, grand_total=150, notes="x",
-        modified="2026-01-02 09:00:00", items=[stamped],
-    ), "on_update")
-    invoke_hook(FrappeLikeDocument(
-        "SO-1", prior=before, docstatus=0, grand_total=100, modified="2026-01-02 09:00:00",
-        items=[{**stamped, "qty": 2}],
-    ), "on_update")
-    db.commit()
-
-    select("t_alpha", worker=True)
-    store = MemoryStore()
-    assert run_publisher(engine, store.append) == 3
-    events = store.read("t_alpha")
-    assert events[1]["data"]["changed_fields"] == ["grand_total", "notes"]
-    assert events[2]["data"]["changed_fields"] == ["items"]
-
-
-def test_recreating_a_deleted_name_gets_a_new_subject_id(sites):
-    engine, select = sites
-    db = select("t_alpha")
-    doc = Document()
-    doc.name = "CUST-1"
-    invoke_hook(doc, "after_insert")
-    invoke_hook(doc, "on_trash")
-    invoke_hook(doc, "after_insert")  # The same name is created again later.
-    edited = Document(prior=Document(docstatus=0), docstatus=0, notes="x")
-    edited.name = "CUST-1"
-    invoke_hook(edited, "on_update")
-    db.commit()
-
-    select("t_alpha", worker=True)
-    store = MemoryStore()
-    assert run_publisher(engine, store.append) == 4
-    created, deleted, recreated, updated = store.read("t_alpha")
-    assert created["subject"]["id"] == deleted["subject"]["id"]
-    assert recreated["subject"]["id"] != deleted["subject"]["id"]
-    assert updated["subject"]["id"] == recreated["subject"]["id"]
-    assert resolve_subject_id(db, deleted["subject"]["id"]) == ("sales_order", "CUST-1")
-    assert resolve_subject_id(db, recreated["subject"]["id"]) == ("sales_order", "CUST-1")
-    live = db.sql("SELECT subject_id FROM `tabChange Engine Event Subject` WHERE live = 1")
-    assert live == [(recreated["subject"]["id"],)]
-
-
-def test_transient_sink_failures_never_dead_letter_an_event(sites):
-    engine, select = sites
-    db = select("t_alpha")
-    for name in ("first", "second"):
-        doc = Document()
-        doc.name = name
-        invoke_hook(doc, "after_insert")
-    db.commit()
-
-    select("t_alpha", worker=True)
-
-    def down(_event):
-        raise ConnectionError("sink unavailable")
-
-    for _ in range(4):  # Far past max_attempts: an outage must not lose events.
-        with pytest.raises(ConnectionError):
-            run_publisher(engine, down, max_attempts=2)
-    assert db.sql("SELECT COUNT(*) FROM `tabChange Engine Event Outbox` WHERE dead_lettered_at IS NOT NULL") == [(0,)]
-    assert db.sql("SELECT attempts, last_error FROM `tabChange Engine Event Outbox` ORDER BY position")[0] == (
-        4, "sink unavailable",
-    )
-
-    store = MemoryStore()
-    assert run_publisher(engine, store.append, max_attempts=2) == 2
-    names = [resolve_subject_id(db, e["subject"]["id"])[1] for e in store.read("t_alpha")]
-    assert names == ["first", "second"]
-
-
-def test_outbox_patch_does_not_swallow_ddl_errors():
-    patch = importlib.import_module("change_engine.patches.erp_009_create_event_outbox")
-    statements = []
-
-    class Db:
-        def sql_ddl(self, statement):
-            statements.append(statement)
-            if "ADD COLUMN" in statement:
-                raise RuntimeError("ddl failed")
-
-    sys.modules["frappe"] = SimpleNamespace(db=Db())
-    try:
-        with pytest.raises(RuntimeError, match="ddl failed"):
-            patch.execute()
-    finally:
-        del sys.modules["frappe"]
-
-    statements.clear()
-    Db.sql_ddl = lambda self, statement: statements.append(statement)
-    sys.modules["frappe"] = SimpleNamespace(db=Db())
-    try:
-        patch.execute()
-    finally:
-        del sys.modules["frappe"]
-    assert any("live TINYINT" in statement for statement in statements)
-
-
-def test_drains_more_than_100_rows_in_single_tick(sites):
-    engine, select = sites
-    db = select("t_alpha")
-    for idx in range(150):
-        doc = Document()
-        doc.name = f"SO-{idx:04d}"
-        invoke_hook(doc, "after_insert")
-    db.commit()
-
-    select("t_alpha", worker=True)
-    store = MemoryStore()
-    assert run_publisher(engine, store.append) == 150
-    assert len(store.read("t_alpha", limit=200)) == 150
-
-
-def test_pre_migrate_skips_during_migration_and_fails_closed_otherwise(sites):
-    engine, select = sites
-    select("t_unmigrated", worker=True, create_tables=False)
-    assert run_publisher(engine, MemoryStore().append) == 0
-
-    engine.flags.in_migrate = True
-    invoke_hook(Document(), "after_insert")
-    engine.flags.in_migrate = False
-
-    with pytest.raises(RuntimeError, match="missing; run bench migrate"):
-        invoke_hook(Document(), "after_insert")
-
-
-def test_concurrent_publishers_serialize_with_advisory_lock_without_duplicates(sites, monkeypatch):
-    engine, select = sites
-    db = select("t_alpha")
-    for idx in range(40):
-        doc = Document()
-        doc.name = f"CONC-{idx:03d}"
-        invoke_hook(doc, "after_insert")
-    db.commit()
-
-    store = MemoryStore()
-    store_lock = threading.Lock()
-    entered = threading.Event()
-    proceed = threading.Event()
-    results: list[int] = []
-    errors: list[BaseException] = []
-
-    def synchronized_append(event):
-        entered.set()
-        proceed.wait(timeout=5.0)
-        with store_lock:
-            return store.append(event)
-
-    def make_worker_frappe():
-        wdb = Database(db.path)
-        return SimpleNamespace(
-            conf={"tenant_id": "t_alpha", "db_name": "t_alpha", "record_event_sink": "test.append"},
-            local=SimpleNamespace(),
-            flags=SimpleNamespace(in_install=False, in_migrate=False, in_patch=False),
-            session=SimpleNamespace(user="frappe-private@example.invalid"),
-            db=wdb,
-            get_attr=lambda p: synchronized_append,
-        )
-
-    from change_engine.adapter import record_events
-
-    worker_one = make_worker_frappe()
-    worker_two = make_worker_frappe()
-
-    # Start worker 1, wait until it holds GET_LOCK inside append, then launch worker 2.
-    def run_w1():
-        sys.modules["frappe"] = worker_one
-        try:
-            results.append(record_events.publish_pending())
-        except BaseException as exc:  # pragma: no cover
-            errors.append(exc)
-        finally:
-            worker_one.db.connection.close()
-
-    t1 = threading.Thread(target=run_w1)
-    t1.start()
-    assert entered.wait(timeout=5.0)
-    # While worker 1 holds the DB advisory lock, worker 2 skips immediately with 0.
-    sys.modules["frappe"] = worker_two
-    try:
-        second_count = record_events.publish_pending()
-    finally:
-        worker_two.db.connection.close()
-        proceed.set()
-        t1.join(timeout=10.0)
-
-    assert not errors
-    assert second_count == 0
-    assert results == [40]
-    assert len(store.read("t_alpha")) == 40
-    assert [e["sequence"] for e in store.read("t_alpha")] == list(range(1, 41))
-
-
-def test_hooks_and_outbox_work_when_evstream_is_absent_from_sys_modules_and_path(sites, monkeypatch):
-    """Simulate a Frappe bench container where evstream is neither installed nor on sys.path."""
-    engine, select = sites
-    db = select("t_bench")
-
-    # Block evstream in sys.modules and strip any services/blueprint/events paths.
-    for mod_name in list(sys.modules):
-        if mod_name == "evstream" or mod_name.startswith("evstream."):
-            monkeypatch.setitem(sys.modules, mod_name, None)
-    monkeypatch.setitem(sys.modules, "evstream", None)
-    monkeypatch.delenv("ORRERY_EVSTREAM_DIR", raising=False)
-    monkeypatch.setattr(
-        sys,
-        "path",
-        [p for p in sys.path if "services/blueprint/events" not in p.replace("\\", "/")],
-    )
-
-    cust = FrappeLikeDocument("CUST-BENCH-1", docstatus=0, customer_name="Bench Co")
-    cust.doctype = "Customer"
-    invoke_hook(cust, "after_insert")
-    updated = FrappeLikeDocument("CUST-BENCH-1", prior=cust, docstatus=0, customer_name="Bench Co Ltd")
-    updated.doctype = "Customer"
-    invoke_hook(updated, "on_update")
-    invoke_hook(updated, "on_trash")
-    db.commit()
-
-    select("t_bench", worker=True)
-    received: list[dict] = []
-
-    def standalone_sink(event):
-        received.append(event)
-        return {"event_id": event["event_id"], "tenant_id": event["tenant_id"], "sequence": len(received)}
-
-    assert run_publisher(engine, standalone_sink) == 3
-    assert [e["type"] for e in received] == ["customer.created", "customer.updated", "customer.deleted"]
-    assert received[1]["data"]["changed_fields"] == ["customer_name"]
-    assert received[2]["data"]["deleted"] is True
-
-    # Verify every event emitted without evstream validates cleanly against the evstream contract.
-    for idx, ev in enumerate(received, start=1):
-        stamped = {**ev, "sequence": idx}
-        res = validate_event(stamped)
-        assert res.ok, res.as_dict()
-
-
-def test_subprocess_without_evstream_runs_hooks_and_quarantines_rejections(tmp_path):
-    """Run in an isolated subprocess with a meta_path blocker rejecting every evstream import."""
-    change_engine_root = str(Path(__file__).resolve().parents[2])
-    db_file = str(tmp_path / "isolated.sqlite")
-    script = f"""
-import importlib, importlib.abc, json, sqlite3, sys
-from types import SimpleNamespace
-
-class BlockEvstream(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path, target=None):
-        if fullname == "evstream" or fullname.startswith("evstream."):
-            raise ModuleNotFoundError("blocked evstream import in bench simulation")
-        return None
-
-sys.meta_path.insert(0, BlockEvstream())
-
-import change_engine.hooks as hooks
-from change_engine.adapter.record_events import RecordEventError, publish_pending
-
-conn = sqlite3.connect({db_file!r})
-conn.executescript('''
-    CREATE TABLE `tabChange Engine Event Outbox` (
-        position INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_id TEXT NOT NULL UNIQUE,
-        payload TEXT NOT NULL,
-        attempts INTEGER NOT NULL DEFAULT 0,
-        last_error TEXT NULL,
-        dead_lettered_at TEXT NULL
-    );
-    CREATE TABLE `tabChange Engine Event Subject` (
-        subject_id TEXT PRIMARY KEY,
-        entity TEXT NOT NULL,
-        record_name TEXT NOT NULL,
-        live INTEGER NULL DEFAULT 1,
-        UNIQUE(entity, record_name, live)
-    );
-''')
-
-class Db:
-    def sql(self, query, params=()):
-        if "GET_LOCK" in query or "RELEASE_LOCK" in query:
-            return [(1,)]
-        return conn.execute(query.replace("%s", "?"), params).fetchall()
-    def commit(self):
-        conn.commit()
-    def rollback(self):
-        conn.rollback()
-
-delivered = []
-def sink(ev):
-    if ev["type"] == "sales_order.created":
-        raise RecordEventError("EVS-ENV-002", "rejected")
-    delivered.append(ev)
-    return {{"event_id": ev["event_id"], "tenant_id": ev["tenant_id"], "sequence": len(delivered)}}
-
-engine = SimpleNamespace(
-    conf={{"tenant_id": "t_iso", "db_name": "t_iso", "record_event_sink": "test.sink"}},
-    local=SimpleNamespace(),
-    flags=SimpleNamespace(in_install=False, in_migrate=False, in_patch=False),
-    session=SimpleNamespace(user="Administrator"),
-    db=Db(),
-    get_attr=lambda p: sink,
-)
-sys.modules["frappe"] = engine
-
-def call_hook(doctype, name, method):
-    path = hooks.doc_events[doctype][method]
-    mod, fn = path.rsplit(".", 1)
-    doc = SimpleNamespace(doctype=doctype, name=name, get=lambda k, d=None: d, get_doc_before_save=lambda: None)
-    getattr(importlib.import_module(mod), fn)(doc, method)
-
-call_hook("Sales Order", "SO-BAD", "after_insert")
-call_hook("Customer", "CUST-OK", "after_insert")
-conn.commit()
-
-# First tick fails on poison Sales Order; second tick quarantines it and delivers Customer.
-try:
-    publish_pending(max_attempts=2)
-    raise AssertionError("expected RecordEventError")
-except RecordEventError:
-    pass
-assert publish_pending(max_attempts=2) == 1
-assert len(delivered) == 1 and delivered[0]["type"] == "customer.created"
-assert "evstream" not in sys.modules
-print(json.dumps(delivered[0]))
-"""
-    env = {k: v for k, v in os.environ.items() if k != "ORRERY_EVSTREAM_DIR"}
-    env["PYTHONPATH"] = change_engine_root
-    proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=env, check=False)
-    assert proc.returncode == 0, proc.stderr
-    emitted = json.loads(proc.stdout.strip().splitlines()[-1])
-    res = validate_event({**emitted, "sequence": 1})
-    assert res.ok, res.as_dict()

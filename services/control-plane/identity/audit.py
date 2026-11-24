@@ -1,14 +1,9 @@
 """Append-only, in-memory audit of every identity decision. No secrets, tokens
-or contact addresses are recorded; only ids, decision and reason code. By
-convention `detail` carries only ids and enumerated values: the length cap limits
-size, it does not redact personal data. `tenant` and `subject` may come from
-caller input, so a value that is not a short string is stored as None."""
+or contact addresses are recorded; only ids, decision and reason code."""
 
 from dataclasses import dataclass
 from typing import Optional
 
-MAX_DETAIL = 200
-MAX_ID = 256
 ALLOW = "allow"
 DENY = "deny"
 
@@ -26,10 +21,6 @@ class AuditEvent:
     detail: str = ""
 
 
-def _bounded_id(value) -> Optional[str]:
-    return value if isinstance(value, str) and 0 < len(value) <= MAX_ID else None
-
-
 class AuditLog:
     """Only `record` adds; nothing edits or removes. `events` returns a copy."""
 
@@ -41,8 +32,7 @@ class AuditLog:
         if decision not in (ALLOW, DENY):
             raise ValueError("decision must be allow or deny")
         event = AuditEvent(len(self._events) + 1, at, action, decision, code, realm,
-                           _bounded_id(subject), _bounded_id(tenant),
-                           "" if detail is None else str(detail)[:MAX_DETAIL])
+                           subject, tenant, detail)
         self._events.append(event)
         return event
 

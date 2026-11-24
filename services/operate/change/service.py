@@ -32,7 +32,7 @@ from . import edits as ed
 from . import policy
 from ._deps import bpdiff, blueprint_hash, validate
 from .errors import ChangeRefused
-from .models import (ACTION_ID, DEFAULT_TTL_S, IMPACT_RISK, MAX_CHAT_RISK, ApplyRefused, BlueprintPort,
+from .models import (ACTION_ID, DEFAULT_TTL_S, IMPACT_RISK, MAX_CHAT_RISK, MAX_PREVIEW_OPS, ApplyRefused, BlueprintPort,
                      ChangeDrafterPort, DraftRequest, Outcome, Preview, Proposal)
 from .store import InMemoryProposalStore
 
@@ -72,13 +72,14 @@ def _clock_ok(now) -> bool:
 class ChangeService:
     def __init__(self, *, blueprints: BlueprintPort, drafter: ChangeDrafterPort, clock: Callable[[], float],
                  allowed_roles, store=None, audit: Optional[Callable[[dict], None]] = None,
-                 ttl_s: float = DEFAULT_TTL_S):
+                 ttl_s: float = DEFAULT_TTL_S, max_ops: int = MAX_PREVIEW_OPS):
         if type(ttl_s) not in (int, float) or not math.isfinite(ttl_s) or ttl_s <= 0:
             raise ChangeRefused("change_unavailable")
         self.bp, self.drafter, self.clock = blueprints, drafter, clock
         self.allowed_roles = frozenset(allowed_roles)  # required: no default role may change the configuration
         self.store = store or InMemoryProposalStore()
         self.audit, self.ttl_s = audit, ttl_s
+        self.max_ops = min(int(max_ops), MAX_PREVIEW_OPS)  # never confirm more ops than a preview lists
 
     # ---- helpers -------------------------------------------------------------------------------------------
     def _emit(self, kind: str, p, **extra) -> None:
@@ -118,6 +119,8 @@ class ChangeService:
             raise ChangeRefused("change_invalid_blueprint") from None
         if d["base"]["hash"] != blueprint_hash(current) or d["target"]["hash"] != blueprint_hash(target) or not d["ops"]:
             raise ChangeRefused("change_invalid_blueprint")
+        if len(d["ops"]) > self.max_ops:
+            raise ChangeRefused("change_needs_review")  # the preview must show every op that confirm applies
         floor = policy.check_diff(d, current, target)  # every changed path, default deny
         impact_risk = max_risk(*[IMPACT_RISK.get(op["impact"], "R4") for op in d["ops"]])  # unknown impact -> R4
         risk = max_risk(MODE_RISK_FLOOR["change"], impact_risk, floor, hint_risk)
@@ -216,7 +219,8 @@ class ChangeService:
         if _sha(d) != prop.diff_hash or d["target"]["hash"] != prop.target_hash or _RANK[risk] > _RANK[prop.risk]:
             raise ChangeRefused("change_tampered")
         if not self.store.consume(prop):  # used once, before the write: a failed apply needs a new proposal
-            raise ChangeRefused("change_replayed")
+            # really used -> replayed; otherwise a newer proposal took its place mid-confirm
+            raise ChangeRefused("change_replayed" if self.store.used(prop.digest) else "change_superseded")
         actor = {"tenant": tenant, "subject": user, "roles": sorted(principal.role_ids), "session": session_id}
         try:
             res = self.bp.submit_change(tenant, copy.deepcopy(d), prop.digest, prop.digest, actor=actor, risk=prop.risk)

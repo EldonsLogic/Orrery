@@ -8,7 +8,7 @@ import type { RequestDraft } from './grants';
  * stores nothing and logs nothing. Open question Q-225.
  */
 export type PortResult = { ok: false; reason: 'not_wired' };
-export type ViewScreen = 'tenants' | 'grants' | 'audit' | 'tenant_banner';
+export type ViewScreen = 'tenants' | 'grants' | 'audit' | 'tenant_banner' | 'component_requests';
 
 export type SupportGrantPort = {
   request: (draft: RequestDraft) => Promise<PortResult>;

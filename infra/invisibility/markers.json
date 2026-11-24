@@ -1,0 +1,202 @@
+[
+  {
+    "id": "MARKER-FRAPPE",
+    "pattern": "frappe",
+    "match_type": "substring",
+    "targets": ["body", "header_value", "header_name", "cookie_name", "cookie_value"],
+    "case_sensitive": false,
+    "comment": "Frappe Framework is the seed engine; its name must never appear on any customer-visible surface (ADR-0016)."
+  },
+  {
+    "id": "MARKER-ERPNEXT",
+    "pattern": "erpnext",
+    "match_type": "substring",
+    "targets": ["body", "header_value", "header_name", "cookie_name", "cookie_value"],
+    "case_sensitive": false,
+    "comment": "ERPNext is the seed ERP application; its name must never appear on customer-visible surfaces (ADR-0016)."
+  },
+  {
+    "id": "MARKER-API-METHOD",
+    "pattern": "/api/method/",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Frappe RPC endpoint URL prefix; gateway must expose platform endpoints instead (ADR-0016)."
+  },
+  {
+    "id": "MARKER-API-RESOURCE",
+    "pattern": "/api/resource/",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Frappe REST resource URL prefix; gateway must expose platform REST endpoints (ADR-0016)."
+  },
+  {
+    "id": "MARKER-DESK",
+    "pattern": "\\bdesk\\b",
+    "match_type": "regex",
+    "targets": ["body", "header_value", "cookie_name"],
+    "case_sensitive": false,
+    "comment": "Frappe Desk admin workspace/route name; tenants must never see engine desk references (ADR-0016)."
+  },
+  {
+    "id": "MARKER-SID-COOKIE",
+    "pattern": "sid",
+    "match_type": "exact",
+    "targets": ["cookie_name"],
+    "case_sensitive": false,
+    "comment": "Frappe standard session cookie is named 'sid'; gateway/web app must rename or manage its own session cookies."
+  },
+  {
+    "id": "MARKER-SYSTEM-USER",
+    "pattern": "system_user",
+    "match_type": "substring",
+    "targets": ["cookie_name", "cookie_value", "header_value", "body"],
+    "case_sensitive": false,
+    "comment": "Frappe system_user cookie name or value indicating Frappe internal user type."
+  },
+  {
+    "id": "MARKER-HEADER-X-FRAPPE",
+    "pattern": "^x-frappe-",
+    "match_type": "regex",
+    "targets": ["header_name"],
+    "case_sensitive": false,
+    "comment": "Frappe engine-specific response header prefix (e.g. X-Frappe-Site-Name, X-Frappe-Blocked-User)."
+  },
+  {
+    "id": "MARKER-SOCKET-IO",
+    "pattern": "socket.io",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Frappe realtime websocket endpoint or client script marker (ADR-0016)."
+  },
+  {
+    "id": "MARKER-WERKZEUG",
+    "pattern": "werkzeug",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Underlying Python WSGI server; leaks via Server headers or debug stack traces."
+  },
+  {
+    "id": "MARKER-PYMYSQL",
+    "pattern": "pymysql",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Internal database driver; leaks in raw exception tracebacks."
+  },
+  {
+    "id": "MARKER-JINJA2",
+    "pattern": "jinja2",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Engine templating engine; leaks in unmapped server error templates."
+  },
+  {
+    "id": "MARKER-WKHTMLTOPDF",
+    "pattern": "wkhtmltopdf",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Engine legacy PDF generator signature."
+  },
+  {
+    "id": "MARKER-SERVER-MESSAGES",
+    "pattern": "_server_messages",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Frappe internal error and notification JSON envelope field name."
+  },
+  {
+    "id": "MARKER-EXC-TYPE",
+    "pattern": "exc_type",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Frappe internal exception type field leaked in JSON error responses."
+  },
+  {
+    "id": "MARKER-DOCTYPE",
+    "pattern": "(?<!<!)\\bdoctype\\b(?!\\s*html\\b)",
+    "match_type": "regex",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Frappe data model metadata key leaked in unmapped API responses (excludes standard HTML doctype declarations)."
+  },
+  {
+    "id": "MARKER-DOCSTATUS",
+    "pattern": "\\bdocstatus\\b",
+    "match_type": "regex",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Frappe document workflow status field leaked in unmapped API responses."
+  },
+  {
+    "id": "MARKER-NAMING-SERIES",
+    "pattern": "\\bnaming_series\\b",
+    "match_type": "regex",
+    "targets": ["body", "header_value"],
+    "case_sensitive": false,
+    "comment": "Frappe document naming series field leaked in unmapped API responses."
+  },
+  {
+    "id": "MARKER-COOKIE-USER-ID",
+    "pattern": "user_id",
+    "match_type": "exact",
+    "targets": ["cookie_name"],
+    "case_sensitive": false,
+    "comment": "Frappe standard login cookie user_id."
+  },
+  {
+    "id": "MARKER-COOKIE-FULL-NAME",
+    "pattern": "full_name",
+    "match_type": "exact",
+    "targets": ["cookie_name"],
+    "case_sensitive": false,
+    "comment": "Frappe standard login cookie full_name."
+  },
+  {
+    "id": "MARKER-COOKIE-USER-IMAGE",
+    "pattern": "user_image",
+    "match_type": "exact",
+    "targets": ["cookie_name"],
+    "case_sensitive": false,
+    "comment": "Frappe standard login cookie user_image."
+  },
+  {
+    "id": "MARKER-CUR-GLOBALS",
+    "pattern": "\\bcur_(frm|list|page|dialog)\\b",
+    "match_type": "regex",
+    "targets": ["body"],
+    "case_sensitive": false,
+    "comment": "Frappe Desk client globals leaked in web pages or JS bundles."
+  },
+  {
+    "id": "MARKER-BOOTINFO",
+    "pattern": "\\bbootinfo\\b",
+    "match_type": "regex",
+    "targets": ["body"],
+    "case_sensitive": false,
+    "comment": "Frappe boot metadata structure leaked in HTML or API payloads."
+  },
+  {
+    "id": "MARKER-FRAPPE-META-FIELDS",
+    "pattern": "\\b_(liked_by|user_tags|assign|comments|seen)\\b",
+    "match_type": "regex",
+    "targets": ["body"],
+    "case_sensitive": false,
+    "comment": "Frappe standard row metadata columns leaked in unmapped API payloads."
+  },
+  {
+    "id": "MARKER-PYTHON-TRACEBACK",
+    "pattern": "Traceback (most recent call last):",
+    "match_type": "substring",
+    "targets": ["body", "header_value"],
+    "case_sensitive": true,
+    "comment": "Raw Python exception traceback leaked in HTTP response."
+  }
+]

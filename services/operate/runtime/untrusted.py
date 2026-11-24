@@ -18,7 +18,7 @@ _CONNECTORS = Path(__file__).resolve().parents[2] / "discovery" / "connectors"
 
 
 def _load(name: str):
-    spec = importlib.util.spec_from_file_location(f"_orrery_rt_{name}", _CONNECTORS / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(f"_seshna_rt_{name}", _CONNECTORS / f"{name}.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

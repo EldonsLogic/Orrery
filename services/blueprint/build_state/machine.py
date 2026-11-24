@@ -104,7 +104,7 @@ class _B:
 
 
 def idempotency_key(tenant_id, bp, kind, digest, attempt) -> str:
-    return "bs-" + hashlib.sha256(f"orrery.buildstate.apply.v1|{tenant_id}|{bp}|{kind}|{digest}|{attempt}".encode()).hexdigest()[:40]
+    return "bs-" + hashlib.sha256(f"seshna.buildstate.apply.v1|{tenant_id}|{bp}|{kind}|{digest}|{attempt}".encode()).hexdigest()[:40]
 
 
 def _bad(code="BS-011", why="record"):
@@ -122,7 +122,7 @@ class BuildStateMachine:
             raise BuildStateError("BS-001", "signoffs")
         if any(p is None for p in (identity, blueprints, validator, reviews, simulations, signoffs, engine, clock, owner_approvals)):
             raise BuildStateError("BS-001", "ports")
-        self._log = SealedLog(keys, key_id if key_id is not None else (list(keys)[-1] if keys else ""), "orrery.buildstate.log.v1")
+        self._log = SealedLog(keys, key_id if key_id is not None else (list(keys)[-1] if keys else ""), "seshna.buildstate.log.v1")
         self._idn, self._bps, self._validate, self._reviews, self._sims = identity, blueprints, validator, reviews, simulations
         self._ledger, self._engine, self._clock, self._audit_cb = signoffs, engine, clock, audit
         self._owner_ap = owner_approvals

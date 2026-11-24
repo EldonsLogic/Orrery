@@ -9,6 +9,7 @@ from pathlib import Path
 
 from components.core.hrms_skeleton import ALLOWED_DOCTYPES, ERROR_CODES, HrmsError
 from components.core.hrms_skeleton.errors import STRINGS_PATH
+from components.core.hrms_skeleton.specs import PLATFORM_CUSTOM_FIELDS
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 ARABIC = re.compile(r"[؀-ۿ]")
@@ -26,6 +27,13 @@ def leaf_strings(node):
 class StringTests(unittest.TestCase):
     def setUp(self):
         self.strings = json.loads(STRINGS_PATH.read_text(encoding="utf-8"))
+
+    def test_applicant_account_label_has_english_and_arabic(self):
+        labels = self.strings.get("fieldLabels", {}).get("applicant_account", {})
+        self.assertEqual(set(labels), {"ar", "en"})
+        self.assertRegex(labels["ar"], ARABIC)
+        (field,) = PLATFORM_CUSTOM_FIELDS["Leave Application"]
+        self.assertEqual(field["label"], labels["en"])
 
     def test_every_error_code_has_english_and_arabic(self):
         self.assertEqual(set(self.strings["errors"]), set(ERROR_CODES))

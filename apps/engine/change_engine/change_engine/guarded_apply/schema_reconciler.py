@@ -15,10 +15,6 @@ from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Protocol
 
 
-class RevisionHashError(RuntimeError):
-    """The live DocType revision hash could not be read; callers must fail closed."""
-
-
 class IdempotencyConflictError(Exception):
     """Raised when an idempotency_key is reused with a different canonical request payload."""
     pass

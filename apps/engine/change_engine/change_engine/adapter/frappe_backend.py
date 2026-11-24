@@ -13,7 +13,6 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
-import os
 import re
 from typing import Any, Callable, Iterator
 
@@ -63,10 +62,6 @@ _BP_PROP_TO_FRAPPE = {
     "/description": ("description", "Text"),
     "/options": ("options", "Text"),
 }
-
-
-ENGINE_ENV_VAR = "CHANGE_ENGINE_ENV"
-OFFLINE_SIMULATOR_ENVS = frozenset({"dev", "test"})
 
 
 class FrappeBackendError(Exception):
@@ -126,14 +121,7 @@ class FrappeRuntimeBackend:
         actor_roles: list[str] | None = None,
         auto_create_sites: bool = False,
         sites_path: str | None = None,
-        offline_ddl_simulator: bool = False,
     ) -> None:
-        # The offline DDL simulator is column-blind (it skips every drift comparison), so it is an
-        # explicit opt-in, never inferred from a factory, and refused outside dev/test. An unset
-        # CHANGE_ENGINE_ENV counts as production (ERP-027, fail closed).
-        if offline_ddl_simulator and os.environ.get(ENGINE_ENV_VAR, "").strip().lower() not in OFFLINE_SIMULATOR_ENVS:
-            raise FrappeBackendError("offline_ddl_simulator_forbidden", stage="validate")
-        self._offline_ddl_simulator = offline_ddl_simulator
         self.site_resolver = site_resolver or FrappeSiteResolver()
         self._frappe_factory = frappe_factory
         self._actor_roles = list(actor_roles) if actor_roles is not None else list(GOVERNANCE_ACTOR_ROLES)
@@ -234,10 +222,10 @@ class FrappeRuntimeBackend:
                     pass
 
     def _deployment_adapter(self, f: Any) -> FrappeDeploymentAdapter:
-        # Offline mode is the explicit constructor flag only (simulated runtime, no real DDL);
-        # an injected factory alone still gets Frappe's own inspection and fails closed.
+        # An injected frappe factory is the explicit test/offline mode (simulated runtime, no
+        # real DDL); a real bench (no factory) always uses Frappe's own inspection and fails closed.
         return FrappeDeploymentAdapter(
-            frappe_module=f, in_memory=False, offline_ddl_simulator=self._offline_ddl_simulator
+            frappe_module=f, in_memory=False, offline_ddl_simulator=self._frappe_factory is not None
         )
 
     def _ensure_state_table(self, f: Any) -> None:

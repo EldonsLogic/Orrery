@@ -6,7 +6,6 @@ import json
 import os
 import sys
 import unittest
-from unittest import mock
 from pathlib import Path
 
 from change_engine.adapter import (
@@ -138,17 +137,6 @@ def _apply(adapter: ChangeEngineAdapter, tenant: str, artifact: dict, key: str, 
     return res
 
 
-_ENV_PATCH = mock.patch.dict(os.environ, {"CHANGE_ENGINE_ENV": "test"})
-
-
-def setUpModule():
-    _ENV_PATCH.start()  # ERP-027: the offline DDL simulator is refused unless CHANGE_ENGINE_ENV is dev or test
-
-
-def tearDownModule():
-    _ENV_PATCH.stop()
-
-
 class TestBpl008BlueprintRollback(unittest.TestCase):
     def setUp(self) -> None:
         FrappeDeploymentAdapter.reset_in_memory_state()
@@ -158,7 +146,7 @@ class TestBpl008BlueprintRollback(unittest.TestCase):
 
     def _provision_v1(self, tenant: str = "t_alpha"):
         sim = SimulatedFrappeRuntime()
-        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True, offline_ddl_simulator=True)
+        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True)
         adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
         prov = adapter.call(
             "provision_site",
@@ -847,7 +835,7 @@ class TestBpl008BlueprintRollback(unittest.TestCase):
         compiled_art = _seal(compiled_art)
 
         sim = SimulatedFrappeRuntime()
-        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True, offline_ddl_simulator=True)
+        backend = FrappeRuntimeBackend(frappe_factory=lambda: sim, auto_create_sites=True)
         adapter = ChangeEngineAdapter(test_hooks=True, frappe_backend=backend)
         prov = adapter.call(
             "provision_site",

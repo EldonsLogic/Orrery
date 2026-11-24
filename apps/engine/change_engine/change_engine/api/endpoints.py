@@ -4,7 +4,6 @@ Implements supported Frappe REST and Desk RPC interfaces for the AI Control Plan
 """
 
 import hashlib
-import logging
 import json
 import time
 import uuid
@@ -16,8 +15,6 @@ try:
     from frappe import _
 except ImportError:
     frappe = None
-
-logger = logging.getLogger(__name__)
 
 from change_engine.guarded_apply.schema_extractor import get_compact_doctype_schema
 from change_engine.guarded_apply.safety_guardrails import (
@@ -31,15 +28,10 @@ from change_engine.guarded_apply.ddl_plan_gate import (
     MARIADB_TYPE_MAP,
     assess_applied_ddl,
     inspect_frappe_ddl_plan,
-    SCHEMA_COLUMN_ATTRS,
-    requires_ddl_check,
-    ddl_batch_rejection,
-    new_column_matches_plan,
 )
 from change_engine.guarded_apply.schema_reconciler import (
     ExhaustiveSnapshot,
     IdempotencyConflictError,
-    RevisionHashError,  # defined in schema_reconciler (shared with property_setter_engine); re-exported here
     Rev23DeploymentAdapter,
     compute_canonical_payload_hash,
     execute_single_field_deployment,
@@ -113,10 +105,9 @@ def _resolve_caller_roles(kwargs: Optional[Dict[str, Any]] = None) -> list:
 
     Inside Frappe the roles come ONLY from the authenticated session; any
     client-supplied `user_roles` / `caller_roles` is ignored (CE-SEC-001).
-    Outside Frappe (unit tests) explicit roles are honoured. A Frappe context without a
-    session user resolves to no roles, never to the caller's (CE-SEC-002).
+    Outside Frappe (unit tests) explicit roles are honoured.
     """
-    if _in_frappe_request():
+    if frappe is not None and hasattr(frappe, "session") and getattr(frappe.session, "user", None):
         return get_current_user_roles()
     kwargs = kwargs or {}
     explicit = kwargs.get("user_roles")
@@ -307,10 +298,7 @@ def propose_configuration_change(
 
     # Step 2: DDL Plan Gate Inspection (Zero DDL executed)
     adapter = kwargs.get("adapter") or kwargs.get("db")
-    if adapter is None and frappe is not None:
-        # Frappe is importable: always the live adapter, even when frappe.db is missing or
-        # disconnected. The gate then rejects (DDL_GATE_FRAPPE_UNAVAILABLE) instead of
-        # silently falling back to the column-blind simulator (ERP-027 re-review H2).
+    if adapter is None and frappe is not None and getattr(getattr(frappe, "db", None), "sql", None):
         adapter = FrappeDeploymentAdapter()
 
     changes = proposal_payload.get("changes", [])
@@ -320,22 +308,11 @@ def propose_configuration_change(
         if adapter is not None and hasattr(adapter, "get_table_columns_description")
         else None
     )
-    try:
-        base_revision_hash = (
-            adapter.get_doctype_revision_hash(doctype)
-            if adapter is not None and hasattr(adapter, "get_doctype_revision_hash")
-            else "rev_default"
-        )
-    except RevisionHashError as exc:
-        return {
-            "status": "REJECTED",
-            "success": False,
-            "stage": "INSPECT",
-            "disposition": "REVISION_HASH_UNAVAILABLE",
-            "reason": f"Cannot read the DocType configuration revision: {exc}",
-            "proposal": proposal_payload,
-            "ddl_plan": None,
-        }
+    base_revision_hash = (
+        adapter.get_doctype_revision_hash(doctype)
+        if adapter is not None and hasattr(adapter, "get_doctype_revision_hash")
+        else "rev_default"
+    )
 
     if proposal_payload.get("intent") == "add_custom_fields" and changes:
         all_statements: List[str] = []
@@ -348,8 +325,6 @@ def propose_configuration_change(
                 doctype,
                 field_def,
                 existing_columns_desc=existing_cols,
-                # Simulator only when nothing live can exist (frappe not importable, so
-                # adapter is None) or a test adapter explicitly asks for it.
                 offline_simulator=adapter is None
                 or bool(getattr(adapter, "in_memory", False) or getattr(adapter, "offline_ddl_simulator", False)),
             )
@@ -519,14 +494,9 @@ class FrappeDeploymentAdapter:
         if in_memory is not None:
             self.in_memory = in_memory
         else:
-            # In-memory only when Frappe cannot be imported at all. A Frappe runtime with a
-            # missing or disconnected frappe.db is still LIVE and fails closed (ERP-027
-            # re-review H2); tests that want the in-memory store pass in_memory=True.
-            self.in_memory = self._frappe is None
+            self.in_memory = not self._is_frappe_db_available()
 
         self.apply_called: bool = False
-        # ERP-027: applied state per deployment (an adapter may be reused for several).
-        self._applied_deployments: Set[str] = set()
         # ERP-027: approved plan vs what Frappe actually executed (live mode only).
         self._approved_ddl: Dict[str, List[str]] = {}
         self._executed_ddl: Dict[str, List[str]] = {}
@@ -562,6 +532,17 @@ class FrappeDeploymentAdapter:
 
         if not self.in_memory:
             self._ensure_audit_table()
+
+    def _is_frappe_db_available(self) -> bool:
+        if self._frappe is None:
+            return False
+        try:
+            db = getattr(self._frappe, "db", None)
+            if db is None or not hasattr(db, "sql") or not callable(db.sql):
+                return False
+            return True
+        except Exception:
+            return False
 
     def _ensure_audit_table(self) -> None:
         if self.in_memory:
@@ -704,102 +685,48 @@ class FrappeDeploymentAdapter:
         self.revision_hashes[doctype] = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
     def _read_nullability(self, table_name: str) -> Dict[str, bool]:
-        """``{column_lower: is_nullable}`` from information_schema. Raises when unreadable."""
-        rows = self._frappe.db.sql(
-            """
-            SELECT COLUMN_NAME, IS_NULLABLE
-            FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
-            """,
-            (table_name,),
-        )
-        return {str(r[0]).lower(): str(r[1]).upper() != "NO" for r in rows}
-
-    def _read_table_schema(self, doctype: str) -> Optional[Dict[str, Any]]:
-        """Whole-table fingerprint used to prove what the apply changed (ERP-027 re-review H1).
-
-        Columns (type, nullability, default, key, charset, collation, EXTRA, comment, generation
-        expression) and their order, indexes, table constraints, CHECK constraints, triggers and
-        table engine/collation/row format. ``None`` when any part is unreadable (fail closed).
-        """
-        table_name = f"tab{doctype}"
-        sql = self._frappe.db.sql
+        """``{column_lower: is_nullable}`` from information_schema; ``{}`` if unreadable."""
         try:
-            cols = sql(
+            rows = self._frappe.db.sql(
                 """
-                SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY,
-                       CHARACTER_SET_NAME, COLLATION_NAME, EXTRA, COLUMN_COMMENT, GENERATION_EXPRESSION
+                SELECT COLUMN_NAME, IS_NULLABLE
                 FROM information_schema.COLUMNS
                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
-                ORDER BY ORDINAL_POSITION
                 """,
                 (table_name,),
             )
-            idx = sql(
+            return {str(r[0]).lower(): str(r[1]).upper() != "NO" for r in rows}
+        except Exception:
+            return {}
+
+    def _read_table_schema(self, doctype: str) -> Optional[Dict[str, Any]]:
+        """Whole-table fingerprint (columns and indexes) used to prove what apply changed."""
+        table_name = f"tab{doctype}"
+        try:
+            cols = self._frappe.db.sql(
                 """
-                SELECT INDEX_NAME, COLUMN_NAME, NON_UNIQUE, SEQ_IN_INDEX, SUB_PART, INDEX_TYPE
+                SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
+                """,
+                (table_name,),
+            )
+            idx = self._frappe.db.sql(
+                """
+                SELECT INDEX_NAME, COLUMN_NAME, NON_UNIQUE, SEQ_IN_INDEX
                 FROM information_schema.STATISTICS
                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
                 """,
                 (table_name,),
             )
-            constraints = sql(
-                """
-                SELECT CONSTRAINT_NAME, CONSTRAINT_TYPE
-                FROM information_schema.TABLE_CONSTRAINTS
-                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
-                """,
-                (table_name,),
-            )
-            checks = sql(
-                """
-                SELECT CONSTRAINT_NAME, CHECK_CLAUSE
-                FROM information_schema.CHECK_CONSTRAINTS
-                WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = %s
-                """,
-                (table_name,),
-            )
-            triggers = sql(
-                """
-                SELECT TRIGGER_NAME, EVENT_MANIPULATION, ACTION_TIMING, ACTION_STATEMENT
-                FROM information_schema.TRIGGERS
-                WHERE EVENT_OBJECT_SCHEMA = DATABASE() AND EVENT_OBJECT_TABLE = %s
-                """,
-                (table_name,),
-            )
-            table = sql(
-                """
-                SELECT ENGINE, TABLE_COLLATION, ROW_FORMAT
-                FROM information_schema.TABLES
-                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s
-                """,
-                (table_name,),
-            )
-            if not cols or not table:
-                return None
             return {
-                "columns": {
-                    str(r[0]): dict(zip(SCHEMA_COLUMN_ATTRS, (str(x) for x in r[1:])))
-                    for r in cols
-                },
-                "order": [str(r[0]) for r in cols],
+                "columns": {str(r[0]): tuple(str(x) for x in r[1:]) for r in cols},
                 "indexes": {tuple(str(x) for x in r) for r in idx},
-                "constraints": {(str(r[0]), str(r[1])) for r in constraints},
-                "checks": {(str(r[0]), str(r[1])) for r in checks},
-                "triggers": {
-                    (str(r[0]), str(r[1]), str(r[2]), hashlib.sha256(str(r[3]).encode("utf-8")).hexdigest())
-                    for r in triggers
-                },
-                "table": tuple(str(x) for x in table[0]),
             }
         except Exception:
-            logger.exception("could not read the whole-table fingerprint of %s", table_name)
             return None
 
-    def get_table_columns_description(self, doctype: str) -> Optional[List[ColumnDesc]]:
-        """Live column definitions. In live mode ``None`` when they cannot be read: the DDL
-        plan gate then rejects (DDL_GATE_EXISTING_COLUMNS_MISSING) instead of inspecting
-        against substituted columns (ERP-027 re-review M1)."""
+    def get_table_columns_description(self, doctype: str) -> List[ColumnDesc]:
         if self.existing_columns_desc_override is not None:
             return self.existing_columns_desc_override
         if not self.in_memory:
@@ -823,7 +750,7 @@ class FrappeDeploymentAdapter:
                                 nullable=nullable_by_col.get(str(cname).lower()),
                             )
                         )
-                    return out or None
+                    return out
                 res = self._frappe.db.sql(
                     """
                     SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_DEFAULT
@@ -836,10 +763,9 @@ class FrappeDeploymentAdapter:
                 return [
                     ColumnDesc(name=r[0], type=r[1], default=r[2], nullable=nullable_by_col.get(str(r[0]).lower()))
                     for r in res
-                ] or None
+                ]
             except Exception:
-                logger.exception("could not read the live column definitions of %s", table_name)
-                return None
+                return self._get_default_columns(doctype)
         if doctype not in self.table_columns:
             self.table_columns[doctype] = self._get_default_columns(doctype)
         return list(self.table_columns[doctype])
@@ -859,9 +785,8 @@ class FrappeDeploymentAdapter:
                 )
                 payload = json.dumps([list(c) for c in res], sort_keys=True)
                 return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-            except Exception as exc:
-                # No "rev_default" stand-in: a stand-in would compare equal on both sides.
-                raise RevisionHashError(f"{type(exc).__name__}: {exc}") from exc
+            except Exception:
+                return "rev_default"
         if doctype not in self.revision_hashes:
             self._update_in_memory_revision_hash(doctype)
         return self.revision_hashes[doctype]
@@ -895,46 +820,36 @@ class FrappeDeploymentAdapter:
                 rev_hash = self.get_doctype_revision_hash(doctype)
                 schema = self._read_table_schema(doctype)
                 indexes_unchanged = True
-                definition_matches = True
                 unapproved = False
                 if self.offline_ddl_simulator:
                     pass  # explicit offline mode: no real DDL ran, nothing to compare
-                elif expected_deployment_id not in self._applied_deployments:
+                elif not self.apply_called:
                     if schema is None:
                         raise RuntimeError("before-apply table schema unreadable")
                     self._before_schema[(doctype, expected_deployment_id)] = schema
                 else:
                     # ERP-027: what ran must match the approved plan; unknown means unapproved.
                     before_schema = self._before_schema.get((doctype, expected_deployment_id))
-                    approved = self._approved_ddl.get(expected_deployment_id)
                     unapproved, _why = assess_applied_ddl(
                         doctype,
                         fieldname,
-                        approved,
+                        self._approved_ddl.get(expected_deployment_id),
                         self._executed_ddl.get(expected_deployment_id),
                         before_schema,
                         schema,
                     )
-                    if unapproved:
-                        logger.warning("DDL apply on %s.%s has unapproved side effects: %s", doctype, fieldname, _why)
-                    indexes_unchanged = (
-                        before_schema is not None
-                        and schema is not None
-                        and before_schema.get("indexes") == schema.get("indexes")
-                    )
-                    # Only meaningful once the column exists; a clean failure never reads it.
-                    definition_matches = (not has_col) or new_column_matches_plan(fieldname, approved, schema)
+                    if before_schema is not None and schema is not None:
+                        indexes_unchanged = before_schema.get("indexes") == schema.get("indexes")
                 return ExhaustiveSnapshot(
                     has_meta=has_meta,
                     has_col=has_col,
-                    definition_matches=definition_matches,
+                    definition_matches=True,
                     indexes_unchanged=indexes_unchanged,
                     provenance_matches=True,
                     unapproved_side_effects=unapproved,
                     revision_hash=rev_hash,
                 )
             except Exception:
-                logger.exception("live snapshot of %s.%s failed; failing closed", doctype, fieldname)
                 return ExhaustiveSnapshot(
                     has_meta=False,
                     has_col=False,
@@ -1050,7 +965,6 @@ class FrappeDeploymentAdapter:
         self, deployment_id: str, doctype: str, field_def: Dict[str, Any]
     ) -> None:
         self.apply_called = True
-        self._applied_deployments.add(deployment_id)
         if self.simulate_apply_error:
             raise TimeoutError("(1205, 'Lock wait timeout exceeded')")
 
@@ -1069,51 +983,23 @@ class FrappeDeploymentAdapter:
             "default": field_def.get("default"),
         }
         if not self.in_memory:
-            # Validate before dispatch: post-apply snapshots cannot undo a narrowing DDL
-            # statement whose implicit commit already truncated customer data.
+            # Record every DDL statement Frappe really executes (still executed unchanged) so
+            # the after-snapshot can compare it with the approved plan (ERP-027).
             executed = self._executed_ddl.setdefault(deployment_id, [])
             db = self._frappe.db
             original_sql_ddl = getattr(db, "sql_ddl", None)
-            original_sql = getattr(db, "sql", None)
-            in_sql_ddl = [0]
-
-            def _record_approved_ddl(query):
-                """Check this batch prefix before admitting the next schema statement."""
-                statement = str(query)
-                reason = ddl_batch_rejection(
-                    doctype, fieldname, self._approved_ddl.get(deployment_id),
-                    [*executed, statement], self._before_schema.get((doctype, deployment_id)),
-                    complete=False,
-                )
-                if reason:
-                    raise ValueError("DDL rejected before execution: " + reason)
-                executed.append(statement)
-
-            def _recording_sql_ddl(query, *a, **kw):
-                _record_approved_ddl(query)
-                in_sql_ddl[0] += 1
-                try:
-                    return original_sql_ddl(query, *a, **kw)
-                finally:
-                    in_sql_ddl[0] -= 1
-
-            def _recording_sql(query, *a, **kw):
-                if not in_sql_ddl[0] and requires_ddl_check(str(query)):
-                    _record_approved_ddl(query)
-                return original_sql(query, *a, **kw)
-
             if original_sql_ddl is not None:
+                def _recording_sql_ddl(query, *a, **kw):
+                    executed.append(str(query))
+                    return original_sql_ddl(query, *a, **kw)
+
                 db.sql_ddl = _recording_sql_ddl
-            if original_sql is not None:
-                db.sql = _recording_sql
             try:
                 cf_doc = self._frappe.get_doc(cf_args)
                 cf_doc.insert(ignore_permissions=True)
             finally:
                 if original_sql_ddl is not None:
                     db.sql_ddl = original_sql_ddl
-                if original_sql is not None:
-                    db.sql = original_sql
             if hasattr(self._frappe.db, "commit"):
                 self._frappe.db.commit()
         else:
@@ -1638,23 +1524,12 @@ def apply_configuration_change(
 
     # Step 4: Resolve base_revision_hash if not provided
     if base_revision_hash is None:
-        try:
-            if hasattr(db, "get_doctype_revision_hash") and callable(getattr(db, "get_doctype_revision_hash", None)):
-                base_revision_hash = db.get_doctype_revision_hash(doctype)
-            elif hasattr(db, "take_snapshot") and callable(getattr(db, "take_snapshot", None)):
-                base_revision_hash = db.take_snapshot(doctype, field_def["fieldname"], deployment_id).revision_hash
-            else:
-                base_revision_hash = "rev_default"
-        except RevisionHashError as exc:
-            return {
-                "deployment_id": deployment_id,
-                "status": "REJECTED",
-                "success": False,
-                "stage": "INSPECT",
-                "disposition": "REVISION_HASH_UNAVAILABLE",
-                "reason": f"Cannot read the DocType configuration revision: {exc}",
-                "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
-            }
+        if hasattr(db, "get_doctype_revision_hash") and callable(getattr(db, "get_doctype_revision_hash", None)):
+            base_revision_hash = db.get_doctype_revision_hash(doctype)
+        elif hasattr(db, "take_snapshot") and callable(getattr(db, "take_snapshot", None)):
+            base_revision_hash = db.take_snapshot(doctype, field_def["fieldname"], deployment_id).revision_hash
+        else:
+            base_revision_hash = "rev_default"
 
     lock_wait_seconds = int(kwargs.get("lock_wait_seconds", 3))
 

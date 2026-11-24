@@ -24,15 +24,15 @@ Every gate, and every delivery phase described in [architecture/](architecture/)
 - ADRs accepted by both founders: tenancy (0006), identity (0007), Blueprint contract (0003).
 
 ## G1 Spine proven
-- A hand-written Blueprint compiles to a fresh tenant, applies and diffs, and a failed or unwanted apply is recoverable (ADR-0028), on a real bench.
-- Compliance for the first pilot market is proven in its own sandbox or checklist. For Saudi Arabia that is a ZATCA Phase 2 invoice passing the ZATCA sandbox, a Saudi release criterion that does not block a pilot in another market (ADR-0026).
+- A hand-written Blueprint compiles to a fresh tenant, applies, diffs and rolls back, on a real bench.
+- A ZATCA Phase 2 invoice passes the ZATCA sandbox.
 - Arabic bilingual tax invoice PDF reviewed by an Arabic-speaking accountant.
 - Tenant creation is one scripted command; the 50-tenant spike has a written result.
 - Counsel has answered the GPL boundary and vendor-certification questions in writing.
 - Arabic eval set v0 and the model bake-off are done; a model tier list exists.
 
 ## G2 Pilot-ready
-- One real business goes from discovery to a Blueprint (simulated month optional) to live, with the human review gate and the one chat.
+- One real business goes from discovery to a simulated Blueprint to live, with the human review gate and the one chat.
 - Role-based views work for at least owner, accountant and sales roles.
 - Tenant branding works end to end with guardrails (ADR-0014).
 - Customer contract with the anonymised-reuse clause is signed for Pilot A.
@@ -42,7 +42,7 @@ Every gate, and every delivery phase described in [architecture/](architecture/)
 - Security baseline checklist met; independent penetration test done and findings fixed or accepted in writing.
 - Backups tested with timed restore drills; export and delete work and are verified.
 - Billing, terms, privacy policy and DPA live; support process and status page running.
-- Per sold market: e-invoicing and payroll (for example UAE e-invoicing, WPS, GOSI) either shipped or explicitly excluded from the sold scope.
+- UAE e-invoicing and payroll (WPS, GOSI) either shipped or explicitly excluded from the sold scope.
 
 ## G4 Repeatable
 - Autonomy and reuse targets in [strategy/08](strategy/08-product-vs-software-house.md) met across several clients.

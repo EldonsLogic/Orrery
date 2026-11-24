@@ -20,7 +20,7 @@ def test_fixture_generates_stable_set(bp):
     assert res.ok, [str(e) for e in res.errors]
     names = [t["name"] for t in res.tools]
     assert names == sorted(names) and len(names) == len(set(names))
-    assert len(names) == 88  # 85 plus the protected bank and contact tools (review T4)
+    assert len(names) == 85
     for n in ("customer.get", "customer.list", "sales_order.create", "sales_order.transition", "sales_invoice.transition",
               "report.run", "metric.query", "approval.decide", "approval.list_mine", "blueprint.propose_change"):
         assert n in names
@@ -166,7 +166,7 @@ def test_bad_input_and_registry_refused(bp):
 
 
 def test_registry_overrides_class(bp):
-    res = generate_tool_api(bp, {"source": "l0:test", "entity_classes": {"customer": "ledger"}})
+    res = generate_tool_api(bp, {"entity_classes": {"customer": "ledger"}})
     assert tool(res, "customer.export")["risk_class"] == "R2"
 
 

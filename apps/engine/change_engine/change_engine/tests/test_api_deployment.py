@@ -550,22 +550,12 @@ class TestApiDeployment(unittest.TestCase):
                     return ()
                 if "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE" in q_upper:
                     rows = (
-                        ("name", "varchar(140)", "NO", None, "PRI", "utf8mb4", "utf8mb4_unicode_ci", "", "", ""),
-                        ("creation", "datetime(6)", "YES", None, "", None, None, "", "", ""),
+                        ("name", "varchar(140)", "NO", None, "PRI"),
+                        ("creation", "datetime(6)", "YES", None, ""),
                     )
                     if doc_inserts:
-                        rows += (("custom_live_field", "varchar(140)", "YES", None, "", "utf8mb4", "utf8mb4_unicode_ci", "", "", ""),)
+                        rows += (("custom_live_field", "varchar(140)", "YES", None, ""),)
                     return rows
-                if "FROM INFORMATION_SCHEMA.STATISTICS" in q_upper:
-                    return (("PRIMARY", "name", 0, 1, None, "BTREE"),)
-                if "FROM INFORMATION_SCHEMA.TABLES" in q_upper:
-                    return (("InnoDB", "utf8mb4_unicode_ci", "Dynamic"),)
-                if (
-                    "FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS" in q_upper
-                    or "FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS" in q_upper
-                    or "FROM INFORMATION_SCHEMA.TRIGGERS" in q_upper
-                ):
-                    return ()
                 if "SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_DEFAULT" in q_upper:
                     return (
                         ("name", "varchar(140)", None),

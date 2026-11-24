@@ -132,12 +132,7 @@ def format_hijri(value: date | str, *, language: str = "ar",
 
 
 def display_enabled(locale: dict, compliance_profile: dict, *, country_default: bool) -> bool:
-    """Resolve existing Blueprint display settings; an explicit profile wins.
-
-    A present ``hijriDisplay.enabled`` decides alone, true or false, so a profile that
-    disables the display cannot be overridden by locale calendar choices. Without it,
-    locale choices apply, then the country default when nothing is configured.
-    """
+    """Resolve existing Blueprint display settings; a required profile wins."""
     if not isinstance(locale, dict) or not isinstance(compliance_profile, dict):
         raise HijriDateError("invalid_locale")
     calendar = locale.get("calendar", {})
@@ -150,7 +145,6 @@ def display_enabled(locale: dict, compliance_profile: dict, *, country_default: 
             or secondary not in ("none", "gregorian", "hijri_umm_al_qura")
             or ("enabled" in profile and type(profile["enabled"]) is not bool)):
         raise HijriDateError("invalid_locale")
-    if "enabled" in profile:
-        return profile["enabled"]
-    return (primary == "hijri_umm_al_qura" or secondary == "hijri_umm_al_qura"
-            or (country_default and not calendar))
+    return (profile.get("enabled", False) or primary == "hijri_umm_al_qura"
+            or secondary == "hijri_umm_al_qura"
+            or (country_default and not calendar and "enabled" not in profile))

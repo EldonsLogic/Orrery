@@ -1,6 +1,6 @@
 # services/discovery
 
-Status: draft (template-first path started, DSC-002; interview agent started (DSC-005), mapper, gap analyser and quote not started)
+Status: draft (template-first path started, DSC-002; interview engine, mapper, gap analyser and quote not started)
 Owner: unassigned
 
 Purpose: Part 1. Interviewer, template-first drafts, connector orchestration, source-to-Blueprint mapping, gap analysis, visual Blueprint, quote. Spec: [01-discovery](../../docs/specs/01-discovery.md). Contracts: Blueprint, connector interface.
@@ -118,12 +118,3 @@ Tests: `tests/blueprintmap/`. Not covered: record-level value translation (selec
 ## Date tests (QA-015)
 
 `tests/dates/test_date_properties.py`: deterministic property tests (seeded loops, no model calls, stdlib plus `hijridate` and `zoneinfo`; needs `tzdata`). Covers Hijri to Gregorian to Hijri round trip over the whole 1343 to 1500 AH table, month and year lengths, monotonic and contiguous months, refusal of out-of-range years and days, Gregorian leap years and month ends, ambiguous day/month flags, Arabic-Indic and Persian digits equal to Latin digits, weekend overrides, Hijri and Gregorian fiscal-year boundaries, and Asia/Riyadh, Asia/Dubai, Asia/Qatar and Africa/Cairo offsets and local date at midnight. Weekend, week-start and fiscal rules are not in production code yet, so the file tests the doc's rule through a small reference helper. Rules the doc marks UNVERIFIED (weekend defaults, Egypt daylight saving) are `xfail`; week start per market is undefined in the doc and is an `xfail` placeholder. Not covered: announced and company overrides, due dates, working-day functions, Ramadan hours (no code yet).
-
-## Interview agent (DSC-005)
-`interview/` asks the question list in `questions.json` in Arabic or English (language follows the owner's last message) and returns a Blueprint-draft input for `instantiate()`. Never a Blueprint; the owner approves.
-- State machine: `Interviewer.start / answer / ingest_document / confirm / reject / resolve_contradiction / draft_input`. Order, retries and completion are code; the model only extracts.
-- Extraction: simple answers (yes or no, an option label, one number, Arabic-Indic digits) are parsed by rules with no model call. Anything else goes to the injected `ExtractionPort.extract(request)`. Its reply is untrusted: exact shape, exact answer keys, per-type and range checks, and free-text and numeric values must appear in the owner's text, otherwise discarded and the question is asked again.
-- Owner and document text is stripped of invisible characters, capped, scanned for instruction-like text (flag `injection_suspected`) and passed to the port only in `untrusted_text`. Values read from documents are `proposed` until the owner confirms.
-- Flags: `uncertain` (owner does not know, low confidence; defaults from the question list are recorded as `default`), `contradiction` (a later value differs from a confirmed one; the old value is kept until the owner decides), `cross_check`, `ungrounded`, `extraction_rejected`, `budget`.
-- Resume: `Session.to_dict()` JSON; `Session.from_dict()` re-validates everything (stored state is untrusted).
-- Arabic question text is `unreviewed` (ADR-0033) until a native speaker reads it. Tests use fakes only: `python -m pytest services/discovery/tests/interview -q`.

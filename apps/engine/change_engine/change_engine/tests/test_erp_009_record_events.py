@@ -173,6 +173,39 @@ def test_hooks_module_imports_no_adapter_at_load_and_matches_registry():
     assert proc.returncode == 0, proc.stderr
 
 
+@pytest.mark.parametrize("method", RECORD_HOOKS)
+def test_unbound_bench_hooks_without_evstream(sites, monkeypatch, method):
+    """Bench installs have no tenant binding or event package; unrelated writes still work."""
+    engine, select = sites
+    db = select("t_alpha")
+    engine.conf.pop("tenant_id")
+    monkeypatch.setitem(sys.modules, "evstream", None)
+    importlib.reload(hooks)
+    before = Document(docstatus=0)
+    invoke_hook(Document(prior=before, docstatus=0), method)
+    assert db.sql("SELECT COUNT(*) FROM `tabChange Engine Event Outbox`") == [(0,)]
+
+
+def test_bound_site_without_evstream_fails_closed(sites, monkeypatch):
+    """A provisioned tenant must never silently lose an event when its dependency is absent."""
+    _, select = sites
+    db = select("t_alpha")
+    monkeypatch.setitem(sys.modules, "evstream", None)
+    with pytest.raises(RuntimeError, match="Event stream package is required"):
+        invoke_hook(Document(), "after_insert")
+    assert db.sql("SELECT COUNT(*) FROM `tabChange Engine Event Subject`") == [(0,)]
+
+
+def test_sink_without_tenant_is_a_configuration_error(sites, monkeypatch):
+    """A sink opts into publication and must not silently run without a tenant binding."""
+    engine, select = sites
+    select("t_alpha", worker=True)
+    engine.conf.pop("tenant_id")
+    monkeypatch.setitem(sys.modules, "evstream", None)
+    with pytest.raises(RuntimeError, match="Site tenant is missing"):
+        invoke_hook(Document(), "after_insert")
+
+
 def test_lifecycle_hooks_deliver_contract_events_with_delete_and_rename(sites):
     engine, select = sites
     db = select("t_alpha")
@@ -325,6 +358,7 @@ def test_missing_or_invalid_tenant_rejects_the_write(sites):
     engine, select = sites
     db = select("t_alpha")
     del engine.conf["tenant_id"]
+    engine.conf["record_event_sink"] = "test.append"
     with pytest.raises(RuntimeError, match="missing or invalid"):
         invoke_hook(Document(tenant_id="t_alpha"), "after_insert")
     engine.conf["tenant_id"] = "invalid-tenant"
@@ -588,143 +622,3 @@ def test_concurrent_publishers_serialize_with_advisory_lock_without_duplicates(s
     assert results == [40]
     assert len(store.read("t_alpha")) == 40
     assert [e["sequence"] for e in store.read("t_alpha")] == list(range(1, 41))
-
-
-def test_hooks_and_outbox_work_when_evstream_is_absent_from_sys_modules_and_path(sites, monkeypatch):
-    """Simulate a Frappe bench container where evstream is neither installed nor on sys.path."""
-    engine, select = sites
-    db = select("t_bench")
-
-    # Block evstream in sys.modules and strip any services/blueprint/events paths.
-    for mod_name in list(sys.modules):
-        if mod_name == "evstream" or mod_name.startswith("evstream."):
-            monkeypatch.setitem(sys.modules, mod_name, None)
-    monkeypatch.setitem(sys.modules, "evstream", None)
-    monkeypatch.delenv("ORRERY_EVSTREAM_DIR", raising=False)
-    monkeypatch.setattr(
-        sys,
-        "path",
-        [p for p in sys.path if "services/blueprint/events" not in p.replace("\\", "/")],
-    )
-
-    cust = FrappeLikeDocument("CUST-BENCH-1", docstatus=0, customer_name="Bench Co")
-    cust.doctype = "Customer"
-    invoke_hook(cust, "after_insert")
-    updated = FrappeLikeDocument("CUST-BENCH-1", prior=cust, docstatus=0, customer_name="Bench Co Ltd")
-    updated.doctype = "Customer"
-    invoke_hook(updated, "on_update")
-    invoke_hook(updated, "on_trash")
-    db.commit()
-
-    select("t_bench", worker=True)
-    received: list[dict] = []
-
-    def standalone_sink(event):
-        received.append(event)
-        return {"event_id": event["event_id"], "tenant_id": event["tenant_id"], "sequence": len(received)}
-
-    assert run_publisher(engine, standalone_sink) == 3
-    assert [e["type"] for e in received] == ["customer.created", "customer.updated", "customer.deleted"]
-    assert received[1]["data"]["changed_fields"] == ["customer_name"]
-    assert received[2]["data"]["deleted"] is True
-
-    # Verify every event emitted without evstream validates cleanly against the evstream contract.
-    for idx, ev in enumerate(received, start=1):
-        stamped = {**ev, "sequence": idx}
-        res = validate_event(stamped)
-        assert res.ok, res.as_dict()
-
-
-def test_subprocess_without_evstream_runs_hooks_and_quarantines_rejections(tmp_path):
-    """Run in an isolated subprocess with a meta_path blocker rejecting every evstream import."""
-    change_engine_root = str(Path(__file__).resolve().parents[2])
-    db_file = str(tmp_path / "isolated.sqlite")
-    script = f"""
-import importlib, importlib.abc, json, sqlite3, sys
-from types import SimpleNamespace
-
-class BlockEvstream(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path, target=None):
-        if fullname == "evstream" or fullname.startswith("evstream."):
-            raise ModuleNotFoundError("blocked evstream import in bench simulation")
-        return None
-
-sys.meta_path.insert(0, BlockEvstream())
-
-import change_engine.hooks as hooks
-from change_engine.adapter.record_events import RecordEventError, publish_pending
-
-conn = sqlite3.connect({db_file!r})
-conn.executescript('''
-    CREATE TABLE `tabChange Engine Event Outbox` (
-        position INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_id TEXT NOT NULL UNIQUE,
-        payload TEXT NOT NULL,
-        attempts INTEGER NOT NULL DEFAULT 0,
-        last_error TEXT NULL,
-        dead_lettered_at TEXT NULL
-    );
-    CREATE TABLE `tabChange Engine Event Subject` (
-        subject_id TEXT PRIMARY KEY,
-        entity TEXT NOT NULL,
-        record_name TEXT NOT NULL,
-        live INTEGER NULL DEFAULT 1,
-        UNIQUE(entity, record_name, live)
-    );
-''')
-
-class Db:
-    def sql(self, query, params=()):
-        if "GET_LOCK" in query or "RELEASE_LOCK" in query:
-            return [(1,)]
-        return conn.execute(query.replace("%s", "?"), params).fetchall()
-    def commit(self):
-        conn.commit()
-    def rollback(self):
-        conn.rollback()
-
-delivered = []
-def sink(ev):
-    if ev["type"] == "sales_order.created":
-        raise RecordEventError("EVS-ENV-002", "rejected")
-    delivered.append(ev)
-    return {{"event_id": ev["event_id"], "tenant_id": ev["tenant_id"], "sequence": len(delivered)}}
-
-engine = SimpleNamespace(
-    conf={{"tenant_id": "t_iso", "db_name": "t_iso", "record_event_sink": "test.sink"}},
-    local=SimpleNamespace(),
-    flags=SimpleNamespace(in_install=False, in_migrate=False, in_patch=False),
-    session=SimpleNamespace(user="Administrator"),
-    db=Db(),
-    get_attr=lambda p: sink,
-)
-sys.modules["frappe"] = engine
-
-def call_hook(doctype, name, method):
-    path = hooks.doc_events[doctype][method]
-    mod, fn = path.rsplit(".", 1)
-    doc = SimpleNamespace(doctype=doctype, name=name, get=lambda k, d=None: d, get_doc_before_save=lambda: None)
-    getattr(importlib.import_module(mod), fn)(doc, method)
-
-call_hook("Sales Order", "SO-BAD", "after_insert")
-call_hook("Customer", "CUST-OK", "after_insert")
-conn.commit()
-
-# First tick fails on poison Sales Order; second tick quarantines it and delivers Customer.
-try:
-    publish_pending(max_attempts=2)
-    raise AssertionError("expected RecordEventError")
-except RecordEventError:
-    pass
-assert publish_pending(max_attempts=2) == 1
-assert len(delivered) == 1 and delivered[0]["type"] == "customer.created"
-assert "evstream" not in sys.modules
-print(json.dumps(delivered[0]))
-"""
-    env = {k: v for k, v in os.environ.items() if k != "ORRERY_EVSTREAM_DIR"}
-    env["PYTHONPATH"] = change_engine_root
-    proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=env, check=False)
-    assert proc.returncode == 0, proc.stderr
-    emitted = json.loads(proc.stdout.strip().splitlines()[-1])
-    res = validate_event({**emitted, "sequence": 1})
-    assert res.ok, res.as_dict()

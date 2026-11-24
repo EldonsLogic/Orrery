@@ -351,11 +351,6 @@ class RealBenchTestCase(unittest.TestCase):
         frappe.set_user("Administrator")
 
     def tearDown(self) -> None:
-        if frappe is not None and _has_active_frappe_db():
-            try:
-                frappe.db.rollback()
-            except Exception:
-                pass
         frappe.set_user("Administrator")
 
 

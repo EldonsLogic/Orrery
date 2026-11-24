@@ -12,10 +12,6 @@ Empty until gate G1; each runbook is written when the process first exists, test
 | Deploy and rollback (services, engine apps, components) | G1 | IaC, staging first, version pins |
 | Backup and restore (per tenant) | G3 | Scheduled restore test, logged |
 | Incident response | G3 | From [../security/incident-response.md](../security/incident-response.md) |
-| Exceptions register (every manual step logged) | G2 | [exceptions-register.md](exceptions-register.md), GOV-017 |
-| Periodic plan review | G1 | [plan-review.md](plan-review.md), `scripts/plan_review.py`, GOV-020 |
-| Shipping plan rows with parallel subagents | G0 | [parallel-subagent-delivery.md](parallel-subagent-delivery.md), GOV-053 |
-| Clear `recovery_required` on a tenant site | G1 | [adapter-recovery-required.md](adapter-recovery-required.md), ERP-026 |
 | Rotate secrets and keys | G1 | Includes ZATCA key handling, gateway keys |
 | Customer onboarding | G2 | Discovery to go-live checklist |
 | Offboard, export and delete tenant | G3 | SLAs TBD ([../security/hosting-rules.md](../security/hosting-rules.md)); rules in [../security/data-retention.md](../security/data-retention.md) |

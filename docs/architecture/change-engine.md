@@ -5,7 +5,7 @@ Owner: eldon
 
 The "change engine" is a module, adapted from a partner-built prototype, that implements guarded configuration changes on Frappe. It is the apply / preview / rollback / audit / policy layer of Part 2, living at `apps/engine/change_engine/` (see its `README.md` and `PROVENANCE.md`). It is not a separate project and carries none of the prototype's name or branding. ADR-0013.
 
-**Status after import:** the deterministic guarded-apply code is in; the prototype's LLM planner, Desk sidebar, LLM settings screen, mock ERP seeder and demo workspaces were not imported because they conflict with the architecture (AI work lives in separate services behind the gateway; the product UI is the one chat). Standalone unit tests pass and `CE-SEC-005` adds live pinned-bench CI (`.github/workflows/real-bench.yml`, `infra/dev/docker/run_real_bench_ci.py`, `test_ce_sec_005_real_bench.py`) exercising `plan`/`apply`/`rollback`/policy and negative security regressions against real Frappe v15, ERPNext, HRMS, MariaDB 11.4, and Redis.
+**Status after import:** the deterministic guarded-apply code is in; the prototype's LLM planner, Desk sidebar, LLM settings screen, mock ERP seeder and demo workspaces were not imported because they conflict with the architecture (AI work lives in separate services behind the gateway; the product UI is the one chat). 68 standalone unit tests pass plus 6 new security regression tests; nothing has run in a real Frappe bench yet (CE-SEC-005).
 
 ## What it does (prototype)
 Preview of changes, a pre-execution DDL plan gate, an audited six-stage deploy, soft-quarantine rollback, declarative workflows and reports, and runtime policy enforcement.
@@ -36,14 +36,14 @@ Also required on import: add a LICENSE file (decision on licence recorded in NOT
 | ID | Status | Evidence |
 |---|---|---|
 | CE-SEC-001 | Fixed in import | Inside Frappe, roles come only from the session; client `user_roles`/`caller_roles` ignored. Test: `test_caller_roles.py` |
-| CE-SEC-002 | Fixed in merged PR #153 | Rollback role lookup and invalid or missing session contexts fail closed. Tests: `test_caller_roles.py` and live HTTP regressions. Sibling role defaults and proposal authorization remain tracked follow-ups from that PR's independent review. |
-| CE-SEC-003 | Implemented | Policy writes require an authorised session role. The policy store persists site-scoped revisions and audit records in MariaDB. |
+| CE-SEC-002 | Fixed in import | Role lookup fails closed (no roles). Test: `test_caller_roles.py` |
+| CE-SEC-003 | Partly mitigated | `register_runtime_policy` is no longer exposed over HTTP; read endpoints require an authorised role. Policies are still in-process memory: persistence per site with revision and audit is still required |
 | CE-SEC-004 | Fixed in import | LLM test-connection and config endpoints removed. Provider keys live only in the gateway |
-| CE-SEC-005 | In review | Real bench CI workflow `.github/workflows/real-bench.yml` and orchestrator `infra/dev/docker/run_real_bench_ci.py` run `test_ce_sec_005_real_bench.py` and `test_ce_sec_005_live_http.py` against pinned Frappe `v15.126.0`, ERPNext `v15.124.5`, HRMS `v15.64.8`, MariaDB `11.4`, and Redis `7.2.7` |
+| CE-SEC-005 | Open | Needs a real bench in CI |
 
 ## Import checklist
 1. Module at `apps/engine/change_engine/`, no old name in code, docs, DocTypes or CI (checked by `scripts/check_repo_hygiene.py`). Done.
-2. CE-SEC-001 through CE-SEC-004 have regression tests. CE-SEC-005 tracks live-bench verification and acceptance.
+2. CE-SEC-001, 002, 004 fixed with tests; 003 persistence and 005 real-bench CI remain, each with its own PR referencing the ID.
 3. Align deploy-stage events to the event contract; add `tenant_id` and audit fields.
 4. Wire to the compiler through the adapter interface (the module has no LLM or request-planning paths).
 5. Gate G0 requires the known bugs fixed (see [GATES](../GATES.md)).

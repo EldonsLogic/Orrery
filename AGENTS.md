@@ -19,7 +19,7 @@ We are a product company, not a software house. "Orrery" is a working name, not 
 10. Be blunt. Flag claims as UNVERIFIED; cite URL and access date (YYYY-MM-DD) for external facts.
 
 ## Current gate
-See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the status printed by `python3 scripts/build_status.py` ([docs/STATUS.md](docs/STATUS.md) explains it). Do not build for a later gate without a plan row. Application code is allowed where a plan row asks for it, at any gate: GATES.md lets later-gate work start early, and nothing counts as passed until the exit run is recorded. A plan row is the permission; no row, no code.
+See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the status printed by `python3 scripts/build_status.py` ([docs/STATUS.md](docs/STATUS.md) explains it). Do not build for a later gate without a plan row. Application code is allowed only where a plan row for the current gate asks for it.
 
 ## Session start checklist
 1. Identify which founder you are working with: Eldon (GitHub `EldonsLogic`) or the partner (GitHub `sayegh9`). Check `gh api user --jq .login`, or `git config user.name` and `user.email`, or ask; never assume. It decides the log `--author` (eldon or partner) and your lane in [docs/ONBOARDING.md](docs/ONBOARDING.md).

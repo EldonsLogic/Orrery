@@ -168,7 +168,7 @@ def _provision_and_build(adapter: ChangeEngineAdapter, tenant: str = "t_alpha", 
 
 class TestErp012FrappeAdapter(unittest.TestCase):
     def test_fail_closed_when_real_frappe_absent(self):
-        adapter = make_frappe_adapter(simulated=False, test_hooks=True)
+        adapter = make_frappe_adapter(simulated=False)
         res = adapter.call(
             "provision_site",
             _ctx("t_alpha"),

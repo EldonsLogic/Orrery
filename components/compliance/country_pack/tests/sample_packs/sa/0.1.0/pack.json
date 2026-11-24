@@ -1,0 +1,132 @@
+{
+  "$schema": "../../../../pack.schema.json",
+  "schemaVersion": "0.1.0",
+  "packId": "sa",
+  "componentId": "country.sa",
+  "countryCode": "SA",
+  "version": "0.1.0",
+  "status": "draft",
+  "evidenceStatus": "unverified",
+  "testOnly": true,
+  "notes": "TEST DATA ONLY — synthetic framework fixture used exclusively by unit tests. No real tax rates or statutory rules.",
+  "name": {
+    "ar": "حزمة اختبارية (بيانات اختبار فقط)",
+    "en": "Sample Test Country Pack (Test Data Only)"
+  },
+  "coaTemplate": {
+    "componentId": "finance.coa_test",
+    "artifactRef": "test_coa_template_ref",
+    "versionRange": ">=0.1.0 <1.0.0"
+  },
+  "tax": {
+    "vatSupported": true,
+    "taxCodesRef": "test.tax_codes_placeholder_no_rates",
+    "filingPeriods": ["monthly", "quarterly"],
+    "roundingRule": "half_away_from_zero",
+    "vatNumberPattern": "^[0-9]{15}$",
+    "crNumberPattern": "^[0-9]{10}$"
+  },
+  "eInvoicing": {
+    "required": true,
+    "mode": "zatca_phase1",
+    "authority": "test_authority_placeholder",
+    "componentId": "compliance.zatca_sa",
+    "mandatoryDocumentLanguages": ["ar"],
+    "archiveRetentionYears": 6
+  },
+  "localeDefaults": {
+    "timezone": "Asia/Riyadh",
+    "calendar": {
+      "primary": "gregorian",
+      "secondaryDisplay": "hijri_umm_al_qura"
+    },
+    "week": {
+      "startDay": "sun",
+      "weekendDays": ["fri", "sat"]
+    },
+    "workingTime": {
+      "workDays": ["sun", "mon", "tue", "wed", "thu"],
+      "hours": {
+        "from": "08:00",
+        "to": "17:00"
+      }
+    },
+    "fiscalYear": {
+      "type": "gregorian",
+      "startMonth": 1,
+      "startDay": 1
+    },
+    "holidays": {
+      "calendarRef": {
+        "id": "sa.holidays",
+        "version": "0.1.0"
+      }
+    },
+    "numberSystem": "western",
+    "currency": "SAR"
+  },
+  "formats": {
+    "currency": "SAR",
+    "currencyDecimals": 2,
+    "gregorianDateFormat": "YYYY-MM-DD",
+    "hijriDateFormat": "iYYYY-iMM-iDD",
+    "numberSystem": "western",
+    "decimalSeparator": ".",
+    "thousandsSeparator": ","
+  },
+  "payrollHooks": {
+    "wpsEnabled": false,
+    "wpsFormatRef": null,
+    "socialInsuranceRef": null,
+    "eosbRuleRef": null
+  },
+  "printFormats": {
+    "legalLayoutPrecedence": true,
+    "mandatoryLanguages": ["ar", "en"],
+    "templates": [
+      {
+        "kind": "tax_invoice",
+        "templateRef": "test_tax_invoice_template",
+        "componentId": "compliance.zatca_sa"
+      }
+    ]
+  },
+  "overridesPolicy": {
+    "overridablePaths": [
+      "timezone",
+      "calendar.primary",
+      "calendar.secondaryDisplay",
+      "week.startDay",
+      "week.weekendDays",
+      "workingTime.workDays",
+      "workingTime.hours",
+      "workingTime.reducedPeriods",
+      "fiscalYear",
+      "holidays.overrides",
+      "numberSystem"
+    ],
+    "lockedPaths": [
+      "countryCode",
+      "packId",
+      "componentId",
+      "version",
+      "coaTemplate",
+      "tax",
+      "eInvoicing",
+      "formats",
+      "payrollHooks",
+      "printFormats",
+      "holidays.calendarRef",
+      "currency"
+    ],
+    "constraints": {
+      "fiscalYearLocked": false,
+      "allowedFiscalYearTypes": ["gregorian", "hijri"],
+      "allowedCurrencies": ["SAR"]
+    }
+  },
+  "upgradePolicy": {
+    "compatibilityRange": ">=0.1.0 <0.2.0",
+    "migrationRequired": false
+  }
+}

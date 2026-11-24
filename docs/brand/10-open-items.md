@@ -32,7 +32,7 @@ Items the PDF leaves undone, inconsistent or unverified.
 - Destructive button is "Crimson fill, white label" (p.13). In dark mode Crimson is #FF6B81, and white on #FF6B81 is about 2.7:1, below AA. The PDF contrast table does not cover this pair. Needs a design decision; preview.html follows the PDF literally (white label).
 
 ## v1.1 status of each item (added after Task D; everything below is PROPOSED, nothing accepted)
-Proposals live in `11-v1.1-additions.md`, `12-tenant-theming.md`, `logo/proposed/`, `tokens/tokens.proposed.*`. v1 files and tokens are unchanged. "Open" means a human must still decide or review.
+Proposals live in `11-v1.1-additions.md`, `12-tenant-theming.md`, `logo/proposed/`, `tokens/tokens.proposed.*` (the token files themselves were ACCEPTED as the active set on 2026-11-22, Q-70; logo and name stay placeholders). v1 files and tokens are unchanged. "Open" means a human must still decide or review.
 | Item above | Status | Where | Still open |
 |---|---|---|---|
 | Missing 3: 16 and 32 px marks | PROPOSED draft: pixel-snapped `mark-16.svg`, `mark-32.svg`, slot verified at least 1.5 px (16) and 1.94 px (32) wide by rendering | `logo/proposed/`, `tools/build_logo_proposed.py --verify` | Designer review and approval; sizes between 16 and 24 px |

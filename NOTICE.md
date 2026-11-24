@@ -20,4 +20,4 @@ This repository is proprietary. This file summarizes what we use or plan to use 
 - A one-page "self-improving agent team" prompt guide supplied by the founder on 2026-11-11 (original source and licence unknown, UNVERIFIED): restated in [agents/team-protocol.md](agents/team-protocol.md) and [agents/roles.md](agents/roles.md).
 
 ## Trademarks
-"Frappe" and "ERPNext" are third-party trademarks. Do not use them in our product name or ads (LEG-009). "Orrery" is a working name and is not cleared (ADR-0001).
+"Frappe" and "ERPNext" are third-party trademarks. Do not use them in our product name or ads (LEG-009). "Seshna" is the final name (ADR-0066); trademark clearance pending (LEG-008).

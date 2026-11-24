@@ -27,6 +27,6 @@ Stack and rules: [ADR-0022](../docs/decisions/ADR-0022-web-stack.md). Both apps 
 - `scripts/`: `copy-tokens.mjs` (token copy) and `check-tokens-only.mjs` (rejects colour and font literals and physical-direction CSS; run by `pnpm lint`).
 
 ## Where tokens come from
-`docs/brand/tokens/tokens.css` (generated, never edited by hand) is copied to `<app>/src/styles/tokens.generated.css` by `scripts/copy-tokens.mjs` before dev, typecheck and build. The copies are git-ignored.
+`docs/brand/tokens/tokens.css` (generated, never edited by hand) is copied to `<app>/src/styles/tokens.generated.css` by `scripts/copy-tokens.mjs` before dev, typecheck and build. `tokens.proposed.css` (the accepted v1.1 layer, Q-70) is copied to `tokens.proposed.generated.css` and imported after it. The copies are git-ignored.
 
 **Only the design-system preview page (`app` route `/preview`) exists.** Product screens come at gate G1 and later.

@@ -34,6 +34,8 @@ class ActionAudit:
     decision: str
     reason: str
     break_glass: bool = False
+    # Q-41, Q-563: the sole owner approved their own request or their own agent's draft (review report input).
+    self_approved: bool = False
 
 
 @dataclass(frozen=True)
@@ -148,9 +150,11 @@ class ActionPolicyStore:
                             raise ValueError("Untrusted clock")
                         audit = replace(audit, timestamp=now)
                         if expires_at is not None and now >= expires_at:
-                            audit = replace(audit, decision="deny", reason="expired", break_glass=False)
+                            audit = replace(audit, decision="deny", reason="expired", break_glass=False,
+                                            self_approved=False)
                     except Exception:
-                        audit = replace(audit, decision="deny", reason="clock_unavailable", break_glass=False)
+                        audit = replace(audit, decision="deny", reason="clock_unavailable", break_glass=False,
+                                        self_approved=False)
                 if audit.decision != "deny":
                     assert audit.submitter is not None
                     keys = [("request", audit.request_id), ("idempotency", json.dumps(
@@ -165,7 +169,8 @@ class ActionPolicyStore:
                         ).rowcount
                         if not inserted:
                             db.execute("ROLLBACK TO claims")
-                            audit = replace(audit, decision="deny", reason="replay", break_glass=False)
+                            audit = replace(audit, decision="deny", reason="replay", break_glass=False,
+                                            self_approved=False)
                             break
                     db.execute("RELEASE claims")
                 if audit.decision != "deny":

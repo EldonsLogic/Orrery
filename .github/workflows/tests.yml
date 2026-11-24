@@ -385,7 +385,7 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_023_action_policy.py apps/engine/change_engine/change_engine/tests/test_erp_029_action_outcome_reconciliation.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_023_action_policy.py apps/engine/change_engine/change_engine/tests/test_erp_029_action_outcome_reconciliation.py apps/engine/change_engine/change_engine/tests/test_erp_033_sole_owner_agent.py -q
 
       - name: Inventory valuation correctness tests (ERP-015; live layer skips without a bench)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

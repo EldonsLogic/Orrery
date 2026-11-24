@@ -12,7 +12,6 @@ import {
   Button,
   Card,
   Checkbox,
-  DatePicker,
   Select,
   Spinner,
   Stack,
@@ -71,55 +70,6 @@ const INVOICES: InvoiceRow[] = [
   { number: 'INV-0044', customer: 'Desert Logistics', status: 'danger', amount: 45300.25 },
 ];
 
-function DatePickerPreview() {
-  const t = useTranslations('preview.components.datePicker');
-  const { locale, direction } = useSettings();
-  const [value, setValue] = useState('2025-06-26');
-  const [calendar, setCalendar] = useState<'gregorian' | 'hijri'>('hijri');
-  const [weekStart, setWeekStart] = useState(locale === 'ar' ? 6 : 1);
-  const [secondary, setSecondary] = useState(true);
-  return (
-    <Stack gap={2}>
-      <h3 className={styles.h3}>{t('title')}</h3>
-      <Stack direction="row" wrap align="center">
-        <Select label={t('calendarLabel')} value={calendar} onChange={(e) => setCalendar(e.target.value as typeof calendar)}>
-          <option value="gregorian">{t('gregorian')}</option>
-          <option value="hijri">{t('hijri')}</option>
-        </Select>
-        <Select label={t('weekStartLabel')} value={weekStart} onChange={(e) => setWeekStart(Number(e.target.value))}>
-          {(['6', '0', '1'] as const).map((d) => (
-            <option key={d} value={d}>{t(`days.${d}`)}</option>
-          ))}
-        </Select>
-        <Checkbox label={t('secondary')} checked={secondary} onChange={(e) => setSecondary(e.target.checked)} />
-      </Stack>
-      <DatePicker
-        label={t('dueLabel')}
-        hint={t('dueHint')}
-        value={value}
-        onChange={setValue}
-        calendar={calendar}
-        locale={locale}
-        dir={direction}
-        weekStart={weekStart}
-        secondary={secondary}
-        numberSystem={locale === 'ar' ? 'arab' : 'latn'}
-        labels={{
-          openCalendar: t('openCalendar'),
-          previousMonth: t('previousMonth'),
-          nextMonth: t('nextMonth'),
-          calendarDialog: t('calendarDialog'),
-          invalidError: t('invalidError'),
-          ambiguousError: t('ambiguousError'),
-        }}
-      />
-      <span>
-        {t('stored')} <bdi dir="ltr">{value || t('none')}</bdi>
-      </span>
-    </Stack>
-  );
-}
-
 function ComponentsPreview() {
   const t = useTranslations('preview.components');
   const { locale } = useSettings();
@@ -156,8 +106,6 @@ function ComponentsPreview() {
           <Checkbox label={t('fields.checkboxLabel')} hint={t('fields.checkboxHint')} defaultChecked />
           <Checkbox label={t('fields.checkboxErrorLabel')} error={t('fields.checkboxErrorText')} />
         </Stack>
-
-        <DatePickerPreview />
 
         <Stack gap={2}>
           <h3 className={styles.h3}>{t('status.title')}</h3>

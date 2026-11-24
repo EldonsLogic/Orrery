@@ -23,8 +23,6 @@ MAX_RATIO = 100  # applied once an entry or the archive exceeds 1 MB uncompresse
 MAX_XML_DEPTH = 64
 MAX_SHARED_STRINGS = 200_000
 MAX_SHARED_CHARS = 5_000_000
-MAX_SHEET_NAME = 31  # Excel's own limit
-MAX_DEFINED_NAME = 255
 MAX_LIST = 20  # row/column numbers listed per hidden report
 ARCHIVE_EXT = (".zip", ".jar", ".7z", ".rar", ".gz", ".tar", ".xlsx", ".xlsm", ".docx", ".pptx")
 ARCHIVE_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"\xd0\xcf\x11\xe0", b"\x1f\x8b", b"7z\xbc\xaf", b"Rar!")
@@ -197,75 +195,30 @@ def _fmt_kind(code: str) -> str:
     return ""  # time-only, general, text, numbers: stay raw
 
 
-_WHITE = {"FFFFFFFF", "FFFFFF", "00FFFFFF"}
-MIN_FONT_SZ = 4.0  # points; smaller text is treated as hidden
-MIN_COL_WIDTH = 0.5  # characters; narrower columns are treated as hidden
-
-
-def _fmt_blank(code: str) -> bool:
-    """True when every section of a number format is empty (e.g. ';;;'): the cell shows nothing."""
-    return ";" in code and all(not _STRIP.sub("", sec).strip() for sec in code.split(";"))
-
-
-def _white(color) -> bool:
-    if color is None:
-        return False
-    rgb = (color.get("rgb") or "").upper()
-    return rgb in _WHITE or (color.get("theme") == "0" and not color.get("tint"))
-
-
-def _styles(pkg: Package):
-    """cellXfs index -> date kind, and index -> hidden reason (blank number format, tiny or
-    background-coloured font). Returns (date_xf, hide_xf)."""
+def _styles(pkg: Package) -> dict:
+    """cellXfs index -> 'date' or 'datetime' when the number format is clearly a date."""
     if not pkg.has("xl/styles.xml"):
-        return {}, {}
+        return {}
     root = parse_small(pkg.read("xl/styles.xml"), pkg.budget)
-    custom, xfs, fonts, fills = {}, [], [], []
+    custom, xfs = {}, []
     for ch in root:
         n = _ln(ch.tag)
         if n == "numFmts":
             for f in ch:
                 custom[f.get("numFmtId", "")] = f.get("formatCode", "")
         elif n == "cellXfs":
-            xfs = [(x.get("numFmtId", "0"), x.get("fontId", "0"), x.get("fillId", "0")) for x in ch]
-        elif n == "fonts":
-            for f in ch:
-                sz = col = None
-                for a in f:
-                    if _ln(a.tag) == "sz":
-                        try:
-                            sz = float(a.get("val", ""))
-                        except ValueError:
-                            sz = None
-                    elif _ln(a.tag) == "color":
-                        col = a
-                fonts.append((sz, _white(col)))
-        elif n == "fills":
-            for f in ch:
-                light = True
-                for pf in f:
-                    if _ln(pf.tag) == "patternFill" and pf.get("patternType") == "solid":
-                        fg = next((c for c in pf if _ln(c.tag) == "fgColor"), None)
-                        light = fg is None or _white(fg) or not (fg.get("rgb") or fg.get("theme") or fg.get("indexed"))
-                fills.append(light)
-    out, hide = {}, {}
-    for i, (fid, font_id, fill_id) in enumerate(xfs):
+            xfs = [x.get("numFmtId", "0") for x in ch]
+    out = {}
+    for i, fid in enumerate(xfs):
         if fid in custom:
             kind = _fmt_kind(custom[fid])
-            if _fmt_blank(custom[fid]):
-                hide[i] = "format_hidden"
         elif fid.isdigit() and int(fid) in BUILTIN_DATE_IDS:
             kind = "datetime" if fid == "22" else "date"
         else:
             kind = ""
         if kind:
             out[i] = kind
-        if i not in hide and font_id.isdigit() and int(font_id) < len(fonts):
-            sz, white = fonts[int(font_id)]
-            light_bg = fills[int(fill_id)] if fill_id.isdigit() and int(fill_id) < len(fills) else True
-            if (sz is not None and sz < MIN_FONT_SZ) or (white and light_bg):
-                hide[i] = "font_hidden"
-    return out, hide
+    return out
 
 
 def _iso(serial: str, kind: str, date1904: bool):
@@ -302,8 +255,6 @@ def _comments(pkg: Package, target: str):
     root = parse_small(pkg.read(target), pkg.budget)
     for el in root.iter():
         if _ln(el.tag) in ("comment", "threadedComment") and el.get("ref"):
-            if not split_ref(el.get("ref")):
-                raise Tab006Malformed("bad comment cell reference")
             for ch in el:
                 if _ln(ch.tag) == "text":
                     t = _text(ch) if any(_ln(c.tag) in ("t", "r") for c in ch) else (ch.text or "")
@@ -324,40 +275,32 @@ def _ranges(nums):
     return out
 
 
-def _sheet(pkg: Package, target: str, name: str, state: str, shared, date_xf, hide_xf, date1904,
+def _sheet(pkg: Package, target: str, name: str, state: str, shared, date_xf, date1904,
            max_rows: int, max_cols: int, max_cells: int) -> dict:
     cols_hidden, hidden_rows, hidden_cols, cells = [], [], set(), []
     row_no = col_no = ncells = 0
-    row_reason = ""
+    row_hidden = in_data = False
     for ev, el in iter_xml(pkg.read(target), pkg.budget):
         n = _ln(el.tag)
         if ev == "start":
-            if n == "row":
+            if n == "sheetData":
+                in_data = True
+            elif n == "row":
                 row_no = int(el.get("r")) if (el.get("r") or "").isdigit() else row_no + 1
                 if row_no > max_rows:
                     raise BudgetExceeded("rows", max_rows)
-                row_reason = "hidden_row" if el.get("hidden", "") in ("1", "true") else ""
-                if not row_reason and el.get("customHeight", "") in ("1", "true"):
-                    try:
-                        row_reason = "zero_height_row" if float(el.get("ht", "")) < 1 else ""
-                    except ValueError:
-                        pass
-                if row_reason:
+                row_hidden = el.get("hidden", "") in ("1", "true")
+                if row_hidden:
                     hidden_rows.append(row_no)
                 col_no = 0
             continue
-        if n == "col":  # <cols> is read wherever it sits (X4); reasons are applied after the pass
-            reason = "hidden_column" if el.get("hidden", "") in ("1", "true") else ""
-            if not reason:
-                try:
-                    reason = "zero_width_column" if float(el.get("width", "")) < MIN_COL_WIDTH else ""
-                except ValueError:
-                    pass
-            if reason and (el.get("min") or "").isdigit() and (el.get("max") or "").isdigit():
-                cols_hidden.append((int(el.get("min")), min(int(el.get("max")), max_cols), reason))
-        elif n == "row":
+        if n == "col" and not in_data:
+            if el.get("hidden", "") in ("1", "true") and (el.get("min") or "").isdigit() \
+                    and (el.get("max") or "").isdigit():
+                cols_hidden.append((int(el.get("min")), min(int(el.get("max")), max_cols)))
+        elif n == "row" and in_data:
             el.clear()
-        elif n == "c":
+        elif n == "c" and in_data:
             ref = el.get("r", "")
             sp = split_ref(ref)
             if sp:
@@ -408,17 +351,12 @@ def _sheet(pkg: Package, target: str, name: str, state: str, shared, date_xf, hi
             ncells += 1
             if ncells > max_cells:
                 raise BudgetExceeded("cells", max_cells)
-            xs = el.get("s", "")
-            cells.append({"ref": ref, "text": text, "kind": kind, "formula": has_formula, "hidden": row_reason,
-                          "style": hide_xf.get(int(xs), "") if xs.isdigit() else ""})
+            hid = "hidden_row" if row_hidden else (
+                "hidden_column" if any(a <= col_no <= b for a, b in cols_hidden) else "")
+            if hid == "hidden_column":
+                hidden_cols.add(col_no)
+            cells.append({"ref": ref, "text": text, "kind": kind, "formula": has_formula, "hidden": hid})
             el.clear()
-    for c in cells:
-        cno = split_ref(c["ref"])[0]
-        creason = next((r for a, b, r in cols_hidden if a <= cno <= b), "")
-        if creason:
-            hidden_cols.add(cno)
-        c["hidden"] = c["hidden"] or creason or c.pop("style")
-        c.pop("style", None)
     rows_seen = {}
     for c in cells:
         if not c["hidden"]:
@@ -445,7 +383,7 @@ def read_xlsx(data: bytes, budget: Budget, max_rows: int, max_cols: int, max_cel
     wb_rels = {rid: (typ, tgt, ext) for rid, typ, tgt, ext in _rels(pkg, "xl/workbook.xml")}
     external = external or any(e or t == "externalLink" for t, _, e in wb_rels.values())
     shared = _shared(pkg)
-    date_xf, hide_xf = _styles(pkg)
+    date_xf = _styles(pkg)
     sheets, names, date1904 = [], [], False
     root = parse_small(pkg.read("xl/workbook.xml"), pkg.budget)
     for ch in root:
@@ -458,22 +396,17 @@ def read_xlsx(data: bytes, budget: Budget, max_rows: int, max_cols: int, max_cel
                 sheets.append((s.get("name", ""), s.get("state", "visible"), rid))
         elif n == "definedNames":
             for d in ch:
-                if len(d.get("name", "")) > MAX_DEFINED_NAME:
-                    raise Tab006Malformed("defined name longer than 255 characters")
                 names.append({"name": d.get("name", ""), "text": d.text or "",
                               "hidden": d.get("hidden", "") in ("1", "true")})
     if len(sheets) > max_sheets:
         raise BudgetExceeded("sheets", max_sheets)
     out = [{"type": "workbook", "names": names, "external_links": external, "date1904": date1904}]
-    for idx, (name, state, rid) in enumerate(sheets, start=1):
-        if len(name) > MAX_SHEET_NAME:
-            raise Tab006Malformed("sheet name longer than 31 characters")
+    for name, state, rid in sheets:
         rel = wb_rels.get(rid)
         if not rel or rel[2] or rel[1] not in pkg.names:
             raise Tab006Malformed("sheet relationship missing")
         sh = _sheet(pkg, rel[1], name, state if state in ("visible", "hidden", "veryHidden") else "hidden",
-                    shared, date_xf, hide_xf, date1904, max_rows, max_cols, max_cells)
-        sh["index"], sh["locator"] = idx, f"s{idx}"  # structured locator: a name never goes in a path
+                    shared, date_xf, date1904, max_rows, max_cols, max_cells)
         sheet_rels = _rels(pkg, rel[1])
         sh["external_links"] = any(e for _, _, _, e in sheet_rels)
         for _, typ, tgt, ext in sheet_rels:

@@ -110,8 +110,8 @@ def extract_fields(lines: list, threshold: float, tolerance: Decimal) -> dict:
                 dates_seen[cal] += 1
                 name = "date" if cal == "gregorian" else "date_hijri"
                 add(name, line, d["span"][0], d["span"][1], norm=d["iso"],
-                    norm_kind="iso_date" if cal == "gregorian" else "iso_date_hijri_umm_al_qura",
-                    flags=d["flags"])
+                    norm_kind="iso_date_hijri_civil_approx" if d["approx"] else "iso_date",
+                    flags=d["flags"] + (["hijri_conversion_approximate"] if d["approx"] else []))
         if not taxline:
             kind = None
             if SUBTOTAL.search(f):

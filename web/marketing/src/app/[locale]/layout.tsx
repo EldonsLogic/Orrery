@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Providers } from '../../components/Providers';
 import { directionOf, isLocale, locales } from '../../i18n';
 import '../../styles/tokens.generated.css';
+import '../../styles/tokens.proposed.generated.css';
 
 export const dynamicParams = false;
 

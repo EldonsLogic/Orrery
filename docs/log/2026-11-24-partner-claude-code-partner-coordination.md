@@ -6,10 +6,11 @@ Tool and model: claude-code / Claude Opus 5.5 (coordinator); children: Claude So
 Plan IDs: SEC-004,CMP-023
 
 ## Summary
-Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-23-partner-claude-code-partner-coordination.md (merged in #304).
+Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-23-partner-claude-code-partner-coordination.md (merged in #304). Merged #299, #301, #302, #303; fixed and re-reviewed #300 and opened and fixed #306 (both Tier 3, waiting on Eldon); reviewed Eldon's #296, #298, #305; recorded five founder answers; saved 41 worktrees to rescue branches.
 
 ## Files touched
 - `docs/log/2026-11-24-partner-claude-code-partner-coordination.md`: this live log. Code changes are in the PRs below, each with its own log.
+- `docs/open-questions.md`: Q-603, Q-606, Q-607, Q-608 resolved; Q-604 partner answer recorded.
 
 ## Delegated tasks and coordinator actions (dispatch, then result)
 - Session start: #268 (GOV-064), #270 and #304 are merged, so ERP-033 is unblocked. Eldon approved #299 (Tier 3, line by line), #301 and #303; requested changes on #302; pushed to #296, #298 and #305.
@@ -41,10 +42,17 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
 - #306 re-review, gpt-6.1-sol at `2aa0a93`: APPROVE (High, Medium and coverage gap closed; five mutants killed). New Low: the report decodes the whole journal before filtering (3.05 s for 100,000 rows); follow-up: indexed tenant and time columns. Posted on #306. Left: Eldon's Tier 3 line-by-line review and the partner's say-so.
 
 ## Decisions
-- None, or link to ADR / strategy decision.
+- Partner's founder answers (2026-11-24, recorded in `docs/open-questions.md`): Q-606, Q-607, Q-608 accept Eldon's suggested answers; Q-603 pass the DDL-gate approval through to the backend (ADR and security review before build); Q-604 yes, read `engineField` (awaits Eldon's confirmation).
+- #300: the partner agreed to Eldon's display-format product-choice decision; the partner gave the Tier 3 say-so for #299.
+- Group D: saved to `rescue/*` on the partner's say-so; worktree deletion not yet approved.
+- The GitHub watcher reached its 2-hour limit with no new events; the partner chose to wrap up instead of restarting it.
 
 ## Tokens or cost
-Unknown or approximate, if known.
+Unknown.
 
 ## Next step
-What the next session should pick up, with plan IDs.
+- #300 CMP-036 and #306 ERP-033 (Tier 3): Eldon's line-by-line re-read, then the partner's say-so to merge.
+- Eldon: merge #296 then #305 (approved); after #296, start GOV-071 (rename in the partner lane).
+- Follow-up rows to open: ERP-033 report scheduling and delivery, the `tenant_role_holders` resolver (gateway lane), indexed report columns (Low); BPL-031 `check_ready` refusals and bench `test_05` in CI; BPL-033 six Lows; CMP-023 optional pin-check and label-sort tests; a Q-604 row once Eldon confirms; Q-603 ADR before build.
+- Open questions for Eldon: Q-605, Q-311 confirmation, Q-604 confirmation.
+- Ask the partner before deleting the 41 rescued worktrees.

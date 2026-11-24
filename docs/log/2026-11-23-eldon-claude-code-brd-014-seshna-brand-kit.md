@@ -31,3 +31,13 @@ Unknown.
 - BRD-014 to done once both PRs merge (PLAN.md owned by GOV-069 session).
 - Outside these paths, needs owners' rows: Alexandria in services/studio/static/index.html and the engine print-format font stack; scripts/build_brand_assets.py should use the small-size cut at 16 px and a 96 px minimum lockup.
 - Web fonts are not loaded anywhere in web/ yet; self-hosting Cairo and Readex Pro WOFF2 needs its own row.
+
+## Addendum: brand state marks in web (BRD-014)
+Eldon asked for the kit's state marks (guidelines p.10, kit "Extending the system") across the product.
+- `web/app/src/ui/Mark.tsx`: the mark as two halves from the master and small-cut paths, each solid or outline (outline drawn inside the silhouette), small cut below 24 px, colour `--color-primary` / `--color-accent` from tokens, no transforms.
+- `web/app/src/components/marks/`: `StatusMark` (not_started, drafted, approved, always with its word), `ProgressMarks` (Discover to Live from the build state, `web/app/src/lib/buildProgress.ts`), `LoadingMark` (PROPOSED fill cycle, static drafted state under reduced motion, visible label).
+- Used in: Blueprint viewer header (status and progress; replaces the Draft badge), component factory request detail (status), chat approval card (drafted), chat working indicator, app session loading, workspace switch and factory list loading (loading), `/preview` (all states). Button busy spinners stay.
+- i18n `marks.*` and `preview.components.marks.*` in en and ar; `blueprint.badge.draft` removed (replaced by the status mark).
+- Docs: `docs/brand/09-applications.md` (state marks, PROPOSED loading), `10-open-items.md` (loading awaits founder approval; inferred stroke and sizes; tenant colour question), `07-graphic-elements.md` pointer.
+- Not mapped: the owner approval screen (WEB-027) is not on main yet, so it has no status mark; it should use `StatusMark` and `ProgressMarks` when built. No screen shows Discovery progress before a Blueprint exists.
+- Checks: web tests 294 (vitest, 16 new in marks.test.tsx) and 133 script tests, lint (eslint, tokens-only, rtl, css-vars, contrast), typecheck app and marketing, next build app and marketing: pass. check_docs and check_repo_hygiene: pass.

@@ -30,7 +30,7 @@ export function buildBlueprintView(bp: Blueprint, caller: Caller, locale: string
   const plain: Badges = { draft, unverified: false };
   // The tax and calendar settings come from a country pack still below 1.0.0: show them as unverified.
   const unverified: Badges = { draft, unverified: (bp.compliance.countryPack?.version ?? '0').startsWith('0.') };
-  if (scope.roles.length === 0) return { scope: 'department', revision: bp.meta.revision, badges: plain, sections: [] }; // deny by default
+  if (scope.roles.length === 0) return { scope: 'department', revision: bp.meta.revision, buildState: bp.meta.buildState, badges: plain, sections: [] }; // deny by default
 
   const ent = (id: string) => bp.entities.find((e) => e.id === id);
   const entLabel = (id: string) => pick(ent(id)?.labels, locale, id);
@@ -204,5 +204,5 @@ export function buildBlueprintView(bp: Blueprint, caller: Caller, locale: string
 
   if (scope.all) sections.push({ id: 'pending', badges: plain, ...summarisePending(pending, locale) });
 
-  return { scope: scope.all ? 'all' : 'department', revision: bp.meta.revision, badges: plain, sections };
+  return { scope: scope.all ? 'all' : 'department', revision: bp.meta.revision, buildState: bp.meta.buildState, badges: plain, sections };
 }

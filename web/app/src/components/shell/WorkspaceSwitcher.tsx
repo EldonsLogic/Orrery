@@ -2,7 +2,7 @@
 
 import { useId } from 'react';
 import { useTranslations } from 'next-intl';
-import { Spinner } from '../../ui';
+import { LoadingMark } from '../marks/LoadingMark';
 import type { SessionClaims, WorkspaceMembership } from '../../lib/session';
 import { useSession } from './SessionProvider';
 import styles from './Shell.module.css';
@@ -30,7 +30,7 @@ export function WorkspaceSwitcher({ claims, memberships }: { claims: SessionClai
           </option>
         ))}
       </select>
-      {switching ? <Spinner label={t('switching')} /> : null}
+      {switching ? <LoadingMark label={t('switching')} /> : null}
     </div>
   );
 }

@@ -1,0 +1,11 @@
+/* Brand mark colour from tokens only (dark mode and tenant values come with the tokens). Never rotated or mirrored. */
+.root {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+  color: var(--color-primary);
+}
+
+.accent {
+  color: var(--color-accent);
+}

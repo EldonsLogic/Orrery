@@ -24,6 +24,9 @@ PENDING_REF = {"path": "coaTemplate.componentId", "value": "x", "blockedBy": "sy
 BLOCKER = {"id": "synthetic_blocker", "claim": "synthetic", "status": "UNVERIFIED", "blockedBy": "synthetic"}
 
 
+DISPLAY_FORMAT_PATHS = ("formats.numberSystem", "formats.decimalSeparator", "formats.thousandsSeparator",
+                        "formats.gregorianDateFormat")
+
 class _Fixture(unittest.TestCase):
     def setUp(self) -> None:
         self.f = gate_tests.TestCountryPackGoLiveGate()
@@ -159,8 +162,9 @@ class TestProductChoiceList(_Fixture):
         listed = {market: [entry["path"] for entry in entries]
                   for market, entries in evidence_mod.product_choice_entries().items()}
         self.assertEqual(listed, {
-            "SA": ["eInvoicing.componentId", "eInvoicing.mode"],
-            "AE": ["tax.roundingRule"],
+            "SA": ["eInvoicing.componentId", "eInvoicing.mode", *DISPLAY_FORMAT_PATHS,
+                   "printFormats.legalLayoutPrecedence", "printFormats.templates"],
+            "AE": ["tax.roundingRule", *DISPLAY_FORMAT_PATHS],
             "EG": [],
             "QA": ["tax.roundingRule"],
         })
@@ -168,6 +172,21 @@ class TestProductChoiceList(_Fixture):
             rounding = next(e for e in evidence_mod.product_choice_entries()[market] if e["path"] == "tax.roundingRule")
             with self.subTest(market=market):
                 self.assertTrue(rounding.get("provisional"))
+
+    def test_display_format_choices_are_active_exact_leaves(self) -> None:
+        """Founder decision on #300 (Eldon for both founders, partner agreed 2026-11-24): display formats are product
+        choices; exact leaves only, never `formats` or `printFormats` themselves, never currency or decimals."""
+        founders = {"eldonslogic", "sayegh9"}
+        for market, extra in (("SA", ("printFormats.legalLayoutPrecedence", "printFormats.templates")), ("AE", ())):
+            active = evidence_mod.active_product_choice_paths(market, founders)
+            for path in (*DISPLAY_FORMAT_PATHS, *extra):
+                with self.subTest(market=market, path=path):
+                    self.assertIn(path, active)
+            for path in ("formats", "printFormats", "formats.currency", "formats.currencyDecimals",
+                         "printFormats.mandatoryLanguages"):
+                with self.subTest(market=market, refused=path):
+                    self.assertNotIn(path, active)
+        self.assertNotIn("printFormats.templates", evidence_mod.active_product_choice_paths("AE", founders))
 
     def test_saudi_rounding_cannot_be_a_platform_default_whatever_the_founders_record(self) -> None:
         """ZATCA XML Implementation Standard v1.2 section 10 sets it: statutory, so never PLATFORM-DEFAULT."""

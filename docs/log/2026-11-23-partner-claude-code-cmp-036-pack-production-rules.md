@@ -54,3 +54,7 @@ Dated 2026-11-24. Eldon's review of #300 at 4ea5173 found stale text and several
 - Low 4: this section.
 - Low 5: the `localeDefaults` and `localeDefaults.holidays` cases were added to `test_unverified_outside_entry_on_a_locked_path_refuses`; changing `_overlaps_locked` to `covered` in `blocker_refusals` made it fail, then the mutation was reverted.
 - Nit: an outside-schema `PLATFORM-DEFAULT` entry that names a locked path is now refused unless that exact path is on the active list (fail closed); new test.
+
+## Founder decision on display formats (2026-11-24)
+- Eldon's decision on #300 (for both founders; the partner agreed on 2026-11-24): Saudi and UAE `formats.numberSystem`, `formats.decimalSeparator`, `formats.thousandsSeparator`, `formats.gregorianDateFormat`, and Saudi `printFormats.legalLayoutPrecedence` and `printFormats.templates` are active product choices (display, not tax). These are exactly the locked paths the SA and AE packs back with `PLATFORM-DEFAULT` today; `formats.currency`, `formats.currencyDecimals`, `formats.hijriDateFormat` and the UAE `printFormats.*` carry UNVERIFIED evidence and stay unlisted.
+- Changed by the coordinator (Claude Opus 5.5), test-first: `product_choice_paths.json`; `test_production_rules.py` (pinned list; new `test_display_format_choices_are_active_exact_leaves`, 11 failures before the data change); `test_production_review_fixes.py` (settled Saudi list); ADR-0067 item 1; framework doc. Country pack suite: 205 OK.

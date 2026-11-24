@@ -21,6 +21,11 @@ DEFAULT_REF = "docs/decisions/ADR-0033-synthetic.md"
 PROVISIONAL_RESOLUTION = {**RESOLVED, "ref": "docs/research/synthetic-accountant-answer.md"}
 
 
+# Settled (non-provisional) Saudi entries: e-invoicing design choices and the display formats (founder decision on #300).
+SA_SETTLED = ["eInvoicing.componentId", "eInvoicing.mode", "formats.numberSystem", "formats.decimalSeparator",
+             "formats.thousandsSeparator", "formats.gregorianDateFormat", "printFormats.legalLayoutPrecedence",
+             "printFormats.templates"]
+
 class TestOutsideSchemaScope(_Fixture):
     """Finding 1: an UNVERIFIED outside-schema entry must declare which pack paths it concerns."""
 
@@ -173,7 +178,7 @@ class TestProvisionalProductChoiceEntries(_Fixture):
         self.refuse(self.with_default("tax.roundingRule"), "PLATFORM-DEFAULT.*tax.roundingRule.*product-choice")
 
     def test_settled_entries_stay_active(self) -> None:
-        for market, expected in (("SA", {"eInvoicing.componentId", "eInvoicing.mode"}), ("EG", set())):
+        for market, expected in (("SA", set(SA_SETTLED)), ("EG", set())):
             self.assertEqual(set(evidence_mod.active_product_choice_paths(market, {"eldonslogic"})), expected)
         self.f._assert_loads(self.with_default("eInvoicing.mode"))
 
@@ -216,7 +221,7 @@ class TestProvisionalProductChoiceEntries(_Fixture):
                 load_country_pack("SA", self.f.packs_dir, version=self.f._write("certified", "verified_official"))
 
     def test_unknown_founders_activate_no_provisional_entry(self) -> None:
-        self.assertEqual(evidence_mod.active_product_choice_paths("SA", None), ["eInvoicing.componentId", "eInvoicing.mode"])
+        self.assertEqual(evidence_mod.active_product_choice_paths("SA", None), SA_SETTLED)
         resolved = self.choice_file(self.entry(resolution=dict(PROVISIONAL_RESOLUTION)))
         with patch.object(evidence_mod, "PRODUCT_CHOICE_FILE", resolved):
             self.assertEqual(evidence_mod.active_product_choice_paths("SA", {"eldonslogic"}), ["tax.roundingRule"])

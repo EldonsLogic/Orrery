@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import re
 import threading
 from typing import Iterator, Optional
 
 from agui import events as wire
 from agui.ports import Principal, RuntimeContext
-from runtime import CancelToken
+from runtime import CancelToken, RateLimited, RateLimiter
 
 from . import errors, language
 from change import ChangeRefused
@@ -35,15 +36,18 @@ def _sha(text: str) -> str:
 class ChatService:
     def __init__(self, *, store, runtime_factory, ids, clock, audit=None, router=None, retention=None,
                  limits: ChatLimits = ChatLimits(), frame_for=default_frame, default_locale: str = "en",
-                 change=None, pending=None):
+                 change=None, pending=None, limiter=None):
         """`change` is a ChangePort (change.ChangeService) built on the SAME clock. With it, a `change` turn that the
         router says needs confirmation is proposed and previewed here, the pending confirmation is recorded only after
         the preview was shown, and a confirming turn goes to `change.confirm` with the router's binding. Without it
-        the chat never proposes or confirms anything."""
+        the chat never proposes or confirms anything. `limiter` (SEC-009) counts accepted turns and new sessions per
+        tenant and user; the default uses `runtime.ratelimit.DEFAULT_RULES` on the same clock (which must be
+        monotonic). Share it with `loop_runtime_factory`."""
         self.store, self.factory, self.ids, self.clock, self.audit = store, runtime_factory, ids, clock, audit
         self.change, self.pending = change, pending or MemoryPendingStore()
         self.router, self.retention = router or DefaultRouter(), retention or NoRetention()
         self.limits, self.frame_for, self.default_locale = limits, frame_for, default_locale
+        self.limiter = RateLimiter(clock) if limiter is None else limiter
         self._lock = threading.Lock()
         self._active: dict = {}  # (tenant, session_id) -> (run_id, CancelToken)
 
@@ -64,6 +68,11 @@ class ChatService:
         s = None if new else self.store.latest_session(p.tenant_id, p.subject)
         if s is not None:
             return s
+        try:  # new sessions are metered per user, so a fresh session is not a fresh quota
+            self._admit(p, "session")
+        except ChatFailure as f:
+            self._audit_refusal(p, f)
+            raise
         now = self.clock()
         return self.store.create_session(Session(p.tenant_id, p.subject, self.ids.new_id("ses"),
                                                  self.ids.new_id("thr"), self.default_locale, now, now))
@@ -81,6 +90,26 @@ class ChatService:
             return False
         cur[1].cancel()
         return True
+
+    def _admit(self, p: Principal, kind: str) -> None:
+        """Count one `kind` event for the verified principal (SEC-009). Over a limit is retryable with a wait time;
+        a limiter fault or misconfiguration is not, and says so. The first refusal per key and reason carries its
+        audit record (no message text); the caller emits it outside the chat lock (`_audit_refusal`)."""
+        try:
+            self.limiter.admit(kind, p.tenant_id, p.subject)
+        except RateLimited as e:
+            if e.retryable:
+                f = ChatFailure("chat_rate_limited", {"minutes": max(1, math.ceil(e.retry_after_s / 60))})
+            else:
+                f = ChatFailure("chat_limit_unavailable")
+            if getattr(e, "first", True):
+                f.audit = {"kind": kind, "reason": e.reason, "retry_after_s": e.retry_after_s}
+            raise f
+
+    def _audit_refusal(self, p: Principal, exc: BaseException) -> None:
+        data = getattr(exc, "audit", None)
+        if data:
+            self._audit(p, "chat.rate_limited", data)
 
     # ---- audit ---------------------------------------------------------------------------------------------
     def _audit(self, p: Principal, type_: str, data: dict, trace: Optional[dict] = None) -> None:
@@ -113,7 +142,7 @@ class ChatService:
             raise ChatFailure("chat_message_too_long")
         session = self.open_session(p, session_id)
         lang = language.detect(text, session.locale)
-        thash, run_id = _sha(text), self.ids.new_id("run")
+        thash, run_id, refused = _sha(text), self.ids.new_id("run"), None
         with self._lock:  # dedup and the one-run rule are decided together
             rec = self.store.get_message(session, message_id)
             if rec is not None and rec.text_hash != thash:
@@ -122,9 +151,18 @@ class ChatService:
             if replay is None:
                 if not self.store.begin_run(session, run_id, self.clock(), self.limits.run_ttl_s):
                     raise ChatFailure("chat_run_in_progress")  # second message is rejected, not queued
-                self.store.put_message(session, MessageRecord(message_id, thash, "running", "", run_id))
-                token = CancelToken()
-                self._active[(session.tenant_id, session.session_id)] = (run_id, token)
+                try:  # only an accepted turn counts; a replay is free (SEC-009)
+                    self._admit(p, "turn")
+                except Exception as exc:
+                    self.store.end_run(session, run_id)  # same lock: undo the accepted run before refusing
+                    refused = exc
+                else:
+                    self.store.put_message(session, MessageRecord(message_id, thash, "running", "", run_id))
+                    token = CancelToken()
+                    self._active[(session.tenant_id, session.session_id)] = (run_id, token)
+        if refused is not None:  # audited after the lock is released, so a flood cannot serialise other sends
+            self._audit_refusal(p, refused)
+            raise refused
         if replay is not None:
             yield from self._replay(session, replay, lang.locale)
             return

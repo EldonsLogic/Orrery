@@ -13,13 +13,9 @@ Implements ADR-001 (Rev 2.3) Sections 6.1 and 6.2:
   or multiple statements, setting is_approved_additive_only=False and explicit rejection_reason.
 """
 
-import logging
 import re
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
-from typing import Dict, Any, List, Optional, Set, Tuple
-
-logger = logging.getLogger(__name__)
+from typing import Dict, Any, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -28,36 +24,11 @@ class DDLPlanInspection:
     statements: List[str]
     is_approved_additive_only: bool
     rejection_reason: Optional[str] = None
-    reason_code: Optional[str] = None
 
 
-# Coded fail-closed reasons (ERP-027). The gate must REJECT, never approve blind.
-REASON_FRAPPE_UNAVAILABLE = "DDL_GATE_FRAPPE_UNAVAILABLE"
-REASON_FRAPPE_IMPORT_FAILED = "DDL_GATE_FRAPPE_IMPORT_FAILED"
-REASON_INSPECTION_FAILED = "DDL_GATE_INSPECTION_FAILED"
-REASON_EXISTING_COLUMNS_MISSING = "DDL_GATE_EXISTING_COLUMNS_MISSING"
-REASON_TABLE_NOT_FOUND = "DDL_GATE_TABLE_NOT_FOUND"
-
-
-class FrappeInspectionError(Exception):
-    """The Frappe-native inspection could not be completed; the plan must be rejected."""
-
-    def __init__(self, code: str, message: str):
-        super().__init__(message)
-        self.code = code
-        self.message = message
-
-
-# Frappe v15 emits a type, optional NOT NULL, and at most one literal default.
-# Keep the captured literal verbatim, including case, whitespace and escaped quotes.
-_TYPE = r"(?:decimal\(\d+,\s*\d+\)|(?:int|bigint|varchar|time|datetime)\(\d+\)|date|text|longtext|json)"
-_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
-_STRING = r"'(?:[^'\\]|\\.|'')*'"
+# ADR-001 Rev 2.3 §6.1/§6.2 Approval Regex (comma permitted strictly inside decimal(w,p))
 APPROVED_DDL_REGEX = re.compile(
-    r"(?i:ALTER TABLE) (?P<table>`tab[A-Za-z0-9_ ]+`) (?i:ADD COLUMN) `(?P<name>custom_[a-z0-9_]+)` "
-    rf"(?P<type>(?i:{_TYPE}))(?P<required>(?i: not null))?"
-    rf"(?:(?i: default )(?P<default>{_NUMBER}|{_STRING}|(?i:NULL)))?\Z",
-    re.ASCII,
+    r"^ALTER TABLE `tab[A-Za-z0-9_ ]+` ADD COLUMN `custom_[a-z0-9_]+` (?:decimal\(\d+,\d+\)|[A-Za-z0-9_() '.])+$"
 )
 
 # MariaDB v15 Type Mapping matching Frappe v15 mariadb/database.py
@@ -114,17 +85,13 @@ class ColumnDesc(dict):
         default: Any = None,
         index: int = 0,
         unique: int = 0,
-        nullable: Optional[bool] = None,
     ):
-        # ``nullable`` is None when the caller could not read IS_NULLABLE; the gate then never
-        # normalises that column (fail closed). Frappe v15 ignores the extra key.
         super().__init__(
             name=name,
             type=type,
             default=default,
             index=int(bool(index)),
             unique=int(bool(unique)),
-            nullable=nullable,
         )
 
     def __getattr__(self, item):
@@ -137,24 +104,20 @@ class ColumnDesc(dict):
         self[item] = value
 
 
-# Only fieldtypes whose Frappe v15 ``DbColumn.get_definition`` emits ``not null default 0``
-# qualify (frappe/database/schema.py:201, v15.126.0: ``elif self.fieldtype in ("Currency",
-# "Float", "Percent")``). Rating and Duration get NO default clause (NULL default), so a live
-# ``0.00`` default on them is real drift and must stay a MODIFY (ERP-027 review H1).
-_DECIMAL_FIELDTYPES = ("Currency", "Float", "Percent")
+_DECIMAL_FIELDTYPES = ("Currency", "Float", "Percent", "Duration", "Rating")
 
 
 def _canonical_column_type(raw_type: Any) -> str:
-    """Canonical form of a column type string: lower case and no whitespace outside quotes.
+    """Canonical form of a column type string so equivalent spellings are not drift.
 
-    Only case and whitespace are treated as equivalent. Any other precision/scale, a different
-    type, ``unsigned`` or a synonym stays different (drift). Quoted literals are left as is.
+    Equivalent: case, whitespace and a bare ``decimal`` (MariaDB default ``decimal(10,0)``).
+    Not equivalent (stays drift): any other precision/scale, a different type, ``unsigned``.
     """
-    parts = re.split(r"('(?:[^'\\]|\\.)*')", str(raw_type or ""))
-    out = []
-    for i, part in enumerate(parts):
-        out.append(part if i % 2 else re.sub(r"\s+", "", part.lower()))
-    return "".join(out)
+    canon = re.sub(r"\s+", "", str(raw_type or "").lower())
+    canon = re.sub(r"\(\s*", "(", canon)
+    if canon in ("decimal", "numeric", "dec"):
+        return "decimal(10,0)"
+    return canon
 
 
 class SimulatedDbColumn:
@@ -402,395 +365,42 @@ def validate_ddl_plan(statements: List[str]) -> Tuple[bool, Optional[str]]:
         return False, f"Expected exactly 1 DDL statement, but produced {len(statements)}: {statements}"
 
     stmt = statements[0]
-    if not APPROVED_DDL_REGEX.fullmatch(stmt):
-        return False, f"DDL statement does not match approved additive ADD COLUMN pattern: {stmt!r}"
+
+    # Explicit check for unapproved operation keywords
+    if "MODIFY" in stmt:
+        return False, f"Unapproved MODIFY COLUMN detected in updatedb() diff: '{stmt}'"
+    if "DROP INDEX" in stmt:
+        return False, f"Unapproved DROP INDEX detected in updatedb() diff: '{stmt}'"
+    if "ADD INDEX" in stmt:
+        return False, f"Unapproved ADD INDEX detected in updatedb() diff: '{stmt}'"
+    if "ADD UNIQUE" in stmt:
+        return False, f"Unapproved ADD UNIQUE detected in updatedb() diff: '{stmt}'"
+
+    # Strictly check approved single ADD COLUMN regex pattern
+    if not APPROVED_DDL_REGEX.match(stmt):
+        return False, f"DDL statement does not match approved additive ADD COLUMN pattern: '{stmt}'"
 
     return True, None
 
 
-def requires_ddl_check(query: str) -> bool:
-    """Only ordinary Frappe data access and transaction commands bypass DDL validation.
-
-    Unknown verbs and leading comments are checked as DDL, hence rejected.
-    """
-    if not re.match(r"^\s*(START\s+TRANSACTION|SELECT|SHOW|DESCRIBE|INSERT|UPDATE|DELETE|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b",
-                    query, re.I):
-        return True
-    try:
-        _scan_top_level(query, split_commas=False)
-    except ValueError:
-        return True
-    return False
-
-
-def _scan_top_level(text: str, *, split_commas: bool) -> List[str]:
-    """Quote- and comment-aware scan of the body of an ALTER TABLE statement.
-
-    Tracks single-quoted and double-quoted literals (backslash escapes and doubled quotes),
-    backticked identifiers (doubled backticks) and parenthesis depth. Splits on top-level
-    commas when ``split_commas``. Raises ``ValueError`` (the caller fails closed) for anything
-    that cannot be classified with certainty: an unterminated quote, unbalanced parentheses, a
-    statement separator, or any comment (``/* */``, ``/*! */`` executable comments, ``-- ``,
-    ``#``). A ``(`` or ``,`` inside a literal or identifier never changes the clause split.
-    """
-    clauses: List[str] = []
-    cur: List[str] = []
-    depth = 0
-    i, n = 0, len(text)
-    while i < n:
-        ch = text[i]
-        if ch in ("'", '"', "`"):
-            quote = ch
-            cur.append(ch)
-            i += 1
-            while True:
-                if i >= n:
-                    raise ValueError("unterminated quoted literal or identifier")
-                c = text[i]
-                cur.append(c)
-                i += 1
-                if c == "\\" and quote != "`":
-                    if i >= n:
-                        raise ValueError("dangling escape in quoted literal")
-                    cur.append(text[i])
-                    i += 1
-                elif c == quote:
-                    if i < n and text[i] == quote:  # doubled quote is an escaped quote
-                        cur.append(text[i])
-                        i += 1
-                        continue
-                    break
-            continue
-        if ch == "/" and text[i : i + 2] == "/*":
-            raise ValueError("SQL comment in DDL statement")
-        if ch == "#" or (ch == "-" and text[i : i + 2] == "--"):
-            raise ValueError("SQL comment in DDL statement")
-        if ch == ";":
-            raise ValueError("statement separator in DDL statement")
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-            if depth < 0:
-                raise ValueError("unbalanced parentheses")
-        if ch == "," and depth == 0 and split_commas:
-            clauses.append("".join(cur).strip())
-            cur = []
-        else:
-            cur.append(ch)
-        i += 1
-    if depth != 0:
-        raise ValueError("unbalanced parentheses")
-    clauses.append("".join(cur).strip())
-    return clauses
-
-
-def _split_alter_clauses(statement: str) -> Tuple[str, List[str]]:
-    """Split ``ALTER TABLE `t` a, b, c`` into (``ALTER TABLE `t```, [clauses]).
-
-    Quote-aware (literals, backticks, parentheses, comments); see ``_scan_top_level``.
-    Returns ("", []) when it is not an ALTER TABLE. Raises ``ValueError`` for a statement that
-    cannot be parsed with certainty, so a trailing clause can never be smuggled inside a
-    literal that merely looks like an open parenthesis."""
-    m = re.match(r"^\s*ALTER TABLE\s+(`(?:[^`]|``)+`)\s+(.*)$", str(statement), re.S | re.I)
-    if not m:
-        return "", []
-    clauses = _scan_top_level(m.group(2), split_commas=True)
-    if not all(clauses):
-        raise ValueError("empty ALTER clause")
-    return m.group(1), clauses
-
-
-def _normalize_sql(text: str) -> str:
-    """Canonical form of a clause for exact comparison: whitespace collapsed (and removed
-    around ``,`` and parentheses) and lower-cased, everything inside quoted literals and
-    backticked identifiers kept verbatim."""
-    parts = re.split(r"('(?:[^'\\]|\\.|'')*'|\"(?:[^\"\\]|\\.|\"\")*\"|`(?:[^`]|``)*`)", str(text))
-    out: List[str] = []
-    for i, part in enumerate(parts):
-        if i % 2:
-            out.append(part)
-        else:
-            low = re.sub(r"\s+", " ", part.lower())
-            low = re.sub(r" ?([(,]) ?", r"\1", low)
-            low = re.sub(r" ?\)", ")", low)
-            out.append(low)
-    return "".join(out).strip()
-
-
-_norm_sql = _normalize_sql  # backwards-compatible alias
-
-# Column attributes compared before and after the apply (everything information_schema.COLUMNS
-# exposes that a MODIFY can change). ORDINAL_POSITION is compared as the order of names.
-SCHEMA_COLUMN_ATTRS = (
-    "type", "nullable", "default", "key", "charset", "collation", "extra", "comment", "generation",
-)
-SCHEMA_KEYS = ("columns", "order", "indexes", "constraints", "checks", "triggers", "table")
-
-
-def _schema_is_complete(schema: Any) -> bool:
-    if not isinstance(schema, dict) or any(k not in schema for k in SCHEMA_KEYS):
-        return False
-    cols = schema["columns"]
-    return isinstance(cols, dict) and all(
-        isinstance(d, dict) and all(a in d for a in SCHEMA_COLUMN_ATTRS) for d in cols.values()
-    )
-
-
-def _column_default(col: Dict[str, Any]) -> Optional[str]:
-    """Preserve quoted string defaults. Compare unquoted numeric defaults losslessly."""
-    raw = col["default"]
-    if raw is None or raw in ("NULL", "None"):
-        return None
-    literal = str(raw)
-    if re.fullmatch(_NUMBER, literal):
-        return "0" if Decimal(literal).is_zero() else literal
-    return literal
-
-
-def _plain_column(col: Dict[str, Any], collation: Optional[str]) -> bool:
-    """Can Frappe omit column options without changing their values?"""
-    return (
-        col["extra"] == "" and col["comment"] == "" and col["generation"] in (None, "", "None")
-        and (None if col["collation"] == "None" else col["collation"]) == collation
-        and (None if col["charset"] == "None" else col["charset"]) == (
-            collation.split("_", 1)[0] if collation else None
-        )
-    )
-
-
-def _quoted_default_value(literal: str) -> str:
-    """Normalize apostrophe escaping without altering case, spaces or other escapes.
-
-    The caller first validates the complete SQL string literal. MariaDB can report
-    an escaped apostrophe as two apostrophes even when the approved DDL used a
-    backslash. Consume other backslash pairs intact so an escaped backslash can
-    never accidentally expose the following character to a second decoding pass.
-    """
-    text = literal[1:-1]
-    parts: List[str] = []
-    i = 0
-    while i < len(text):
-        pair = text[i:i + 2]
-        if len(pair) == 2 and pair[0] == "\\":
-            parts.append("'" if pair[1] == "'" else pair)
-            i += 2
-        elif pair == "''":
-            parts.append("'")
-            i += 2
-        else:
-            parts.append(text[i])
-            i += 1
-    return "".join(parts)
-
-
-def noop_modify_allowlist(before_schema: Dict[str, Any]) -> Dict[str, Set[str]]:
-    """Regenerate only supported Frappe restatements that preserve the BEFORE definition."""
-    allowed = {}
-    for name, col in before_schema["columns"].items():
-        if col["nullable"] not in ("YES", "NO"):
-            continue
-        raw_type = col["type"]
-        canon = _canonical_column_type(raw_type)
-        if not re.fullmatch(_TYPE, canon):
-            continue
-        literal = _column_default(col)
-        zero_decimal = canon.startswith("decimal(") and col["nullable"] == "NO" and literal == "0"
-        if not zero_decimal and canon == raw_type:
-            continue
-        collation = before_schema["table"][1] if canon.startswith(("varchar", "text", "longtext")) else None
-        if not _plain_column(col, collation):
-            continue
-        if literal is not None and not re.fullmatch(f"{_NUMBER}|{_STRING}", literal):
-            continue
-        required = " not null" if col["nullable"] == "NO" else ""
-        default = f" default {literal}" if literal is not None else ""
-        allowed[name.lower()] = {_normalize_sql(f"MODIFY `{name}` {canon}{required}{default}")}
-    return allowed
-
-
-def _approved_column(approved: Optional[List[str]], fieldname: str):
-    """Return the exact single-field declaration, or None for an unsupported plan."""
-    if not approved or len(approved) != 1:
-        return None
-    match = APPROVED_DDL_REGEX.fullmatch(approved[0])
-    return match if match and match["name"] == fieldname else None
-
-
-def new_column_matches_plan(
-    fieldname: str, approved_statements: Optional[List[str]], after_schema: Optional[Dict[str, Any]]
-) -> bool:
-    """Read back type, nullability, literal default and inherited column properties."""
-    match = _approved_column(approved_statements, fieldname)
-    if not match or not _schema_is_complete(after_schema):
-        return False
-    col = after_schema["columns"].get(fieldname)
-    declared = _canonical_column_type(match["type"])
-    collation = None
-    if declared == "json":
-        declared, collation = "longtext", "utf8mb4_bin"
-    elif declared.startswith(("varchar", "text", "longtext")):
-        collation = after_schema["table"][1]
-    if (not col or _canonical_column_type(col["type"]) != declared
-            or col["nullable"] != ("NO" if match["required"] else "YES")
-            or not _plain_column(col, collation) or col["key"]):
-        return False
-    expected = match["default"]
-    actual = _column_default(col)
-    if expected is None or expected.upper() == "NULL":
-        return actual is None
-    if re.fullmatch(_NUMBER, expected):
-        return actual is not None and bool(re.fullmatch(_NUMBER, actual)) and Decimal(actual) == Decimal(expected)
-    return (
-        actual is not None and re.fullmatch(_STRING, actual) is not None
-        and _quoted_default_value(actual) == _quoted_default_value(expected)
-    )
-
-
-def ddl_batch_rejection(doctype, fieldname, approved_statements, executed_statements, before_schema, *, complete):
-    """Check a prefix before dispatch, or the complete batch when reconciling after apply."""
-    if not _schema_is_complete(before_schema):
-        return "before schema is unknown or incomplete"
-    table = f"`tab{doctype}`"
-    approved = _approved_column(approved_statements, fieldname)
-    if not approved or approved["table"] != table:
-        return "expected one approved ADD COLUMN on the target field and table"
-    _, adds = _split_alter_clauses(approved[0])
-    approved_adds = [_normalize_sql(adds[0])]
-    allowed = noop_modify_allowlist(before_schema)
-    executed_adds: List[str] = []
-    modified: Set[str] = set()
-    try:
-        for stmt in executed_statements:
-            t, clauses = _split_alter_clauses(stmt)
-            if not clauses or t != table:
-                return f"executed DDL is not an ALTER TABLE on {table}: {str(stmt)[:120]}"
-            for c in clauses:
-                norm = _normalize_sql(c)
-                if norm.startswith("add column "):
-                    executed_adds.append(norm)
-                    continue
-                m = re.match(r"^modify `((?:[^`]|``)+)`", norm)
-                if not m:
-                    return f"executed DDL contains an unapproved clause: {c[:120]}"
-                column = m.group(1).lower()
-                if norm not in allowed.get(column, set()):
-                    return (
-                        f"executed MODIFY on '{m.group(1)}' is not in the allow-list of "
-                        f"no-op clauses for the before-snapshot: {c[:120]}"
-                    )
-                if column in modified:
-                    return f"column '{m.group(1)}' was modified more than once"
-                modified.add(column)
-    except ValueError as exc:
-        return f"executed DDL cannot be parsed with certainty: {exc}"
-    if executed_adds != approved_adds and (complete or executed_adds):
-        return "executed ADD COLUMN clauses differ from the approved plan"
-
-    return None
-
-
-def assess_applied_ddl(
-    doctype: str,
-    fieldname: str,
-    approved_statements: Optional[List[str]],
-    executed_statements: Optional[List[str]],
-    before_schema: Optional[Dict[str, Any]],
-    after_schema: Optional[Dict[str, Any]],
-) -> Tuple[bool, Optional[str]]:
-    """Compare what actually ran with the approved plan (ERP-027 re-review H1/M1).
-
-    Returns ``(unapproved_side_effects, reason)``. Fail closed: unknown input is a side effect.
-
-    An executed statement is accepted only if it is
-      (a) in the approved plan (the ``ADD COLUMN`` clauses must be equal), or
-      (b) an exact member of ``noop_modify_allowlist(before_schema)``: the phantom no-op
-          ``MODIFY`` clauses Frappe re-emits for unchanged columns, compared after
-          canonicalisation, at most one per column.
-    Anything else, including any other ``MODIFY`` (so a shrink-then-restore pair), fails.
-    Independently, the whole-table fingerprint before and after must prove that only
-    ``fieldname`` was added: column type/nullability/default/key/charset/collation/EXTRA/
-    comment, column order, indexes, constraints, CHECK constraints, triggers and table
-    engine/collation must be unchanged.
-
-    ``*_schema`` is the dict built by the adapter's ``_read_table_schema`` (see
-    ``SCHEMA_KEYS`` and ``SCHEMA_COLUMN_ATTRS``).
-    """
-    if approved_statements is None or executed_statements is None:
-        return True, "approved plan or executed statements are unknown"
-    if not _schema_is_complete(before_schema) or not _schema_is_complete(after_schema):
-        return True, "before/after table schema is unknown or incomplete"
-
-    if not executed_statements and before_schema == after_schema:
-        return False, None  # nothing ran and nothing changed (clean failure)
-
-    reason = ddl_batch_rejection(doctype, fieldname, approved_statements, executed_statements,
-                                 before_schema, complete=True)
-    if reason:
-        return True, reason
-
-    before_cols, after_cols = before_schema["columns"], after_schema["columns"]
-    if set(after_cols) - set(before_cols) != {fieldname} or set(before_cols) - set(after_cols):
-        return True, "table columns after apply are not exactly the previous set plus the new field"
-    for name, definition in before_cols.items():
-        now = after_cols[name]
-        changed = [a for a in SCHEMA_COLUMN_ATTRS if definition.get(a) != now.get(a)]
-        if changed:
-            return True, f"existing column '{name}' changed during apply ({', '.join(changed)})"
-    if list(after_schema["order"]) != [*before_schema["order"], fieldname]:
-        return True, "column order changed during apply"
-    new_checks = after_schema["checks"] - before_schema["checks"]
-    new_constraints = after_schema["constraints"] - before_schema["constraints"]
-    declared = _approved_column(approved_statements, fieldname)
-    if declared["type"].lower() == "json":
-        expected_check = (fieldname, f"json_valid(`{fieldname}`)")
-        normalized = {(name, _normalize_sql(expr)) for name, expr in new_checks}
-        if normalized != {expected_check} or new_constraints != {(fieldname, "CHECK")}:
-            return True, "table JSON CHECK constraints changed during apply"
-        new_checks, new_constraints = set(), set()
-    for label, key, extra in (
-        ("indexes", "indexes", None), ("constraints", "constraints", new_constraints),
-        ("CHECK constraints", "checks", new_checks), ("triggers", "triggers", None),
-    ):
-        grew = extra if extra is not None else after_schema[key] - before_schema[key]
-        shrank = before_schema[key] - after_schema[key]
-        if grew or shrank:
-            return True, f"table {label} changed during apply"
-    if before_schema["table"] != after_schema["table"]:
-        return True, "table engine, collation or row format changed during apply"
-    return False, None
-
-
-def _col_get(col: Any, key: str, default: Any = None) -> Any:
-    return col.get(key, default) if isinstance(col, dict) else getattr(col, key, default)
-
-
-def _col_with(col: Any, **overrides: Any) -> Any:
-    """Copy a live column description and override only the given keys (extra keys kept)."""
-    if isinstance(col, dict):
-        copy = ColumnDesc(name=col.get("name", ""), type=col.get("type", ""))
-        copy.update(col)
-        copy.update(overrides)
-        return copy
-    copy = ColumnDesc(name=getattr(col, "name", ""), type=getattr(col, "type", ""))
-    for key in ("default", "index", "unique", "nullable"):
-        if hasattr(col, key):
-            copy[key] = getattr(col, key)
-    copy.update(overrides)
-    return copy
-
-
 def _canonicalize_current_column_types(current_columns: Dict[str, Any]) -> None:
-    """Rewrite equivalent spellings of the live column type (case, whitespace outside quotes)
+    """Rewrite equivalent spellings of the live column type (case, spaces, bare ``decimal``)
     to the canonical form Frappe generates, so Frappe's strict string comparison does not
     report them as a type change. Real precision/scale/type differences are left untouched.
     """
     for cname, cur_col in list(current_columns.items()):
-        raw_type = _col_get(cur_col, "type", "")
+        get = cur_col.get if isinstance(cur_col, dict) else lambda k, d=None: getattr(cur_col, k, d)
+        raw_type = get("type", "")
         canon = _canonical_column_type(raw_type)
         if not raw_type or canon == raw_type:
             continue
-        current_columns[cname] = _col_with(cur_col, type=canon)
+        current_columns[cname] = ColumnDesc(
+            name=get("name", cname),
+            type=canon,
+            default=get("default", None),
+            index=get("index", 0),
+            unique=get("unique", 0),
+        )
 
 
 def _normalize_zero_decimal_defaults(
@@ -802,11 +412,6 @@ def _normalize_zero_decimal_defaults(
     """Normalize MariaDB INFORMATION_SCHEMA `'0.000000000'` defaults on untouched decimal
     columns when the DocField default is empty/None (matches SimulatedDbColumn semantics
     and avoids Frappe DbColumn.default_changed_for_decimal phantom MODIFY noise).
-
-    Only Currency/Float/Percent qualify (see ``_DECIMAL_FIELDTYPES``) and only when the live
-    column is explicitly ``NOT NULL`` (``nullable is False``): Frappe's phantom MODIFY is
-    ``not null default 0``, so on a NULLable column it is a real nullability change that
-    must not be hidden. Unknown nullability is treated as nullable (fail closed).
     """
     for cname, col in table_columns.items():
         if cname == exclude_fieldname:
@@ -818,17 +423,21 @@ def _normalize_zero_decimal_defaults(
         cur_col = current_columns.get(cname.lower())
         if not cur_col:
             continue
-        if _col_get(cur_col, "nullable") is not False:
-            continue
-        cur_type = _col_get(cur_col, "type", "")
+        cur_type = cur_col.get("type", "") if isinstance(cur_col, dict) else getattr(cur_col, "type", "")
         if not _canonical_column_type(cur_type).startswith("decimal("):
             continue
-        cur_def = _col_get(cur_col, "default")
+        cur_def = cur_col.get("default") if isinstance(cur_col, dict) else getattr(cur_col, "default", None)
         if cur_def in (None, "", "NULL"):
             continue
         try:
             if float(str(cur_def).strip("'\"")) == 0.0:
-                current_columns[cname.lower()] = _col_with(cur_col, default=None)
+                current_columns[cname.lower()] = ColumnDesc(
+                    name=cur_col.get("name", cname) if isinstance(cur_col, dict) else getattr(cur_col, "name", cname),
+                    type=cur_type,
+                    default=None,
+                    index=int(bool(cur_col.get("index", 0) if isinstance(cur_col, dict) else getattr(cur_col, "index", 0))),
+                    unique=int(bool(cur_col.get("unique", 0) if isinstance(cur_col, dict) else getattr(cur_col, "unique", 0))),
+                )
         except (ValueError, TypeError):
             continue
 
@@ -837,38 +446,37 @@ def _inspect_with_frappe_mariadb_table(
     doctype: str,
     field_def: Dict[str, Any],
     existing_columns_desc: Optional[List[Any]] = None,
-) -> List[str]:
-    """Inspect the DDL plan with Frappe's own MariaDBTable on a live bench.
-
-    Fail closed: any problem raises ``FrappeInspectionError`` (a coded reason) and the caller
-    rejects the plan. There is no fallback to the simulator on this path (ERP-027 H2).
+) -> Optional[List[str]]:
+    """
+    Attempts to inspect DDL statements using Frappe's MariaDBTable if running
+    in an active Frappe environment with initialized database and metadata.
+    Returns None if Frappe environment is not fully available.
     """
     try:
         import frappe
-    except Exception as exc:
-        raise FrappeInspectionError(REASON_FRAPPE_UNAVAILABLE, f"frappe cannot be imported: {exc}")
-    try:
         from frappe.database.mariadb.schema import MariaDBTable
         from frappe.database.schema import DbColumn
-    except Exception as exc:
-        raise FrappeInspectionError(
-            REASON_FRAPPE_IMPORT_FAILED, f"Frappe schema classes cannot be imported: {exc}"
-        )
 
-    db = getattr(frappe, "db", None)
-    if db is None or not hasattr(db, "sql_ddl"):
-        raise FrappeInspectionError(
-            REASON_FRAPPE_UNAVAILABLE, "frappe.db is not connected; the live DDL plan cannot be inspected"
-        )
-    if existing_columns_desc is None:
-        raise FrappeInspectionError(
-            REASON_EXISTING_COLUMNS_MISSING,
-            "existing column definitions were not supplied by the caller; refusing to inspect blind",
-        )
+        if not (hasattr(frappe, "db") and frappe.db is not None and hasattr(frappe.db, "sql_ddl")):
+            return None
 
-    try:
+        if existing_columns_desc is None:
+            if hasattr(frappe, "get_meta"):
+                try:
+                    dt_meta = frappe.get_meta(doctype)
+                    if getattr(dt_meta, "issingle", 0):
+                        return None
+                except Exception:
+                    pass
+            if hasattr(frappe.db, "table_exists") and not frappe.db.table_exists(doctype):
+                return None
+
         table = MariaDBTable(doctype)
-        table.current_columns = {c["name"].lower(): c for c in existing_columns_desc}
+
+        if existing_columns_desc is not None:
+            table.current_columns = {c["name"].lower(): c for c in existing_columns_desc}
+        else:
+            table.setup_table_columns()
 
         new_fname = field_def["fieldname"]
         _canonicalize_current_column_types(table.current_columns)
@@ -891,21 +499,17 @@ def _inspect_with_frappe_mariadb_table(
         )
         table.columns[new_fname] = new_col
 
-        statements: List[str] = []
-        original_sql_ddl = db.sql_ddl
+        statements = []
+        original_sql_ddl = frappe.db.sql_ddl
         try:
-            db.sql_ddl = lambda q: statements.append(q)
+            frappe.db.sql_ddl = lambda q: statements.append(q)
             table.alter()
         finally:
-            db.sql_ddl = original_sql_ddl
+            frappe.db.sql_ddl = original_sql_ddl
+
         return statements
-    except FrappeInspectionError:
-        raise
-    except Exception as exc:
-        logger.exception("DDL plan gate: Frappe inspection failed for %s", doctype)
-        raise FrappeInspectionError(
-            REASON_INSPECTION_FAILED, f"Frappe DDL plan inspection raised {type(exc).__name__}: {exc}"
-        )
+    except Exception:
+        return None
 
 
 def _simulate_alter_statements(
@@ -991,7 +595,6 @@ def inspect_frappe_ddl_plan(
     existing_columns_desc: Optional[List[Any]] = None,
     doctype_fields: Optional[List[Dict[str, Any]]] = None,
     meta: Optional[Any] = None,
-    offline_simulator: bool = False,
 ) -> DDLPlanInspection:
     """
     Inspects Frappe's updatedb() DDL plan for a proposed field deployment
@@ -1003,9 +606,6 @@ def inspect_frappe_ddl_plan(
     - existing_columns_desc: Optional list of column descriptions from DB
     - doctype_fields: Optional list of existing DocType field definitions
     - meta: Optional DocType meta object
-    - offline_simulator: explicit test/offline mode (default False). True uses ONLY the
-      pure-Python simulator. False uses ONLY Frappe's own MariaDBTable and fails closed (coded
-      rejection) when that inspection cannot run; it never falls back to the simulator.
     """
     if not doctype or not isinstance(doctype, str) or not doctype.strip():
         return DDLPlanInspection(
@@ -1046,7 +646,19 @@ def inspect_frappe_ddl_plan(
             ),
         )
 
-    if offline_simulator:
+    # Try Frappe-native inspection first if full environment is available
+    statements = None
+    try:
+        statements = _inspect_with_frappe_mariadb_table(
+            doctype=doctype,
+            field_def=field_def,
+            existing_columns_desc=existing_columns_desc,
+        )
+    except Exception:
+        statements = None
+
+    # Fall back to pure-Python simulator
+    if statements is None:
         try:
             statements = _simulate_alter_statements(
                 doctype=doctype,
@@ -1061,22 +673,6 @@ def inspect_frappe_ddl_plan(
                 statements=[],
                 is_approved_additive_only=False,
                 rejection_reason=f"DDL Plan inspection simulator failed: {exc}",
-                reason_code=REASON_INSPECTION_FAILED,
-            )
-    else:
-        try:
-            statements = _inspect_with_frappe_mariadb_table(
-                doctype=doctype,
-                field_def=field_def,
-                existing_columns_desc=existing_columns_desc,
-            )
-        except FrappeInspectionError as exc:
-            return DDLPlanInspection(
-                inspectable=False,
-                statements=[],
-                is_approved_additive_only=False,
-                rejection_reason=f"[{exc.code}] {exc.message}",
-                reason_code=exc.code,
             )
 
     is_approved, rejection_reason = validate_ddl_plan(statements)

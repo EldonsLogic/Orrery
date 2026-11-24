@@ -3,21 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from typing import Any, Callable, Optional
 
 from .detect import instruction_hits
 from .model import (DATA_CLASSES, Budget, BudgetExceeded, ConnectorRefusal, RunContext, check_connector)
-
 from .sanitise import comparison_copy, script_flags, strip_controls
 
-FIELD_KEYS = {"path", "text", "kind", "visible", "hidden_reason", "transform", "confidence", "evidence_only"}
-# Structured locators only (F1/F2): ASCII identifier-like, no spaces, capped. Free text such as a
-# sheet name never goes here; connectors use an index (e.g. s2!B7) and keep names in labelled text.
-PATH_RE = re.compile(r"^[A-Za-z0-9_.:#!/\[\]\-]{1,128}$")
-STAT_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
-REASON_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
-MAX_STAT_KEYS = 100
+FIELD_KEYS = {"path", "text", "kind", "visible", "hidden_reason", "transform", "confidence"}
 FIELD_KINDS = {"body", "header", "filename", "metadata", "ocr", "sender", "reply_to", "column_header",
                "cell", "comment", "title", "entity_name", "entity_kind", "issue", "other"}
 TRANSFORMS = {"ocr", "parse", "normalise"}
@@ -63,19 +55,15 @@ def _jsonlike(v: Any, depth: int, max_depth: int, budget: Budget) -> None:
 class _Run:
     def __init__(self, connector: Any, ctx: RunContext, sink: Optional[Callable[[dict], None]]):
         self.c, self.ctx, self.sink = connector, ctx, sink
-        # Snapshot the declarations once: a connector cannot change them mid-run.
-        self.caps = frozenset(getattr(connector, "capabilities", ()) or ())
-        self.cid, self.cver, self.tier = (getattr(connector, "id", None), getattr(connector, "version", None),
-                                          getattr(connector, "tier", None))
         self.events: list = []
         self.n = 0
-        self.totals = {"bidi": 0, "zero_width": 0, "unicode_tag": 0, "invisible": 0, "control": 0, "truncated": 0}
+        self.totals = {"bidi": 0, "zero_width": 0, "unicode_tag": 0, "truncated": 0}
         self.flag_counts: dict = {}
         self.chars = 0
 
     def ev(self, type_: str, **kw: Any) -> None:
         self.events.append({"type": type_, "seq": len(self.events), "job_id": self.ctx.job_id,
-                            "connector": self.cid, "tenant_id": self.ctx.tenant_id, **kw})
+                            "connector": getattr(self.c, "id", None), "tenant_id": self.ctx.tenant_id, **kw})
 
     def discard_labels(self, where: str, d: dict) -> dict:
         found = sorted(k for k in d if k in LABEL_KEYS)
@@ -85,20 +73,17 @@ class _Run:
 
     def envelope(self, text: Any, kind: str, path: str, ref: str, visible: bool = True,
                  hidden_reason: str = "", transform: str = "parse", confidence: Any = None,
-                 extra_flags: tuple = (), evidence_only: bool = False) -> dict:
+                 extra_flags: tuple = ()) -> dict:
         if not isinstance(text, str):
             raise _Fail("CON-011", f"field {path} text is not a string")
-        if not isinstance(path, str) or not PATH_RE.match(path):
-            raise _Fail("CON-011", "field path is not a structured locator")
         lim = self.ctx.limits
-        self.chars += len(text) + len(path)  # the locator counts against the budget too
+        self.chars += len(text)
         if self.chars > lim.max_total_chars:
             raise BudgetExceeded("chars", lim.max_total_chars)
         original_hash = sha256(text.encode("utf-8", "surrogatepass"))
         clean, counts = strip_controls(text)
         flags = set(extra_flags)
-        for k, flag in (("bidi", "bidi_control"), ("zero_width", "zero_width"), ("unicode_tag", "unicode_tag"),
-                        ("invisible", "invisible_char"), ("control", "control_char")):
+        for k, flag in (("bidi", "bidi_control"), ("zero_width", "zero_width"), ("unicode_tag", "unicode_tag")):
             self.totals[k] += counts[k]
             if counts[k]:
                 flags.add(flag)
@@ -111,14 +96,11 @@ class _Run:
         if not visible:
             flags.add("hidden_text")
         hits = instruction_hits(comp)
-        phits = instruction_hits(comparison_copy(path))  # the locator is checked like text
-        if phits:
-            hits = sorted(set(hits) | set(phits))
         if hits:
             flags.add("instruction_like")
         self.n += 1
         cid = f"{self.ctx.job_id}/{self.n:05d}"
-        facing = (visible or self.ctx.include_hidden) and not evidence_only
+        facing = visible or self.ctx.include_hidden
         for f in flags:
             self.flag_counts[f] = self.flag_counts.get(f, 0) + 1
         if hits:
@@ -128,7 +110,7 @@ class _Run:
             "content_id": cid,
             "trust": "untrusted", "level": "L3",  # set here only (PI-002, PI-003)
             "tenant_id": self.ctx.tenant_id,
-            "source": {"connector": self.cid, "version": self.cver, "tier": self.tier,
+            "source": {"connector": self.c.id, "version": self.c.version, "tier": self.c.tier,
                        "job_id": self.ctx.job_id, "ref": ref, "path": path, "kind": kind},
             "data_class": self.ctx.data_class,
             "transform": transform,
@@ -139,21 +121,16 @@ class _Run:
             "text": clean if facing else None,
             "comparison": comp if facing else None,
         }
-        if evidence_only:
-            env["evidence_only"] = True  # flagged and hashed, never given to the model, even on opt-in
-            env["length"] = len(clean)
         if not visible:
-            env["hidden_reason"] = self.reason_safe(hidden_reason)
+            env["hidden_reason"] = self.envelope_text_safe(hidden_reason)
         if confidence is not None:
             env["confidence"] = confidence
         return env
 
-    def reason_safe(self, s: Any) -> str:
-        """hidden_reason is a code, not text: anything else becomes `unspecified` (logged)."""
-        if isinstance(s, str) and REASON_RE.match(s):
-            return s
-        self.ev("label.discarded", where="hidden_reason", keys=["hidden_reason"])
-        return "unspecified"
+    @staticmethod
+    def envelope_text_safe(s: Any) -> str:
+        clean, _ = strip_controls(s if isinstance(s, str) else "")
+        return clean[:100]
 
     def field(self, d: Any, ref: str, prefix: str) -> dict:
         if not isinstance(d, dict):
@@ -167,15 +144,6 @@ class _Run:
                 raise _Fail("CON-011", f"field missing {req}")
         if not isinstance(d["path"], str) or d["kind"] not in FIELD_KINDS:
             raise _Fail("CON-011", "field has bad path or kind")
-        if not PATH_RE.match(d["path"]):
-            raise _Fail("CON-011", "field path is not a structured locator")
-        eo = d.get("evidence_only", False)
-        if not isinstance(eo, bool):
-            raise _Fail("CON-011", "evidence_only must be boolean")
-        if d["kind"] in ("sender", "reply_to") and self.tier != 4:
-            raise _Fail("CON-018", "sender/reply_to fields need a tier 4 connector")
-        if (d["kind"] == "ocr" or d.get("transform") == "ocr") and "ocr" not in self.caps:
-            raise _Fail("CON-018", "ocr output needs the ocr capability")
         vis = d.get("visible", True)
         if not isinstance(vis, bool):
             raise _Fail("CON-011", "visible must be boolean")
@@ -185,7 +153,7 @@ class _Run:
         conf = d.get("confidence")
         if conf is not None and (isinstance(conf, bool) or not isinstance(conf, (int, float)) or not 0 <= conf <= 1):
             raise _Fail("CON-011", "confidence must be a number in 0..1")
-        return self.envelope(d["text"], d["kind"], d["path"], ref, vis, d.get("hidden_reason", ""), tr, conf, (), eo)
+        return self.envelope(d["text"], d["kind"], d["path"], ref, vis, d.get("hidden_reason", ""), tr, conf)
 
     def addr_checks(self, fields: list) -> None:
         """PI-007: sender, reply-to and headers are L3; mismatches and look-alikes are flagged;
@@ -203,9 +171,9 @@ class _Run:
                 add.add(fl)
             if d and any(skeleton_eq(d, p) for p in self.ctx.protected_names):
                 add.add("confusable")
-            if f["source"]["kind"] == "reply_to" and (sender is None or dom(sender) != d):
+            if f["source"]["kind"] == "reply_to" and sender is not None and dom(sender) != d:
                 add.add("reply_to_mismatch")
-            if (f["source"]["kind"] == "sender" and self.tier == 4 and self.ctx.sender_allowlist
+            if (f["source"]["kind"] == "sender" and self.c.tier == 4 and self.ctx.sender_allowlist
                     and (f["text"] or "").strip().lower() not in {a.lower() for a in self.ctx.sender_allowlist}):
                 add.add("sender_not_allowlisted")
             for fl in add:
@@ -225,26 +193,15 @@ def _refuse(r: _Run, code: str, reason: str, steps: int) -> dict:
     return _finish(r, {"ok": False, "code": code, "reason": reason})
 
 
-class RecordingSink:
-    """Built-in audit sink used when the caller passes none (F5): every run is recorded, never skipped.
-    The same events are also returned in `result["events"]`. The platform persists them (PLT row)."""
-
-    def __init__(self) -> None:
-        self.events: list = []
-
-    def __call__(self, e: dict) -> None:
-        self.events.append(e)
-
-
 def _finish(r: _Run, out: dict) -> dict:
-    try:
-        for e in r.events:
-            r.sink(dict(e))
-    except Exception:
-        return {"ok": False, "code": "CON-017", "reason": "audit sink failed; output withheld",
-                "events": r.events}
+    if r.sink is not None:
+        try:
+            for e in r.events:
+                r.sink(dict(e))
+        except Exception:
+            return {"ok": False, "code": "CON-017", "reason": "audit sink failed; output withheld",
+                    "events": r.events}
     out["events"] = r.events
-    out["audit"] = "recorded" if r.builtin_sink else "sink"
     return out
 
 
@@ -264,24 +221,15 @@ def run_connector(connector: Any, source: Any, ctx: RunContext,
     """Run one connector on bytes. Returns {"ok": True, ...labelled result...} or
     {"ok": False, "code": "CON-...", "reason": ...}. Never raises for connector faults, never
     returns partial output."""
-    builtin = sink is None
-    if builtin:
-        sink = RecordingSink()
     r = _Run(connector, ctx, sink)
-    r.builtin_sink = builtin
-    limit = ctx.limits.max_steps if isinstance(ctx, RunContext) else 0
-    budget = Budget(limit)  # limits come from the platform context only; the connector gets a handle
-    handle = budget.handle()
+    budget = Budget(ctx.limits.max_steps if isinstance(ctx, RunContext) else 0)
     try:
         if not isinstance(ctx, RunContext) or not ctx.tenant_id or not ctx.job_id or ctx.data_class not in DATA_CLASSES:
             raise _Fail("CON-012", "run context lacks tenant, job or valid data class")
-        if not callable(sink):
-            raise _Fail("CON-017", "audit sink must be callable")
         try:
             check_connector(connector)
         except ConnectorRefusal as e:
             raise _Fail(e.code, e.reason)
-        r.caps = frozenset(connector.capabilities)  # re-snapshot after validation
         if not isinstance(source, (bytes, bytearray)):
             raise _Fail("CON-016", "source must be bytes")
         lim = ctx.limits
@@ -290,13 +238,11 @@ def run_connector(connector: Any, source: Any, ctx: RunContext,
         data = bytes(source)
         src_hash = sha256(data)
         try:
-            raw = connector.extract(data, handle)
+            raw = connector.extract(data, budget)
         except BudgetExceeded:
             raise
         except Exception as e:  # fail closed on any connector fault
             raise _Fail("CON-010", f"extract raised {type(e).__name__}")
-        if budget.max_steps != limit or budget.used > limit:
-            raise BudgetExceeded("steps", limit)
         if not isinstance(raw, list):
             raise _Fail("CON-011", "extract must return a list")
         if len(raw) > lim.max_items:
@@ -305,13 +251,11 @@ def run_connector(connector: Any, source: Any, ctx: RunContext,
         raw_hash = sha256(_canon(raw))
         raw_copy = json.loads(_canon(raw).decode("utf-8"))  # isolated copy, no shared references
         try:
-            norm = connector.normalise(raw_copy, handle)
+            norm = connector.normalise(raw_copy, budget)
         except BudgetExceeded:
             raise
         except Exception as e:
             raise _Fail("CON-010", f"normalise raised {type(e).__name__}")
-        if budget.max_steps != limit or budget.used > limit:
-            raise BudgetExceeded("steps", limit)
         if not isinstance(norm, dict):
             raise _Fail("CON-011", "normalise must return an object")
         _jsonlike(norm, 0, lim.max_depth, budget)
@@ -324,8 +268,6 @@ def run_connector(connector: Any, source: Any, ctx: RunContext,
         stats = norm.get("stats", {})
         if not isinstance(ents, list) or not isinstance(issues, list) or not isinstance(stats, dict):
             raise _Fail("CON-011", "entities and issues must be lists, stats an object")
-        if len(stats) > MAX_STAT_KEYS or not all(isinstance(k, str) and STAT_KEY_RE.match(k) for k in stats):
-            raise _Fail("CON-011", "stats keys must be short lowercase identifiers")
         if not all(isinstance(v, int) and not isinstance(v, bool) for v in stats.values()):
             raise _Fail("CON-011", "stats values must be integers")
         nfields = sum(len(e.get("fields", [])) if isinstance(e, dict) and isinstance(e.get("fields", []), list) else 0
@@ -373,7 +315,7 @@ def run_connector(connector: Any, source: Any, ctx: RunContext,
          source_sha256=src_hash, source_bytes=len(data), raw_sha256=raw_hash)
     return _finish(r, {
         "ok": True, "tainted": True,
-        "source": {"connector": r.cid, "version": r.cver, "tier": r.tier,
+        "source": {"connector": connector.id, "version": connector.version, "tier": connector.tier,
                    "job_id": ctx.job_id, "trust": "untrusted", "level": "L3"},
         "entities": out_ents, "issues": out_issues, "stats": dict(stats),
         "evidence": {"source_sha256": src_hash, "source_bytes": len(data), "raw_sha256": raw_hash},

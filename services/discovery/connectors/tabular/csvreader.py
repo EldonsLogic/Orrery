@@ -84,6 +84,6 @@ def read_csv(data: bytes, budget: Budget, max_rows: int, max_cols: int, max_cell
                 rows_seen[rno] = line
     except csv.Error as e:
         raise Tab006Malformed(f"csv: {e}") from None
-    return {"type": "sheet", "name": "csv", "index": 1, "locator": "csv", "state": "visible", "encoding": enc,
+    return {"type": "sheet", "name": "csv", "state": "visible", "encoding": enc,
             "delimiter": DELIM_NAMES[delim], "header_row": detect_header_row(rows_seen),
             "cells": cells, "comments": [], "hidden_rows": [], "hidden_cols": []}

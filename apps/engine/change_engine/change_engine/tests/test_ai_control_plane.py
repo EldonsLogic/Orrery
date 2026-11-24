@@ -110,7 +110,6 @@ class FakeRev23DeploymentAdapter:
             field_def=field_def,
             existing_columns_desc=self.existing_columns_desc,
             doctype_fields=self.doctype_fields,
-            offline_simulator=True,
         )
 
     def persist_prepare_and_audit_intent(self, record: dict) -> None:
@@ -170,7 +169,7 @@ class TestADR001Rev23(unittest.TestCase):
     def test_suite_a_ddl_plan_gate_approves_valid_single_add_column(self):
         """§6.1 & §6.2: Single nullable custom column without indexes produces approved ADD COLUMN plan."""
         field_def = {"fieldname": "custom_cargo_id", "fieldtype": "Data"}
-        inspection = inspect_frappe_ddl_plan("Sales Order", field_def, offline_simulator=True)
+        inspection = inspect_frappe_ddl_plan("Sales Order", field_def)
         self.assertTrue(inspection.inspectable)
         self.assertTrue(inspection.is_approved_additive_only)
         self.assertIsNone(inspection.rejection_reason)
@@ -209,7 +208,6 @@ class TestADR001Rev23(unittest.TestCase):
             field_def=field_def,
             existing_columns_desc=existing_cols,
             doctype_fields=doctype_fields,
-            offline_simulator=True,
         )
         self.assertTrue(inspection.inspectable)
         self.assertFalse(inspection.is_approved_additive_only)
@@ -242,7 +240,7 @@ class TestADR001Rev23(unittest.TestCase):
             "fieldtype": "Data",
             "search_index": 1,
         }
-        inspection = inspect_frappe_ddl_plan("Sales Order", field_def, offline_simulator=True)
+        inspection = inspect_frappe_ddl_plan("Sales Order", field_def)
         self.assertTrue(inspection.inspectable)
         self.assertFalse(inspection.is_approved_additive_only)
         self.assertIsNotNone(inspection.rejection_reason)
@@ -268,18 +266,18 @@ class TestADR001Rev23(unittest.TestCase):
         """§5.1 & §6.1: Reject plan with unique constraint or non-compliant fieldnames."""
         # 1. Unique constraint rejection
         unique_def = {"fieldname": "custom_cargo_id", "fieldtype": "Data", "unique": 1}
-        insp_unique = inspect_frappe_ddl_plan("Sales Order", unique_def, offline_simulator=True)
+        insp_unique = inspect_frappe_ddl_plan("Sales Order", unique_def)
         self.assertFalse(insp_unique.is_approved_additive_only)
 
         # 2. Non-custom prefix fieldname rejection
         non_custom = {"fieldname": "cargo_id", "fieldtype": "Data"}
-        insp_non_custom = inspect_frappe_ddl_plan("Sales Order", non_custom, offline_simulator=True)
+        insp_non_custom = inspect_frappe_ddl_plan("Sales Order", non_custom)
         self.assertFalse(insp_non_custom.is_approved_additive_only)
         self.assertIn("does not match approved additive ADD COLUMN pattern", insp_non_custom.rejection_reason)
 
         # 3. Uppercase letters in fieldname rejection
         upper_field = {"fieldname": "custom_Cargo_Id", "fieldtype": "Data"}
-        insp_upper = inspect_frappe_ddl_plan("Sales Order", upper_field, offline_simulator=True)
+        insp_upper = inspect_frappe_ddl_plan("Sales Order", upper_field)
         self.assertFalse(insp_upper.is_approved_additive_only)
         self.assertIn("does not match approved additive ADD COLUMN pattern", insp_upper.rejection_reason)
 

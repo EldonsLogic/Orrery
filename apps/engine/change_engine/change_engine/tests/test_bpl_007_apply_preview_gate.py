@@ -83,7 +83,6 @@ class TestBpl007ApplyPreviewAndDdlGate(unittest.TestCase):
             res = inspect_frappe_ddl_plan(
                 "Sales Order",
                 {"fieldname": f"custom_num_{fieldtype.lower()}", "fieldtype": fieldtype},
-                offline_simulator=True,
             )
             self.assertTrue(res.inspectable)
             self.assertTrue(res.is_approved_additive_only, res.rejection_reason)
@@ -116,14 +115,14 @@ class TestBpl007ApplyPreviewAndDdlGate(unittest.TestCase):
             "custom_new_pct": _DummyFrappeDbCol("custom_new_pct", "Float", default=None),
         }
         current_cols = {
-            "total": ColumnDesc(name="total", type="decimal(21,9)", default="0.000000000", nullable=False),
+            "total": ColumnDesc(name="total", type="decimal(21,9)", default="0.000000000"),
         }
         _normalize_zero_decimal_defaults(table_cols, current_cols, exclude_fieldname="custom_new_pct")
         self.assertIsNone(current_cols["total"]["default"])
 
         # Non-zero DB default must NOT be normalized away so real drift stays blocked
         real_drift_cols = {
-            "total": ColumnDesc(name="total", type="decimal(21,9)", default="5.000000000", nullable=False),
+            "total": ColumnDesc(name="total", type="decimal(21,9)", default="5.000000000"),
         }
         _normalize_zero_decimal_defaults(table_cols, real_drift_cols, exclude_fieldname="custom_new_pct")
         self.assertEqual(real_drift_cols["total"]["default"], "5.000000000")

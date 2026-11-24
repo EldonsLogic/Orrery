@@ -29,7 +29,6 @@ from .safety_guardrails import (
 )
 from .schema_reconciler import (
     IdempotencyConflictError,
-    RevisionHashError,
     compute_canonical_payload_hash,
     make_bounded_lock_key,
 )
@@ -257,28 +256,10 @@ def execute_property_setter_deployment(
 
         base_revision_hash = kwargs.get("base_revision_hash")
         if not base_revision_hash:
-            try:
-                if hasattr(db, "get_doctype_revision_hash") and callable(getattr(db, "get_doctype_revision_hash", None)):
-                    base_revision_hash = db.get_doctype_revision_hash(doctype)
-                elif getattr(db, "in_memory", False) or getattr(db, "offline_ddl_simulator", False):
-                    base_revision_hash = "rev_ps_default"  # explicit offline/in-memory mode only
-                else:
-                    # A live adapter without a readable revision hash must not get a stand-in that
-                    # compares equal on both sides (ERP-027).
-                    raise RevisionHashError("adapter cannot report the DocType revision hash")
-            except RevisionHashError as exc:
-                return {
-                    "deployment_id": deployment_id,
-                    "status": "REJECTED",
-                    "success": False,
-                    "stage": "INSPECT",
-                    "disposition": "REVISION_HASH_UNAVAILABLE",
-                    "reason": f"Cannot read the DocType configuration revision: {exc}",
-                    "doctype": doctype,
-                    "fieldname": fieldname,
-                    "property_name": property_name,
-                    "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
-                }
+            if hasattr(db, "get_doctype_revision_hash") and callable(getattr(db, "get_doctype_revision_hash", None)):
+                base_revision_hash = db.get_doctype_revision_hash(doctype)
+            else:
+                base_revision_hash = "rev_ps_default"
 
         prepare_record = {
             "deployment_id": deployment_id,

@@ -101,7 +101,6 @@ def make_frappe_adapter(
     auto_create_sites: bool = False,
     sites_path: str | None = None,
     test_hooks: bool = True,
-    offline_ddl_simulator: bool | None = None,
 ) -> ChangeEngineAdapter:
     """Create a ChangeEngineAdapter wired to FrappeRuntimeBackend (fails closed unless simulated=True or frappe_factory is set)."""
     if frappe_factory is None and simulated:
@@ -113,8 +112,6 @@ def make_frappe_adapter(
         frappe_factory=frappe_factory,
         auto_create_sites=auto_create_sites,
         sites_path=sites_path,
-        # Only the simulated runtime is offline; a caller-supplied factory must opt in explicitly.
-        offline_ddl_simulator=simulated if offline_ddl_simulator is None else offline_ddl_simulator,
     )
     return ChangeEngineAdapter(test_hooks=test_hooks, db_path=db_path, frappe_backend=backend)
 

@@ -38,24 +38,9 @@ STANDARD_COLUMNS = frozenset({"name"})
 CALLER_IDENTITY_FIELDS = frozenset(
     {
         "roles", "user_roles", "caller_roles", "user", "approver", "tenant", "site", "site_id", "owner",
-        "applicant_user", "custom_applicant_user",
+        "applicant_user",
     }
 )
-
-# Platform-owned custom field that holds the applicant principal captured when a leave application
-# is filed. The engine ships no such field, and document persistence drops unknown columns, so the
-# field must be declared on the bench (a `Custom Field`, Q-280). It is protected twice: read-only at
-# permission level 2 (no ordinary role can edit it through the document API), and written only by
-# `Store.record_applicant_identity`, once, never from a payload. UNVERIFIED on the pinned bench.
-APPLICANT_IDENTITY_FIELD = "custom_applicant_user"
-PLATFORM_CUSTOM_FIELDS = {
-    "Leave Application": (
-        {
-            "fieldname": APPLICANT_IDENTITY_FIELD, "label": "Applicant account", "fieldtype": "Data",
-            "read_only": 1, "permlevel": 2, "no_copy": 1, "print_hide": 1, "hidden": 1,
-        },
-    ),
-}
 
 
 @dataclass(frozen=True)

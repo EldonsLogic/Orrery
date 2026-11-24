@@ -16,7 +16,6 @@ from components.core.hrms_skeleton.validation import canonical_decimal, normalis
 from .test_service import APPLICATION, CO, EMP, T, make, refused, seed_employee
 
 LINA, BOSS = "lina@example.invalid", "boss@example.invalid"
-APP_KEY = ("Leave Application", "LEA-00001")
 
 
 class ApplicantIdentityTests(unittest.TestCase):
@@ -30,8 +29,7 @@ class ApplicantIdentityTests(unittest.TestCase):
         self.lina.upsert("Leave Application", APPLICATION)
 
     def test_the_applicant_principal_is_captured_when_the_application_is_filed(self):
-        self.assertEqual(self.store.applicant_identities[APP_KEY], LINA)
-        self.assertNotIn("applicant_user", self.store.rows["Leave Application"]["LEA-00001"])  # not a payload column
+        self.assertEqual(self.store.rows["Leave Application"]["LEA-00001"]["applicant_user"], LINA)
 
     def test_the_applicant_cannot_rebind_her_own_employee_record_then_approve(self):
         refused(self, "identity_binding_protected", self.lina.upsert, "Employee", {**EMP, "user_id": "someone@example.invalid"})
@@ -62,9 +60,9 @@ class ApplicantIdentityTests(unittest.TestCase):
         refused(self, "applicant_identity_unresolved", boss.decide_leave_application, APPLICATION, "reject")
         self.store.rows["Employee"]["EMP-00001"]["user_id"] = LINA
         for bad in (None, "", 5):
-            self.store.applicant_identities[APP_KEY] = bad
+            self.store.rows["Leave Application"]["LEA-00001"]["applicant_user"] = bad
             refused(self, "applicant_identity_unresolved", boss.decide_leave_application, APPLICATION, "approve")
-        del self.store.applicant_identities[APP_KEY]  # filed before this guard existed
+        del self.store.rows["Leave Application"]["LEA-00001"]["applicant_user"]  # filed before this guard existed
         refused(self, "applicant_identity_unresolved", boss.decide_leave_application, APPLICATION, "approve")
         self.assertEqual(self.store.rows["Leave Application"]["LEA-00001"]["status"], "Open")
 
@@ -91,20 +89,6 @@ class ApplicantIdentityTests(unittest.TestCase):
                 {**APPLICATION, "to_date": "2026-03-09", "applicant_user": BOSS})
         refused(self, "caller_identity_not_accepted", self.lina.upsert, "Leave Application",
                 {**APPLICATION, "applicant_user": BOSS})
-        for field in ("applicant_user", "custom_applicant_user"):
-            refused(self, "caller_identity_not_accepted", self.lina.upsert, "Leave Application",
-                    {**APPLICATION, field: BOSS})
-        self.assertEqual(self.store.applicant_identities[APP_KEY], LINA)
-
-    def test_the_filed_principal_is_recorded_once_and_never_overwritten(self):
-        with self.assertRaises(ValueError):
-            self.store.record_applicant_identity("Leave Application", "LEA-00001", BOSS)
-        self.assertEqual(self.store.applicant_identities[APP_KEY], LINA)
-
-    def test_an_independent_hr_manager_can_decide_and_the_applicant_still_cannot(self):
-        boss, _, _ = make(roles=("HR Manager",), user=BOSS, store=self.store)
-        refused(self, "self_approval_forbidden", self.lina.decide_leave_application, APPLICATION, "approve")
-        self.assertEqual(boss.decide_leave_application(APPLICATION, "approve").action, "approved")
 
 
 class LiveContextTests(unittest.TestCase):

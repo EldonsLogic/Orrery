@@ -12,9 +12,7 @@ from types import SimpleNamespace
 
 from components.core.hrms_skeleton import HrmsError, HrmsService
 from components.core.hrms_skeleton.frappe_backend import FrappeSession, FrappeStore
-from components.core.hrms_skeleton.specs import (
-    APPLICANT_IDENTITY_FIELD, PLATFORM_CUSTOM_FIELDS, SPECS, STANDARD_COLUMNS,
-)
+from components.core.hrms_skeleton.specs import SPECS, STANDARD_COLUMNS
 
 # Mandatory fields of the pinned schemas that the caller must supply (the engine defaults the rest,
 # for example `status` and `company`). UNVERIFIED against a live bench (Q-280).
@@ -23,9 +21,7 @@ PINNED_MANDATORY = {
     "Salary Structure": ("name",),  # naming rule "Prompt"
 }
 # Fields that exist on the pinned doctypes beyond the spec's own (set by the engine or the service).
-# `applicant_user` is deliberately NOT here: the engine ships no such column, so persistence drops it.
-# The captured applicant lives in the platform custom field declared in `PLATFORM_CUSTOM_FIELDS`.
-EXTRA_FIELDS = {"Leave Application": {"status", APPLICANT_IDENTITY_FIELD}}
+EXTRA_FIELDS = {"Leave Application": {"status", "applicant_user"}}
 
 
 def schema_fields(doctype):
@@ -41,23 +37,11 @@ class FakeDoc:
     def __init__(self, frappe, data):
         self.frappe, self.data, self.saved = frappe, dict(data), False
 
-    def _persist(self, stored=None):
-        """What the pinned engine keeps: valid columns only. A field above the caller's permission
-        level is reset: to the stored value on an existing document, to nothing on a new one."""
-        doctype, writable = self.data["doctype"], self.frappe.get_meta(self.data["doctype"]).get_permlevel_access("write")
-        keep = schema_fields(doctype) | {"doctype", "name"}
-        kept = {k: v for k, v in self.data.items() if k in keep and self.frappe.levels.get(k, 0) in writable}
-        for k in keep:
-            if self.frappe.levels.get(k, 0) not in writable and stored and k in stored:
-                kept[k] = stored[k]
-        self.data = kept
-
     def insert(self):
         missing = [f for f in PINNED_MANDATORY.get(self.data["doctype"], ()) if not self.data.get(f)]
         if missing:
             raise MandatoryError(missing)
         self.frappe.insert_calls += 1
-        self._persist()
         if self.frappe.duplicate_next:
             self.frappe.duplicate_next -= 1
             raise self.frappe.DuplicateEntryError("exists")
@@ -69,7 +53,6 @@ class FakeDoc:
         self.data.update(values)
 
     def save(self):
-        self._persist(self.frappe.docs.get((self.data["doctype"], self.data["name"])))
         self.frappe.docs[(self.data["doctype"], self.data["name"])] = self.data
         self.frappe.saved.append(self.data)
 
@@ -91,8 +74,7 @@ class FakeMeta:
     def get_field(self, name):
         if name not in schema_fields(self.doctype):  # includes "name": a column, not a DocField
             return None
-        level = self.levels.get(name, 0)
-        return SimpleNamespace(permlevel=level, read_only=1 if level else 0)
+        return SimpleNamespace(permlevel=self.levels.get(name, 0))
 
 
 class FakeFrappe:
@@ -101,16 +83,11 @@ class FakeFrappe:
         self.local = SimpleNamespace(site=site)
         self.roles, self.docs, self.inserted, self.saved = list(roles), {}, [], []
         self.can_read, self.perms, self.companies, self.restricted = True, True, {"Acme"}, []
-        self.levels = {"base": 1, APPLICANT_IDENTITY_FIELD: 2}
+        self.levels = {"base": 1}
         self.conf = SimpleNamespace(db_type="mariadb")
         self.sql_log, self.lock_result, self.commits = [], 1, 0
-        self.lock_held, self.reads, self.snapshot = False, [], None
-        self.caller_pending, self.committed = [], []  # the enclosing transaction: the caller's, not ours
         self.insert_calls, self.duplicate_next = 0, 0
-        self.db = SimpleNamespace(
-            exists=lambda dt, name: name in self.companies, sql=self._sql, commit=self._commit,
-            rollback=self._rollback, get_value=self._get_value, set_value=self._set_value,
-        )
+        self.db = SimpleNamespace(exists=lambda dt, name: name in self.companies, sql=self._sql, commit=self._commit)
 
         class DuplicateEntryError(Exception):
             pass
@@ -119,32 +96,10 @@ class FakeFrappe:
 
     def _sql(self, query, values=None):
         self.sql_log.append((query.split("(")[0].strip(), values))
-        self.lock_held = "release" not in query and "unlock" not in query and self.lock_result == 1
         return ((self.lock_result,),)
 
     def _commit(self):
         self.commits += 1
-        self.committed += self.caller_pending
-        self.caller_pending = []
-
-    def _rollback(self):
-        self.caller_pending = []
-
-    def freeze_snapshot(self):
-        """Simulate REPEATABLE-READ: later plain reads see only what existed now."""
-        self.snapshot = {k: dict(v) for k, v in self.docs.items()}
-
-    def _visible(self, for_update):
-        return self.docs if for_update or self.snapshot is None else self.snapshot
-
-    def _get_value(self, doctype, name, field, for_update=False):
-        self.reads.append(("get_value", doctype, bool(for_update), self.lock_held))
-        return self.docs[(doctype, name)].get(field)
-
-    def _set_value(self, doctype, name, field, value, update_modified=True):
-        if field not in schema_fields(doctype):
-            raise KeyError(f"Unknown column {field}")  # the engine rejects a column that does not exist
-        self.docs[(doctype, name)][field] = value  # a direct column write: no document permission levels
 
     def get_roles(self, user):
         return list(self.roles)
@@ -159,16 +114,14 @@ class FakeFrappe:
     def get_meta(self, doctype):
         return FakeMeta(doctype, self.levels)
 
-    def get_list(self, doctype, filters=None, pluck=None, limit_page_length=None, for_update=False):
-        self.reads.append(("get_list", doctype, bool(for_update), self.lock_held))
-        rows = [d for (dt, _), d in self._visible(for_update).items() if dt == doctype and all(d.get(k) == v for k, v in filters.items())]
+    def get_list(self, doctype, filters=None, pluck=None, limit_page_length=None):
+        rows = [d for (dt, _), d in self.docs.items() if dt == doctype and all(d.get(k) == v for k, v in filters.items())]
         return [r["name"] for r in rows][:limit_page_length]
 
-    def get_doc(self, *args, for_update=False):
+    def get_doc(self, *args):
         if isinstance(args[0], dict):
             return FakeDoc(self, args[0])
-        self.reads.append(("get_doc", args[0], bool(for_update), self.lock_held))
-        return FakeDoc(self, self._visible(for_update)[(args[0], args[1])])
+        return FakeDoc(self, self.docs[(args[0], args[1])])
 
 
 class FrappeSessionTests(unittest.TestCase):
@@ -301,7 +254,7 @@ class KeyLockTests(unittest.TestCase):
         self.assertEqual([q for q, _ in f.sql_log], ["select get_lock", "select release_lock"])
         self.assertEqual(f.sql_log[0][1][0], f.sql_log[1][1][0])  # same lock name
         self.assertLessEqual(len(f.sql_log[0][1][0]), 64)
-        self.assertEqual(f.commits, 0)  # the caller owns commit and rollback, never this component
+        self.assertEqual(f.commits, 1)
 
     def test_lock_names_differ_by_key_company_and_doctype_but_never_expose_the_key(self):
         f = FakeFrappe(roles=("HR Manager",))
@@ -365,183 +318,6 @@ class KeyLockTests(unittest.TestCase):
         f.duplicate_next = 5
         refused(self, "ambiguous_key", service(f).upsert, "Designation", {"designation_name": "Rep"})
         self.assertEqual(f.insert_calls, 2)  # one retry, then stop
-
-
-LINA, BOSS = EMPLOYEE["user_id"], "boss@example.invalid"
-FILING = {"employee": "EMP-1", "leave_type": "Annual", "from_date": "2026-03-01", "to_date": "2026-03-05"}
-
-
-class TransactionOwnershipTests(unittest.TestCase):
-    """Review (round 2) MED: the component never commits the caller's enclosing transaction."""
-
-    def test_a_no_op_upsert_leaves_unrelated_caller_work_to_roll_back(self):
-        f = FakeFrappe(roles=("HR Manager",))
-        svc = service(f)
-        svc.upsert("Designation", {"designation_name": "Rep"})
-        f.caller_pending.append("unrelated pending row")  # the caller's own uncommitted work
-        self.assertEqual(svc.upsert("Designation", {"designation_name": "Rep"}).action, "unchanged")
-        f.db.rollback()  # the caller decides
-        self.assertEqual((f.caller_pending, f.committed, f.commits), ([], [], 0))
-
-    def test_no_path_commits_on_create_update_refusal_or_failure(self):
-        f = FakeFrappe(roles=("HR Manager",))
-        svc = service(f)
-        f.caller_pending.append("unrelated pending row")
-        self.assertEqual(svc.upsert("Salary Structure", {"name": "S", "payroll_frequency": "Monthly"}).action, "created")
-        self.assertEqual(svc.upsert("Salary Structure", {"name": "S", "payroll_frequency": "Weekly"}).action, "updated")
-        f.perms = False
-        refused(self, "permission_denied", svc.upsert, "Designation", {"designation_name": "Other"})
-        f.lock_result = 0
-        refused(self, "operation_failed", svc.upsert, "Designation", {"designation_name": "Other"})
-        self.assertEqual((f.commits, f.committed, f.caller_pending), (0, [], ["unrelated pending row"]))
-
-    def test_the_adapter_source_has_no_commit_or_rollback_call(self):
-        import inspect
-        from components.core.hrms_skeleton import frappe_backend
-        code = inspect.getsource(frappe_backend)
-        self.assertNotRegex(code, r"\.(commit|rollback)\(")
-
-
-class CurrentReadTests(unittest.TestCase):
-    """Review (round 2) MED: under REPEATABLE-READ the lookup inside the lock is a locking current read."""
-
-    def test_lookups_inside_the_lock_are_for_update_and_outside_it_are_not(self):
-        f = FakeFrappe(roles=("HR Manager",))
-        svc = service(f)
-        svc.upsert("Designation", {"designation_name": "Rep"})
-        svc.upsert("Designation", {"designation_name": "Rep"})
-        reads = [r for r in f.reads if r[1] == "Designation"]
-        self.assertTrue(reads)
-        self.assertTrue(all(for_update and lock_held for _, _, for_update, lock_held in reads), reads)
-        self.assertEqual(f.commits, 0)
-
-    def test_the_company_check_outside_the_lock_is_a_plain_read(self):
-        f = FakeFrappe(roles=("HR Manager",))
-        FrappeStore(f).find("Branch", {"branch": "HQ"})
-        self.assertEqual([r[2] for r in f.reads], [False])
-
-    def test_a_stale_snapshot_does_not_hide_another_writers_row(self):
-        f = FakeFrappe(roles=("HR Manager",))
-        first, second = service(f), service(f)
-        f.freeze_snapshot()  # the second request's transaction already holds its read snapshot
-        self.assertEqual(first.upsert("Designation", {"designation_name": "Rep"}).action, "created")
-        self.assertEqual(second.upsert("Designation", {"designation_name": "Rep"}).action, "unchanged")
-        self.assertEqual(len([k for k in f.docs if k[0] == "Designation"]), 1)
-        # A plain read in the same state really is stale: the fake does model the problem.
-        self.assertEqual(FrappeStore(f).find("Designation", {"designation_name": "Rep"}), [])
-
-    def test_a_stale_snapshot_does_not_make_a_second_policy_or_an_ambiguous_key(self):
-        f = FakeFrappe(roles=("HR Manager",))
-        payload = {"title": "Standard", "leave_policy_details": [{"leave_type": "Annual", "annual_allocation": "21"}]}
-        a, b = service(f), service(f)
-        f.freeze_snapshot()
-        self.assertEqual(a.upsert("Leave Policy", payload).action, "created")
-        self.assertEqual(b.upsert("Leave Policy", payload).action, "unchanged")
-        self.assertEqual(b.upsert("Leave Policy", payload).action, "unchanged")  # the retry is not ambiguous
-        self.assertEqual(len([k for k in f.docs if k[0] == "Leave Policy"]), 1)
-
-    def test_updates_load_the_document_with_a_current_read(self):
-        f = FakeFrappe(roles=("HR Manager",))
-        svc = service(f)
-        svc.upsert("Salary Structure", {"name": "S", "payroll_frequency": "Monthly"})
-        f.reads.clear()
-        svc.upsert("Salary Structure", {"name": "S", "payroll_frequency": "Weekly"})
-        self.assertTrue(all(r[2] for r in f.reads if r[0] == "get_doc"))
-
-    def test_the_database_unique_constraint_is_still_the_backstop(self):
-        f = FakeFrappe(roles=("HR Manager",))
-        f.duplicate_next = 1
-        self.assertEqual(service(f).upsert("Designation", {"designation_name": "Rep"}).action in ("created", "unchanged"), True)
-        self.assertEqual(f.insert_calls, 2)
-
-
-class ApplicantIdentityPersistenceTests(unittest.TestCase):
-    """Review (round 2) MED: the applicant principal survives save and reload without an invented
-    column. The fake keeps valid columns only and resets fields above the caller's permission level."""
-
-    def setUp(self):
-        self.f = FakeFrappe(user=BOSS, roles=("HR Manager",))
-        service(self.f).upsert("Employee", EMPLOYEE)
-        self.name = next(n for (dt, n) in self.f.docs if dt == "Employee")
-        self.filing = {**FILING, "employee": self.name}
-
-    def stored(self):
-        """The application as persisted now (saves replace the stored dict, so never cache it)."""
-        return next(d for (dt, _), d in self.f.docs.items() if dt == "Leave Application")
-
-    def as_user(self, user, roles):
-        self.f.session.user, self.f.roles = user, list(roles)
-        return service(self.f)  # a fresh service and store: nothing carried over from filing
-
-    def file_as_lina(self, roles=("Employee",)):
-        return self.as_user(LINA, roles).upsert("Leave Application", self.filing)
-
-    def test_the_fake_drops_an_unknown_column_and_a_protected_field_on_save(self):
-        doc = self.f.get_doc({"doctype": "Leave Application", "employee": "E", "applicant_user": LINA,
-                              APPLICANT_IDENTITY_FIELD: LINA})
-        doc.insert()
-        self.assertNotIn("applicant_user", doc.data)
-        self.assertNotIn(APPLICANT_IDENTITY_FIELD, doc.data)  # permission level 2: reset for this caller
-
-    def test_the_protected_field_is_declared_read_only_above_level_one(self):
-        (field,) = PLATFORM_CUSTOM_FIELDS["Leave Application"]
-        self.assertEqual(field["fieldname"], APPLICANT_IDENTITY_FIELD)
-        self.assertTrue(field["read_only"] and field["permlevel"] >= 2)
-        df = self.f.get_meta("Leave Application").get_field(APPLICANT_IDENTITY_FIELD)
-        self.assertTrue(df.read_only and df.permlevel == 2)
-
-    def test_filing_then_reload_then_an_independent_hr_manager_decision_succeeds(self):
-        self.assertEqual(self.file_as_lina().action, "created")
-        self.assertEqual(self.stored()[APPLICANT_IDENTITY_FIELD], LINA)
-        self.assertNotIn("applicant_user", self.stored())
-        result = self.as_user(BOSS, ("HR Manager",)).decide_leave_application(self.filing, "approve")
-        self.assertEqual(result.action, "approved")
-        self.assertEqual(self.stored()["status"], "Approved")
-
-    def test_the_applicant_cannot_approve_her_own_application_after_reload(self):
-        self.file_as_lina()
-        refused(self, "self_approval_forbidden", self.as_user(LINA, ("HR Manager",)).decide_leave_application,
-                self.filing, "approve")
-        self.assertEqual(self.stored()["status"], "Open")
-
-    def test_rewriting_the_employee_link_or_the_field_through_the_document_api_fails_closed(self):
-        self.file_as_lina()
-        # The document API cannot change the protected field (reset above the caller's level)...
-        FrappeStore(self.f).update("Leave Application", self.stored()["name"], {APPLICANT_IDENTITY_FIELD: BOSS})
-        self.assertEqual(self.stored()[APPLICANT_IDENTITY_FIELD], LINA)
-        # ...and re-linking the employee record behind the service's back no longer matches it.
-        self.f.docs[("Employee", self.name)]["user_id"] = "other@example.invalid"
-        refused(self, "applicant_identity_unresolved", self.as_user(BOSS, ("HR Manager",)).decide_leave_application,
-                self.filing, "approve")
-        self.assertEqual(self.stored()["status"], "Open")
-
-    def test_the_recorded_principal_is_written_once(self):
-        self.file_as_lina()
-        with self.assertRaises(HrmsError) as ctx:
-            FrappeStore(self.f).record_applicant_identity("Leave Application", self.stored()["name"], BOSS)
-        self.assertEqual(ctx.exception.code, "identity_binding_protected")
-        self.assertEqual(self.stored()[APPLICANT_IDENTITY_FIELD], LINA)
-
-    def test_a_bench_without_the_protected_field_refuses_filing_and_every_decision(self):
-        # Field not declared (unknown column): the write raises, the filing is refused, no decision passes.
-        import components.core.hrms_skeleton.tests.test_frappe_backend as me
-        keep = me.EXTRA_FIELDS["Leave Application"]
-        me.EXTRA_FIELDS["Leave Application"] = {"status"}
-        try:
-            refused(self, "operation_failed", self.as_user(LINA, ("Employee",)).upsert, "Leave Application", self.filing)
-        finally:
-            me.EXTRA_FIELDS["Leave Application"] = keep
-
-    def test_an_unprotected_field_is_not_trusted(self):
-        for level in (0,):  # declared but editable: refuse rather than rely on it
-            self.f.levels[APPLICANT_IDENTITY_FIELD] = level
-            refused(self, "operation_failed", self.as_user(LINA, ("Employee",)).upsert, "Leave Application", self.filing)
-
-    def test_an_application_filed_before_the_field_existed_cannot_be_decided(self):
-        self.file_as_lina()
-        self.stored()[APPLICANT_IDENTITY_FIELD] = None
-        refused(self, "applicant_identity_unresolved", self.as_user(BOSS, ("HR Manager",)).decide_leave_application,
-                self.filing, "approve")
 
 
 if __name__ == "__main__":

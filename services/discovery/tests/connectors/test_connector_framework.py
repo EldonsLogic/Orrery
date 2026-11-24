@@ -136,7 +136,7 @@ def test_pi004_a10_zero_width_and_tag_chars():
     out, ev = run(EmailLike(), j({"from": "a@example.invalid", "reply_to": "a@example.invalid", "body": body}))
     f = [e for e in iter_envelopes(out) if e["source"]["kind"] == "body"][0]
     assert f["text"] == "Invoice total"
-    assert f["sanitisation"]["stripped"] == {"bidi": 0, "zero_width": 2, "unicode_tag": 16, "invisible": 0, "control": 0}
+    assert f["sanitisation"]["stripped"] == {"bidi": 0, "zero_width": 2, "unicode_tag": 16}
     assert {"zero_width", "unicode_tag"} <= set(f["sanitisation"]["flags"])
     assert "injection.suspected" not in types(ev)  # tags were invisible text; metric only anyway
 

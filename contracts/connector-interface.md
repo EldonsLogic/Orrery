@@ -74,9 +74,3 @@ Records themselves stay in staging; the model sees schema, stats and redacted sa
 
 ## 5. Registry and versioning
 Connector ids are dotted (`file.excel_upload`, `inbox.email_forward`, `erp.<vendor>`). A connector has a semver, a manifest (describe output), tests with sample files (anonymised), and a security review for tiers 1, 3, 4 and 5. Connectors are listed in `connectors/README.md` as they are added.
-
-## Runtime boundary notes (DSC-010 review fixes)
-- "Sandboxed" in the framework means a **logical** boundary only (`SANDBOX = "logical"` in the connector model): bytes in, structured data out, no network or file access offered, platform-set limits the connector cannot raise. An OS-level sandbox (separate process, no network, memory and time limits) is a separate infrastructure row and is required before any real customer upload.
-- Every string that reaches an envelope or `source` is either a strict ASCII locator (`[A-Za-z0-9_.:#!/[]-]`, at most 128 characters, such as `s1!A1` or `meta:1`) or sanitised, capped, counted in the character budget and run through the detector. Anything else is refused (`CON-011`). Cell comments and hidden-sheet names never reach the model-facing copy.
-- Refusal `CON-018`: the declared tier and capabilities do not match what the connector returned.
-- An audit sink is always present: the runner falls back to a built-in recording sink when none is given.

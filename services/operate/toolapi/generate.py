@@ -4,7 +4,6 @@ from __future__ import annotations
 import copy
 import re
 
-from . import classify as C
 from . import policy as P
 from .result import Issue, ToolApiResult, build_set
 from .schema import FieldError, field_schema, object_schema
@@ -13,11 +12,8 @@ _ID = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 _RANK = {r: i for i, r in enumerate(P.RISK_ORDER)}
 
 
-def filter_schema(fields: list[str]) -> dict:
-    return {"type": "array", "maxItems": 10, "items": object_schema({
-        "field": {"type": "string", "enum": fields},
-        "op": {"type": "string", "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "is_set", "is_not_set"]},
-        "value": {"type": ["string", "number", "boolean", "null"]}}, ["field", "op"])}
+def norm_arg(name: str) -> str:
+    return str(name).lower().replace("_", "").replace("-", "")
 
 
 def _loc(labels) -> dict:
@@ -25,12 +21,11 @@ def _loc(labels) -> dict:
 
 
 class _Gen:
-    def __init__(self, bp: dict, registry: dict | None, manifests: list | None = None):
+    def __init__(self, bp: dict, registry: dict | None):
         self.bp = bp
-        self.manifests = manifests
         self.errors: list[Issue] = []
         self.tools: list[dict] = []
-        self.registry = registry if registry is not None else {}
+        self.registry = registry or {}
 
     def err(self, code: str, ptr: str, fact: str) -> None:
         self.errors.append(Issue(code, ptr, fact))
@@ -38,10 +33,21 @@ class _Gen:
     # ---- setup --------------------------------------------------------------------------------------------------
     def setup(self) -> bool:
         bp = self.bp
-        self.policy = C.Policy(self.registry, self.manifests)
-        self.errors.extend(self.policy.errors)
-        if self.policy.errors:
+        reg = self.registry
+        if not isinstance(reg, dict) or set(reg) - {"entity_classes", "entity_effects"}:
+            self.err("TAPI-REGISTRY-001", "/registry", "registry must be a mapping with only entity_classes and entity_effects")
             return False
+        self.classes = dict(P.ENTITY_CLASS_DEFAULTS)
+        self.classes.update(reg.get("entity_classes") or {})
+        self.effects_extra = {k: dict(v) for k, v in P.ENTITY_EFFECT_DEFAULTS.items()}
+        for k, v in (reg.get("entity_effects") or {}).items():
+            self.effects_extra[k] = dict(v)
+        for k, c in self.classes.items():
+            if c not in P.ENTITY_CLASSES:
+                self.err("TAPI-REGISTRY-001", f"/registry/entity_classes/{k}", f"unknown entity class {c!r}")
+        for k, v in self.effects_extra.items():
+            if not isinstance(v, dict) or set(v) - set(P.EFFECT_KEYS) or any(not isinstance(x, bool) for x in v.values()):
+                self.err("TAPI-REGISTRY-001", f"/registry/entity_effects/{k}", "effects must be booleans for ledger, tax, external_send")
         if not isinstance(bp, dict) or not isinstance(bp.get("entities"), list) or not isinstance(bp.get("roles"), list):
             self.err("TAPI-INPUT-001", "/", "Blueprint must be an object with entities and roles lists")
             return False
@@ -54,21 +60,8 @@ class _Gen:
                 self.err("TAPI-NAME-001", f"/entities/{i}/id", f"duplicate entity id {eid!r}")
             elif eid in P.PLATFORM_DOMAINS:
                 self.err("TAPI-NAME-002", f"/entities/{i}/id", f"entity id {eid!r} collides with a platform tool domain")
-            elif C.identity_entity(eid) or self.policy.permission_entity(eid):
-                self.err("TAPI-DOMAIN-001", f"/entities/{i}/id",
-                         f"entity id {eid!r} is in the identity and permission domain; such changes are never generated tools")
             else:
                 self.entities[eid] = e
-        self.cls_of: dict[str, str] = {}
-        for eid, e in self.entities.items():
-            if e.get("kind") == "child":
-                continue
-            cls = self.policy.entity_class(eid)
-            if cls is None:
-                self.err("TAPI-CLASS-001", f"/entities/{eid}",
-                         f"entity {eid!r} has no reviewed class (plain, stock or ledger); refused, never assumed plain")
-            else:
-                self.cls_of[eid] = cls
         self.roles: dict[str, dict] = {}
         for i, r in enumerate(bp["roles"]):
             rid = r.get("id") if isinstance(r, dict) else None
@@ -97,8 +90,6 @@ class _Gen:
                 self.err("TAPI-REF-001", f"/workflows/{i}/entity", f"unknown entity {eid!r}")
             elif eid in self.workflows:
                 self.err("TAPI-NAME-001", f"/workflows/{i}/entity", f"entity {eid!r} has more than one workflow")
-            elif sum(1 for s in w.get("states") or [] if isinstance(s, dict) and s.get("kind") == "initial") != 1:
-                self.err("TAPI-TRANS-002", f"/workflows/{i}/states", "a workflow needs exactly one initial state")
             else:
                 self.workflows[eid] = w
         self.revision = (bp.get("meta") or {}).get("revision") if isinstance(bp.get("meta"), dict) else None
@@ -113,43 +104,32 @@ class _Gen:
         return not self.errors
 
     # ---- helpers ---------------------------------------------------------------------------------------------------
+    def eclass(self, eid: str) -> str:
+        return self.classes.get(eid, "plain")
+
     def effects(self, eid: str, write: bool) -> dict:
-        return self.policy.effects(eid, self.cls_of[eid], write)
+        eff = {k: False for k in P.EFFECT_KEYS}
+        if write:
+            if self.eclass(eid) in ("stock", "ledger"):
+                eff["ledger"] = True
+            eff.update(self.effects_extra.get(eid, {}))
+        return eff
 
     def roles_with(self, eid: str, action: str) -> list[str]:
         return sorted(self.perms.get((eid, action), set()) & self.chat_roles)
 
     def check_arg_name(self, name: str, ptr: str) -> bool:
-        if C.forbidden_arg(name):
-            self.err("TAPI-ARG-001", ptr, f"{name!r} would name a caller, role, tenant, user, owner, approver or scope; refused")
+        if norm_arg(name) in P.FORBIDDEN_ARG_NAMES:
+            self.err("TAPI-ARG-001", ptr, f"{name!r} would be a caller, role, tenant, user or scope argument; refused")
             return False
         if name in P.RESERVED_ARG_NAMES:
             self.err("TAPI-NAME-003", ptr, f"{name!r} is reserved by the generator")
             return False
         return True
 
-    def schema_fields(self, entity: dict, eptr: str, nested: bool = False, has_wf: bool = False):
-        """-> (input_props, input_required, output_props, sensitive {class: {id: schema}}, required sensitive ids).
-
-        Sensitive fields (bank target, contact, access) never enter the generic inputs: they go to their own R4 tool
-        (inside a child table they have no write path at all). Status-like fields are output only.
-        """
-        ip, ir, op, seen = {}, [], {}, set()
-        sens: dict[str, dict] = {}
-        sens_req: list[str] = []
-
-        def route(fid, s, required, sc):
-            if sc:
-                op[fid]["x-sensitive"] = sc
-                if not nested:
-                    sens.setdefault(sc, {})[fid] = dict(s, **{"x-sensitive": sc})
-                    if required:
-                        sens_req.append(fid)
-                return
-            ip[fid] = s
-            if required:
-                ir.append(fid)
-
+    def schema_fields(self, entity: dict, eptr: str, nested: bool = False):
+        """-> (input_props, input_required, output_props, output_required, field_ids)"""
+        ip, ir, op, orq, seen = {}, [], {}, [], set()
         for j, f in enumerate(entity.get("fields") or []):
             fid, ptr = f.get("id"), f"{eptr}/fields/{j}"
             if not isinstance(fid, str) or not _ID.match(fid) or fid in seen:
@@ -164,9 +144,10 @@ class _Gen:
                 self.err(exc.code, ptr, f"{fid}: {exc.fact}")
                 continue
             op[fid] = copy.deepcopy(s)
-            if not f.get("computed") and not f.get("readOnly") and not C.status_like(fid, has_wf):
-                route(fid, s, f.get("required") and "default" not in f,
-                      C.sensitivity(fid, f.get("type"), f.get("target") if f.get("type") == "link" else None))
+            if not f.get("computed") and not f.get("readOnly"):
+                ip[fid] = s
+                if f.get("required") and "default" not in f:
+                    ir.append(fid)
         for k, rel in enumerate(entity.get("relations") or []):
             rid, ptr, kind = rel.get("id"), f"{eptr}/relations/{k}", rel.get("kind", "reference")
             if not isinstance(rid, str) or not _ID.match(rid) or rid in seen:
@@ -184,21 +165,20 @@ class _Gen:
                 if nested:
                     self.err("TAPI-REF-002", ptr, "child tables nested inside a child table are not supported")
                     continue
-                cip, cir, cop, _, _ = self.schema_fields(target, f"/entities/{rel['target']}", nested=True)
-                item_in, item_out = object_schema(cip, cir), object_schema(cop, [])
+                cip, cir, cop, cor, _ = self.schema_fields(target, f"/entities/{rel['target']}", nested=True)
+                item_in, item_out = object_schema(cip, cir), object_schema(cop, cor)
                 arr_in = {"type": "array", "items": item_in, "maxItems": 500}
                 if rel.get("required"):
                     arr_in["minItems"] = 1
                 ip[rid] = arr_in
                 op[rid] = {"type": "array", "items": item_out}
-                if rel.get("required"):
-                    ir.append(rid)
             else:
                 ref = {"type": "string", "pattern": P.ID_PATTERN, "x-entity-ref": rel["target"]}
                 s = {"type": "array", "items": ref, "maxItems": 500} if many else ref
-                op[rid] = copy.deepcopy(s)
-                route(rid, s, bool(rel.get("required")), C.sensitivity(rid, None, rel["target"]))
-        return ip, ir, op, sens, sens_req
+                ip[rid], op[rid] = s, copy.deepcopy(s)
+            if rel.get("required"):
+                ir.append(rid)
+        return ip, ir, op, [], seen
 
     def field_access(self, eid: str, roles: list[str]) -> dict:
         entity = self.entities[eid]
@@ -249,10 +229,10 @@ class _Gen:
         return out
 
     def add(self, name, kind, entity, roles, perm, risk, eff, approval, in_schema, out_schema, labels, desc,
-            kind_key, extra=None, source_component=None, limits_key=None):
+            kind_key, extra=None, source_component=None):
         if not roles:
             return  # contract 3.2: a tool exists only if at least one role may call it
-        rk = limits_key or ("read" if kind == "read" else kind)
+        rk = "read" if kind == "read" else kind
         limits = dict(P.LIMITS[rk])
         limits["token_budget_class"] = "medium" if name.split(".", 1)[1] in P.MEDIUM_BUDGET_VERBS or name in P.MEDIUM_BUDGET_VERBS else "small"
         t = {
@@ -274,81 +254,57 @@ class _Gen:
         e = self.entities[eid]
         eptr = f"/entities/{eid}"
         if e.get("kind") == "child":
-            self.schema_fields(e, eptr, nested=True)  # validate types even when no parent embeds it
+            self.schema_fields(e, eptr)  # validate types even when no parent embeds it
             return
-        has_wf = eid in self.workflows
-        ip, ir, op, sens, sens_req = self.schema_fields(e, eptr, has_wf=has_wf)
-        cls = self.cls_of[eid]
-        for rel in e.get("relations") or []:  # a child table never carries a riskier entity under a cheaper parent
-            tgt = rel.get("target")
-            tc = self.cls_of.get(tgt) or P.ENTITY_CLASS_DEFAULTS.get(tgt)
-            if rel.get("kind") == "child_table" and tc and P.CLASS_RANK[tc] > P.CLASS_RANK[cls]:
-                self.err("TAPI-CLASS-003", f"{eptr}/relations/{rel.get('id')}",
-                         f"child table {tgt!r} is {tc} class, above its {cls} parent {eid!r}; refused")
-                return
+        ip, ir, op, _, _ = self.schema_fields(e, eptr)
+        cls = self.eclass(eid)
         labels = _loc(e.get("labels"))
         en = labels.get("en", eid)
         comp = next((c.get("component") for c in e.get("components") or [] if c.get("mode") == "implements"), None)
         record = object_schema({"id": {"type": "string", "pattern": P.ID_PATTERN}, "version": {"type": "integer", "minimum": 1},
-                                **({"state": {"type": "string"}} if has_wf else {}), **op},
+                                **({"state": {"type": "string"}} if eid in self.workflows else {}), **op},
                                ["id", "version"])
         id_prop = {"type": "string", "pattern": P.ID_PATTERN}
         ver_prop = {"type": "integer", "minimum": 1}
+        has_wf = eid in self.workflows
 
-        def fa(action):
-            return self.field_access(eid, self.roles_with(eid, action))
-
-        def mk(verb, in_s, out_s, perm_action, extra=None, kind="write", risk=None, egress=False):
-            risk = risk or P.RISK[cls][verb]
-            eff = self.effects(eid, kind != "read" and not egress)
+        def mk(verb, in_s, out_s, perm_action, extra=None, kind="write"):
+            risk = P.RISK[cls][verb]
+            eff = self.effects(eid, kind != "read")
             roles = self.roles_with(eid, perm_action)
-            appr = self.approval_for(eid, (verb,), None, risk, eff)
-            if egress:  # data leaves the platform: a human confirms it, never an agent alone (PI 4.3, A06)
-                appr["agent_required"] = True
-            labels_ = self.labels_for(verb, labels)
-            self.add(f"{eid}.{verb}", kind, eid, roles, {"entity": eid, "action": perm_action}, risk, eff, appr,
-                     in_s, out_s, labels_,
+            self.add(f"{eid}.{verb}", kind, eid, roles, {"entity": eid, "action": perm_action}, risk, eff,
+                     self.approval_for(eid, (verb,), None, risk, eff), in_s, out_s, self.labels_for(verb, labels),
                      f"{P.VERB_LABELS[verb]['en']} {en}. Generated from the Blueprint; arguments are typed and checked by code.",
-                     verb, {"entity_class": cls, "field_access": fa(perm_action), **(extra or {})}, comp,
-                     "export" if egress else None)
+                     verb, extra, comp)
 
-        base_filterable = sorted(fid for fid, s in op.items() if s.get("type") not in ("array",) and not s.get("x-attachment"))
-
-        def filterable(action):
-            """Fields every role that may call the tool can see: a hidden field is never a filter, sort or group key."""
-            hidden = {f for v in fa(action)["hidden_by_role"].values() for f in v}
-            return [f for f in base_filterable if f not in hidden]
-
-        mk("get", object_schema({"id": id_prop}, ["id"]), record, "read", kind="read")
-        lf = filterable("read")
+        fa = lambda verb, action: {"field_access": self.field_access(eid, self.roles_with(eid, action))}
+        mk("get", object_schema({"id": id_prop}, ["id"]), record, "read", fa("get", "read"), "read")
+        filterable = sorted(fid for fid, s in op.items() if s.get("type") not in ("array",) and not s.get("x-attachment"))
+        flt = {"type": "array", "maxItems": 10, "items": object_schema({
+            "field": {"type": "string", "enum": filterable},
+            "op": {"type": "string", "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "is_set", "is_not_set"]},
+            "value": {"type": ["string", "number", "boolean", "null"]}}, ["field", "op"])}
         mk("list", object_schema({
-            "filter": filter_schema(lf), "limit": {"type": "integer", "minimum": 1, "maximum": P.LIMITS["read"]["max_rows"]},
+            "filter": flt, "limit": {"type": "integer", "minimum": 1, "maximum": P.LIMITS["read"]["max_rows"]},
             "cursor": {"type": "string", "maxLength": 512},
-            "order_by": object_schema({"field": {"type": "string", "enum": lf},
+            "order_by": object_schema({"field": {"type": "string", "enum": filterable},
                                        "direction": {"type": "string", "enum": ["asc", "desc"]}}, ["field"])}, []),
            object_schema({"rows": {"type": "array", "items": record}, "next_cursor": {"type": ["string", "null"]}}, ["rows"]),
-           "read", kind="read")
-        mk("export", object_schema({"filter": filter_schema(filterable("export")),
-                                    "format": {"type": "string", "enum": ["csv", "xlsx"]}}, ["format"]),
+           "read", fa("list", "read"), "read")
+        mk("export", object_schema({"filter": flt, "format": {"type": "string", "enum": ["csv", "xlsx"]}}, ["format"]),
            object_schema({"file_id": id_prop, "row_count": {"type": "integer", "minimum": 0}}, ["file_id", "row_count"]),
-           "export", egress=True)
-        # a required sensitive field must be set at create: that create is then a protected (R4) write as a whole
-        req_sens = {f: s for c in sens.values() for f, s in c.items() if f in sens_req}
-        mk("create", object_schema({**ip, **req_sens}, ir + sorted(req_sens)), record, "create",
-           risk="R4" if req_sens else None)
-        mk("update", object_schema({"id": id_prop, "expected_version": ver_prop, **ip}, ["id", "expected_version"]),
-           record, "update")
-        for sc, verb in P.SENSITIVE_VERBS.items():
-            if sc in sens:
-                mk(verb, object_schema({"id": id_prop, "expected_version": ver_prop, **sens[sc]},
-                                       ["id", "expected_version"]), record, "update")
+           "export", fa("export", "export"), "read")
+        mk("create", object_schema(ip, ir), record, "create", fa("create", "create"))
+        upd = {k: v for k, v in ip.items()}
+        mk("update", object_schema({"id": id_prop, "expected_version": ver_prop, **upd}, ["id", "expected_version"]),
+           record, "update", fa("update", "update"))
         mk("delete", object_schema({"id": id_prop, "expected_version": ver_prop}, ["id", "expected_version"]),
            object_schema({"id": id_prop, "deleted": {"type": "boolean", "const": True}}, ["id", "deleted"]), "delete")
         if not has_wf:
             for verb in ("submit", "cancel"):
                 mk(verb, object_schema({"id": id_prop, "expected_version": ver_prop,
                                         "reason": {"type": "string", "maxLength": 500}}, ["id", "expected_version"]),
-                   record, verb)
+                   record, verb, fa(verb, verb))
         else:
             self.transition_tool(eid, record, labels, en, cls, comp)
 
@@ -370,32 +326,26 @@ class _Gen:
             if bad:
                 self.err("TAPI-REF-001", ptr + "/allowedRoles", f"unknown role(s) {bad}")
                 continue
-            declared = t.get("kind")
-            if declared is not None and declared not in P.TRANSITION_KINDS:
-                self.err("TAPI-TRANS-001", ptr + "/kind", f"transition kind {declared!r} is not one of {list(P.TRANSITION_KINDS)}")
-                continue
-            fk, tk = states[t["from"]].get("kind"), states[t["to"]].get("kind")
-            kind, forbidden = C.transition_kind(tid, cls, fk, t["to"], tk, bool(t.get("approval")), declared)
+            kind = "advance"
+            toks = set(tid.split("_"))
+            for tok, k2 in P.TRANSITION_TOKENS:
+                if tok in toks:
+                    kind = k2
+                    break
+            if kind == "cancel" and states[t["from"]].get("kind") == "initial":
+                kind = "cancel_draft"
             risk = P.RISK[cls][kind]
             eff = self.effects(eid, True)
             roles = sorted(set(t.get("allowedRoles") or []) & self.chat_roles)
             if not roles:
                 continue
-            # a rule on submit/cancel/update/delete gates a transition whose id names that action, and also, by kind,
-            # every move out of the initial state (submit) and every cancel or reversal (cancel)
-            verbs = set(C.tokens(tid)) & {"submit", "cancel", "update", "delete"}
-            if fk == "initial" and kind in ("advance", "approve"):
-                verbs.add("submit")
-            if kind in ("cancel", "reversal", "cancel_draft"):
-                verbs.add("cancel")
-            appr = self.approval_for(eid, ("transition", *sorted(verbs)), t.get("approval"), risk, eff)
+            # a rule on submit/cancel/update/delete also gates a transition whose id names that action
+            appr = self.approval_for(eid, ("transition", *sorted(toks & {"submit", "cancel", "update", "delete"})),
+                                     t.get("approval"), risk, eff)
             ts.append({
                 "id": tid, "from": t["from"], "to": t["to"], "kind": kind, "labels": _loc(t.get("actionLabels")),
-                "risk_class": risk,
-                "agent_creatable": _RANK[risk] <= _RANK[P.MAX_AGENT_RISK] and not forbidden,
+                "risk_class": risk, "agent_creatable": self.agent_ok(f"{eid}.transition", kind, risk),
                 "allowed_roles": roles, "approval": appr, "guards": copy.deepcopy(t.get("guards") or []),
-                "from_state_kind": fk, "to_state_kind": tk, "approval_step": bool(t.get("approval")),
-                "declared_kind": declared,
             })
         if not ts:
             return
@@ -418,7 +368,7 @@ class _Gen:
                                ["id", "transition_id", "expected_version"]),
                  record, self.labels_for("transition", labels),
                  f"Move a {en} through its workflow. Each transition has its own roles, risk class and approval; code checks them.",
-                 "transition", {"entity_class": cls, "transitions": ts, "field_access": self.field_access(eid, roles)}, comp)
+                 "transition", {"transitions": ts, "field_access": self.field_access(eid, roles)}, comp)
         # the tool-level flag must agree with the per-transition flags
         self.tools[-1]["agent_creatable"] = agent
 
@@ -454,10 +404,7 @@ class _Gen:
                          "number_range": object_schema({"min": {"type": "string", "pattern": "^-?[0-9]{1,18}(\\.[0-9]{1,6})?$"},
                                                         "max": {"type": "string", "pattern": "^-?[0-9]{1,18}(\\.[0-9]{1,6})?$"}}, []),
                          }.get(f.get("type"), {"type": "string", "maxLength": 200 if f.get("type") == "text" else 64})
-                    if not isinstance(f, dict) or not isinstance(f.get("field"), str) or not f["field"]:
-                        self.err("TAPI-INPUT-003", f"/reports/{r.get('id')}/filters", "a report filter needs a field id")
-                        continue
-                    if not self.check_arg_name(f["field"], f"/reports/{r.get('id')}/filters"):
+                    if not self.check_arg_name(f.get("field", ""), f"/reports/{r.get('id')}/filters"):
                         continue
                     lst = fsch.setdefault(f["field"], [])
                     if s not in lst:
@@ -466,7 +413,7 @@ class _Gen:
                       for k, v in sorted(fsch.items())}
             ids = sorted(visible)
             self.add("report.run", "read", None, sorted({x for v in visible.values() for x in v}),
-                     {"entity": None, "action": "report.run"}, P.PLATFORM_RISK["report.run"], dict(none), dict(no_appr),
+                     {"entity": None, "action": "report.run"}, "R0", dict(none), dict(no_appr),
                      object_schema({"report_id": {"type": "string", "enum": ids}, "filters": object_schema(fprops, [])}, ["report_id"]),
                      object_schema({"report_id": {"type": "string"}, "columns": {"type": "array", "items": {"type": "string"}},
                                     "rows": {"type": "array", "items": {"type": "object"}}}, ["report_id", "rows"]),
@@ -474,21 +421,15 @@ class _Gen:
                      "Run a Blueprint report by id. Rows are limited to the caller's scope.", "report.run",
                      {"requires_by_value": {"argument": "report_id", "roles": {k: visible[k] for k in ids}}})
             metrics: dict[str, set] = {}
-            group_fields: set[str] = set()
             for r in reports:
                 if r.get("id") in visible:
                     for m in r.get("metrics") or []:
                         metrics.setdefault(m.get("ref"), set()).update(visible[r["id"]])
-                        for g in m.get("groupBy") or []:
-                            if isinstance(g, str) and _ID.match(g) and self.check_arg_name(g, f"/reports/{r['id']}/metrics"):
-                                group_fields.add(g)
-            group_by = ({"group_by": {"type": "array", "maxItems": 5, "uniqueItems": True,
-                                      "items": {"type": "string", "enum": sorted(group_fields)}}} if group_fields else {})
             if metrics:
                 self.add("metric.query", "read", None, sorted({x for v in metrics.values() for x in v}),
-                         {"entity": None, "action": "metric.query"}, P.PLATFORM_RISK["metric.query"], dict(none), dict(no_appr),
+                         {"entity": None, "action": "metric.query"}, "R0", dict(none), dict(no_appr),
                          object_schema({"metric": {"type": "string", "enum": sorted(metrics)},
-                                        **group_by,
+                                        "group_by": {"type": "array", "maxItems": 5, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"}},
                                         "period": object_schema({"from": {"type": "string", "format": "date"}, "to": {"type": "string", "format": "date"}}, [])},
                                        ["metric"]),
                          object_schema({"metric": {"type": "string"}, "rows": {"type": "array", "items": {"type": "object"}}}, ["metric", "rows"]),
@@ -498,13 +439,11 @@ class _Gen:
             approvers = {s["approverRole"] for a in self.approvals.values() for s in a.get("steps") or []}
             approvers |= {r for (e, a), rs in self.perms.items() if a == "approve" for r in rs}
             roles = sorted(approvers & self.chat_roles)
-            self.add("approval.list_mine", "read", None, roles, {"entity": None, "action": "approval.list_mine"},
-                     P.PLATFORM_RISK["approval.list_mine"],
+            self.add("approval.list_mine", "read", None, roles, {"entity": None, "action": "approval.list_mine"}, "R0",
                      dict(none), dict(no_appr), object_schema({"limit": {"type": "integer", "minimum": 1, "maximum": 200}}, []),
                      object_schema({"rows": {"type": "array", "items": {"type": "object"}}}, ["rows"]),
                      {"ar": "موافقاتي", "en": "My approvals"}, "List approvals waiting for the caller.", "approval.list_mine")
-            self.add("approval.decide", "write", None, roles, {"entity": None, "action": "approval.decide"},
-                     P.PLATFORM_RISK["approval.decide"], dict(none),
+            self.add("approval.decide", "write", None, roles, {"entity": None, "action": "approval.decide"}, "R3", dict(none),
                      dict(no_appr, required=False, agent_required=True),
                      object_schema({"approval_id": {"type": "string", "pattern": P.ID_PATTERN},
                                     "decision": {"type": "string", "enum": ["approve", "reject"]},
@@ -515,7 +454,7 @@ class _Gen:
                      "approval.decide")
         admins = sorted({rid for rid, r in self.roles.items() if r.get("isAdmin")} & self.chat_roles)
         self.add("blueprint.propose_change", "admin", None, admins, {"entity": None, "action": "blueprint.propose_change"},
-                 P.PLATFORM_RISK["blueprint.propose_change"], dict(none), dict(no_appr, required=True, agent_required=True),
+                 "R4", dict(none), dict(no_appr, required=True, agent_required=True),
                  object_schema({"base_revision": {"type": "integer", "minimum": 1},
                                 "operations": {"type": "array", "minItems": 1, "maxItems": 100, "items": object_schema({
                                     "op": {"type": "string", "enum": ["add", "replace", "remove"]},
@@ -527,16 +466,13 @@ class _Gen:
                  "Produces a diff for human review. Never applies a change.", "blueprint.propose_change")
 
 
-def generate_tool_api(blueprint, registry=None, manifests=None) -> ToolApiResult:
+def generate_tool_api(blueprint, registry=None) -> ToolApiResult:
     """Return the tool set for a validated Blueprint, or a refusal (`ok` False, `errors` set, no tools).
 
-    `registry` is optional L0 configuration: {"source": "<where it came from>", "entity_classes": {entity_id:
-    plain|stock|ledger}, "entity_effects": {entity_id: {ledger|tax|external_send: bool}}}. It may only raise a class and
-    add effects; an attempt to lower one is refused (TAPI-REGISTRY-002). Its source and hash are recorded in the set.
-    `manifests` is an optional list of resolved component manifests whose entity artifacts may declare `riskClass`
-    (ADR-0037); same raise-only rule (TAPI-MANIFEST-002), recorded as `manifests`. The input is never mutated.
+    `registry` is optional: {"entity_classes": {entity_id: plain|stock|ledger}, "entity_effects": {entity_id:
+    {ledger|tax|external_send: bool}}}. It adds to the policy defaults. The input is never mutated.
     """
-    g = _Gen(blueprint, registry, manifests)
+    g = _Gen(blueprint, registry)
     if g.setup():
         for eid in sorted(g.entities):
             g.entity_tools(eid)
@@ -549,11 +485,9 @@ def generate_tool_api(blueprint, registry=None, manifests=None) -> ToolApiResult
             g.err("TAPI-NAME-001", f"/tools/{n}", f"tool name {n!r} is produced {c} times")
     g.errors = list(dict.fromkeys(g.errors))
     res = ToolApiResult(errors=g.errors, blueprint_revision=g.revision if not g.errors else None)
-    res.registry = getattr(g, "policy", None) and g.policy.meta
-    res.manifests = getattr(g, "policy", None) and g.policy.manifest_meta
     if g.errors:
         return res
     tools = sorted(g.tools, key=lambda t: t["name"])
     res.tools = tools
-    res.content_hash = build_set(tools, g.revision, res.registry, res.manifests)["contentHash"]
+    res.content_hash = build_set(tools, g.revision)["contentHash"]
     return res

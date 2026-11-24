@@ -72,14 +72,11 @@ class FrappeBackendError(Exception):
         code: str,
         details: dict[str, Any] | None = None,
         stage: str = "execute",
-        *,
-        side_effect_free: bool = False,
     ) -> None:
         super().__init__(code)
         self.code = code
         self.details = details or {}
         self.stage = stage
-        self.side_effect_free = bool(side_effect_free)
 
 
 class FrappeSiteResolver:
@@ -95,12 +92,7 @@ class FrappeSiteResolver:
 
     def resolve(self, tenant_id: str) -> str:
         if not tenant_id or not _SAFE_TENANT_RE.match(tenant_id) or ".." in tenant_id:
-            raise FrappeBackendError(
-                "invalid_request",
-                {"fields": ["/context/tenantId"]},
-                stage="validate",
-                side_effect_free=True,
-            )
+            raise FrappeBackendError("invalid_request", {"fields": ["/context/tenantId"]}, stage="validate")
         if tenant_id in self.site_map:
             return self.site_map[tenant_id]
         slug = re.sub(r"[^a-zA-Z0-9-]", "-", tenant_id.lower()).strip("-") or "tenant"
@@ -157,9 +149,9 @@ class FrappeRuntimeBackend:
         try:
             import frappe  # type: ignore[import-not-found]
         except ImportError as exc:
-            raise FrappeBackendError("engine_unavailable", stage="acquire", side_effect_free=True) from exc
+            raise FrappeBackendError("engine_unavailable", stage="acquire") from exc
         if not hasattr(frappe, "connect") and self._safe_attr(frappe, "db") is None:
-            raise FrappeBackendError("engine_unavailable", stage="acquire", side_effect_free=True)
+            raise FrappeBackendError("engine_unavailable", stage="acquire")
         return frappe
 
     @contextlib.contextmanager
@@ -174,7 +166,6 @@ class FrappeRuntimeBackend:
         prev_cwd = os.getcwd()
         changed_cwd = False
         switched = False
-        yielded = False
 
         try:
             if self._sites_path and os.path.isdir(self._sites_path) and os.path.abspath(prev_cwd) != os.path.abspath(self._sites_path):
@@ -201,18 +192,13 @@ class FrappeRuntimeBackend:
                 switched = True
 
             if self._safe_attr(f, "db", "sql") is None:
-                raise FrappeBackendError("engine_unavailable", stage="acquire", side_effect_free=True)
+                raise FrappeBackendError("engine_unavailable", stage="acquire")
 
-            yielded = True
             yield f, site_name
         except FrappeBackendError:
             raise
         except Exception as exc:
-            raise FrappeBackendError(
-                "engine_unavailable",
-                stage="execute" if yielded else "acquire",
-                side_effect_free=not yielded,
-            ) from exc
+            raise FrappeBackendError("engine_unavailable", stage="acquire") from exc
         finally:
             if switched:
                 try:
@@ -525,173 +511,137 @@ class FrappeRuntimeBackend:
 
         with self._site_session(tenant_id) as (f, _site_name):
             dep = self._deployment_adapter(f)
-            try:
-                if kind == "entity.add":
-                    entity_id = str(subject.get("id") or (segs[1] if len(segs) > 1 else "entity"))
-                    doctype = entity_to_doctype(entity_id)
-                    self._ensure_doctype_exists(f, doctype, params.get("definition") or {})
 
-                elif kind in ("field.add", "relation.add"):
-                    parents = subject.get("parents") or []
-                    entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
-                    doctype = entity_to_doctype(entity_id)
-                    defn = params.get("definition") or {"id": subject.get("id") or "field", "type": "string"}
-                    if kind == "relation.add":
-                        defn = {**defn, "type": "link", "id": defn.get("id") or subject.get("id") or "rel"}
-                    fieldname = _sanitize_custom_fieldname(str(defn.get("id") or subject.get("id") or "field"))
-                    self._ensure_doctype_exists(f, doctype, {})
-                    self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, defn)
+            if kind == "entity.add":
+                entity_id = str(subject.get("id") or (segs[1] if len(segs) > 1 else "entity"))
+                doctype = entity_to_doctype(entity_id)
+                self._ensure_doctype_exists(f, doctype, params.get("definition") or {})
 
-                elif kind in ("field.quarantine", "relation.quarantine"):
-                    parents = subject.get("parents") or []
-                    entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
-                    doctype = entity_to_doctype(entity_id)
-                    fieldname = _sanitize_custom_fieldname(str(subject.get("id") or segs[-1]))
-                    self._quarantine_field(dep, tenant_id, doctype, fieldname)
+            elif kind in ("field.add", "relation.add"):
+                parents = subject.get("parents") or []
+                entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
+                doctype = entity_to_doctype(entity_id)
+                defn = params.get("definition") or {"id": subject.get("id") or "field", "type": "string"}
+                if kind == "relation.add":
+                    defn = {**defn, "type": "link", "id": defn.get("id") or subject.get("id") or "rel"}
+                fieldname = _sanitize_custom_fieldname(str(defn.get("id") or subject.get("id") or "field"))
+                self._ensure_doctype_exists(f, doctype, {})
+                self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, defn)
 
-                elif kind in ("field.set_property", "relation.set_property"):
-                    parents = subject.get("parents") or []
-                    entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
-                    doctype = entity_to_doctype(entity_id)
-                    fieldname = _sanitize_custom_fieldname(str(subject.get("id") or segs[-1]))
-                    prop_ptr = str(params.get("property") or "")
-                    mapped = _BP_PROP_TO_FRAPPE.get(prop_ptr)
-                    if mapped:
-                        frappe_prop, frappe_ptype = mapped
-                        if "after" not in params or params.get("after") is None:
-                            self._delete_property_setter(dep, doctype, fieldname, frappe_prop)
-                        else:
-                            val = params["after"]
-                            if frappe_prop == "options" and isinstance(val, list):
-                                val = "\n".join(
-                                    str(o.get("value") or o.get("id") or "")
-                                    if isinstance(o, dict)
-                                    else str(o)
-                                    for o in val
-                                )
-                            self._apply_property_setter(dep, tenant_id, doctype, fieldname, frappe_prop, val, frappe_ptype)
+            elif kind in ("field.quarantine", "relation.quarantine"):
+                parents = subject.get("parents") or []
+                entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
+                doctype = entity_to_doctype(entity_id)
+                fieldname = _sanitize_custom_fieldname(str(subject.get("id") or segs[-1]))
+                self._quarantine_field(dep, tenant_id, doctype, fieldname)
 
-                elif kind == "workflow.upsert":
-                    defn = params.get("definition") or {}
-                    self._deploy_workflow(f, dep, tenant_id, defn)
-
-                elif kind == "workflow.disable":
-                    wf_id = str(subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Workflow", wf_id):
-                        wf_dt = f.db.get_value("Workflow", wf_id, "document_type") if hasattr(f.db, "get_value") else None
-                        f.db.set_value("Workflow", wf_id, "is_active", 0)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
-                        if wf_dt:
-                            dep.clear_doctype_cache(str(wf_dt))
-
-                elif kind == "report.upsert":
-                    defn = params.get("definition") or {}
-                    self._deploy_report(f, dep, tenant_id, defn)
-
-                elif kind == "report.disable":
-                    rep_id = str(subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Report", rep_id):
-                        rep_dt = f.db.get_value("Report", rep_id, "ref_doctype") if hasattr(f.db, "get_value") else None
-                        f.db.set_value("Report", rep_id, "disabled", 1)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
-                        if rep_dt:
-                            dep.clear_doctype_cache(str(rep_dt))
-
-                elif kind == "role.upsert":
-                    defn = params.get("definition") or {}
-                    role_id = str(defn.get("id") or subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
-                        f.db.set_value("Role", role_id, "disabled", 0)
+            elif kind in ("field.set_property", "relation.set_property"):
+                parents = subject.get("parents") or []
+                entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
+                doctype = entity_to_doctype(entity_id)
+                fieldname = _sanitize_custom_fieldname(str(subject.get("id") or segs[-1]))
+                prop_ptr = str(params.get("property") or "")
+                mapped = _BP_PROP_TO_FRAPPE.get(prop_ptr)
+                if mapped:
+                    frappe_prop, frappe_ptype = mapped
+                    if "after" not in params or params.get("after") is None:
+                        self._delete_property_setter(dep, doctype, fieldname, frappe_prop)
                     else:
-                        f.get_doc({"doctype": "Role", "role_name": role_id, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
+                        val = params["after"]
+                        if frappe_prop == "options" and isinstance(val, list):
+                            val = "\n".join(
+                                str(o.get("value") or o.get("id") or "")
+                                if isinstance(o, dict)
+                                else str(o)
+                                for o in val
+                            )
+                        self._apply_property_setter(dep, tenant_id, doctype, fieldname, frappe_prop, val, frappe_ptype)
+
+            elif kind == "workflow.upsert":
+                defn = params.get("definition") or {}
+                self._deploy_workflow(f, dep, tenant_id, defn)
+
+            elif kind == "workflow.disable":
+                wf_id = str(subject.get("id") or segs[-1])
+                if hasattr(f.db, "exists") and f.db.exists("Workflow", wf_id):
+                    wf_dt = f.db.get_value("Workflow", wf_id, "document_type") if hasattr(f.db, "get_value") else None
+                    f.db.set_value("Workflow", wf_id, "is_active", 0)
+                    if hasattr(f.db, "commit"):
+                        f.db.commit()
+                    if wf_dt:
+                        dep.clear_doctype_cache(str(wf_dt))
+
+            elif kind == "report.upsert":
+                defn = params.get("definition") or {}
+                self._deploy_report(f, dep, tenant_id, defn)
+
+            elif kind == "report.disable":
+                rep_id = str(subject.get("id") or segs[-1])
+                if hasattr(f.db, "exists") and f.db.exists("Report", rep_id):
+                    rep_dt = f.db.get_value("Report", rep_id, "ref_doctype") if hasattr(f.db, "get_value") else None
+                    f.db.set_value("Report", rep_id, "disabled", 1)
+                    if hasattr(f.db, "commit"):
+                        f.db.commit()
+                    if rep_dt:
+                        dep.clear_doctype_cache(str(rep_dt))
+
+            elif kind == "role.upsert":
+                defn = params.get("definition") or {}
+                role_id = str(defn.get("id") or subject.get("id") or segs[-1])
+                if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
+                    f.db.set_value("Role", role_id, "disabled", 0)
+                else:
+                    f.get_doc({"doctype": "Role", "role_name": role_id, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
+                if hasattr(f.db, "commit"):
+                    f.db.commit()
+
+            elif kind == "role.disable":
+                role_id = str(subject.get("id") or segs[-1])
+                if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
+                    f.db.set_value("Role", role_id, "disabled", 1)
                     if hasattr(f.db, "commit"):
                         f.db.commit()
 
-                elif kind == "role.disable":
-                    role_id = str(subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
-                        f.db.set_value("Role", role_id, "disabled", 1)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
-
-                elif kind == "location.upsert":
-                    defn = params.get("definition") or {}
-                    if defn.get("kind") == "warehouse":
-                        wh_name = str(defn.get("id") or subject.get("id"))
-                        explicit_company = defn.get("company") or params.get("company")
-                        existing, company = self._find_warehouse(
-                            f,
-                            wh_name,
-                            company_name=explicit_company if isinstance(explicit_company, str) else None,
-                            require_company=True,
-                        )
-                        if existing:
-                            f.db.set_value("Warehouse", existing, "disabled", 0)
-                        else:
-                            doc = {"doctype": "Warehouse", "warehouse_name": wh_name, "disabled": 0}
-                            if company:
-                                doc["company"] = company
-                            f.get_doc(doc).insert(ignore_permissions=True)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
-
-                elif kind == "location.disable":
-                    loc_id = str(subject.get("id") or segs[-1])
-                    defn = params.get("definition") if isinstance(params.get("definition"), dict) else {}
-                    explicit_company = params.get("company") or defn.get("company")
-                    existing, _company = self._find_warehouse(
-                        f,
-                        loc_id,
-                        company_name=explicit_company if isinstance(explicit_company, str) else None,
-                        require_company=False,
-                    )
+            elif kind == "location.upsert":
+                defn = params.get("definition") or {}
+                if defn.get("kind") == "warehouse":
+                    wh_name = str(defn.get("id") or subject.get("id"))
+                    existing, company = self._find_warehouse(f, wh_name)
                     if existing:
-                        f.db.set_value("Warehouse", existing, "disabled", 1)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
+                        f.db.set_value("Warehouse", existing, "disabled", 0)
+                    else:
+                        doc = {"doctype": "Warehouse", "warehouse_name": wh_name, "disabled": 0}
+                        if company:
+                            doc["company"] = company
+                        f.get_doc(doc).insert(ignore_permissions=True)
+                    if hasattr(f.db, "commit"):
+                        f.db.commit()
 
-                elif kind == "settings.set":
-                    has_after = "after" in params and params.get("after") is not None
-                    self._sync_settings(
-                        f,
-                        tenant_id,
-                        segs[0] if segs else "",
-                        str(params.get("property") or ""),
-                        params.get("after") if has_after else None,
-                        unset=not has_after,
-                    )
-            except Exception:
-                if hasattr(f, "db") and hasattr(f.db, "rollback"):
-                    try:
-                        f.db.rollback()
-                    except Exception:
-                        pass
-                raise
+            elif kind == "location.disable":
+                loc_id = str(subject.get("id") or segs[-1])
+                existing, _company = self._find_warehouse(f, loc_id)
+                if existing:
+                    f.db.set_value("Warehouse", existing, "disabled", 1)
+                    if hasattr(f.db, "commit"):
+                        f.db.commit()
 
-    def _find_warehouse(
-        self,
-        f: Any,
-        wh_name: str,
-        *,
-        company_name: str | None = None,
-        require_company: bool = True,
-    ) -> tuple[str | None, str | None]:
+            elif kind == "settings.set":
+                has_after = "after" in params and params.get("after") is not None
+                self._sync_settings(
+                    f,
+                    tenant_id,
+                    segs[0] if segs else "",
+                    str(params.get("property") or ""),
+                    params.get("after") if has_after else None,
+                    unset=not has_after,
+                )
+
+    def _find_warehouse(self, f: Any, wh_name: str) -> tuple[str | None, str | None]:
         """Return (existing warehouse name, company) for a Blueprint warehouse id (BPL-027).
 
         The engine requires a company on a warehouse and names it "<warehouse_name> - <abbr>", so a lookup by the
-        bare id misses it and an insert without a company fails.
-
-        Company resolution is fail-closed:
-        - If ``company_name`` is explicitly provided (in the Blueprint definition or step params), verify it exists
-          on the site; otherwise raise ``site_not_ready``.
-        - Otherwise, if more than one Company exists on the site, refuse to guess (never silently pick a global
-          default or the oldest company) and raise ``site_not_ready``.
-        - If exactly one Company exists, use it.
-        - If no Company exists: raise ``site_not_ready`` when ``require_company=True`` (``location.upsert``), or
-          return ``(None, None)`` when ``require_company=False`` (``location.disable`` is a documented no-op because
-          zero companies means no company-scoped warehouse exists to disable).
+        bare id misses it and an insert without a company fails. Fails closed with site_not_ready when the engine
+        requires a company and the site has none (company setup belongs to tenant provisioning).
         """
         meta = f.get_meta("Warehouse") if hasattr(f, "get_meta") else None
         company_field = meta.get_field("company") if meta is not None else None
@@ -699,20 +649,11 @@ class FrappeRuntimeBackend:
             if hasattr(f.db, "exists") and f.db.exists("Warehouse", wh_name):
                 return wh_name, None
             return None, None
-        companies = [str(c) for c in f.get_all("Company", pluck="name", order_by="creation asc") if c]
-        explicit = company_name.strip() if isinstance(company_name, str) and company_name.strip() else None
-        if explicit is not None:
-            if explicit not in companies:
-                raise FrappeBackendError("site_not_ready", stage="execute", side_effect_free=True)
-            company = explicit
-        elif len(companies) > 1:
-            raise FrappeBackendError("site_not_ready", stage="execute", side_effect_free=True)
-        elif len(companies) == 1:
-            company = companies[0]
-        else:
-            if require_company:
-                raise FrappeBackendError("site_not_ready", stage="execute", side_effect_free=True)
-            return None, None
+        companies = f.get_all("Company", pluck="name", order_by="creation asc")
+        defaults = getattr(f, "defaults", None)
+        company = (defaults.get_global_default("company") if defaults is not None else None) or (companies[0] if companies else None)
+        if not company:
+            raise FrappeBackendError("site_not_ready", stage="execute")
         existing = f.db.get_value("Warehouse", {"warehouse_name": wh_name, "company": company}, "name")
         return (str(existing) if existing else None), company
 

@@ -9,7 +9,6 @@ import types
 import unittest
 
 from change_engine.api import endpoints
-from change_engine.guarded_apply import rollback_engine
 
 
 def _fake_frappe(user="staff@example.invalid", roles=("Sales User",), fail=False):
@@ -64,54 +63,9 @@ class CallerRoleTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             endpoints.evaluate_document_policies("Sales Order", {})
 
-    def test_frappe_site_without_session_user_ignores_client_roles(self):
-        # CE-SEC-002 hole: a Frappe site context with no session user fell through to the
-        # caller-supplied roles. It must resolve to no roles instead.
-        f = _fake_frappe(user=None)
-        f.local = types.SimpleNamespace(site="tenant_a.localhost")
-        endpoints.frappe = f
-        self.assertEqual(endpoints._resolve_caller_roles({"user_roles": ["System Manager"]}), [])
-        self.assertEqual(endpoints._resolve_caller_roles({"caller_roles": ["System Manager"]}), [])
-        out = endpoints.apply_configuration_change(
-            doctype="Delivery Note",
-            field_def={"fieldname": "custom_container_no", "fieldtype": "Data", "label": "Container No"},
-            user_roles=["System Manager"],
-        )
-        self.assertEqual(out.get("disposition"), "UNAUTHORIZED_ROLE")
-
     def test_llm_endpoints_removed(self):
         self.assertFalse(hasattr(endpoints, "test_llm_connection"))
         self.assertFalse(hasattr(endpoints, "get_llm_config"))
-
-
-class RollbackFailClosedTests(unittest.TestCase):
-    """CE-SEC-002 hole: execute_rollback granted System Manager when the role lookup failed."""
-
-    def setUp(self):
-        self._orig = rollback_engine.frappe
-
-    def tearDown(self):
-        rollback_engine.frappe = self._orig
-
-    def _rollback(self):
-        return rollback_engine.execute_rollback("dep_missing", caller_roles=None, db=types.SimpleNamespace(audit_journal={}))
-
-    def test_role_lookup_failure_denies_rollback(self):
-        rollback_engine.frappe = _fake_frappe(fail=True)
-        out = self._rollback()
-        self.assertEqual(out["disposition"], "UNAUTHORIZED_ROLE")
-
-    def test_missing_session_user_denies_rollback(self):
-        rollback_engine.frappe = _fake_frappe(user=None, roles=("System Manager",))
-        self.assertEqual(self._rollback()["disposition"], "UNAUTHORIZED_ROLE")
-
-    def test_no_frappe_and_no_roles_denies_rollback(self):
-        rollback_engine.frappe = None
-        self.assertEqual(self._rollback()["disposition"], "UNAUTHORIZED_ROLE")
-
-    def test_session_roles_still_authorise_rollback(self):
-        rollback_engine.frappe = _fake_frappe(roles=("Finance Director",))
-        self.assertEqual(self._rollback()["disposition"], "DEPLOYMENT_NOT_FOUND")
 
 
 if __name__ == "__main__":

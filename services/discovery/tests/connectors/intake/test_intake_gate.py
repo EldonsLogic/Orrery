@@ -141,4 +141,4 @@ def test_pdf_info_title_decoded_and_key_sanitised():
     assert ("Title", "Inv (1)") in g["metadata"] and ("Author", "A") in g["metadata"]
     g = gate(png(text={"bad key\n": "v"}), **G)
     out, _ = run(png(text={"bad key/\n": "v"}))
-    assert out["entities"][0]["fields"][0]["source"]["path"] == "meta:1"
+    assert out["entities"][0]["fields"][0]["source"]["path"] == "meta:bad_key__"

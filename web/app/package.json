@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "node ../scripts/copy-tokens.mjs && next dev",
-    "build": "node ../scripts/copy-tokens.mjs && next build",
+    "build": "next build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -75,10 +75,8 @@ class IntakeConnector:
             counts[code] = counts.get(code, 0) + 1
 
         doc = raw[0]
-        # Locator is structural (index), never the file's own key text: keys can be arbitrary and the runner
-        # only accepts a strict ASCII locator (DSC-010 review F1).
-        meta = [{"path": f"meta:{i}", "text": f"{m['key']}: {m['text']}", "kind": "metadata"}
-                for i, m in enumerate(doc["metadata"], start=1)]
+        meta = [{"path": f"meta:{m['key']}", "text": f"{m['key']}: {m['text']}", "kind": "metadata"}
+                for m in doc["metadata"]]
         st["metadata_fields"] = len(meta)
         if meta:
             ents.append({"name": "document_metadata", "kind": "metadata", "fields": meta})

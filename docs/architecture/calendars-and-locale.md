@@ -12,7 +12,7 @@ How the platform handles dates, weeks, working time, fiscal years, numbers and t
 4. **Numbers and money come from code.** The model never formats or computes dates or amounts.
 
 ## Hijri (Umm al-Qura)
-- The supported Hijri calendar is **Umm al-Qura** (`hijri_umm_al_qura`), a computed calendar used officially in Saudi Arabia. Conversion library (CMP-022): Python `hijridate` 2.6.0 (MIT, tables 1343 to 1500 AH), pinned in `services/discovery/requirements.txt` and recorded in the licence register. Browser and Node code may use `Intl` with `islamic-umalqura` for display; stored values stay Gregorian. Table accuracy against the official calendar is UNVERIFIED until a Saudi accountant spot-checks month starts.
+- The supported Hijri calendar is **Umm al-Qura** (`hijri_umm_al_qura`), a computed calendar used officially in Saudi Arabia. Library choice for conversion is UNVERIFIED: candidates are the platform's runtime `Intl` support, a maintained Umm al-Qura table library, or our own table. Pick one in the spike, record its licence, and pin it.
 - **Sources of divergence** (must be designed for, not ignored):
   - Moon-sighting announcements for Ramadan, Eid and Hajj-related dates can differ from the computed calendar by a day.
   - Regional authorities can announce different dates (UAE and Egypt rely on their own announcements, UNVERIFIED).

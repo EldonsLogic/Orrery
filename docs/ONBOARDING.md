@@ -47,7 +47,7 @@ Every open plan row has exactly one owner, and the plan never makes one founder 
 | Lane | Founder | Paths | Typical plan rows |
 |---|---|---|---|
 | Spine, product and brand | Eldon | `contracts/`, `services/blueprint/`, `services/discovery/`, `services/operate/`, `services/control-plane/`, `connectors/`, `web/`, `evals/`, `docs/product/`, `docs/brand/`, `docs/strategy/`, `docs/research/` | BPL-003 to BPL-006, QA-001 to QA-004, SEC-001, WEB, BRD, DSC, GTM, FND, LEG |
-| Engine, runtime and compliance | Partner | `apps/engine/`, `infra/`, `components/`, `services/gateway/`, `services/provisioning/` | CE-SEC-003, CE-SEC-005, LEG-004, ERP, CMP, BPL-007, BPL-008, BPL-012 |
+| Engine, runtime and compliance | Partner | `apps/engine/`, `infra/`, `components/`, `services/gateway/` | CE-SEC-003, CE-SEC-005, LEG-004, ERP, CMP, BPL-007, BPL-008, BPL-012 |
 | Shared (needs the other's review) | both | `docs/PLAN.md`, `docs/RULES.md`, `AGENTS.md`, `docs/decisions/`, `docs/log/`, `docs/security/`, `docs/compliance/`, `docs/legal/`, `scripts/`, `.github/` | GOV |
 
 ## 3. First tasks (claim by setting `doing` plus owner in PLAN.md)

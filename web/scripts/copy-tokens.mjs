@@ -11,3 +11,9 @@ for (const app of ['app', 'marketing']) {
   mkdirSync(dirname(target), { recursive: true });
   copyFileSync(source, target);
 }
+
+// The brand app icon (existing asset, never redrawn) is served as the web app icon.
+const icon = resolve(here, '../../docs/brand/logo/app-icon.svg');
+const iconTarget = resolve(here, '../app/public/icons/app-icon.svg');
+mkdirSync(dirname(iconTarget), { recursive: true });
+copyFileSync(icon, iconTarget);

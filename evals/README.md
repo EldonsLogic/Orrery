@@ -63,3 +63,30 @@ python3 -m evals.harness injection --adapter oracle|permissive|null [--out repor
 - Report: totals, blocking, detection, task success and detector hit rates, overall, per case and per language (ar, en, mixed).
 - Adapters: `oracle` must score 100%; `permissive` executes everything the content proposes and must fail every attack's blocking check; `null` stops every side effect but emits nothing, so it fails detection and the controls. A real adapter implements `InjectionAdapter.run(case) -> Observation`. No gate threshold until a real adapter exists.
 - `check` also validates this set (`injection cases: N`); it is not counted in the record totals of the other sets.
+
+## Agent behaviour suite (QA-005)
+`sets/agent_behaviour/` holds 144 deterministic cases (English and Arabic) that score the platform around the model, not the model: the real agent runtime, allow-list, assistant authority rules, chat service, intent router and change-by-chat, with only the ports faked (scripted model, scripted Tool API port, in-memory Blueprint store, scripted drafter). No model call, no network. Basis: [ADR-0048](../docs/decisions/ADR-0048-agent-authority-propose-not-act.md), [agent-runtime](../docs/architecture/agent-runtime.md).
+
+| Category | What is checked |
+|---|---|
+| tool_choice | the menu from roles and assistant config; R0 runs, R1 runs untainted, R2 and tainted R1 are proposed, R3 and R4 are never dispatched; transitions take the move's own risk; repeat and cap guards |
+| refusal | an assistant cannot approve, cancel, reverse, post or touch roles and approvals; chat cannot change roles, approvals, compliance, ledger, tax or stock |
+| confirm_before_write | a bare yes confirms only its own preview; expiry; replay; a changed proposal; another user or session; yes plus extra instructions |
+| injection | instructions in tool output or documents stay in the data channel and never escalate; a tainted session proposes even plain R1 writes |
+
+Files: `tools.json` (tool catalog), `run_cases.json` (one agent-loop run: model script, roles, optional assistant, tool results, expectations), `chat_cases.json` (steps against a chat session: say, advance the clock, change the drafter output), `thresholds.json`. Runner and scorers: `harness/agent_behaviour.py`; fake ports: `harness/agent_world.py`.
+
+```
+python3 -m evals.harness.agent_behaviour check
+python3 -m evals.harness.agent_behaviour run [--arm scripted|silent] [--out report.json] [--baseline last-report.json]
+python3 -m pytest evals/tests/test_agent_behaviour.py -q
+```
+Needs `evals/requirements.txt` plus `pydantic>=2` and `hijridate` (the service code imports them). A full run takes about 6 seconds. Report: totals, pass rate per category and per locale, failures with the names of the failed checks. Gate: `thresholds.json` sets a floor per category (100 percent: any failure is a regression), a minimum case count per category, and `max_regression` against a baseline report. Exit 1 when the gate fails. The `silent` arm (a model that only talks) must fail every run case; mutation tests break a control and require the matching cases to turn red. A real-model arm is not built (Q-350).
+## Simulator accuracy (QA-011)
+`harness/sim_accuracy.py` replays four fictional months (SAR, 3-decimal KWD, mixed, a source warning; Arabic names and descriptions) through the month simulator with the fake engine adapter. Expected totals are hand-computed integer minor units; rows, anomaly codes (SIM-102 to SIM-138) and verdict must match exactly. 14 seeded faults tamper the fake engine after the replay (drift of 1 minor unit, missing or duplicated invoices, payments and stock receipts, VAT half-down rounding, flipped sign, excess precision, misplaced aging bucket) and each must be flagged with its exact codes. The scorer reports detection (target 1000 permille) and false positives on clean months (target 0) as integers.
+
+```
+python3 -m evals.harness.sim_accuracy       # JSON score, exit 1 unless the gate passes
+python3 -m pytest evals/tests/test_sim_accuracy.py -q
+```
+Needs `jsonschema` and `pydantic>=2` only through the simulator import. The fake engine is no evidence about the real one (Q-242, Q-362).

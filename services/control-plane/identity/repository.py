@@ -44,6 +44,9 @@ class Repository(ABC):
     @abstractmethod
     def memberships_for_tenant(self, tenant_id: str) -> tuple: ...
     @abstractmethod
+    def memberships_for_person(self, person_id: str) -> tuple:
+        """Every membership of the person, in any status (SEC-005 session revocation)."""
+    @abstractmethod
     def put_invite(self, invite: Invite) -> None: ...
     @abstractmethod
     def get_invite(self, invite_hash: str) -> Optional[Invite]: ...
@@ -130,6 +133,9 @@ class InMemoryRepository(Repository):
 
     def memberships_for_tenant(self, tenant_id):
         return tuple(m for (_, t), m in self._members.items() if t == tenant_id)
+
+    def memberships_for_person(self, person_id):
+        return tuple(m for (p, _), m in self._members.items() if p == person_id)
 
     def put_invite(self, invite):
         self._invites[invite.invite_hash] = invite

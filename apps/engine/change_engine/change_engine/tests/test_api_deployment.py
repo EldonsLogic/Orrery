@@ -530,6 +530,10 @@ class TestApiDeployment(unittest.TestCase):
             def __init__(self, data):
                 self.data = data
             def insert(self, ignore_permissions=True):
+                # Frappe's Custom Field insert runs the ALTER through frappe.db.sql_ddl
+                mock_frappe.db.sql_ddl(
+                    "ALTER TABLE `tabSales Order` ADD COLUMN `custom_live_field` varchar(140)"
+                )
                 doc_inserts.append(self.data)
 
         class MockFrappeDB:
@@ -545,10 +549,23 @@ class TestApiDeployment(unittest.TestCase):
                 if "SELECT PAYLOAD_HASH" in q_upper:
                     return ()
                 if "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE" in q_upper:
-                    return (
-                        ("name", "varchar(140)", "NO", None),
-                        ("creation", "datetime(6)", "YES", None),
+                    rows = (
+                        ("name", "varchar(140)", "NO", None, "PRI", "utf8mb4", "utf8mb4_unicode_ci", "", "", ""),
+                        ("creation", "datetime(6)", "YES", None, "", None, None, "", "", ""),
                     )
+                    if doc_inserts:
+                        rows += (("custom_live_field", "varchar(140)", "YES", None, "", "utf8mb4", "utf8mb4_unicode_ci", "", "", ""),)
+                    return rows
+                if "FROM INFORMATION_SCHEMA.STATISTICS" in q_upper:
+                    return (("PRIMARY", "name", 0, 1, None, "BTREE"),)
+                if "FROM INFORMATION_SCHEMA.TABLES" in q_upper:
+                    return (("InnoDB", "utf8mb4_unicode_ci", "Dynamic"),)
+                if (
+                    "FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS" in q_upper
+                    or "FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS" in q_upper
+                    or "FROM INFORMATION_SCHEMA.TRIGGERS" in q_upper
+                ):
+                    return ()
                 if "SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_DEFAULT" in q_upper:
                     return (
                         ("name", "varchar(140)", None),
@@ -562,6 +579,9 @@ class TestApiDeployment(unittest.TestCase):
                     return (("custom_live_field", "varchar(140)"),) if doc_inserts else ()
                 return ()
 
+            def sql_ddl(self, query):
+                sql_calls.append((query, None))
+
             def commit(self):
                 sql_calls.append(("COMMIT", None))
 
@@ -570,7 +590,14 @@ class TestApiDeployment(unittest.TestCase):
         mock_frappe.get_doc = lambda d: MockFrappeDoc(d)
         mock_frappe.clear_cache = lambda doctype: sql_calls.append((f"CLEAR_CACHE:{doctype}", None))
 
-        adapter = FrappeDeploymentAdapter(frappe_module=mock_frappe, in_memory=False)
+        # The live Frappe MariaDBTable inspection needs a real bench; here the approved plan is
+        # injected and the after-snapshot compares what the mock actually ran against it.
+        approved_plan = DDLPlanInspection(
+            inspectable=True,
+            statements=["ALTER TABLE `tabSales Order` ADD COLUMN `custom_live_field` varchar(140)"],
+            is_approved_additive_only=True,
+        )
+        adapter = FrappeDeploymentAdapter(frappe_module=mock_frappe, in_memory=False, ddl_plan=approved_plan)
         self.assertFalse(adapter.in_memory)
 
         field_def = {

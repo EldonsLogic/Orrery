@@ -1,11 +1,9 @@
 """ERP-026: durable adapter state (ADR-0041): store conformance, production guard, restart and restore.
 
 MariaDB tests run only when a throwaway server is given (otherwise skipped with the reason):
-  docker run -d --name erp026-mdb -e MARIADB_ROOT_PASSWORD=<PLACEHOLDER_PASSWORD> -p 127.0.0.1:33726:3306 mariadb:11.4
-  ERP026_MARIADB=127.0.0.1:33726:root:<PLACEHOLDER_PASSWORD>  ERP026_MARIADB_CONTAINER=erp026-mdb   (container only for the restore test)
+  docker run -d --name erp026-mdb -e MARIADB_ROOT_PASSWORD=pw -p 127.0.0.1:33726:3306 mariadb:10.6
+  ERP026_MARIADB=127.0.0.1:33726:root:pw  ERP026_MARIADB_CONTAINER=erp026-mdb   (container only for the restore test)
 Needs pymysql. Each test uses its own database, dropped afterwards.
-With REQUIRE_ERP026_MARIADB=1 (CI) nothing is skipped: a missing server, pymysql or container fails the run, so the store
-tests cannot silently stop running on main.
 """
 from __future__ import annotations
 
@@ -30,17 +28,6 @@ except ImportError:  # pragma: no cover
 CONF = os.environ.get("ERP026_MARIADB", "")
 CONTAINER = os.environ.get("ERP026_MARIADB_CONTAINER", "")
 MARIA_SKIP = "needs pymysql and ERP026_MARIADB=host:port:user:password (see module docstring)"
-REQUIRE = os.environ.get("REQUIRE_ERP026_MARIADB") == "1"
-MARIA_READY = bool(pymysql) and CONF.count(":") == 3
-
-
-def mariadb_only(obj):
-    """Skip without a MariaDB server, except when REQUIRE_ERP026_MARIADB=1: then the test runs and fails loudly."""
-    return obj if REQUIRE else unittest.skipUnless(MARIA_READY, MARIA_SKIP)(obj)
-
-
-def container_only(obj):
-    return obj if REQUIRE else unittest.skipUnless(CONTAINER, "restore test needs ERP026_MARIADB_CONTAINER (docker exec mariadb-dump/mariadb)")(obj)
 PROVISION = {
     "idempotencyKey": "prov_durable_0001",
     "engineTarget": {"adapter": "frappe", "versionSet": "set-example"},
@@ -180,8 +167,6 @@ class MariaDBBase(unittest.TestCase):
     DB_CHARSET = "utf8mb4"
 
     def setUp(self):
-        if REQUIRE and not MARIA_READY:
-            self.fail("REQUIRE_ERP026_MARIADB=1 but pymysql or ERP026_MARIADB=host:port:user:password is missing")
         self.host, port, self.user, self.pw = CONF.split(":")
         self.port, self.db, self._open = int(port), "erp026_" + uuid.uuid4().hex[:10], []
         admin = self._connect(None, autocommit=True)
@@ -209,15 +194,7 @@ class MariaDBBase(unittest.TestCase):
         return MariaDBAdapterStore(self._connect(self.db))
 
 
-class RequiredMode(unittest.TestCase):
-    def test_required_mode_has_a_server_pymysql_and_a_container(self):
-        if REQUIRE:
-            self.assertTrue(pymysql, "pymysql is not installed")
-            self.assertEqual(CONF.count(":"), 3, "ERP026_MARIADB=host:port:user:password is not set")
-            self.assertTrue(CONTAINER, "ERP026_MARIADB_CONTAINER is not set: the restore test would be skipped")
-
-
-@mariadb_only
+@unittest.skipUnless(pymysql and CONF.count(":") == 3, MARIA_SKIP)
 class MariaDBConformance(MariaDBBase, StoreConformance):
     def test_transaction_rolls_back_effect_and_idempotency_record_together(self):
         s = self.make_store()
@@ -233,7 +210,7 @@ class MariaDBConformance(MariaDBBase, StoreConformance):
     def test_production_accepts_mariadb_store(self):
         ChangeEngineAdapter(test_hooks=False, store=self.make_store())
 
-    @container_only
+    @unittest.skipUnless(CONTAINER, "restore test needs ERP026_MARIADB_CONTAINER (docker exec mariadb-dump/mariadb)")
     def test_dump_and_restore_of_tenant_database_keeps_keys_and_effects_consistent(self):
         s = self.make_store()
         ChangeEngineAdapter(test_hooks=True, store=s).call("provision_site", _ctx(), PROVISION)

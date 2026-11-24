@@ -3,7 +3,7 @@
 Status: draft
 Owner: eldon
 
-Evidence on how owner-led firms buy is thin (UNVERIFIED, [../research/02-market-and-customer.md](../research/02-market-and-customer.md) section 2). The first job is to test it. Before any figure goes into external material, check [figure-sources.md](figure-sources.md) (GTM-018): only VERIFIED figures, or targets labelled as ours. Free-first at launch; pricing hypotheses in [../strategy/07-pricing.md](../strategy/07-pricing.md).
+Evidence on how owner-led firms buy is thin (UNVERIFIED, [../research/02-market-and-customer.md](../research/02-market-and-customer.md) section 2). The first job is to test it. Free-first at launch; pricing hypotheses in [../strategy/07-pricing.md](../strategy/07-pricing.md).
 
 ## Channels (hypotheses)
 | Channel | Why | First move | Risk |

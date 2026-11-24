@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import ast
+import copy
+import dataclasses
 from datetime import date, datetime, time
+from importlib import metadata
 from pathlib import Path
+import pickle
+import re
 import unittest
 
 from components.compliance.company_calendar import (
@@ -18,6 +24,7 @@ from components.compliance.country_pack import (
 )
 
 PACKS_DIR = Path(__file__).resolve().parents[2] / "country_pack" / "packs"
+REPO_ROOT = Path(__file__).resolve().parents[4]
 
 
 def resolve(country: str, overrides=None, **kw):
@@ -58,9 +65,50 @@ class TestDefaultsFromPack(unittest.TestCase):
 
     def test_nested_labels_are_immutable(self) -> None:
         period = resolve("SA").reduced_periods[0]
+        self.assertIsInstance(period.labels, tuple)  # sorted (language, text) pairs
+        self.assertEqual([k for k, _ in period.labels], sorted(k for k, _ in period.labels))
         with self.assertRaises(TypeError):
-            period.labels["en"] = "changed"  # type: ignore[index]
-        self.assertNotEqual(resolve("SA").reduced_periods[0].labels.get("en"), "changed")
+            period.labels[0] = ("en", "changed")  # type: ignore[index]
+        self.assertNotIn("changed", [v for _, v in resolve("SA").reduced_periods[0].labels])
+
+    def test_label_lookup(self) -> None:
+        period = resolve("SA").reduced_periods[0]
+        self.assertEqual(period.label("en"), dict(period.labels)["en"])
+        self.assertIsNone(period.label("fr"))
+
+
+class TestSettingsAreValues(unittest.TestCase):
+    """L2: a settings object with a reduced period must hash, copy, pickle and convert to plain data."""
+
+    def test_hash_and_equality(self) -> None:
+        a, b = resolve("SA"), resolve("SA")
+        self.assertTrue(a.reduced_periods)
+        self.assertEqual(hash(a), hash(b))
+        self.assertEqual(a, b)
+        self.assertEqual(len({a, b, resolve("AE")}), 2)
+        self.assertNotEqual(a, resolve("SA", {"week": {"startDay": "sat"}}))
+
+    def test_deepcopy(self) -> None:
+        s = resolve("SA")
+        c = copy.deepcopy(s)
+        self.assertEqual(c, s)
+        self.assertIsNot(c, s)
+        self.assertEqual(copy.copy(s), s)
+
+    def test_pickle_round_trip(self) -> None:
+        s = resolve("SA", {"numberSystem": "eastern_arabic"})
+        for proto in range(pickle.HIGHEST_PROTOCOL + 1):
+            with self.subTest(protocol=proto):
+                self.assertEqual(pickle.loads(pickle.dumps(s, protocol=proto)), s)
+
+    def test_asdict(self) -> None:
+        s = resolve("SA")
+        d = dataclasses.asdict(s)
+        self.assertEqual(d["country_code"], "SA")
+        period = d["reduced_periods"][0]
+        self.assertEqual(period["id"], "ramadan_hours")
+        self.assertEqual(dict(period["labels"])["en"], s.reduced_periods[0].label("en"))
+        self.assertEqual(period["hours"]["start"], time(9, 0))
 
 
 class TestCompanyOverrides(unittest.TestCase):
@@ -112,7 +160,7 @@ class TestCompanyOverrides(unittest.TestCase):
         resolve("SA", ov)
         self.assertEqual(ov, {"week": {"startDay": "sat"}})
 
-    def test_no_day_may_be_both_unlisted_everywhere(self) -> None:
+    def test_day_in_neither_list_is_not_a_work_day_and_not_a_weekend(self) -> None:
         # A day that is neither work day nor weekend is allowed (half days, rotas); it is not a work day.
         s = resolve("SA", {"workingTime": {"workDays": ["sun", "mon", "tue", "wed"]}})
         self.assertFalse(s.is_work_day(date(2026, 11, 26)))  # Thursday
@@ -235,8 +283,38 @@ class TestRamadanHours(unittest.TestCase):
         self.assertEqual(s.hours_on(date(2026, 2, 10)).period_id, "winter")
 
     def test_date_outside_hijri_table_fails_closed_when_ramadan_rule_exists(self) -> None:
-        with self.assertRaises(CalendarSettingsError):
-            resolve("SA").hours_on(date(1900, 1, 1))
+        sa = resolve("SA")
+        for day in (date(1924, 7, 31), date(2077, 11, 17), date(1900, 1, 3)):  # all work days (Sun to Thu)
+            with self.subTest(day=day), self.assertRaises(CalendarSettingsError) as ctx:
+                sa.hours_on(day)
+            self.assertEqual(ctx.exception.code, "calendar_range")
+
+    def test_table_edges_still_resolve(self) -> None:
+        sa = resolve("SA")
+        self.assertEqual(sa.hours_on(date(2077, 11, 16)).source, "regular")  # last day of 1500 AH, a Sunday
+        self.assertIsNone(sa.hours_on(date(1924, 8, 1)))  # first table day (a Friday)
+
+    def test_out_of_table_dates_do_not_fail_when_the_tables_are_not_used(self) -> None:
+        # No ramadan rule (EG), or a weekend day: hours_on never reaches the Umm al-Qura tables.
+        self.assertEqual(resolve("EG").hours_on(date(1900, 1, 2)).source, "regular")
+        self.assertIsNone(resolve("SA").hours_on(date(1900, 1, 5)))  # Friday
+        fixed = [{"id": "old", "labels": {"ar": "قديم", "en": "Old"}, "rule": "fixed_dates",
+                  "gregorianFrom": "1900-01-01", "gregorianTo": "1900-12-31", "hours": {"from": "07:00", "to": "13:00"}}]
+        self.assertEqual(resolve("EG", {"workingTime": {"reducedPeriods": fixed}}).hours_on(date(1900, 1, 2)).period_id, "old")
+        # Day classification and week start use no tables either.
+        self.assertTrue(resolve("SA").is_work_day(date(1900, 1, 3)))
+        self.assertEqual(resolve("SA").week_start_date(date(1900, 1, 3)), date(1899, 12, 31))  # Wednesday to the Sunday before
+
+    def test_ramadan_period_with_gregorian_dates_is_refused(self) -> None:
+        # The pack framework accepts these keys on any rule; for `ramadan` they would be silently ignored.
+        for extra in ({"gregorianFrom": "2026-01-01"}, {"gregorianTo": "2026-12-31"},
+                      {"gregorianFrom": "2026-01-01", "gregorianTo": "2026-12-31"}):
+            with self.subTest(extra=extra):
+                red = [{"id": "ramadan", "labels": {"ar": "رمضان", "en": "Ramadan"}, "rule": "ramadan",
+                        "hours": {"from": "09:00", "to": "14:00"}, **extra}]
+                with self.assertRaises(CalendarSettingsError) as ctx:
+                    resolve("SA", {"workingTime": {"reducedPeriods": red}})
+                self.assertEqual(ctx.exception.code, "invalid_reduced_period")
 
 
 class TestNumberSystem(unittest.TestCase):
@@ -254,10 +332,40 @@ class TestNumberSystem(unittest.TestCase):
 
 
 class TestSource(unittest.TestCase):
-    def test_no_statutory_limits_or_hand_computed_hijri_in_code(self) -> None:
-        src = (Path(__file__).resolve().parents[1] / "settings.py").read_text(encoding="utf-8")
-        for needle in ("ramadan_hours_max", "48", "354", "355", "29.53"):
-            self.assertNotIn(needle, src)
+    SETTINGS = Path(__file__).resolve().parents[1] / "settings.py"
+    # Numbers the module may contain: 0 and 1 (offsets, counts), 7 (days a week), 9 (Ramadan is Hijri month 9).
+    ALLOWED_NUMBERS = {0, 1, 7, 9}
+
+    def test_no_statutory_limit_or_lunar_arithmetic_constants_in_code(self) -> None:
+        # Hour caps (48), lunar-year lengths (354, 355), the synodic month (29.53), month lengths (29, 30) or any
+        # other literal number would show up here: only the allowed numbers may appear as code constants.
+        tree = ast.parse(self.SETTINGS.read_text(encoding="utf-8"))
+        numbers = {n.value for n in ast.walk(tree)
+                   if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) and not isinstance(n.value, bool)}
+        self.assertLessEqual(numbers, self.ALLOWED_NUMBERS)
+
+    def test_source_check_detects_a_planted_constant(self) -> None:
+        planted = ast.parse("MAX_WEEKLY_HOURS = 48")
+        numbers = {n.value for n in ast.walk(planted) if isinstance(n, ast.Constant)}
+        self.assertFalse(numbers <= self.ALLOWED_NUMBERS)
+
+
+class TestHijridatePin(unittest.TestCase):
+    """L4: one runtime pin (the engine package) and a CI pin that must match it."""
+
+    PIN = re.compile(r"hijridate==([0-9][0-9A-Za-z.]*)")
+
+    def test_ci_step_pin_equals_runtime_pin(self) -> None:
+        runtime = self.PIN.findall((REPO_ROOT / "apps/engine/change_engine/pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(len(runtime), 1)
+        workflow = (REPO_ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+        step = re.search(r"- name: Company calendar settings tests \(CMP-023\)\n(.*?)(?=\n      - name:|\Z)", workflow, re.S)
+        self.assertIsNotNone(step)
+        self.assertEqual(self.PIN.findall(step.group(1)), runtime)
+
+    def test_installed_library_is_the_pinned_version(self) -> None:
+        runtime = self.PIN.findall((REPO_ROOT / "apps/engine/change_engine/pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual([metadata.version("hijridate")], runtime)
 
 
 if __name__ == "__main__":

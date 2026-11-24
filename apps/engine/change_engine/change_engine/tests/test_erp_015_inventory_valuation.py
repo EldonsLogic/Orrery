@@ -49,6 +49,8 @@ Run the live layer against your own bench (never someone else's Compose project,
 The site needs a synthetic tenant in its config (``bench --site <site> set-config tenant_id t_<name>``), which
 the event stream requires. ``ERP015_EXAMPLES`` (default 40) sets the seeded drift moves, ``ERP015_SEED`` the seed.
 The probe refuses a site that already holds its items, another company or any GL entry.
+``REQUIRE_ERP015_LIVE=1`` (set by real-bench CI, ERP-031) turns the live layer's skip into a failure, and any
+repost that does not end ``Completed``, ``Skipped`` included, fails ``test_9``.
 """
 from __future__ import annotations
 
@@ -62,7 +64,8 @@ from collections import defaultdict
 from decimal import ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
 from pathlib import Path
 
-from change_engine.tests.test_erp_014_accounting_properties import half_away, mirror_mismatch, unbalanced_vouchers
+from change_engine.tests.test_erp_014_accounting_properties import (half_away, live_config_problem, live_skip_reason,
+                                                                    mirror_mismatch, unbalanced_vouchers)
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 COMPOSE_FILE = REPO_ROOT / "infra" / "dev" / "docker" / "docker-compose.dev.yml"
@@ -70,6 +73,7 @@ PROBE_FILE = Path(__file__).with_name("erp_015_bench_probe.py")
 PROBE = "apps/change_engine/change_engine/tests/erp_015_bench_probe.py"
 SEED = int(os.environ.get("ERP015_SEED", "15015"))
 EXAMPLES = int(os.environ.get("ERP015_EXAMPLES", "40"))
+LIVE_ENV = ("ERP015_COMPOSE_PROJECT", "ERP015_BENCH_SITE", "REQUIRE_ERP015_LIVE")
 D0, CENT = Decimal(0), Decimal("0.01")
 NEAR_TIE = Decimal("0.0001")  # engine rates carry 9 decimals; only this close to x.xx5 may the stored cent differ
 RATE_TOL = Decimal("0.000001")
@@ -134,10 +138,24 @@ FORCED = [
      "date": BACK_DATE, "time": "10:00:00"},
     {"id": "b5", "op": "cancel", "ref": "b4"},
     {"id": "b6", "op": "issue", "item": "E15-BACK", "wh": "W1", "qty": "3"},
+    # ERP-031: a back-dated issue and a back-dated transfer, each dated between two earlier submitted receipts
+    # so the engine must repost the later receipt. Times are unique across all moves.
+    {"id": "i1", "op": "receipt", "item": "E15-BKIS", "wh": "W1", "qty": "10", "rate": "50.00",
+     "date": BACK_DATE, "time": "11:00:00"},
+    {"id": "i2", "op": "receipt", "item": "E15-BKIS", "wh": "W1", "qty": "10", "rate": "80.00"},
+    {"id": "i3", "op": "issue", "item": "E15-BKIS", "wh": "W1", "qty": "4", "date": BACK_DATE, "time": "11:30:00"},
+    {"id": "i4", "op": "issue", "item": "E15-BKIS", "wh": "W1", "qty": "16"},
+    {"id": "t1", "op": "receipt", "item": "E15-BKTX", "wh": "W1", "qty": "10", "rate": "20.00",
+     "date": BACK_DATE, "time": "12:00:00"},
+    {"id": "t2", "op": "receipt", "item": "E15-BKTX", "wh": "W1", "qty": "10", "rate": "30.00"},
+    {"id": "t3", "op": "transfer", "item": "E15-BKTX", "wh": "W1", "to_wh": "W2", "qty": "5",
+     "date": BACK_DATE, "time": "12:30:00"},
+    {"id": "t4", "op": "issue", "item": "E15-BKTX", "wh": "W2", "qty": "5"},
+    {"id": "t5", "op": "issue", "item": "E15-BKTX", "wh": "W1", "qty": "15"},
 ]
 QTY_PLACES = 2  # the ledger's running-quantity precision with float_precision unset (Q-514 (b))
 QTY_PRECISION_ITEMS = {"E15-QTY"}  # 3-decimal quantities, checked by test_7 and test_8 (Q-514 (b))
-BACKDATED_ITEMS = {"E15-BACK"}  # checked by test_9, so a repost failure is reported on its own
+BACKDATED_ITEMS = {"E15-BACK", "E15-BKIS", "E15-BKTX"}  # checked by test_9, so a repost failure is reported on its own
 REJECTED = {"g7", "g12", "g14"}
 # Hand-computed from first principles (not by the oracle): rate = value / qty; value rounded half away from zero.
 FORCED_EXACT = {
@@ -164,6 +182,23 @@ BACKDATED_EXACT = {
     "b6": {"value": "480.00", "diff": "-180.00", "rate": "60"},
 }
 # While b4 stood (before b5), in posting order b3, b4, b1, b2: b2 left 17 x 1320.00 / 21 = 1068.571... -> 1068.57.
+# ERP-031, hand-computed in posting order i1, i3, i2, i4 (10 x 50.00 = 500.00; i3 leaves 6 x 50 = 300.00; i2 adds
+# 800.00 to reach 1100.00 on 16, rate 68.75; i4 empties it). At submission i3 would have left 16 x 1300.00 / 20 =
+# 1040.00 and i2 would still stand at 1300.00 on 20: the later receipt must be reposted.
+# t1, t3, t2, t5 in W1 and t3, t4 in W2 (key ``id@warehouse`` for a row of a two-row transfer): t3 moves 5 x 20.00 =
+# 100.00 (not 5 x 25.00 = 125.00 at the stale rate 500.00 / 20), t2 then lifts W1 from 100.00 to 400.00 on 15.
+BACKDATED_EXACT.update({
+    "i1": {"value": "500.00", "diff": "500.00", "rate": "50"},
+    "i3": {"value": "300.00", "diff": "-200.00", "rate": "50"},
+    "i2": {"value": "1100.00", "diff": "800.00", "rate": "68.75"},
+    "i4": {"value": "0.00", "diff": "-1100.00"},
+    "t1": {"value": "200.00", "diff": "200.00", "rate": "20"},
+    "t3@W1": {"value": "100.00", "diff": "-100.00", "rate": "20"},
+    "t3@W2": {"value": "100.00", "diff": "100.00", "rate": "20"},
+    "t2": {"value": "400.00", "diff": "300.00"},
+    "t4": {"value": "0.00", "diff": "-100.00"},
+    "t5": {"value": "0.00", "diff": "-400.00"},
+})
 BACKDATED_BEFORE_CANCEL = {"b4": ("820.00", "420.00"), "b2": ("1068.57", "-251.43")}
 
 
@@ -417,15 +452,24 @@ def check_run(ops, sim, final, results, sle, bins):
 
 def forced_exact_problems(results, sle, cases=None):
     problems = []
-    for oid, want in (cases or FORCED_EXACT).items():
-        rows = [r for r in sle if r["voucher_no"] == results[oid]["voucher_no"] and not int(r["is_cancelled"])]
+    for key, want in (cases or FORCED_EXACT).items():
+        oid, _, wh = key.partition("@")  # ``id@warehouse`` picks one row of a transfer's two
+        rows = [r for r in sle if r["voucher_no"] == results[oid]["voucher_no"] and not int(r["is_cancelled"])
+                and (not wh or r["wh"] == wh)]
         if len(rows) != 1:
-            problems.append(f"{oid}: {len(rows)} active rows")
+            problems.append(f"{key}: {len(rows)} active rows")
             continue
         for field, value in want.items():
             if Decimal(rows[0][field]) != Decimal(value):
-                problems.append(f"{oid}: {field} {rows[0][field]}, want {value}")
+                problems.append(f"{key}: {field} {rows[0][field]}, want {value}")
     return problems
+
+
+def repost_problems(reposts):
+    """Every queued repost must end ``Completed``. ``Skipped`` fails too (ERP-031): a skipped repost leaves the
+    entries after a back-dated move at their old values."""
+    return [f"{r.get('item_code')} {r.get('warehouse')} from {r.get('posting_date')}: {r.get('status')} "
+            f"{r.get('error') or ''}".strip() for r in reposts if r.get("status") != "Completed"]
 
 
 def perfect_engine(ops, sim):
@@ -476,11 +520,12 @@ class TestOracleAndChecker(unittest.TestCase):
         self.assertEqual((q1["value"] / q1["qty"]).quantize(Decimal("1e-9")), Decimal("9.995951417"))
         self.assertEqual((q2["dqty"], q2["qty"], q2["value"]), (Decimal("-12.345"), D0, D0))
         self.assertEqual((stored_qty(Decimal("0.005")), stored_qty(Decimal("0.004"))), (CENT, D0), "half up")
-        for oid, want in BACKDATED_EXACT.items():
-            e = sim[oid]["effects"][0]
-            got = {"value": e["value"], "diff": e["dvalue"], "rate": e["value"] / e["qty"]}
+        for key, want in BACKDATED_EXACT.items():
+            oid, _, wh = key.partition("@")
+            e = next(x for x in sim[oid]["effects"] if not wh or x["wh"] == wh)
+            got = {"value": e["value"], "diff": e["dvalue"], "rate": e["value"] / e["qty"] if e["qty"] else None}
             for field, value in want.items():
-                self.assertEqual(got[field], Decimal(value), f"{oid} {field}")
+                self.assertEqual(got[field], Decimal(value), f"{key} {field}")
 
     def test_oracle_replays_back_dated_moves_in_posting_order(self):
         ops = make_ops(SEED, 1)
@@ -579,6 +624,13 @@ class TestOracleAndChecker(unittest.TestCase):
                 row(s, "b1").update(value="500.00", diff="500.00", rate="50"),
                 row(s, "b2").update(value="300.00", diff="-200.00", rate="50"),
                 row(s, "b6").update(value="225.00", diff="-75.00", rate="50")],
+            "back-dated issue not reposted": lambda res, s, b: row(s, "i2").update(
+                value="1300.00", qty_after="20", rate="65", diff="800.00"),
+            "back-dated transfer not reposted": lambda res, s, b: row(s, "t2").update(
+                value="500.00", qty_after="20", rate="25", diff="300.00"),
+            "back-dated transfer at the stale rate": lambda res, s, b: (
+                row(s, "t3", "W1").update(value="375.00", diff="-125.00"),
+                row(s, "t3", "W2").update(value="125.00", diff="125.00")),
             "cancelled back-dated receipt not reposted": lambda res, s, b: row(s, "b2").update(
                 value="1068.57", diff="-251.43", rate=str((Decimal("1068.57") / 11).quantize(Decimal("1e-9")))),
             "sales return at the delivery's cost": lambda res, s, b: row(s, "g6").update(
@@ -588,6 +640,15 @@ class TestOracleAndChecker(unittest.TestCase):
         for name, mutate in cases.items():
             with self.subTest(name):
                 self.assertTrue(run(mutate), f"checker missed: {name}")
+
+    def test_repost_check_fails_on_anything_but_completed(self):
+        done = {"item_code": "E15-BKIS", "warehouse": "W1", "posting_date": BACK_DATE, "status": "Completed", "error": ""}
+        self.assertEqual(repost_problems([done, dict(done)]), [])
+        self.assertEqual(repost_problems([]), [])
+        for status in ("Skipped", "Queued", "In Progress", "Failed", "", None):
+            with self.subTest(status):
+                self.assertEqual(len(repost_problems([done, {**done, "status": status}])), 1)
+        self.assertIn("Skipped", repost_problems([{**done, "status": "Skipped"}])[0])
 
     def test_inputs_are_deterministic_and_bounded(self):
         for n in (1, EXAMPLES):
@@ -602,19 +663,19 @@ class TestOracleAndChecker(unittest.TestCase):
                 if o["op"] == "cancel":  # the probe cancels the move it just submitted (b4 is back-dated)
                     self.assertEqual(ids.index(o["id"]), ids.index(o["ref"]) + 1)
                 if "date" in o:  # back-dated moves post the day before every other move, at a time of their own
-                    self.assertEqual((o["date"], o["op"]), (BACK_DATE, "receipt"))
+                    self.assertEqual(o["date"], BACK_DATE)
+                    self.assertIn(o["op"], ("receipt", "issue", "transfer"))
                     self.assertLess(BACK_DATE, POSTING_DATE)
             self.assertEqual(by_id["b4"].get("date"), BACK_DATE, "b5 cancels a back-dated move")
+            self.assertEqual([by_id[i].get("date") for i in ("i3", "t3")], [BACK_DATE] * 2, "ERP-031 back-dated moves")
+            self.assertEqual((by_id["i3"]["op"], by_id["t3"]["op"]), ("issue", "transfer"))
             keys = list(posting_keys(a).values())
             self.assertEqual(len(set(keys)), len(keys), "every move has its own posting time")
             simulate(a)  # raises on negative stock, whole-stock purchase returns and cancels that leave a gap
 
     def test_live_bench_env_is_all_or_nothing(self):
         """Fail closed: one variable alone (or REQUIRE_ERP015_LIVE=1 without a bench) must not skip silently."""
-        project, site = os.environ.get("ERP015_COMPOSE_PROJECT"), os.environ.get("ERP015_BENCH_SITE")
-        self.assertEqual(bool(project), bool(site), "set both ERP015_COMPOSE_PROJECT and ERP015_BENCH_SITE, or neither")
-        if os.environ.get("REQUIRE_ERP015_LIVE") == "1":
-            self.assertTrue(project and site, "REQUIRE_ERP015_LIVE=1 but no bench is configured")
+        self.assertIsNone(live_config_problem(os.environ, *LIVE_ENV))
 
     def test_probe_is_valid_python_with_the_expected_shape(self):
         tree = ast.parse(PROBE_FILE.read_text(encoding="utf-8"), filename=str(PROBE_FILE))
@@ -636,12 +697,13 @@ class TestOracleAndChecker(unittest.TestCase):
 
 # ---- live layer ----
 
-@unittest.skipUnless(os.environ.get("ERP015_COMPOSE_PROJECT") and os.environ.get("ERP015_BENCH_SITE"),
-                     "No bench configured: set ERP015_COMPOSE_PROJECT and ERP015_BENCH_SITE to a fresh synthetic "
-                     "site on your own Compose project (see module docstring)")
+@unittest.skipIf(live_skip_reason(os.environ, *LIVE_ENV) is not None, live_skip_reason(os.environ, *LIVE_ENV) or "")
 class TestLiveInventoryValuation(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        problem = live_config_problem(os.environ, *LIVE_ENV)
+        if problem:  # REQUIRE_ERP015_LIVE=1 without a bench: a failure, never a skip (ERP-031)
+            raise AssertionError(problem)
         cls.ops = make_ops(SEED, EXAMPLES)
         cls.sim, cls.final = simulate(cls.ops)
         payload = json.dumps({"site": os.environ["ERP015_BENCH_SITE"], "ops": cls.ops})
@@ -766,19 +828,24 @@ class TestLiveInventoryValuation(unittest.TestCase):
         ours = [r for r in d["reposts"] if r["item_code"] in BACKDATED_ITEMS]
         self.assertGreaterEqual(len(ours), 2, "b3, b4 and the cancellation b5 queue reposts")
         self.assertEqual({r["posting_date"] for r in ours}, {BACK_DATE}, "reposted from the back date")
-        self.assertEqual([r for r in d["reposts"] if r["status"] not in ("Completed", "Skipped")], [],
-                         "every queued repost ran to completion")
+        # ERP-031: Skipped is a failure too, it leaves the entries after the back-dated move unvalued.
+        self.assertEqual(repost_problems(d["reposts"]), [], "every queued repost ran to completion")
         ops, final, results, sle, bins = subset(self.ops, self.final, d, lambda item: item in BACKDATED_ITEMS)
         self.assertEqual(check_run(ops, self.sim, final, results, sle, bins), [])
         self.assertEqual(forced_exact_problems(res, d["sle"], BACKDATED_EXACT), [])
         by_voucher, acc = self._gl_by_voucher(), d["accounts"]
         for oid, want in BACKDATED_EXACT.items():  # the GL was reposted too: stock account = ledger difference
+            if "@" in oid:  # a transfer's two rows net to zero on the one Stock In Hand account, checked below
+                continue
             with self.subTest(oid):
                 rows = [r for r in by_voucher[res[oid]["voucher_no"]] if not int(r["is_cancelled"])]
                 net = {a: sum((Decimal(r["debit"]) - Decimal(r["credit"]) for r in rows if r["account"] == a), D0)
                        for a in (acc["stock_in_hand"], acc["stock_adjustment"])}
                 self.assertEqual((net[acc["stock_in_hand"]], net[acc["stock_adjustment"]]),
                                  (Decimal(want["diff"]), -Decimal(want["diff"])))
+        stock_net = sum((Decimal(r["debit"]) - Decimal(r["credit"]) for r in by_voucher[res["t3"]["voucher_no"]]
+                         if not int(r["is_cancelled"]) and r["account"] == acc["stock_in_hand"]), D0)
+        self.assertEqual(stock_net, D0, "the back-dated transfer moves value between warehouses, not out of stock")
         b4 = by_voucher[res["b4"]["voucher_no"]]
         self.assertTrue(b4, "b4 posted to the GL before it was cancelled")
         self.assertFalse(mirror_mismatch(b4), "the cancelled back-dated receipt is reversed exactly")

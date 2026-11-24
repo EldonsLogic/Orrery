@@ -1,6 +1,8 @@
 {
-  "name": "Orrery",
-  "pronunciation": "OR-uh-ree",
-  "status": "working codename, not cleared",
-  "latinNameAlways": true
+  "name": "Seshna",
+  "domain": "seshna.com",
+  "status": "final product name (ADR-0066); trademark search in Saudi Arabia, the UAE, Egypt and Qatar still pending",
+  "mark": "Nuqta S",
+  "latinNameAlways": true,
+  "arabicScriptNever": true
 }

@@ -1,38 +1,22 @@
 """API edge core (PLT-024, ADR-0016): the only customer-facing surface in front of the engine.
 
 Deny by default: a request is routed only if its normalised path is under /v1/ and matches a route
-registered by us (exact path, plus at most `max_params` identifier segments). Engine output is never
-passed through raw: a route declares an allow-listed schema (our field names) and the gateway builds the
-response body from it; a non-JSON route must explicitly declare the sanitised content type its handler
-produces. Engine errors are mapped to our error model, engine headers and cookies never reach the caller,
-and every request is audited (an intent record before a mutating request, an outcome record after).
+registered by us. Every response passes through the same filter: headers allow-listed, cookies
+renamed, engine errors mapped to our error model, success bodies checked for engine markers
+(a hit is replaced by internal_error; the original is never sent).
 """
 from __future__ import annotations
 
-import hashlib
-import re
-from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Mapping
-from threading import Lock
 
 from ..ulid import UlidGenerator
 from .errors import ErrorResult, error_body, is_engine_error, map_engine_error
 from .headers import (
-    CLEAR_SESSION_COOKIE, Headers, engine_session_directive, filter_response_headers, has_gateway_session_cookie,
-    request_headers_for_engine, with_security_headers,
+    Headers, filter_response_headers, request_headers_for_engine, rewrite_set_cookies, with_security_headers,
 )
-from .markers import contains_engine_structure
+from .markers import contains_engine_marker
 from .paths import ALLOWED_METHODS, is_own_path, normalise_path
-from .projection import RenderError, media_type, project_json_body, validate_schema
-
-MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-_PARAM_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")  # no dots: an engine method name cannot be a path parameter
-_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,63}$")
-# Conservative header grammar: media type plus token-valued parameters, no quoted values.
-_CONTENT_TYPE_RE = re.compile(r"[a-z]+/[a-z0-9][a-z0-9.+-]*(?:; *[a-z0-9_-]+=[a-z0-9_.+-]+)*", re.I)
-_AUDIT_HIGH_WATER = 900
-_AUDIT_CAPACITY = 1000
 
 
 @dataclass(frozen=True)
@@ -45,7 +29,7 @@ class GatewayRequest:
 
 @dataclass(frozen=True)
 class UpstreamRequest:
-    """What a route handler receives: our own path and engine-safe headers only (never a cookie)."""
+    """What a route handler receives: our own path and engine-safe headers only."""
 
     method: str
     path: str
@@ -72,233 +56,76 @@ Handler = Callable[[UpstreamRequest], UpstreamResponse]
 AuditSink = Callable[[dict], None]
 
 
-@dataclass(frozen=True)
-class Route:
-    """One registered route. Exactly one of `schema` or `own_content_type`.
-
-    schema: allow-list projection of a JSON engine response (see projection.py).
-    own_content_type: the handler's body is produced by OUR renderer (for example our PDF renderer), not
-        the engine's; the gateway then passes the bytes through only when the upstream media type equals
-        this declaration. Declaring it is a security-reviewed trust statement about the handler.
-    filename: our own download name (Content-Disposition); the engine's is never used.
-    max_params: how many identifier segments may follow the route path (0 = exact match only).
-    """
-
-    handler: Handler
-    schema: object | None = None
-    own_content_type: str | None = None
-    filename: str | None = None
-    max_params: int = 0
-
-    def __post_init__(self):
-        if not callable(self.handler) or (self.schema is None) == (self.own_content_type is None):
-            raise ValueError("a route needs a handler and exactly one of schema or own_content_type")
-        if self.schema is not None:
-            validate_schema(self.schema)
-        else:
-            ctype = self.own_content_type
-            if not isinstance(ctype, str) or any(c in ctype for c in "\r\n") or not _CONTENT_TYPE_RE.fullmatch(ctype) or \
-                    ctype.split(";")[0].strip().lower() in ("application/json", "text/html"):
-                raise ValueError("own_content_type must be a concrete non-JSON, non-HTML media type")
-        if self.filename is not None and (not isinstance(self.filename, str) or
-                any(c in self.filename for c in "\r\n") or not _FILENAME_RE.fullmatch(self.filename)):
-            raise ValueError("filename must be a plain safe name")
-        if not isinstance(self.max_params, int) or not 0 <= self.max_params <= 4:
-            raise ValueError("max_params must be 0..4")
-
-
-def _etag(body: bytes) -> str:
-    return '"' + hashlib.sha256(body).hexdigest()[:32] + '"'
-
-
-def _client_has(headers: Headers, etag: str) -> bool:
-    for name, value in headers:
-        if name.lower() == "if-none-match":
-            tags = [t.strip() for t in value.split(",")]
-            return "*" in tags or etag in tags or ("W/" + etag) in tags
-    return False
-
-
 class Gateway:
-    def __init__(self, routes: Mapping[str, Route], *, audit_sink: AuditSink, ulid: UlidGenerator | None = None):
-        if not callable(audit_sink):
-            raise TypeError("audit_sink is required: the gateway does not serve unaudited requests")
-        self._routes: dict[str, Route] = {}
-        for prefix, route in routes.items():
-            if not isinstance(route, Route):
-                raise TypeError(f"route {prefix!r} must be a Route (schema-declared), not a bare handler")
+    def __init__(self, routes: Mapping[str, Handler], *, audit_sink: AuditSink | None = None,
+                 ulid: UlidGenerator | None = None):
+        self._routes: dict[str, Handler] = {}
+        for prefix, handler in routes.items():
             if normalise_path(prefix) != prefix or not is_own_path(prefix):
                 raise ValueError(f"route {prefix!r} must be a normalised path under /v1/")
-            self._routes[prefix] = route
+            self._routes[prefix] = handler
         self._audit_sink = audit_sink
         self._ulid = ulid or UlidGenerator()
-        # Outcome records that could not be written after a committed effect; drain and retry them.
-        self._unlogged: deque[dict] = deque(maxlen=_AUDIT_CAPACITY)
-        self._audit_lock = Lock()
-        self._inflight_mutations = 0
-        self._audit_drop_count = 0
-
-    @property
-    def audit_drop_count(self) -> int:
-        """Cumulative records lost at the hard cap; normally zero due to capacity reservation."""
-        with self._audit_lock:
-            return self._audit_drop_count
-
-    def drain_unlogged(self) -> list[dict]:
-        """Transfer queued records to the caller, which must durably retain them for retry."""
-        with self._audit_lock:
-            records = list(self._unlogged)
-            self._unlogged.clear()
-            return records
 
     def handle(self, request: GatewayRequest) -> GatewayResponse:
-        """Validate and process a request inside one fail-closed boundary, including cookie parsing."""
         audit_id = f"aud_{self._ulid.generate()}"
-        reserved = False
         try:
-            if not isinstance(request, GatewayRequest) or not isinstance(request.method, str) or \
-                    not isinstance(request.path, str) or not isinstance(request.body, bytes) or \
-                    not isinstance(request.headers, (list, tuple)) or any(
-                        not isinstance(pair, (list, tuple)) or len(pair) != 2 or
-                        not all(isinstance(value, str) for value in pair) for pair in request.headers):
-                raise ValueError("malformed gateway request")
-            method = request.method.upper()
-            path = normalise_path(request.path)
-            route = self._match(path) if method in ALLOWED_METHODS else None
-            if route is None:
-                parts = self._error_parts(audit_id, "not_found", "path_denied")
-            elif has_gateway_session_cookie(request.headers):
-                # No session store yet: nothing can validate this cookie. Fail closed and clear it.
-                parts = self._error_parts(audit_id, "permission_denied", "session_unsupported",
-                                          [("Set-Cookie", CLEAR_SESSION_COOKIE)])
-            else:
-                if method in MUTATING_METHODS:
-                    # Reserve space for every in-flight outcome before writing intent. The sink and
-                    # handler run outside this short lock, so concurrent calls cannot overbook it.
-                    with self._audit_lock:
-                        if len(self._unlogged) + self._inflight_mutations >= _AUDIT_HIGH_WATER:
-                            return self._unaudited(audit_id, unavailable=True)
-                        self._inflight_mutations += 1
-                        reserved = True
-                    if not self._write(self._record(request, audit_id, "intent")):
-                        with self._audit_lock:
-                            self._inflight_mutations -= 1
-                            reserved = False
-                        return self._unaudited(audit_id, unavailable=True)
-                upstream = route.handler(UpstreamRequest(method, path, request_headers_for_engine(request.headers), request.body))
-                parts = self._filter(route, upstream, request, method, audit_id)
-        except Exception:  # fail closed; never leak validation, cookie, or handler exception text
-            parts = self._error_parts(audit_id, "internal_error", "handler_exception")
-        try:
-            return self._complete(request, audit_id, parts, reserved)
-        finally:
-            if reserved:
-                with self._audit_lock:
-                    self._inflight_mutations -= 1
+            status, headers, body, reason = self._dispatch(request, audit_id)
+        except Exception:  # fail closed; never leak exception text
+            return self._error(audit_id, "internal_error", "handler_exception", request)
+        return self._finish(request, audit_id, status, headers, body, reason)
 
-    def _match(self, path: str | None) -> Route | None:
-        if not is_own_path(path) or contains_engine_structure(path):
+    def _dispatch(self, request: GatewayRequest, audit_id: str):
+        path = normalise_path(request.path)
+        method = request.method.upper() if isinstance(request.method, str) else ""
+        handler = self._match(path)
+        if method not in ALLOWED_METHODS or handler is None:
+            return self._error_parts(audit_id, "not_found", "path_denied")
+        upstream = handler(UpstreamRequest(method, path, request_headers_for_engine(request.headers), request.body))
+        return self._filter(upstream, audit_id)
+
+    def _match(self, path: str | None) -> Handler | None:
+        if not is_own_path(path):
             return None
-        best: tuple[str, Route] | None = None
-        for prefix, route in self._routes.items():
-            if path == prefix:
-                extra: list[str] = []
-            elif path.startswith(prefix + "/"):
-                extra = path[len(prefix) + 1:].split("/")
-            else:
-                continue
-            if len(extra) > route.max_params or not all(_PARAM_RE.match(s) for s in extra):
-                continue
-            if best is None or len(prefix) > len(best[0]):
-                best = (prefix, route)
-        return best[1] if best else None
+        best = max((p for p in self._routes if path == p or path.startswith(p + "/")), key=len, default=None)
+        return self._routes[best] if best else None
 
-    def _filter(self, route: Route, up: UpstreamResponse, request: GatewayRequest, method: str, audit_id: str):
+    def _filter(self, up: UpstreamResponse, audit_id: str):
         if not isinstance(up.status, int) or not 200 <= up.status <= 599 or not isinstance(up.body, bytes):
             return self._error_parts(audit_id, "internal_error", "bad_upstream_response")
-        if any(n.lower() in ("content-encoding", "transfer-encoding") and v.strip().lower() not in ("", "identity")
-               for n, v in up.headers):
+        if any(n.lower() == "content-encoding" and v.strip().lower() != "identity" for n, v in up.headers):
             return self._error_parts(audit_id, "internal_error", "unscannable_encoding")  # cannot be checked
         if up.status >= 300 or is_engine_error(up.status, up.body):
-            # 3xx: engine redirects (login, desk) are never followed or exposed. A 304 cannot be legitimate:
-            # conditional headers are not forwarded (we answer them from our own ETag).
+            # 3xx: engine redirects (login, desk) are never followed or exposed.
             status = up.status if up.status >= 400 else 500
-            return self._error_parts(audit_id, None, "engine_error", result=map_engine_error(status, up.headers, up.body, audit_id))
-        directive = engine_session_directive(up.headers)
-        if directive == "issue":  # the engine sid is never our session (ADR-0007 will define one)
-            return self._error_parts(audit_id, "internal_error", "engine_session_not_issuable")
-        try:
-            content_type, body = self._render(route, up)
-        except RenderError as exc:
-            return self._error_parts(audit_id, "internal_error", exc.reason)
-        headers: Headers = ([] if up.status == 204 and not body else [("Content-Type", content_type)]) + filter_response_headers(up.headers)
-        if route.filename:
-            headers.append(("Content-Disposition", f'attachment; filename="{route.filename}"'))
-        if directive == "clear":
-            headers.append(("Set-Cookie", CLEAR_SESSION_COOKIE))
-        if body and up.status == 200:
-            etag = _etag(body)
-            headers.append(("ETag", etag))
-            if method in ("GET", "HEAD") and _client_has(request.headers, etag):
-                return 304, with_security_headers([h for h in headers if h[0] != "Content-Type"]), b"", "not_modified"
-        return up.status, with_security_headers(headers), body, "ok"
+            result = map_engine_error(status, up.headers, up.body, audit_id)
+            return self._error_parts(audit_id, None, "engine_error", result=result, retry_headers=up.headers)
+        if contains_engine_marker(up.body):
+            return self._error_parts(audit_id, "internal_error", "engine_marker_in_body")
+        headers = filter_response_headers(up.headers) + rewrite_set_cookies(up.headers)
+        return up.status, with_security_headers(headers), up.body, "ok"
 
-    @staticmethod
-    def _render(route: Route, up: UpstreamResponse) -> tuple[str, bytes]:
-        if up.status in (204, 205) and not up.body:
-            return (route.own_content_type or "application/json"), b""
-        if route.schema is not None:
-            return "application/json", project_json_body(up.headers, up.body, route.schema)
-        if media_type(up.headers)[0] != route.own_content_type.split(";")[0].strip().lower():
-            raise RenderError("undeclared_content_type")
-        return route.own_content_type, up.body
-
-    def _error_parts(self, audit_id, code, reason, extra_headers: Headers = (), *, result: ErrorResult | None = None):
+    def _error_parts(self, audit_id, code, reason, *, result: ErrorResult | None = None, retry_headers: Headers = ()):
         result = result or error_body(code, audit_id)
-        headers: Headers = [("Content-Type", "application/json")] + list(extra_headers)
-        if result.http_status == 429 and result.retry_after_s is not None:
-            headers.append(("Retry-After", str(result.retry_after_s)))  # our own value, never the engine's header
+        headers: Headers = [("Content-Type", "application/json")]
+        if result.http_status == 429:
+            headers += [(n, v) for n, v in filter_response_headers(list(retry_headers)) if n.lower() == "retry-after"]
         return result.http_status, with_security_headers(headers), result.body, reason
 
-    @staticmethod
-    def _record(request: GatewayRequest, audit_id: str, phase: str, **extra) -> dict:
-        raw_path = getattr(request, "path", None)
-        method = getattr(request, "method", None)
-        path = normalise_path(raw_path)
-        return {"audit_id": audit_id, "phase": phase, "method": method[:16] if isinstance(method, str) else "",
-                "path": raw_path[:256] if isinstance(raw_path, str) else "",
-                "normalised_path": path,
-                "path_normalisation": "rejected" if path is None else "unchanged" if path == raw_path else "changed",
-                **extra}
+    def _error(self, audit_id, code, reason, request):
+        status, headers, body, reason = self._error_parts(audit_id, code, reason)
+        return self._finish(request, audit_id, status, headers, body, reason)
 
-    def _write(self, record: dict) -> bool:
-        try:
-            self._audit_sink(record)
-            return True
-        except Exception:
-            return False
-
-    def _unaudited(self, audit_id: str, *, unavailable: bool = False) -> GatewayResponse:
-        failed = error_body("audit_unavailable" if unavailable else "internal_error", audit_id)
-        headers = with_security_headers([("Content-Type", "application/json"), ("Content-Length", str(len(failed.body)))])
-        return GatewayResponse(failed.http_status, headers, failed.body, audit_id)
-
-    def _complete(self, request, audit_id, parts, effect_possible: bool) -> GatewayResponse:
-        """Write the outcome record. Failure is an error, except after a committed mutating effect."""
-        status, headers, body, reason = parts
-        record = self._record(request, audit_id, "outcome", status=status, reason=reason)
-        if not self._write(record):
-            if not effect_possible:
-                return self._unaudited(audit_id)
-            # The write may have committed: report the real result (a 500 would invite a duplicate) and
-            # keep the outcome record for retry. The intent record already exists.
-            with self._audit_lock:
-                if len(self._unlogged) == _AUDIT_CAPACITY:
-                    # Never let deque silently evict an older record. Expose any unexpected loss.
-                    self._audit_drop_count += 1
-                else:
-                    self._unlogged.append(record)
+    def _finish(self, request, audit_id, status, headers, body, reason) -> GatewayResponse:
+        if self._audit_sink is not None:
+            try:
+                self._audit_sink({"audit_id": audit_id, "method": str(request.method)[:16],
+                                  "path": str(request.path)[:256], "status": status, "reason": reason})
+            except Exception:  # audit is required: fail closed rather than answer unlogged
+                failed = error_body("internal_error", audit_id)
+                return GatewayResponse(failed.http_status,
+                                       with_security_headers([("Content-Type", "application/json")]),
+                                       failed.body, audit_id)
         headers = [(n, v) for n, v in headers if n.lower() != "content-length"]
-        if status != 304:
-            headers.append(("Content-Length", str(len(body))))
+        headers.append(("Content-Length", str(len(body))))
         return GatewayResponse(status, headers, body, audit_id)

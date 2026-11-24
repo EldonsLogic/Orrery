@@ -16,7 +16,7 @@ from unittest.mock import patch
 from components.compliance.country_pack import PackValidationError, load_country_pack
 from components.compliance.country_pack import certification, evidence as evidence_mod
 from components.compliance.country_pack.tests import test_country_pack_go_live_gate as gate_tests
-from components.compliance.country_pack.tests.pack_checks import certifiability_violations, get, leaves
+from components.compliance.country_pack.tests.pack_checks import certifiability_violations, get, leaves, pending
 
 PACKS_DIR = Path(__file__).resolve().parents[1] / "packs"
 RESOLVED = {"status": "resolved", "by": "EldonsLogic", "at": "2026-11-23"}
@@ -96,13 +96,21 @@ class TestProductChoiceList(_Fixture):
                 self.f._save(v, "evidence.json", record)
                 self.refuse(v, f"PLATFORM-DEFAULT.*{ancestor}.*product-choice")
 
-    def test_a_listed_path_covers_its_descendants_only(self) -> None:
+    def test_a_listed_path_matches_exactly_and_covers_no_other_path(self) -> None:
         self.assertTrue(evidence_mod.is_product_choice_path(["printFormats.templates"], "printFormats.templates"))
-        self.assertTrue(evidence_mod.is_product_choice_path(["printFormats.templates"], "printFormats.templates[0].componentId"))
-        self.assertFalse(evidence_mod.is_product_choice_path(["printFormats.templates"], "printFormats"))
+        for other in ("printFormats.templates[0].componentId", "printFormats.templates[0]",
+                      "printFormats.templates.x", "printFormats"):
+            with self.subTest(path=other):
+                self.assertFalse(evidence_mod.is_product_choice_path(["printFormats.templates"], other))
         self.assertFalse(evidence_mod.is_product_choice_path(["tax.roundingRule"], "tax"))
         self.assertFalse(evidence_mod.is_product_choice_path(["tax.round"], "tax.roundingRule"))
         self.assertFalse(evidence_mod.is_product_choice_path([], "tax.roundingRule"))
+
+    def test_a_child_of_a_listed_path_is_refused_in_production(self) -> None:
+        with patch.object(evidence_mod, "PRODUCT_CHOICE_FILE", self._choice_file({"SA": ["tax.filingPeriods"]})):
+            self.f._assert_loads(self.with_default("tax.filingPeriods"))  # the listed path itself is a list leaf
+            v = self.with_default("tax.filingPeriods[0]")
+            self.refuse(v, r"PLATFORM-DEFAULT.*tax\.filingPeriods\[0\].*product-choice")
 
     def test_platform_default_outside_locked_areas_is_unaffected(self) -> None:
         v = self.f._write("certified", "verified_official")
@@ -147,22 +155,24 @@ class TestProductChoiceList(_Fixture):
                         load_country_pack("SA", self.f.packs_dir, version=v)
                     self.f._assert_loads(v, environment="sandbox")
 
-    def test_shipped_list_is_pinned_and_marks_the_saudi_rounding_rule_provisional(self) -> None:
+    def test_shipped_list_is_pinned_and_has_no_saudi_rounding_entry(self) -> None:
         listed = {market: [entry["path"] for entry in entries]
                   for market, entries in evidence_mod.product_choice_entries().items()}
         self.assertEqual(listed, {
-            "SA": ["eInvoicing.componentId", "eInvoicing.mode", "tax.roundingRule"],
+            "SA": ["eInvoicing.componentId", "eInvoicing.mode"],
             "AE": ["tax.roundingRule"],
             "EG": [],
             "QA": ["tax.roundingRule"],
         })
-        for market, entries in evidence_mod.product_choice_entries().items():
-            rounding = next((e for e in entries if e["path"] == "tax.roundingRule"), None)
-            if rounding:
-                with self.subTest(market=market):
-                    self.assertTrue(rounding.get("provisional"))
-        sa_rounding = next(e for e in evidence_mod.product_choice_entries()["SA"] if e["path"] == "tax.roundingRule")
-        self.assertIn("Q-601", sa_rounding["provisional"])
+        for market in ("AE", "QA"):
+            rounding = next(e for e in evidence_mod.product_choice_entries()[market] if e["path"] == "tax.roundingRule")
+            with self.subTest(market=market):
+                self.assertTrue(rounding.get("provisional"))
+
+    def test_saudi_rounding_cannot_be_a_platform_default_whatever_the_founders_record(self) -> None:
+        """ZATCA XML Implementation Standard v1.2 section 10 sets it: statutory, so never PLATFORM-DEFAULT."""
+        self.assertNotIn("tax.roundingRule", evidence_mod.active_product_choice_paths("SA", {"eldonslogic", "sayegh9"}))
+        self.refuse(self.with_default("tax.roundingRule"), "PLATFORM-DEFAULT.*tax.roundingRule.*product-choice")
 
     def test_shipped_list_paths_exist_in_the_shipped_packs(self) -> None:
         for market, entries in evidence_mod.product_choice_entries().items():
@@ -237,7 +247,9 @@ class TestOpenBlockers(_Fixture):
                     self.refuse(v, key)
 
     def test_unverified_outside_entry_on_a_locked_path_refuses(self) -> None:
-        for path in ("tax", "tax.filingPeriods", "eInvoicing.mode", "localeDefaults.holidays.calendarRef"):
+        # `localeDefaults` and `localeDefaults.holidays` are ancestors of a locked path, not locked themselves.
+        for path in ("tax", "tax.filingPeriods", "eInvoicing.mode", "localeDefaults.holidays.calendarRef",
+                     "localeDefaults.holidays", "localeDefaults"):
             with self.subTest(path=path):
                 v = self.mutate("evidence.json", lambda r: r.update(
                     factsOutsideSchema=[{"claim": "synthetic", "status": "UNVERIFIED", "paths": [path]}]))
@@ -250,6 +262,25 @@ class TestOpenBlockers(_Fixture):
             with self.subTest(entry=entry):
                 v = self.mutate("evidence.json", lambda r: r.update(factsOutsideSchema=[entry]))
                 self.f._assert_loads(v)
+
+    def test_outside_platform_default_on_a_locked_path_needs_the_product_choice_list(self) -> None:
+        entry = {"claim": "synthetic", "status": "PLATFORM-DEFAULT", "paths": ["tax.filingPeriods"],
+                 "ref": "docs/decisions/ADR-0033-synthetic.md"}
+        v = self.mutate("evidence.json", lambda r: r.update(factsOutsideSchema=[entry]))
+        self.refuse(v, r"factsOutsideSchema\[0\].*PLATFORM-DEFAULT.*tax\.filingPeriods.*product-choice")
+        v = self.mutate("evidence.json", lambda r: r.update(factsOutsideSchema=[{**entry, "paths": ["eInvoicing.mode"]}]))
+        self.f._assert_loads(v)  # listed for SA
+        v = self.mutate("evidence.json", lambda r: r.update(
+            factsOutsideSchema=[{**entry, "paths": ["localeDefaults.week.startDay"]}]))
+        self.f._assert_loads(v)  # not locked
+
+    def test_ci_pending_check_is_not_weaker_than_production(self) -> None:
+        """Low 3: CI's `pending()` must also refuse a resolution whose `by` is no founder."""
+        open_entry = {**BLOCKER, "resolution": dict(RESOLVED, by="synthetic-nobody")}
+        self.assertEqual(pending({"goLiveBlockers": [open_entry]}), [open_entry])
+        self.assertEqual(pending({"pendingRefs": [{**PENDING_REF, "resolution": dict(RESOLVED, by="SAYEGH9")}]}), [])
+        self.assertEqual(pending({"goLiveBlockers": [{**BLOCKER, "resolution": dict(RESOLVED)}]}), [])
+        self.assertEqual(len(pending({"goLiveBlockers": [BLOCKER]})), 1)
 
     def test_malformed_outside_entries_are_refused(self) -> None:
         for entry in (None, "x", {"claim": "x"}, {"claim": "x", "status": "maybe"},

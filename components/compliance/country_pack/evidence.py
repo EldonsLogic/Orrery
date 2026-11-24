@@ -175,8 +175,8 @@ def active_product_choice_paths(market: str, founders: set[str] | None) -> list[
 
 
 def is_product_choice_path(listed: list[str], path: str) -> bool:
-    """A path is allowed if it equals a listed path or lies beneath one; never through an ancestor."""
-    return covered(path, listed)
+    """A path is allowed only if it equals a listed path: not an ancestor, not a descendant (ADR-0067)."""
+    return path in listed
 
 
 def locked_paths(pack: dict[str, Any]) -> list[str]:
@@ -200,7 +200,7 @@ def locked_fact_refusals(pack: dict[str, Any], evidence: dict[str, Any],
     Always lock tax, eInvoicing and payrollHooks. Lists (including empty lists) and nulls are leaves,
     matching the shipped packs. Evidence may name the leaf or an ancestor; indexed facts alone do
     not cover a whole list. Unknown fact paths are refused even outside locked areas. A PLATFORM-DEFAULT
-    fact on a locked path needs that path (or a path beneath a listed one) on the market's product-choice list
+    fact on a locked path needs exactly that path on the market's product-choice list
     and the entry not provisional unless resolved with evidence (ADR-0067; `founders` checks the record); and `verified_official` needs official facts (or listed defaults) under every locked leaf.
     """
     facts = evidence.get("facts")
@@ -319,6 +319,10 @@ def blocker_refusals(pack: dict[str, Any], evidence: dict[str, Any], founders: s
         for index, entry in enumerate(_entry_list(evidence, key, reasons)):
             reasons.extend(resolution_refusals(f"evidence.json.{key}[{index}]", entry, founders))
     locked = locked_paths(pack)
+    try:
+        listed = active_product_choice_paths(pack["countryCode"], founders)
+    except ValueError:
+        listed = []  # reported once by locked_fact_refusals; nothing is authorised meanwhile
     for index, fact in enumerate(_entry_list(evidence, "factsOutsideSchema", reasons)):
         prefix = f"evidence.json.factsOutsideSchema[{index}]"
         status = fact.get("status") if isinstance(fact, dict) else None
@@ -342,6 +346,9 @@ def blocker_refusals(pack: dict[str, Any], evidence: dict[str, Any], founders: s
                 continue
             if status == "UNVERIFIED" and _overlaps_locked(path, locked):
                 reasons.append(f"{prefix}: UNVERIFIED fact on locked path {path}")
+            if status == "PLATFORM-DEFAULT" and _overlaps_locked(path, locked) and not is_product_choice_path(listed, path):
+                reasons.append(f"{prefix}: PLATFORM-DEFAULT fact on locked path {path} is not on the "
+                               f"{pack['countryCode']} product-choice list (ADR-0067)")
         if status in SOURCED_LABELS or status == "PLATFORM-DEFAULT":
             reasons.extend(f"{prefix}: {reason}" for reason in fact_source_violations(fact, date.today().isoformat()))
     return reasons

@@ -164,7 +164,7 @@ class TestProvisionalProductChoiceEntries(_Fixture):
         return {"path": "tax.roundingRule", "reason": "synthetic", "provisional": "synthetic open question", **extra}
 
     def test_shipped_provisional_entries_do_not_authorise_a_default_in_production(self) -> None:
-        for market in ("SA", "AE", "QA"):
+        for market in ("AE", "QA"):
             with self.subTest(market=market):
                 entry = next(e for e in evidence_mod.product_choice_entries()[market] if e["path"] == "tax.roundingRule")
                 self.assertTrue(entry.get("provisional"))

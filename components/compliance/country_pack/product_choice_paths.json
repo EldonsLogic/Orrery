@@ -1,5 +1,5 @@
 {
-  "description": "Per-market product-choice paths (CMP-036, ADR-0067). A PLATFORM-DEFAULT fact may back a locked pack path only if the path equals a listed path or lies beneath one; a listed path never authorises an ancestor. Entries are reviewed one by one; an entry marked provisional is not settled.",
+  "description": "Per-market product-choice paths (CMP-036, ADR-0067). A PLATFORM-DEFAULT fact may back a locked pack path only if the path exactly equals a listed path; a listed path authorises neither an ancestor nor a descendant. Entries are reviewed one by one; an entry marked provisional is not settled.",
   "markets": {
     "SA": [
       {
@@ -9,11 +9,6 @@
       {
         "path": "eInvoicing.mode",
         "reason": "Design choice: which e-invoicing mode the pack locks (Q-559 asks who decides it)."
-      },
-      {
-        "path": "tax.roundingRule",
-        "reason": "Platform rounding rule, listed only if the law is silent on invoice rounding.",
-        "provisional": "Q-601: UNVERIFIED whether ZATCA mandates invoice rounding; if it does, this entry comes off the list."
       }
     ],
     "AE": [

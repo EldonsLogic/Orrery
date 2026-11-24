@@ -12,7 +12,7 @@ Not legal advice. Everything here needs counsel. Status values: todo / doing / d
 | 3 | IP assignment (founders and contractors to the company) | Clean ownership for investors | Include prior prototype code (change engine) and its history | todo |
 | 4 | GPL boundary review | ERPNext/HRMS are GPL-3; run as SaaS only | Confirm separate services over API are not derivative; never distribute engine without review; write down the architecture rule ([../strategy/04-architecture-and-seed.md](../strategy/04-architecture-and-seed.md)) | todo |
 | 5 | Open-source licence register | Principle 1 | Recorded in [licence-register.md](licence-register.md) (Frappe 15.126.0 MIT, ERPNext 15.124.5 GPL-3.0, change engine, MariaDB, Redis); avoid AGPL lavaloon app | done |
-| 6 | Trademark and domain clearance | Working name Orrery is not cleared (ADR-0001) | Search in KSA, UAE, Egypt and key classes; domains; avoid "ERPNext"/"Frappe" in name and ads | todo |
+| 6 | Trademark and domain clearance | Final name Seshna (ADR-0066) is not yet cleared (supersedes ADR-0001) | Search in KSA, UAE, Egypt and key classes; domains; avoid "ERPNext"/"Frappe" in name and ads | todo |
 | 7 | Customer contract (master agreement) | Revenue | Includes: SaaS scope, setup milestones, data ownership and export, anonymised pattern reuse clause (licence to reuse de-identified Blueprint patterns and components), no training on tenant data, SLAs TBD, liability cap for compliance output, human review gate language, termination and deletion | todo |
 | 8 | Pilot agreement (paid, about 50%) | First customers | Case-study rights, reuse clause, data handling, feedback | todo |
 | 9 | Terms of service | Self-serve sign-up | Acceptable use, AI limitations, account rules | todo |

@@ -319,6 +319,8 @@ class AgentLoop:
         yield RunEvent("tool_end", {"call_id": cid, "status": "error", "code": err["code"]})
         if err["code"] == "budget_exceeded":
             self._stop = _Stop("stopped", "budget", "budget_exceeded", "tool_api")
+        elif err["code"] == "rate_limited":  # retrying inside this run only spends model steps (SEC-009)
+            self._stop = _Stop("stopped", "rate_limited", "budget_exceeded", "rate_limited")
         elif err["code"] == "permission_denied":
             self.refusals += 1
         extra = ""

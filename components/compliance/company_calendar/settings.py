@@ -10,8 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, time, timedelta
 from pathlib import Path
-from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any
 
 from components.compliance.country_pack import resolve_country_pack
 
@@ -37,11 +36,14 @@ class WorkingHours:
 @dataclass(frozen=True)
 class ReducedPeriod:
     id: str
-    labels: Mapping[str, str]  # read-only view
+    labels: tuple[tuple[str, str], ...]  # (language, text) pairs sorted by language: hashable, copyable, picklable
     rule: str  # "ramadan" or "fixed_dates"
     hours: WorkingHours
-    gregorian_from: date | None = None
-    gregorian_to: date | None = None
+    gregorian_from: date | None = None  # fixed_dates only
+    gregorian_to: date | None = None  # fixed_dates only
+
+    def label(self, language: str) -> str | None:
+        return dict(self.labels).get(language)
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,20 @@ def _time(text: str) -> time:
 
 def _hours(raw: dict[str, str]) -> WorkingHours:
     return WorkingHours(_time(raw["from"]), _time(raw["to"]))
+
+
+def _reduced_period(rp: dict[str, Any]) -> ReducedPeriod:
+    rule = rp.get("rule", "ramadan")
+    # The pack framework accepts the Gregorian keys on any rule. On `ramadan` they would be silently ignored,
+    # so refuse them: a company that typed dates meant a fixed period.
+    if rule == "ramadan" and ("gregorianFrom" in rp or "gregorianTo" in rp):
+        raise CalendarSettingsError("invalid_reduced_period")
+    return ReducedPeriod(
+        id=rp["id"], labels=tuple(sorted((str(k), str(v)) for k, v in rp["labels"].items())), rule=rule,
+        hours=_hours(rp["hours"]),
+        gregorian_from=date.fromisoformat(rp["gregorianFrom"]) if "gregorianFrom" in rp else None,
+        gregorian_to=date.fromisoformat(rp["gregorianTo"]) if "gregorianTo" in rp else None,
+    )
 
 
 @dataclass(frozen=True)
@@ -180,14 +196,7 @@ def resolve_calendar_settings(
         allow_test_packs=allow_test_packs, allow_unpinned=allow_unpinned, environment=environment,
     )
     loc = pack["locale"]
-    reduced = tuple(
-        ReducedPeriod(
-            id=rp["id"], labels=MappingProxyType(dict(rp["labels"])), rule=rp.get("rule", "ramadan"), hours=_hours(rp["hours"]),
-            gregorian_from=date.fromisoformat(rp["gregorianFrom"]) if "gregorianFrom" in rp else None,
-            gregorian_to=date.fromisoformat(rp["gregorianTo"]) if "gregorianTo" in rp else None,
-        )
-        for rp in loc["workingTime"].get("reducedPeriods", [])
-    )
+    reduced = tuple(_reduced_period(rp) for rp in loc["workingTime"].get("reducedPeriods", []))
     return CompanyCalendarSettings(
         country_code=pack["countryCode"],
         pack_id=pack["packId"],

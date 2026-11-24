@@ -707,7 +707,8 @@ class TestBpl027Offline(unittest.TestCase):
         zero_co_backend._frappe_factory = lambda: stub([], None)
         zero_co_backend.execute_step(
             TENANT,
-            {"kind": "location.disable", "pointer": "/locations/wh_riyadh", "subject": {"kind": "location", "id": "wh_riyadh"}, "params": {}},
+            {"kind": "location.disable", "pointer": "/locations/wh_riyadh", "subject": {"kind": "location", "id": "wh_riyadh"},
+             "params": {"definition": {"id": "wh_riyadh", "kind": "warehouse"}}},  # BPL-033: a disable names its kind
         )
 
         # >1 companies without explicit company: fails closed even if global default is set

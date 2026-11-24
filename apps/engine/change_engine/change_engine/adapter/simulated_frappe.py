@@ -561,6 +561,7 @@ class SimulatedFrappeDB:
                     "sync_version": p[9],
                     "config_json": p[10],
                     "retained_json": p[11],
+                    "write_token": p[12],
                 }
                 return ()
             if "WHERE TENANT_ID = %S" in q_upper:

@@ -2,6 +2,12 @@
 
 **Source.** The Seshna logo kit "Nuqta S", exploration draft v3 (November 2026), file `tools/build_kit.py`, supplied by the founders outside the repo. The kit is not published anywhere; there is no upstream commit. Imported under BRD-014, ADR-0066.
 
+- **Author:** Seshna founders, with AI assistance, November 2026.
+- **Licence:** same as the repo (see `LICENSE`); no third-party code.
+- **Third-party parts:** only the Cairo font, used at build time under OFL 1.1 and not redistributed.
+- **Notices:** none required beyond the Cairo OFL record (`docs/legal/licence-register.md`, `docs/brand/fonts/README.md`).
+(Founder answer of 2026-11-24, for both founders, to the #298 review.)
+
 **Font used to generate.** Cairo variable font, `ofl/cairo/Cairo[slnt,wght].ttf` from google/fonts at commit `a2c83daed9bc723922de8d0a9512990bd3d91df4` (SHA-256 `667c9871 82391c91 f4e57a2f 455b1794 fb5e3ee6 ca4ef338 3e86bb69 0fa9c964`, fetched 2026-11-23). Copyright 2009 The Cairo Project Authors (https://github.com/Gue3bara/Cairo), SIL OFL 1.1. The font file is not in the repo; the outlined wordmark is artwork, not a font file.
 
 **Check.** With that font, `build_logo.py` writes the 11 masters byte-identical to the kit's `masters/` folder (mark and small-size cut, light and dark; wordmark, light and dark; horizontal lockups primary, dark and on Cobalt; stacked lockups primary and dark). Verified 2026-11-23.

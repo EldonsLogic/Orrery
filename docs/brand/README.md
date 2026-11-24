@@ -26,7 +26,7 @@ Logo source: the Seshna logo kit "Nuqta S", draft v3, regenerated in this repo b
 ## Regenerate the logo set
 1. Marks and app icons (stdlib): `python3 tools/build_logo.py`.
 2. Wordmark and lockups need the Cairo variable font outside the repo (pinned source in `tools/PROVENANCE.md`): `SESHNA_FONT_CAIRO=/path/to/Cairo-VF.ttf uv run --no-project --with fonttools --with uharfbuzz python3 tools/build_logo.py`. Without the variable the wordmark and lockups are left as they are.
-3. Rasters: `uv run --no-project --with pymupdf python3 tools/build_icons.py`.
+3. Rasters (stdlib, deterministic, byte for byte): `uv run --no-project --python 3.12 python3 tools/build_icons.py`; `--check` fails when a committed PNG or ICO differs.
 4. Size set: `python3 scripts/build_brand_assets.py` (from the repo root; `--check` in CI).
 5. The web app copies `logo/app-icon.svg`, `logo/mark-small.svg` and the `logo/png/` web icons at build time (`web/scripts/copy-tokens.mjs`).
 

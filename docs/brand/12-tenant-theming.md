@@ -6,7 +6,7 @@ Requirement source: `CONTEXT.md` section 9. Nothing here changes v1. Code: `tool
 ## 1. Token layers (lowest to highest precedence)
 | # | Layer | Source | Notes |
 |---|---|---|---|
-| 0 | Orrery base | `tokens/tokens.json` (v1) | The 8 colours, type, radii |
+| 0 | Seshna base | `tokens/tokens.json` (v1) | The 8 colours, type, radii |
 | 1 | Product theme, light or dark | `tokens.css` + `tokens.proposed.css` | Dark is a full set, not an inversion |
 | 2 | Tenant overrides | Blueprint `branding` section, resolved to CSS | Scoped as `:root[data-tenant="slug"]` (light), plus the same under `prefers-color-scheme: dark` and `[data-theme="dark"]`, loaded after layer 1 |
 | 3 | User preference | `data-theme` light, dark or system, persisted per user | Changes theme mode only, never tenant colours |
@@ -29,8 +29,8 @@ Components read variables only. The server stores the resolved tokens at apply t
 | Chart palette (including series 1) | Colour-blind separation is verified for this set only. Open question: let series 1 follow the tenant primary |
 | Typography, spacing, radii, icon set, motion | Brand and layout integrity |
 | Focus ring width, offset and the 3:1 rule (colour follows the primary) | Accessibility |
-| Arabic and RTL behaviour, Western digits, mirroring rules, the Latin name "Orrery" | v1 rule |
-| The Orrery mark in "Powered by" | Orrery's own mark, mono |
+| Arabic and RTL behaviour, Western digits, mirroring rules, the Latin name "Seshna" | v1 rule |
+| The Seshna mark in "Powered by" | Seshna's own mark, mono |
 
 ## 3. Derivation algorithm (`derive_tenant_theme.py`)
 Input: one primary hex, optional accent hex. Work in OKLCH (L lightness, C chroma, H hue; Ottosson matrices). Every colour is gamut-mapped by reducing chroma only; contrast is measured with WCAG 2.x on the final rounded hex.
@@ -39,7 +39,7 @@ Input: one primary hex, optional accent hex. Work in OKLCH (L lightness, C chrom
 3. **Reject if it moved too far.** More than 0.20 L of darkening means it is not the tenant's colour any more: "too light". Less than 1.5:1 against body text: "too dark, looks like text".
 4. **Dark primary.** Start at L = max(input L, 0.72), chroma x 0.65, hue kept (v1 maps Cobalt #2443D0 to #86A0FF the same way); raise L in 0.005 steps until every dark pair passes, with the label Carbon deep #0E1117 (white if Carbon cannot reach 4.5). Reject if the result is within 0.10 of dark Crimson or under 0.08 from the dark text colour.
 5. **Accent.** If given: reject grey and near-Crimson; darken (light, at most 0.25 L) until 3:1 on Chalk, Panel and raised; lighten in dark likewise; reject if within 0.12 of the primary in either theme. If not given: Coral stays unless it is within 0.12 of the tenant primary, then the accent falls back to the text colour (reported).
-6. **Everything else** (hover, pressed, selected, visited, tints, labels) comes from the same formulas as the Orrery base (`tools/themelib.py`), so a tenant gets exactly the states of section 3 of `11-v1.1-additions.md`.
+6. **Everything else** (hover, pressed, selected, visited, tints, labels) comes from the same formulas as the Seshna base (`tools/themelib.py`), so a tenant gets exactly the states of section 3 of `11-v1.1-additions.md`.
 7. **Verify.** All 100 pairs per theme are recomputed from the final hex; any failure rejects (it would be a bug). Warnings, not rejections: closeness to Jade or Ochre (pills always carry icon and label).
 Guarantee: for an accepted colour every listed pair passes AA in both themes. Tested on 300 pseudo-random colours: 118 accepted, 0 violations.
 
@@ -70,7 +70,7 @@ Decisions for the founders: the 0.20 limit rejects common mid-tones such as teal
 | Security | Untrusted: type sniffing, size limits, SVG sanitised (scripts, event handlers, external references, `foreignObject`, embedded fonts removed), malware scan, stored per tenant, served from a cookieless asset host, rasterised copies for PDF and email. Owned by SEC |
 
 ## 5. Favicon and icon set (generated from the logo)
-16, 32 and 48 px in `favicon.ico` (PNG-compressed entries), apple-touch 180, PWA 192 and 512 plus a 512 maskable with the mark inside the 80% safe circle (UNVERIFIED rule), 1024 for stores and emails. From the square mark when supplied; otherwise a monogram (first letter of the display name, Alexandria 600) on the tenant primary with the label colour. App-icon tiles use the primary fill (light). No hand tuning is possible for tenants; sizes under 32 px get a 1 px safe margin and a legibility warning in the preview if the mark has fine detail. The Orrery pipeline for its own icons is `tools/build_icons.py`.
+16, 32 and 48 px in `favicon.ico` (PNG-compressed entries), apple-touch 180, PWA 192 and 512 plus a 512 maskable with the mark inside the 80% safe circle (UNVERIFIED rule), 1024 for stores and emails. From the square mark when supplied; otherwise a monogram (first letter of the display name, Cairo 600) on the tenant primary with the label colour. App-icon tiles use the primary fill (light). No hand tuning is possible for tenants; sizes under 32 px get a 1 px safe margin and a legibility warning in the preview if the mark has fine detail. The Seshna pipeline for its own icons is `tools/build_icons.py`.
 
 ## 6. Documents (invoices, PDFs, emails)
 Legal layout beats branding. Precedence, highest first: (1) mandatory fields and Arabic content on Saudi tax invoices; (2) the ZATCA QR code and its clear zone, to the specification (confirm with a compliance advisor, UNVERIFIED here); (3) the tenant logo; (4) tenant colour; (5) Powered by.
@@ -80,10 +80,10 @@ Legal layout beats branding. Precedence, highest first: (1) mandatory fields and
 | Colour | Documents always use the light theme. Tenant primary only for rules and headings on white (4.5:1 checked). The tenant accent and Coral are not used on invoices (v1) |
 | Overlap | The logo never enters the QR clear zone. If it cannot fit, it shrinks, then drops to the mark, then is omitted; the QR and mandatory fields never move |
 | Emails | Logo 40 px high, primary button with its label colour, text in text colour |
-| Fonts | Alexandria and Readex Pro unchanged |
+| Fonts | Cairo and Readex Pro unchanged |
 
-## 7. "Powered by Orrery"
-Shown by default: sidebar footer (the mark plus "Powered by Orrery" as caption text; mark only when the rail is collapsed), login page footer, and a one-line document footer. The mark is Orrery's, mono (text-muted), never in tenant colours; the name stays Latin, isolated left-to-right in Arabic. It may be removed only when the plan entitlement `branding.removePoweredBy` is on (PLT; plan names are a founder decision), set by an owner or admin, never during a trial. Even then the About dialog, legal pages and Orrery's own emails keep the name. Each toggle is audited.
+## 7. "Powered by Seshna"
+Shown by default: sidebar footer (the mark plus "Powered by Seshna" as caption text; mark only when the rail is collapsed), login page footer, and a one-line document footer. The mark is Seshna's, mono (text-muted), never in tenant colours; the name stays Latin, isolated left-to-right in Arabic. It may be removed only when the plan entitlement `branding.removePoweredBy` is on (PLT; plan names are a founder decision), set by an owner or admin, never during a trial. Even then the About dialog, legal pages and Seshna's own emails keep the name. Each toggle is audited.
 
 ## 8. Preview before applying
 Settings > Branding shows, side by side in light and dark and in English and Arabic: sidebar with logo and display name, primary and secondary button with hover and pressed, a link and a visited link, status pills, a chat message with the avatar, a table row (hover, selected), the login page, the invoice header on white and the email header. It also shows the derived colours, every adjustment ("darkened 0.026 L"), warnings, and the contrast report. **Apply** is disabled when rejected (with the reason and the nearest accepted colour) and creates a new Blueprint `branding` version; **Roll back** restores the previous one. A static sample is `preview-tenant-themes.html` (6 invented tenants and 1 rejected).

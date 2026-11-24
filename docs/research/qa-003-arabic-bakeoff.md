@@ -32,6 +32,3 @@ By dialect (round 2): Opus Gulf 89%, Egyptian 93%, MSA 94%; Sonnet Gulf 85%, Egy
 - Routing and extraction of Arabic and mixed requests is feasible at a Sonnet-class or stronger tier on this set; a Haiku-class tier is not enough on dates and numbers without code help.
 - Numbers and dates should be resolved by code, not the model (AGENTS.md principle 6): the weak categories are the ones the platform already computes deterministically.
 - Next: fix the five set issues with a native reviewer, rerun with controlled settings through the model gateway when it exists, add non-Claude models, and measure cost per request. A model-routing ADR is not proposed here.
-
-## Addendum 2026-11-18: five set fixes (draft, unreviewed)
-Eldon approved fixing the five records every model failed (002, 045, 078, 081, 097). The fixes, made by an AI author and still marked `nativeSpeaker: false`: 002 accepts the definite form, 045 expects the search tool call, 078 expects `period: 2026-02`, 081 expects `sales.list_overdue`, 097 expects a refusal. Rescoring the same stored responses: Opus 96%, Sonnet 94%, Haiku 85% (was 91, 89, 83). The gate stays at 0.85; Haiku sits exactly on it, so it is not evidence either way. Fixing the set after seeing the failures biases the scores upward; a native speaker must confirm each change before the numbers are quoted.

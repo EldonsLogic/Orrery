@@ -18,10 +18,7 @@ class TabularConnector:
     writes = False
     capabilities = frozenset({"read", "parse"})
 
-    # max_cells is aligned with the platform's default Limits (max_fields 20,000, max_steps 500,000):
-    # a sheet over it is refused (CON-013) instead of failing late. Larger files need the platform to
-    # raise those Limits for the job (memory cost) or to split the file.
-    def __init__(self, max_rows: int = 50_000, max_cols: int = 256, max_cells: int = 18_000,
+    def __init__(self, max_rows: int = 50_000, max_cols: int = 256, max_cells: int = 200_000,
                  max_sheets: int = 100):
         self.max_rows, self.max_cols, self.max_cells, self.max_sheets = max_rows, max_cols, max_cells, max_sheets
 
@@ -51,27 +48,24 @@ class TabularConnector:
                     st["external_links"] += 1
                     issue("warn", "external_link", "workbook references external content; never fetched")
                 fields = []
-                for ni, nm in enumerate(item["names"], start=1):
+                for nm in item["names"]:
                     st["defined_names"] += 1
-                    f = {"path": f"name:{ni}", "text": f"{nm['name']} = {nm['text']}", "kind": "metadata"}
+                    f = {"path": f"name:{nm['name']}", "text": f"{nm['name']} = {nm['text']}", "kind": "metadata"}
                     if nm["hidden"]:
                         f.update(visible=False, hidden_reason="hidden_name")
                     fields.append(f)
                 if fields:
                     entities.append({"name": "workbook", "kind": "workbook", "fields": fields})
                 continue
-            state = item["state"]
+            sname, state = item["name"], item["state"]
             hidden = state != "visible"
-            loc = item["locator"]
-            # A hidden sheet's name never reaches the model: a platform label stands in (X2).
-            sname = f"sheet {item['index']} (hidden)" if hidden else item["name"]
             st["sheets"] += 1
             if item["encoding"]:
                 issue("info", "encoding_used", item["encoding"])
                 issue("info", "delimiter_used", item["delimiter"])
             if hidden:
                 st["hidden_sheets"] += 1
-                issue("warn", "hidden_sheet", f"{sname}: {state}; excluded from the model-facing copy")
+                issue("warn", "hidden_sheet", f"{sname} ({state}); excluded from the model-facing copy")
             if item.get("external_links"):
                 st["external_links"] += 1
                 issue("warn", "external_link", f"{sname}: external hyperlink or link target; never fetched")
@@ -93,7 +87,7 @@ class TabularConnector:
             for c in item["cells"]:
                 budget.tick()
                 st["cells"] += 1
-                path = f"{loc}!{c['ref']}"
+                path = f"{sname}!{c['ref']}"
                 row = int("".join(ch for ch in c["ref"] if ch.isdigit()))
                 kind = "column_header" if row == item["header_row"] and not c["hidden"] else "cell"
                 f = {"path": path, "text": c["text"], "kind": kind}
@@ -112,10 +106,10 @@ class TabularConnector:
             for cm in item["comments"]:
                 budget.tick()
                 st["comments"] += 1
-                # PI 3.3: comments are hidden content. Flagged and hashed as evidence, never model text.
-                fields.append({"path": f"{loc}!{cm['ref']}#comment", "text": cm["text"], "kind": "comment",
-                               "visible": False, "hidden_reason": "hidden_sheet" if hidden else "comment",
-                               "evidence_only": True})
+                f = {"path": f"{sname}!{cm['ref']}#comment", "text": cm["text"], "kind": "comment"}
+                if hidden:
+                    f.update(visible=False, hidden_reason="hidden_sheet")
+                fields.append(f)
             st["hidden_rows"] += len(item["hidden_rows"])
             entities.append({"name": sname, "kind": "table", "fields": fields})
         return {"entities": entities, "issues": issues, "stats": st}

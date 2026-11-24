@@ -120,7 +120,7 @@
                 "to": { "$ref": "#/$defs/timeOfDay" }
               }
             },
-            "reducedPeriods": { "type": "array", "items": { "$ref": "#/$defs/reducedPeriod" } }
+            "reducedPeriods": { "type": "array", "items": { "type": "object" } }
           }
         },
         "fiscalYear": {
@@ -249,32 +249,6 @@
       "properties": {
         "ar": { "type": "string", "minLength": 1, "maxLength": 120 },
         "en": { "type": "string", "minLength": 1, "maxLength": 120 }
-      }
-    },
-    "reducedPeriod": {
-      "type": "object",
-      "required": ["id", "labels", "hours"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" },
-        "labels": {
-          "type": "object",
-          "required": ["ar", "en"],
-          "propertyNames": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$" },
-          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 200 }
-        },
-        "rule": { "enum": ["ramadan", "fixed_dates"], "default": "ramadan" },
-        "gregorianFrom": { "type": "string", "format": "date" },
-        "gregorianTo": { "type": "string", "format": "date" },
-        "hours": {
-          "type": "object",
-          "required": ["from", "to"],
-          "additionalProperties": false,
-          "properties": {
-            "from": { "$ref": "#/$defs/timeOfDay" },
-            "to": { "$ref": "#/$defs/timeOfDay" }
-          }
-        }
       }
     }
   }

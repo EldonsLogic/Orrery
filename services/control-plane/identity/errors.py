@@ -29,7 +29,6 @@ MESSAGES = {
     "IDN-042": "support grant not active",
     "IDN-043": "support grant request invalid",
     "IDN-044": "support grant does not cover this scope",
-    "IDN-045": "too many pending support grant requests",
     "IDN-050": "unknown realm",
     "IDN-051": "identity configuration invalid",
 }

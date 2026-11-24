@@ -15,7 +15,7 @@ from .models import (OPEN_TENANT, Clock, Membership, MembershipStatus, Realm,
                      RefreshRecord, TenantStatus, TokenPair)
 from .policy import RoleInfo, is_owner, mfa_required, resolve_roles, role_requires_mfa
 from .repository import Repository
-from .tokens import AccessClaims, RealmConfig, check_live, decode, encode
+from .tokens import AccessClaims, RealmConfig, decode, encode
 
 DEFAULT_REFRESH_TTL = 12 * 3600
 MAX_SESSION_AGE = 7 * 24 * 3600  # a refresh family never outlives this after sign-in
@@ -52,17 +52,15 @@ class IdentityService:
     @contextmanager
     def decision(self, action, realm: Realm, subject, tenant, detail: str = ""):
         """Audit allow on success, deny with the reason code on any failure."""
-        ctx = {}  # a caller may set "subject" once a token has been verified
         try:
-            yield ctx
+            yield
         except Exception as err:
-            subject = ctx.get("subject", subject)
             code = err.code if isinstance(err, IdentityError) else "ERROR"
             self.audit.record(at=self.clock(), action=action, decision=DENY, code=code,
                               realm=realm.value, subject=subject, tenant=tenant, detail=detail)
             raise
         self.audit.record(at=self.clock(), action=action, decision=ALLOW, code="OK",
-                          realm=realm.value, subject=ctx.get("subject", subject), tenant=tenant, detail=detail)
+                          realm=realm.value, subject=subject, tenant=tenant, detail=detail)
 
     def active_membership(self, person_id, tenant_id) -> Membership:
         person = self.repo.get_person(person_id)
@@ -78,8 +76,8 @@ class IdentityService:
 
     def caller_roles(self, caller: AccessClaims, tenant_id: str) -> tuple:
         """Roles of a verified customer caller in that tenant, from the resolver."""
-        check_live(caller, self.now())  # sealed, inside nbf/exp (Q-152)
-        if caller.realm is not Realm.CUSTOMER or caller.tenant != tenant_id:
+        if (not isinstance(caller, AccessClaims) or caller.realm is not Realm.CUSTOMER
+                or caller.tenant != tenant_id):
             raise IdentityError("IDN-006")
         m = self.active_membership(caller.subject, tenant_id)
         if m.session_version != caller.session_version:
@@ -114,7 +112,6 @@ class IdentityService:
 
     def require_step_up(self, claims: AccessClaims) -> None:
         """Fresh MFA sign-in within STEP_UP_MAX_AGE; refresh keeps the old auth_time."""
-        check_live(claims, self.now())
         if not claims.mfa_satisfied or self.now() - claims.auth_time > STEP_UP_MAX_AGE:
             raise IdentityError("IDN-013")
 
@@ -129,9 +126,8 @@ class IdentityService:
 
     def verify_customer_token(self, token, tenant_id) -> AccessClaims:
         """`tenant_id` is the tenant this request is for (from the subdomain)."""
-        with self.decision("token.verify", Realm.CUSTOMER, None, tenant_id) as ctx:
+        with self.decision("token.verify", Realm.CUSTOMER, None, tenant_id):
             claims = decode(token, self.customer, now=self.now(), tenant=tenant_id)
-            ctx["subject"] = claims.subject
             m = self.active_membership(claims.subject, tenant_id)
             if m.session_version != claims.session_version:
                 raise IdentityError("IDN-009")
@@ -254,9 +250,8 @@ class IdentityService:
             return TokenPair(token, None, exp)
 
     def verify_staff_token(self, token) -> AccessClaims:
-        with self.decision("token.verify", Realm.STAFF, None, None) as ctx:
+        with self.decision("token.verify", Realm.STAFF, None, None):
             claims = decode(token, self.staff, now=self.now(), tenant=None)
-            ctx["subject"] = claims.subject
             staff = self.repo.get_staff(claims.subject)
             if staff is None or not staff.active:
                 raise IdentityError("IDN-010")

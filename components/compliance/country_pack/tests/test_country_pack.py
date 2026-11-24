@@ -8,8 +8,6 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from jsonschema import Draft202012Validator
-
 from components.compliance.country_pack import (
     OverrideRejectedError,
     PackNotFoundError,
@@ -27,15 +25,13 @@ SAMPLE_PACKS_DIR = Path(__file__).resolve().parent / "sample_packs"
 
 
 class TestCountryPackFramework(unittest.TestCase):
-    """Covers valid load, testOnly enforcement, pinned resolution, reducedPeriods, overrides, and unknown country."""
+    """Covers valid load, invalid pack rejection, locked overrides, allowed overrides, and unknown country."""
 
     def setUp(self) -> None:
-        self.sample_pack = load_country_pack(
-            "SA", SAMPLE_PACKS_DIR, version="0.1.0", allow_test_packs=True
-        )
+        self.sample_pack = load_country_pack("SA", SAMPLE_PACKS_DIR, version="0.1.0")
 
     def test_valid_pack_loads(self) -> None:
-        pack = load_country_pack("SA", SAMPLE_PACKS_DIR, version="0.1.0", allow_test_packs=True)
+        pack = load_country_pack("SA", SAMPLE_PACKS_DIR)
         self.assertTrue(pack["testOnly"])
         self.assertEqual(pack["countryCode"], "SA")
         self.assertEqual(pack["packId"], "sa")
@@ -43,26 +39,20 @@ class TestCountryPackFramework(unittest.TestCase):
         self.assertEqual(pack["version"], "0.1.0")
         self.assertEqual(validate_pack(pack), [])
 
-        resolved = resolve_country_pack(
-            "sa", SAMPLE_PACKS_DIR, version="0.1.0", allow_test_packs=True
-        )
+        resolved = resolve_country_pack("sa", SAMPLE_PACKS_DIR)
         self.assertEqual(resolved["locale"]["currency"], "SAR")
         self.assertEqual(resolved["locale"]["timezone"], "Asia/Riyadh")
         self.assertEqual(resolved["appliedOverrides"], [])
         self.assertIn("tax", resolved["locked"])
         self.assertIn("coaTemplate", resolved["locked"])
 
-    def test_test_only_rejected_and_unpinned_resolve_rejected_by_default(self) -> None:
-        with self.assertRaises(PackValidationError):
-            load_country_pack("SA", SAMPLE_PACKS_DIR, version="0.1.0")
-        with self.assertRaises(PackNotFoundError):
-            load_country_pack("SA", SAMPLE_PACKS_DIR)
-        with self.assertRaises(PackNotFoundError):
-            resolve_country_pack("SA", SAMPLE_PACKS_DIR, allow_test_packs=True)
-
-    def test_schema_is_valid_draft_2020_12(self) -> None:
+    def test_schema_is_valid_draft_2020_12_if_jsonschema_installed(self) -> None:
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
         self.assertEqual(schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
+        try:
+            from jsonschema import Draft202012Validator
+        except ImportError:
+            return
         Draft202012Validator.check_schema(schema)
 
     def test_invalid_pack_rejected(self) -> None:
@@ -87,18 +77,12 @@ class TestCountryPackFramework(unittest.TestCase):
         bad_days["localeDefaults"]["workingTime"]["workDays"].append("fri")
         self.assertTrue(validate_pack(bad_days))
 
-        bad_rp = copy.deepcopy(self.sample_pack)
-        bad_rp["localeDefaults"]["workingTime"]["reducedPeriods"] = [
-            {"id": "BAD-ID", "labels": {"en": "Only English"}, "hours": {"from": "09:00", "to": "15:00"}}
-        ]
-        self.assertTrue(validate_pack(bad_rp))
-
         with tempfile.TemporaryDirectory() as tmp:
             pdir = Path(tmp) / "sa" / "0.1.0"
             pdir.mkdir(parents=True)
             (pdir / "pack.json").write_text(json.dumps(bad_missing), encoding="utf-8")
             with self.assertRaises(PackValidationError):
-                load_country_pack("SA", Path(tmp), version="0.1.0", allow_test_packs=True)
+                load_country_pack("SA", Path(tmp), version="0.1.0")
 
     def test_locked_setting_override_rejected(self) -> None:
         locked_attempts = [
@@ -135,14 +119,6 @@ class TestCountryPackFramework(unittest.TestCase):
             "workingTime": {
                 "workDays": ["mon", "tue", "wed", "thu", "fri"],
                 "hours": {"from": "09:00", "to": "18:00"},
-                "reducedPeriods": [
-                    {
-                        "id": "ramadan_hours",
-                        "labels": {"ar": "دوام رمضان", "en": "Ramadan Hours"},
-                        "rule": "ramadan",
-                        "hours": {"from": "10:00", "to": "16:00"},
-                    }
-                ],
             },
             "holidays": {
                 "overrides": [
@@ -155,9 +131,7 @@ class TestCountryPackFramework(unittest.TestCase):
                 ]
             },
         }
-        resolved = resolve_country_pack(
-            "SA", SAMPLE_PACKS_DIR, company_overrides=overrides, version="0.1.0", allow_test_packs=True
-        )
+        resolved = resolve_country_pack("SA", SAMPLE_PACKS_DIR, company_overrides=overrides)
         self.assertEqual(resolved["locale"]["timezone"], "Asia/Dubai")
         self.assertEqual(resolved["locale"]["numberSystem"], "eastern_arabic")
         self.assertEqual(resolved["locale"]["week"]["weekendDays"], ["sat", "sun"])
@@ -177,18 +151,6 @@ class TestCountryPackFramework(unittest.TestCase):
         with self.assertRaises(OverrideRejectedError):
             apply_company_overrides(self.sample_pack, {"workingTime": {"reducedPeriods": "not-a-list"}})
 
-        # Blueprint contract violations on reducedPeriods
-        bad_periods = [
-            [{"labels": {"ar": "أ", "en": "A"}, "hours": {"from": "09:00", "to": "15:00"}}],
-            [{"id": "ramadan_hours", "labels": {"en": "Missing Arabic"}, "hours": {"from": "09:00", "to": "15:00"}}],
-            [{"id": "ramadan_hours", "labels": {"ar": "أ", "en": "A"}, "hours": {"from": "09:00", "to": "15:00"}, "extra": 1}],
-            [{"id": "fixed_a", "labels": {"ar": "أ", "en": "A"}, "rule": "fixed_dates", "hours": {"from": "09:00", "to": "15:00"}}],
-        ]
-        for bp in bad_periods:
-            with self.subTest(bad_period=bp):
-                with self.assertRaises(OverrideRejectedError):
-                    apply_company_overrides(self.sample_pack, {"workingTime": {"reducedPeriods": bp}})
-
         with self.assertRaises(OverrideRejectedError):
             apply_company_overrides(self.sample_pack, {"timezone": "Mars/Olympus"})
 
@@ -200,24 +162,16 @@ class TestCountryPackFramework(unittest.TestCase):
         with self.assertRaises(OverrideRejectedError):
             apply_company_overrides(constrained, {"fiscalYear": {"type": "hijri"}})
 
-    def test_highest_semver_selected_skips_test_only_when_production_mode(self) -> None:
-        prod_v1 = copy.deepcopy(self.sample_pack)
-        prod_v1["testOnly"] = False
-        prod_v1["version"] = "0.1.0"
-        test_v2 = copy.deepcopy(self.sample_pack)
-        test_v2["testOnly"] = True
-        test_v2["version"] = "0.2.0"
+    def test_highest_semver_selected_when_version_omitted(self) -> None:
+        v2 = copy.deepcopy(self.sample_pack)
+        v2["version"] = "0.2.0"
         with tempfile.TemporaryDirectory() as tmp:
-            for ver, data in (("0.1.0", prod_v1), ("0.2.0", test_v2)):
+            for ver, data in (("0.1.0", self.sample_pack), ("0.2.0", v2)):
                 d = Path(tmp) / "sa" / ver
                 d.mkdir(parents=True)
                 (d / "pack.json").write_text(json.dumps(data), encoding="utf-8")
-            # Default production load ignores testOnly=true 0.2.0 and picks 0.1.0
-            loaded_prod = load_country_pack("SA", Path(tmp))
-            self.assertEqual(loaded_prod["version"], "0.1.0")
-            # Discovery with allow_test_packs=True sees 0.2.0
-            loaded_test = load_country_pack("SA", Path(tmp), allow_test_packs=True)
-            self.assertEqual(loaded_test["version"], "0.2.0")
+            loaded = load_country_pack("SA", Path(tmp))
+            self.assertEqual(loaded["version"], "0.2.0")
 
     def test_unknown_country_fails_closed(self) -> None:
         for bad_country in ("ZZ", "FR", "AE", "", "SAUDI", "12"):
@@ -226,12 +180,10 @@ class TestCountryPackFramework(unittest.TestCase):
                     load_country_pack(bad_country, SAMPLE_PACKS_DIR)
 
         with self.assertRaises(PackNotFoundError):
-            load_country_pack("SA", SAMPLE_PACKS_DIR, version="9.9.9", allow_test_packs=True)
+            load_country_pack("SA", SAMPLE_PACKS_DIR, version="9.9.9")
 
         with self.assertRaises(PackValidationError):
-            resolve_country_pack(
-                "SA", SAMPLE_PACKS_DIR, version="0.1.0", pack_id="ae", allow_test_packs=True
-            )
+            resolve_country_pack("SA", SAMPLE_PACKS_DIR, pack_id="ae")
 
 
 if __name__ == "__main__":

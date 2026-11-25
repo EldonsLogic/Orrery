@@ -44,9 +44,12 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
 - #309 round 2 fixes returned (Opus), revision 3 (143 lines): no compiler split (a constrained field must be alone in its authored revision, else `constraint_change_not_isolated`); stored policy floor raised before activation and re-read under lock at reservation; `siteId` rotated in both copies on every remap, clone and restore; grant budget charged only after signature and tenant binding; `sha256:` hash grammar; citation fixed. Coordinator read the diff. Pushed `7212399`; table posted.
   - Final re-review dispatched: gpt-6.1-sol (high), `9160d33..7212399`.
 - Both re-reviews (#309 `9160d33..7212399`, #310 `c1666d1..2cae216`) failed at start: the ChatGPT account on `codex_39c1269a` reached its usage limit. No review result; nothing changed. Asking the partner how to continue the cross-model reviews.
+- Partner decision: run the pending reviews on Gemini via Antigravity (gemini-4-argon, high) while the ChatGPT account is limited. Dispatched both: #309 final security re-review `9160d33..7212399`, and the #310 narrow N1 re-check `c1666d1..2cae216`.
+- The GitHub watcher reached its 2-hour limit with no events after #308 merged; not restarted (asking the partner).
 
 ## Decisions
 - Partner: run a third review round on #309 ADR-0068 (2026-11-25).
+- Partner: while the ChatGPT reviewer account is at its usage limit, cross-model reviews run on Gemini (Antigravity, gemini-4-argon, high).
 
 ## Tokens or cost
 Unknown.

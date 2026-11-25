@@ -55,10 +55,16 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
 - BPL-043 returned (Sonnet): `_refuse_constrained_fields` in `_ensure_doctype_exists` and the unmapped branch of `_check_entity_add`; projection no longer carries constraint flags; 13 new tests (8 failed before the fix); one BPL-041 test that asserted the old bypass inverted and renamed. Coordinator reviewed the diff and re-ran: 60 engine files 1,528 passed, 86 skipped, 27 Hijri-only failures. Opened #312 (Tier 2, base `bpl-041-check-ready-refusals`, stacked on #310) at `4337684`.
   - Review dispatched: Gemini 4 Argon (high), read-only code-correctness and security review of #312.
 - #312 review result, Gemini 4 Argon at `4337684`: APPROVE; every constraint route covered, execute and readiness parity, both refusal-removal mutants killed; one Low (the restored projection flags are an equivalent mutant behind the refusal) accepted with no change. 102 passed, 10 skipped. Posted. Waits for #310 and Eldon (Tier 2).
+- After the session-end PR (#313): the partner decided to keep the 41 old worktrees (never delete them) and to restart the GitHub watcher at the start of the next session. The coordinator prepared a sprint handoff brief for the next thread (kept outside the repo, per the no-session-briefs rule). It plans conflict-free parallel waves:
+  - **Rules:** a Tier 1 claim PR before any dispatch; the coordinator alone edits shared files (PLAN, open questions, ADR index, `tests.yml`); a path-lock table in the live log; a serial adapter lane for `frappe_backend.py` and `engine.py`; ADR-0069 and Q-609 reserved as next free numbers.
+  - **Wave 1:** CMP-010, new PLT-027 ADR, CE-SEC-008 part 1, GOV-071 once #296 merges, a PLT-024 request-header test.
+  - **Wave 2:** lanes triggered by #310, #312, #306, #300 and #296 merging.
+  - **Survey of the partner's 23 `doing` rows:** none closes with code alone today. ERP-031 may close on the green real-bench runs 45623345992 and 45636525010; SEC-004 needs a fresh green run on main.
 
 ## Decisions
 - Partner: run a third review round on #309 ADR-0068 (2026-11-25).
 - Partner: park #309 ADR-0068 for Eldon after three review rounds; open findings F1 to F4 stay on the PR.
+- Partner: keep the 41 old worktrees (do not delete); restart the GitHub watcher at the next session start.
 - Partner: while the ChatGPT reviewer account is at its usage limit, cross-model reviews run on Gemini (Antigravity, gemini-4-argon, high).
 
 ## Tokens or cost
@@ -70,4 +76,4 @@ Unknown. The ChatGPT reviewer account (`codex_39c1269a`) reached its usage limit
 - After #312 merges: CE-SEC-008 (deploy-path durability defects), BPL-044 (DocField snapshot gap), BPL-042 (Eldon's six BPL-033 Lows).
 - After #306 merges: ERP-034; SEC-025 needs an ADR and security review first. After #296 merges: GOV-071.
 - Ready large rows for a fresh session: CMP-039, CMP-010, CMP-011 (rigid zone, Tier 3).
-- Open with the partner: restart of the GitHub watcher (stopped at its 2-hour limit, no events), deleting the 41 rescued worktrees. Eldon: Q-605, Q-311 confirmation, Q-604 confirmation.
+- Next session: a parallel sprint per the handoff brief (claim PR first, coordinator-only shared files, path locks). Restart the watcher at start. Confirm with the partner that the CMP-003 and ERP-015 method (agent-drafted deterministic code, Tier 3 line-by-line review, accountant review before production) applies to CMP-010 before starting it. Eldon: Q-605, Q-311 confirmation, Q-604 confirmation.

@@ -20,5 +20,8 @@ Validator rule 10 now calls the token resolver's OKLCH derive (`tokens.brand_too
 ## Tokens or cost
 Unknown or approximate, if known.
 
+## Behaviour change
+- Known change for the founders: dark-theme derivations are now silent. The derive is authoritative and rule 10 reports only light-theme darkening (BP-BRAND-002).
+
 ## Next step
-Validator `colour.auto_adjust` and `MAX_LIGHTNESS_SHIFT` are now unused by rule 10 (left in place, tested by nothing else); remove in a later cleanup. Rule 10 only reports light-theme adjustments; the dark primary is always derived.
+Removed in review fixes: `colour.auto_adjust`, `lightness`, `_with_lightness`, `MAX_LIGHTNESS_SHIFT`. `passes_all` stays (used by the contrast tests). Rule 10 only reports light-theme adjustments; the dark primary is always derived.

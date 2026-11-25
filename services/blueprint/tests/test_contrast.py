@@ -38,8 +38,7 @@ def test_light_yellow_is_adjusted_or_rejected_and_adjustment_passes():
         bgs = list(SURFACES["light"].values())
         assert passes_all(a["proposed"], bgs, 4.5)
         assert a["proposed"] != a["original"]
-    # yellow is fine on the dark theme
-    assert not [a for a in rep.adjustments if a["theme"] == "dark"]
+    # Rule 10 reports light-theme adjustments only; dark-theme derivations are silent (the derive is authoritative).
 
 
 def test_auto_adjust_yields_warning_not_error():
@@ -48,6 +47,20 @@ def test_auto_adjust_yields_warning_not_error():
     adj = [a for a in rep.adjustments if a["theme"] == "light" and a["path"].endswith("primaryColour")]
     assert adj and passes_all(adj[0]["proposed"], list(SURFACES["light"].values()), 4.5)
     assert adj[0]["ratioAfter"] >= 4.5 > adj[0]["ratioBefore"]
+
+
+def test_unavailable_derive_is_a_branding_error(monkeypatch):
+    # Rule 10 must fail closed: if the token derive cannot load, the primary colour is reported, never passed silently.
+    from tokens import brand_tools
+
+    def _unavailable():
+        raise brand_tools.BrandToolsUnavailable("test: brand tools missing")
+
+    monkeypatch.setattr(brand_tools, "load", _unavailable)
+    rep = validate(_with(primary="#2443D0"), full_ctx())
+    errs = [e for e in rep.errors if e.code == "BP-BRAND-001"]
+    assert errs and errs[0].path == "/branding/primaryColour"
+    assert not rep.ok
 
 
 def test_white_is_rejected_in_light_theme():

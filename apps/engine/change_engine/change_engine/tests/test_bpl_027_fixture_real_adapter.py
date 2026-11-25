@@ -116,6 +116,17 @@ def live_config_problem(env) -> str | None:
     return bench_skip_reason() if env.get(REQUIRE_LIVE_ENV) == "1" else None
 
 
+def missing_prerequisite(env, state: dict, key: str) -> None:
+    """An earlier ordered test did not reach ``key``. REQUIRE_BPL027_LIVE=1 makes that a failure, never a skip (BPL-041
+    review round 1): a skipped successor would hide the failure of its predecessor."""
+    if key in state:
+        return
+    message = f"earlier step did not reach {key!r}"
+    if env.get(REQUIRE_LIVE_ENV) == "1":
+        raise AssertionError(f"{REQUIRE_LIVE_ENV}=1 but {message}")
+    raise unittest.SkipTest(message)
+
+
 def load_fixture() -> dict:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))
 
@@ -779,8 +790,7 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
         cls.tmp.cleanup()
 
     def need(self, key: str) -> None:
-        if key not in self.state:
-            self.skipTest(f"earlier step did not reach {key!r}")
+        missing_prerequisite(os.environ, self.state, key)
 
     def call(self, op: str, inp: dict, adapter: ChangeEngineAdapter | None = None) -> dict:
         return (adapter or self.adapter).call(op, ctx(), inp)

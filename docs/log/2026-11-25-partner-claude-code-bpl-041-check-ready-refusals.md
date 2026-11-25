@@ -33,3 +33,12 @@ Unknown.
 
 ## Next step
 BPL-041 slice 2: add a BPL-027 phase to `infra/dev/docker/run_real_bench_ci.py` (fresh `BPL027_BENCH_SITE`, engine container with `jsonschema`, the `docker-compose.bpl027-test.yml` mounts, minimum 10 tests, `REQUIRE_BPL027_LIVE=1`) and update `infra/dev/docker/tests/test_erp_031_real_bench_valuation.py`.
+
+## Review round 1 (cross-model review, gpt-6.1-sol)
+- R1 (earlier steps ignored): `check_ready` now walks the steps in order with an in-memory projection (`made_types`, `made`) of the types and fields earlier steps create, and judges each step against the engine plus that projection. A field an earlier step adds never carries unique or index (Q-603); a type `entity.add` creates carries its fields' flags.
+- R2 (false `subject_missing`): the projection includes types created by `entity.add` of an unmapped entity and by `field.add` or `relation.add` (`_ensure_doctype_exists`); a mapped `entity.add` still raises `subject_missing` for a type nothing earlier creates. Tests: the passing plan runs to the end, and plans execute would refuse are still refused.
+- R3 (`need()` skipped under the flag): new `missing_prerequisite(env, state, key)`; with `REQUIRE_BPL027_LIVE=1` a missing prerequisite fails, otherwise it skips as before. `need()` calls it.
+- R4 (survivors): added the `unsupported_value_type` refusal test; the zero-write spy now fails on any document or DocType insert, `set_value`, commit, DDL helper or non-read `db.sql`, and on any difference in the whole simulated site state. Both survivors (no unsupported-type check; DocType insert during readiness) now fail the new file.
+- R5 (`get_meta` cache fill): accepted; one comment in `_held_fields`.
+- R6 (malformed steps): `_check_step_shapes` runs first and raises the backend's existing side-effect-free `invalid_request` with `details.fields` (as `_location_kind` does). Covers step, subject, params, definition, fields (list of dicts), parents (list of dicts with `id`).
+- Counts: new file 8 -> 21 tests (13 added; all pass). Both `test_bpl_031_*`, `test_bpl_033`, `test_bpl_027`, `test_bpl_012` and the new file: 103 passed, 10 skipped. All 59 engine files in `tests.yml`: 1,514 passed, 86 skipped, 27 failed (only the known Hijri-date ones).

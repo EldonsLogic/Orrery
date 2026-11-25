@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+from types import SimpleNamespace
 from typing import Any, Callable, Iterator
 
 from change_engine.adapter.mapping import (
@@ -89,6 +90,10 @@ ENGINE_ENV_VAR = "CHANGE_ENGINE_ENV"
 OFFLINE_SIMULATOR_ENVS = frozenset({"dev", "test"})
 LOCATION_KINDS = frozenset({"branch", "warehouse", "department"})  # contracts/blueprint.schema.json location.kind
 _STATE_TABLE = "tabChange Engine Blueprint State"  # the tenant-database copy of the site state
+
+
+# A field the guarded path adds never carries unique or an index (Q-603); BPL-041's readiness projection uses this.
+_NO_CONSTRAINT = SimpleNamespace(unique=0, search_index=0)
 
 
 class FrappeBackendError(Exception):
@@ -784,6 +789,7 @@ class FrappeRuntimeBackend:
         Refuses with a side-effect-free error when the engine site cannot take the artifact: its database does not
         answer, a location upsert or disable step has no kind the adapter knows, or a warehouse step has no resolvable company. The
         engine turns the refusal into ``failed_clean`` (nothing ran) instead of compensating committed steps."""
+        self._check_step_shapes(steps)
         with self._site_session(tenant_id) as (f, _site_name):
             try:
                 f.db.sql("SELECT 1")
@@ -806,11 +812,40 @@ class FrappeRuntimeBackend:
                 )
             self._check_entity_refusals(f, steps)
 
+    @staticmethod
+    def _check_step_shapes(steps: list[dict[str, Any]]) -> None:
+        """A step whose shape the checks below cannot read is a side-effect-free invalid_request (the code `_location_kind`
+        uses), never a generic engine_unavailable (BPL-041 review round 1)."""
+        for i, step in enumerate(steps):
+            bad = None if isinstance(step, dict) else f"/steps/{i}"
+            if bad is None and step.get("kind") in ("entity.add", "field.add", "relation.add"):
+                params, subject = step.get("params"), step.get("subject")
+                defn = params.get("definition") if isinstance(params, dict) else None
+                parents = subject.get("parents") if isinstance(subject, dict) else None
+                fields = defn.get("fields") if isinstance(defn, dict) else None
+                for ok, where in (
+                    (params is None or isinstance(params, dict), "params"),
+                    (subject is None or isinstance(subject, dict), "subject"),
+                    (defn is None or isinstance(defn, dict), "params/definition"),
+                    (fields is None or (isinstance(fields, list) and all(isinstance(x, dict) for x in fields)), "params/definition/fields"),
+                    (parents is None or (isinstance(parents, list) and all(isinstance(x, dict) and "id" in x for x in parents)), "subject/parents"),
+                ):
+                    if not ok:
+                        bad = f"/steps/{i}/{where}"
+                        break
+            if bad:
+                raise FrappeBackendError("invalid_request", {"fields": [bad]}, stage="prepare", side_effect_free=True)
+
     def _check_entity_refusals(self, f: Any, steps: list[dict[str, Any]]) -> None:
         """BPL-041: the BPL-031 refusals of entity.add, field.add and relation.add, found before the first step runs.
 
         Same checks, error type and reason codes as the execute path (``protected_subject``, ``subject_missing``,
-        ``unique_or_index``), read-only, against the engine as it is now. The execute-time checks stay as a second line."""
+        ``unique_or_index``), read-only, in step order. Each step is judged against the engine as it is now plus an
+        in-memory projection of what the steps before it will create, as execute would see it: ``made`` maps (type, field)
+        to the field an earlier step adds (types an earlier step creates appear in ``made_types``). The execute-time
+        checks stay as a second line."""
+        made_types: set[str] = set()
+        made: dict[tuple[str, str], Any] = {}
         for step in steps:
             kind = step.get("kind")
             if kind not in ("entity.add", "field.add", "relation.add"):
@@ -821,7 +856,7 @@ class FrappeRuntimeBackend:
             if kind == "entity.add":
                 entity_id = str(subject.get("id") or (segs[1] if len(segs) > 1 else "entity"))
                 self._refuse_protected_entity(entity_id)
-                self._check_entity_add(f, entity_id, entity_to_doctype(entity_id), params.get("definition") or {})
+                self._check_entity_add(f, entity_id, entity_to_doctype(entity_id), params.get("definition") or {}, made_types, made)
                 continue
             parents = subject.get("parents") or []
             entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
@@ -829,32 +864,61 @@ class FrappeRuntimeBackend:
             doctype = entity_to_doctype(entity_id)
             defn = params.get("definition") or {"id": subject.get("id") or "field", "type": "string"}
             fieldname = _sanitize_custom_fieldname(str(defn.get("id") or subject.get("id") or ("rel" if kind == "relation.add" else "field")))
-            if self._doctype_exists(f, doctype):
-                held = f.get_meta(doctype).get_field(fieldname)
-                if held is not None and self._lacks_constraint(held, defn.get("unique"), defn.get("indexed")):
+            held = self._held_fields(f, doctype, [fieldname], made_types, made)
+            if held:
+                if any(self._lacks_constraint(x, defn.get("unique"), defn.get("indexed")) for x in held):
                     raise self._refuse("unique_or_index")
+            else:  # execute creates the type if it is missing (`_ensure_doctype_exists`), then the field, never with a constraint
+                self._project_new_type(f, doctype, made_types, made, [])
+                made[(doctype, fieldname)] = _NO_CONSTRAINT
 
-    def _check_entity_add(self, f: Any, entity_id: str, doctype: str, defn: dict[str, Any]) -> None:
-        """The refusals `_add_entity` raises, without its writes."""
-        exists = self._doctype_exists(f, doctype)
+    def _held_fields(self, f: Any, doctype: str, names: list[str], made_types: set[str], made: dict[tuple[str, str], Any]) -> list[Any]:
+        """The fields of these names the type holds: on the engine now, or added by an earlier step of the plan."""
+        held = []
+        if doctype not in made_types and self._doctype_exists(f, doctype):
+            # get_meta may fill the engine's own metadata cache on a miss; that is not a business-data write, and the
+            # execute path reads the same way, so readiness stays as read-only as execute's own checks.
+            meta = f.get_meta(doctype)
+            held += [x for x in (meta.get_field(n) for n in names) if x is not None]
+        return held + [made[(doctype, n)] for n in names if (doctype, n) in made]
+
+    def _project_new_type(self, f: Any, doctype: str, made_types: set[str], made: dict[tuple[str, str], Any],
+                          fields: list[dict[str, Any]]) -> None:
+        """Record the type `_ensure_doctype_exists` would create (adapter-owned, with these fields' unique and index flags)."""
+        if doctype in made_types or self._doctype_exists(f, doctype):
+            return
+        made_types.add(doctype)
+        known = [fld for fld in fields if fld.get("type", "string") in BLUEPRINT_TO_FRAPPE_FIELDTYPE]
+        for fld in known:
+            name = _sanitize_custom_fieldname(str(fld.get("id") or "field"))
+            made[(doctype, name)] = SimpleNamespace(unique=int(bool(fld.get("unique"))), search_index=int(bool(fld.get("indexed"))))
+        if not known:
+            made[(doctype, "title")] = _NO_CONSTRAINT
+
+    def _check_entity_add(self, f: Any, entity_id: str, doctype: str, defn: dict[str, Any], made_types: set[str],
+                          made: dict[tuple[str, str], Any]) -> None:
+        """The refusals `_add_entity` raises, without its writes, and the type and fields it would leave behind."""
+        fields = [fld for fld in defn.get("fields") or [] if isinstance(fld, dict)]
+        exists = doctype in made_types or self._doctype_exists(f, doctype)
         if not is_contract_mapped_entity(entity_id):
-            if exists and not self._adapter_owns_doctype(f, doctype):
+            if exists and doctype not in made_types and not self._adapter_owns_doctype(f, doctype):
                 raise self._refuse("protected_subject")
+            self._project_new_type(f, doctype, made_types, made, fields)
             return
         if not exists:
             raise self._refuse("subject_missing")
-        fields = [fld for fld in defn.get("fields") or [] if isinstance(fld, dict)]
         if any(fld.get("type", "string") not in BLUEPRINT_TO_FRAPPE_FIELDTYPE for fld in fields):
             raise self._refuse("unsupported_value_type")
-        meta = f.get_meta(doctype)
         for fld in fields:
-            holders = [x for x in (meta.get_field(_sanitize_custom_fieldname(str(fld.get("id") or "field"))),
-                                   meta.get_field(str(fld.get("id")))) if x is not None]
+            names = [_sanitize_custom_fieldname(str(fld.get("id") or "field")), str(fld.get("id"))]
+            holders = self._held_fields(f, doctype, names, made_types, made)
             if holders:
                 if any(self._lacks_constraint(x, fld.get("unique"), fld.get("indexed")) for x in holders):
                     raise self._refuse("unique_or_index")
             elif fld.get("unique") or fld.get("indexed"):
                 raise self._refuse("unique_or_index")
+            else:
+                made[(doctype, names[0])] = _NO_CONSTRAINT
 
     def _find_warehouse(
         self,

@@ -159,7 +159,7 @@ None yet; claim PR must merge first.
   - Plan cleanup:
     - Done: BPL-043 (#312), PLT-027 (ADR-0069 merged as Proposed; open items owned by PLT-028 to PLT-032) and CMP-036 (#300 delivered the full row).
     - BPL-041 stays doing, because slice 2 (real-bench CI sets the REQUIRE flag) is still open.
-    - New row ERP-036: the `tenant_role_holders` resolver Eldon asked for on #306. ERP-034 already covers the scheduled report.
+    - The `tenant_role_holders` resolver Eldon asked for on #306 already exists as SEC-025. A duplicate ERP-036 was dropped after Eldon's review of #334, and its detail was folded into SEC-025's text: per-request read with no cache, tenant from the verified token, suspended or away members and pending invitations counted. The SEC-025 gate (ADR and security review before any build) is kept. ERP-034 covers the scheduled report.
   - Claimed (doing):
     - ERP-035: invoice tokens, Sonnet.
     - CE-SEC-009 and CE-SEC-010: one design ADR-0070, Opus.

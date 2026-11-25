@@ -45,6 +45,9 @@ None yet; claim PR must merge first.
 - Dispatched after the claim merged: T1a CMP-010 design (Claude Opus, running) and T2 PLT-027 design (Claude Opus). T3 CE-SEC-008 part 1 and T5 PLT-024 header tests not yet dispatched.
 - T2 PLT-027 result: ADR-0069 Proposed (154 lines, design only, 29 threats each with a named proposed test). Coordinator added the INDEX entry, follow-up rows PLT-028 to PLT-031 (G3 go-live row depends only on earlier-gate Eldon rows) and Q-609 to Q-614 for Eldon's lane. check_docs, check_repo_hygiene and check_plan_independence pass. Security review by a different model is pending.
 
+- PR #316 opened for PLT-027. Security review dispatched to Codex GPT-6.2 Sol (high), read-only.
+- Dispatched T3 CE-SEC-008 part 1 (Claude Sonnet 5.5 high, own worktree) and T5 PLT-024 header tests (Claude Sonnet 5.5 medium, own worktree) with the sprint-6 briefs unchanged.
+
 ## Tokens or cost
 Unknown.
 

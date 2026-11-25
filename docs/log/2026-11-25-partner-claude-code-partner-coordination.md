@@ -31,6 +31,7 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
   - Review dispatched: gpt-6.1-sol (high), read-only code-correctness review of #311 at `31302b9`.
 - #310 review result, gpt-6.1-sol at `d0c93e2`: REQUEST_CHANGES. Medium: R1 earlier planned fields ignored, R2 false `subject_missing` when an earlier step creates the type, R3 `need()` still skips with `REQUIRE_BPL027_LIVE=1`. Low: R4 untested `unsupported_value_type` and narrow write spies (two mutants survive), R5 `get_meta` fills the cache, R6 malformed steps give `engine_unavailable`. Posted on #310.
   - Fixes dispatched: Claude Sonnet 5.5 (high), in the #310 checkout only, test-first, no git. Allowed: `frappe_backend.py`, the BPL-041 test file, the REQUIRE and `need()` handling in the BPL-027 test, the PR's log (append). R5 accepted with a code comment (the execute path and the existing `check_ready` already call `get_meta`; a cache fill is not a business write).
+- #311 review result, gpt-6.1-sol at `31302b9`: APPROVE with two Lows (engine-install pin removal survived; helper bypass in the real check survived). Both fixed by the coordinator at `c9249ae` (step-scoped pin test; the planted test goes through the real check); both mutants now killed; `company_calendar` 48 OK, `country_pack` 129 OK. Review and fixes table posted. Waits for Eldon (Tier 2).
 
 ## Decisions
 - None yet.

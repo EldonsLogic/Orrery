@@ -226,6 +226,31 @@ class TestBilingualTaxInvoiceHTML(unittest.TestCase):
         self.assertIn("Engine totals disagree", str(ctx.exception))
 
 
+class TestSeshnaTypographyAndName(unittest.TestCase):
+    """GOV-071 (#328 review): the Seshna font stack (Readex Pro body, Cairo titles and figures, ADR-0066, BRD-011,
+    WEB-028) and the product name kept in Latin letters inside the Arabic footer."""
+
+    def setUp(self):
+        self.doc_html = render_tax_invoice_html(_sample_zatca_standard(), mode="zatca_sa")
+
+    def test_retired_brand_fonts_are_gone(self):
+        for font in ("Alexandria", "Arial"):
+            with self.subTest(font=font):
+                self.assertNotIn(font, self.doc_html)
+
+    def test_body_is_readex_pro_and_titles_and_figures_are_cairo(self):
+        import re
+
+        stacks = re.findall(r"font-family:\s*([^;]+);", self.doc_html)
+        self.assertTrue(stacks and stacks[0].startswith("'Readex Pro'"), stacks)
+        self.assertTrue(any(s.startswith("'Cairo'") for s in stacks), stacks)
+        self.assertIn("tabular-nums", self.doc_html)
+
+    def test_footer_keeps_seshna_in_a_latin_isolate(self):
+        self.assertIn('مدعوم من <bdi dir="ltr">Seshna</bdi>', self.doc_html)
+        self.assertNotIn("سيشنا", self.doc_html)
+
+
 class TestBrandingAndSecurity(unittest.TestCase):
     def test_branding_contrast_and_logo_guardrails(self):
         self.assertGreaterEqual(contrast_ratio_on_white(DEFAULT_BRANDING_PRIMARY), 4.5)

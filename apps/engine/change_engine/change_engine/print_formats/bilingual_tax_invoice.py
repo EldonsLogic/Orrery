@@ -900,7 +900,7 @@ def render_tax_invoice_html(
     padding: 0;
     background: #ffffff;
     color: #0e1117;
-    font-family: 'Readex Pro', 'Alexandria', 'DejaVu Sans', 'Noto Sans Arabic', Arial, sans-serif;
+    font-family: 'Readex Pro', 'Noto Sans Arabic', 'DejaVu Sans', sans-serif;
     font-size: 9.5pt;
     line-height: 1.45;
     direction: rtl;
@@ -967,6 +967,7 @@ def render_tax_invoice_html(
     margin-bottom: 1mm;
   }}
   .doc-title-ar, .doc-title-en {{
+    font-family: 'Cairo', 'Noto Sans Arabic', 'DejaVu Sans', sans-serif;
     display: table-cell;
     width: 50%;
     font-size: 14pt;
@@ -1138,6 +1139,8 @@ def render_tax_invoice_html(
   .num-col {{
     text-align: center;
     white-space: nowrap;
+    font-family: 'Cairo', 'Noto Sans Arabic', 'DejaVu Sans', sans-serif;
+    font-variant-numeric: tabular-nums;
   }}
   .code-col {{
     text-align: center;

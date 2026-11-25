@@ -27,6 +27,13 @@ Renamed Orrery to Seshna in prose, customer-visible text and test fixtures in th
 ## Decisions
 - None. Follows ADR-0066.
 
+## Review fix (Eldon's Haiku 5.5 review at 124da064, one blocker)
+- `bilingual_tax_invoice.py`: the retired brand font Alexandria and Arial are removed. Body text is now `'Readex Pro', 'Noto Sans Arabic', 'DejaVu Sans', sans-serif`. Titles and the number columns use Cairo, and the number columns get `tabular-nums` (brand tokens; Eldon's WEB-028 decision that table figures use Cairo).
+- New `TestSeshnaTypographyAndName` in `test_erp_007`: retired fonts absent, Readex Pro body, Cairo titles and figures, and the footer pinned to a Latin `<bdi dir="ltr">Seshna</bdi>`. It failed before the fix, then passed.
+- Not done here: adding this file to the full colour and font literal guard in `test_erp_016`. That needs its 36 hard-coded colours moved to tokens, which is beyond a rename. Recorded as ERP-035.
+- GOV-071 set to done in PLAN.
+- Engine print tests: 218 passed, 1 skipped.
+
 ## Tokens or cost
 Unknown.
 

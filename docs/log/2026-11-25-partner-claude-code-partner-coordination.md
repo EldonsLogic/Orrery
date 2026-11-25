@@ -52,6 +52,8 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
 - Partner decision: park #309 for Eldon's Tier 3 read; no more review rounds now. Summary and three questions for Eldon posted (where grant state lives, policy version grammar, compiler and schema ownership). BPL-040 stays `doing`.
 - BPL-043 branch `bpl-043-unmapped-constraint-refusal`, stacked on #310 (it needs BPL-041's readiness projection). Rows added on that branch: BPL-043 (`doing`), CE-SEC-008 (today's deploy-path durability defects from the #309 reviews), BPL-044 (DocField snapshot gap, #310 re-review N2).
   - Dispatched BPL-043: Claude Sonnet 5.5 (high), in that checkout only, test-first, no git. Allowed: `frappe_backend.py`, new `test_bpl_043_unmapped_constraint_refusal.py`, one test in the BPL-041 file, the `tests.yml` list, the PR's new log. Refuse `unique` and `indexed` on unmapped `entity.add` and in `_ensure_doctype_exists`, at execute and in `check_ready` (Q-603).
+- BPL-043 returned (Sonnet): `_refuse_constrained_fields` in `_ensure_doctype_exists` and the unmapped branch of `_check_entity_add`; projection no longer carries constraint flags; 13 new tests (8 failed before the fix); one BPL-041 test that asserted the old bypass inverted and renamed. Coordinator reviewed the diff and re-ran: 60 engine files 1,528 passed, 86 skipped, 27 Hijri-only failures. Opened #312 (Tier 2, base `bpl-041-check-ready-refusals`, stacked on #310) at `4337684`.
+  - Review dispatched: Gemini 4 Argon (high), read-only code-correctness and security review of #312.
 
 ## Decisions
 - Partner: run a third review round on #309 ADR-0068 (2026-11-25).

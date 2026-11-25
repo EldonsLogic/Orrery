@@ -50,6 +50,8 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
 - CI: #311 green at `c9249ae`; #309 green at `7212399`.
 - #309 round 3 re-review result (Gemini 4 Argon) `9160d33..7212399`: REQUEST_CHANGES. N1, N4, N5 closed; N2, N3 partly. New: F1 High (`apply_native_custom_field` drops `unique`, reconcile predicate rejects the new index, `updatedb()` no-op MODIFY clauses abort after a committed statement), F2 High (the "regional store" contradicts ADR-0041 and ADR-0040; policy version grammar), F3 Medium (isolation check ignores `skippedOps` and extra entity properties; compiler and schema gaps), F4 Medium (refusals map to `recovery_required`; an early refusal burns the idempotency key). Posted. Three rounds done; asking the partner.
 - Partner decision: park #309 for Eldon's Tier 3 read; no more review rounds now. Summary and three questions for Eldon posted (where grant state lives, policy version grammar, compiler and schema ownership). BPL-040 stays `doing`.
+- BPL-043 branch `bpl-043-unmapped-constraint-refusal`, stacked on #310 (it needs BPL-041's readiness projection). Rows added on that branch: BPL-043 (`doing`), CE-SEC-008 (today's deploy-path durability defects from the #309 reviews), BPL-044 (DocField snapshot gap, #310 re-review N2).
+  - Dispatched BPL-043: Claude Sonnet 5.5 (high), in that checkout only, test-first, no git. Allowed: `frappe_backend.py`, new `test_bpl_043_unmapped_constraint_refusal.py`, one test in the BPL-041 file, the `tests.yml` list, the PR's new log. Refuse `unique` and `indexed` on unmapped `entity.add` and in `_ensure_doctype_exists`, at execute and in `check_ready` (Q-603).
 
 ## Decisions
 - Partner: run a third review round on #309 ADR-0068 (2026-11-25).

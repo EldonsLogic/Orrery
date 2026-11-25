@@ -130,6 +130,12 @@ All under `apps/engine/change_engine/change_engine/`:
   - Revert and recovery reads use deployment ids, and the policy store uses its own host-scoped tables. The reviewer noted both and did not raise them as defects of this PR.
 - Review loop stopped after round 7 (the coordinator's call, reported to the partner): each round since round 3 has found one narrower edge case, and the remaining items belong to CE-SEC-009, CE-SEC-010 and CE-SEC-011, which need an ADR or adapter-lane files.
 
+## Eldon's approval kept; follow-up work moved to part 2
+- Eldon approved this PR at 750dc543 after a line-by-line read, and listed follow-ups.
+- Commit 049c349c then answered most of those follow-ups: F2, F3, F6 and F8 to F10. A cross-model check found two new Medium issues in it: legacy plain-list physical-DDL evidence fails to load, and `approved_plan` skips Stage 2 validation.
+- To keep the approved content intact, 049c349c is reverted here (b6bb4840) and moved to the branch `ce-sec-008-part-2` (a3050409). There it is fixed and reviewed as its own PR.
+- The PR's own files are identical to 750dc543, plus the merge of main.
+
 ## Tokens or cost
 Unknown.
 

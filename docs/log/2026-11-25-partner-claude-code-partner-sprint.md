@@ -168,6 +168,29 @@ None yet; claim PR must merge first.
   - Reviews go to Gemini 4 Argon, because the GPT models are at their usage limit.
   - Reserved: ADR-0070 and Q-629 onward, both allocated by the coordinator only.
 
+- Wave 2 results. All reviews were Gemini 4 Argon, high, because the GPT models are at their usage limit.
+  - **#334** (plan cleanup and claims): merged after Eldon's re-check. ERP-036 was dropped as a duplicate of SEC-025, and its detail was folded into SEC-025.
+  - **#335 PLT-028** spool spec, 287 lines, docs-only:
+    - Gemini round 1 found 3 High, 3 Medium and 1 Low; all fixed.
+    - Round 2 resolved everything except capacity and found 2 new Medium (the key-rotation admission row, TX6 in the close state). Both were fixed, and the coordinator checked the diff.
+    - Q-629 to Q-634 added.
+    - Waiting for Eldon.
+  - **#336 ADR-0070** (CE-SEC-009, CE-SEC-010), Proposed:
+    - Round 1: 3 High, 2 Medium, all fixed; 4(c) partly rebutted and accepted.
+    - Round 2: 2 High, 1 Medium, all fixed.
+    - Round 3: 2 High left (non-tail event replacement; the drain probe verifying before attesting). The coordinator applied both plus two nits, and **stopped the loop** as with ADR-0069.
+    - Q-635 to Q-642 and rows CE-SEC-012 to CE-SEC-014 added.
+    - Waiting for Eldon.
+  - **#337 ERP-035** (invoice onto tokens):
+    - The first pass lost Cairo, the muted hierarchy and visible borders. Fixed: a heading font token, opacity at or above WCAG 4.5:1, and a hairline.
+    - Gemini: approve with nits. The coordinator fixed the 3 Lows (primary contrast on both surfaces).
+    - Q-643 asks Eldon for `muted` and `border` brand tokens.
+    - 1785 passed, 0 failed. Tier 2.
+  - **#338 CE-SEC-011 slice 1**:
+    - Gemini round 1 found 1 High (a workflow regression), 2 Medium and 1 Low; all fixed.
+    - Round 2 left one Medium (a swallowed `reqd=0` write), fixed.
+    - 1831 passed, 0 failed. Tier 3.
+
 ## Tokens or cost
 Unknown.
 

@@ -832,13 +832,14 @@ class FrappeDeploymentAdapter:
     def is_target_in_recovery_required(self, site_id: str, doctype: str) -> bool:
         if self.target_in_recovery:
             return True
+        read_ids = _read_site_ids(site_id)
         if not self.in_memory:
             # CE-SEC-008: a database error propagates and blocks; it is never read as "not blocked".
             res = self._frappe.db.sql(f"""
                 SELECT COUNT(*) FROM `{self.audit_table}`
-                WHERE site_id = %s AND doctype = %s AND status IN ('RECOVERY_REQUIRED', 'PREPARED')
-                AND {_MAIN_ROWS_ONLY}
-            """, (site_id, doctype))
+                WHERE site_id IN ({", ".join(["%s"] * len(read_ids))}) AND doctype = %s
+                AND status IN ('RECOVERY_REQUIRED', 'PREPARED') AND {_MAIN_ROWS_ONLY}
+            """, (*read_ids, doctype))
             # An empty or odd-shaped answer is a failed read, never "no blocked deployment".
             try:
                 count = res[0][0]
@@ -848,7 +849,7 @@ class FrappeDeploymentAdapter:
                 raise DurableEvidenceError("the recovery lookup returned no usable count")
             return count > 0
         for rec in self.audit_journal.values():
-            if rec.get("site_id") == site_id and rec.get("doctype") == doctype:
+            if rec.get("site_id") in read_ids and rec.get("doctype") == doctype:
                 if rec.get("status") in ("RECOVERY_REQUIRED", "PREPARED"):
                     return True
         return False
@@ -856,14 +857,16 @@ class FrappeDeploymentAdapter:
     def get_existing_deployment_by_idempotency(
         self, site_id: str, idempotency_key: str
     ) -> Optional[Dict[str, Any]]:
+        read_ids = _read_site_ids(site_id)
         if not self.in_memory:
             # CE-SEC-008: a database error, a missing row shape or an unusable stored outcome propagates and
             # blocks; it is never read as "no earlier attempt". A main row without an outcome is an unfinished
             # deployment: the key is held, and the hold is what a matching request is told.
             res = self._frappe.db.sql(f"""
                 SELECT payload_hash, outcome_json, status FROM `{self.audit_table}`
-                WHERE site_id = %s AND idempotency_key = %s AND {_MAIN_ROWS_ONLY}
-            """, (site_id, idempotency_key))
+                WHERE site_id IN ({", ".join(["%s"] * len(read_ids))}) AND idempotency_key = %s
+                AND {_MAIN_ROWS_ONLY}
+            """, (*read_ids, idempotency_key))
             if not res:
                 return None
             completed: List[Tuple[str, Dict[str, Any]]] = []
@@ -884,7 +887,8 @@ class FrappeDeploymentAdapter:
             if completed:
                 return {"payload_hash": completed[0][0], "outcome": completed[0][1]}
             return {"payload_hash": held[0], "outcome": self._hold_outcome()}
-        stored = self.idempotency_store.get((site_id, idempotency_key))
+        stored = next((self.idempotency_store[(sid, idempotency_key)] for sid in read_ids
+                       if (sid, idempotency_key) in self.idempotency_store), None)
         if stored is not None and stored.get("outcome") is None:
             return {"payload_hash": stored.get("payload_hash"), "outcome": self._hold_outcome()}
         return stored
@@ -2007,6 +2011,17 @@ def _tenant_of_site(resolved: str) -> Optional[str]:
         return None
     tenant = label.replace("-", "_")
     return tenant if _TENANT_ID_RE.fullmatch(tenant) and tenant.replace("_", "-") == label else None
+
+
+def _read_site_ids(site_id: str) -> Tuple[str, ...]:
+    """The ``site_id`` values the hold and replay lookups read for ``site_id``: the identity itself, plus, on the
+    tenant site it belongs to, the host name that rows written before the single-identity rule used (CE-SEC-008
+    round 6). Read-only: every new row, lock and journal entry uses ``site_id`` alone. Another site's host name is
+    never added, because the alias is taken only when the current site maps back to exactly this identity."""
+    resolved = getattr(getattr(frappe, "local", None), "site", None)
+    if isinstance(resolved, str) and resolved != site_id and _tenant_of_site(resolved) == site_id:
+        return (site_id, resolved)
+    return (site_id,)
 
 
 def _resolve_site_id(caller_site: Any, deployment_id: Any, start_time: float, **extra: Any):

@@ -251,15 +251,15 @@ class _DurableDb(_LiveDb):
             self.pending.append(("update", dep, fields))
             return ()
         if "SELECT COUNT(*)" in q:
-            site, doctype = p
+            *sites, doctype = p  # ``site_id IN (...)``: the identity and its read-only legacy alias
             n = sum(1 for r in rows.values()
-                    if _same(r["site_id"], site) and _same(r["doctype"], doctype)
+                    if any(_same(r["site_id"], site) for site in sites) and _same(r["doctype"], doctype)
                     and r["status"] in ("RECOVERY_REQUIRED", "PREPARED"))
             return ((n,),)
         if "SELECT PAYLOAD_HASH, OUTCOME_JSON" in q:
-            site, key = p
+            *sites, key = p
             return tuple((r["payload_hash"], r["outcome_json"], r["status"]) for r in rows.values()
-                         if _same(r["site_id"], site) and _same(r["idempotency_key"], key)
+                         if any(_same(r["site_id"], site) for site in sites) and _same(r["idempotency_key"], key)
                          and not r["status"].startswith("EVIDENCE_"))
         if "WHERE IDEMPOTENCY_KEY = %S" in q and "SELECT NAME" in q:
             hit = sorted((r for r in rows.values() if r["idempotency_key"] == p[0]), key=lambda r: r["name"])

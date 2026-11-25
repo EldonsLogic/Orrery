@@ -1165,6 +1165,46 @@ class TestR5OneAuthoritativeSiteIdentity(unittest.TestCase):
         self.assertEqual(out["status"], "RECOVERY_REQUIRED", out)
         self.assertEqual(len(bench.db.altered()), sent)
 
+    def test_a_legacy_hold_stored_under_the_host_name_still_blocks(self):
+        # Round 6 (High): rows written before this change under the host name must stay visible (read-only alias).
+        bench = _Bench(statements=[XYZ_STMT])
+        adapter = bench.new_adapter()
+        adapter.persist_final_outcome_and_audit = lambda *a, **k: (_ for _ in ()).throw(_Crash("x"))
+        with self.assertRaises(_Crash):
+            bench.deploy(adapter, key="idemp-dep_1", site=HOST, field=XYZ)
+        bench.db.crash()
+        sent = len(bench.db.altered())
+        for kw in ({}, {"site_id": TENANT}):
+            with self.subTest(**kw):
+                out = self._rpc(bench, bench.new_adapter(), deployment_id="dep_2", idempotency_key="idemp-other", **kw)
+                self.assertEqual(out["status"], "RECOVERY_REQUIRED", out)
+        self.assertEqual(len(bench.db.altered()), sent)
+
+    def test_a_legacy_replay_record_stored_under_the_host_name_still_holds_its_key(self):
+        # The legacy row is found, so the key can not run again. Its payload hash was taken with the host name,
+        # so the request is refused as a conflict (fail closed), not replayed; no second statement is sent.
+        bench = _Bench(statements=[XYZ_STMT])
+        first = bench.deploy(bench.new_adapter(), key="idemp-dep_1", site=HOST, field=XYZ)
+        self.assertEqual(first["status"], "APPLIED")
+        out = self._rpc(bench, bench.new_adapter(), deployment_id="dep_2", idempotency_key="idemp-dep_1")
+        self.assertEqual((out["status"], out.get("disposition")), ("REJECTED", "IDEMPOTENCY_CONFLICT"), out)
+        self.assertEqual(len(bench.db.altered()), 1, "no second statement")
+
+    def test_the_legacy_alias_never_reaches_another_tenant(self):
+        bench = _Bench(statements=[XYZ_STMT])
+        adapter = bench.new_adapter()
+        adapter.persist_final_outcome_and_audit = lambda *a, **k: (_ for _ in ()).throw(_Crash("x"))
+        with self.assertRaises(_Crash):
+            bench.deploy(adapter, key="idemp-dep_1", site="t-beta.localhost", field=XYZ)
+        bench.db.crash()
+        from unittest import mock
+
+        with mock.patch.object(endpoints, "frappe", _frappe_stub(HOST)):
+            fresh = bench.new_adapter()
+            self.assertFalse(fresh.is_target_in_recovery_required(TENANT, "Item"),
+                             "a hold of another site is not this site's hold")
+            self.assertIsNone(fresh.get_existing_deployment_by_idempotency(TENANT, "idemp-dep_1"))
+
     def test_a_site_that_is_not_a_tenant_site_keeps_its_own_name_as_the_only_identity(self):
         from unittest import mock
 

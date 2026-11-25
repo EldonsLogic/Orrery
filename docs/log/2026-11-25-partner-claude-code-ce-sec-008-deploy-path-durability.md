@@ -113,6 +113,12 @@ All under `apps/engine/change_engine/change_engine/`:
 - Tests first: `TestR5OneAuthoritativeSiteIdentity` (aliases refused, a missing identity still hits the hold, a non-tenant site). 6 failed before the fix, then passed.
 - Full suite: 1636 passed, 86 skipped, 0 failed.
 
+## Review round 6 (GPT-6.2 Sol at be4a11a4: 1 High; all 966 generated site cases matched the backend's identity)
+- High: holds and replay records written before the single-identity rule, under the host name, became invisible. The coordinator fixed it directly: `_read_site_ids` adds the host name as a read-only alias in the hold and idempotency lookups, and only when the current site maps back to exactly this tenant identity. Writes, locks and journal entries still use the single identity.
+- Result: a legacy hold still blocks, whether or not the caller passes an identity. A legacy idempotency key still holds its key, but is refused as `IDEMPOTENCY_CONFLICT` rather than replayed, because its payload hash was taken with the host name. That fails closed and sends no second statement. Another site's hold never matches.
+- Tests first: 3 new tests in `TestR5OneAuthoritativeSiteIdentity`. The fake database models `site_id IN (...)`.
+- Full suite: 1639 passed, 86 skipped, 0 failed.
+
 ## Tokens or cost
 Unknown.
 

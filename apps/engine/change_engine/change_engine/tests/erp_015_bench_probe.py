@@ -26,7 +26,7 @@ from change_engine.proofs.phase0_bench_proof import (  # noqa: E402
 
 CO = {"company": "ERP15 Trading KSA", "abbr": "E15K", "country": "Saudi Arabia", "currency": "SAR"}
 ITEMS = {"E15-GOLD": "Nos", "E15-HALF": "Nos", "E15-XFER": "Nos", "E15-RECO": "Nos", "E15-DRIFT": "Kg",
-         "E15-QTY": "Kg", "E15-BACK": "Nos"}
+         "E15-QTY": "Kg", "E15-BACK": "Nos", "E15-BKIS": "Nos", "E15-BKTX": "Nos"}
 WAREHOUSES = ("W1", "W2", "W3")
 POSTING_DATE = "2026-03-02"
 ENTRY_TYPES = {"receipt": "Material Receipt", "issue": "Material Issue", "transfer": "Material Transfer"}

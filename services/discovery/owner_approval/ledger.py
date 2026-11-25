@@ -82,7 +82,7 @@ class MemoryStore:
 
 
 class SealedLog:
-    def __init__(self, integrity_keys, key_id, domain="orrery.ownerapproval.log.v1", store=None):
+    def __init__(self, integrity_keys, key_id, domain="seshna.ownerapproval.log.v1", store=None):
         if type(integrity_keys) is not dict or not integrity_keys or type(key_id) is not str:
             raise OwnerApprovalError("OA-010")
         if any(type(k) is not str or type(v) is not bytes or len(v) < 32 for k, v in integrity_keys.items()):

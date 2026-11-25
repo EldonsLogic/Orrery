@@ -60,7 +60,7 @@ Rationale: ADR-0048 section 3 puts R1 and above behind a rendered canonical conf
 - RTL: numbers inside Arabic text use isolates (U+2068 to U+2069) around Latin tokens and links; use Western or Arabic-Indic digits by tenant setting, consistent within a message. Currency and dates via the country pack, not the model.
 - Test each template on iOS and Android WhatsApp in both languages for bidi order and truncation. Template variables are length-capped and sanitised (strip control and bidi override characters U+202A to U+202E and U+2066 to U+2069 in untrusted values, then add our own isolates).
 - Dialect and tone: Modern Standard Arabic for templates; Meta approval for Arabic copy is UNVERIFIED in turnaround.
-- Brand: platform name is not final; say "the platform" in drafts (AGENTS).
+- Brand: the name is Seshna (ADR-0066); write it in Latin script in drafts (AGENTS).
 
 ## 8. Cost caps
 1. A per-tenant monthly message budget (messages and currency), a per-user daily outbound cap, and a global platform cap, all configuration, placeholders until real rates are read from Meta's rate card. Rates are fetched into a versioned table by PR, never from model output or third-party sites.

@@ -1,7 +1,8 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Badge, Spinner } from '../../ui';
+import { Badge } from '../../ui';
+import { LoadingMark } from '../marks/LoadingMark';
 import { textLang } from '../../chat/text';
 import type { ActivityStep, ChatMessage, ToolOutcome } from '../../chat/types';
 import styles from './Chat.module.css';
@@ -55,11 +56,7 @@ export function ActivityList({ steps }: { steps: ReadonlyArray<ActivityStep> }) 
   );
 }
 
+/** Seshna is working on a reply: the brand loading mark with its visible label. */
 export function Typing({ label }: { label: string }) {
-  return (
-    <span className={styles.typing} role="status">
-      <Spinner decorative />
-      {label}
-    </span>
-  );
+  return <LoadingMark label={label} className={styles.typing} />;
 }

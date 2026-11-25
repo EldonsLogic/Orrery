@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate ../preview-tenant-themes.html (one static file, no external scripts) from derive_tenant_theme.derive().
 Run through: python3 tools/derive_tenant_theme.py --preview preview-tenant-themes.html   (path relative to docs/brand)"""
-import html, pathlib
+import html, pathlib, re
 import themelib as T
 import derive_tenant_theme as D
 
@@ -14,9 +14,11 @@ TENANTS = [  # fictional; names and colours invented
     ("mawj", "Mawj Textiles", "موج للمنسوجات", "#0E7490", None),
 ]
 REJECTED = ("Shams Bakery", "مخبز شمس", "#FFD400", None)
-LOWER = "M5 27L27.5 27A22.5 22.5 0 0 0 22.236 12.537Z"
-UPPER = "M5 27L18.852 9.27A22.5 22.5 0 0 0 5 4.5Z"
-MARK = f'<svg class="mk" viewBox="4 3.5 24.5 24.5" aria-hidden="true"><path d="{LOWER}"/><path d="{UPPER}"/></svg>'
+# The chat avatar is the Nuqta S mark, read from the generated master (logo/mark-primary.svg); colour comes from CSS.
+_MARK_SVG = (pathlib.Path(__file__).resolve().parent.parent / "logo" / "mark-primary.svg").read_text(encoding="utf-8")
+_VB = re.search(r'viewBox="([^"]+)"', _MARK_SVG).group(1)
+_D = re.search(r' d="([^"]+)"', _MARK_SVG).group(1)
+MARK = f'<svg class="mk" viewBox="{_VB}" aria-hidden="true"><path d="{_D}"/></svg>'
 ICON = {  # Lucide-style outline paths, 24 px, 1.75 stroke (drawn here as stand-ins)
     "check": '<path d="M20 6 9 17l-5-5"/>', "alert": '<path d="m10.3 3.9-8.4 14.5A2 2 0 0 0 3.6 21h16.8a2 2 0 0 0 1.7-2.6L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
     "x": '<path d="M18 6 6 18M6 6l12 12"/>'}

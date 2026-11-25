@@ -22,6 +22,10 @@ TABLE = {
                                 "تعذر إرسال الرسالة. حاول مرة أخرى."),
     "chat_message_id_conflict": (False, "This message id was already used for a different message.",
                                  "تم استخدام معرف الرسالة هذا لرسالة مختلفة."),
+    "chat_rate_limited": (True, "You are sending messages too quickly. Try again in {minutes} min.",
+                          "أنت ترسل الرسائل بسرعة كبيرة. حاول مرة أخرى بعد {minutes} دقيقة."),
+    "chat_limit_unavailable": (False, "Messages cannot be accepted right now. If this continues, contact support.",
+                               "لا يمكن قبول الرسائل الآن. إذا استمر ذلك، تواصل مع الدعم."),
     "chat_cancelled": (True, "Stopped.", "تم الإيقاف."),
     "permission_denied": (False, "You do not have access to this.", "ليس لديك صلاحية الوصول إلى هذا."),
     "internal_error": (True, "Something went wrong on our side. Please try again.",
@@ -33,23 +37,29 @@ ARABIC_REVIEW = "unreviewed"
 class ChatFailure(Exception):
     """A failure expressed as a code from `TABLE`. An unknown code becomes `internal_error`."""
 
-    def __init__(self, code: str):
+    def __init__(self, code: str, params: dict | None = None):
         super().__init__(code)
         self.code = code if code in TABLE else "internal_error"
+        self.params = {k: v for k, v in (params or {}).items() if isinstance(k, str) and type(v) is int}
 
 
-def render(code: str, locale: str = "en") -> dict:
-    """{"code", "message", "message_key", "retryable"} for the wire; falls back to English."""
+def render(code: str, locale: str = "en", params: dict | None = None) -> dict:
+    """{"code", "message", "message_key", "retryable", "params"} for the wire; falls back to English. Only integer
+    params fill a template; a template whose params are missing falls back to `internal_error`."""
     code = code if code in TABLE else "internal_error"
     retry, en, ar = TABLE[code]
-    return {"code": code, "message": ar if locale == "ar" else en, "message_key": f"errors.{code}",
-            "retryable": retry}
+    params = {k: v for k, v in (params or {}).items() if isinstance(k, str) and type(v) is int}
+    try:
+        message = (ar if locale == "ar" else en).format(**params)
+    except (KeyError, IndexError, ValueError):
+        return render("internal_error", locale)
+    return {"code": code, "message": message, "message_key": f"errors.{code}", "retryable": retry, "params": params}
 
 
 def firewall(exc: BaseException, locale: str = "en") -> dict:
     """Any exception to a safe error dict. Only the exception type is logged, against a correlation id."""
     if isinstance(exc, ChatFailure):
-        return render(exc.code, locale)
+        return render(exc.code, locale, exc.params)
     status = getattr(exc, "status", None)
     if type(exc).__name__ == "AuthFailure" and status in (401, 403):
         return render("permission_denied", locale)

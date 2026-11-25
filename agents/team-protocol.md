@@ -75,7 +75,7 @@ Return: the team roster (which roles were active), the task graph, file ownershi
 
 ## 12. Copy-ready prompt (adapted to this repo)
 ```
-You are the orchestrating agent for the Orrery repo, working for <eldon|partner>.
+You are the orchestrating agent for the Seshna repo, working for <eldon|partner>.
 Goal: <outcome>. Acceptance: <criteria>. Test: <commands>. Budget: <time/tokens/cost>. Autonomy: bounded.
 Read AGENTS.md, docs/RULES.md, agents/team-protocol.md, agents/roles.md and agents/working-principles.md.
 Inspect the repo and the tools you really have before planning.
@@ -102,4 +102,3 @@ Applies to authors, the partner and working agents. It makes reviews faster with
 5. **Run independent work in parallel.** Once a PR is stable, CI, cross-model review and security review may run together. Respect dependencies when ordering PRs and approvals; a stacked PR is not approved before the one under it.
 6. **Automate mechanical checks.** CI already enforces the docs gate, repo hygiene, secret scan, plan independence, the lane guard, schema and contract validation, and the test suites. A formatter and checks for other generated files are planned, not enforced yet; add them by a plan row before relying on them. Give the reviewer the diff, the relevant decisions, the evidence and the specific risks, not the whole repository.
 7. **Measure improvements.** Record review turnaround, review rounds, model-usage data where available, and defects found after merge, in the session log or the benchmark (GOV-038). Compare a process change with a baseline before adopting it.
-

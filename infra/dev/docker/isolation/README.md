@@ -15,7 +15,7 @@ python3 infra/dev/docker/isolation/run_isolation_suite.py            # up, provi
 python3 infra/dev/docker/isolation/run_isolation_suite.py --keep     # leave the stack up
 python3 infra/dev/docker/isolation/run_isolation_suite.py --reuse <context.json>  # re-run tests only
 ```
-Defaults: Compose project `sec004-isolation` (the name must contain `sec004`; the runner refuses anything else, so it never touches the dev, ERP-001 or ERP-002 stacks) and engine port `127.0.0.1:18404`. Teardown runs `docker compose down -v` for that project only.
+Defaults: Compose project `sec004-isolation` (the name must be `sec004` or start with `sec004-`; the runner refuses anything else, `prod-sec004` included, so it never touches the dev, ERP-001 or ERP-002 stacks) and engine port `127.0.0.1:18404`. Teardown runs `docker compose down -v` for that project only.
 
 CI runs this harness via [.github/workflows/sec-004-live-isolation.yml](../../../../.github/workflows/sec-004-live-isolation.yml) on a weekly schedule and on manual `workflow_dispatch` with `CI_REQUIRE_LIVE_SEC004=1` (fail closed if `SEC004_CONTEXT` is missing).
 
@@ -24,6 +24,8 @@ CI runs this harness via [.github/workflows/sec-004-live-isolation.yml](../../..
 - Three sites created with the ERP-003 script ([provision_tenant.sh](../provision_tenant.sh)), each with its own random admin and database passwords in 0600 files under a private temp directory:
   - A `sec004-tenant-a.localhost` (SA) and B `sec004-tenant-b.localhost` (AE) with the default app set;
   - a prefix twin `sec004-tenant-a.localhost.sa` (change_engine only), the `acme.com` vs `acme.com.sa` case, to catch prefix-matching site filters.
+
+- The engine serves HTTP through [raw_engine_wsgi.py](raw_engine_wsgi.py), which drops the ERP-020 `before_request` hook (`change_engine.api.route_guard.enforce_internal_only`). That hook is installed on every site that has change_engine and answers 404 to everything outside its internal allowlist (login, session cookies, `/api/resource/ToDo`, files, backups and the job API included), so with it on the suite could neither log in nor tell a real denial from the blanket 404. The module is mounted only by this compose file, refuses to start outside a `sec004` project (same rule, [sec004_project.py](sec004_project.py)), and touches no production image, hook or allowlist. The suite therefore certifies the engine's own isolation without the guard; the run with the guard on is SEC-021.
 
 Full provisioning takes tens of minutes (two full ERPNext + HRMS installs). The suite itself takes a few minutes.
 

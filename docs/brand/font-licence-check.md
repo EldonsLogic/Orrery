@@ -42,3 +42,6 @@ Owner: eldon. Register rows: [docs/legal/licence-register.md](../legal/licence-r
 - Download the families from the Google Fonts repo, keep each OFL.txt next to its file, and run a glyph check for U+0660 to U+0669, U+20C3 and the `tnum` feature. Record the results here.
 - Founder decision: Arial in the print format stack (remove, or bundle a fallback).
 - Then mark BRD-011 done and close Q-119 in `docs/open-questions.md`.
+
+## Addendum 2026-11-23 (BRD-014): Cairo
+Cairo replaces Alexandria for headings and the wordmark (ADR-0066). Licence checked from `ofl/cairo/OFL.txt` in google/fonts at commit a2c83daed9bc723922de8d0a9512990bd3d91df4 (accessed 2026-11-23): SIL OFL 1.1, Copyright 2009 The Cairo Project Authors (https://github.com/Gue3bara/Cairo), no Reserved Font Name. Identical to the OFL.txt shipped with the Seshna logo kit. Used only to outline the wordmark; no Cairo font file is in the repo. The Alexandria rows above are historical. Not yet confirmed for Cairo: Arabic-Indic digits, `tnum`, 2025 currency symbols.

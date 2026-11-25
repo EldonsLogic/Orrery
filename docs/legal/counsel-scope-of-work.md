@@ -59,7 +59,7 @@ Tags: `[row | Q | gate]`. M = every market; KSA, UAE, EG, QA = market-specific.
 31. Tenant-uploaded logos and content: warranties, licence and takedown. [LEG-015 | checklist 13 | G3] M
 
 ### 3.6 Name clearance and trademarks
-32. Search and written opinion on our working name and short-listed alternatives, in Latin and Arabic spelling, in KSA, UAE, Egypt, Qatar and internationally, for software and SaaS classes; domains and handles. Filing strategy and cost per market. [LEG-008, LEG-005 | checklist 6, E-7 | G1] M
+32. Search and written opinion on our final name Seshna (ADR-0066) and any alternatives, in Latin and Arabic spelling, in KSA, UAE, Egypt, Qatar and internationally, for software and SaaS classes; domains and handles. Filing strategy and cost per market. [LEG-008, LEG-005 | checklist 6, E-7 | G1] M
 33. Is a cleared name needed before we register the entity or sign a first customer? [LEG-008, BRD-003 | - | G1] M
 
 ### 3.7 Employment, contractors and IP

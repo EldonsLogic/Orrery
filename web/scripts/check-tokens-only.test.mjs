@@ -27,6 +27,7 @@ test('rejects physical direction properties', () => {
 });
 test('token files are exempt', () => {
   assert.deepEqual(rules('a{color:#fff}', 'web/app/src/styles/tokens.generated.css'), []);
+  assert.deepEqual(rules('a{color:#fff}', 'web/app/src/styles/tokens.proposed.generated.css'), []);
   assert.deepEqual(rules('a{color:#fff}', 'docs/brand/tokens/tokens.css'), []);
 });
 test('logical properties are not flagged', () => {

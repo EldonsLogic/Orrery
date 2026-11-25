@@ -58,7 +58,7 @@ def derive(primary, accent=None):
         return reject(f"Primary {p_in} is {kind} (OKLCH chroma {C:.3f} < {MIN_CHROMA}). Buttons and links would not read as actionable against text and borders. Choose a colour with visible hue.")
     d = T.dE(p_in, crimson["light"])
     if d < DANGER_DE:
-        return reject(f"Primary {p_in} is within {d:.3f} of Orrery Crimson {crimson['light']} (limit {DANGER_DE}). It would read as an error or a destructive action. Choose a different hue or use it as the accent only if it is clearly distinct from Crimson.")
+        return reject(f"Primary {p_in} is within {d:.3f} of Seshna Crimson {crimson['light']} (limit {DANGER_DE}). It would read as an error or a destructive action. Choose a different hue or use it as the accent only if it is clearly distinct from Crimson.")
 
     # ---- light primary: keep the colour if it passes, else darken (hue and chroma kept, gamut-mapped) ----
     cand = [p_in] + [T.oklch_to_hex(l, C, H) for l in _frange(L - STEP, 0.15, STEP)]
@@ -134,7 +134,7 @@ def derive(primary, accent=None):
             acc[m] = base[m]["accent"]
             if T.dE(acc[m], pv) < ACCENT_MIN_DE:
                 acc = {mm: base[mm]["text"] for mm in base}
-                res["adjustments"].append(f"accent: Orrery Coral is within {T.dE(base[m]['accent'], pv):.3f} of the tenant primary in the {m} theme; accent falls back to the text colour (one highlight in Carbon/Chalk)")
+                res["adjustments"].append(f"accent: Seshna Coral is within {T.dE(base[m]['accent'], pv):.3f} of the tenant primary in the {m} theme; accent falls back to the text colour (one highlight in Carbon/Chalk)")
                 break
 
     # ---- status closeness is a warning only ----
@@ -154,8 +154,14 @@ def derive(primary, accent=None):
         return reject("Internal check failed: a derived pair is below its minimum (this is a bug, not a colour problem).")
     return res
 
+PROTECTED_PREFIX = "--seshna-"
+
 def css(slug, res):
     """Scoped CSS: light, system dark, explicit dark. Selector keys match tokens.css (data-theme) and add data-tenant."""
+    # Founders' decision 2026-11-24: the Seshna mark colours (--seshna-*) are never tenant-overridable.
+    for m in ("light", "dark"):
+        if any(k.startswith(PROTECTED_PREFIX) for k in res[m]["vars"]):
+            raise ValueError("tenant theme must not set the Seshna mark colours")
     def block(m, ind):
         return "".join(f"{ind}{k}: {v};\n" for k, v in res[m]["vars"].items())
     s = f":root[data-tenant=\"{slug}\"] {{\n{block('light', '  ')}}}\n\n"

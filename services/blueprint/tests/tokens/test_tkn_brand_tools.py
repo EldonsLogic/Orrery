@@ -30,7 +30,7 @@ def test_derive_colours_ok():
 
 @pytest.mark.parametrize("reason,code", [
     ("Primary #FFFFFF is near-white (OKLCH chroma 0.000 < 0.04). Buttons", C.COLOUR_GREY),
-    ("Primary #C21F3A is within 0.000 of Orrery Crimson #C21F3A (limit 0.1).", C.COLOUR_NEAR_CRIMSON),
+    ("Primary #C21F3A is within 0.000 of Seshna Crimson #C21F3A (limit 0.1).", C.COLOUR_NEAR_CRIMSON),
     ("Primary #FFD400 is too light: Primary text is 1.5:1", C.COLOUR_TOO_LIGHT),
     ("Primary #1A1040 is too dark: only 1.04:1", C.COLOUR_TOO_DARK),
     ("No darker shade of #123456 reaches AA in the light theme.", C.COLOUR_NO_AA),

@@ -28,7 +28,7 @@ Use the tier names; current model names live in [model-registry.md](../../agents
 ## 2. One worktree per plan row, outside the repo
 Parallel rows edit the same shared files (`docs/PLAN.md`, `docs/open-questions.md`, the session log folder), so each row gets its own checkout. This is the one case where worktrees are justified ([routing.md](../../agents/routing.md) rule 6).
 
-- Create it from `main` with a branch named after the plan ID, e.g. `gov-053-subagent-delivery-runbook`, in a folder beside the repo, not under it: `<parent-of-repo>/Orrery-<plan-id-lowercase>-<slug>`. Never under `.claude/worktrees/` inside the repo, because each copy carries `node_modules`, and copies inside the repo have grown to gigabytes.
+- Create it from `main` with a branch named after the plan ID, e.g. `gov-053-subagent-delivery-runbook`, in a folder beside the repo, not under it: `<parent-of-repo>/Seshna-<plan-id-lowercase>-<slug>`. Never under `.claude/worktrees/` inside the repo, because each copy carries `node_modules`, and copies inside the repo have grown to gigabytes.
 - One agent writes in one worktree. Agents for different rows never share a worktree.
 - Keep a worktree only for an open row. Remove it after the merge (section 11).
 

@@ -19,6 +19,9 @@ import {
   Table,
   TextField,
 } from '../ui';
+import { LoadingMark } from './marks/LoadingMark';
+import { ProgressMarks } from './marks/ProgressMarks';
+import { StatusMark, STATUS_MARKS } from './marks/StatusMark';
 import styles from './Preview.module.css';
 
 const COLOUR_TOKENS = [
@@ -180,6 +183,22 @@ function ComponentsPreview() {
               <strong id="preview-card-title">{t('cards.cardTitle')}</strong>
               <span>{t('cards.cardBody')}</span>
               <Spinner label={t('cards.spinnerLabel')} />
+            </Stack>
+          </Card>
+        </Stack>
+
+        <Stack gap={2}>
+          <h3 className={styles.h3}>{t('marks.title')}</h3>
+          <Card as="section" aria-labelledby="preview-marks-status">
+            <Stack gap={2}>
+              <strong id="preview-marks-status">{t('marks.status')}</strong>
+              {STATUS_MARKS.map((s) => (
+                <StatusMark key={s} status={s} />
+              ))}
+              <strong>{t('marks.progress')}</strong>
+              <ProgressMarks buildState="owner_approved" />
+              <strong>{t('marks.loading')}</strong>
+              <LoadingMark />
             </Stack>
           </Card>
         </Stack>

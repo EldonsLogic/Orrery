@@ -17,7 +17,7 @@ export type WebManifest = {
   orientation: 'any';
   background_color: string;
   theme_color: string;
-  icons: ReadonlyArray<{ src: string; sizes: string; type: string; purpose: 'any' }>;
+  icons: ReadonlyArray<{ src: string; sizes: string; type: string; purpose: 'any' | 'maskable' }>;
 };
 
 /** Read the background colour for the light and dark themes from the generated token CSS. */
@@ -45,7 +45,12 @@ export function buildManifest(text: ManifestText, colors: ThemeColors, locale: s
     orientation: 'any',
     background_color: colors.light,
     theme_color: colors.light,
-    // Brand app icon (docs/brand/logo/app-icon.svg), copied at build time. No PNG exports exist yet (Q-381).
-    icons: [{ src: '/icons/app-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+    // Brand icons (docs/brand/logo, generated), copied to /icons/ at build time by scripts/copy-tokens.mjs.
+    icons: [
+      { src: '/icons/app-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+      { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
   };
 }

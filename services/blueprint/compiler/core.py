@@ -14,7 +14,7 @@ from ._deps import ValidationContext, blueprint_hash, bpdiff, validate
 from .components import resolve_components
 from .mapping import check_mapping
 from .result import CompileResult, Issue, Refused, sort_issues
-from .steps import ledger_or_tax_subjects, post_conditions, risk, skeleton, steps_from_ops
+from .steps import duplicate_step_keys, ledger_or_tax_subjects, post_conditions, risk, skeleton, steps_from_ops
 
 
 def compile_blueprint(blueprint: Any, registry: Any, engine_mapping: Any, *, environment: str) -> CompileResult:
@@ -57,6 +57,7 @@ def _compile(bp: Any, registry: Any, mapping: Any, environment: str) -> dict:
 
     d = bpdiff.diff(skeleton(bp), bp)
     steps, skipped, issues = steps_from_ops(d["ops"])
+    issues += [Issue("CMP-ART-006", key[1], "duplicate step key") for key in duplicate_step_keys(steps)]
     _refuse_if(issues)
     artifact = art.assemble(
         blueprint_ref={"id": meta["id"], "base": None, "diffHash": None,

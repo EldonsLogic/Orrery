@@ -17,6 +17,9 @@ BPL-037: settings.set step uniqueness keyed on params.property (Q-51) and labelO
 ## Decisions
 - Implements ADR-0057 Q-51 and Q-52 (no new decision).
 
+- Review follow-up: duplicate_step_keys wired into compile as CMP-ART-006; sort key restricted to settings.set; artifact schema stays 0.1.0 (text-only, no shape change).
+- The partner adapter still advertises 0.1.2. That is compatible (versions compare on major.minor); left as a partner-lane follow-up.
+
 ## Tokens or cost
 Unknown or approximate, if known.
 

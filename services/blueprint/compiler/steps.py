@@ -82,7 +82,8 @@ def steps_from_ops(ops: list[dict]) -> tuple[list[dict], list[dict], list[Issue]
             issues.append(Issue("CMP-ART-001", pointer, "no compile rule covers this Blueprint operation"))
     # Contract 9.4 orders by (phase, pointer, kind); several settings.set steps share one subject pointer, so the
     # property breaks the tie (ADR-0057 Q-51).
-    steps.sort(key=lambda s: (s["phase"], s["pointer"], s["kind"], s["params"].get("property", "")))
+    steps.sort(key=lambda s: (s["phase"], s["pointer"], s["kind"],
+                              s["params"]["property"] if s["kind"] == "settings.set" else ""))
     for i, s in enumerate(steps, 1):
         s["seq"] = i
     skipped.sort(key=lambda s: s["pointer"])

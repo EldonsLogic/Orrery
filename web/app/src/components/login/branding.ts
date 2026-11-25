@@ -6,6 +6,13 @@
  * tokens may be set; background, surface, text and status colours never are (ADR-0014).
  */
 import type { Locale } from '../../i18n';
+import platformTokens from '../../../../../docs/brand/tokens/tokens.json';
+
+/** The card surface the login form sits on, per theme (a platform token tenants cannot change). */
+export const SURFACE = {
+  light: platformTokens.color.light.surface.hex,
+  dark: platformTokens.color.dark.surface.hex,
+} as const;
 
 export type LocalizedText = Partial<Record<Locale, string>>;
 export type TokenMap = Record<string, string>;
@@ -123,7 +130,16 @@ export function cleanText(v: unknown): string | null {
 }
 
 export function pickText(t: LocalizedText | undefined, locale: Locale): string | null {
-  return cleanText(t?.[locale]) ?? cleanText(t?.[locale === 'ar' ? 'en' : 'ar']);
+  return pickLocalized(t, locale)?.text ?? null;
+}
+
+/** The text to show and the locale it is actually written in (the other one when the wanted one is empty). */
+export function pickLocalized(t: LocalizedText | undefined, locale: Locale): { text: string; locale: Locale } | null {
+  const other: Locale = locale === 'ar' ? 'en' : 'ar';
+  const own = cleanText(t?.[locale]);
+  if (own) return { text: own, locale };
+  const alt = cleanText(t?.[other]);
+  return alt ? { text: alt, locale: other } : null;
 }
 
 /** Returns a branding that is safe to render, or null (platform look) when it is unusable. */
@@ -133,11 +149,15 @@ export function sanitiseBranding(raw: TenantBranding | null | undefined): Tenant
   const dark = safeTokens(raw.dark);
   // The derivation always yields both themes; half a theme would break contrast, so fall back.
   if (!light['--color-primary'] || !dark['--color-primary'] || !light['--color-primary-label'] || !dark['--color-primary-label']) return null;
-  for (const m of [light, dark]) {
-    const label = m['--color-primary-label'];
-    if (!label || !HEX.test(label)) return null;
-    for (const k of ['--color-primary', '--color-primary-hover', '--color-primary-pressed'])
-      if (m[k] && HEX.test(m[k]) && contrastRatio(label, m[k]) < 4.5) return null;
+  // Check the colours the login actually renders, in both themes (WCAG 2.2: 1.4.3 text 4.5:1, 1.4.11 focus ring 3:1).
+  for (const [mode, m] of [['light', light], ['dark', dark]] as const) {
+    const [primary, hover, pressed, label] = [m['--color-primary'], m['--color-primary-hover'], m['--color-primary-pressed'], m['--color-primary-label']];
+    // The button uses all four tokens; a missing or non-hex one would fall back to a platform colour that no longer matches.
+    if (![primary, hover, pressed, label].every((v) => v && HEX.test(v))) return null;
+    // Button label on the fill, and on its hover and pressed fills.
+    if ([primary, hover, pressed].some((fill) => contrastRatio(label!, fill!) < 4.5)) return null;
+    // Reset link text on the card surface, and the focus ring (also the primary) on the same surface.
+    if (contrastRatio(primary!, SURFACE[mode]) < 4.5) return null;
   }
   const name = { ar: cleanText(raw.displayName?.ar), en: cleanText(raw.displayName?.en) };
   if (!name.ar && !name.en) return null; // a brand with no name would be silent for screen readers

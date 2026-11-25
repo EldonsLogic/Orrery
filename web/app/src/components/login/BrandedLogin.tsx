@@ -3,14 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { LoginForm } from '../auth/LoginForm';
-import { defaultLocale, isLocale } from '../../i18n';
-import { brandingCss, isTenantKey, pickText, sanitiseBranding, type TenantBranding, type TenantBrandingPort } from './branding';
+import { defaultLocale, directionOf, isLocale } from '../../i18n';
+import { brandingCss, isTenantKey, pickLocalized, sanitiseBranding, type TenantBranding, type TenantBrandingPort } from './branding';
 import { fakeBrandingPort } from './fake';
+import { tenantFromLocation } from './host';
 import styles from './BrandedLogin.module.css';
 
 export type BrandedLoginProps = {
   port?: TenantBrandingPort;
-  /** Tenant key; when absent it is read from the `tenant` query parameter in the browser. */
+  /**
+   * Preview and tests only (the dev-only /login/preview/ route and unit tests). The real login never passes it:
+   * it takes the tenant from the host alone (ADR-0007), never from the query string.
+   */
   tenantKey?: string;
   /** Starting branding, for tests and previews only. */
   initialBranding?: TenantBranding | null;
@@ -21,15 +25,17 @@ export function BrandBlock({ branding }: { branding: TenantBranding | null }) {
   const t = useTranslations('auth');
   const raw = useLocale();
   const locale = isLocale(raw) ? raw : defaultLocale;
-  const name = branding ? pickText(branding.displayName, locale) : null;
-  const headline = branding ? pickText(branding.headline, locale) : null;
+  const name = branding ? pickLocalized(branding.displayName, locale) : null;
+  const headline = branding ? pickLocalized(branding.headline, locale) : null;
   const logo = branding?.showLogo !== false ? branding?.logo : undefined;
 
   if (!branding) {
     return (
       <div className={styles.brand}>
         <img className={styles.logo} src="/icons/app-icon.svg" alt="" width={40} height={40} />
-        <p className={styles.name}>{t('login.platformName')}</p>
+        <p className={styles.name} lang={locale} dir={directionOf(locale)}>
+          {t('login.platformName')}
+        </p>
       </div>
     );
   }
@@ -44,8 +50,17 @@ export function BrandBlock({ branding }: { branding: TenantBranding | null }) {
           ) : null}
         </span>
       ) : null}
-      {name ? <p className={styles.name}>{name}</p> : null}
-      {headline ? <p className={styles.headline}>{headline}</p> : null}
+      {/* Each text carries the locale it is written in, so English fallback text inside an Arabic page is not read or laid out as Arabic. */}
+      {name ? (
+        <p className={styles.name} lang={name.locale} dir={directionOf(name.locale)}>
+          {name.text}
+        </p>
+      ) : null}
+      {headline ? (
+        <p className={styles.headline} lang={headline.locale} dir={directionOf(headline.locale)}>
+          {headline.text}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -54,7 +69,7 @@ export function BrandedLogin({ port = fakeBrandingPort, tenantKey, initialBrandi
   const [branding, setBranding] = useState<TenantBranding | null>(sanitiseBranding(initialBranding));
 
   useEffect(() => {
-    const key = tenantKey ?? new URLSearchParams(window.location.search).get('tenant');
+    const key = tenantKey ?? tenantFromLocation(window.location);
     if (!isTenantKey(key)) {
       setBranding(null);
       return;

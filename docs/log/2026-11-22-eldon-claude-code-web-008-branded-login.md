@@ -22,3 +22,9 @@ Unknown.
 
 ## Next step
 Real tenant token endpoint and identity wiring replace the fake and placeholder (PLT-005); login background asset and favicon; WEB-007 can reuse branding.ts sanitisers.
+
+## Review fixes (partner review of 75d14db1)
+- High: login form is `method="post"` with a fixed `action="/login/"`; email, password and submit stay disabled until the client has mounted, so a failed hydration cannot send credentials in a GET query string. CSRF protection is left for when identity is wired (PLT-005); noted in a code comment.
+- Medium: the real login takes the tenant from the host only (ADR-0007) through `tenantFromHost` and a local synthetic host map; the gateway will validate it later (PLT). The query-driven fixture choice moved to `/login/preview/`, off unless `NEXT_PUBLIC_LOGIN_PREVIEW=1`, noindex, dev only.
+- Medium: branding checks use the rendered colours in light and dark: button label on fill, hover and pressed; primary link and focus ring on the card surface (read from docs/brand/tokens). Hover, pressed and label tokens are now required. Button uses `--color-primary-label`, `-hover`, `-pressed`; `check-contrast.mjs` reads the same tokens. `next.config.mjs` sets the bundler root to the repo root for the read-only tokens.json import.
+- Low: tenant name and headline carry `lang` and `dir` of the locale actually shown.

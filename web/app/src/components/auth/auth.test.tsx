@@ -76,3 +76,17 @@ describe('placeholder handlers', () => {
     expect(await placeholderResetRequest({ email: 'a@b.c' })).toEqual({ ok: true });
   });
 });
+
+describe('login form before hydration (WEB-008 review)', () => {
+  it.each(locales)('is a POST with a fixed action and its credential inputs and submit are disabled in %s', (locale) => {
+    const out = render(locale, <LoginForm />);
+    const form = out.match(/<form[^>]*>/)![0];
+    expect(form).toContain('method="post"');
+    expect(form).toMatch(/action="\/login\/"/);
+    expect(form).not.toMatch(/method="get"/i);
+    const inputs = out.match(/<input[^>]*>/g)!;
+    expect(inputs).toHaveLength(2);
+    for (const i of inputs) expect(i).toMatch(/disabled=""/);
+    expect(out.match(/<button[^>]*>/)![0]).toMatch(/disabled=""/);
+  });
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Alert, Button, Stack, TextField } from '../../ui';
 import { placeholderLogin, type AuthResult, type LoginHandler } from '../../lib/authPlaceholder';
@@ -21,6 +21,10 @@ export function LoginForm({ onSubmit = placeholderLogin, initialResult, brand, t
   const t = useTranslations('auth');
   const [result, setResult] = useState<AuthResult | undefined>(initialResult);
   const [busy, setBusy] = useState(false);
+  // False in server output and until this component has mounted in the browser. Until then the form cannot be
+  // filled in or sent, so a failed hydration can never submit credentials natively.
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
 
   async function handle(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -38,16 +42,18 @@ export function LoginForm({ onSubmit = placeholderLogin, initialResult, brand, t
   return (
     <AuthShell title={t('login.title')} brand={brand} tenant={tenant}>
       <p className={styles.intro}>{t('login.intro')}</p>
-      <form onSubmit={handle} noValidate={false}>
+      {/* POST with a fixed same-page action: even a native submit never puts the email or password in a URL (GET).
+          CSRF protection is added when identity is wired (PLT-005); today the handler is a placeholder. */}
+      <form method="post" action="/login/" onSubmit={handle} noValidate={false}>
         <Stack gap={2}>
           {result && !result.ok ? (
             <Alert tone="danger" title={t('login.errorTitle')}>
               {t('login.error')}
             </Alert>
           ) : null}
-          <TextField name="email" type="email" label={t('login.email')} autoComplete="username" required />
-          <TextField name="password" type="password" label={t('login.password')} autoComplete="current-password" required />
-          <Button type="submit" loading={busy}>
+          <TextField name="email" type="email" label={t('login.email')} autoComplete="username" required disabled={!ready} />
+          <TextField name="password" type="password" label={t('login.password')} autoComplete="current-password" required disabled={!ready} />
+          <Button type="submit" loading={busy} disabled={!ready}>
             {busy ? t('login.submitting') : t('login.submit')}
           </Button>
           <a className={styles.link} href="/reset-password/">

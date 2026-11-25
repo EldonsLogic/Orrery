@@ -4,8 +4,12 @@ import { NextIntlClientProvider } from 'next-intl';
 import type { ReactElement } from 'react';
 import { messages, type Locale } from '../../i18n';
 import { BrandedLogin } from './BrandedLogin';
-import { brandingCss, cleanText, safeLogoUrl, safeTokens, sanitiseBranding, type TenantBranding } from './branding';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { SURFACE, brandingCss, cleanText, safeLogoUrl, safeTokens, sanitiseBranding, type TenantBranding } from './branding';
 import { fakeBrandingPort } from './fake';
+import { tenantFromHost, tenantFromLocation } from './host';
+import { LoginPreview, previewEnabled } from './LoginPreview';
 import fixture from './fixture.json';
 
 const render = (locale: Locale, node: ReactElement) =>
@@ -167,5 +171,66 @@ describe('review hardening (M1, M2, M3, L1)', () => {
   it('brandingCss sanitises its own input', () => {
     const css = brandingCss({ ...sample, slug: 'x"] { } a[b="' } as TenantBranding);
     expect(css).toBe('');
+  });
+});
+
+describe('review fixes WEB-008 (host-only tenant, rendered contrast, locale of shown text)', () => {
+  const here = __dirname;
+
+  it('tenantFromHost maps only known hosts; unknown, odd and prototype hosts give null', () => {
+    expect(tenantFromHost('sample-trading.localhost')).toBe('sample-trading');
+    expect(tenantFromHost('Sample-Trading.localhost.')).toBe('sample-trading');
+    for (const h of ['evil.test', 'sample-trading.localhost.evil.test', 'constructor', '__proto__', '', null, undefined])
+      expect(tenantFromHost(h as string)).toBeNull();
+  });
+
+  it('a query parameter cannot change the brand: only the hostname is read', () => {
+    const loc = { hostname: 'sample-trading.localhost', search: '?tenant=example-foods', hash: '#tenant=example-foods' };
+    expect(tenantFromLocation(loc)).toBe('sample-trading');
+    expect(tenantFromLocation({ hostname: 'unknown.example', search: '?tenant=sample-trading' } as { hostname: string })).toBeNull();
+  });
+
+  it('the real login code and route never read the query string; the preview route is separate and off by default', () => {
+    for (const f of ['BrandedLogin.tsx', 'host.ts', '../../app/login/page.tsx']) {
+      const src = readFileSync(join(here, f), 'utf8');
+      expect(src, f).not.toMatch(/URLSearchParams|location\.search|useSearchParams/);
+    }
+    expect(readFileSync(join(here, '../../app/login/page.tsx'), 'utf8')).not.toContain('tenantKey');
+    expect(previewEnabled()).toBe(false);
+    expect(render('en', <LoginPreview />)).toBe('');
+  });
+
+  it('primary equal to the card surface is refused (link and focus ring would vanish), in light and dark', () => {
+    const lightBad = { ...sample, light: { ...sample.light, '--color-primary': SURFACE.light, '--color-primary-label': c('000000'), '--color-primary-hover': SURFACE.light, '--color-primary-pressed': SURFACE.light } };
+    expect(sanitiseBranding(lightBad)).toBeNull();
+    const darkBad = { ...sample, dark: { ...sample.dark, '--color-primary': SURFACE.dark, '--color-primary-label': c('FFFFFF'), '--color-primary-hover': SURFACE.dark, '--color-primary-pressed': SURFACE.dark } };
+    expect(sanitiseBranding(darkBad)).toBeNull();
+    expect(sanitiseBranding(sample)).not.toBeNull();
+  });
+
+  it('refuses a hover or pressed fill the label cannot sit on, and missing hover or pressed', () => {
+    expect(sanitiseBranding({ ...sample, light: { ...sample.light, '--color-primary-hover': c('7FBFB9') } })).toBeNull();
+    expect(sanitiseBranding({ ...sample, dark: { ...sample.dark, '--color-primary-pressed': c('1A3A37') } })).toBeNull();
+    const noHover = { ...sample.light };
+    delete noHover['--color-primary-hover'];
+    expect(sanitiseBranding({ ...sample, light: noHover })).toBeNull();
+  });
+
+  it('the primary button uses the validated label, hover and pressed tokens', () => {
+    const css = readFileSync(join(here, '../../ui/Button.module.css'), 'utf8');
+    expect(css).toMatch(/\.primary \{[^}]*color: var\(--color-primary-label\)/);
+    expect(css).toMatch(/\.primary:hover[^{]*\{[^}]*var\(--color-primary-hover\)/);
+    expect(css).toMatch(/\.primary:active[^{]*\{[^}]*var\(--color-primary-pressed\)/);
+  });
+
+  it('English fallback text on the Arabic page carries lang=en dir=ltr; Arabic text keeps ar/rtl', () => {
+    const enOnly: TenantBranding = { ...sample, displayName: { en: 'Sample Trading Co' }, headline: { en: 'Welcome back' } };
+    const out = render('ar', <BrandedLogin initialBranding={enOnly} />);
+    expect(out).toMatch(/<p class="[^"]*name[^"]*" lang="en" dir="ltr">Sample Trading Co<\/p>/);
+    expect(out).toMatch(/<p class="[^"]*headline[^"]*" lang="en" dir="ltr">Welcome back<\/p>/);
+    const both = render('ar', <BrandedLogin initialBranding={sample} />);
+    expect(both).toMatch(/lang="ar" dir="rtl">شركة العينة للتجارة</);
+    const arOnly: TenantBranding = { ...sample, displayName: { ar: sample.displayName.ar }, headline: undefined };
+    expect(render('en', <BrandedLogin initialBranding={arOnly} />)).toMatch(/lang="ar" dir="rtl">شركة العينة للتجارة</);
   });
 });

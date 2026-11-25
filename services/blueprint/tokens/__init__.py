@@ -38,7 +38,7 @@ Open questions (also to be added to docs/open-questions.md by a founder lane; th
   5. "Focus ring colour" in the may-override table has no token of its own; it is taken to follow --color-primary.
   6. Slug rule: the docs say lowercase letters, digits and hyphen. Assumed 1 to 63 characters, no leading or trailing hyphen.
   7. Display name "1 to 40 characters" is counted in Unicode code points; control characters (Cc, Cs) and blank text are refused.
-  8. Layer 1 (tokens.proposed.*) is PROPOSED, not accepted; the resolver takes any token set, so acceptance changes data, not code.
+  8. Layer 1 (tokens.proposed.*) is ACCEPTED as the active token set (Q-70, 2026-11-22); the resolver takes any token set, so acceptance changed data, not code.
   9. A tenant accent that is absent leaves --color-accent alone unless derive falls back to the text colour (then it is overridden).
  10. `tokens` (direct overrides) is not a Blueprint field; it exists only as the channel through which attempts are refused and logged.
  11. A stored `resolved` block is not re-checked against primaryColour; callers must drop it when the colour changes (explicit save).

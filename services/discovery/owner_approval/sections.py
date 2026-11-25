@@ -41,11 +41,11 @@ def _minor(obj):
     return _int(obj["minor"])
 
 
-def _labels(item) -> dict:
-    lab = item.get("labels") if type(item) is dict else None
+def _labels(item, field="labels", cap=80) -> dict:
+    lab = item.get(field) if type(item) is dict else None
     lab = lab if type(lab) is dict else {}
-    ar, c1 = clean_cut(lab.get("ar"), 80)
-    en, c2 = clean_cut(lab.get("en"), 80)
+    ar, c1 = clean_cut(lab.get("ar"), cap)
+    en, c2 = clean_cut(lab.get("en"), cap)
     return {"ar": ar, "en": en, "cut": c1 or c2}
 
 
@@ -127,6 +127,11 @@ def summary_section(content: dict) -> dict:
                     row["details"], hidden = det, hidden + h
                 items.append(row)   # a non-dict item is not listed, so it counts in moreItems below
     company = content.get("company") if type(content.get("company")) is dict else {}
+    # the schema names the company by legalName (required) and tradeName (optional), localizedText up to 200 characters;
+    # it has no labels
+    legal = _labels(company, "legalName", 200)
+    trade = _labels(company, "tradeName", 200) if type(company.get("tradeName")) is dict else None
+    name_cut = int(legal["cut"]) + int(bool(trade and trade["cut"]))   # a name cut short blocks approval (too_large)
     comp = content.get("compliance") if type(content.get("compliance")) is dict else {}
     vat = comp.get("vat") if type(comp.get("vat")) is dict else {}
     einv = comp.get("eInvoicing") if type(comp.get("eInvoicing")) is dict else {}
@@ -135,9 +140,10 @@ def summary_section(content: dict) -> dict:
     return {"id": "summary", "labelKey": "oa.section.summary", "introKey": "oa.summary.intro", "counts": counts,
             "compliance": compliance, "notShown": [{"key": k, "labelKey": f"oa.summary.not_shown.{k}"} for k in NOT_SHOWN],
             "notShownNoticeKey": "oa.summary.not_shown",
-            "company": {"labels": _labels(company), "country": clean(company.get("country"), 2), "untrustedText": True},
+            "company": {"legalName": legal, "legalNameKey": "oa.company.legal_name", "tradeName": trade,
+                        "tradeNameKey": "oa.company.trade_name", "country": clean(company.get("country"), 2), "untrustedText": True},
             "detailLabels": [{"key": f, "labelKey": f"oa.detail.{f}"} for f in DETAIL_FIELDS],
-            "items": items, "moreItems": max(0, sum(counts.values()) - len(items)) + hidden}
+            "items": items, "moreItems": max(0, sum(counts.values()) - len(items)) + hidden + name_cut}
 
 
 def check_quote(quote, content: dict, gap: dict, bp_id: str, now_dt) -> str:

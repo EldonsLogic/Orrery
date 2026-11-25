@@ -8,6 +8,7 @@ CODES = {
     "OA-010": "integrity key missing or weak", "OA-011": "tenant mismatch", "OA-012": "the quote is not usable",
     "OA-013": "the draft is on hold", "OA-014": "confirmations incomplete", "OA-015": "the build gate refused", "OA-016": "changes were asked for on this version",
     "OA-017": "the plan has more items than the summary can list",
+    "OA-018": "this version's approval was spent by a rollback",
 }
 
 

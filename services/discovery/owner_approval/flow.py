@@ -21,7 +21,12 @@ How it stays honest (the PLT-013, BPL-019, BPL-020 and DSC-016 lessons, applied)
   version (digest and quote) until the draft or the quote changes; otherwise one owner's approval is enough.
 - One step-up per decision (Q-520): when the machine's gate is called it consumes the step-up, otherwise this flow does.
   A decision the gate refused does not count: the owner may approve again (explicit states: sealed decision, then the
-  outcome confirmed or refused). Rejections and requests for changes are final.
+  outcome confirmed or refused). Rejections and requests for changes are final, even when their rollback failed,
+  except one the gate refused because it did not verify the owner (BS-003: no fresh step-up, past draft the gate's
+  step-up is the decision's step-up, Q-520): it counts for nothing and may be made again.
+- An approval the gate confirmed is spent once a rollback sends the plan back to draft (Q-540): no owner may approve
+  that version again (OA-018); the draft or the quote must change. While an apply is pending or in recovery, no
+  decision is taken at all (OA-005): a rejection then would block the machine's own apply recovery (Q-544).
 - Humans only: agent, assistant and service principals and staff principals never decide. A principal that also holds
   the team reviewer or build runner role cannot decide. Time is the host clock only.
 - The approval is evidence, not the gate. After the decision is sealed the flow asks the build state machine's owner
@@ -75,6 +80,12 @@ def _dig(v, what):
     if type(v) is not str or not DIGEST_RE.fullmatch(v):
         raise OwnerApprovalError("OA-001", what)
     return v
+
+
+def _void(decision, outcome, code) -> bool:
+    """A decision that took no effect: an approval the gate refused, or a rollback the gate refused because it did not
+    verify the owner (BS-003). Such a decision counts for nothing and the owner may decide again on that version."""
+    return outcome == "refused" and (decision == "approve" or code == "BS-003")
 
 
 def _corrupt(why="record"):
@@ -161,7 +172,8 @@ class OwnerApproval:
 
     # ----- the log: one rule set for write time and read time ---------------------------------------------
     def _fold(self, t, bp, records) -> dict:
-        decisions, outcomes, max_at, latest, rejected, changes = [], {}, 0, {}, set(), set()
+        decisions, outcomes, max_at, latest, rej, chg, spent = [], {}, 0, {}, {}, {}, set()
+        live = lambda m: {k for k, v in m.items() if v}  # noqa: E731  (a refused reject or change request counts for nothing)
         for r in records:
             body = r["body"]
             try:
@@ -185,15 +197,16 @@ class OwnerApproval:
                         raise _corrupt()
                     key = (a["subject"], d["bpDigest"], d["quoteDigest"])
                     prev = latest.get(key)
-                    # one decision per owner per version; only an approval the gate REFUSED may be tried again
-                    if prev is not None and not (prev["decision"] == "approve" and outcomes.get(prev["seq"], (None,))[0] == "refused"):
+                    # one decision per owner per version; only a decision the gate REFUSED may be made again
+                    if prev is not None and not _void(prev["decision"], *outcomes.get(prev["seq"], (None, None))):
                         raise _corrupt("order")
-                    if dec == "approve" and (d["bpDigest"] in rejected or (d["bpDigest"], d["quoteDigest"]) in changes):
+                    vkey = (d["bpDigest"], d["quoteDigest"])
+                    if dec == "approve" and (d["bpDigest"] in live(rej) or vkey in live(chg) or vkey in spent):
                         raise _corrupt("order")
                     if dec == "reject":
-                        rejected.add(d["bpDigest"])
+                        rej.setdefault(d["bpDigest"], set()).add(r["seq"])
                     elif dec == "request_changes":
-                        changes.add((d["bpDigest"], d["quoteDigest"]))
+                        chg.setdefault(vkey, set()).add(r["seq"])
                     x = {"seq": r["seq"], "subject": a["subject"], "at": at, **d}
                     latest[key] = x
                     decisions.append(x)
@@ -204,13 +217,19 @@ class OwnerApproval:
                             or ref["subject"] != a["subject"]:
                         raise _corrupt("outcome")
                     outcomes[d["decisionSeq"]] = (d["outcome"], d["code"])
+                    if ref["decision"] == "approve" and d["outcome"] == "confirmed":
+                        spent.add((ref["bpDigest"], ref["quoteDigest"]))   # it moved the machine once; never again
+                    elif ref["decision"] == "reject" and _void("reject", d["outcome"], d["code"]):
+                        rej.get(ref["bpDigest"], set()).discard(ref["seq"])
+                    elif ref["decision"] == "request_changes" and _void("request_changes", d["outcome"], d["code"]):
+                        chg.get((ref["bpDigest"], ref["quoteDigest"]), set()).discard(ref["seq"])
             except OwnerApprovalError:
                 raise
             except Exception:
                 raise _corrupt("shape") from None
         for x in decisions:
             x["outcome"], x["outcomeCode"] = outcomes.get(x["seq"], (None, None))
-        return {"decisions": decisions, "latest": latest, "rejected": rejected, "changes": changes, "max_at": max_at}
+        return {"decisions": decisions, "latest": latest, "rejected": live(rej), "changes": live(chg), "spent": spent, "max_at": max_at}
 
     @staticmethod
     def _tries(folded, subject, bp_digest, quote_digest) -> int:
@@ -291,6 +310,10 @@ class OwnerApproval:
             raise OwnerApprovalError("OA-004", "gate")
         if type(st.get("rollbacks")) is not int or st["rollbacks"] < 0:
             raise OwnerApprovalError("OA-004", "gate")   # needed to tell a pending approval from one a rollback spent
+        if "pending" not in st or "recovery" not in st or any(st[k] is not None and type(st[k]) is not dict for k in ("pending", "recovery")):
+            raise OwnerApprovalError("OA-004", "gate")   # needed to keep a decision from blocking apply recovery
+        if st["pending"] is not None or st["recovery"] is not None:
+            blockers.append("apply_pending")   # no decision while an apply is in flight or in recovery (Q-544)
         if st["contentChanged"] or st["contentDigest"] != dg:
             blockers.append("stale")   # the author must record the new content as a revision first
         try:
@@ -318,12 +341,12 @@ class OwnerApproval:
             try:
                 recs, folded = self._records(t, bp)
             except OwnerApprovalError:
-                folded = {"decisions": [], "rejected": set(), "changes": set()}
+                folded = {"decisions": [], "rejected": set(), "changes": set(), "spent": set()}
                 blockers.append("integrity")
             integrity = "integrity" in blockers
             eff = "integrity_error" if integrity else self._effective(folded, ctx["bpDigest"], ctx["quoteDigest"])
             mine = [d for d in folded["decisions"] if d["subject"] == p.subject and d["bpDigest"] == ctx["bpDigest"]
-                    and d["quoteDigest"] == ctx["quoteDigest"] and not (d["decision"] == "approve" and d["outcome"] == "refused")]
+                    and d["quoteDigest"] == ctx["quoteDigest"] and not _void(d["decision"], d["outcome"], d["outcomeCode"])]
             m = ctx["machine"]
             if eff == "rejected":
                 blockers.append("rejected")
@@ -333,9 +356,11 @@ class OwnerApproval:
                 blockers.append("state")
             if mine:
                 blockers.append("already_decided")
+            if (ctx["bpDigest"], ctx["quoteDigest"]) in folded["spent"] and m == "draft":
+                blockers.append("approval_spent")   # decide refuses approve (OA-018); reject and request changes still work
             if not integrity and self._tries(folded, p.subject, ctx["bpDigest"], ctx["quoteDigest"]) >= MAX_TRIES:
                 blockers.append("tries")    # decide refuses every decision on this version past the cap (OA-007)
-            base = set(blockers) - {"rejected", "changes_requested", "already_decided", "state", "too_large", "quote"}
+            base = set(blockers) - {"rejected", "changes_requested", "already_decided", "state", "too_large", "quote", "approval_spent"}
             can_approve = not blockers and m == "draft"
             can_change = not base and not mine and m != "live" and ctx["quoteState"] in ("valid", "expired")
             if m != "draft" and eff not in ("approved", "integrity_error", "pending"):
@@ -427,7 +452,7 @@ class OwnerApproval:
             p = self._actor(claims, t, gate=False)
             at = self._now()
             ctx = self._context(t, bp, at)
-            for code, key in (("OA-013", "held"), ("OA-012", "quote"), ("OA-006", "stale"), ("OA-017", "too_large")):
+            for code, key in (("OA-013", "held"), ("OA-005", "apply_pending"), ("OA-012", "quote"), ("OA-006", "stale"), ("OA-017", "too_large")):
                 # an expired quote or a plan too large to list stops an approval only; the owner may still say no
                 if key in ctx["blockers"] and (decision == "approve" or key not in ("quote", "too_large")
                                                or (key == "quote" and ctx["quoteState"] != "expired")):
@@ -451,7 +476,7 @@ class OwnerApproval:
                 if at < folded["max_at"] - MAX_SKEW:
                     raise OwnerApprovalError("OA-002", "order")
                 prev = folded["latest"].get((p.subject, data["bpDigest"], data["quoteDigest"]))
-                if prev is not None and not (prev["decision"] == "approve" and prev["outcome"] == "refused"):
+                if prev is not None and not _void(prev["decision"], prev["outcome"], prev["outcomeCode"]):
                     raise OwnerApprovalError("OA-007")
                 if self._tries(folded, p.subject, data["bpDigest"], data["quoteDigest"]) >= MAX_TRIES:
                     raise OwnerApprovalError("OA-007", "tries")   # bounded log growth from refused approvals
@@ -460,6 +485,8 @@ class OwnerApproval:
                         raise OwnerApprovalError("OA-008")
                     if (data["bpDigest"], data["quoteDigest"]) in folded["changes"]:
                         raise OwnerApprovalError("OA-016")
+                    if (data["bpDigest"], data["quoteDigest"]) in folded["spent"]:
+                        raise OwnerApprovalError("OA-018")   # a rollback spent it; the draft or the quote must change
             rec = self._log.append(t, bp, {"type": "decision", "at": at, "actor": actor, "data": data}, check)
             if forward:
                 self._forward(claims, t, bp, p, rec["seq"], decision, ctx)

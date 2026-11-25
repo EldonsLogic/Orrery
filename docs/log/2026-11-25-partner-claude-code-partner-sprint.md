@@ -1,0 +1,72 @@
+# Session log: partner-sprint
+
+Date: 2026-11-25
+Author: partner
+Tool and model: claude-code (requested log label; coordinator is Codex GPT-6.1 Sol)
+Plan IDs: SEC-004,CMP-023
+
+## Summary
+Live parallel-sprint coordination for the partner lane. Account verified as sayegh9; clean checkout cut from origin/main. The session-start checklist, standing rules, generated status and latest three logs were read. Current gate remains G0; later-gate work follows its plan rows.
+
+## Decisions
+- Partner confirmed in this session that CMP-010 follows the CMP-003/ERP-015 method: agent-drafted deterministic code, Tier 3 line-by-line human review, accountant review before production.
+- Existing decisions preserved: keep all 41 old worktrees and rescue branches; #309 parked for Eldon after three review rounds; Gemini 4 Argon is the approved fallback while the other reviewer account is limited.
+
+## Wave 0
+- Started the approved GitHub watcher under a 7200-second timeout. Restart after events; ask before restarting at the time limit.
+- Open PRs checked: no new Eldon review on #300, #306, #309, #310, #311 or #312. #296 remains open, so GOV-071 waits. Adapter lane waits for #310 and #312.
+- Historical ERP-031 bench logs requested for runs 45623345992 and 45636525010; verdict pending.
+- Triggered SEC-004 workflow_dispatch on main; result pending.
+
+## Path-lock table
+| Task | Branch | Allowed paths | State |
+|---|---|---|---|
+| Coordination | sec-004-cmp-023-partner-coordination-6 | docs/PLAN.md and this live log; coordinator-only shared-file assembly on task branches | held |
+| CMP-010 design/build | pending claim | docs/compliance/ksa-vat-return.md; components/compliance/ksa_vat_return/** | reserved, no dispatch |
+| PLT-027 | pending claim | docs/decisions/ADR-0069-gateway-live-binding-audit-spool.md | reserved, no dispatch |
+| CE-SEC-008 part 1 | pending claim | api/endpoints.py; guarded_apply/schema_reconciler.py; guarded_apply/ddl_plan_gate.py; new test_ce_sec_008_deploy_path_durability.py, under the change-engine package | reserved, overlap check pending |
+| PLT-024 regression | pending claim | services/gateway/tests/test_plt_024_request_headers.py | reserved, no dispatch |
+| Adapter lane | existing #310 and #312 | adapter/frappe_backend.py; adapter/engine.py | blocked by open PRs |
+| GOV-071 | pending #296 | recompute partner-lane rename paths after #296 merges | waiting |
+
+## Reservations
+- ADR-0069 for PLT-027, subject to open-PR number verification before dispatch.
+- Q-609 is the next reserved question number; no child may allocate a number. Coordinator owns PLAN, open questions, ADR index, tests.yml, RULES and AGENTS.
+- No implementation child edits PLAN. No child may run git, including status or stash. Worktrees are retained.
+
+## Dispatches and results
+None yet; claim PR must merge first.
+- W0.4: removed only the three PLAN row additions from #312 in commit 05f111d8; code unchanged. Rows copied verbatim into this claim, with CE-SEC-008 doing. Comment posted on #312.
+- R3/R5 audit: fetched origin, diffed all 17 open PRs against their actual bases. No Wave 1 implementation/design path overlaps an open PR or another reserved task. ADR numbers in flight stop at 0068; Q references stop at 608. ADR-0069 reserved for PLT-027; Q-609 held for coordinator use.
+- Claim sets CMP-010, PLT-027, CE-SEC-008 and BPL-043 doing. GOV-071 remains todo because #296 remains open. BPL-044 is recorded todo; its adapter lane is unavailable.
+- SEC-004 dispatched run 45646846161 on main at 1fa88849; in progress. An additional historical successful SEC-004 run 45088110814 exists after the previously reported failing run; no closure claimed without inspecting the fresh run.
+
+- Coordinator handoff: the thread moved from Codex GPT-6.1 Sol to Claude Opus 5.5 (high) at the partner's request; sprint state recovered from this log and the child worktrees.
+- Dispatched after the claim merged: T1a CMP-010 design (Claude Opus, running) and T2 PLT-027 design (Claude Opus). T3 CE-SEC-008 part 1 and T5 PLT-024 header tests not yet dispatched.
+- T2 PLT-027 result: ADR-0069 Proposed (154 lines, design only, 29 threats each with a named proposed test). Coordinator added the INDEX entry, follow-up rows PLT-028 to PLT-031 (G3 go-live row depends only on earlier-gate Eldon rows) and Q-609 to Q-614 for Eldon's lane. check_docs, check_repo_hygiene and check_plan_independence pass. Security review by a different model is pending.
+
+- PR #316 opened for PLT-027. Security review dispatched to Codex GPT-6.2 Sol (high), read-only.
+- Dispatched T3 CE-SEC-008 part 1 (Claude Sonnet 5.5 high, own worktree) and T5 PLT-024 header tests (Claude Sonnet 5.5 medium, own worktree) with the sprint-6 briefs unchanged.
+
+- PLT-027 security review (GPT-6.2 Sol): changes required, with 9 High, 5 Medium and 1 Low findings (audit loss when an intent is acked before its outcome, spool rollback and truncation, unauthenticated flood capacity, WSGI framing limits, business-write idempotency, per-route method and effect declarations, stale role reads, stable session id, upstream cookie control, transport-level caps, the existing adapter correlationId, path redaction, the PLT-029 to PLT-028 dependency). Sent back to the author child as revision round 1.
+- T5 PLT-024 result: 5 tests, 62 gateway tests pass, and a pass-through mutant fails all 5. PR #318 opened with its own log; Tier 2, waiting for Eldon's review.
+- T1a CMP-010 result: docs/compliance/ksa-vat-return.md, 253 lines, design only, five official ZATCA sources fetched on 2026-11-25. Only Boxes 7 to 9 are confirmed by number. Coordinator allocated Q-615 to Q-622. PR #319 opened; cross-model review dispatched to GPT-6.2 Sol (high). Open point: the code location (the doc proposes zatca_sa/vat_return.py; the path lock reserved ksa_vat_return/**).
+- GitHub returned intermittent 500 and 502 errors on push and PR creation; retries succeeded and no duplicate PRs were created.
+
+- PLT-027 revision round 1: author fixed all 15 findings (none rebutted; the code claims in findings 7, 10, 11 and 12 were confirmed in the code), and the ADR grew from 154 to 187 lines. Coordinator applied the PLAN changes (PLT-028 to PLT-031 text; PLT-029 and PLT-030 now depend on PLT-028; PLT-031 gated on Q-609, Q-302 and Q-613) and reworded Q-609, Q-610, Q-611, Q-613 and Q-614. Fresh re-review dispatched.
+
+- PLT-027 re-review round 2 (GPT-6.2 Sol, head 4c7176a9): changes required. Resolved: findings 8, 9, 10, 12 and 13. The rest are partly resolved, with 6 new High defects (recovery metadata after pruning, checkpoint race, placeholder HMAC and crash before quarantine, preauth isolation and record-size ceiling, one stalled tenant stopping the instance, cross-principal dedupe disclosure and admin step-up) and 2 Medium. Advice accepted: split PLT-028. Sent to the author as revision round 2.
+- CMP-010 review (GPT-6.2 Sol, head 7b0d9880): changes required, 9 High and 4 Medium. Main points: the Art. 63 threshold reportedly amended to SAR 15,000; reverse-charge VAT in Box 9 under full recovery; mixed zero-rated subtotals; deferred versus customs-paid imports; note filing state; calendar quarters; deferred input claims; refusal output must carry no amounts; a replay and taxpayer-binding key. Sent to the author as revision round 1, with an instruction to verify every reviewer citation against the official text before acting.
+
+- PLT-027 revision round 2 committed (35f53c26): PLT-028 split into PLT-028 (local durability) and PLT-032 (forwarding and integrity conformance), with Q-613 and Q-614 updated. Re-review round 3 (GPT-6.2 Sol): changes required. M1 and M2 resolved, H1 to H6 partly resolved; 6 new High and 1 Medium, all in the spool, checkpoint and receipt protocol. **Parked for a founder decision**, as the coordinator proposed, with options posted on PR #316: (a) one more focused round, (b) simplify the protocol, or (c) move the state machines into PLT-028 and PLT-032 with their own review. Review rounds: 3.
+- T3 CE-SEC-008 part 1 result: implemented test-first, but 108 existing tests failed closed on the new lock-timeout read-back in two test doubles outside the child's paths. Coordinator applied the child's 4-line patch to `adapter/simulated_frappe.py` and `tests/test_api_deployment.py` (no open-PR overlap), and the full suite then passed: 1555 passed, 86 skipped, 0 failed (baseline 1514 passed, 86 skipped). Coordinator added the CI step. PR #322 opened with its own log; cross-model review dispatched to GPT-6.2 Sol.
+- CMP-010 revision round 1: all 13 findings fixed after the author read each reviewer citation (the Art. 63(3) threshold of 15,000 confirmed in the Umm al-Qura gazette, calendar quarters confirmed, 16 box labels taken from the illustrative form). Coordinator applied the Q changes, marked Q-621 PARTLY ANSWERED and added Q-623 to Q-626. Commit 5baf921e; re-review round 2 dispatched.
+
+- CMP-010 re-review round 2 (GPT-6.2 Sol, head 5baf921e): changes required, converging. Resolved: 1, 4, 6, 8, 9, 10 and 12; the rest partly resolved. All FETCHED sources were confirmed. New: 3 High (mixed document kinds reconciling to one subtotal, `claim_date` not bound to the period, non-XML source bypassing BR-CO-17) and 2 Medium, plus vector fixes. Sent to the author as revision round 2.
+- CE-SEC-008 review (GPT-6.2 Sol, head 56b00a23): changes required. The suite counts were confirmed (1555 passed, 86 skipped). Findings: 4 High (a regression where live workflow, report and property-setter deployments fail at prepare; the evidence namespace collides with caller keys and rollback accepts evidence rows; a pre-lock read view; no recovery entry point consumes the journal), 4 Medium, 1 Low. Sent to the implementation child as revision round 1, with the write paths widened to the two test doubles and a schema change or new API reported as follow-up. PR #322 must not merge before this is fixed.
+
+## Tokens or cost
+Unknown.
+
+## Next step
+Verify historical evidence; move #312 plan hunks; merge the Tier 1 claim PR, then dispatch disjoint Wave 1 tasks.

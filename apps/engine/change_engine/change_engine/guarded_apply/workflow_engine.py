@@ -25,6 +25,7 @@ from .safety_guardrails import (
     TIER_1_GOVERNANCE_ROLES,
     ZONE_2_LOCKED_DOCTYPES,
     ZoneSafetyViolation,
+    is_locked_doctype,
 )
 from .schema_reconciler import (
     IdempotencyConflictError,
@@ -230,7 +231,7 @@ def validate_workflow_state_machine(
     target_dt = wf_obj.document_type
     if not target_dt:
         errors.append("Target document_type must be specified.")
-    elif target_dt in TIER_0_PROHIBITED_WORKFLOW_DOCTYPES:
+    elif is_locked_doctype(target_dt, TIER_0_PROHIBITED_WORKFLOW_DOCTYPES):
         errors.append(
             f"DocType '{target_dt}' is a protected Tier 0 system/financial DocType. "
             f"Workflows are strictly prohibited on Tier 0 DocTypes under ADR-001 Rev 2.3."

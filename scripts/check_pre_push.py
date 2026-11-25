@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """pre-push hook: block pushes to main, then run the repo checks and the task-trail check.
-Emergency founder override (never for agents): ORRERY_ALLOW_MAIN_PUSH=founder-emergency (the main-guard workflow still audits it).
+Emergency founder override (never for agents): SESHNA_ALLOW_MAIN_PUSH=founder-emergency (the main-guard workflow still audits it).
 """
 import os
 import subprocess
@@ -21,7 +21,7 @@ def current_branch():
 def main():
     remote_ref = os.environ.get("PRE_COMMIT_REMOTE_BRANCH", "")
     target_main = remote_ref.endswith("/main") or (not remote_ref and current_branch() == "main")
-    if target_main and os.environ.get("ORRERY_ALLOW_MAIN_PUSH") != "founder-emergency":
+    if target_main and os.environ.get("SESHNA_ALLOW_MAIN_PUSH") != "founder-emergency":
         print("Blocked: never push to main. Push a branch named with the plan ID and open a PR (AGENTS.md).")
         return 1
     rc = 0

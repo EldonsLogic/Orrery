@@ -13,7 +13,7 @@ Method: the CMP-003 and ERP-015 method applies, as the partner confirmed for thi
 - **All or nothing.** If any refusal fires, the result is a `RefusedResult` (§8). It holds **no amounts of any kind**: no boxes, totals, diagnostics or exclusions. A partial return is worse than no return.
 - **Scope.** Invoice accounting basis only (S4 Art. 45; S2 §9.1). Cash basis (Art. 46, amended in S6) is refused (R-BASIS).
 - **Traceability (principle 8).** Every box value lists the `row_id`s it sums.
-- **Proposed location** (for the implementation row to confirm): `components/compliance/zatca_sa/vat_return.py`, with tests in `components/compliance/zatca_sa/tests/test_vat_return.py`.
+- **Location (partner's decision, 2026-11-25):** `components/compliance/zatca_sa/vat_return.py`, with tests in `components/compliance/zatca_sa/tests/test_vat_return.py`, inside the existing rigid `compliance.zatca_sa` component boundary.
 
 ## 2. Evidence labels and sources
 
@@ -134,7 +134,7 @@ The selected date must fall inside the period, or the row is refused (R-PERIOD).
 
 | Stage | Where | Rule | Evidence |
 |---|---|---|---|
-| 0. Document VAT | Upstream: engine, CMP-003, CMP-004 | Half-up, BT-117 rounded to 2 decimals per category at document level, on final results only | S5 §10, BR-CO-17 (FETCHED). Whether it binds the ledger: Q-601. |
+| 0. Document VAT | Upstream: engine, CMP-003, CMP-004 | Half-up, BT-117 rounded to 2 decimals per category at document level, on final results only | S5 §10, BR-CO-17 (FETCHED). Q-601 answered 2026-11-25: ZATCA mandates half-up, so the Saudi rounding rule is statutory; rounding of negative amounts stays open. |
 | 0a. Platform setting | Engine | Commercial Rounding, ties away from zero, including negatives | ADR-0033 (a founder decision). It matches S5 for positive values. Python `ROUND_HALF_UP` also rounds ties away from zero (checked: `-0.015` → `-0.02`). |
 | 1. Input check | This function | No rounding. More than 2 decimals is R-PREC. If an output `S` subtotal's `group_vat` ≠ half-up(`group_taxable` × rate / 100), or an input row mismatches, the result is warning **W-BRCO17** listing the `row_id`s and `xml_uuid`, and the draft is still built from the issued figures. Nothing is recomputed or substituted (CMP-003: no second calculator). | S5 BR-CO-17; founder decision "A, warn only" (PR #319 comment, Eldon for both founders, 2026-11-25) |
 | 2. Aggregation | This function | Exact integer sum, no rounding | S3 §4.2.4: "the rounded figures used must be the same figures used for … filing the VAT return" |
@@ -311,7 +311,7 @@ Properties:
 
 - **Q-267 (OPEN)**: customs evidence; restricted and partial recovery; reverse-charge settlement; import VAT through the return; Box 2 state-borne supplies; `VATEX-SA-34-*`, `-36`, `-MLTRY` mapping.
 - **Q-8 (OPEN)**: splitting `2210` (the design splits by category and does not depend on it); settlement (`2230`) and refund receivable presentation.
-- **Q-601 (OPEN)**: whether S5 half-up binds the ledger; negative rounding; BR-CO-17 on ledger-only rows (§7).
+- **Q-601 (ANSWERED in part, 2026-11-25)**: ZATCA mandates half-up (S5 §10), so the Saudi rounding rule is statutory. Still open for the accountant: rounding of negative amounts (`half_away_from_zero` versus half-up). The return itself still does no rounding, and W-BRCO17 stays a warning (founder decision, §7).
 - **Q-615–Q-622 (OPEN)**: live-portal labels (Q-615); the VAT column (Q-616); Adjustment entry (Q-617); halala or riyal (Q-618); out-of-scope reporting (Q-619); Art. 63 correction routes at SAR 15,000 (Q-620); quarter exceptions (Q-621); cross-period purchase notes and late claims (Q-622).
 - **Q-623–Q-626 (OPEN)**: how a mixed `Z` invoice (Box 3 and Box 4 items) states reasons in one BG-23 (S5 §8.4) (Q-623); the Art. 54 note deadline after Resolution (01-06-24) (S8 guidance read; Arabic text not read) (Q-624); which consolidated Arabic Implementing Regulations text governs, given that S4 predates S6 (Q-625); the Art. 49(8) five-year boundary (Q-626).
 

@@ -19,7 +19,7 @@ from .contract import CONTRACTS, artifact_hashes, canon, response_validator, sch
 
 ADAPTER_ID = "frappe"  # internal id; the sample artifacts name it in engineTarget.adapter (contract open question 12)
 ADAPTER_VERSION = "0.1.0"
-CONTRACT_VERSIONS = ["0.1.2"]
+CONTRACT_VERSIONS = ["0.1.3"]
 ARTIFACT_SCHEMA_VERSIONS = ["0.1.0"]
 VERSION_SETS = ["set-example", "set-example-2"]
 PLAN_TOKEN_TTL = 900

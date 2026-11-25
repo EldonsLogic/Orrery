@@ -25,7 +25,7 @@ ADD_KIND = {"locations": "location.upsert", "components": "component.enable", "e
             "roles": "role.upsert", "workflows": "workflow.upsert", "approvals": "approval.upsert",
             "reports": "report.upsert"}
 SETTINGS_SECTIONS = ("company", "compliance")
-I18N_SETTINGS = ("defaultLocale", "labelOverrides")  # labelOverrides: open question 3
+I18N_SETTINGS = ("defaultLocale", "labelOverrides")  # contract 9.3 (ADR-0057 Q-52)
 # Contract 9.3 "Skipped": first pointer segment -> reason.
 SKIP = {"meta": "meta", "branding": "branding", "integrations": "integration", "provenance": "provenance"}
 KEYED_COLLECTIONS = tuple(ADD_KIND) + ("integrations",)
@@ -81,7 +81,7 @@ def steps_from_ops(ops: list[dict]) -> tuple[list[dict], list[dict], list[Issue]
         else:
             issues.append(Issue("CMP-ART-001", pointer, "no compile rule covers this Blueprint operation"))
     # Contract 9.4 orders by (phase, pointer, kind); several settings.set steps share one subject pointer, so the
-    # property breaks the tie (open question 2).
+    # property breaks the tie (ADR-0057 Q-51).
     steps.sort(key=lambda s: (s["phase"], s["pointer"], s["kind"], s["params"].get("property", "")))
     for i, s in enumerate(steps, 1):
         s["seq"] = i
@@ -133,3 +133,14 @@ def risk(diff_risk: dict, steps: list[dict], ledger_or_tax: bool) -> dict:
     out["requiresTeamReview"] = bool(out["touchesCompliance"]) or ledger_or_tax
     out["irreversibleSteps"] = sum(1 for s in steps if not s["reversible"])
     return out
+
+
+def duplicate_step_keys(steps: list[dict]) -> list[tuple]:
+    """Uniqueness keys used by more than one step (contract 9.4): (kind, pointer); settings.set adds params.property."""
+    seen, dup = set(), []
+    for s in steps:
+        key = (s["kind"], s["pointer"]) + ((s["params"].get("property"),) if s["kind"] == "settings.set" else ())
+        if key in seen and key not in dup:
+            dup.append(key)
+        seen.add(key)
+    return dup

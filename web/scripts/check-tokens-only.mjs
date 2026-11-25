@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const EXEMPT = /(^|\/)tokens(\.generated)?\.css$/;
+const EXEMPT = /(^|\/)tokens(\.proposed)?(\.generated)?\.css$/;
 const EXT = /\.(css|ts|tsx)$/;
 const SKIP_DIRS = new Set(['node_modules', '.next', 'out', 'theme']);
 

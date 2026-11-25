@@ -7,7 +7,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 
 | ADR | Title | Status |
 |---|---|---|
-| [ADR-0001-working-codename.md](ADR-0001-working-codename.md) | Working codename Orrery, not cleared | Accepted |
+| [ADR-0001-working-codename.md](ADR-0001-working-codename.md) | Working codename Orrery, not cleared | Accepted; superseded by ADR-0066 (working-name rule) |
 | [ADR-0002-seed-engine-frappe-erpnext.md](ADR-0002-seed-engine-frappe-erpnext.md) | Seed engine is Frappe + ERPNext, behind an adapter | Accepted |
 | [ADR-0003-five-parts-four-contracts.md](ADR-0003-five-parts-four-contracts.md) | Five parts and four contracts | Accepted |
 | [ADR-0004-one-chat-role-based-views.md](ADR-0004-one-chat-role-based-views.md) | One chat, anyone chats, role-based views | Accepted |
@@ -17,7 +17,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0008-no-client-specific-code.md](ADR-0008-no-client-specific-code.md) | No client-specific code; component factory; autonomy metrics | Accepted |
 | [ADR-0009-repo-workflow.md](ADR-0009-repo-workflow.md) | Repo workflow | Accepted |
 | [ADR-0010-model-strategy.md](ADR-0010-model-strategy.md) | Model strategy | Accepted |
-| [ADR-0011-interim-design-system.md](ADR-0011-interim-design-system.md) | Interim design system is brand guidelines v1 (Quadrant); logo is a placeholder | Accepted |
+| [ADR-0011-interim-design-system.md](ADR-0011-interim-design-system.md) | Interim design system is brand guidelines v1 (Quadrant); logo is a placeholder | Accepted; partly superseded by ADR-0066 (logo, heading typeface) |
 | [ADR-0012-phase-2-strategy-decisions.md](ADR-0012-phase-2-strategy-decisions.md) | Phase 2 strategy decisions D-P2-1..11 | Accepted |
 | [ADR-0013-change-engine-module.md](ADR-0013-change-engine-module.md) | The prototype change engine becomes a module of Part 2 | Accepted |
 | [ADR-0014-theming-and-tenant-branding.md](ADR-0014-theming-and-tenant-branding.md) | Theming and tenant branding | Accepted |
@@ -59,6 +59,14 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |
 | [ADR-0051-adapter-role-and-state-namespacing.md](ADR-0051-adapter-role-and-state-namespacing.md) | Adapter-owned engine roles and workflow states carry a reserved prefix, collisions are refused, role.upsert writes the mapped grants | Proposed |
 | [ADR-0052-isolated-browser-runner-placement.md](ADR-0052-isolated-browser-runner-placement.md) | Isolated browser runner placement (Tier 5 connector) | Proposed |
+| [ADR-0057-compiler-and-studio-design-confirmations.md](ADR-0057-compiler-and-studio-design-confirmations.md) | Compiler, token-resolver and Studio design confirmations from open questions | Proposed |
+| [ADR-0056-golden-path-mapping-gaps.md](ADR-0056-golden-path-mapping-gaps.md) | Golden-path engine mapping: complete unmapped list, computed fields engine-authoritative | Proposed |
+| [ADR-0054-model-call-contract.md](ADR-0054-model-call-contract.md) | Model-call interface contract | Proposed |
+| [ADR-0058-design-confirmations-batch-2.md](ADR-0058-design-confirmations-batch-2.md) | Design confirmations batch 2: compiler scope, connector refusals, fonts, Tool API risk | Proposed |
+| [ADR-0055-purchasing-engine-mapping.md](ADR-0055-purchasing-engine-mapping.md) | Purchasing and price-list engine mapping (contract 0.2.0) | Proposed |
 | [ADR-0059-draft-country-packs-in-sandbox.md](ADR-0059-draft-country-packs-in-sandbox.md) | Draft country packs may run in sandbox and test (synthetic data only); partly supersedes ADR-0034 | Accepted |
 | [ADR-0060-role-assignments-in-regional-store.md](ADR-0060-role-assignments-in-regional-store.md) | Role assignments live in a regional store outside the tenant site, under the security conditions of the GOV-066 review; supersedes ADR-0007 item 9 | Accepted |
 | [ADR-0062-tool-api-roles-from-assignment-store.md](ADR-0062-tool-api-roles-from-assignment-store.md) | Tool API section 4 step 2 loads the caller's roles from the regional assignment store, fail closed, re-read on approved execution (Tool API 0.3.2) | Accepted |
+| [ADR-0063-country-pack-certification-record.md](ADR-0063-country-pack-certification-record.md) | Country pack certification records: market accountant sign-off, one founder, matching manifest and named reviewer (CMP-035, Q-560) | Accepted |
+| [ADR-0066-final-name-seshna-and-nuqta-s-mark.md](ADR-0066-final-name-seshna-and-nuqta-s-mark.md) | Final product name Seshna (seshna.com) and the Nuqta S mark with Cairo headings; supersedes the ADR-0001 working-name rule and the logo and heading typeface of ADR-0011 (trademark not cleared) | Accepted |
+| [ADR-0069-gateway-live-binding-audit-spool.md](ADR-0069-gateway-live-binding-audit-spool.md) | Gateway live binding: durable audit spool, identity-bound audit records, request and response size caps (PLT-027) | Proposed |

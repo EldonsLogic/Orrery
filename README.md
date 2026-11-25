@@ -1,8 +1,8 @@
-# Orrery (working name)
+# Seshna
 
-An AI-native business platform for owner-led companies in the Middle East. One chat, in Arabic or English, interviews the owner, drafts a Blueprint of the business, assembles an ERP from vetted components, simulates a month before go-live, then runs it. The name "Orrery" is a working codename and is not trademark-cleared.
+An AI-native business platform for owner-led companies in the Middle East. One chat, in Arabic or English, interviews the owner, drafts a Blueprint of the business, assembles an ERP from vetted components, simulates a month before go-live, then runs it. Seshna (seshna.com) is the final product name ([ADR-0066](docs/decisions/ADR-0066-final-name-seshna-and-nuqta-s-mark.md)); counsel's trademark clearance is still open. The repository keeps its old name, `EldonsLogic/Orrery`, until it is renamed under GOV-002.
 
-Status: foundation built, product not yet built. Current gate in [docs/GATES.md](docs/GATES.md); what is built and what is ready to start in [docs/STATUS.md](docs/STATUS.md). Markets: Saudi Arabia, UAE, Egypt. Public repository, read-only for outsiders; all rights reserved (see [LICENSE](LICENSE)); not open source.
+Status: foundation built, product not yet built. Current gate in [docs/GATES.md](docs/GATES.md); what is built and what is ready to start in [docs/STATUS.md](docs/STATUS.md). Markets: Saudi Arabia, the UAE, Egypt and Qatar, all phase 1 ([ADR-0024](docs/decisions/ADR-0024-four-phase-1-markets.md)). Public repository, read-only for outsiders; all rights reserved (see [LICENSE](LICENSE)); not open source.
 
 ## Start
 - New here: [docs/ONBOARDING.md](docs/ONBOARDING.md) (setup, lanes, first tasks). Humans and agents: [docs/00-START-HERE.md](docs/00-START-HERE.md), then [AGENTS.md](AGENTS.md) and [docs/RULES.md](docs/RULES.md). Delegating to sub-agents: [agents/delegation-playbook.md](agents/delegation-playbook.md).

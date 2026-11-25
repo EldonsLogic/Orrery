@@ -64,7 +64,7 @@ _CORE_DOCTYPES: dict[str, dict[str, Any]] = {
     "Item": {
         "issingle": 0,
         "fields": [
-            {"fieldname": "item_code", "fieldtype": "Data", "permlevel": 0},
+            {"fieldname": "item_code", "fieldtype": "Data", "permlevel": 0, "unique": 1},
             {"fieldname": "item_name", "fieldtype": "Data", "permlevel": 0},
             {"fieldname": "stock_uom", "fieldtype": "Link", "permlevel": 0},
             {"fieldname": "valuation_rate", "fieldtype": "Currency", "permlevel": 0},
@@ -144,6 +144,12 @@ _CORE_DOCTYPES: dict[str, dict[str, Any]] = {
     "ToDo": {"issingle": 0, "fields": [{"fieldname": "description", "fieldtype": "Text", "permlevel": 0}], "perms": {"System Manager": {"read": 1, "write": 1, "create": 1}}},
     "Note": {"issingle": 0, "fields": [{"fieldname": "title", "fieldtype": "Data", "permlevel": 0}], "perms": {"System Manager": {"read": 1, "write": 1, "create": 1}}},
 }
+
+# BPL-031: built-in document types the mapping contract names (golden path and purchasing); entity.add adds fields to
+# them and never creates them, so a simulated site must hold them like a real one.
+for _builtin in ("Delivery Note", "Delivery Note Item", "Supplier", "Price List", "Item Price", "Purchase Order",
+                 "Purchase Order Item", "Purchase Receipt", "Purchase Receipt Item", "Purchase Invoice", "Purchase Invoice Item"):
+    _CORE_DOCTYPES.setdefault(_builtin, {"issingle": 0, "fields": [], "perms": {"System Manager": {"read": 1, "write": 1, "create": 1}}})
 
 _FIELDTYPE_TO_SQL = {
     "Data": "varchar(140)",
@@ -445,6 +451,26 @@ class SimulatedFrappeDB:
                 site.rows.setdefault(tbl, {})
             return ()
 
+        if "`TABCHANGE ENGINE ENTITY FIELD`" in q_upper:  # BPL-031 review: fields an entity.add creates (rows keyed by pair)
+            tbl = site.rows.setdefault("tabChange Engine Entity Field", {})
+            where_status = (re.findall(r"STATUS = '(\w+)'", q_upper) or [""])[-1].lower()  # the filter, after any SET
+            if q_upper.startswith("INSERT"):
+                dt, fn = p
+                tbl.setdefault(f"{dt}\x00{fn}", {"doctype": dt, "fieldname": fn, "status": re.search(r"'(\w+)'\)\s*$", q).group(1)})
+                return ()
+            if q_upper.startswith("UPDATE"):
+                row = tbl.get(f"{p[0]}\x00{p[1]}")
+                if row is not None and row["status"] == where_status:
+                    row["status"] = re.search(r"SET STATUS = '(\w+)'", q_upper).group(1).lower()
+                return ()
+            if q_upper.startswith("DELETE"):
+                row = tbl.get(f"{p[0]}\x00{p[1]}")
+                if row is not None and row["status"] == where_status:
+                    del tbl[f"{p[0]}\x00{p[1]}"]
+                return ()
+            if q_upper.startswith("SELECT"):
+                return [(r["fieldname"],) for r in tbl.values() if r["doctype"] == p[0] and r["status"] == where_status]
+
         if "FROM INFORMATION_SCHEMA.COLUMNS" in q_upper:
             table_name = p[0] if p else ""
             cols = site.table_columns.get(table_name, [])
@@ -561,6 +587,7 @@ class SimulatedFrappeDB:
                     "sync_version": p[9],
                     "config_json": p[10],
                     "retained_json": p[11],
+                    "write_token": p[12],
                 }
                 return ()
             if "WHERE TENANT_ID = %S" in q_upper:

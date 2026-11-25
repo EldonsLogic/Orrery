@@ -1,100 +1,173 @@
 #!/usr/bin/env python3
-"""Build Quadrant mark, app icons and lockups into ../logo/. Python 3; stdlib only, plus fontTools when ORRERY_FONT_ALEXANDRIA (path to Alexandria-VF.ttf) is set, which outlines the wordmark. Name comes from ../brand.json.
-Geometry: PDF p.4, 32-unit grid. Corner (5,27), r=22.5, lower sector 0-40 deg, slot 40-52, upper 52-90.
-Angles are measured up from the horizontal baseline; SVG y points down so y = 27 - r*sin(a)."""
-import json, math, os, pathlib, sys
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import wordmark_outline
-root = pathlib.Path(__file__).resolve().parent.parent
-out = root / "logo"; out.mkdir(exist_ok=True)
-name = json.loads((root / "brand.json").read_text(encoding="utf-8"))["name"]
+"""Build the Seshna logo set (Nuqta S mark, Cairo Bold wordmark) into ../logo/. ADR-0066, BRD-014.
+Adapted from the Seshna logo kit's build_kit.py (draft v3); see PROVENANCE.md in this folder.
 
-CX, CY, R = 5.0, 27.0, 22.5
-COBALT, COBALT_DARK, CARBON, CORAL, WHITE, CARBON_BG = "#2443D0", "#86A0FF", "#12151B", "#E0552C", "#FFFFFF", "#0E1117"
-CHALK = "#E8EAEF"
-BBOX = (5.0, 4.5, 27.5, 27.0)
+  python3 tools/build_logo.py                                   marks and app icons only (stdlib)
+  SESHNA_FONT_CAIRO=/path/to/Cairo-VF.ttf \\
+    uv run --no-project --with fonttools --with uharfbuzz python3 tools/build_logo.py   also wordmark and lockups
 
-def pt(a):
-    r = math.radians(a)
-    return CX + R * math.cos(r), CY - R * math.sin(r)
+Without SESHNA_FONT_CAIRO the wordmark and lockup files are left untouched (never replaced by live text).
+The name comes from ../brand.json and is written in Latin letters only. Output: flat paths, no live text,
+transforms, clip paths or external references (SEC-018 section 6)."""
+import json, math, os, pathlib
 
-def f(v):
-    return f"{v:.3f}".rstrip("0").rstrip(".")
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+OUT = ROOT / "logo"; OUT.mkdir(exist_ok=True)
+NAME = json.loads((ROOT / "brand.json").read_text(encoding="utf-8"))["name"]
+WGHT, TRACKING, FAMILY = 700.0, -0.005, "Cairo"
 
-def sector(a0, a1):
-    x0, y0 = pt(a0); x1, y1 = pt(a1)
-    # sweep-flag 0 = counter-clockwise on screen, i.e. angle increasing upward
-    return f"M{f(CX)} {f(CY)}L{f(x0)} {f(y0)}A{f(R)} {f(R)} 0 0 0 {f(x1)} {f(y1)}Z"
+# Seshna palette (tokens.json, v1). Coral is never used in the logo.
+COBALT, COBALT_D = "#2443D0", "#86A0FF"
+CARBON, CHALK_TXT = "#12151B", "#E8EAEF"
+BG_D, WHITE, BLACK = "#0E1117", "#FFFFFF", "#000000"
+fmt = lambda v: f"{v:.2f}".rstrip("0").rstrip(".") or "0"
 
-LOWER, UPPER = sector(0, 40), sector(52, 90)
+# ---------- mark: Nuqta S ----------
+# Local frame: a square of half side s (the Nuqta diamond before turning), cut horizontally by a gap g.
+# Each half is a bar; the top bar's left end and the bottom bar's right end are half circles (radius = half the bar height).
+# The frame is turned -45 deg so the cut runs at the pen angle, lower left to upper right.
+C45 = math.sqrt(0.5)
+def turn(x, y):
+    return (C45 * (x + y), C45 * (y - x))
 
-def svg(w, h, vb, body, title):
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{f(w)}" height="{f(h)}" viewBox="{vb}" role="img">\n'
-            f'<title>{title}</title>\n{body}\n</svg>\n')
+def mark_geometry(gap, half_diag=112.0):
+    s = half_diag * C45
+    h = s - gap / 2; r = h / 2
+    top = [("M", (-s + r, -s)), ("L", (s, -s)), ("L", (s, -gap / 2)), ("L", (-s + r, -gap / 2)), ("A", (-s + r, -s))]
+    bot = [("M", (s - r, s)), ("L", (-s, s)), ("L", (-s, gap / 2)), ("L", (s - r, gap / 2)), ("A", (s - r, s))]
+    pts = []  # bounds (turned): sample the outline including the arcs
+    for cx, cy, sign in [(-s + r, -s + r, -1), (s - r, s - r, 1)]:
+        for i in range(181):
+            t = math.radians(90 + 180 * i / 180) if sign < 0 else math.radians(-90 + 180 * i / 180)
+            pts.append(turn(cx + r * math.cos(t), cy + r * math.sin(t)))
+    for shape in (top, bot):
+        pts += [turn(*p) for _, p in shape]
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    return dict(top=top, bot=bot, r=r, bounds=(min(xs), min(ys), max(xs), max(ys)))
 
-def mark(fill, lower=None, upper=None, tf=""):
-    g = f' transform="{tf}"' if tf else ""
-    return f'<g{g}><path d="{LOWER}" fill="{lower or fill}"/><path d="{UPPER}" fill="{upper or fill}"/></g>'
+def mark_path(gap, box_h, ox, oy, half_diag=112.0):
+    """Path for the mark scaled so its height is box_h, with its bounding box's top-left at (ox, oy)."""
+    G = mark_geometry(gap, half_diag)
+    x0, y0, x1, y1 = G["bounds"]
+    k = box_h / (y1 - y0)
+    def P(p):
+        x, y = turn(*p)
+        return f"{fmt(ox + (x - x0) * k)} {fmt(oy + (y - y0) * k)}"
+    out = []
+    for shape in (G["top"], G["bot"]):
+        d = ""
+        for cmd, p in shape:
+            d += (f"A{fmt(G['r'] * k)} {fmt(G['r'] * k)} 0 0 1 {P(p)} Z " if cmd == "A" else f"{cmd}{P(p)} ")
+        out.append(d.strip())
+    return " ".join(out), (x1 - x0) * k
 
-def mark_file(fn, fill, **kw):
-    pad = 1.0
-    x, y = BBOX[0] - pad, BBOX[1] - pad
-    w, h = BBOX[2] - BBOX[0] + 2 * pad, BBOX[3] - BBOX[1] + 2 * pad
-    (out / fn).write_text(svg(w * 8, h * 8, f"{f(x)} {f(y)} {f(w)} {f(h)}", mark(fill, **kw), f"{name} mark"), encoding="utf-8")
+def centred(gap, box, hgt):
+    _, w = mark_path(gap, hgt, 0, 0)
+    return mark_path(gap, hgt, (box - w) / 2, (box - hgt) / 2)[0]
 
-mark_file("mark-primary.svg", COBALT)
-mark_file("mark-dark.svg", COBALT_DARK)
-mark_file("mark-mono.svg", CARBON)
-mark_file("mark-reversed.svg", WHITE)
-mark_file("mark-two-tone.svg", COBALT, lower=COBALT, upper=CORAL)
+MASTER_GAP, SMALL_GAP = 18, 30   # small-size cut below 24 px
 
-# App icon: 64 unit tile, mark width = 56% of tile, optically centred then nudged up and right.
-T = 64.0; s = 0.56 * T / (BBOX[2] - BBOX[0])
-NUDGE_X, NUDGE_Y = 1.5, -1.5   # INFERRED: PDF gives no value, only "nudged up and right"
-RX = 14.0                      # INFERRED: PDF gives "rounded tile", no radius
-mcx, mcy = (BBOX[0] + BBOX[2]) / 2, (BBOX[1] + BBOX[3]) / 2
-tf = f"translate({f(T/2+NUDGE_X)} {f(T/2+NUDGE_Y)}) scale({f(s)}) translate({f(-mcx)} {f(-mcy)})"
-for fn, tile, fill in (("app-icon.svg", COBALT, WHITE), ("app-icon-dark.svg", CARBON_BG, COBALT_DARK)):
-    body = f'<rect width="{f(T)}" height="{f(T)}" rx="{f(RX)}" fill="{tile}"/>\n' + mark(fill, tf=tf)
-    (out / fn).write_text(svg(512, 512, f"0 0 {f(T)} {f(T)}", body, f"{name} app icon"), encoding="utf-8")
+def svg(w, h, body, title, comment=""):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {fmt(w)} {fmt(h)}" width="{fmt(w)}" height="{fmt(h)}">\n'
+            f'  <title>{title}</title>\n{comment}{body}\n</svg>\n')
 
-# Lockup. X = cap height of the wordmark. Mark visible height = 1.4 X, gap = 0.6 X, clear space = 1 X.
-MARK_H = BBOX[3] - BBOX[1]            # 22.5 units
-X = MARK_H / 1.4
-GAP = 0.6 * X
-CAP_RATIO = 0.70                      # INFERRED: Alexandria cap height / em. Verify against the font file.
-FONT_SIZE = X / CAP_RATIO
-ADVANCE_X = 4.5 * X * len(name) / 6       # INFERRED from the PDF cover: "Orrery" is about 4.5 X wide
-tx = BBOX[2] + GAP
-left, right = BBOX[0] - X, tx + ADVANCE_X + X
-top, bottom = BBOX[1] - X, CY + X
-W, H = right - left, bottom - top
-PLACEHOLDER = ("<!-- PLACEHOLDER: wordmark is live text, must be outlined from Alexandria SemiBold "
-               "before any external use. Width and cap-height ratio are INFERRED. -->")
-OUTLINED = "<!-- outlined from Alexandria SemiBold (SIL OFL 1.1) -->"
-WM = wordmark_outline.build(name)      # None unless ORRERY_FONT_ALEXANDRIA points at the font file
-if WM:
-    # Measured: X = OS/2 sCapHeight (700/1000 em). Ink left edge sits GAP right of the quadrant; baseline = CY (quadrant flat edge).
-    S = X / WM["cap"]
-    ink_l, _, ink_r, _ = WM["bounds"]
-    ox = BBOX[2] + GAP - ink_l * S
-    WM_D = wordmark_outline.path_data(WM, S, ox, CY)
-    right = BBOX[2] + GAP + (ink_r - ink_l) * S + X
-    W = right - left
+def write(name, text):
+    (OUT / name).write_text(text, encoding="utf-8"); print("wrote", name)
 
-def lockup(fn, mark_fill, text_fill):
-    vb = f"{f(left)} {f(top)} {f(W)} {f(H)}"
-    if WM:
-        body = OUTLINED + "\n" + mark(mark_fill) + "\n" + f'<path d="{WM_D}" fill="{text_fill}"/>'
-        (out / fn).write_text(svg(W * 5, H * 5, vb, body, f"{name} lockup"), encoding="utf-8")
-        return
-    text = (f'<text x="{f(tx)}" y="{f(CY)}" font-family="Alexandria, sans-serif" font-weight="600" '
-            f'font-size="{f(FONT_SIZE)}" letter-spacing="{f(FONT_SIZE*-0.005)}" fill="{text_fill}">{name}</text>')
-    body = PLACEHOLDER + "\n" + mark(mark_fill) + "\n" + text
-    (out / fn).write_text(svg(W * 5, H * 5, vb, body, f"{name} lockup"), encoding="utf-8")
+# symbol on a 256 square, centred, height 224 (master) or 240 (small cut)
+for fn, col, gap, hgt, label in [
+    ("mark-primary.svg", COBALT, MASTER_GAP, 224, "-"), ("mark-dark.svg", COBALT_D, MASTER_GAP, 224, "-dark"),
+    ("mark-small.svg", COBALT, SMALL_GAP, 240, "-"), ("mark-small-dark.svg", COBALT_D, SMALL_GAP, 240, "-dark"),
+    ("mark-mono.svg", BLACK, MASTER_GAP, 224, " one colour black"), ("mark-reversed.svg", WHITE, MASTER_GAP, 224, " one colour white"),
+]:
+    tag = "" if label == "-" else label
+    kind = "small-size cut" if gap == SMALL_GAP else "master"
+    write(fn, svg(256, 256, f'  <path fill="{col}" d="{centred(gap, 256, hgt)}"/>', f"{NAME} mark{tag} ({kind})"))
 
-lockup("lockup-primary.svg", COBALT, CARBON)
-lockup("lockup-dark.svg", COBALT_DARK, CHALK)
-print("name:", name, "| wordmark:", "outlined (cap height %s/%s em, kerning pairs %s)" % (WM["cap"], WM["upm"], WM["kern"]) if WM else "PLACEHOLDER live text (set ORRERY_FONT_ALEXANDRIA to outline)")
-print("LOWER:", LOWER); print("UPPER:", UPPER)
-print("files:", sorted(p.name for p in out.glob("*.svg")))
+# App icons on a 64-unit tile, small-size cut (they render small), mark height 62% of the tile, centred.
+# app-icon: rounded tile (rx 14, about 22%); square: full bleed for apple-touch-icon (iOS masks it);
+# maskable: full bleed, mark height 50% so it stays inside the 80% safe circle.
+T = 64
+for fn, tile, glyph, rx, share in [
+    ("app-icon.svg", COBALT, WHITE, 14, 0.62), ("app-icon-dark.svg", BG_D, COBALT_D, 14, 0.62),
+    ("app-icon-square.svg", COBALT, WHITE, 0, 0.62), ("app-icon-maskable.svg", COBALT, WHITE, 0, 0.5),
+]:
+    rect = f'  <rect width="{T}" height="{T}" rx="{rx}" fill="{tile}"/>\n' if rx else f'  <rect width="{T}" height="{T}" fill="{tile}"/>\n'
+    write(fn, svg(T, T, rect + f'  <path fill="{glyph}" d="{centred(SMALL_GAP, T, share * T)}"/>', f"{NAME} app icon"))
+
+# ---------- wordmark and lockups (need the Cairo variable font) ----------
+FONT = os.environ.get("SESHNA_FONT_CAIRO")
+if not FONT:
+    print("SESHNA_FONT_CAIRO not set: wordmark and lockups NOT rebuilt (existing files kept).")
+    raise SystemExit(0)
+
+import uharfbuzz as hb
+from fontTools.ttLib import TTFont
+from fontTools.varLib import instancer
+from fontTools.pens.svgPathPen import SVGPathPen
+from fontTools.pens.transformPen import TransformPen
+from fontTools.pens.boundsPen import BoundsPen
+
+src = TTFont(FONT)
+axes = {ax.axisTag: ax.defaultValue for ax in src["fvar"].axes} if "fvar" in src else {}
+axes["wght"] = WGHT
+if "slnt" in axes: axes["slnt"] = 0
+inst = instancer.instantiateVariableFont(src, axes)
+upm, cap = inst["head"].unitsPerEm, inst["OS/2"].sCapHeight
+hfont = hb.Font(hb.Face(hb.Blob.from_file_path(FONT))); hfont.set_variations(axes)
+buf = hb.Buffer(); buf.add_str(NAME); buf.guess_segment_properties()
+hb.shape(hfont, buf, {"kern": True})
+gs, order = inst.getGlyphSet(), inst.getGlyphOrder()
+x, placed, n = 0.0, [], len(buf.glyph_infos)
+for i, (info, pos) in enumerate(zip(buf.glyph_infos, buf.glyph_positions)):
+    placed.append((order[info.codepoint], x + pos.x_offset, pos.y_offset))
+    x += pos.x_advance + (TRACKING * upm if i < n - 1 else 0)
+bp = BoundsPen(gs)
+for g, gx, gy in placed:
+    gs[g].draw(TransformPen(bp, (1, 0, 0, 1, gx, gy)))
+xmin, ymin, xmax, ymax = bp.bounds
+
+CAP_PX = 100.0
+s = CAP_PX / cap
+wm_w, asc_px, desc_px = (xmax - xmin) * s, ymax * s, max(0.0, -ymin * s)
+NOTE = (f"  <!-- Wordmark outlined from {FAMILY} (wght {int(WGHT)}), SIL OFL 1.1; tracking {TRACKING * 100:g}% em, "
+        f"kerning via HarfBuzz. Latin only: the name is never written in Arabic script. -->\n")
+
+def wordmark(ox, base_y, fill):
+    sp = SVGPathPen(gs, ntos=lambda v: f"{v:.2f}".rstrip("0").rstrip(".") or "0")
+    for g, gx, gy in placed:
+        gs[g].draw(TransformPen(sp, (s, 0, 0, -s, ox + (gx - xmin) * s, base_y - gy * s)))
+    return f'  <path fill="{fill}" d="{sp.getCommands()}"/>'
+
+for fn, tag, col in [("wordmark.svg", "", CARBON), ("wordmark-dark.svg", "-dark", CHALK_TXT)]:
+    write(fn, svg(wm_w, asc_px + desc_px, wordmark(0, asc_px, col), f"{NAME} wordmark{tag}", NOTE))
+
+PAD = CAP_PX  # clear space on panel versions: one cap height on every side
+def panel(W, H, body, bg):
+    return f'  <rect width="{fmt(W + 2 * PAD)}" height="{fmt(H + 2 * PAD)}" fill="{bg}"/>\n' + body
+
+# Horizontal: mark height 1.6 x cap height, centred on the middle of the cap height; gap 0.6 x cap height.
+MARK_H, GAP = 1.6 * CAP_PX, 0.6 * CAP_PX
+for fn, variant, mf, wf, bg in [("lockup-primary.svg", "primary", COBALT, CARBON, None), ("lockup-dark.svg", "dark", COBALT_D, CHALK_TXT, BG_D),
+                                ("lockup-on-cobalt.svg", "on-cobalt", WHITE, WHITE, COBALT)]:
+    off = PAD if bg else 0.0
+    top = max(0.0, asc_px - (MARK_H / 2 + CAP_PX / 2))
+    base = top + MARK_H / 2 + CAP_PX / 2
+    md, mw = mark_path(MASTER_GAP, MARK_H, off, off + top)
+    W, H = mw + GAP + wm_w, max(top + MARK_H, base + desc_px)
+    body = f'  <path fill="{mf}" d="{md}"/>\n' + wordmark(off + mw + GAP, off + base, wf)
+    title = f"{NAME} lockup, horizontal, {variant}"
+    write(fn, svg(W + 2 * PAD, H + 2 * PAD, panel(W, H, body, bg), title, NOTE) if bg else svg(W, H, body, title, NOTE))
+
+# Stacked: mark height 2.2 x cap height, gap 0.6 x cap height.
+SMH, SGAP = 2.2 * CAP_PX, 0.6 * CAP_PX
+for fn, variant, mf, wf, bg in [("lockup-stacked-primary.svg", "primary", COBALT, CARBON, None), ("lockup-stacked-dark.svg", "dark", COBALT_D, CHALK_TXT, BG_D)]:
+    off = PAD if bg else 0.0
+    _, mw = mark_path(MASTER_GAP, SMH, 0, 0)
+    SW = max(mw, wm_w)
+    md, _ = mark_path(MASTER_GAP, SMH, off + (SW - mw) / 2, off)
+    sbase = SMH + SGAP + asc_px; SH = sbase + desc_px
+    body = f'  <path fill="{mf}" d="{md}"/>\n' + wordmark(off + (SW - wm_w) / 2, off + sbase, wf)
+    title = f"{NAME} lockup, stacked, {variant}"
+    write(fn, svg(SW + 2 * PAD, SH + 2 * PAD, panel(SW, SH, body, bg), title, NOTE) if bg else svg(SW, SH, body, title, NOTE))
+print(f"{FAMILY} {int(WGHT)}: cap={cap} wordmark_w={wm_w:.1f}")

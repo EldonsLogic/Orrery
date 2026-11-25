@@ -14,6 +14,8 @@ Run the live layer against your own bench (never someone else's Compose project)
     PYTHONPATH=apps/engine/change_engine python3 -m unittest \
     apps/engine/change_engine/change_engine/tests/test_erp_014_accounting_properties.py -v
 
+``REQUIRE_ERP014_LIVE=1`` (set by real-bench CI, ERP-031) turns the skip into a failure when no bench is named.
+
 More examples: ``ERP014_EXAMPLES=200`` (default 6 invoices per company; pure tests use 25x that) and a
 different ``ERP014_SEED``. The site must be disposable: the probe creates two synthetic companies on it.
 
@@ -52,6 +54,26 @@ CENT = Decimal("0.01")
 VAT_RATES = {"ERP14 Trading KSA": 15, "ERP14 Trading UAE": 5}
 SEED = int(os.environ.get("ERP014_SEED", "14014"))
 EXAMPLES = int(os.environ.get("ERP014_EXAMPLES", "6"))
+LIVE_ENV = ("ERP014_COMPOSE_PROJECT", "ERP014_SITE", "REQUIRE_ERP014_LIVE")
+
+
+def live_skip_reason(env, project_var: str, site_var: str, require_var: str):
+    """Why a live layer skips, or None when it must run. ERP-031: a REQUIRE flag of 1 never skips (the class
+    then fails in ``live_config_problem`` if no bench is named); also used by the ERP-015 live layer."""
+    if env.get(require_var) == "1" or (env.get(project_var) and env.get(site_var)):
+        return None
+    return (f"No bench configured: set {project_var} and {site_var} to a disposable synthetic site on your own "
+            "Compose project (see module docstring)")
+
+
+def live_config_problem(env, project_var: str, site_var: str, require_var: str):
+    """The fail-closed rule: one bench variable alone, or the REQUIRE flag without a bench, is an error."""
+    project, site = env.get(project_var), env.get(site_var)
+    if bool(project) != bool(site):
+        return f"set both {project_var} and {site_var}, or neither"
+    if env.get(require_var) == "1" and not (project and site):
+        return f"{require_var}=1 but no bench is configured"
+    return None
 
 
 # ---- decimal oracle and invariant checkers (test code: they check, they never post) ----
@@ -261,10 +283,7 @@ class TestOracleAndCheckers(unittest.TestCase):
 
     def test_live_bench_env_is_all_or_nothing(self):
         """Fail closed: one variable alone (or REQUIRE_ERP014_LIVE=1 without a bench) must not skip silently."""
-        project, site = os.environ.get("ERP014_COMPOSE_PROJECT"), os.environ.get("ERP014_SITE")
-        self.assertEqual(bool(project), bool(site), "set both ERP014_COMPOSE_PROJECT and ERP014_SITE, or neither")
-        if os.environ.get("REQUIRE_ERP014_LIVE") == "1":
-            self.assertTrue(project and site, "REQUIRE_ERP014_LIVE=1 but no bench is configured")
+        self.assertIsNone(live_config_problem(os.environ, *LIVE_ENV))
 
     def test_probe_is_valid_python_with_the_expected_shape(self):
         """The probe only runs inside a bench, so CI would never notice it rotting: parse it here."""
@@ -293,12 +312,13 @@ class TestOracleAndCheckers(unittest.TestCase):
 
 # ---- live layer ----
 
-@unittest.skipUnless(os.environ.get("ERP014_COMPOSE_PROJECT") and os.environ.get("ERP014_SITE"),
-                     "No bench configured: set ERP014_COMPOSE_PROJECT and ERP014_SITE to a disposable synthetic "
-                     "site on your own Compose project (see module docstring)")
+@unittest.skipIf(live_skip_reason(os.environ, *LIVE_ENV) is not None, live_skip_reason(os.environ, *LIVE_ENV) or "")
 class TestLiveEngineProperties(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        problem = live_config_problem(os.environ, *LIVE_ENV)
+        if problem:  # REQUIRE_ERP014_LIVE=1 without a bench: a failure, never a skip (ERP-031)
+            raise AssertionError(problem)
         cls.inputs = make_inputs(SEED, EXAMPLES)
         payload = json.dumps({"site": os.environ["ERP014_SITE"], **cls.inputs})
         res = subprocess.run(

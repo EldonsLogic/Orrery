@@ -351,7 +351,9 @@ def test_error_table_is_bilingual_and_arabic_unreviewed():
     from chat.errors import ARABIC_REVIEW
     assert ARABIC_REVIEW == "unreviewed"
     for code, (retry, en, ar) in TABLE.items():
-        assert en and ar and render(code, "ar")["message"] == ar and render(code, "en")["message"] == en
+        sample = {"minutes": 2} if "{minutes}" in en + ar else {}  # SEC-009: wait time in chat_rate_limited
+        assert en and ar and render(code, "ar", sample)["message"] == ar.format(**sample)
+        assert render(code, "en", sample)["message"] == en.format(**sample) and "{" not in en.format(**sample)
         assert not any(w in (en + ar).lower() for w in ("frappe", "erpnext", "traceback"))
     assert render("nope")["code"] == "internal_error"
 

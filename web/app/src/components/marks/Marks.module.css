@@ -1,0 +1,78 @@
+/* BRD-014 state marks. Fill only: the halves never rotate or move, no gradients or shadows. */
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-unit);
+}
+
+.progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--space-unit) / 2);
+  font-size: var(--text-small-size);
+}
+
+.stage[data-state='upcoming'] {
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+.stage[data-state='current'] {
+  font-weight: 600;
+}
+
+/* PROPOSED loading loop: outline, then the upper half, then both halves, about 0.8 s each. */
+.loading {
+  display: inline-flex;
+}
+
+.loading [data-half='upper'] {
+  animation: mark-upper 2400ms linear infinite;
+}
+
+.loading [data-half='lower'] {
+  animation: mark-lower 2400ms linear infinite;
+}
+
+@keyframes mark-upper {
+  0%,
+  30% {
+    fill-opacity: 0;
+  }
+  36%,
+  100% {
+    fill-opacity: 1;
+  }
+}
+
+@keyframes mark-lower {
+  0%,
+  63% {
+    fill-opacity: 0;
+  }
+  69%,
+  100% {
+    fill-opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading [data-half] {
+    animation: none;
+  }
+  .loading [data-half='upper'] {
+    fill-opacity: 1;
+  }
+  .loading [data-half='lower'] {
+    fill-opacity: 0;
+  }
+}

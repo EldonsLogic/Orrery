@@ -3,7 +3,7 @@
 
 Steps (each fails closed):
 1. `docker compose up` the dev bench plus a worker under a project name that must
-   contain "sec004" (never a shared or load-test project) on a non-default port.
+   be `sec004` or start with `sec004-` (never a shared or load-test project) on a non-default port.
 2. Provision tenant A, tenant B and a prefix-twin site (`<A's site>.sa`, change_engine
    only) with infra/dev/docker/provision_tenant.sh, each with its own random admin
    password; credentials go to 0600 files in a private temp directory.
@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import secrets
 import shutil
 import subprocess
@@ -33,12 +32,13 @@ from pathlib import Path
 DOCKER_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = DOCKER_DIR.parents[2]
 COMPOSE_FILES = [DOCKER_DIR / "docker-compose.dev.yml", DOCKER_DIR / "isolation" / "docker-compose.isolation.yml"]
-if str(DOCKER_DIR) not in sys.path:
-    sys.path.insert(0, str(DOCKER_DIR))
+for _path in (DOCKER_DIR, Path(__file__).resolve().parent):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
+from sec004_project import PROJECT_RE  # noqa: E402  one project-name rule, shared with raw_engine_wsgi.py
 from run_real_bench_ci import redact  # noqa: E402  INF-015: same redaction as the real-bench runner
 
 SUITE = REPO_ROOT / "apps/engine/change_engine/change_engine/tests/live_sec_004_bench_attacks.py"
-PROJECT_RE = re.compile(r"^(?=[a-z0-9])[a-z0-9_-]*sec004[a-z0-9_-]*$")
 TENANTS = {
     "a": {"tenant_id": "sec004-tenant-a", "country": "SA", "site": None, "apps": None},
     "b": {"tenant_id": "sec004-tenant-b", "country": "AE", "site": None, "apps": None},
@@ -93,7 +93,7 @@ def main() -> int:
     ap.add_argument("--reuse", metavar="CONTEXT", help="skip up/provision; reuse a context file from --keep")
     args = ap.parse_args()
     if not PROJECT_RE.fullmatch(args.project):
-        raise SystemExit("project name must contain 'sec004' (refusing to touch other stacks)")
+        raise SystemExit("project name must be 'sec004' or start with 'sec004-' (refusing to touch other stacks)")
     if args.port in (8000, 18111, 18222):
         raise SystemExit("use a non-default port not shared with other benches")
 

@@ -21,6 +21,10 @@ Simulations: `load(tenant_id, simulation_id) -> dict`, the BPL-018 report from t
 Engine: `apply(tenant_id, kind, idempotency_key, content_digest) -> "confirmed" | "failed" | "unknown"` and
 `status(tenant_id, idempotency_key) -> same`, a thin adapter over the engine-adapter contract (idempotent by key);
 `kind` is "sandbox" or "live". The machine never names or reaches the engine itself.
+Owner approvals: `verify(tenant_id, blueprint_id, content_digest, quote_digest, subject) -> dict` with exactly the keys tenantId,
+blueprintId, contentDigest, quoteDigest (echoes), approvedBy (`subject` when that owner's sealed approval covers this
+digest and quote, else None), blocked (a rejection, request for changes or hold) and quoteCurrent (the quote is still the
+live one); a thin adapter over services/discovery/owner_approval (DSC-009, ADR-0050 amendment). Never trusted from a caller.
 Clock: `() -> int`, whole epoch seconds from the host clock (never the caller's).
 """
 from __future__ import annotations

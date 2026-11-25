@@ -31,9 +31,16 @@ describe('web app manifest', () => {
     expect(colors.dark).not.toBe(colors.light);
     expect(() => themeColorsFromTokens(':root{}')).toThrow();
   });
-  it('points the icon at the brand app icon that exists in the repo', () => {
-    expect(existsSync(join(root, '../../docs/brand/logo/app-icon.svg'))).toBe(true);
-    expect(buildManifest(messages.en.pwa, colors, 'en', 'ltr').icons[0]?.src).toBe('/icons/app-icon.svg');
+  it('points the icons at brand files that exist in the repo', () => {
+    for (const f of ['app-icon.svg', 'mark-small.svg', 'png/favicon.ico', 'png/apple-touch-icon.png', 'png/app-icon-192.png', 'png/app-icon-512.png', 'png/maskable-512.png']) {
+      expect(existsSync(join(root, '../../docs/brand/logo', f)), f).toBe(true);
+    }
+    const icons = buildManifest(messages.en.pwa, colors, 'en', 'ltr').icons;
+    expect(icons[0]?.src).toBe('/icons/app-icon.svg');
+    expect(icons.some((i) => i.purpose === 'maskable' && i.sizes === '512x512')).toBe(true);
+  });
+  it('names the product Seshna in Latin letters in both languages', () => {
+    for (const loc of ['ar', 'en'] as const) expect(messages[loc].pwa.name).toBe('Seshna');
   });
 });
 

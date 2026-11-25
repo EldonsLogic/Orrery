@@ -53,6 +53,8 @@ None yet; claim PR must merge first.
 - T1a CMP-010 result: docs/compliance/ksa-vat-return.md, 253 lines, design only, five official ZATCA sources fetched on 2026-11-25. Only Boxes 7 to 9 are confirmed by number. Coordinator allocated Q-615 to Q-622. PR #319 opened; cross-model review dispatched to GPT-6.2 Sol (high). Open point: the code location (the doc proposes zatca_sa/vat_return.py; the path lock reserved ksa_vat_return/**).
 - GitHub returned intermittent 500 and 502 errors on push and PR creation; retries succeeded and no duplicate PRs were created.
 
+- PLT-027 revision round 1: author fixed all 15 findings (none rebutted; the code claims in findings 7, 10, 11 and 12 were confirmed in the code), and the ADR grew from 154 to 187 lines. Coordinator applied the PLAN changes (PLT-028 to PLT-031 text; PLT-029 and PLT-030 now depend on PLT-028; PLT-031 gated on Q-609, Q-302 and Q-613) and reworded Q-609, Q-610, Q-611, Q-613 and Q-614. Fresh re-review dispatched.
+
 ## Tokens or cost
 Unknown.
 

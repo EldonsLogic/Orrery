@@ -48,6 +48,11 @@ None yet; claim PR must merge first.
 - PR #316 opened for PLT-027. Security review dispatched to Codex GPT-6.2 Sol (high), read-only.
 - Dispatched T3 CE-SEC-008 part 1 (Claude Sonnet 5.5 high, own worktree) and T5 PLT-024 header tests (Claude Sonnet 5.5 medium, own worktree) with the sprint-6 briefs unchanged.
 
+- PLT-027 security review (GPT-6.2 Sol): changes required, with 9 High, 5 Medium and 1 Low findings (audit loss when an intent is acked before its outcome, spool rollback and truncation, unauthenticated flood capacity, WSGI framing limits, business-write idempotency, per-route method and effect declarations, stale role reads, stable session id, upstream cookie control, transport-level caps, the existing adapter correlationId, path redaction, the PLT-029 to PLT-028 dependency). Sent back to the author child as revision round 1.
+- T5 PLT-024 result: 5 tests, 62 gateway tests pass, and a pass-through mutant fails all 5. PR #318 opened with its own log; Tier 2, waiting for Eldon's review.
+- T1a CMP-010 result: docs/compliance/ksa-vat-return.md, 253 lines, design only, five official ZATCA sources fetched on 2026-11-25. Only Boxes 7 to 9 are confirmed by number. Coordinator allocated Q-615 to Q-622. PR #319 opened; cross-model review dispatched to GPT-6.2 Sol (high). Open point: the code location (the doc proposes zatca_sa/vat_return.py; the path lock reserved ksa_vat_return/**).
+- GitHub returned intermittent 500 and 502 errors on push and PR creation; retries succeeded and no duplicate PRs were created.
+
 ## Tokens or cost
 Unknown.
 

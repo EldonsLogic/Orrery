@@ -38,9 +38,14 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
 - #310 fixes returned (Sonnet): in-order readiness projection of earlier steps (R1, R2); `need()` fails under `REQUIRE_BPL027_LIVE=1` (R3); unsupported-type test and a wider zero-write spy, both earlier mutants killed (R4); R5 comment; `_check_step_shapes` gives side-effect-free `invalid_request` (R6, stricter than execute on non-dict `fields`, fail closed). About 320 lines this round against a target of 250 (mostly tests). Coordinator re-ran: 59 engine files 1,514 passed, 86 skipped, 27 Hijri-only failures; with the flag set and no bench the class errors 10 times, never skips. Pushed at `c1666d1`; fixes table posted.
   - Re-review dispatched: gpt-6.1-sol (high), `d0c93e2..c1666d1`.
 - #309 re-review result, gpt-6.1-sol `c31042e..9160d33`: REQUEST_CHANGES. Closed R2, R4, R5, R6, R8, R10; partly R1, R3, R7, R9, R11. New: N1 High (the compiler split leaves a half-applied Blueprint with no barrier), N2 High (policy tightening after issue not enforced), N3 Medium (site id rotation on restore and clone), N4 Medium (grant budget charged before signature and tenant checks), N5 Medium (hash grammar must be `sha256:` prefixed). R2 bypass on main confirmed. Posted. Two review rounds reached (the cap): asking the partner before a third round.
+- Partner decision: run a third fix-and-review round on #309 (asked at the two-round cap).
+- #310 re-review result `d0c93e2..c1666d1`: R2 to R6 closed, R1 partly; N1 Medium (one `entity.add`'s fields judged against a projection updated mid-scan), N2 Low (existing execute gap for DocField-backed fields of adapter-made types, follow-up). Coordinator fixed N1 directly (per-step additions merged after the scan) with a regression seen failing on the old code; 59 engine files 1,515 passed, 27 Hijri-only failures. Pushed `2cae216`; table posted.
+  - Narrow re-check dispatched: gpt-6.1-sol (high), `c1666d1..2cae216`.
+- #309 round 2 fixes returned (Opus), revision 3 (143 lines): no compiler split (a constrained field must be alone in its authored revision, else `constraint_change_not_isolated`); stored policy floor raised before activation and re-read under lock at reservation; `siteId` rotated in both copies on every remap, clone and restore; grant budget charged only after signature and tenant binding; `sha256:` hash grammar; citation fixed. Coordinator read the diff. Pushed `7212399`; table posted.
+  - Final re-review dispatched: gpt-6.1-sol (high), `9160d33..7212399`.
 
 ## Decisions
-- None yet.
+- Partner: run a third review round on #309 ADR-0068 (2026-11-25).
 
 ## Tokens or cost
 Unknown.

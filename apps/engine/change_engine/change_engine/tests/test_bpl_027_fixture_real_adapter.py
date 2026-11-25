@@ -106,7 +106,7 @@ REQUIRE_LIVE_ENV = "REQUIRE_BPL027_LIVE"
 
 
 def live_skip_reason(env) -> str | None:
-    """Why the bench class skips, or None when it must run. BPL-041: REQUIRE_BPL027_LIVE=1 (set by real-bench CI) never
+    """Why the bench class skips, or None when it must run. BPL-041: REQUIRE_BPL027_LIVE=1 (to be set by real-bench CI, slice 2) never
     skips; the class then fails in ``live_config_problem`` when no bench is usable (same rule as ERP-031)."""
     return None if env.get(REQUIRE_LIVE_ENV) == "1" else bench_skip_reason()
 

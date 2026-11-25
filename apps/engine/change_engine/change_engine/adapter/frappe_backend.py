@@ -150,6 +150,22 @@ class FrappeSiteResolver:
         slug = tenant_id.replace("_", "-")
         return f"{slug}.{self.default_domain}"
 
+    def tenant_of(self, site: Any) -> str | None:
+        """The one tenant id whose site is exactly ``site`` (the inverse of ``resolve``), or ``None``.
+
+        A ``site_map`` entry is matched on the exact site name the backend binds; any other site must be the
+        default-domain name of a tenant that is NOT mapped elsewhere (``resolve`` of the candidate returns it back).
+        No other spelling of a site (case, trailing dot, another domain) maps to a tenant."""
+        if not isinstance(site, str) or not site:
+            return None
+        for tenant_id, mapped in self.site_map.items():
+            if mapped == site:
+                return tenant_id
+        candidate = site.partition(".")[0].replace("-", "_")
+        if not _SAFE_TENANT_RE.fullmatch(candidate) or candidate in self.site_map:
+            return None
+        return candidate if self.resolve(candidate) == site else None
+
 
 def shadow_user_email(member_ref: str) -> str:
     """Derive deterministic non-PII internal shadow user identifier from memberRef (ADP-C-065)."""
@@ -291,7 +307,8 @@ class FrappeRuntimeBackend:
         # Offline mode is the explicit constructor flag only (simulated runtime, no real DDL);
         # an injected factory alone still gets Frappe's own inspection and fails closed.
         return FrappeDeploymentAdapter(
-            frappe_module=f, in_memory=False, offline_ddl_simulator=self._offline_ddl_simulator
+            frappe_module=f, in_memory=False, offline_ddl_simulator=self._offline_ddl_simulator,
+            site_resolver=self.site_resolver,
         )
 
     def _ensure_state_table(self, f: Any) -> None:

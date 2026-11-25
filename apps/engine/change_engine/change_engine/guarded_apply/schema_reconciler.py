@@ -13,8 +13,9 @@ import hashlib
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional, Protocol
+from typing import Dict, Any, List, Optional, Protocol, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,109 @@ def _discard_session(db: Any) -> None:
             mark()
         except Exception:
             logger.exception("could not discard the database session")
+
+
+def acquire_scoped_locks(
+    db: Any, held: List[str], site_id: str, doctype: str, idempotency_key: Optional[str], wait_seconds: int
+) -> Optional[Tuple[str, str]]:
+    """Take the site-scoped idempotency lock (when there is a key) and then the target lock, in that order, for the
+    non-DDL engines and the revert (CE-SEC-011). Every lock taken is appended to ``held`` BEFORE the next one is
+    tried, so the caller's ``finally: release_scoped_locks(db, held)`` frees whatever is held however this returns
+    or raises. Returns ``None`` when every lock is held, else ``(reason_code, reason)`` for the refusal; the
+    database's own error text is logged, never returned."""
+    keys = [make_bounded_lock_key(site_id, doctype)]
+    if idempotency_key is not None:
+        keys.insert(0, make_idempotency_lock_key(site_id, idempotency_key))
+    for key in keys:
+        try:
+            result = db.acquire_advisory_lock(key, wait_seconds=wait_seconds)
+        except Exception:
+            logger.exception("advisory lock acquisition raised for %s", key)
+            return "engine_unavailable", "Could not acquire the MariaDB advisory lock (database error)."
+        if result != 1:
+            detail = "Lock wait timeout (0)" if result == 0 else "Database lock error (NULL)"
+            return ("lock_timeout" if result == 0 else "engine_unavailable",
+                    f"Could not acquire MariaDB GET_LOCK ({detail})")
+        held.append(key)
+    return None
+
+
+def release_scoped_locks(db: Any, held: List[str]) -> None:
+    """The ``finally`` of the guarded sequence for a caller that holds ``held``: the session's own
+    ``lock_wait_timeout`` is restored, every lock is released and verified (newest first), and a restore or a
+    release that is not verified discards the session, because a lock that may still be held keeps blocking others
+    for as long as the connection lives. Never raises."""
+    unusable = False
+    restore = getattr(db, "restore_lock_wait_timeout", None)
+    if callable(restore):
+        try:
+            unusable = restore() is False or unusable
+        except Exception:
+            logger.exception("could not restore the session lock_wait_timeout")
+            unusable = True
+    for key in reversed(held):
+        unusable = not _release_checked(db, key) or unusable
+    if unusable:
+        _discard_session(db)
+
+
+def begin_fresh_read_view_checked(db: Any) -> Optional[str]:
+    """Open a fresh read view after the locks; ``None`` when it is open (or the adapter has no such view), else the
+    name of the lookup that failed, for ``blocked_response``. The error is logged, never returned."""
+    refresh = getattr(db, "begin_fresh_read_view", None)
+    if not callable(refresh):
+        return None
+    try:
+        refresh()
+    except Exception:
+        logger.exception("could not open a fresh read view")
+        return "read view"
+    return None
+
+
+def set_lock_wait_timeout_checked(db: Any, seconds: int) -> bool:
+    """Set the session ``lock_wait_timeout`` and read it back BEFORE any intent exists (CE-SEC-008); ``False`` when
+    it did not verify, and the caller refuses with ``lock_timeout_not_effective``."""
+    setter = getattr(db, "set_lock_wait_timeout", None)
+    if not callable(setter):
+        return True
+    try:
+        setter(seconds)
+    except Exception:
+        logger.exception("lock_wait_timeout could not be set and verified")
+        return False
+    return True
+
+
+def blocked_response(lookup: str) -> Dict[str, Any]:
+    """The refusal for a durable lookup that failed: it blocks, and says nothing of the error."""
+    return {
+        "status": "REJECTED",
+        "stage": "INSPECT",
+        "reason_code": "engine_unavailable",
+        "reason": f"Fail-closed: the durable {lookup} lookup failed; deployment blocked.",
+    }
+
+
+def engine_refusal(base: Dict[str, Any], deployment_id: str, disposition: str, start_time: float,
+                   **extra: Any) -> Dict[str, Any]:
+    """A non-DDL engine's refusal: a ``base`` (code and fixed text) in the engine's response shape."""
+    return {
+        **base,
+        "deployment_id": deployment_id,
+        "success": False,
+        "disposition": disposition,
+        **extra,
+        "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+    }
+
+
+TIMEOUT_NOT_EFFECTIVE: Dict[str, Any] = {
+    "status": "REJECTED",
+    "stage": "PREPARE",
+    "reason_code": "lock_timeout_not_effective",
+    "reason": "Fail-closed: lock_wait_timeout could not be set and verified.",
+}
 
 
 def compute_canonical_payload_hash(site_id: str, doctype: str, field_def: Dict[str, Any]) -> str:

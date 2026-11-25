@@ -279,9 +279,9 @@ Plus a measurement, not a pass or fail test: `bench_commit_rate_synchronous_full
 - Whether audit metadata counts as tenant data under data-retention section 8.
 
 ## 11. Questions for Eldon
-1. M6: accept the per-volume key exception of section 9, or require per-tenant data keys for the spool?
-2. Q-614: may the fake and SEC-008 expose `list_open_intents(instance)` as a complete list taken at one checkpoint `version`? Does an intent whose outcome the store `rejected` stay on that list?
-3. R3-5: agree the unit model (65,536 units replacing "100,000 records or 512 MiB"), the share on reads and denials, and refusals recorded only as capped per-minute aggregates that a crash can lose?
-4. Secret inventory ids for the spool's HMAC key versions and the per-volume data key: to be allocated in the ADR-0038 inventory by its owner when code lands; does SEC-008 need the same chain key versions, and for how long?
-5. A corrupt spool retires its `instance_id`: should SEC-008 mark that instance's store-open intents as unknown outcomes for operators, or keep them open?
-6. SEC-008 and Q-614 (record schema, provisional here per ADR-0069 lane note): ratify the `K_chain` derivation label `seshna.spool.chain.v1`, the exclusion of `chain` from `body`, and the schemas of the `aggregate` and `key_rotation` records (5.2 step 5, TX7)?
+1. **Q-629**: M6: accept the per-volume key exception of section 9, or require per-tenant data keys for the spool?
+2. **Q-630**: Q-614: may the fake and SEC-008 expose `list_open_intents(instance)` as a complete list taken at one checkpoint `version`? Does an intent whose outcome the store `rejected` stay on that list?
+3. **Q-631**: R3-5: agree the unit model (65,536 units replacing "100,000 records or 512 MiB"), the share on reads and denials, and refusals recorded only as capped per-minute aggregates that a crash can lose?
+4. **Q-632**: Secret inventory ids for the spool's HMAC key versions and the per-volume data key: to be allocated in the ADR-0038 inventory by its owner when code lands; does SEC-008 need the same chain key versions, and for how long?
+5. **Q-633**: A corrupt spool retires its `instance_id`: should SEC-008 mark that instance's store-open intents as unknown outcomes for operators, or keep them open?
+6. **Q-634**: SEC-008 and Q-614 (record schema, provisional here per ADR-0069 lane note): ratify the `K_chain` derivation label `seshna.spool.chain.v1`, the exclusion of `chain` from `body`, and the schemas of the `aggregate` and `key_rotation` records (5.2 step 5, TX7)?

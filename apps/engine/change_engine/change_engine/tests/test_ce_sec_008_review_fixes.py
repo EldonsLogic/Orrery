@@ -1349,6 +1349,39 @@ class TestR4NothingCommitsOnADiscardedSession(unittest.TestCase):
         self.assertEqual(bench.db.commits, commits)
 
 
+class TestP2RemainingMutantsDie(unittest.TestCase):
+    """Part 2 (Gemini review, Low): the two mutants Eldon's 750dc54 review saw survive (N13, N20)."""
+
+    def test_a_lock_lost_during_the_statement_stops_the_publishing_commit(self):
+        # N13: the pre-apply check passes; the lock is lost while the statement runs; the re-check before the
+        # commit that publishes the apply must catch it.
+        from change_engine.guarded_apply.schema_reconciler import make_bounded_lock_key
+
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        key = make_bounded_lock_key("site-a", "Item")
+        self.assertEqual(adapter.acquire_advisory_lock(key, wait_seconds=5), 1)
+        adapter.take_snapshot("Item", "custom_x", "dep_1")
+        adapter.persist_prepare_and_audit_intent(_record(fieldname="custom_x", ddl_plan_statements=[STMT]))
+        real_ddl = bench.db.sql_ddl
+
+        def ddl_then_lose_lock(stmt, *a, **k):
+            out = real_ddl(stmt, *a, **k)
+            bench.db.locks.clear()  # the server dropped the lock mid-apply
+            return out
+
+        bench.db.sql_ddl = ddl_then_lose_lock
+        with self.assertRaises(endpoints.SessionDiscardedError):
+            adapter.apply_native_custom_field("dep_1", "Item", dict(FIELD))
+        self.assertEqual(len(bench.db.altered()), 1, "the statement ran, so only the final re-check refused")
+
+    def test_a_host_with_an_underscore_in_its_first_label_is_not_a_tenant_site(self):
+        # N20: the round trip refuses a label that only maps to a tenant id after replacing "_" (t_alpha.<domain>).
+        self.assertIsNone(endpoints._tenant_of_site("t_alpha.localhost"))
+        self.assertIsNone(endpoints._tenant_of_site("t-al_pha.localhost"))
+        self.assertEqual(endpoints._tenant_of_site("t-alpha.localhost"), "t_alpha")
+
+
 class TestR4AFailedCloseNeverReportsASuccessfulRelease(unittest.TestCase):
     def test_release_is_unverified_while_the_discard_has_not_worked(self):
         bench = _Bench()

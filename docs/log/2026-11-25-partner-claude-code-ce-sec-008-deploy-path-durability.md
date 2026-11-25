@@ -152,6 +152,16 @@ All under `apps/engine/change_engine/change_engine/`:
 - Tests: `TestP2LegacyEvidenceLoadsAsUnverified` (6) and `TestP2ApprovedPlanOverrideIsValidatedLikeAComputedPlan` (4). The two CE-SEC-008 files went from 15 failed to 161 passed.
 - Full suite: 1773 passed, 86 skipped, 0 failed.
 
+## Part 2, Gemini 4 Argon review (at 7260840f): approve with nits; 2 Lows fixed by the coordinator
+- Gemini verified:
+  - the decimal path keeps the BPL-041 and BPL-043 refusals and inherits locks, fresh view, lookups and timeout-before-intent;
+  - `approved_plan` is validated before the intent;
+  - a canonical digest; stripping the digest from a current row raises, and a plain-list rewrite loads unverified and always holds;
+  - the timeout is restored on every exit;
+  - no raw text or engine names in new strings.
+- Low 1: CE-SEC-011 now also lists stable reason codes for the raw exception text in the three non-DDL engines.
+- Low 2: new `TestP2RemainingMutantsDie` covers lock loss during the statement (N13) and an underscore in the first host label (N20). Both tests fail with their check removed (in-memory mutation, restored) and pass on the code.
+
 ## Tokens or cost
 Unknown.
 

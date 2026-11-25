@@ -48,3 +48,13 @@ Unknown.
 
 ## Next step
 BPL-039 slice 2 (Studio real rollback); then close Q-61 and Q-76.
+
+## Partner review fixes (review at 9d546ae6)
+Each fix has a test in `services/blueprint/tests/compiler/test_cmp_incremental.py` that failed before the fix.
+1. Field and option order: a reorder `order` now lists exactly the keys active when it runs (target order, then the removed keys still awaiting quarantine), forward and inverse; this supersedes point 4 of the rules above without a contract change. An added or restored element has no position in the step schema and every diff op is used exactly once, so no reorder step can be added without a diff reorder op. Where none exists, the compiler predicts the adapter's order (new element appended, one restored element back at its former index) and refuses with CMP-ART-001 when that misses the target: a prepend, a rename in the middle, or two removals (whose rollback cannot restore the order). Contract follow-up: give `*.add` a position, or allow a derived reorder step.
+2. Precision changes are refused at compile time (CMP-ART-001, "precision change not yet supported by the adapter"). **Partner follow-up:** the engine backend applies precision wrongly (`frappe_backend.py` around line 643, partner lane); lift the refusal once the adapter supports it.
+3. Secret-like keys in a property pointer (`/default/api_key`) are refused with CMP-ART-002 in the artifact check, so forward and inverse are both covered; `before` and `after` values were already scanned at any depth.
+4. The fake adapter matches select options by `value` (lookup, execution, post-conditions).
+5. The provenance skip is limited to the declared Blueprint provenance paths (component, entity, workflow, role, approval, report, integration, assistant).
+6. No two steps share (kind, pointer): property changes on one subject coalesce into one step at their common property (entity labels: one `/labels` step); two different properties (`required` and `maxLength`) refuse with CMP-ART-001, because a step carries one `property`. `settings.set` is unchanged until BPL-037 settles it.
+7. The round trip asserts the target state after the forward apply (field and option order, field properties, labels, locations) over nine edits on two base revisions. The contract's minimal example has no matching engine mapping, so it is not used.

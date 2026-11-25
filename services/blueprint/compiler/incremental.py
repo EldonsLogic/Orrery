@@ -5,8 +5,19 @@ with base and target swapped, so rollback restores the base revision. Values are
 revisions; nothing here computes a ledger, tax or posting figure (ADR-0030).
 
 Rules beyond the initial build (open points, conservative reading; see the BPL-039 log):
-- set_property and settings.set carry one property each; several may share one pointer (as open question 2 in
-  __init__). A property stops at the first array, so an array is always set whole.
+- A property stops at the first array, so an array is always set whole. No two steps share (kind, pointer) (schema
+  x-validator-rules): changes under one property of one subject coalesce into one step whose `property` is their
+  common prefix (the labels of an entity: one /labels step); changes to two different properties of one subject
+  cannot be carried by one step (one `property` per step) and refuse with CMP-ART-001. settings.set keeps one step
+  per property until BPL-037 settles it in the contract.
+- Field and option order (9.4): quarantine runs in phase 15, after the reorder in phase 6, so a reorder `order` lists
+  exactly the keys active when it runs (target order, then the removed keys). An added or restored element carries no
+  position in the step schema; with no reorder op in the diff, the compiler predicts the adapter's order (a new
+  element is appended, a single restored one returns to its former index) and refuses with CMP-ART-001 when that
+  misses the target, in either direction (prepend, rename, several removals whose rollback cannot restore order).
+- A precision change is refused (CMP-ART-001) until the engine adapter supports it (BPL-039 review, partner).
+- Only the declared Blueprint provenance paths are skipped (`provenance` of a component, entity, workflow, role,
+  approval, report, integration or assistant); a `provenance` key inside ordinary data (a JSON default) is compiled.
 - Changes inside a location become one location.upsert of the whole node (9.3 names no location.set_property).
 - Not compiled, refused (CMP-ART-001): a component version range change, a change inside an option, a reorder of
   an unordered collection (9.3 has no step kind and skippedOps no reason for it), whole sections added or removed.
@@ -34,6 +45,9 @@ COALESCED = {"workflows": "workflow.upsert", "roles": "role.upsert", "approvals"
 CHILD = {"fields": ("field.add", "field.quarantine", "field.set_property"),
          "relations": ("relation.add", "relation.quarantine", "relation.set_property"),
          "components": ("binding.add", "binding.disable", "binding.set_property")}
+PROVENANCE_OF = {"components", "entities", "workflows", "roles", "approvals", "reports", "integrations", "assistants"}
+ORDERED = (("fields", "field.reorder"), ("options", "option.reorder"))  # order-significant collections with a step kind
+UNCOALESCED = {"settings.set"}  # BPL-037 owns the settings.set contract change
 SEMANTIC = {"field.set_property": {"/type", "/unique", "/precision", "/maxLength", "/required", "/target"},
             "relation.set_property": {"/target", "/required"}}
 
@@ -82,7 +96,7 @@ def _classify(op: dict, base: dict, target: dict) -> tuple | str:
     if kind not in OP_KINDS:  # fail closed: an unknown kind must never fall through to a property change
         return ""
     head, n = (path[0] if path else None), len(path)
-    if head in SKIP or "provenance" in bpdiff.model.path_info(path)[0]:
+    if head in SKIP or (n >= 3 and head in PROVENANCE_OF and path[2] == "provenance"):
         return "skip:" + SKIP.get(head, "provenance")
     if head == "i18n" and n >= 2 and path[1] == "glossary":
         return "skip:i18n_glossary"
@@ -125,29 +139,94 @@ def _classify(op: dict, base: dict, target: dict) -> tuple | str:
     return "entity.set_property", _subject("entity", path[1], []), eptr, ("property", 2)
 
 
+def _keys(doc: dict, path: list) -> list | None:
+    arr = _get(doc, path)
+    return bpdiff.model.keys_of(arr, bpdiff.model.path_info(path)[0]) if isinstance(arr, list) else None
+
+
 def _params(spec: tuple, path: list, base: dict, target: dict) -> dict:
     if spec[0] == "definition":
         return {"definition": copy.deepcopy(_get(spec[1], spec[2]))}
-    if spec[0] == "order":
-        key = bpdiff.model.KEYED[bpdiff.model.path_info(path)[0]]
-        keys = lambda doc: [bpdiff.model.key_of(e, key) for e in _get(doc, path)]  # noqa: E731
-        return {"order": keys(target), "previousOrder": keys(base)}
-    start = spec[1]
-    prop = _prop(base, target, path, start)
-    full = path[:start] + prop
+    if spec[0] == "order":  # finished by _reconcile_order, which knows every membership change
+        return {"order": _keys(target, path), "previousOrder": _keys(base, path)}
+    return _prop_params(path[:spec[1]], _prop(base, target, path, spec[1]), base, target)
+
+
+def _prop_params(head: list, prop: list, base: dict, target: dict) -> dict:
     out = {"property": "".join("/" + _esc(s) for s in prop)}
     for name, doc in (("before", base), ("after", target)):
-        value = _get(doc, full)
+        value = _get(doc, head + prop)
         if value is not MISSING:
             out[name] = copy.deepcopy(value)
     return out
 
 
-def steps_from_diff(d: dict, base: dict, target: dict) -> tuple[list[dict], list[dict], list[Issue]]:
-    """(steps sorted and numbered, skippedOps sorted, issues). Ops with the same (kind, pointer, property) coalesce
-    into one step whose sourceOps lists them all."""
+def _collections(frm: dict, to: dict):
+    """(path, kind) of every ordered collection (entity fields, field options) present in both revisions."""
+    for e in to.get("entities", []):
+        eid = e.get("id")
+        if _get(frm, ["entities", eid]) is MISSING:
+            continue
+        yield ["entities", eid, "fields"], "field.reorder"
+        for f in e.get("fields", []):
+            path = ["entities", eid, "fields", f.get("id"), "options"]
+            if isinstance(_get(frm, path), list) and isinstance(_get(to, path), list):
+                yield path, "option.reorder"
+
+
+def _reconcile_order(by_key: dict, frm: dict, to: dict, restores: bool) -> list[Issue]:
+    """Finish reorder steps and refuse membership changes whose order the adapter cannot reach (module notes)."""
+    issues = []
+    for path, kind in _collections(frm, to):
+        before, after = _keys(frm, path), _keys(to, path)
+        if before is None or after is None or before == after:
+            continue
+        pointer = bpdiff.model.pointer(path)
+        removed = [k for k in before if k not in after]
+        added = sorted((k for k in after if k not in before), key=_esc)  # phase 5 runs them in pointer order
+        step = by_key.get((kind, pointer))
+        if step is not None:
+            step["params"] = {"order": after + removed, "previousOrder": before + added}
+            continue
+        active = list(before)
+        if restores and len(added) > 1:
+            active = None  # several restores: each returns to an index taken after the others left
+        for k in added if active is not None else ():
+            if restores:
+                active.insert(min(after.index(k), len(active)), k)
+            else:
+                active.append(k)
+        if active is None or [k for k in active if k not in removed] != after:
+            noun = "field" if kind == "field.reorder" else "option"
+            issues.append(Issue("CMP-ART-001", pointer, f"{noun} position change: an added or restored {noun} has "
+                                "no position in the step schema and no reorder follows it"))
+    return issues
+
+
+def _coalesce(step: dict, path: list, spec: tuple, base: dict, target: dict, prop_of: dict) -> bool:
+    """Widen a property step to the common prefix of its properties; False when they share none."""
+    head, old = prop_of[(step["kind"], step["pointer"])]
+    new = _prop(base, target, path, spec[1])
+    common = []
+    for a, b in zip(old, new):
+        if a != b:
+            break
+        common.append(a)
+    if not common:
+        return False
+    prop_of[(step["kind"], step["pointer"])] = (head, common)
+    step["params"] = _prop_params(head, common, base, target)
+    return True
+
+
+def steps_from_diff(d: dict, base: dict, target: dict, *, restores: bool = False) -> tuple[list[dict], list[dict],
+                                                                                         list[Issue]]:
+    """(steps sorted and numbered, skippedOps sorted, issues). Ops with the same (kind, pointer) coalesce into one step
+    whose sourceOps lists them all (settings.set: same property). `restores` is true for an inverse, whose adds bring
+    back what the forward quarantined."""
     by_key: dict[tuple, dict] = {}
-    skipped, issues = [], []
+    prop_of: dict[tuple, tuple] = {}
+    skipped, issues, refused = [], [], set()
     for op in d["ops"]:
         c = _classify(op, base, target)
         if isinstance(c, str):
@@ -158,18 +237,29 @@ def steps_from_diff(d: dict, base: dict, target: dict) -> tuple[list[dict], list
             continue
         kind, subject, pointer, spec = c
         params = _params(spec, op["path"], base, target)
-        key = (kind, pointer, params.get("property", ""))
+        key = (kind, pointer, params["property"]) if kind in UNCOALESCED else (kind, pointer)
         if key in by_key:
             s = by_key[key]
+            if spec[0] == "property" and kind not in UNCOALESCED and s["params"]["property"] != params["property"] \
+                    and not _coalesce(s, op["path"], spec, base, target, prop_of) and key not in refused:
+                refused.add(key)
+                issues.append(Issue("CMP-ART-001", pointer, "several properties of one subject change: one step "
+                                    "carries one property; change them in separate revisions"))
             s["sourceOps"].append(op["pointer"])
             s["impact"] = max(s["impact"], op["impact"], key=_SEVERITY.index)
             continue
-        ddl = "additive" if kind in ADDITIVE else "semantic" if params.get("property") in SEMANTIC.get(kind, ()) else "none"
-        step = {"seq": 0, "phase": PHASE[kind], "kind": kind, "subject": copy.deepcopy(subject), "pointer": pointer,
-                "impact": op["impact"], "ddlImpact": ddl, "reversible": True, "params": params,
-                "sourceOps": [op["pointer"]]}
-        step["reversible"] = irreversible_reason(step) is None
-        by_key[key] = step
+        if spec[0] == "property":
+            prop_of[key] = (op["path"][:spec[1]], _prop(base, target, op["path"], spec[1]))
+        by_key[key] = {"seq": 0, "phase": PHASE[kind], "kind": kind, "subject": copy.deepcopy(subject),
+                       "pointer": pointer, "impact": op["impact"], "ddlImpact": "none", "reversible": True,
+                       "params": params, "sourceOps": [op["pointer"]]}
+    issues += _reconcile_order(by_key, base, target, restores)
+    for s in by_key.values():
+        kind, prop = s["kind"], s["params"].get("property")
+        if kind == "field.set_property" and prop == "/precision":
+            issues.append(Issue("CMP-ART-001", s["pointer"] + prop, "precision change not yet supported by the adapter"))
+        s["ddlImpact"] = "additive" if kind in ADDITIVE else "semantic" if prop in SEMANTIC.get(kind, ()) else "none"
+        s["reversible"] = irreversible_reason(s) is None
     steps = sorted(by_key.values(), key=lambda s: (s["phase"], s["pointer"], s["kind"], s["params"].get("property", "")))
     for i, s in enumerate(steps, 1):
         s["seq"] = i

@@ -88,7 +88,7 @@ def _ref(bp: dict) -> dict:
 
 def _side(d: dict, frm: dict, to: dict, resolved: dict, both: dict, inverse: dict | None) -> dict:
     """One artifact of an incremental compile: forward (d = diff(base, target)) or its inverse (d = invert(diff))."""
-    steps, skipped, issues = steps_from_diff(d, frm, to)
+    steps, skipped, issues = steps_from_diff(d, frm, to, restores=inverse is None)
     _refuse_if(issues)
     meta, target = to["meta"], to["meta"]["engineTarget"]
     artifact = art.assemble(

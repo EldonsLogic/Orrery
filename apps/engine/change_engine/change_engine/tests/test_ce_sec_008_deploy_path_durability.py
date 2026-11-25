@@ -75,6 +75,8 @@ class _DurableDb(_LiveDb):
         self.release_result = 1  # what RELEASE_LOCK answers (1 released, 0 not ours, None no such lock)
         self.closed = False
         self.rollback_error: Exception | None = None
+        self.close_error: Exception | None = None
+        self.commits_at_close: int | None = None
         self.on_set_timeout = None  # runs when the engine sets the session timeout (after its fresh read view)
 
     @property
@@ -83,7 +85,10 @@ class _DurableDb(_LiveDb):
         return len(self.pending) + len(self.meta_pending)
 
     def close(self):
+        if self.close_error is not None:
+            raise self.close_error
         self.closed = True
+        self.commits_at_close = self.commits
         self.pending = []  # closing ends the transaction without committing it
         self.meta_pending = set()
         self.view = None
@@ -170,6 +175,9 @@ class _DurableDb(_LiveDb):
             if self.on_lock:
                 self.on_lock(values[0])
             return ((1,),)
+        if q.startswith("SELECT IS_USED_LOCK"):
+            self.sql_log.append(query)
+            return ((1 if values[0] in self.locks else 0,),)
         if q.startswith("SELECT RELEASE_LOCK"):
             self.sql_log.append(query)
             self.locks.discard(values[0])
@@ -302,9 +310,9 @@ class _Bench:
         plan = DDLPlanInspection(inspectable=True, statements=list(self.statements), is_approved_additive_only=True)
         return FrappeDeploymentAdapter(frappe_module=self.module, in_memory=False, ddl_plan=plan, use_shared_state=False)
 
-    def deploy(self, adapter, *, dep="dep_1", key="key-1", field=None):
+    def deploy(self, adapter, *, dep="dep_1", key="key-1", field=None, site="site-a"):
         return execute_single_field_deployment(
-            adapter, dep, key, "site-a", "Item", adapter.get_doctype_revision_hash("Item"), dict(field or FIELD))
+            adapter, dep, key, site, "Item", adapter.get_doctype_revision_hash("Item"), dict(field or FIELD))
 
 
 def _stages(db: _DurableDb) -> list[str]:

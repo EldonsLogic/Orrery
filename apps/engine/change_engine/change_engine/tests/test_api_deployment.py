@@ -554,6 +554,8 @@ class TestApiDeployment(unittest.TestCase):
                     return ((session["lock_wait_timeout"],),)
                 if "SELECT GET_LOCK" in q_upper:
                     return ((1,),)
+                if "SELECT IS_USED_LOCK" in q_upper:
+                    return ((1,),)
                 if "SELECT RELEASE_LOCK" in q_upper:
                     return ((1,),)
                 if "COUNT(*)" in q_upper:

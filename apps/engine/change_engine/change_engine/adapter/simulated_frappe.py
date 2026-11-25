@@ -432,6 +432,9 @@ class SimulatedFrappeDB:
             site.locks.add(lock_key)
             return [(1,)]
 
+        if "IS_USED_LOCK(" in q_upper:
+            return [(1 if str(p[0]) in site.locks else 0,)]
+
         if "RELEASE_LOCK(" in q_upper:
             lock_key = str(p[0])
             site.locks.discard(lock_key)

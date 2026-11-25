@@ -98,6 +98,16 @@ All under `apps/engine/change_engine/change_engine/`:
 - Full suite: 1624 passed, 86 skipped, 0 failed.
 - The CE-SEC-011 row text now includes the dedicated connection and the locked hold check.
 
+## Review round 4 (GPT-6.2 Sol at 716eb136: changes required, 3 regressions from round 3)
+- Fixed:
+  - The site identity is now the tenant id the backend binds (`site_id=tenant_id`). It is accepted only if it is canonical and belongs to the resolved site. A hold and a replay record written by the backend are found through the RPC path.
+  - A typed `SessionDiscardedError` refuses every commit, finalize and prepare once the session is unusable. All 12 raw commits now go through `_commit_durable`.
+  - Native apply re-checks the session and lock ownership (`IS_USED_LOCK`) before it commits. The decimal path finalizes through the guarded adapter.
+  - A failed close never reports a successful release. The close is retried once per release call.
+- Red then green: 8 failed, then 128 passed in the two CE-SEC-008 files.
+- Full suite: 1633 passed, 86 skipped, 0 failed.
+- The CE-SEC-011 text now includes mapping `SessionDiscardedError` in the decimal path, and resolving a custom `site_map` through the backend's resolver.
+
 ## Tokens or cost
 Unknown.
 

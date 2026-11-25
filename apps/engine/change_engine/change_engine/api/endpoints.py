@@ -45,6 +45,7 @@ from change_engine.guarded_apply.schema_reconciler import (
     InvalidDeploymentIdError,
     LockTimeoutError,
     MAX_IDEMPOTENCY_KEY_LENGTH,
+    SessionDiscardedError,
     MAX_SITE_ID_LENGTH,
     caller_id_problem,
     evidence_namespace_problem,
@@ -609,6 +610,8 @@ class FrappeDeploymentAdapter:
 
         self.apply_called: bool = False
         self._session_unusable = False
+        self._discard_confirmed = False  # True only once the connection is really closed
+        self._held_locks: Set[str] = set()
         # ERP-027: applied state per deployment (an adapter may be reused for several).
         self._applied_deployments: Set[str] = set()
         # ERP-027: approved plan vs what Frappe actually executed (live mode only).
@@ -709,14 +712,19 @@ class FrappeDeploymentAdapter:
         return self._session_unusable
 
     def mark_session_unusable(self) -> None:
-        """A lock may still be held on this connection (a release failed): refuse further deployments on it and
-        discard the connection, which frees every advisory lock it owns."""
+        """A lock may still be held on this connection, or unknown writes may be pending on it: refuse further
+        use and discard the connection, which frees every advisory lock and drops pending writes. Safe to call
+        again: a discard that did not work is retried, and until one works nothing counts as released."""
         self._session_unusable = True
-        if not self.in_memory:
-            try:
-                self._frappe.db.close()
-            except Exception:
-                logger.exception("could not close the unusable database session")
+        self._held_locks.clear()
+        if self.in_memory:
+            self._discard_confirmed = True
+            return
+        try:
+            self._frappe.db.close()
+            self._discard_confirmed = True
+        except Exception:
+            logger.exception("could not close the unusable database session")
 
     def acquire_advisory_lock(self, lock_key: str, wait_seconds: int) -> Optional[int]:
         if self._session_unusable:
@@ -726,6 +734,8 @@ class FrappeDeploymentAdapter:
                 res = self._frappe.db.sql("SELECT GET_LOCK(%s, %s)", (lock_key, wait_seconds))
                 if res and len(res) > 0 and len(res[0]) > 0:
                     val = res[0][0]
+                    if val is not None and int(val) == 1:
+                        self._held_locks.add(lock_key)
                     return int(val) if val is not None else None
                 return None
             except Exception:
@@ -741,16 +751,20 @@ class FrappeDeploymentAdapter:
 
     def release_advisory_lock(self, lock_key: str) -> bool:
         """Release a lock and verify it (``RELEASE_LOCK`` answers 1). Never raises, so a deployment that has
-        already run is never reported as failed because of its own cleanup; a release that is not verified
-        marks the session unusable and returns ``False``."""
+        already run is never reported as failed because of its own cleanup. ``True`` means verified released
+        (or the connection that held it is verifiably closed); a release that is not verified, or a discard whose
+        close failed, returns ``False`` and keeps the session unusable."""
         if self.in_memory:
             self.locks.discard(lock_key)
             return True
         if self._session_unusable:
-            return True  # the connection is gone, and the server freed its locks with it
+            if not self._discard_confirmed:
+                self.mark_session_unusable()  # retry the close
+            return self._discard_confirmed
         try:
             res = self._frappe.db.sql("SELECT RELEASE_LOCK(%s)", (lock_key,))
             if res and res[0] and res[0][0] == 1:
+                self._held_locks.discard(lock_key)
                 return True
             logger.error("RELEASE_LOCK did not confirm the release of %s", lock_key)
         except Exception:
@@ -792,6 +806,7 @@ class FrappeDeploymentAdapter:
 
     def mark_recovery_required(self, deployment_id: str, reason: str = "") -> None:
         """Best-effort recovery marker when Stage 6 finalization fails after DDL (main rows only)."""
+        self._require_usable_session()
         _require_main_row_id(deployment_id)
         if not self.in_memory:
             try:
@@ -803,8 +818,7 @@ class FrappeDeploymentAdapter:
                         updated_at = NOW(6)
                     WHERE deployment_id = %s AND {_MAIN_ROWS_ONLY}
                 """, (json.dumps({"deployment_id": deployment_id, "status": "RECOVERY_REQUIRED", "reason": reason}), deployment_id))
-                if hasattr(self._frappe.db, "commit"):
-                    self._frappe.db.commit()
+                self._commit_durable()
             except Exception:
                 pass
         elif deployment_id in self.audit_journal:
@@ -1088,6 +1102,7 @@ class FrappeDeploymentAdapter:
         if not self.in_memory:
             table_name = f"tab{doctype}"
             try:
+                self._require_usable_session()
                 meta_row = self._frappe.db.sql(
                     "SELECT name, fieldtype FROM `tabCustom Field` WHERE dt = %s AND fieldname = %s",
                     (doctype, fieldname),
@@ -1221,7 +1236,30 @@ class FrappeDeploymentAdapter:
         )
 
     # -- durable evidence (CE-SEC-008) ---------------------------------------------------
+    def _require_usable_session(self) -> None:
+        """Once a session is discarded nothing may commit, finalize or rely on a lock through this adapter."""
+        if self._session_unusable:
+            raise SessionDiscardedError("the database session was discarded")
+
+    def _require_locks_held(self, sql: Any = None) -> None:
+        """Every advisory lock this adapter took must still be this connection's (``IS_USED_LOCK`` is our
+        ``CONNECTION_ID``); one that is not means the session is no longer the one that was serialised."""
+        if self.in_memory or not self._held_locks:
+            return
+        run = sql or self._frappe.db.sql
+        for key in sorted(self._held_locks):
+            try:
+                rows = run("SELECT IS_USED_LOCK(%s) = CONNECTION_ID()", (key,))
+                held = bool(rows and rows[0] and rows[0][0] == 1)
+            except Exception:
+                logger.exception("could not verify advisory lock %s", key)
+                held = False
+            if not held:
+                self.mark_session_unusable()
+                raise SessionDiscardedError("an advisory lock is no longer held by this session")
+
     def _commit_durable(self) -> None:
+        self._require_usable_session()
         if hasattr(self._frappe.db, "commit"):
             self._frappe.db.commit()
 
@@ -1390,6 +1428,7 @@ class FrappeDeploymentAdapter:
         """
         if self.simulate_prepare_error:
             raise RuntimeError("Fail-closed: Simulated audit prepare failure")
+        self._require_usable_session()
 
         dep_id = record["deployment_id"]
         # A NEW deployment gets the strict canonical grammar (existing rows are not re-validated).
@@ -1458,6 +1497,7 @@ class FrappeDeploymentAdapter:
     ) -> None:
         if self.simulate_finalize_error:
             raise RuntimeError("Final audit persistence simulated failure")
+        self._require_usable_session()
         _require_main_row_id(deployment_id)
 
         outcome = outcome_record.get("outcome", {})
@@ -1471,8 +1511,7 @@ class FrappeDeploymentAdapter:
                 SET status = %s, outcome_json = %s, updated_at = NOW(6)
                 WHERE deployment_id = %s AND {_MAIN_ROWS_ONLY}
             """, (status, outcome_json, deployment_id))
-            if hasattr(self._frappe.db, "commit"):
-                self._frappe.db.commit()
+            self._commit_durable()
         else:
             if deployment_id in self.audit_journal:
                 self.audit_journal[deployment_id]["status"] = status
@@ -1489,6 +1528,9 @@ class FrappeDeploymentAdapter:
     def apply_native_custom_field(
         self, deployment_id: str, doctype: str, field_def: Dict[str, Any]
     ) -> None:
+        self._require_usable_session()
+        if not self.in_memory:
+            self._require_locks_held()
         self.apply_called = True
         self._applied_deployments.add(deployment_id)
         if self.simulate_apply_error:
@@ -1585,8 +1627,10 @@ class FrappeDeploymentAdapter:
                     db.sql_ddl = original_sql_ddl
                 if original_sql is not None:
                     db.sql = original_sql
-            if hasattr(self._frappe.db, "commit"):
-                self._frappe.db.commit()
+            # The commit publishes the apply: only on a session that is still usable and still holds the lock.
+            self._require_usable_session()
+            self._require_locks_held()
+            self._commit_durable()
         else:
             self.custom_fields[(doctype, fieldname)] = dict(cf_args)
             if doctype not in self.table_columns:
@@ -1644,8 +1688,7 @@ class FrappeDeploymentAdapter:
                         value=value,
                         property_type=property_type,
                     )
-                if hasattr(self._frappe.db, "commit"):
-                    self._frappe.db.commit()
+                self._commit_durable()
 
     def get_property_setter(
         self, doctype: str, fieldname: Optional[str], property_name: str
@@ -1691,8 +1734,7 @@ class FrappeDeploymentAdapter:
                         "DELETE FROM `tabProperty Setter` WHERE doc_type = %s AND (field_name IS NULL OR field_name = '') AND property = %s",
                         (doctype, property_name),
                     )
-                if hasattr(self._frappe.db, "commit"):
-                    self._frappe.db.commit()
+                self._commit_durable()
             except Exception:
                 pass
 
@@ -1770,8 +1812,7 @@ class FrappeDeploymentAdapter:
                         "style": style or "Primary",
                     })
                     ws.insert(ignore_permissions=True)
-                    if hasattr(self._frappe.db, "commit"):
-                        self._frappe.db.commit()
+                    self._commit_durable()
 
     def get_workflow_state(self, state_name: str) -> Optional[Dict[str, Any]]:
         if self.in_memory:
@@ -1831,8 +1872,7 @@ class FrappeDeploymentAdapter:
                 else:
                     w_doc = self._frappe.get_doc(workflow_data)
                     w_doc.insert(ignore_permissions=True)
-                if hasattr(self._frappe.db, "commit"):
-                    self._frappe.db.commit()
+                self._commit_durable()
 
     def set_workflow_active(self, workflow_name: str, is_active: int) -> None:
         if self.in_memory:
@@ -1841,8 +1881,7 @@ class FrappeDeploymentAdapter:
         else:
             if hasattr(self._frappe, "db") and hasattr(self._frappe.db, "set_value"):
                 self._frappe.db.set_value("Workflow", workflow_name, "is_active", is_active)
-                if hasattr(self._frappe.db, "commit"):
-                    self._frappe.db.commit()
+                self._commit_durable()
 
     def get_report(self, report_name: str) -> Optional[Dict[str, Any]]:
         if self.in_memory:
@@ -1869,8 +1908,7 @@ class FrappeDeploymentAdapter:
                 else:
                     r_doc = self._frappe.get_doc(report_doc)
                     r_doc.insert(ignore_permissions=True)
-                if hasattr(self._frappe.db, "commit"):
-                    self._frappe.db.commit()
+                self._commit_durable()
 
     def set_report_disabled(self, report_name: str, disabled: int = 1) -> None:
         if self.in_memory:
@@ -1879,8 +1917,7 @@ class FrappeDeploymentAdapter:
         else:
             if hasattr(self._frappe, "db") and hasattr(self._frappe.db, "set_value"):
                 self._frappe.db.set_value("Report", report_name, "disabled", disabled)
-                if hasattr(self._frappe.db, "commit"):
-                    self._frappe.db.commit()
+                self._commit_durable()
 
     def get_document(self, doctype: str, name: str) -> Optional[Dict[str, Any]]:
         if self.in_memory:
@@ -1908,8 +1945,7 @@ class FrappeDeploymentAdapter:
                     doc_dict["doctype"] = doctype
                     doc = self._frappe.get_doc(doc_dict)
                     doc.insert(ignore_permissions=True)
-                if hasattr(self._frappe.db, "commit"):
-                    self._frappe.db.commit()
+                self._commit_durable()
 
 
 
@@ -1958,21 +1994,28 @@ def _reject_invalid_deployment_id(deployment_id: Any, start_time: float, **extra
     }
 
 
-def _resolve_site_id(caller_site: Any, deployment_id: Any, start_time: float, **extra: Any):
-    """The site identity for the lock, the lookups and the audit rows: the RESOLVED site, never caller input.
+def _identity_belongs_to_site(identity: str, resolved: str) -> bool:
+    """Is ``identity`` (the tenant id the runtime backend binds as ``site_id`` on every audit row) the one that
+    belongs to the resolved Frappe site? The backend names a tenant's site ``<tenant with _ as ->.<domain>``."""
+    return identity == resolved or resolved.split(".")[0].lower() == identity.replace("_", "-").lower()
 
-    A caller-supplied site is accepted only when no site is resolved (offline use) or when it is exactly the
-    resolved one. The result must be canonical (the same grammar as ids), so collation-equivalent spellings
-    cannot take different locks. Returns ``(site_id, None)`` or ``(None, rejection)``.
+
+def _resolve_site_id(caller_site: Any, deployment_id: Any, start_time: float, **extra: Any):
+    """The ``site_id`` for the lock, the lookups and the audit rows.
+
+    The backend binds the TENANT id there, so that is the identity (a caller passes it, as the backend does).
+    It is accepted only if it belongs to the resolved Frappe site (a caller can not pick another tenant's
+    identity inside this site and so step around its holds and replay records), and it must be canonical (the
+    same grammar as ids, so collation-equivalent spellings can not take different locks). With no caller
+    identity the resolved site name is used. Returns ``(site_id, None)`` or ``(None, rejection)``.
     """
     resolved = getattr(getattr(frappe, "local", None), "site", None)
-    if resolved:
-        if caller_site is not None and caller_site != resolved:
-            return None, _site_rejection(deployment_id, start_time, "SITE_MISMATCH", "site_mismatch",
-                                         "The site is resolved by the server and cannot be chosen by the caller.", **extra)
-        site = resolved
-    else:
-        site = caller_site or "default"
+    if resolved and caller_site is not None and (
+        not isinstance(caller_site, str) or not _identity_belongs_to_site(caller_site, resolved)
+    ):
+        return None, _site_rejection(deployment_id, start_time, "SITE_MISMATCH", "site_mismatch",
+                                     "The site identity does not belong to the site this request runs on.", **extra)
+    site = caller_site if caller_site is not None else (resolved or "default")
     if caller_id_problem(site, MAX_SITE_ID_LENGTH):
         return None, _site_rejection(deployment_id, start_time, "INVALID_SITE_ID", "invalid_site_id",
                                      "The site identity is not canonical.", **extra)

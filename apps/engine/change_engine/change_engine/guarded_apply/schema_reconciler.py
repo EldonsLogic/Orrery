@@ -88,6 +88,11 @@ def _collation_fold(value: str) -> str:
     return str(value).rstrip(" ").lower()
 
 
+class SessionDiscardedError(RuntimeError):
+    """CE-SEC-008: the database session was discarded (a rollback or a lock release could not be verified);
+    nothing may commit, finalize or rely on a lock through it. The reconciler holds the deployment instead."""
+
+
 class LockTimeoutError(RuntimeError):
     """CE-SEC-008: the session lock-wait timeout could not be set or its effective value read back."""
 

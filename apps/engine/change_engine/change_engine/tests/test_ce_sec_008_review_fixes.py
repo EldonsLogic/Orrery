@@ -585,12 +585,12 @@ class TestFinding8TimeoutIsValidatedAndVerifiedWhereDdlIsDispatched(unittest.Tes
 # ===========================================================================================
 # Revision round 2
 # ===========================================================================================
-def _crashed(bench: _Bench, dep="dep_1", key="key-1"):
+def _crashed(bench: _Bench, dep="dep_1", key="key-1", site="site-a"):
     """Leave ``dep`` PREPARED: the process dies after the DDL, before finalization."""
     adapter = bench.new_adapter()
     adapter.persist_final_outcome_and_audit = lambda *a, **k: (_ for _ in ()).throw(_Crash("x"))
     try:
-        bench.deploy(adapter, dep=dep, key=key)
+        bench.deploy(adapter, dep=dep, key=key, site=site)
     except _Crash:
         pass
     bench.db.crash()
@@ -1085,6 +1085,182 @@ class TestR3RevertHoldCheckComesAfterAuthorization(unittest.TestCase):
         _crashed(bench)
         out = endpoints.revert_configuration_change(deployment_id="dep_1", adapter=bench.new_adapter(), user_roles=ADMIN)
         self.assertEqual(out["disposition"], "DEPLOYMENT_ON_HOLD")
+
+
+# ===========================================================================================
+# Revision round 4
+# ===========================================================================================
+TENANT = "t_alpha"  # what the runtime backend binds as ``site_id`` (the tenant id), not the Frappe host name
+HOST = "t-alpha.localhost"
+XYZ = {**FIELD, "fieldname": "custom_xyz"}
+XYZ_STMT = _T + "ADD COLUMN `custom_xyz` varchar(140)"
+
+
+class TestR4SiteIdentityIsTheOneTheBackendBinds(unittest.TestCase):
+    def _rpc(self, bench, adapter, **kw):
+        from unittest import mock
+
+        with mock.patch.object(endpoints, "frappe", _frappe_stub(HOST)):
+            return endpoints.apply_configuration_change(
+                doctype="Item", field_def=dict(XYZ), adapter=adapter, user_roles=ADMIN, **kw)
+
+    def test_a_replay_record_written_under_the_tenant_id_is_found_through_the_rpc(self):
+        bench = _Bench(statements=[XYZ_STMT])
+        adapter = bench.new_adapter()
+        first = bench.deploy(adapter, key="idemp-dep_1", site=TENANT, field=XYZ)  # as the backend writes it
+        self.assertEqual(first["status"], "APPLIED")
+        out = self._rpc(bench, bench.new_adapter(), deployment_id="dep_2", idempotency_key="idemp-dep_1", site_id=TENANT)
+        for key in ("execution_time_ms", "success"):
+            out.pop(key, None)
+        self.assertEqual(out, first)
+        self.assertEqual(len(bench.db.altered()), 1, "no second statement")
+
+    def test_a_hold_written_under_the_tenant_id_is_found_through_the_rpc(self):
+        bench = _Bench(statements=[XYZ_STMT])
+        adapter = bench.new_adapter()
+        adapter.persist_final_outcome_and_audit = lambda *a, **k: (_ for _ in ()).throw(_Crash("x"))
+        with self.assertRaises(_Crash):
+            bench.deploy(adapter, key="idemp-dep_1", site=TENANT, field=XYZ)
+        bench.db.crash()
+        sent = len(bench.db.altered())
+        out = self._rpc(bench, bench.new_adapter(), deployment_id="dep_2", idempotency_key="idemp-other", site_id=TENANT)
+        self.assertEqual(out["status"], "RECOVERY_REQUIRED", out)
+        self.assertEqual(len(bench.db.altered()), sent)
+
+    def test_the_identity_must_belong_to_the_resolved_site_and_be_canonical(self):
+        bench = _Bench(statements=[XYZ_STMT])
+        adapter = bench.new_adapter()
+        for site in ("t_beta", "t_alpha ", "other.site", "t_alphà", HOST + "x"):
+            with self.subTest(site=site):
+                out = self._rpc(bench, adapter, deployment_id="dep_1", site_id=site)
+                self.assertIn(out["disposition"], ("SITE_MISMATCH", "INVALID_SITE_ID"))
+                self.assertEqual(bench.db.committed, {})
+        out = self._rpc(bench, adapter, deployment_id="dep_1", site_id=HOST)
+        self.assertEqual(out["status"], "APPLIED", "the host name itself is still a valid identity")
+
+
+def _decimal_style(bench: _Bench, adapter, dep="dep_1", key="idemp-dep_1", site="site-a"):
+    """The adapter calls ``FrappeRuntimeBackend._execute_six_stage_field`` makes, in its order."""
+    from change_engine.guarded_apply.schema_reconciler import (
+        compute_canonical_payload_hash, make_bounded_lock_key, reconcile_exhaustive_snapshot as reconcile)
+
+    adapter.acquire_advisory_lock(make_bounded_lock_key(site, "Item"), wait_seconds=5)
+    before = adapter.take_snapshot("Item", "custom_x", expected_deployment_id=dep)
+    adapter.persist_prepare_and_audit_intent({
+        "deployment_id": dep, "idempotency_key": key, "payload_hash": compute_canonical_payload_hash(site, "Item", FIELD),
+        "site_id": site, "doctype": "Item", "fieldname": "custom_x",
+        "base_revision_hash": before.revision_hash, "ddl_plan_statements": [STMT], "status": "PREPARED"})
+    adapter.set_lock_wait_timeout(3)
+    apply_error = None
+    try:
+        adapter.apply_native_custom_field(dep, "Item", dict(FIELD))
+    except Exception as exc:
+        apply_error = str(exc)
+    after = adapter.take_snapshot("Item", "custom_x", expected_deployment_id=dep)
+    outcome = reconcile(dep, "Item", "custom_x", before, after, apply_error)
+    adapter.persist_final_outcome_and_audit(dep, {"payload_hash": "h", "outcome": outcome})
+    return outcome
+
+
+def _break_completion_journal(bench: _Bench):
+    """The completion journal write fails and the rollback after it fails too (the reviewer's scenario)."""
+    orig = bench.db._audit
+    n = {"i": 0}
+
+    def flaky(q, p, as_dict):
+        if q.startswith("INSERT INTO"):
+            n["i"] += 1
+            if n["i"] == 4:  # main, baseline, dispatch intent, then the completion row
+                bench.db.rollback_error = _DbDown(SECRET)
+                raise _DbDown("journal unavailable")
+        return orig(q, p, as_dict)
+
+    bench.db._audit = flaky
+
+
+class TestR4NothingCommitsOnADiscardedSession(unittest.TestCase):
+    def test_native_apply_does_not_commit_or_finalize_after_the_session_is_discarded(self):
+        bench = _Bench(meta_first=True)
+        adapter = bench.new_adapter()
+        _break_completion_journal(bench)
+        out = bench.deploy(adapter)
+        self.assertEqual(out["status"], "RECOVERY_REQUIRED", out)
+        self.assertEqual(out["reason_code"], "session_discarded")
+        self.assertTrue(bench.db.closed)
+        self.assertEqual(bench.db.commits, bench.db.commits_at_close, "no commit after the connection was discarded")
+        row = bench.db.row("dep_1")
+        self.assertEqual(row["status"], "PREPARED")
+        self.assertIsNone(row["outcome_json"])
+
+    def test_the_decimal_path_cannot_finalize_over_a_discarded_session(self):
+        bench = _Bench(meta_first=True)
+        adapter = bench.new_adapter()
+        _break_completion_journal(bench)
+        with self.assertRaises(endpoints.SessionDiscardedError):
+            _decimal_style(bench, adapter)
+        self.assertEqual(bench.db.commits, bench.db.commits_at_close)
+        row = bench.db.row("dep_1")
+        self.assertEqual((row["status"], row["outcome_json"]), ("PREPARED", None), "the hold stands")
+
+    def test_every_commit_finalize_and_write_refuses_on_a_discarded_session(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        adapter.mark_session_unusable()
+        for call in (
+            lambda: adapter.persist_final_outcome_and_audit("dep_1", {"outcome": {"status": "APPLIED"}}),
+            lambda: adapter.mark_recovery_required("dep_1", "x"),
+            lambda: adapter.persist_prepare_and_audit_intent(_record(ddl_plan_statements=[STMT])),
+            lambda: adapter.apply_native_custom_field("dep_1", "Item", dict(FIELD)),
+            lambda: adapter._commit_durable(),
+        ):
+            with self.assertRaises(endpoints.SessionDiscardedError):
+                call()
+        self.assertEqual(bench.db.altered(), [])
+
+    def test_native_apply_refuses_to_commit_when_the_lock_is_no_longer_held(self):
+        from change_engine.guarded_apply.schema_reconciler import make_bounded_lock_key
+
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        key = make_bounded_lock_key("site-a", "Item")
+        self.assertEqual(adapter.acquire_advisory_lock(key, wait_seconds=5), 1)
+        adapter.take_snapshot("Item", "custom_x", "dep_1")
+        adapter.persist_prepare_and_audit_intent(_record(fieldname="custom_x", ddl_plan_statements=[STMT]))
+        bench.db.locks.clear()  # the server dropped the lock before the apply
+        commits = bench.db.commits
+        with self.assertRaises(endpoints.SessionDiscardedError):
+            adapter.apply_native_custom_field("dep_1", "Item", dict(FIELD))
+        self.assertEqual(bench.db.altered(), [])
+        self.assertEqual(bench.db.commits, commits)
+
+
+class TestR4AFailedCloseNeverReportsASuccessfulRelease(unittest.TestCase):
+    def test_release_is_unverified_while_the_discard_has_not_worked(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        bench.db.close_error = _DbDown(SECRET)
+        adapter.mark_session_unusable()
+        self.assertTrue(adapter.session_unusable)
+        self.assertFalse(adapter.release_advisory_lock("ce:v1:any"), "the lock may still be held")
+        bench.db.close_error = None
+        self.assertTrue(adapter.release_advisory_lock("ce:v1:any"), "the retried close worked: the lock is freed")
+
+    def test_a_deployment_whose_close_failed_stays_unusable_on_hold_and_retries_the_discard(self):
+        bench = _Bench(meta_first=True)
+        adapter = bench.new_adapter()
+        _break_completion_journal(bench)
+        bench.db.close_error = _DbDown(SECRET)
+        results = []
+        real = adapter.release_advisory_lock
+        adapter.release_advisory_lock = lambda k: (results.append(real(k)), results[-1])[1]
+        out = bench.deploy(adapter)
+        self.assertEqual(out["status"], "RECOVERY_REQUIRED")
+        self.assertNotIn("SECRET", json.dumps(out))
+        self.assertTrue(results and not any(results), "no release is reported as successful")
+        self.assertTrue(adapter.session_unusable)
+        self.assertEqual(bench.db.row("dep_1")["status"], "PREPARED")
+        again = bench.deploy(adapter, dep="dep_2", key="key-2")
+        self.assertEqual((again["status"], again["stage"]), ("REJECTED", "ACQUIRE"))
 
 
 if __name__ == "__main__":

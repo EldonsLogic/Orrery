@@ -130,6 +130,22 @@ All under `apps/engine/change_engine/change_engine/`:
   - Revert and recovery reads use deployment ids, and the policy store uses its own host-scoped tables. The reviewer noted both and did not raise them as defects of this PR.
 - Review loop stopped after round 7 (the coordinator's call, reported to the partner): each round since round 3 has found one narrower edge case, and the remaining items belong to CE-SEC-009, CE-SEC-010 and CE-SEC-011, which need an ADR or adapter-lane files.
 
+## Review round 8: Eldon's security review (Fable 5.2 at 56b00a23)
+- F1 (non-DDL engines) and F5 (`#` in keys) were already fixed, and re-checked.
+- Fixed in this round:
+  - F2: deployment ids are `prefix_<uuid4 hex>`, unique across restarts.
+  - F3: an evidence digest over baseline, plan, id, site, doctype, field and payload hash, stored in the existing plan column. Each journal row is chained to it, and all of it is verified on load. Limit: the digest is unkeyed and journal-tail truncation is not detected; a keyed MAC is in CE-SEC-010 and CE-SEC-011.
+  - F4: evidence must match the request's doctype, field and bound site.
+  - F6: the decimal path now runs through `execute_single_field_deployment` (`approved_plan`). It inherits both locks, the fresh view, the idempotency and recovery lookups and the timeout before the intent. Failures map to `engine_unavailable` or `recovery_required`.
+  - F7: the three surviving mutants are now killed, with meta-tests.
+  - F8: `_commit_durable` raises when there is no `commit`.
+  - F9: distinct `evidence_unavailable` and `snapshot_unavailable` codes.
+  - F10: the timeout ceiling is now 60 s, and the previous session value is restored and verified on every exit path.
+- `frappe_backend.py` was edited in this PR, because #310 and #312 had merged.
+- Red then green: 38 failed and 128 passed before, 150 passed after (two CE-SEC-008 files).
+- Full suite: 1721 passed, 86 skipped, 0 failed.
+- CE-SEC-011 text trimmed to what remains.
+
 ## Tokens or cost
 Unknown.
 

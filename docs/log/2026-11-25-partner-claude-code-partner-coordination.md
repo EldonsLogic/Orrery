@@ -24,6 +24,8 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
   - Review dispatched (redispatch): gpt-6.1-sol (high), read-only security review of ADR-0068 at `c31042e`.
 - BPL-041 returned (Sonnet): `check_ready` now refuses `protected_subject`, `subject_missing`, `unique_or_index` (and `unsupported_value_type`) for `entity.add`, `field.add`, `relation.add` before any step runs; execute-time checks kept; `REQUIRE_BPL027_LIVE` read in the BPL-027 bench class. Only allowed paths changed. Not done: the real-bench runner `infra/dev/docker/run_real_bench_ci.py` does not run BPL-027, so nothing sets the flag; that is slice 2 (partner lane, coordinator's call, not a founder decision). Coordinator re-ran: neighbouring suites 90 passed, 10 skipped; all 59 engine files 1,501 passed, 86 skipped, 27 Hijri-only failures (same as main). Opened #310 (Tier 2, slice 1, BPL-041 stays `doing`).
   - Review dispatched: gpt-6.1-sol (high), read-only code-correctness review of #310 at `d0c93e2`.
+- #309 security review result, gpt-6.1-sol at `c31042e`: REQUEST_CHANGES, 6 High (R1 artifact-wide nonce against per-field execution; R2 custom-type insertion bypasses the one path; R3 revocation not honoured before expiry; R4 no durable reconcile evidence; R5 process-local deployment IDs and an overwriting intent upsert; R6 non-null numeric defaults and quarantine), 4 Medium (R7 site incarnation, R8 failed-clean and existing-column reconcile, R9 swallowed lock timeout and unbounded scans, R10 the contract dependency on Eldon's lane), 1 Low (R11 wire format). Posted on #309.
+  - Fixes dispatched: Claude Opus 5.5 (high), in the original ADR child checkout only, the ADR file only, no git; narrowing scope preferred where simpler.
 
 ## Decisions
 - None yet.

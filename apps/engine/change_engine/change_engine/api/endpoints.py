@@ -832,7 +832,7 @@ class FrappeDeploymentAdapter:
     def is_target_in_recovery_required(self, site_id: str, doctype: str) -> bool:
         if self.target_in_recovery:
             return True
-        read_ids = _read_site_ids(site_id)
+        read_ids = _read_site_ids(site_id, self._frappe)
         if not self.in_memory:
             # CE-SEC-008: a database error propagates and blocks; it is never read as "not blocked".
             res = self._frappe.db.sql(f"""
@@ -857,7 +857,7 @@ class FrappeDeploymentAdapter:
     def get_existing_deployment_by_idempotency(
         self, site_id: str, idempotency_key: str
     ) -> Optional[Dict[str, Any]]:
-        read_ids = _read_site_ids(site_id)
+        read_ids = _read_site_ids(site_id, self._frappe)
         if not self.in_memory:
             # CE-SEC-008: a database error, a missing row shape or an unusable stored outcome propagates and
             # blocks; it is never read as "no earlier attempt". A main row without an outcome is an unfinished
@@ -2013,12 +2013,15 @@ def _tenant_of_site(resolved: str) -> Optional[str]:
     return tenant if _TENANT_ID_RE.fullmatch(tenant) and tenant.replace("_", "-") == label else None
 
 
-def _read_site_ids(site_id: str) -> Tuple[str, ...]:
+def _read_site_ids(site_id: str, runtime: Any = None) -> Tuple[str, ...]:
     """The ``site_id`` values the hold and replay lookups read for ``site_id``: the identity itself, plus, on the
     tenant site it belongs to, the host name that rows written before the single-identity rule used (CE-SEC-008
     round 6). Read-only: every new row, lock and journal entry uses ``site_id`` alone. Another site's host name is
-    never added, because the alias is taken only when the current site maps back to exactly this identity."""
-    resolved = getattr(getattr(frappe, "local", None), "site", None)
+    never added, because the alias is taken only when the current site maps back to exactly this identity.
+    The site comes from the adapter's own runtime when it has one (an injected Frappe), else the global one."""
+    resolved = getattr(getattr(runtime, "local", None), "site", None) if runtime is not None else None
+    if not isinstance(resolved, str):
+        resolved = getattr(getattr(frappe, "local", None), "site", None)
     if isinstance(resolved, str) and resolved != site_id and _tenant_of_site(resolved) == site_id:
         return (site_id, resolved)
     return (site_id,)

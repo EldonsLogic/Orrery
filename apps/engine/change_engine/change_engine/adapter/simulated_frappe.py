@@ -564,9 +564,9 @@ class SimulatedFrappeDB:
                     cnt = sum(1 for r in tbl.values() if r.get("status") == "RECOVERY_REQUIRED")
                 return [(cnt,)]
             if "SELECT PAYLOAD_HASH, OUTCOME_JSON" in q_upper:
-                site_id, idemp = p
+                *site_ids, idemp = p  # ``site_id IN (...)``: the identity and its read-only legacy alias
                 for r in tbl.values():
-                    if r.get("site_id") == site_id and r.get("idempotency_key") == idemp and r.get("outcome_json"):
+                    if r.get("site_id") in site_ids and r.get("idempotency_key") == idemp and r.get("outcome_json"):
                         return [(r["payload_hash"], r["outcome_json"])]
                 return []
             if "WHERE DEPLOYMENT_ID = %S" in q_upper:

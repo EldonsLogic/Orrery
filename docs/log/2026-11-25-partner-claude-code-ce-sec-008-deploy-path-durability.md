@@ -119,6 +119,17 @@ All under `apps/engine/change_engine/change_engine/`:
 - Tests first: 3 new tests in `TestR5OneAuthoritativeSiteIdentity`. The fake database models `site_id IN (...)`.
 - Full suite: 1639 passed, 86 skipped, 0 failed.
 
+## Review round 7 (GPT-6.2 Sol at 78338507) and the coordinator's close-out of the review loop
+- Fixed:
+  - The legacy alias now takes the site from the adapter's own runtime when it is injected, and from the global Frappe runtime otherwise.
+  - The offline simulator answers the three-parameter `IN` lookup. Its test fails without the simulator fix and passes with it.
+- Full suite: 1641 passed, 86 skipped, 0 failed.
+- Not fixed here, recorded as residuals:
+  - Rows under a bare site slug or under arbitrary caller-chosen site ids are not read as aliases. The bare slug was accepted only by the round 4 resolver on this unmerged branch. Before this PR, any caller string was accepted, so no complete alias set exists. CE-SEC-010's journal migration rekeys such rows.
+  - The decimal backend skips the deployment idempotency lookup (`frappe_backend.py`, CE-SEC-011).
+  - Revert and recovery reads use deployment ids, and the policy store uses its own host-scoped tables. The reviewer noted both and did not raise them as defects of this PR.
+- Review loop stopped after round 7 (the coordinator's call, reported to the partner): each round since round 3 has found one narrower edge case, and the remaining items belong to CE-SEC-009, CE-SEC-010 and CE-SEC-011, which need an ADR or adapter-lane files.
+
 ## Tokens or cost
 Unknown.
 

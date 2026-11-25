@@ -1205,6 +1205,33 @@ class TestR5OneAuthoritativeSiteIdentity(unittest.TestCase):
                              "a hold of another site is not this site's hold")
             self.assertIsNone(fresh.get_existing_deployment_by_idempotency(TENANT, "idemp-dep_1"))
 
+    def test_the_legacy_alias_comes_from_an_injected_runtime_too(self):
+        # Round 7 (Medium): an adapter with its own Frappe runtime must see the alias even if the global differs.
+        from types import SimpleNamespace
+        from unittest import mock
+
+        runtime = SimpleNamespace(local=SimpleNamespace(site=HOST))
+        with mock.patch.object(endpoints, "frappe", _frappe_stub("other.localhost")):
+            self.assertEqual(endpoints._read_site_ids(TENANT, runtime), (TENANT, HOST))
+            self.assertEqual(endpoints._read_site_ids("t_beta", runtime), ("t_beta",))
+        self.assertEqual(endpoints._read_site_ids(TENANT, SimpleNamespace()), (TENANT,))
+
+    def test_the_offline_simulator_reads_the_alias_list(self):
+        # Round 7 (Medium): the simulator answers the three-parameter ``site_id IN (%s, %s)`` replay lookup.
+        from change_engine.adapter.simulated_frappe import SimulatedFrappeRuntime
+
+        rt = SimulatedFrappeRuntime()
+        rt.ensure_site(HOST)
+        rt.connect(HOST)
+        rt.local.site = HOST
+        adapter = endpoints.FrappeDeploymentAdapter(frappe_module=rt)
+        rt.db.sql(f"INSERT INTO `{adapter.audit_table}` VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                  ("dep_1", "dep_1", "idemp-dep_1", "h", HOST, "Item", "custom_x", "r", "[]", "APPLIED"))
+        rt.db.sql(f"UPDATE `{adapter.audit_table}` SET status = %s, outcome_json = %s WHERE deployment_id = %s",
+                  ("APPLIED", '{"status": "APPLIED"}', "dep_1"))
+        found = adapter.get_existing_deployment_by_idempotency(TENANT, "idemp-dep_1")
+        self.assertEqual(found, {"payload_hash": "h", "outcome": {"status": "APPLIED"}})
+
     def test_a_site_that_is_not_a_tenant_site_keeps_its_own_name_as_the_only_identity(self):
         from unittest import mock
 

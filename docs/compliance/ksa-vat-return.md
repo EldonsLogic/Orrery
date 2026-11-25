@@ -1,6 +1,6 @@
 # KSA VAT return report: design
 
-Status: Design draft for Tier 3 line-by-line founder review and Saudi accountant review. No code in this file. Not tax advice.
+Status: Design draft (revision 1) for Tier 3 line-by-line founder review and Saudi accountant review. No code in this file. Not tax advice.
 
 Plan ID: CMP-010 (G2, rigid zone, Tier 3). Depends on CMP-006 ([KSA chart and VAT codes](ksa-coa-and-tax-codes.md)).
 
@@ -8,245 +8,278 @@ Method: the CMP-003 and ERP-015 method applies, as the partner confirmed for thi
 
 ## 1. Scope and shape
 
-- **What it is.** A pure function `build_vat_return_draft(input) -> ReturnDraft` turns a closed list of deterministic tax lines into return boxes. It makes no engine calls, does no I/O, uses no model and reads no clock (the period comes in with the input).
+- **What it is.** A pure function `build_vat_return_draft(input) -> ReturnDraft | RefusedResult` turns a closed list of deterministic tax rows into return boxes. It makes no engine calls, does no I/O, uses no model and reads no clock (the period comes in with the input).
 - **What feeds it.** A separate extractor, outside this design and needing its own plan row, reads the engine's posted documents and produces the input. The engine stays the calculation authority for each document's VAT (ADR-0031). This function only **sums** amounts that are already rounded. It never recomputes the VAT it reports.
-- **All or nothing.** If any refusal fires, the output carries the refusals and **no box values**. A partial return is worse than no return.
-- **Traceability (principle 8).** Every box value lists the `line_id`s it sums.
-- **Proposed location** (for the implementation row to confirm): `components/compliance/zatca_sa/vat_return.py`, with tests in `components/compliance/zatca_sa/tests/test_vat_return.py`, next to the existing rigid `compliance.zatca_sa` component.
+- **All or nothing.** If any refusal fires, the result is a `RefusedResult` (§8). It holds **no amounts of any kind**: no boxes, totals, diagnostics or exclusions. A partial return is worse than no return.
+- **Scope.** Invoice accounting basis only (S4 Art. 45; S2 §9.1). Cash basis (Art. 46, amended in S6) is refused (R-BASIS).
+- **Traceability (principle 8).** Every box value lists the `row_id`s it sums.
+- **Proposed location** (for the implementation row to confirm): `components/compliance/zatca_sa/vat_return.py`, with tests in `components/compliance/zatca_sa/tests/test_vat_return.py`.
 
 ## 2. Evidence labels and sources
 
 All sources below were accessed **2026-11-25**. Labels:
-- **FETCHED**: the official ZATCA file was downloaded and its text read this session.
-- **UNVERIFIED**: no official text was read. Software vendor guides seen in search results (Zoho, Tally, ClearTax, Odoo apps) are SECONDARY and are not cited as authority.
+- **FETCHED**: the official file or page was downloaded and its text, or for S7 p.15 its rendered image, was read this session.
+- **UNVERIFIED**: no official text was read.
 
-The English guidelines state that the Arabic version prevails.
+Vendor guides (Zoho, Tally, ClearTax, Odoo apps) are SECONDARY and are not cited. The ZATCA RCM circular (`.../MediaCenter/Publications/Documents/VAT%20Circular%20-%20RCM-EN.pdf`) returned an HTML page instead of the PDF to our fetcher, so it is **UNVERIFIED** and not relied on. S2 §4.3 states the same Box 9 rule. The English guidelines state that the Arabic version prevails.
 
-| Id | Source (official) | Used for |
+| Id | Source (official, all FETCHED) | Used for |
 |---|---|---|
-| S1 | [ZATCA Guideline on Imports and Exports under VAT Provision, Second Edition, May 2026](https://zatca.gov.sa/en/HelpCenter/guidelines/Documents/Guideline-on-Imports-and-Exports-under-VAT-Provision.pdf), §5.3, §6.3 (example 7), §10.4 | Field 8 holds import VAT paid to ZATCA. Field 9 holds reverse charge, and import VAT paid through the return once approved. The columns are Amount, Adjustment and VAT Amount. Partial deduction goes in the Field 9 adjustment. |
-| S2 | [ZATCA Guideline on Input Tax Deduction under VAT Provisions, Third Version, May 2026](https://zatca.gov.sa/en/HelpCenter/guidelines/Documents/Guideline-on-Input-Tax-Deduction-under-VAT-Provisions.pdf), §4.2, §4.3, §4.4, §10 | Box 7 is standard-rated domestic purchases. Box 8 is imports. In Box 9 the return form deducts reverse-charge VAT automatically, so full deduction leaves no VAT payable. Credit-note input adjustments. |
-| S3 | [ZATCA Guideline for Tax Invoicing and Records under VAT Provisions, Version 3, May 2026](https://zatca.gov.sa/en/HelpCenter/guidelines/Documents/Guideline-for-Tax-Invoicing-and-Records-under-VAT-Provisions.pdf), §4.2.4, §7.1.1 | VAT is rounded to the nearest halala, and "the rounded figures used must be the same figures used for the purposes of filing the VAT return". Credit and debit notes go in the Amount or Adjustments field. The §4.2.4 example 6 is internally inconsistent: it says 1,091.30 is "rounded" to 1,195.24, while 1,255.00 − 163.70 = 1,091.30. Do not rely on that example. |
-| S4 | [VAT Implementing Regulations (English, amended to Resolution 2-7-21 of 2021-11-09)](https://www.zatca.gov.sa/en/RulesRegulations/Taxes/Documents/Implmenting%20Regulations%20of%20the%20VAT%20Law_EN.pdf), articles headed *Tax Period*, *Payment of Tax*, *Tax Returns*, *Correction of Returns* (Art. 63), *Adjustment to Value of a Supply* (Art. 40), *Credit and Debit Notes*, *Currency Conversion* | Monthly or three-month periods. The return is due by the last day of the following month. Disclosure items. Correction routes. Credit-note period rules. SAMA rate conversion. The extracted text carries no article numbers, so articles are cited by heading. Numbers are given only where S4 itself or S2 confirms them (Art. 40, Art. 63). |
-| S5 | [ZATCA Electronic Invoice XML Implementation Standard v1.2 (2023-05-19)](https://zatca.gov.sa/ar/E-Invoicing/SystemsDevelopers/Documents/20230519_ZATCA_Electronic_Invoice_XML_Implementation_Standard_%20vF.pdf), §10 Rounding, BR-CO-17, BR-S-09 | Half-up rounding. VAT category tax amount (BT-117) = taxable amount (BT-116) × rate / 100, rounded to two decimals at document level. This was also read by CMP-037 ([official sources](../research/cmp-037-official-sources.md) §5). |
+| S1 | [Guideline on Imports and Exports, 2nd ed., May 2026](https://zatca.gov.sa/en/HelpCenter/guidelines/Documents/Guideline-on-Imports-and-Exports-under-VAT-Provision.pdf) §5.3, §6.3 ex. 7, §10.3–10.4 | Field 8 holds VAT paid to ZATCA at customs. Field 9 holds reverse charge, and import VAT accounted through the return once approved. Ex. 7: the Field 9 VAT Amount is VAT payable after deduction (Amount 100,000, Adjustment 30,000, VAT 1,500). |
+| S2 | [Guideline on Input Tax Deduction, 3rd version, May 2026](https://zatca.gov.sa/en/HelpCenter/guidelines/Documents/Guideline-on-Input-Tax-Deduction-under-VAT-Provisions.pdf) §4.2–4.4, §9.1–9.2, §10 | Box 7, Box 8. Box 9 "without adjustment results in VAT payable being fully offset". Deduction timing and later-period deduction (Art. 49(8)). Input adjustments for notes. |
+| S3 | [Guideline for Tax Invoicing and Records, version 3, May 2026](https://zatca.gov.sa/en/HelpCenter/guidelines/Documents/Guideline-for-Tax-Invoicing-and-Records-under-VAT-Provisions.pdf) §4.2.4, §7.1.1, §7.2, §7.2.1, §10.4 | Rounded invoice figures are the return figures. Amount or Adjustments field for notes. Notes are due within 15 days of the following month (Art. 54(6)). One note may cover several invoices. Correction routes. Its change log cites Implementing Regulations amendments by Resolution (01-06-24) of 2024-11-19, which were not read (UNVERIFIED). Its §4.2.4 ex. 6 is arithmetically inconsistent (1,091.30 "rounded" to 1,195.24), so it is not relied on. |
+| S4 | [VAT Implementing Regulations, English, amended to 2021-11-09](https://www.zatca.gov.sa/en/RulesRegulations/Taxes/Documents/Implmenting%20Regulations%20of%20the%20VAT%20Law_EN.pdf), the articles on tax period (Art. 58), payment (Art. 59), tax returns, correction (Art. 63), value adjustment (Art. 40), credit and debit notes (Art. 54), currency conversion | **Out of date**: it predates S6 and the 2024 amendments. It is used only where S6, S7 or the 2026 guidelines agree. Article numbers come from S2, S3 and S7 footnotes. |
+| S5 | [E-Invoice XML Implementation Standard v1.2, 2023-05-19](https://zatca.gov.sa/ar/E-Invoicing/SystemsDevelopers/Documents/20230519_ZATCA_Electronic_Invoice_XML_Implementation_Standard_%20vF.pdf) §8.4, §8.5, §10, BR-CO-17, BR-S-09 | One VAT breakdown (BG-23) per VAT category and rate. Half-up rounding. BT-117 = BT-116 × rate / 100, rounded to 2 decimals at document level. |
+| S6 | [Umm al-Qura Gazette: amendments to the VAT Implementing Regulations, 1444-12-05 (2023-06-23)](https://www.uqn.gov.sa/details?p=23146), Arabic | Art. 63(3) now covers an error "resulting in a tax difference whose net value is less than fifteen thousand (15,000) riyals", replacing 5,000. Also amends Art. 40(7)(d) and Art. 46. |
+| S7 | [Guideline on Examination, Assessment, Correction and Objection, version 3, May 2026](https://zatca.gov.sa/en/HelpCenter/guidelines/Documents/Guideline-Examination-Assessment-Correction-Objection-on-VAT-Decision.pdf) §4.1, §4.2 (illustrative return form, p.15), §5.1–5.4 | Calendar month or **calendar quarter**. All 16 box labels. Box 14 limit ±15,000. Signed adjustments (ex. 6). Correction routes. |
 
 ## 3. Return boxes
 
-Every box has three columns: **Amount (SAR)**, **Adjustment (SAR)** and **VAT Amount (SAR)** (S1 §6.3 table, S2 §4.3 table). Only Boxes 7, 8 and 9 were confirmed by number in official text this session. The other numbers and labels follow the commonly published 16-box layout and are **UNVERIFIED**: confirm them on the ZATCA portal before an implementation hard-codes them. The code uses stable internal box keys, so renumbering is a data change.
+Labels come from the **illustrative form in S7 p.15 (FETCHED, Arabic image)**, read by sight: S7 ex. 6 names "Box 1: Standard rated domestic sales" and "Box 4: Exports". Boxes 1–12 have Amount (SAR) and Adjustment (SAR) columns. Boxes 1–9 and 12 also have a VAT Amount column; Boxes 10–11 have none. Boxes 13–16 are single values. The form is illustrative: whether the live portal matches it stays open (Q-615), and so does whether its shaded VAT cells are computed by the portal (Q-616).
 
-| Key | Box | Label (working) | Number evidence | Draft may calculate |
-|---|---|---|---|---|
-| `sales_standard` | 1 | Standard-rated sales | UNVERIFIED | Yes |
-| `sales_citizen_state_borne` | 2 | Private healthcare and education (and possibly first home) to citizens | UNVERIFIED | **No**, refused (R-ZMAP) |
-| `sales_zero_domestic` | 3 | Zero-rated domestic sales | UNVERIFIED | Yes, `VATEX-SA-35` only |
-| `sales_export` | 4 | Exports | UNVERIFIED | Yes, `VATEX-SA-32` and `-33` only |
-| `sales_exempt` | 5 | Exempt sales | UNVERIFIED | Yes, all three `E` codes |
-| `sales_total` | 6 | Total sales | UNVERIFIED | Yes (sum of 1–5) |
-| `purch_standard_domestic` | 7 | Standard-rated domestic purchases | **FETCHED** S2 §4.2 | Yes, full deduction only |
-| `purch_import_customs` | 8 | Imports subject to VAT paid at customs | **FETCHED** S1 §5.3, S2 §4.4 | Yes, full deduction only |
-| `purch_reverse_charge` | 9 | Imports subject to VAT accounted for through the reverse charge mechanism | **FETCHED** S1 §6.3, §10.4; S2 §4.3 | Yes, full deduction only. Import VAT through the return is refused (R-IMPRET). |
-| `purch_zero` | 10 | Zero-rated purchases | UNVERIFIED | **Not computed**: no CMP-006 treatment exists |
-| `purch_exempt` | 11 | Exempt purchases | UNVERIFIED | **Not computed**: no CMP-006 treatment exists |
-| `purch_total` | 12 | Total purchases | UNVERIFIED | Yes (sum of 7–9), marked incomplete while 10–11 are not computed |
-| `vat_due_current` | 13 | Total VAT due for the current period | UNVERIFIED | Yes (§5) |
-| `corrections_prior` | 14 | Corrections from previous periods | UNVERIFIED | **No**, refused (R-CORR) |
-| `credit_carried_forward` | 15 | VAT credit carried forward | UNVERIFIED | **No**, refused if non-zero (R-CFWD) |
-| `net_vat_due` | 16 | Net VAT due (or claim) | UNVERIFIED | **No**: needs 14 and 15. The draft shows `vat_due_current` only. |
-
-S4 (*Tax Returns*, para 2) lets ZATCA require these disclosures: (a) basic-rate and zero-rate supplies and their output tax; (b) supplies received and deductible input tax; (c) nominal supplies; (d) reverse-charge supplies; (e) internal supplies; (f) import tax through the return and input tax on imports; (g) exempt supplies; (h) other supplies; (i) Art. 51/52 input adjustments; (j) Art. 63(2) corrections. Items (c), (e), (h) and (i) have no CMP-006 treatment. Any line that would need them is refused (R-TREAT).
+| Key | Box | Label (S7 p.15) | Draft may calculate |
+|---|---|---|---|
+| `sales_standard` | 1 | المبيعات الخاضعة للنسبة الأساسية | Yes |
+| `sales_citizens` | 2 | المبيعات للمواطنين (الخدمات الصحية الخاصة/ التعليم الأهلي الخاص) | **No**: R-ZMAP |
+| `sales_zero_domestic` | 3 | المبيعات المحلية الخاضعة للنسبة الصفرية | Yes, `VATEX-SA-35` only |
+| `sales_export` | 4 | الصادرات | Yes, `VATEX-SA-32`, `-33` (S7 ex. 6 puts zero-rated services to a UK client in Box 4) |
+| `sales_exempt` | 5 | المبيعات المعفاة | Yes, the three `E` codes |
+| `sales_total` | 6 | إجمالي المبيعات | Yes, sum of 1–5 |
+| `purch_standard` | 7 | المشتريات الخاضعة للنسبة الأساسية | Yes, full deduction, same-period supply |
+| `purch_import_customs` | 8 | الاستيرادات … التي تدفع في الجمارك | Yes, full deduction, VAT paid at customs with evidence |
+| `purch_reverse_charge` | 9 | الاستيرادات … التي تطبق عليها آلية الاحتساب العكسي | Yes, full deduction only. VAT column 0.00 (§5). |
+| `purch_zero` | 10 | المشتريات الخاضعة للنسبة الصفرية | **Not computed**: no CMP-006 treatment |
+| `purch_exempt` | 11 | المشتريات المعفاة | **Not computed**: no CMP-006 treatment |
+| `purch_total` | 12 | إجمالي المشتريات | Yes, sum of 7–9, marked incomplete |
+| `vat_due_current` | 13 | إجمالي ضريبة القيمة المضافة المستحقة عن الفترة الضريبية الحالية | Yes (§5) |
+| `corrections_prior` | 14 | تصحيحات من الفترات السابقة بين (15,000) ± ريال | **No**: R-CORR |
+| `credit_carried_forward` | 15 | ضريبة القيمة المضافة التي تم ترحيلها من الفترة/الفترات السابقة | **No**: R-CFWD |
+| `net_vat_due` | 16 | صافي الضريبة المستحقة | **No**: needs 14 and 15 |
 
 ## 4. Exact mapping: CMP-006 treatment to box
 
-The input `treatment` must be one of the seven keys in `apps/engine/compliance/ksa/vat_treatments.json`. The mapping is closed. Any pair not listed below is refused (R-TREAT).
+`treatment` must be one of the seven keys in `apps/engine/compliance/ksa/vat_treatments.json`. The mapping is closed. Any other combination of `direction`, `treatment`, `invoice_category`, `reason_code`, `vat_rate_percent` or `source_doctype` is refused (R-TREAT).
 
-| `direction` | `treatment` | Invoice category and reason | Box key | Column rule |
-|---|---|---|---|---|
-| output | `domestic_sale_standard` | `S`, reason `null` | `sales_standard` | §6 |
-| output | `sale_zero_rated` | `Z`, `VATEX-SA-35` | `sales_zero_domestic` | §6, VAT must be `0.00` |
-| output | `sale_zero_rated` | `Z`, `VATEX-SA-32`, `VATEX-SA-33` | `sales_export` | §6, VAT must be `0.00` |
-| output | `sale_zero_rated` | `Z`, `VATEX-SA-EDU`, `VATEX-SA-HEA` | refused R-ZMAP | Box 2 mapping and state-borne VAT handling need accountant sign-off |
-| output | `sale_zero_rated` | `Z`, `VATEX-SA-34-1`…`34-5`, `VATEX-SA-36`, `VATEX-SA-MLTRY` | refused R-ZMAP | Box 3 or Box 4 is not settled for transport, metals and military goods |
-| output | `sale_exempt` | `E`, `VATEX-SA-29`, `-29-7`, `-30` | `sales_exempt` | §6, VAT must be `0.00` |
-| output | `sale_out_of_scope` | `O`, `VATEX-SA-OOS` | none | Excluded from every box. Listed in `excluded_out_of_scope` with a total for the accountant to check (UNVERIFIED that out-of-scope sales are never reported). |
-| input | `domestic_purchase_standard` | none | `purch_standard_domestic` | §6, `deductible_share` must be `full` |
-| input | `goods_import_standard_at_customs` | none | `purch_import_customs` | Amount = customs value, VAT = customs VAT, `full` only |
-| input | `services_reverse_charge_standard` | none | `purch_reverse_charge` | Amount = SAR value of the service, VAT = self-assessed VAT, `full` only. Adds the same VAT to `self_assessed_output` and `deductible_rcm_input`, net zero (S2 §4.3). |
+**Canonical rate representation** (the XML form, not the CMP-006 `vat_rate_percent` field): `S` = `"15"`, `Z` = `"0"`, `E` = `"0"` (S5 uses 0 for exempt, as CMP-006 notes), `O` = `null`, input rows = `"15"`. The function checks it against this table and never copies CMP-006 `null` for exempt rows.
 
-`Z` and `E` both post to `2210` at 0% (CMP-006). The split above is therefore by **category and reason code** on the line, never by account balance. If Q-8 later creates split accounts, the input contract does not change.
+| `direction` / `treatment` | Category, reason | `source_doctype` | Box key |
+|---|---|---|---|
+| output `domestic_sale_standard` | `S`, `null` | `sales_invoice` | `sales_standard` |
+| output `sale_zero_rated` | `Z`, `VATEX-SA-35` | `sales_invoice` | `sales_zero_domestic`, VAT `0.00` |
+| output `sale_zero_rated` | `Z`, `VATEX-SA-32` or `-33` | `sales_invoice` | `sales_export`, VAT `0.00` |
+| output `sale_zero_rated` | `Z`, `-EDU`, `-HEA`, `-34-1`…`-34-5`, `-36`, `-MLTRY` | – | refused R-ZMAP (Q-267) |
+| output `sale_exempt` | `E`, `VATEX-SA-29`, `-29-7`, `-30` | `sales_invoice` | `sales_exempt`, VAT `0.00` |
+| output `sale_out_of_scope` | `O`, `VATEX-SA-OOS` | `sales_invoice` | excluded, VAT must be `0.00` (R-OOSVAT) (Q-619) |
+| input `domestic_purchase_standard` | `null` | `purchase_invoice` | `purch_standard` |
+| input `goods_import_standard_at_customs` | `null` | `customs_declaration` | `purch_import_customs` |
+| input `services_reverse_charge_standard` | `null` | `reverse_charge_record` | `purch_reverse_charge` |
+
+**Mixed zero-rated documents (S5 §8.4).** One BG-23 breakdown covers every line with the same category and rate. A single invoice can therefore put medicines (Box 3) and exports (Box 4) into one `Z` subtotal. The input carries one row per (document, category, rate, reason, original document), and each row repeats its BG-23 subtotal. The rows of a subtotal must add up to it exactly (R-RECON). An extractor that cannot attribute every item of a subtotal to exactly one reason must not emit the document. How a mixed `Z` invoice states its reasons in XML is an open question (§12).
 
 ## 5. Calculation
 
-All arithmetic runs on integer halalas (1 SAR = 100 halalas) after strict parsing. No floats are used, and no rounding happens anywhere in this function (§7).
+All arithmetic runs on integer halalas after strict parsing, with no floats and no rounding (§7). Let *s* be the sign (§6) and *col* the column (§6).
 
-For each box key `k`:
-- `amount[k]` = Σ signed `taxable_amount` over lines in the Amount column.
-- `adjustment[k]` = Σ signed `taxable_amount` over lines in the Adjustment column.
-- `vat[k]` = Σ signed `vat_amount` over all lines of `k`, both columns.
-- `sales_total` = component-wise sum of Boxes 1, 3, 4 and 5 (Box 2 is refused, so it is always empty when a draft is emitted). `purch_total` = component-wise sum of Boxes 7–9.
-- `output_vat` = `vat[sales_total]` + `self_assessed_output`.
-- `input_vat` = `vat[purch_standard_domestic]` + `vat[purch_import_customs]` + `deductible_rcm_input`.
-- `vat_due_current` = `output_vat` − `input_vat`. A negative value is a claim position. The draft does not decide between refund and carry-forward: that is Box 15 and 16 territory, refused.
-- `filing_due_date` = the last day of the month after `period.end` (S4 *Tax Returns* para 1 and *Payment of Tax* para 1, FETCHED).
+- For each leaf box *k* (1–5, 7–9): `amount[k]` = Σ *s* × `taxable_amount` over rows with *col* = Amount, and `adjustment[k]` = the same over rows with *col* = Adjustment.
+- `vat[k]` for Boxes 1–5, 7 and 8 = Σ *s* × `vat_amount` over all rows of *k*.
+- `vat[purch_reverse_charge]` = **0.00**. With full deduction the self-assessed output and the deduction cancel (S2 §4.3; S1 ex. 7 shows this column as net VAT payable). The gross self-assessed VAT goes to `reconciliation.rcm_self_assessed_vat` = Σ *s* × `vat_amount` of Box 9 rows. It is shown, never added to a box.
+- Box 6 and Box 12 are column sums of their leaf boxes.
+- `vat_due_current` (Box 13) = `vat[6]` − `vat[12]`. A negative value is a refundable position (S7 p.15 callout 4). Refund versus carry-forward stays with Boxes 15–16, which are refused.
+- `filing_due_date` = the last day of the month after `period.end` (S4 Art. 59(1); S7 §4.2 schedule).
+- `diagnostics.vat_recomputed[k]` for Boxes 1 and 7 = half-up(|`amount` + `adjustment`| × rate / 100), with the sign restored, and its difference from `vat[k]`. This is **diagnostic only** and is never a box value (Q-616).
 
-The draft also shows **`vat_recomputed[k]`** = half-up(|(`amount[k]` + `adjustment[k]`) × rate|) with the sign restored, for `sales_standard` and `purch_standard_domestic`, plus the difference from `vat[k]`. It is shown as information and is never used as a box value. Whether the portal computes the VAT column itself or takes the taxpayer's figure is **UNVERIFIED**. S3 §4.2.4 points to the invoice figures. An accountant decides.
+## 6. Signs, notes, periods, timing and corrections
 
-## 6. Signs, credit and debit notes, and periods
+**Signs.** Amounts in the input are non-negative magnitudes. The sign comes only from `document_kind`: `invoice` +1, `debit_note` +1, `credit_note` −1. A negative string is refused (R-NEG). S7 ex. 6 confirms that adjustments are signed: "a negative adjustment of SAR 120,000 to Box 1 … a positive adjustment … to Box 4". How the portal enters them stays Q-617.
 
-**Signs.** Input amounts are **non-negative magnitudes**. The sign comes only from `document_kind`: `invoice` is +1, `debit_note` is +1, `credit_note` is −1. A negative string in the input is refused (R-NEG). This keeps the questions of rounding negative values and of credit notes mirroring invoices (Q-601, ADR-0033) out of the return.
+**Output notes (S3 §7.1.1; S4 Art. 40(4)–(5)).** For a note, `supply_date` is its issue date. The row carries exactly one `original_document_id`, and a note covering several invoices (S3 §7.2.1) arrives as several rows reconciled to the note's subtotal (R-RECON). Filing status is fixed **at issue**, from the actual filing date of the original period's return: `original_return_filed_on` (a date, or `null` if not filed when the extract was taken). The status is never taken from extraction time.
 
-**Column rule for output lines (S3 §7.1.1, FETCHED; S4 Art. 40 paras 4–5):**
+| Condition | Column and period |
+|---|---|
+| `original_supply_date` in this period, or `original_return_filed_on` is `null` or after `supply_date` | Amount, in the period of `supply_date` |
+| `original_return_filed_on` before `supply_date`, credit note | Adjustment, in the period of the later of `supply_date` and `adjustment_event_date` |
+| `original_return_filed_on` before `supply_date`, debit note | Amount, in the period of `adjustment_event_date` |
+| `original_return_filed_on` equal to `supply_date`, or not after the last day of `original_supply_date`'s month (no return is filed before its period ends), or `original_supply_date` after `supply_date` | refused, R-NOTECTX |
 
-| Case | Period | Column |
-|---|---|---|
-| `invoice` | period containing `tax_date` | Amount |
-| `credit_note` or `debit_note`, and the original supply is in the same period, or `original_return_filed` is `false` | period containing `tax_date` (the note's issue date) | Amount, netted |
-| `credit_note`, and `original_return_filed` is `true` | the later of the note's issue date and `adjustment_event_date` | Adjustment (negative) |
-| `debit_note`, and `original_return_filed` is `true` | period containing `adjustment_event_date` | Amount |
+The selected date must fall inside the period, or the row is refused (R-PERIOD). The function never moves a row. S3 §7.2 requires a note within 15 days of the month after the triggering event (Art. 54(6); the 2024 amendment text was not read). A later note produces a warning, not a refusal, because it is a document-compliance issue, not a return amount.
 
-For a note, `tax_date` is its issue date and `adjustment_event_date` is required. The date the rule selects must fall within the period, or the line is refused (R-PERIOD). The function never moves a line to another period by itself. **UNVERIFIED**: whether the portal expects the Adjustment column as a negative number or as a positive amount it subtracts. S1's Box 9 example shows a positive 30,000 that reduces the deduction. The draft emits signed values and flags the presentation for the accountant.
+**Input notes.** Same-period purchase notes are netted in the Amount column (S2 §10; Art. 40(6)). Cross-period purchase notes are refused (R-PNOTE, Q-622).
 
-**Input-side notes.** S2 §10 and S4 Art. 40(6) say the customer corrects input tax in the period the note was issued. The draft nets a purchase note into the Amount column only when the original purchase is in the same period. A cross-period purchase note is refused (R-PNOTE) until the accountant confirms its column.
+**Input timing (S2 §9.1–9.2, Art. 49(8)).** An input row has `supply_date` (when the tax became due) and `claim_date` (the return it is claimed in). Same-period claims are accepted. If `supply_date` is before `period.start` (a late claim, which Art. 49(8) allows up to five calendar years after the calendar year of supply), the row is refused (R-LATECLAIM). Neither the column nor the five-year boundary is set out in official text (§12). This refusal is explicit, not a silent R-PERIOD.
 
-**Periods (S4 *Tax Period*, FETCHED).** Monthly applies when annual taxable supplies exceed SAR 40,000,000. Otherwise the standard period is three months, and ZATCA may approve or direct a change. The function does **not** derive the frequency. `period.frequency` is an input that records what ZATCA assigned. The function checks that `start` is the first day of a month, `end` is the last day of the same month (monthly) or of the second month after it (quarterly), and every invoice's `tax_date`, and every note's selected date (above), falls within [`start`, `end`]. Quarter alignment (calendar or registration-based) is **UNVERIFIED**, so any three whole consecutive months are accepted, with a warning. A period starting before 2020-07-01 is refused (R-RATE): the earlier 5% rate and transitional rules are out of scope.
+**Periods (S7 §4.1, FETCHED).** "In the KSA, the tax period is either a calendar month or a calendar quarter." Monthly is mandatory above SAR 40 million of annual taxable supplies (S4 Art. 58(1): "during the previous twelve months"). `period.frequency` is an input (ZATCA assigns it), and the function never derives it.
+- `monthly`: one calendar month.
+- `quarterly`: exactly Jan–Mar, Apr–Jun, Jul–Sep or Oct–Dec. Anything else is R-PERIOD. There is no verified exception route (for example, the first period after registration), so exceptions are refused.
+- Supported range: `period.start` ≥ 2020-07-01 (earlier is R-RATE, because the 5% rate and transition rules are out of scope) and `period.end` ≤ 2099-12-31 (later is R-DATE).
 
-**Corrections (S4 Art. 63, FETCHED).** An understatement must be notified within 20 days through a correction submission. If the understatement of Net Tax is under SAR 5,000, it may instead be adjusted in the next return. An overstatement may be adjusted in any later return, and never after five years from the end of the calendar year of the period. A correction must state the periods, the output and input tax corrected per period, and the reason. Whether the SAR 5,000 test applies per error, per period or in aggregate is a legal reading, so the draft refuses every correction entry (R-CORR) and quotes these routes in the refusal text. Bad-debt (Art. 40 paras 10–11) and capital-asset adjustments are also refused (R-TREAT).
+**Corrections (S6; S7 §§5.1–5.4; S3 §10.4; all FETCHED).**
+- An understatement of SAR 15,000 or more must be notified within 20 days of becoming aware of it, by correcting the original period's return on the portal (S7 §5.2.1, §5.4).
+- An understatement under 15,000 may go in Box 14 of "the next Tax Return" (S6 Art. 63(3)) or "the tax return … for the tax period during which the error was discovered" (S3 §10.4).
+- An overstatement under 15,000 may go in Box 14. Above that, it goes in the Adjustment column of the matching boxes in a later return (S7 §5.1.1, ex. 6), within five years of the end of the calendar year.
+- The official texts disagree on the exact boundary ("less than", "15,000 or more", "exceeding") and on which return to use. S7 ex. 9 says a 6,000 understatement must be notified, contradicting §5.3. The draft therefore refuses every correction (R-CORR), and the refusal message carries the period in which the error was discovered and these routes (Q-620).
+
+**Special cases are never silent.** Each row must state `special_case`. Any value other than `none` (bad-debt relief, capital-asset adjustment, nominal supply, internal supply, proportional deduction, state-borne citizen supply, other) is refused (R-SPECIAL). For customs rows, `vat_settlement` must be `paid_at_customs` with a non-empty `customs_payment_reference`. `through_return` is refused (R-IMPRET, S1 §5.3), and a missing reference is R-SCHEMA.
 
 ## 7. Rounding stages
 
 | Stage | Where | Rule | Evidence |
 |---|---|---|---|
-| 0. Document VAT | Upstream: the engine and the invoice component (CMP-003), with ZATCA XML for CMP-004 | Half-up. BT-117 = BT-116 × rate / 100, rounded to 2 decimals per VAT category **at document level**, not summed from rounded line amounts. Round final results only. | S5 §10, BR-CO-17, BR-S-09 (FETCHED). Whether this e-invoice standard binds the ledger is an open legal point (CMP-037 §5, Q-601). |
-| 0a. Platform setting | Engine | "Commercial Rounding", ties away from zero, including negatives | ADR-0033, a founder decision and not a ZATCA rule. For positive values it matches S5 half-up. Python `Decimal` `ROUND_HALF_UP` also rounds ties away from zero, checked locally: `-0.015` → `-0.02`. |
-| 1. Input check | This function | No rounding. Any amount with more than 2 decimals is refused (R-PREC). For **output** `S` lines, `vat_amount` must equal half-up(`taxable_amount` × 15 / 100) on magnitudes, or the line is refused (R-BRCO17): our own documents must satisfy BR-CO-17. For **input** lines a mismatch is a warning, not a refusal, because the supplier's tax invoice states the deductible VAT. That is a design choice for the accountant to confirm. | S5; S3 §4.2.4 |
-| 2. Aggregation | This function | Exact integer sum of halalas. No rounding. "The rounded figures used must be the same figures used for the purposes of filing the VAT return." | S3 §4.2.4 (FETCHED) |
-| 3. Presentation | Portal entry | **UNVERIFIED** whether the portal accepts halalas or whole riyals. The draft keeps halalas and performs **no** whole-riyal rounding. | none found |
+| 0. Document VAT | Upstream: engine, CMP-003, CMP-004 | Half-up, BT-117 rounded to 2 decimals per category at document level, on final results only | S5 §10, BR-CO-17 (FETCHED). Whether it binds the ledger: Q-601. |
+| 0a. Platform setting | Engine | Commercial Rounding, ties away from zero, including negatives | ADR-0033 (a founder decision). It matches S5 for positive values. Python `ROUND_HALF_UP` also rounds ties away from zero (checked: `-0.015` → `-0.02`). |
+| 1. Input check | This function | No rounding. More than 2 decimals is R-PREC. Only for output `S` subtotals with `vat_source = "zatca_xml_bg23"`: `group_vat` must equal half-up(`group_taxable` × rate / 100), or R-BRCO17. `ledger_only` and input rows: a mismatch is a warning, left to the accountant (Q-601). | S5 BR-CO-17 |
+| 2. Aggregation | This function | Exact integer sum, no rounding | S3 §4.2.4: "the rounded figures used must be the same figures used for … filing the VAT return" |
+| 3. Presentation | Portal | Halalas or whole riyals: UNVERIFIED. No whole-riyal rounding is done. | Q-618 |
 
-The draft never re-rounds a sum, so tension between the S5 page 17 and §10 rules (CMP-037 §5) cannot arise inside this function.
+The 15% rate is read from the SA country pack version passed in `rate_source`. That version is echoed in the output, and a row whose rate differs from it is refused (R-RATE).
 
-## 8. Closed input contract (`cmp-010.input.v0`)
+## 8. Closed input contract (`cmp-010.input.v1`)
 
-Every object has a fixed key set: an unknown or missing key is refused (R-SCHEMA). Amounts are JSON **strings** matching `^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$`; a JSON number is R-TYPE, a leading minus is R-NEG, more than 2 decimals is R-PREC, more than 12 integer digits is R-BOUND, and any other mismatch (exponent, plus sign, whitespace) is R-TYPE. Dates are `YYYY-MM-DD` Gregorian.
+Every object has a fixed key set: an unknown or missing key is R-SCHEMA. Amounts are JSON strings: a JSON number is R-TYPE, a leading minus is R-NEG, more than 2 decimals is R-PREC, more than 12 integer digits is R-BOUND, and any other mismatch is R-TYPE. Dates are Gregorian `YYYY-MM-DD`.
 
 ```text
 ReturnInput {
-  schema_version: "cmp-010.input.v0"
-  taxpayer: { vat_number: string /^3\d{13}3$/ }          # BR-KSA-40 format, as in phase1.py
+  schema_version: "cmp-010.input.v1"
+  taxpayer_vat_number: /^3\d{13}3$/                       # BR-KSA-40 format, as in phase1.py
+  accounting_basis: "invoice"                             # else R-BASIS
   period: { frequency: "monthly" | "quarterly", start: date, end: date }
-  lines: TaxLine[1..1_000_000]
-  prior_period_corrections: []                          # must be empty (R-CORR)
-  credit_carried_forward: "0.00"                        # must be "0.00" (R-CFWD)
+  rate_source: { pack_id: "sa", pack_version: string, standard_rate_percent: "15" }
+  empty_period_confirmed: boolean                         # true if and only if rows is empty, else R-SCHEMA
+  rows: TaxRow[0..1_000_000]
+  prior_period_corrections: []                            # non-empty: R-CORR
+  credit_carried_forward: "0.00"                          # anything else: R-CFWD
 }
-TaxLine {                       # one VAT breakdown (BG-23) entry of one document, not an item line
-  line_id: string /^[A-Za-z0-9._:-]{1,64}$/, unique      # R-DUP
+TaxRow {
+  row_id: /^[A-Za-z0-9._:-]{1,64}$/                       # unique, else R-DUP
+  taxpayer_vat_number: string                             # must equal the top level, else R-TAXPAYER
   source_doctype: "sales_invoice" | "purchase_invoice" | "customs_declaration" | "reverse_charge_record"
-  source_document_id: string /^[A-Za-z0-9._:\/-]{1,140}$/
-  direction: "output" | "input"
-  treatment: one of the 7 CMP-006 treatment keys
-  invoice_category: "S" | "Z" | "E" | "O" | null         # must equal the treatment's category
-  reason_code: CMP-006 reason key | null                 # null for S and for input lines
-  vat_rate_percent: "15" | "0" | null                    # must equal the treatment's rate
+  source_document_id: /^[A-Za-z0-9._:\/-]{1,140}$/
+  original_document_id: same pattern | null               # required for notes, else null
+  direction, treatment, invoice_category, reason_code, vat_rate_percent   # §4
+  special_case: "none" | "bad_debt" | "capital_asset" | "nominal_supply" | "internal_supply"
+              | "proportional_deduction" | "state_borne" | "other"     # not "none": R-SPECIAL
+  vat_settlement: "paid_at_customs" | "through_return" | null          # customs rows only
+  customs_payment_reference: string{1,64} | null                       # required if paid_at_customs
   document_kind: "invoice" | "credit_note" | "debit_note"
-  tax_date: date                                         # date VAT became due, or the note's issue date
-  original_tax_date: date | null                         # required for notes, else null
-  original_return_filed: boolean | null                  # required for notes, else null
-  adjustment_event_date: date | null                     # required for notes, else null
-  taxable_amount: amount                                 # SAR, magnitude
-  vat_amount: amount                                     # SAR, magnitude, as on the document
-  deductible_share: "full" | "partial" | "none" | null   # input lines only; anything but "full" is R-PARTIAL
-  currency: "SAR"                                        # conversion happens upstream at the SAMA rate (S4)
+  supply_date: date            # tax due date, or the note's issue date
+  claim_date: date | null      # input invoice rows: the claimed return's date, else null
+  original_supply_date: date | null            # notes only
+  original_return_filed_on: date | null        # notes only: the actual filing date of the original's return
+  adjustment_event_date: date | null           # notes only
+  taxable_amount: amount, vat_amount: amount   # magnitudes, SAR
+  group_taxable: amount, group_vat: amount     # the document's BG-23 subtotal for (category, rate)
+  vat_source: "zatca_xml_bg23" | "ledger_only" | "supplier_document" | "customs_declaration"
+  deductible_share: "full" | "partial" | "none" | null   # input rows; not "full": R-PARTIAL
+  currency: "SAR"                                        # conversion happens upstream at the SAMA rate
 }
 ```
 
-**Bounds.** At most SAR 999,999,999,999.99 per amount. At most 1,000,000 lines. Box sums are exact integers, so they cannot overflow in Python, and a sum above 10^15 halalas is refused (R-BOUND) as implausible. `source_doctype` must agree with `direction` and `treatment`: for example, `customs_declaration` only with `goods_import_standard_at_customs`. Otherwise R-TREAT.
+**Allocation key and replay.** The key is (`source_doctype`, `source_document_id`, `invoice_category`, `vat_rate_percent`, `reason_code`, `original_document_id`). A repeated key is R-DUP, even with a new `row_id`, so a replayed SAR 1,500 subtotal cannot double. Rows sharing (`source_doctype`, `source_document_id`, `invoice_category`, `vat_rate_percent`) must carry identical `group_*` values and sum to them exactly (R-RECON). A row from another VAT registration is R-TAXPAYER.
 
-**Output `ReturnDraft`.**
-- `status`: always `"draft-unreviewed"`.
-- `boxes`: `{key: {amount, adjustment, vat, line_ids, number_evidence}}`, or `null` if any refusal fired.
-- The calculated totals `self_assessed_output`, `deductible_rcm_input`, `output_vat`, `input_vat`, `vat_due_current`, `vat_recomputed` and `filing_due_date`.
-- `excluded_out_of_scope`, `not_computed: ["purch_zero", "purch_exempt", "corrections_prior", "credit_carried_forward", "net_vat_due"]`, `refusals[]` and `warnings[]`.
-- Each refusal carries `{code, line_id | null, message_key}`. Messages go through i18n, and the rule's wording lives in the message catalogue, not the code.
+**Bounds.** At most SAR 999,999,999,999.99 per amount and 1,000,000 rows. Every column sum and derived total, **positive or negative**, must satisfy |x| ≤ 10^15 halalas, else R-BOUND.
+
+**`ReturnDraft`** (only when there are no refusals):
+- `status: "draft-unreviewed"` and `rate_source` (echoed).
+- `boxes: {key: {amount, adjustment, vat | null, row_ids}}` for 1–9 and 12, and single values for 13.
+- `not_computed: [10, 11, 14, 15, 16]`, `purch_total_incomplete: true`, `filing_due_date`.
+- `reconciliation: {rcm_self_assessed_vat, excluded_out_of_scope: {taxable, row_ids}}`.
+- `diagnostics`, `warnings[]`.
+
+**`RefusedResult`**: `{status: "refused", schema_version, refusals: [{code, row_id | null, message_key}], warnings: [{code, row_id | null}]}`, with no other keys and no amounts. Messages go through i18n.
 
 ## 9. What the draft may calculate, and what it refuses
 
-**May calculate (draft, unreviewed):** Boxes 1, 3 (`-35`), 4 (`-32`, `-33`), 5 and 6; Boxes 7, 8 and 9 with full deduction; Box 12 marked incomplete; `vat_due_current`; `filing_due_date`; out-of-scope exclusions; the recomputation comparison.
+**May calculate (draft, unreviewed):** Boxes 1, 3 (`-35`), 4 (`-32`, `-33`), 5 and 6; Boxes 7–9 with full deduction and same-period supply; Box 12 (marked incomplete); Box 13; the due date; reconciliation and diagnostics.
 
-**Refuses pending accountant sign-off:**
+**Refuses:**
 
-| Code | Trigger | Open question |
+| Code | Trigger | Open with |
 |---|---|---|
-| R-ZMAP | `Z` reasons other than `-32`, `-33`, `-35` | Box 2 and 3 or 4 mapping, state-borne VAT (Q-267) |
-| R-PARTIAL | `deductible_share` other than `full` (proportional deduction, restricted input VAT, Box 9 adjustment) | Q-267 |
-| R-IMPRET | Import VAT accounted through the return (S1 §5.3) | Q-267 (import evidence and approval workflow) |
-| R-CORR | Any prior-period correction | Art. 63 reading |
-| R-CFWD | Non-zero carried-forward credit | Refund or carry-forward workflow |
-| R-PNOTE | Cross-period purchase credit or debit note | Column for input notes |
-| R-TREAT | Pairs not in §4: nominal or internal supplies, bad debt, capital assets, unknown treatment, doctype mismatch | Q-8, Q-267 |
-| R-RATE | Period before 2020-07-01, or a rate other than the treatment's | none |
-| R-BRCO17 | Output `S` VAT ≠ half-up(base × 15%) | none: an upstream defect |
-| R-SCHEMA, R-TYPE, R-NEG, R-PREC, R-DUP, R-PERIOD, R-BOUND | Contract violations (§6, §8) | none |
+| R-ZMAP | `Z` reasons other than `-32`, `-33`, `-35` (includes Box 2) | Q-267 |
+| R-PARTIAL, R-SPECIAL | Partial or no deduction; any special case | Q-267, Q-8 |
+| R-IMPRET | Customs VAT settled through the return | Q-267 |
+| R-LATECLAIM, R-PNOTE | Late input claim; cross-period purchase note | Q-622 |
+| R-CORR, R-CFWD | Any correction; non-zero carried-forward credit | Q-620 |
+| R-BASIS | Cash accounting basis | — |
+| R-OOSVAT | Out-of-scope row with VAT ≠ 0.00 | Q-619 |
+| R-BRCO17 | XML-sourced `S` subtotal fails BR-CO-17 | upstream defect |
+| R-RECON, R-DUP, R-TAXPAYER, R-NOTECTX | Allocation, replay, taxpayer or note-context failures | — |
+| R-SCHEMA, R-TYPE, R-NEG, R-PREC, R-BOUND, R-PERIOD, R-RATE, R-DATE, R-TREAT | Contract violations | — |
 
-## 10. Worked synthetic example (monthly, 2026-10-01 to 2026-10-31, VAT number `300000000000003`)
+## 10. Worked synthetic example (monthly, 2026-10-01 to 2026-10-31)
 
-| line | treatment / reason | kind | notes | taxable | VAT | box, column |
-|---|---|---|---|---|---|---|
-| L1 | `domestic_sale_standard` | invoice | | 10,000.00 | 1,500.00 | 1, Amount |
-| L2 | `domestic_sale_standard` | invoice | 333.33 × 15% = 49.9995 → 50.00 | 333.33 | 50.00 | 1, Amount |
-| L3 | `sale_zero_rated` / `VATEX-SA-32` | invoice | | 5,000.00 | 0.00 | 4, Amount |
-| L4 | `sale_exempt` / `VATEX-SA-30` | invoice | | 2,000.00 | 0.00 | 5, Amount |
-| L5 | `domestic_sale_standard` | credit_note | issued 2026-10-20, original 2026-10-05, same period | 1,000.00 | 150.00 | 1, Amount (−) |
-| L6 | `domestic_sale_standard` | credit_note | issued 2026-10-15, original 2026-08-10, return filed, event 2026-10-12 | 400.00 | 60.00 | 1, Adjustment (−) |
-| L7 | `domestic_purchase_standard` | invoice | full | 6,000.00 | 900.00 | 7, Amount |
-| L8 | `goods_import_standard_at_customs` | invoice | full | 2,000.00 | 300.00 | 8, Amount |
-| L9 | `services_reverse_charge_standard` | invoice | full | 2,000.00 | 300.00 | 9, Amount |
-| L10 | `sale_out_of_scope` / `VATEX-SA-OOS` | invoice | | 750.00 | 0.00 | excluded |
+Fixture **F**. All rows share these values: `taxpayer_vat_number` `300000000000003` (also top level); `currency` `SAR`; `special_case` `none`; `claim_date` `null` (the same-period default); `vat_settlement`, `customs_payment_reference`, `original_*` and `adjustment_event_date` `null` unless stated; and `group_*` equal to the row's own amounts. Top level: `accounting_basis` `invoice`; `rate_source` `{sa, 0.1.0, "15"}`; `empty_period_confirmed` `false`; corrections `[]`; carried-forward credit `"0.00"`.
 
-Expected results:
-- Box 1: amount 9,333.33; adjustment −400.00; VAT 1,500.00 + 50.00 − 150.00 − 60.00 = **1,340.00**. Recomputed: 8,933.33 × 15% = 1,339.9995 → 1,340.00, a difference of 0.00.
-- Box 4: 5,000.00 / 0 / 0.00. Box 5: 2,000.00 / 0 / 0.00. Box 6: 16,333.33 / −400.00 / 1,340.00.
-- Box 7: 6,000.00 / 0 / 900.00. Box 8: 2,000.00 / 0 / 300.00. Box 9: 2,000.00 / 0 / 300.00. Box 12: 10,000.00 / 0 / 1,500.00 (incomplete).
-- `self_assessed_output` = `deductible_rcm_input` = 300.00.
-- `output_vat` = 1,340.00 + 300.00 = 1,640.00. `input_vat` = 900.00 + 300.00 + 300.00 = 1,500.00. **`vat_due_current` = 140.00**.
-- `excluded_out_of_scope` = 750.00 (L10). `filing_due_date` = 2026-11-30.
+| row | doctype / doc id | treatment, cat, reason, rate | kind, `supply_date`, note fields | taxable | VAT | `vat_source`, share | box, col |
+|---|---|---|---|---|---|---|---|
+| L1 | sales_invoice SI-1 | std sale, S, null, 15 | invoice 10-02 | 10,000.00 | 1,500.00 | xml | 1 A |
+| L2 | sales_invoice SI-2 | std sale, S, null, 15 | invoice 10-03 | 333.33 | 50.00 | xml | 1 A |
+| L3 | sales_invoice SI-3 | zero, Z, -32, 0 | invoice 10-04 | 5,000.00 | 0.00 | xml | 4 A |
+| L4 | sales_invoice SI-4 | exempt, E, -30, 0 | invoice 10-04 | 2,000.00 | 0.00 | xml | 5 A |
+| L5 | sales_invoice CN-1 | std sale, S, null, 15 | credit 10-20; orig SI-1 10-02; filed null; event 10-18 | 1,000.00 | 150.00 | xml | 1 A (−) |
+| L6 | sales_invoice CN-2 | std sale, S, null, 15 | credit 10-15; orig SI-0 08-10; filed 09-25; event 10-12 | 400.00 | 60.00 | xml | 1 Adj (−) |
+| L7 | purchase_invoice PI-1 | std purchase, null, null, 15 | invoice 10-06 | 6,000.00 | 900.00 | supplier, full | 7 A |
+| L8 | customs_declaration CD-1 | import, null, null, 15; `paid_at_customs`, ref `PAY-1` | invoice 10-07 | 2,000.00 | 300.00 | customs, full | 8 A |
+| L9 | reverse_charge_record RC-1 | RCM, null, null, 15 | invoice 10-08 | 2,000.00 | 300.00 | ledger, full | 9 A |
+| L10 | sales_invoice SI-5 | OOS, O, -OOS, null | invoice 10-09 | 750.00 | 0.00 | xml | excluded |
 
-## 11. Test vectors for the implementation row
+Expected:
+- Box 1: 9,333.33 / −400.00 / **1,340.00** (1,500 + 50 − 150 − 60). The diagnostic gives 8,933.33 × 15% = 1,339.9995 → 1,340.00, a difference of 0.00.
+- Box 4: 5,000.00 / 0.00 / 0.00. Box 5: 2,000.00 / 0.00 / 0.00. Box 6: 16,333.33 / −400.00 / 1,340.00.
+- Box 7: 6,000.00 / 0.00 / 900.00. Box 8: 2,000.00 / 0.00 / 300.00. Box 9: 2,000.00 / 0.00 / **0.00**. Box 12: 10,000.00 / 0.00 / 1,200.00 (incomplete).
+- **Box 13 = 1,340.00 − 1,200.00 = 140.00.** `rcm_self_assessed_vat` = 300.00. `excluded_out_of_scope` = 750.00 (L10). Due date 2026-11-30.
 
-Each vector reuses the §10 input with one change. The first group must produce `boxes = null` plus exactly the named refusal.
+## 11. Test vectors
 
-| # | Change | Expect |
+Each refusal vector changes **one** thing in F and expects a `RefusedResult` with exactly that one code and no amount keys. T1 and the accepted vectors return a `ReturnDraft`.
+
+| # | Change to F | Expect |
 |---|---|---|
-| T1 | §10 unchanged | the §10 results, exactly |
-| T2 | L1 `vat_amount` `"1500.005"` | R-PREC |
-| T3 | L1 `taxable_amount` as JSON number `10000` | R-TYPE |
+| T1 | none | §10 exactly |
+| T2 | L1 `vat_amount` and `group_vat` `"1500.005"` | R-PREC |
+| T3 | L1 `taxable_amount` as JSON number | R-TYPE |
 | T4 | L5 `taxable_amount` `"-1000.00"` | R-NEG |
-| T5 | L9 `deductible_share` `"partial"` | R-PARTIAL |
-| T6 | L3 reason `VATEX-SA-EDU` | R-ZMAP |
-| T7 | L1 `tax_date` 2026-11-01 | R-PERIOD |
-| T8 | `prior_period_corrections` has one entry | R-CORR |
-| T9 | L1 VAT `"1500.01"` | R-BRCO17 |
-| T10 | an extra key `"note"` on L1 | R-SCHEMA |
-| T11 | L6 `original_return_filed` `null` | R-SCHEMA |
-| T12 | L7 as a credit note (note fields complete) with `original_tax_date` 2026-09-03 | R-PNOTE |
-| T13 | L1 `currency` `"USD"` | R-SCHEMA |
-| T14 | duplicate `line_id` L2 | R-DUP |
-| T15 | `period.start` 2020-06-01 | R-RATE |
+| T5 | L9 `deductible_share` `partial` | R-PARTIAL |
+| T6 | L3 reason `-EDU` | R-ZMAP |
+| T7 | L1 `supply_date` 2026-11-01 | R-PERIOD |
+| T8 | one correction entry | R-CORR |
+| T9 | L1 VAT and group VAT `"1500.01"` | R-BRCO17 |
+| T10 | L1 extra key | R-SCHEMA |
+| T11 | L6 `original_return_filed_on` = 10-15 (its issue date) | R-NOTECTX |
+| T12 | L7 as a credit note: `original_document_id` PI-0, `original_supply_date` 09-03, filed 10-02, event 10-05 | R-PNOTE |
+| T13 | L8 `vat_settlement` `through_return` | R-IMPRET |
+| T14 | L2 copied with a new `row_id` (replay) | R-DUP |
+| T15 | period 2020-06-01 to 2020-06-30, every date in F shifted back 76 months | R-RATE |
 | T16 | `credit_carried_forward` `"10.00"` | R-CFWD |
-| T17 | L8 `source_doctype` `"purchase_invoice"` | R-TREAT |
-| T18 | L1 `taxable_amount` `"1000000000000.00"` (13 integer digits) | R-BOUND |
-| T19 | standalone input: output S 0.10 / 0.02 (0.015 → 0.02) and 0.03 / 0.00 (0.0045 → 0.00) | accepted, Box 1 VAT 0.02 |
-| T20 | T19 plus a same-period credit note 0.10 / 0.02 | Box 1 amount 0.03, VAT 0.00 (the note mirrors the invoice) |
-| T21 | L7 VAT `"900.01"` | accepted, with a warning |
-| T22 | refusals T2 and T6 together | both listed, `boxes = null` |
-| T23 | input order shuffled | identical output (order-independent sums, `line_ids` sorted) |
-| T24 | quarterly 2026-08-01 to 2026-10-31 | accepted, with the quarter-alignment warning |
+| T17 | L8 `source_doctype` `purchase_invoice` | R-TREAT |
+| T18 | L1 taxable and group `"1000000000000.00"` | R-BOUND |
+| T19 | L7 `taxpayer_vat_number` `300000000000013` | R-TAXPAYER |
+| T20 | L7 `supply_date` 09-20, `claim_date` 10-06 | R-LATECLAIM |
+| T21 | L7 VAT and group VAT `"900.01"` | accepted, a warning, Box 13 = **139.99** |
+| T22 | L3 split into two rows of SI-3 (`-32` 3,000.00 and `-35` 2,000.00, group 5,000.00) | accepted: Box 3 2,000.00, Box 4 3,000.00 |
+| T23 | T22 with the `-35` row at 1,900.00 | R-RECON |
+| T24 | quarterly 2026-08-01 to 2026-10-31 (all dates still inside) | R-PERIOD (not a calendar quarter) |
+| T25 | quarterly 2026-07-01 to 2026-09-30, every date in F shifted back 3 months except L6 filed 07-10 | accepted, §10 boxes, due date 2026-10-31 |
+| T26 | L10 VAT `"1.00"` | R-OOSVAT |
+| T27 | `special_case` `bad_debt` on L7 | R-SPECIAL |
+| T28 | `rows` `[]`, `empty_period_confirmed` `true` | accepted, all boxes 0.00, Box 13 0.00 |
+| T29 | `rows` `[]`, `empty_period_confirmed` `false` | R-SCHEMA |
+| T30 | `accounting_basis` `cash` | R-BASIS |
+| T31 | T28 with period 2100-01-01 to 2100-01-31 | R-DATE |
+| T32 | standalone: S 0.10/0.02 and 0.03/0.00, then plus a same-period credit 0.10/0.02 | Box 1 VAT 0.02, then 0.00 |
 
-Property checks: `vat_due_current` equals Σ output signed VAT − Σ full-deductible input VAT over the accepted lines. Every accepted `line_id` appears in exactly one box or in `excluded_out_of_scope`. Doubling every amount doubles every sum exactly.
+Properties:
+- **Additivity**: for disjoint valid row sets A and B whose union is valid, every leaf-box column of A∪B equals A plus B.
+- **Coverage**: every accepted `row_id` appears in exactly one leaf box (1–5, 7–9) or in `excluded_out_of_scope`.
+- **Order independence**: shuffling the rows gives identical output.
+- **No leakage**: every refusal vector's result has exactly the `RefusedResult` keys.
 
 ## 12. Accountant questions (open; nothing here closes them)
 
-- **Q-267 (OPEN)**: customs import evidence; restricted and partial input VAT recovery; reverse-charge posting and settlement against the return; import VAT through the return; Box 2 state-borne citizen supplies; mapping of `VATEX-SA-34-*`, `-36` and `-MLTRY`.
-- **Q-8 (OPEN)**: whether `2210` should be split into zero-rated and exempt output accounts. The design does not depend on the answer, because it splits by category and reason. Also the presentation of VAT settlement (`2230`) and refund receivables.
-- **Q-601 (OPEN)**: whether S5 half-up binds the ledger; rounding of negative amounts. The return avoids both by design (§6, §7).
-- **Q-615 to Q-622 (OPEN)**: box numbering and labels for Boxes 1–6 and 10–16 on the current portal (Q-615); the VAT column (portal-computed or taxpayer-entered, Q-616); the sign of the Adjustment column (Q-617); halala or riyal entry (Q-618); out-of-scope reporting (Q-619); how the Art. 63 SAR 5,000 test is applied (Q-620); quarter alignment (Q-621); the column for cross-period purchase notes (Q-622).
+- **Q-267 (OPEN)**: customs evidence; restricted and partial recovery; reverse-charge settlement; import VAT through the return; Box 2 state-borne supplies; `VATEX-SA-34-*`, `-36`, `-MLTRY` mapping.
+- **Q-8 (OPEN)**: splitting `2210` (the design splits by category and does not depend on it); settlement (`2230`) and refund receivable presentation.
+- **Q-601 (OPEN)**: whether S5 half-up binds the ledger; negative rounding; BR-CO-17 on ledger-only rows (§7).
+- **Q-615–Q-622 (OPEN)**: live-portal labels (Q-615); the VAT column (Q-616); Adjustment entry (Q-617); halala or riyal (Q-618); out-of-scope reporting (Q-619); Art. 63 correction routes at SAR 15,000 (Q-620); quarter exceptions (Q-621); cross-period purchase notes and late claims (Q-622).
+- **Q-623–Q-626 (OPEN)**: how a mixed `Z` invoice (Box 3 and Box 4 items) states reasons in one BG-23 (S5 §8.4) (Q-623); the Art. 54(6) note deadline as amended by Resolution (01-06-24) (text not read) (Q-624); which consolidated Arabic Implementing Regulations text governs, given that S4 predates S6 (Q-625); the Art. 49(8) five-year boundary (Q-626).
 
 ## 13. Not claimed
 

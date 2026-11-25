@@ -155,6 +155,19 @@ None yet; claim PR must merge first.
   - #328 GOV-071: main merged in (PLAN conflict: kept the CE-SEC rows and ERP-035). CI running; the PR is watched and will merge on green (Tier 2, Eldon approved).
   - #319 CMP-010: Eldon's re-review at 8c341e0b found no number or vector wrong (T1 to T53 pass). Two sentence-level fixes (F1 ledger_only duty; F2 digest edge cases and a golden value) plus Lows sent to the author as round 7.
 
+- After #333: Wave 2 approved by the partner (agents A to D; Gemini reviews of Eldon's open PRs deferred, remind later; mark PLT-027 done).
+  - Plan cleanup:
+    - Done: BPL-043 (#312), PLT-027 (ADR-0069 merged as Proposed; open items owned by PLT-028 to PLT-032) and CMP-036 (#300 delivered the full row).
+    - BPL-041 stays doing, because slice 2 (real-bench CI sets the REQUIRE flag) is still open.
+    - New row ERP-036: the `tenant_role_holders` resolver Eldon asked for on #306. ERP-034 already covers the scheduled report.
+  - Claimed (doing):
+    - ERP-035: invoice tokens, Sonnet.
+    - CE-SEC-009 and CE-SEC-010: one design ADR-0070, Opus.
+    - PLT-028: spool state-machine spec, Opus.
+    - CE-SEC-011 slice 1: Sonnet. The dedicated connection and the keyed MAC wait for ADR-0070.
+  - Reviews go to Gemini 4 Argon, because the GPT models are at their usage limit.
+  - Reserved: ADR-0070 and Q-629 onward, both allocated by the coordinator only.
+
 ## Tokens or cost
 Unknown.
 

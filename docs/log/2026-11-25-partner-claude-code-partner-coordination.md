@@ -48,6 +48,7 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
 - The GitHub watcher reached its 2-hour limit with no events after #308 merged; not restarted (asking the partner).
 - #310 N1 re-check result (Gemini 4 Argon, high) at `2cae216`: APPROVE; N1 closed, other projection paths clean, regression fails on `c1666d1` and passes on `2cae216`, 89 passed, 10 skipped. Posted. CI green. Waits for Eldon (Tier 2). BPL-041 stays `doing` for slice 2 (real-bench runner phase), started after #310 merges.
 - CI: #311 green at `c9249ae`; #309 green at `7212399`.
+- #309 round 3 re-review result (Gemini 4 Argon) `9160d33..7212399`: REQUEST_CHANGES. N1, N4, N5 closed; N2, N3 partly. New: F1 High (`apply_native_custom_field` drops `unique`, reconcile predicate rejects the new index, `updatedb()` no-op MODIFY clauses abort after a committed statement), F2 High (the "regional store" contradicts ADR-0041 and ADR-0040; policy version grammar), F3 Medium (isolation check ignores `skippedOps` and extra entity properties; compiler and schema gaps), F4 Medium (refusals map to `recovery_required`; an early refusal burns the idempotency key). Posted. Three rounds done; asking the partner.
 
 ## Decisions
 - Partner: run a third review round on #309 ADR-0068 (2026-11-25).

@@ -146,7 +146,7 @@ class TestBilingualTaxInvoiceHTML(unittest.TestCase):
         self.assertIn('<bdi dir="ltr">2026-11-17</bdi>', doc_html)
         self.assertIn('<bdi dir="ltr">1448-06-07</bdi>', doc_html)
         self.assertIn('<bdi dir="ltr">230.00 SAR</bdi>', doc_html)
-        self.assertIn('<bdi dir="ltr">Orrery</bdi>', doc_html)
+        self.assertIn('<bdi dir="ltr">Seshna</bdi>', doc_html)
         self.assertIn('class="qr-clear-zone"', doc_html)
         self.assertIn('data-zatca-tlv="', doc_html)
 

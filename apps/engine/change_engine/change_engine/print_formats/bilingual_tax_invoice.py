@@ -875,7 +875,7 @@ def render_tax_invoice_html(
         if resolved_branding.remove_powered_by
         else (
             '<span class="powered-by">'
-            f'مدعوم من {_ltr("Orrery")} &nbsp;|&nbsp; Powered by {_ltr("Orrery")}'
+            f'مدعوم من {_ltr("Seshna")} &nbsp;|&nbsp; Powered by {_ltr("Seshna")}'
             "</span>"
         )
     )

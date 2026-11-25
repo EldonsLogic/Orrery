@@ -146,6 +146,12 @@ All under `apps/engine/change_engine/change_engine/`:
 - Full suite: 1721 passed, 86 skipped, 0 failed.
 - CE-SEC-011 text trimmed to what remains.
 
+## Part 2, round 1: the two Medium issues from the cross-model check of 049c349c
+- Legacy physical-DDL evidence (a non-empty plain-list plan) now loads as `verified: False`. It is never trusted: a restart from it holds at RECOVERY_REQUIRED and never finalizes, while lookup, replay and revert keep working. Evidence rows with no bound plan still raise.
+- An `approved_plan` override is validated like a computed plan before any intent is written (`_approved_plan_problem`, `validate_ddl_plan`). It must be exactly one additive ADD COLUMN for this table and field, else `invalid_approved_plan`.
+- Tests: `TestP2LegacyEvidenceLoadsAsUnverified` (6) and `TestP2ApprovedPlanOverrideIsValidatedLikeAComputedPlan` (4). The two CE-SEC-008 files went from 15 failed to 161 passed.
+- Full suite: 1773 passed, 86 skipped, 0 failed.
+
 ## Tokens or cost
 Unknown.
 

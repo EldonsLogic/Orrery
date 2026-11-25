@@ -1201,6 +1201,7 @@ class FrappeDeploymentAdapter:
                 unapproved = False
                 provenance = True  # offline mode: nothing ran, so there is nothing to attribute
                 restarted_dispatched: Optional[List[str]] = None
+                evidence_unverified = False
                 if self.offline_ddl_simulator:
                     pass  # explicit offline mode: no real DDL ran, nothing to compare
                 else:
@@ -1232,6 +1233,7 @@ class FrappeDeploymentAdapter:
                             self._before_schema.setdefault((doctype, expected_deployment_id), evidence["baseline"])
                             self._approved_ddl.setdefault(expected_deployment_id, evidence["approved"])
                             restarted_dispatched = evidence["dispatched"]
+                            evidence_unverified = not evidence.get("verified", True)
                             post_apply = True
                             restarted = True
                     if not post_apply:
@@ -1270,6 +1272,10 @@ class FrappeDeploymentAdapter:
                         before_schema,
                         schema,
                     )
+                    if evidence_unverified and not unapproved:
+                        # Legacy evidence carries no digest: it is read, but never trusted as untouched, so the
+                        # reconciler classifies the deployment RECOVERY_REQUIRED instead of finalizing it.
+                        unapproved, _why = True, "the durable evidence is a legacy, unverified record"
                     if unapproved:
                         logger.warning("DDL apply on %s.%s has unapproved side effects: %s", doctype, fieldname, _why)
                     indexes_unchanged = (
@@ -1429,11 +1435,12 @@ class FrappeDeploymentAdapter:
             return {
                 "deployment_id": deployment_id, "main": dict(rec) if rec else None,
                 "approved": list(rec.get("ddl_plan_statements", [])) if rec else None,
-                "baseline": None, "dispatched": [], "completed": [],
+                "baseline": None, "dispatched": [], "completed": [], "verified": True,
             }
         main = self._read_audit_row(deployment_id)
         approved: Optional[List[str]] = None
         stored_digest: Optional[str] = None
+        legacy = False  # a physical-DDL row written before the digest format: readable, never verified
         if main is not None:
             approved = _stored_statements(main.get("ddl_plan_statements"))
             envelope = json.loads(main["ddl_plan_statements"])
@@ -1442,13 +1449,15 @@ class FrappeDeploymentAdapter:
                 if not isinstance(stored_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", stored_digest):
                     raise DurableEvidenceError("the stored evidence digest is malformed")
             elif approved:
-                raise DurableEvidenceError("a physical-DDL deployment row carries no evidence digest")
+                legacy = True
         rows = self._frappe.db.sql(
             f"SELECT name, status, ddl_plan_statements FROM `{self.audit_table}` WHERE idempotency_key = %s",
             (_evidence_key(deployment_id),),
         )
         if rows and main is None:
             raise DurableEvidenceError("evidence rows exist without their deployment row")
+        if rows and stored_digest is None and not legacy:
+            raise DurableEvidenceError("evidence rows exist but the deployment row has no plan to bind them to")
         baseline: Optional[Dict[str, Any]] = None
         baseline_blob: Any = None
         offline_baseline = False
@@ -1476,7 +1485,9 @@ class FrappeDeploymentAdapter:
                 table = dispatched if kind == "dispatch_intent" else completed
                 if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1 or not isinstance(statement, str) or seq in table:
                     raise DurableEvidenceError(f"journal row '{_name}' is malformed or repeated")
-                if stored_digest is None or payload.get("digest") != _row_digest(stored_digest, kind, seq, statement):
+                if not legacy and (
+                    stored_digest is None or payload.get("digest") != _row_digest(stored_digest, kind, seq, statement)
+                ):
                     raise DurableEvidenceError(f"journal row '{_name}' does not match the deployment's digest")
                 table[seq] = statement
         if stored_digest is not None:
@@ -1493,6 +1504,8 @@ class FrappeDeploymentAdapter:
         return {
             "deployment_id": deployment_id, "main": main, "approved": approved, "baseline": baseline,
             "offline_baseline": offline_baseline,
+            # False for a legacy plain-list plan: nothing in it can prove the evidence is untouched.
+            "verified": not legacy,
             "dispatched": [dispatched[i] for i in sorted(dispatched)],
             "completed": [completed[i] for i in sorted(completed)],
         }

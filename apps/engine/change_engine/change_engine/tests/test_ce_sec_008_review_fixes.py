@@ -1102,6 +1102,7 @@ TENANT = "t_alpha"  # what the runtime backend binds as ``site_id`` (the tenant 
 HOST = "t-alpha.localhost"
 XYZ = {**FIELD, "fieldname": "custom_xyz"}
 XYZ_STMT = _T + "ADD COLUMN `custom_xyz` varchar(140)"
+_ADD_X = "ADD COLUMN `custom_x` varchar(140)"
 
 
 class TestR4SiteIdentityIsTheOneTheBackendBinds(unittest.TestCase):
@@ -1537,8 +1538,6 @@ class TestR5EvidenceIsBoundAndTamperIsDetected(unittest.TestCase):
             "journal digest": lambda m, e: e["dep_1#c0001"].update(ddl_plan_statements=re.sub(
                 r'"digest": "[0-9a-f]{64}"', '"digest": "' + "0" * 64 + '"', e["dep_1#c0001"]["ddl_plan_statements"])),
             "baseline removed": lambda m, e: bench.db.committed.pop("dep_1#baseline"),
-            "digest removed": lambda m, e: m.update(ddl_plan_statements=json.dumps(
-                json.loads(m["ddl_plan_statements"])["statements"])),
         }
         for name, edit in edits.items():
             with self.subTest(edit=name):
@@ -1745,6 +1744,142 @@ class TestR5SmallerFindings(unittest.TestCase):
         self.assertEqual(out["status"], "APPLIED")
         self.assertTrue(adapter.session_unusable, "a short timeout must not leak into the caller's session")
         self.assertTrue(bench.db.closed)
+
+
+# ===========================================================================================
+# Part 2, round 1
+# ===========================================================================================
+def _legacy(bench: _Bench, dep="dep_1"):
+    """Rewrite a deployment's rows into the format written before the digest existed: a plain-list plan, and
+    journal rows without a digest."""
+    main, evidence = _rows(bench, dep)
+    main["ddl_plan_statements"] = json.dumps(json.loads(main["ddl_plan_statements"])["statements"])
+    for name, row in evidence.items():
+        payload = json.loads(row["ddl_plan_statements"])
+        payload.pop("digest", None)
+        row["ddl_plan_statements"] = json.dumps(payload, sort_keys=True)
+
+
+class TestP2LegacyEvidenceLoadsAsUnverified(unittest.TestCase):
+    def _legacy_restart(self):
+        bench = _Bench()
+        _crashed(bench)
+        _legacy(bench)
+        return bench, bench.new_adapter()
+
+    def test_a_legacy_plan_loads_but_is_never_verified(self):
+        bench, restarted = self._legacy_restart()
+        ev = restarted.load_durable_evidence("dep_1")
+        self.assertIs(ev["verified"], False)
+        self.assertEqual((ev["approved"], ev["dispatched"], ev["completed"]), ([STMT], [STMT], [STMT]))
+        self.assertIsNotNone(ev["baseline"])
+
+    def test_current_evidence_is_still_verified(self):
+        bench = _Bench()
+        _crashed(bench)
+        self.assertIs(bench.new_adapter().load_durable_evidence("dep_1")["verified"], True)
+
+    def test_a_restart_from_legacy_evidence_holds_and_never_finalizes(self):
+        bench, restarted = self._legacy_restart()
+        snap = restarted.take_snapshot("Item", "custom_x", "dep_1")
+        self.assertIsNone(snap.error_code)
+        self.assertTrue(snap.unapproved_side_effects, "unverified evidence is never trusted as clean")
+        self.assertFalse(snap.provenance_matches)
+        for after in (snap, ExhaustiveSnapshot(False, False, unapproved_side_effects=snap.unapproved_side_effects)):
+            out = reconcile_exhaustive_snapshot("dep_1", "Item", "custom_x", ExhaustiveSnapshot(False, False), after, None)
+            self.assertEqual(out["status"], "RECOVERY_REQUIRED", out)
+        out = bench.deploy(restarted, dep="dep_2", key="key-2")
+        self.assertEqual(out["status"], "RECOVERY_REQUIRED", "the target stays held")
+        self.assertEqual(bench.db.row("dep_1")["status"], "PREPARED")
+
+    def test_lookup_replay_and_revert_keep_working_for_legacy_rows(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        first = bench.deploy(adapter)
+        self.assertEqual(first["status"], "APPLIED")
+        _legacy(bench)
+        fresh = bench.new_adapter()
+        self.assertEqual(fresh.get_deployment_record("dep_1")["status"], "APPLIED")
+        self.assertEqual(bench.deploy(fresh, dep="dep_2"), first, "the stored outcome is replayed")
+        out = endpoints.revert_configuration_change(deployment_id="dep_1", adapter=fresh, user_roles=ADMIN)
+        self.assertNotIn(out.get("disposition"), ("ENGINE_UNAVAILABLE", "DEPLOYMENT_NOT_FOUND", "INVALID_DEPLOYMENT_ID"))
+
+    def test_evidence_rows_without_any_bound_plan_are_still_refused(self):
+        bench = _Bench()
+        _crashed(bench)
+        main, _ = _rows(bench)
+        main["ddl_plan_statements"] = "[]"  # an empty list is not a legacy DDL plan: the evidence has no owner
+        with self.assertRaises(endpoints.DurableEvidenceError):
+            bench.new_adapter().load_durable_evidence("dep_1")
+
+    def test_an_empty_non_ddl_list_still_loads(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        adapter.persist_prepare_and_audit_intent(_record())
+        ev = adapter.load_durable_evidence("dep_1")
+        self.assertEqual((ev["approved"], ev["baseline"], ev["dispatched"]), ([], None, []))
+
+
+class TestP2ApprovedPlanOverrideIsValidatedLikeAComputedPlan(unittest.TestCase):
+    def _deploy(self, statements, *, adapter=None, bench=None, **plan_kw):
+        bench = bench or _Bench()
+        adapter = adapter or bench.new_adapter()
+        plan = DDLPlanInspection(inspectable=True, statements=statements, is_approved_additive_only=True, **plan_kw)
+        out = execute_single_field_deployment(
+            adapter, "dep_1", "key-1", "site-a", "Item", adapter.get_doctype_revision_hash("Item"), dict(FIELD),
+            approved_plan=plan)
+        return bench, out
+
+    def test_a_plan_that_is_not_exactly_one_additive_statement_for_this_field_is_refused_with_no_intent(self):
+        cases = {
+            "empty": [],
+            "another table": [_T.replace("tabItem", "tabCustomer") + _ADD_X],
+            "another field": [_T + "ADD COLUMN `custom_y` varchar(140)"],
+            "not additive": [_T + "DROP COLUMN `note`"],
+            "modify": [_T + "MODIFY `total` decimal(21,9) not null default 0"],
+            "extra statement": [STMT, _T + "ADD COLUMN `custom_y` int(11)"],
+            "extra clause": [_T + _ADD_X + ", ADD COLUMN `custom_y` int(11)"],
+            "an index too": [STMT, _T + "ADD UNIQUE `u` (`note`)"],
+            "not a statement": ["DROP TABLE `tabItem`"],
+        }
+        for name, statements in cases.items():
+            with self.subTest(plan=name):
+                bench, out = self._deploy(statements)
+                self.assertEqual((out["status"], out["stage"]), ("REJECTED", "INSPECT"), out)
+                self.assertEqual(out["reason_code"], "invalid_approved_plan")
+                self.assertEqual(bench.db.committed, {}, "no intent was written")
+                self.assertEqual(bench.db.altered(), [])
+
+    def test_the_same_refusals_apply_in_memory(self):
+        for statements in ([], [_T + "DROP COLUMN `note`"], [STMT, STMT]):
+            with self.subTest(plan=statements):
+                adapter = FrappeDeploymentAdapter(in_memory=True, use_shared_state=False)
+                _bench, out = self._deploy(statements, adapter=adapter)
+                self.assertEqual(out["status"], "REJECTED")
+                self.assertEqual(out["reason_code"], "invalid_approved_plan")
+                self.assertEqual(adapter.audit_journal, {})
+
+    def test_a_valid_plan_override_still_deploys_including_decimal(self):
+        bench, out = self._deploy([STMT])
+        self.assertEqual(out["status"], "APPLIED", out)
+        bench = _Bench(statements=[DEC_STMT])
+        adapter = bench.new_adapter()
+        plan = DDLPlanInspection(inspectable=True, statements=[DEC_STMT], is_approved_additive_only=True)
+        out = execute_single_field_deployment(
+            adapter, "dep_1", "key-1", "site-a", "Item", adapter.get_doctype_revision_hash("Item"),
+            dict(DEC_FIELD), approved_plan=plan)
+        self.assertEqual(out["status"], "APPLIED", out)
+
+    def test_an_override_that_is_not_marked_approved_or_inspectable_is_refused(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        for plan in (DDLPlanInspection(inspectable=False, statements=[STMT], is_approved_additive_only=True),
+                     DDLPlanInspection(inspectable=True, statements=[STMT], is_approved_additive_only=False)):
+            out = execute_single_field_deployment(
+                adapter, "dep_1", "key-1", "site-a", "Item", adapter.get_doctype_revision_hash("Item"), dict(FIELD),
+                approved_plan=plan)
+            self.assertEqual(out["status"], "REJECTED")
+        self.assertEqual(bench.db.committed, {})
 
 
 if __name__ == "__main__":

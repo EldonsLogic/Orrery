@@ -40,7 +40,10 @@ describe('blueprint viewer', () => {
       expect(out).toContain(`id="bp-${id}"`);
       expect(out).toContain(`href="#bp-${id}"`);
     }
-    expect(out).toContain(t.badge.draft);
+    expect(out).toContain(messages.ar.marks.status.drafted);
+    expect(out).toContain('data-status="drafted"');
+    expect(out).toContain(`aria-label="${messages.ar.marks.progress.title}"`);
+    expect(out.match(/aria-current="step"/g)).toHaveLength(1);
     expect(out).toContain(t.badge.unverified);
     expect(out).toContain(t.sections.flows.title);
     expect(out).toContain('<svg');

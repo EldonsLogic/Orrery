@@ -103,7 +103,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | CMP-007 | ZATCA onboarding automation per tenant (CSID, certificates, environments) | Compliance | G2 | CMP-004,PLT-003 | partner | todo |
 | CMP-008 | ZATCA regression suite run on every engine or component change | Compliance | G2 | CMP-004,QA-001 | partner | todo |
 | CMP-009 | UAE e-invoicing: choose accredited service provider | Compliance | G2 | CMP-001 | eldon | done |
-| CMP-010 | KSA VAT return report | Compliance | G2 | CMP-006 | partner | todo |
+| CMP-010 | KSA VAT return report | Compliance | G2 | CMP-006 | partner | doing |
 | CMP-011 | UAE e-invoicing integration via the chosen provider | Compliance | G3 | CMP-009 | partner | todo |
 | CMP-012 | UAE VAT return report | Compliance | G3 | CMP-011 | partner | todo |
 | CMP-013 | Zakat report | Compliance | G3 | CMP-010 | partner | todo |
@@ -429,3 +429,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-041 | BPL-031 follow-ups: move the execute-time refusals (`subject_missing`, `protected_subject`, `unique_or_index`) into `check_ready` so a plan is refused before any step runs, and run the bench `test_05` in real-bench CI with a REQUIRE flag so it cannot skip | Blueprint | G1 | BPL-031 | partner | todo |
 | BPL-042 | BPL-033 review Lows from Eldon's #301 review: pass through only backend error codes (`engine.py` execute path), fail closed when a backend has no `check_ready`, runbook note on the journal crash window, a locked-site test, no DDL on the read path (`frappe_backend.py`), and a real-bench run of the BPL-033 changes | Blueprint | G1 | BPL-033 | partner | todo |
 | CMP-040 | CMP-023 optional review follow-ups from Eldon's #283 and #303 reviews: the `hijridate` pin check also covers the other two pins, a label-sort test (N1), and one shared planted-constant test helper (N2) | Compliance | G2 | CMP-023 | partner | todo |
+
+| BPL-043 | Refuse `unique` and `indexed` fields on an unmapped `entity.add` and in `_ensure_doctype_exists`, with or without a gate approval, at execute and in `check_ready`: today a gated unmapped `entity.add` inserts a custom type whose fields carry `unique` and `search_index` outside the DDL gate (found in the #309 reviews; Q-603 keeps such fields refused until ADR-0068 is Accepted) | Blueprint | G1 | BPL-031 | partner | doing |
+| CE-SEC-008 | Change engine: durability defects in today's guarded deploy path, found in the #309 reviews: deployment ids from a per-process counter that restarts at 1, a Stage 3 intent upsert that can overwrite an older row, idempotency and recovery lookups that return none on a database error, a lock-timeout setter that swallows errors, and the baseline and statements held only in instance memory; fail closed and keep evidence durable | Security | G1 | - | partner | doing |
+| BPL-044 | Execute snapshots read only Custom Field metadata, so a field of an adapter-made type (stored as DocField) returns `recovery_required` on a later step that touches it (#310 re-review N2); read both, with a regression test | Blueprint | G1 | BPL-041 | partner | todo |
+| PLT-027 | Design the gateway live binding: durable audit spool, identity-bound audit records, request and response size caps; Proposed ADR and threat-to-test mapping, with separately owned implementation follow-ups | Platform | G2 | PLT-024 | partner | doing |

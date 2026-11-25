@@ -36,6 +36,10 @@ Live parallel-sprint coordination for the partner lane. Account verified as saye
 
 ## Dispatches and results
 None yet; claim PR must merge first.
+- W0.4: removed only the three PLAN row additions from #312 in commit 05f111d8; code unchanged. Rows copied verbatim into this claim, with CE-SEC-008 doing. Comment posted on #312.
+- R3/R5 audit: fetched origin, diffed all 17 open PRs against their actual bases. No Wave 1 implementation/design path overlaps an open PR or another reserved task. ADR numbers in flight stop at 0068; Q references stop at 608. ADR-0069 reserved for PLT-027; Q-609 held for coordinator use.
+- Claim sets CMP-010, PLT-027, CE-SEC-008 and BPL-043 doing. GOV-071 remains todo because #296 remains open. BPL-044 is recorded todo; its adapter lane is unavailable.
+- SEC-004 dispatched run 45646846161 on main at 1fa88849; in progress. An additional historical successful SEC-004 run 45088110814 exists after the previously reported failing run; no closure claimed without inspecting the fresh run.
 
 ## Tokens or cost
 Unknown.

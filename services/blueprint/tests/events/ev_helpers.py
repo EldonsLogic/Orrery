@@ -57,6 +57,10 @@ DATA = {
     "agent.tool_proposed": {"run_id": "r_1", "tool": "x", "tainted": False},
     "agent.budget_exceeded": {"run_id": "r_1", "budget_kind": "calls"},
     "agent.output_flagged": {"run_id": "r_1", "reason_code": "injection"},
+    "agent.run_refused": {"code": "overlap", "schedule_id": "sch_1"},
+    "schedule.created": {"schedule_id": "sch_1"}, "schedule.updated": {"changed_fields": ["cron"]},
+    "schedule.disabled": {"schedule_id": "sch_1"}, "schedule.resumed": {"schedule_id": "sch_1"},
+    "schedule.suspended": {"reason": "budget_exhausted"}, "schedule.change_refused": {"code": "E1"},
     "chat.turn_completed": {"mode": "ask", "latency_ms": 900, "input_tokens": 10, "output_tokens": 20},
     "memory.written": {"memory_id": "m_1"}, "memory.expired": {"memory_id": "m_1"},
     "eval.regression_detected": {"suite": "s1"},
@@ -81,6 +85,8 @@ for _t in ("published", "deprecated", "request_created", "request_reviewed"):
     DATA[f"component.{_t}"] = {"component_id": "core.x"}
 for _t in ("upgrade_canary_started", "upgrade_promoted", "upgrade_rolled_back"):
     DATA[f"engine.{_t}"] = {"canary_id": "k1"}
+for _t in ("clock_fault", "clock_gap", "clock_rebase"):
+    DATA[f"scheduler.{_t}"] = {"last_accepted": "2026-01-01T09:30:00Z"}
 
 
 def concrete_type(key: str) -> str:

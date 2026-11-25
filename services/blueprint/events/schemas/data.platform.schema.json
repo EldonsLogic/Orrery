@@ -31,6 +31,16 @@
           "maxLength": 256
         }
       }
+    },
+    "scheduler_clock_event": {
+      "type": "object",
+      "properties": {
+        "last_accepted": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
     }
   }
 }

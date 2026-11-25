@@ -30,3 +30,7 @@ Unknown.
 ## Next step
 - Re-check of #286, then the partner's Tier 3 review.
 - UNVERIFIED: the real gateway's cost feed (Q-599), that `Principal` is built from the verified session, that the tenant layer carries a real cap, and that the production clock is monotonic.
+
+## Registry fix (event types, test_registry_covers_every_contract_type)
+- Registered `schedule.created/updated/disabled/suspended/resumed/change_refused`, `agent.run_refused` and `scheduler.clock_fault/clock_gap/clock_rebase` (platform scope) in `services/blueprint/events/schemas/types.json`, with data schemas and samples; `schedule` and `scheduler` added to `reserved_domains`. Field names not stated by the contract are marked `assumed` (UNVERIFIED).
+- Tests: blueprint+studio 2184 passed, operate 885 passed 1 skipped; contracts, docs and hygiene checks OK.

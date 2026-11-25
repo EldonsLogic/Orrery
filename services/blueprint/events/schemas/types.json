@@ -18,6 +18,8 @@
   "meter",
   "permission",
   "role",
+  "schedule",
+  "scheduler",
   "support",
   "tenant",
   "tool"
@@ -541,6 +543,96 @@
    "requires_trace": false,
    "data_schema": "data.platform.schema.json#/$defs/engine_event",
    "assumed": "kind platform added; not one of the four kinds in the brief"
+  },
+  "schedule.created": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/schedule_event",
+   "assumed": "data field names and optionality are assumed; the contract names only the data's meaning (changed field names, reason, code); no trace required (assumption)"
+  },
+  "schedule.updated": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/schedule_updated",
+   "assumed": "data field names and optionality are assumed; the contract names only the data's meaning (changed field names, reason, code); no trace required (assumption)"
+  },
+  "schedule.disabled": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/schedule_event",
+   "assumed": "data field names and optionality are assumed; the contract names only the data's meaning (changed field names, reason, code); no trace required (assumption)"
+  },
+  "schedule.suspended": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/schedule_suspended",
+   "assumed": "data field names and optionality are assumed; the contract names only the data's meaning (changed field names, reason, code); no trace required (assumption)"
+  },
+  "schedule.resumed": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/schedule_event",
+   "assumed": "data field names and optionality are assumed; the contract names only the data's meaning (changed field names, reason, code); no trace required (assumption)"
+  },
+  "schedule.change_refused": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.audit.schema.json#/$defs/schedule_change_refused",
+   "assumed": "data field names and optionality are assumed; the contract names only the data's meaning (changed field names, reason, code); no trace required (assumption)"
+  },
+  "agent.run_refused": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "agent",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.agent.schema.json#/$defs/agent_run_refused",
+   "assumed": "data field name 'code' and no trace required (no model call happens on a refused run) are assumed"
+  },
+  "scheduler.clock_fault": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/scheduler_clock_event",
+   "assumed": "kind platform added; data field 'last_accepted' (the contract says: last accepted reading) is assumed"
+  },
+  "scheduler.clock_gap": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/scheduler_clock_event",
+   "assumed": "kind platform added; data field 'last_accepted' (the contract says: last accepted reading) is assumed"
+  },
+  "scheduler.clock_rebase": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "platform",
+   "scope": "platform",
+   "requires_trace": false,
+   "data_schema": "data.platform.schema.json#/$defs/scheduler_clock_event",
+   "assumed": "kind platform added; data field 'last_accepted' (the contract says: last accepted reading) is assumed"
   }
  }
 }

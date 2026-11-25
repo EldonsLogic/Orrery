@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useMemo, useSyncExternalStore, type CSSProperties } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { Alert, Button, Card, Stack, TextField, VisuallyHidden } from '../../../ui';
 import { canEditBranding } from '../../../settings/branding/access';
 import { DEFAULT_PRIMARY, derive, normHex, rawPairs, type Pair, type Theme } from '../../../settings/branding/colour';
-import { checkLogo, createFakeBrandingPort, type BrandingPort, type BrandingSettings } from '../../../settings/branding/port';
+import { createBrandingController } from '../../../settings/branding/controller';
+import { createFakeBrandingPort, type BrandingPort, type BrandingSettings } from '../../../settings/branding/port';
 import { fixtureBlueprint } from '../../../blueprint/fixture';
 import { plainText } from '../../../factory/text';
 import { callerOf } from '../../../lib/session';
@@ -13,14 +14,15 @@ import { useSession } from '../../shell/SessionProvider';
 import styles from './BrandingScreen.module.css';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
-type Status = 'idle' | 'saving' | 'saved' | 'forbidden' | 'invalid' | 'failed';
 
 /** Settings > Branding (WEB-007). The session decides who may edit; the data comes from a fake port until the gateway exists. */
-export function BrandingScreen({ port }: { port?: BrandingPort }) {
+export function BrandingScreen({ portFor }: { portFor?: (tenantId: string) => BrandingPort }) {
   const { session } = useSession();
   const t = useTranslations('branding');
-  const fallback = useMemo(() => createFakeBrandingPort(), []);
-  if (session.status !== 'ready') return null;
+  const tenantId = session.status === 'ready' ? session.claims.tenantId : null;
+  // One port per workspace: nothing loaded or saved for one tenant can reach another.
+  const port = useMemo(() => (tenantId === null ? null : (portFor ?? (() => createFakeBrandingPort()))(tenantId)), [tenantId, portFor]);
+  if (session.status !== 'ready' || !port || tenantId === null) return null;
   if (!canEditBranding(fixtureBlueprint, callerOf(session.claims))) {
     return (
       <section aria-labelledby="branding-title">
@@ -31,7 +33,8 @@ export function BrandingScreen({ port }: { port?: BrandingPort }) {
       </section>
     );
   }
-  return <BrandingEditor port={port ?? fallback} initial={null} />;
+  // The key throws the editor's state away on a workspace switch.
+  return <BrandingEditor key={tenantId} port={port} initial={null} />;
 }
 
 export function BrandingEditor({ port, initial }: { port: BrandingPort; initial: BrandingSettings | null }) {
@@ -39,53 +42,22 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
   const tr = t as unknown as Translate;
   const locale = useLocale();
   const nf = useMemo(() => new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), [locale]);
-  const [text, setText] = useState(initial?.primary ?? DEFAULT_PRIMARY);
-  const [logo, setLogo] = useState<BrandingSettings['logo']>(initial?.logo ?? null);
-  const [logoError, setLogoError] = useState<string | null>(null);
-  const [status, setStatus] = useState<Status>('idle');
-  const [loaded, setLoaded] = useState<'loading' | 'ready' | 'failed'>(initial ? 'ready' : 'loading');
+  const ctrl = useMemo(() => createBrandingController(port, initial), [port, initial]);
+  useEffect(() => ctrl.attach(), [ctrl]);
+  const { text, logo, logoError, status, loaded } = useSyncExternalStore(ctrl.subscribe, ctrl.get, ctrl.get);
   const logoId = useId();
-
-  useEffect(() => {
-    if (initial) return;
-    let live = true;
-    void port.load().then(
-      (s) => {
-        if (!live) return;
-        setText(s.primary);
-        setLogo(s.logo);
-        setLoaded('ready');
-      },
-      () => {
-        if (live) setLoaded('failed');
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [port, initial]);
+  const editable = loaded === 'ready';
 
   const result = useMemo(() => derive(text), [text]);
   const raw = useMemo(() => rawPairs(text), [text]);
   const valid = result.status === 'ok';
   const picked = normHex(text);
 
-  const onSave = async () => {
-    if (!picked || !valid || loaded !== 'ready') return;
-    setStatus('saving');
-    const r = await port.save({ primary: picked, logo });
-    setStatus(r.ok ? 'saved' : r.code);
+  const onSave = () => {
+    if (picked && valid) void ctrl.save(picked);
   };
-
-  // Only the file's name, type and size are read; its bytes are never opened, rendered or previewed (SEC-006 not built).
-  const onLogo = async (file: File | undefined) => {
-    if (!file) return;
-    setLogoError(null);
-    const bad = checkLogo({ fileName: file.name, mediaType: file.type, sizeBytes: file.size });
-    if (bad) return setLogoError(bad === 'type' ? 'errType' : 'errSize');
-    const r = await port.uploadLogo({ fileName: file.name, mediaType: file.type, sizeBytes: file.size });
-    if (r.ok) setLogo(r.logo);
-    else setLogoError(r.code === 'type' ? 'errType' : r.code === 'size' ? 'errSize' : 'errFailed');
+  const onLogo = (file: File | undefined) => {
+    if (file) void ctrl.uploadLogo({ fileName: file.name, mediaType: file.type, sizeBytes: file.size });
   };
 
   const pairLabel = (id: string) => {
@@ -107,6 +79,30 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
         </span>
         {adjusted ? <small>{tr('preview.adjusted', { colour: theme.primary })}</small> : null}
       </div>
+    );
+  };
+  // A valid hex that was refused: show the pairs it fails as picked, with the ratio and the minimum.
+  const failedList = (r: NonNullable<typeof raw>) => {
+    const failed = (['light', 'dark'] as const).flatMap((mode) => r[mode].filter((p) => !p.ok).map((p) => ({ mode, p })));
+    if (failed.length === 0) return null;
+    return (
+      <section aria-labelledby="branding-failed">
+        <h2 id="branding-failed">{t('result.failedTitle')}</h2>
+        <ul className={styles.failed}>
+          {failed.map(({ mode, p }) => (
+            <li key={`${mode}/${p.id}`}>
+              {tr('result.failedPair', {
+                pair: pairLabel(p.id),
+                theme: t(`themeName.${mode}`),
+                fg: p.fg,
+                bg: p.bg,
+                ratio: tr('result.ratioValue', { value: nf.format(p.ratio) }),
+                min: tr('result.ratioValue', { value: nf.format(p.min) }),
+              })}
+            </li>
+          ))}
+        </ul>
+      </section>
     );
   };
   const table = (mode: 'light' | 'dark', pairs: ReadonlyArray<Pair>, rawPairsOfMode: ReadonlyArray<Pair> | undefined) => (
@@ -151,13 +147,15 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
                 className={styles.picker}
                 aria-label={t('colour.picker')}
                 value={(picked ?? DEFAULT_PRIMARY).toLowerCase()}
-                onChange={(e) => setText(e.target.value.toUpperCase())}
+                onChange={(e) => ctrl.setText(e.target.value.toUpperCase())}
+                disabled={!editable}
               />
               <TextField
                 label={t('colour.label')}
                 hint={t('colour.hint')}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => ctrl.setText(e.target.value)}
+                disabled={!editable}
                 dir="ltr"
                 pattern="#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})"
                 spellCheck={false}
@@ -172,7 +170,8 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
               label={t('logo.label')}
               hint={t('logo.hint')}
               error={logoError ? t(`logo.${logoError}`) : undefined}
-              onChange={(e) => void onLogo(e.target.files?.[0])}
+              onChange={(e) => onLogo(e.target.files?.[0])}
+              disabled={!editable}
             />
             {logo ? <Alert tone="info">{t('logo.pending', { name: plainText(logo.fileName, 80) })}</Alert> : null}
           </Stack>
@@ -189,6 +188,7 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
               {t(`reject.${result.code}`)}
             </Alert>
           )}
+          {result.status === 'rejected' && raw ? failedList(raw) : null}
         </div>
       </div>
       {result.status === 'ok' ? (
@@ -206,7 +206,7 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
       {loaded === 'loading' ? <Alert tone="info">{t('loading')}</Alert> : null}
       {loaded === 'failed' ? <Alert tone="danger">{t('loadFailed')}</Alert> : null}
       <div className={styles.actions}>
-        <Button onClick={() => void onSave()} loading={status === 'saving'} disabled={!valid || loaded !== 'ready'}>
+        <Button onClick={onSave} loading={status === 'saving'} disabled={!valid || !editable}>
           {status === 'saving' ? t('saving') : t('save')}
         </Button>
         {loaded === 'ready' && !valid ? <span>{t('fixBeforeSave')}</span> : null}

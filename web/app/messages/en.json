@@ -397,7 +397,7 @@
     "intro": "Choose your primary colour. We check it against the platform's accessibility rules in light and dark themes and adjust it where needed.",
     "noAccess": {
       "title": "Not available",
-      "body": "Only the owner or the general manager can change branding."
+      "body": "Only workspace administrators can change branding."
     },
     "colour": {
       "label": "Primary colour",
@@ -435,7 +435,9 @@
       "result": "Result",
       "ratioValue": "{value}:1",
       "rawSummary": "(your colour as picked: {pass} of {total})",
-      "statusOk": "The colour passes in both themes."
+      "statusOk": "The colour passes in both themes.",
+      "failedTitle": "Where this colour fails as picked",
+      "failedPair": "{pair} in the {theme}: {fg} on {bg}, ratio {ratio}, minimum {min}."
     },
     "reject": {
       "invalid": "Enter a valid hex code with 3 or 6 digits.",

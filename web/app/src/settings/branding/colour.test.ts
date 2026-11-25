@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import data from './colour.data.json';
-import { BASE, derive, normHex, rawPairs } from './colour';
+import { BASE, DEFAULT_PRIMARY, derive, normHex, rawPairs } from './colour';
 
 const S = data.samples;
 
@@ -24,6 +24,11 @@ describe('base colours', () => {
   it('match docs/brand/tokens/tokens.json', () => {
     const c = JSON.parse(readFileSync(resolve(root, 'docs/brand/tokens/tokens.json'), 'utf8')).color;
     for (const m of ['light', 'dark'] as const) for (const k of Object.keys(BASE[m]) as Array<keyof (typeof BASE)['light']>) expect(BASE[m][k]).toBe(c[m][k].hex);
+    expect(DEFAULT_PRIMARY).toBe(c.light.primary.hex);
+    // Python constants of themelib.py that the port reuses; they equal these tokens today.
+    expect(data.white).toBe(c.light.surface.hex);
+    expect(data.carbonDeep).toBe(c.dark.background.hex);
+    expect(data.carbonInk).toBe(c.light.text.hex);
   });
 });
 

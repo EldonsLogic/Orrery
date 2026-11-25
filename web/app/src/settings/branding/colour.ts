@@ -6,13 +6,14 @@
  * neither). Pure, no DOM, no network.
  */
 import data from './colour.data.json';
+import tokens from './colour.tokens.generated.json';
 
 export type Mode = 'light' | 'dark';
 
-// Base colours of docs/brand/tokens/tokens.json (colour.test.ts checks they still match).
-export const BASE = data.base;
+// Base colours of docs/brand/tokens/tokens.json, generated (scripts/gen-branding-colours.mjs; never edit the JSON by hand).
+export const BASE = tokens.base;
 /** Brand Cobalt, the platform default primary; also the neutral start of the picker. */
-export const DEFAULT_PRIMARY: string = data.defaultPrimary;
+export const DEFAULT_PRIMARY: string = tokens.defaultPrimary;
 const WHITE: string = data.white;
 const CARBON_DEEP: string = data.carbonDeep;
 const CARBON_INK: string = data.carbonInk;

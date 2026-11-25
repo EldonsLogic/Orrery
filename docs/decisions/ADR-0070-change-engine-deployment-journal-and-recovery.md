@@ -4,7 +4,7 @@ Status: Proposed
 Owner: partner
 Approved by: pending (security review by a different model, then Eldon line by line; Tier 3, RULES 42: touches audit, tenancy and a new API surface)
 
-Plan IDs: CE-SEC-009 and CE-SEC-010 (G1, design only), plus the keyed MAC from CE-SEC-011. No code until this ADR is Accepted. Internal document: it names the engine (ADR-0016). `CE/` means `apps/engine/change_engine/change_engine/`. Line numbers are at `b28a8709`. Items marked **(P)** are proposed choices of this ADR; everything else restates code or an existing ADR.
+Plan IDs: CE-SEC-009 and CE-SEC-010 (G1, design only), plus the keyed MAC from CE-SEC-011. No code until this ADR is Accepted. Internal document: it names the engine (ADR-0016). `CE/` means `apps/engine/change_engine/change_engine/`. Line numbers are at `b28a8709`. Items marked **(P)** are proposed choices of this ADR; everything else restates code or an existing ADR. Revision 2 answers the review listed at the end.
 
 ## 0. Assumptions and questions for Eldon
 
@@ -16,140 +16,151 @@ Assumptions (each is a reading I chose; say if it is wrong):
 - A5. ADR-0041 (journal on the tenant database) and ADR-0068 (signed grant, `siteId` incarnation) are Proposed. This ADR builds on them as written and changes neither.
 
 Questions for Eldon (the coordinator numbers them):
-1. **Key custody.** A per-tenant HMAC key held in engine-worker memory and read from the secret store (P, item 3.1), or a KMS-held MAC key (no key in memory, but one network call per verified row on the hold lookup)? With the chosen option, production deployments are refused until SEC-002's store exists. Is that acceptable before the first pilot?
-2. **Inferred provenance.** When the live table is exactly the baseline plus the approved column, the dispatching connection is gone and the metadata matches, may recovery finalize `APPLIED` with `provenance: inferred` (P, row R13)? Or must it hold for a human? An out-of-band desk change that adds the identical field is indistinguishable.
-3. **Migrated holds.** May recovery finalize a migrated CE-SEC-008-format hold whose unkeyed digest still verifies? Or does every migrated hold stay held (P)?
+1. **Key custody.** A per-tenant HMAC key held in engine-worker memory and read from the secret store (P, item 3.1), or a KMS-held MAC key (no key in memory, but one network call per verified row on a full site check)? With the chosen option, production deployments are refused until SEC-002's store exists. Is that acceptable before the first pilot?
+2. **Inferred provenance.** When the live table is exactly the baseline plus the approved column, the dispatching connection is gone and the metadata matches the stored field definition, may recovery finalize `APPLIED` with `provenance: inferred` (P, row R17)? Or must it hold for a human? An out-of-band desk change that adds the identical field is indistinguishable.
+3. **Migrated holds.** May recovery finalize a migrated CE-SEC-008-format hold whose unkeyed digest verified during the migration? Or does every migrated hold stay held (P)?
 4. **Recovery caller.** `System Manager` only (P), or a dedicated role held only by a platform service user? Should the control plane later trigger recovery through an adapter contract operation (your `contracts/` lane, a later gate)?
 5. **Scope.** Recovery v1 covers physical-DDL field deployments only. Property-setter, workflow and report holds stay held until CE-SEC-011 gives them durable baselines (P). Acceptable?
-6. **Rollback residual.** A consistent rollback (old head row plus deleted recent rows) is not detectable locally (item 3.5). Accept it until SEC-008's off-box anchor (your G2 row)?
+6. **Rollback residual.** A consistent rollback (an old head row plus deleted later rows) is not detectable locally (item 3.5). Accept it until SEC-008's off-box anchor (your G2 row)?
 7. **Identity.** Key the journal on the tenant id (P), with ADR-0068's opaque `siteId` added as a column once that ADR is Accepted? Or wait and key on `siteId`?
+8. **Metadata without column (R16).** A timed-out ALTER can leave the engine's field metadata committed with no column. Recovery holds it and never deletes metadata. Should a separate, audited operator action remove such metadata (a new row), or is a reviewed runbook enough for G1?
 
 ## Context
 - CE-SEC-008 (PRs #322, #331) made the guarded field path durable. It kept the evidence inside the old audit table `tabChange Engine Audit` (`CE/api/endpoints.py:459-483`, created at `:697-721`). One main row per deployment is updated in place (status, `outcome_json`; `:1635-1660`, `:879-902`). Evidence rows sit beside it under the key `<dep>#evidence`, with statuses `EVIDENCE_BASELINE`, `EVIDENCE_DDL_DISPATCH` and `EVIDENCE_DDL_COMPLETED` (`:1394-1409`).
 - The plan column carries an unkeyed SHA-256 over id, site, doctype, field, payload hash, plan and baseline (`_bind_digest`, `:497-506`). Journal rows chain to it (`_row_digest`, `:509-512`). `load_durable_evidence` verifies all of it (`:1425-1511`). A legacy plain-list plan loads as `verified: False` and always holds (`:1275-1278`).
-- Known limits, stated in the code and in Eldon's reviews of #322 and #331:
-  - the digest is unkeyed, so anyone who can write the table can recompute it;
-  - deleting the journal tail is not detected (probe T8);
-  - `status`, `outcome_json`, `base_revision_hash` and `idempotency_key` sit outside the digest, so PREPARED to APPLIED lifts a hold undetected (T12 to T14);
-  - replay and revert do not check the digest (N4).
-- The index on `(site_id, idempotency_key)` is not unique (`:716`). Duplicate keys are caught only after the fact, by "one idempotency key is bound to several payloads" (`:957-958`).
+- Known limits (code and Eldon's reviews of #322 and #331): the digest is unkeyed, so anyone who can write the table can recompute it; deleting the journal tail is not detected (T8); `status`, `outcome_json`, `base_revision_hash` and `idempotency_key` sit outside it, so PREPARED to APPLIED lifts a hold undetected (T12 to T14); replay and revert do not check it (N4).
+- The index on `(site_id, idempotency_key)` is not unique (`:716`). Duplicate keys are caught only after the fact (`:957-958`).
 - **Identity.** `_read_site_ids` reads the host name as a read-only alias for rows written before the single-identity rule (`:2152-2163`). Rows under a bare slug (`t-alpha`) or under any caller-chosen id are invisible to the hold and replay lookups (log `2026-11-25-partner-claude-code-ce-sec-008-deploy-path-durability.md:128`).
-- **No release path.** Nothing releases a held deployment. `revert_configuration_change` refuses a held one (`:2955-2967`). The reconciler sends every restarted deployment to `RECOVERY_REQUIRED`, because provenance is never computed after a restart (`:1240-1252`; `CE/guarded_apply/schema_reconciler.py:595-603`). A held table therefore stays blocked forever.
+- **Dispatch.** The engine inserts the field metadata (`cf_doc.insert`), which sends the ALTER through the hooked `_admit_ddl` (`:1703-1723`). `_journal_dispatch_intent` commits on the same engine session (`:1516-1526`), and MariaDB commits implicitly before an ALTER anyway, so a timed-out ALTER (1205) leaves the metadata committed and the table unchanged.
+- **No release path.** Nothing releases a held deployment. `revert_configuration_change` refuses a held one (`:2955-2967`). The reconciler sends every restarted deployment to `RECOVERY_REQUIRED` (`:1240-1252`; `CE/guarded_apply/schema_reconciler.py:595-603`). A held table therefore stays blocked forever.
 - Eldon's carry-overs into CE-SEC-009: compare the stored doctype and site with the request (F4), and hold on `verified: False` (N3).
 
 ## Decision
 
 ### 1. Journal tables (CE-SEC-010)
-1.1 **(P) Location.** Three plain InnoDB tables, utf8mb4, in the tenant site database beside the schema they describe (ADR-0041). A dump or restore returns journal and schema together.
-- They are created by a patch in `CE/patches.txt`, not by `CREATE TABLE IF NOT EXISTS` on every adapter construction.
-- They are not engine document types, so no desk view or REST resource exists for them. Their names join the protected list in `CE/guarded_apply/safety_guardrails.py:53-69`.
+1.1 **(P) Location.** Three plain InnoDB tables, utf8mb4, in the tenant site database beside the schema they describe (ADR-0041); a dump or restore returns journal and schema together. Created by a patch in `CE/patches.txt`. Not engine document types, so no desk view or REST resource; their names join the protected list in `CE/guarded_apply/safety_guardrails.py:53-69`.
 
 1.2 **(P) `tabChange Engine Deployment`.** One row per deployment, insert-only.
 
 | Column | Type | Note |
 |---|---|---|
-| `site_id` | VARCHAR(140) NOT NULL | canonical identity (A1) |
-| `deployment_id` | VARCHAR(140) NOT NULL | `caller_id_problem` grammar |
-| `idempotency_key` | VARCHAR(140) NOT NULL | |
+| `site_id`, `deployment_id`, `idempotency_key` | VARCHAR(140) NOT NULL | canonical identity (A1); ids as stored |
 | `payload_hash` | CHAR(64) NOT NULL | |
 | `engine_kind` | ENUM(`field`, `property_setter`, `workflow`, `report`) | |
 | `doctype`, `fieldname` | VARCHAR(140) | |
 | `base_revision_hash` | VARCHAR(64) | |
-| `approved_plan` | LONGTEXT | JSON list of statements |
-| `dispatch_connection_id` | BIGINT NULL | `CONNECTION_ID()` of the deployment session at prepare (field only) |
-| `site_seq` | BIGINT NOT NULL | gap-free position of this deployment in its site (item 3.5) |
+| `approved_plan` | LONGTEXT | JSON list; the MAC covers `approved_plan_sha256` CHAR(64) |
+| `field_def` | LONGTEXT NULL | canonical JSON of the engine field definition (fieldtype, options, length, default, reqd, unique, index); the MAC covers `field_def_sha256` CHAR(64) |
+| `dispatch_connection_id` | BIGINT UNSIGNED NULL | `CONNECTION_ID()` of the engine session that will send the statements, read on it at prepare (field only) |
+| `dispatch_db_user` | VARCHAR(288) NULL | `CURRENT_USER()` of that session (ADR-0038 dual-slot users) |
+| `site_seq` | BIGINT NOT NULL | site-wide append position (item 1.5) |
 | `origin` | ENUM(`current`, `legacy`) | `legacy` only from the migration |
-| `legacy_site_id`, `legacy_status` | VARCHAR NULL | the original values, kept for audit |
+| `legacy_site_id` | VARCHAR(140) NULL | original value |
+| `legacy_status` | VARCHAR(64) NULL | original value |
 | `created_at` | DATETIME(6) | |
-| `mac` | VARCHAR(80) NOT NULL | `<kid>:<hex>` |
+| `mac` | VARCHAR(140) NOT NULL | `<kid>:<hex>` |
 
-Keys:
-- `PRIMARY KEY (site_id, deployment_id)`;
-- `UNIQUE uq_site_idem (site_id, idempotency_key)`, the database-level guarantee CE-SEC-010 asks for;
-- `UNIQUE uq_site_seq (site_id, site_seq)`;
-- `INDEX (site_id, doctype)`.
-
-There is no status column (item 1.4).
+Keys: `PRIMARY KEY (site_id, deployment_id)`; `UNIQUE uq_site_idem (site_id, idempotency_key)`; `INDEX (site_id, doctype)`. No status column (item 1.4).
 
 1.3 **(P) `tabChange Engine Deployment Event`.** Append-only.
-- Columns: `site_id`, `deployment_id`, `seq` (gap-free from 1 per deployment), `kind`, `stmt_seq` (NULL unless a dispatch kind), `payload` (canonical JSON), `actor`, `created_at`, `prev_mac` (the `mac` of event `seq-1`, or of the deployment row for `seq = 1`) and `mac`.
-- `kind` is one of `baseline`, `dispatch_intent`, `dispatch_completed`, `outcome` or `recovery_attempt`.
-- Key: `PRIMARY KEY (site_id, deployment_id, seq)`.
-- The `payload` of an `outcome` event carries `status`, `final` (bool), the reconciler disposition and, after recovery, the classification row.
+- Columns: `site_id`, `deployment_id` (VARCHAR(140)), `seq` (gap-free from 1 per deployment), `kind`, `stmt_seq` (NULL unless a dispatch kind), `payload` (canonical JSON), `actor` (VARCHAR(140)), `created_at`, `site_seq` (BIGINT NOT NULL), `prev_mac` and `mac` (VARCHAR(140)).
+- `kind` is one of `baseline`, `dispatch_intent`, `dispatch_completed`, `outcome` or `recovery_attempt`. `prev_mac` is the `mac` of event `seq-1`, or of the deployment row for `seq = 1`.
+- Keys: `PRIMARY KEY (site_id, deployment_id, seq)`.
+- An `outcome` payload carries `status`, `final` (bool), the reconciler disposition and, after recovery, the classification row.
 
-1.4 **(P) Status is derived, never stored.** A deployment's status is the status of its latest `outcome` event, or `PREPARED` when it has none.
-- Final statuses: `APPLIED`, `ALREADY_APPLIED`, `FAILED_CLEAN`, `REJECTED`, `ROLLED_BACK`, `QUARANTINED`.
-- `RECOVERY_REQUIRED` is a non-final outcome.
-- Today's in-place updates (`persist_final_outcome_and_audit`, `mark_recovery_required`, `update_deployment_status`) become appended `outcome` events. A deleted outcome therefore reads as held, which fails closed.
+1.4 **(P) Status is derived.** A deployment's status is the status of its latest `outcome` event, or `PREPARED` when it has none. Final: `APPLIED`, `ALREADY_APPLIED`, `FAILED_CLEAN`, `REJECTED`, `ROLLED_BACK`, `QUARANTINED`. `RECOVERY_REQUIRED` is non-final. Today's in-place updates (`persist_final_outcome_and_audit`, `mark_recovery_required`, `update_deployment_status`) become appended `outcome` events. Whether a deployment is open is ALSO recorded in the head (item 1.5); a disagreement between the two is `evidence_invalid`.
 
-1.5 **(P) `tabChange Engine Journal Head`.** One row per site: `site_id` (PK), `deployment_count`, `migration_state` (`none`, `blocked` or `complete`), `migration_source_sha256`, `updated_at` and `mac`. Every prepare updates it in the same transaction as the new deployment row: `SELECT ... FOR UPDATE`, then `deployment_count + 1 = site_seq`.
+1.5 **(P) `tabChange Engine Journal Head`: the site anchor.** One row per site. Every append (deployment row or event) runs in one short transaction that takes `SELECT ... FOR UPDATE` on this row, gives each new row the next gap-free `site_seq` (one sequence across both tables), and rewrites the head. No DDL is ever inside it.
 
-1.6 **(P) Triggers.** They guard against code bugs and naive SQL, not against an attacker. The MAC (item 3) is the integrity control.
-- `BEFORE UPDATE` and `BEFORE DELETE` on the deployment and event tables `SIGNAL SQLSTATE '45000'`.
-- On the head table, `BEFORE UPDATE` allows only `deployment_count = OLD + 1` (or a migration-state change) with `site_id` unchanged, and `BEFORE DELETE` signals.
-- They are required in dev and CI. In production a missing trigger is reported by the health check but does not block, because creating a trigger may need privileges we do not hold (U1, U2).
+| Column | Meaning |
+|---|---|
+| `site_id` | PK |
+| `deployment_count`, `event_count` | rows in each table for this site |
+| `last_site_seq` | `deployment_count + event_count` |
+| `last_row_mac` | `mac` of the row with `site_seq = last_site_seq` |
+| `open_deployments` | canonical JSON list, one entry per non-final deployment: `deployment_id`, `doctype`, `idempotency_key`, `engine_kind`, `dispatch_db_user` |
+| `migration_state`, `migration_source_sha256` | item 2.5 |
+| `updated_at`; `head_mac` VARCHAR(140) | MAC over every other column |
 
-1.7 **Writers and readers.** All four engines already write through `FrappeDeploymentAdapter`. Its prepare, finalize, hold, replay, revert-record and evidence functions switch to these tables in one change, so no engine writes the old table afterwards.
-- The health check (`CE/adapter/frappe_backend.py:521-528`) and the phase-0 proof (`CE/proofs/phase0_bench_proof.py:1117`) switch too.
+A prepare adds an `open_deployments` entry; a final `outcome` removes it, in the same transaction as the event.
+
+1.6 **(P) Journal checks and their cost.** *D* is the site's deployment count and *E* its event count.
+
+| Check | Used by | Reads | Cost |
+|---|---|---|---|
+| **Head check** | hold lookup, `inspect_step_plan`, revert precondition, health | head row; verify `head_mac`; the row at `last_site_seq` exists and its `mac = last_row_mac` | O(1): one row, one seek, two HMACs |
+| **Hold decision** | after the head check | the target is held iff an `open_deployments` entry has its doctype | O(open holds), no table scan |
+| **Site check** | prepare (replay miss), replay hit, recovery, end of migration | head check; every deployment row's MAC (narrow columns, the two `*_sha256` instead of LONGTEXT); `COUNT(*)` and `MAX(site_seq)` per table equal the head; `site_seq` gap-free | O(*D*) HMACs plus two index-only counts |
+| **Deployment check** | replay hit, revert, recovery | the deployment's events: gap-free `seq`, `prev_mac` chain, every MAC, latest `outcome` agrees with `open_deployments` | O(events of one deployment) |
+
+Any failure is fail-closed: the hold lookup reports held (`evidence_invalid`), and replay, revert, prepare and recovery refuse. A lookup never filters by an editable column without the check that covers it: holds come only from the signed head, and replay absence needs the site check. An edited `doctype` or `idempotency_key` therefore no longer hides a row.
+
+1.7 **(P) Triggers** guard against code bugs and naive SQL, not against an attacker; the MAC is the integrity control.
+
+| Table | Trigger rule |
+|---|---|
+| deployment, event | `BEFORE UPDATE`, `BEFORE DELETE`: `SIGNAL SQLSTATE '45000'` |
+| head, `OLD.migration_state <> 'complete'` | any update allowed except a change of `site_id` (migration batch; re-run after `blocked`) |
+| head, `OLD.migration_state = 'complete'` | `site_id` and `migration_*` unchanged; `NEW.last_site_seq > OLD.last_site_seq`; both counts non-decreasing |
+| head | `BEFORE DELETE` signals |
+
+Required in dev and CI. In production a missing trigger is reported by the health check and does not block, because creating one may need privileges we lack (U1, U2).
+
+1.8 **Writers and readers.**
+- All four engines write through `FrappeDeploymentAdapter`. Its prepare, finalize, hold, replay, revert-record and evidence functions switch to these tables in one change. The health check (`CE/adapter/frappe_backend.py:521-528`) and the phase-0 proof (`CE/proofs/phase0_bench_proof.py:1117`) switch too.
 - The duplicate-key insert maps to the existing `DeploymentIntentConflictError` path (`schema_reconciler.py:387-414`).
-- Replay and revert verify the MAC before using a row (closes N4).
-- The hold lookup (item 4.5) returns held for any deployment on the target without a verified final outcome.
+- **Dispatch rules (P).** `_admit_ddl` reads `CONNECTION_ID()` and `CURRENT_USER()` on the sending session before every statement. It refuses to send unless they equal the stored `dispatch_connection_id` and `dispatch_db_user`. Journal appends (intent, completion, outcome) commit on CE-SEC-011's dedicated connection, never on the engine session, so a journal commit never publishes engine writes. MariaDB still commits the metadata implicitly before the ALTER; R16 classifies that state.
+- **Rotation rule (P).** ADR-0038 dual-slot rotation must not revoke a database user while `open_deployments` names it as `dispatch_db_user`.
 
 ### 2. Migration of legacy rows (CE-SEC-010)
-2.1 **(P) Canonical identity.** `C = _tenant_of_site(frappe.local.site) or frappe.local.site` (A1). Under A2 every legacy row in this database is rekeyed to `C`. The reason is recorded per row, comparing with `_collation_fold`:
-- `canonical`: the row already says `C`;
-- `host_alias`: the host name;
-- `slug_alias`: the host label, such as `t-alpha`;
-- `caller_chosen`: anything else.
-
-The original value goes to `legacy_site_id`.
+2.1 **(P) Canonical identity.** `C = _tenant_of_site(frappe.local.site) or frappe.local.site` (A1). Under A2 every legacy row in this database is rekeyed to `C`. The reason is recorded per row: `canonical` (already `C`), `host_alias` (the host name), `slug_alias` (the host label, such as `t-alpha`) or `caller_chosen` (anything else). The original value goes to `legacy_site_id`.
 
 2.2 **Mapping.**
-- Each main row (status not `EVIDENCE_*`, no `#` in its name) becomes one deployment row with `origin = legacy`, plus one `outcome` event carrying its old status and outcome, if any.
-- Each evidence row `<dep>#<suffix>` becomes an event of its kind, under its main row, in name order. The old SHA-256 digest is copied into the payload.
-- `payload_hash` is copied, never recomputed. A retry of a legacy key therefore still gets `IDEMPOTENCY_CONFLICT`, as today (log line 118). That fails closed.
-- `site_seq` follows `created_at`, then `name`.
+- Each main row (status not `EVIDENCE_*`, no `#` in its name) becomes one deployment row with `origin = legacy`, plus one `outcome` event carrying its old status and outcome when it has one. It joins `open_deployments` when its status is `PREPARED` or `RECOVERY_REQUIRED`.
+- Each evidence row `<dep>#<suffix>` becomes an event under its main row. **Order (P):** baseline first, then by `stmt_seq`, and for one `stmt_seq` the `dispatch_intent` before the `dispatch_completed`; never by row name, which sorts `#c0001` before `#d0001`. The old SHA-256 digest is copied into the payload.
+- `payload_hash` is copied, never recomputed, so a retry of a legacy key still gets `IDEMPOTENCY_CONFLICT`, as today (log line 118). Fail closed.
+- `site_seq` follows `created_at`, then `name`, per deployment in the order above.
 
-2.3 **(P) MAC without laundering.** Migrated rows are MAC'd so that later tampering is detected. `origin = legacy` is inside the MAC'd bytes, and recovery always holds a legacy deployment (R7). Tampering that happened before the migration is never turned into trusted evidence.
+2.3 **(P) Verify, then MAC without laundering.**
+- Before anything is written, every legacy deployment is checked the way `load_durable_evidence` checks it (`:1425-1511`): a digest-format plan must verify, with its journal rows chained, gap-free, and every completion matching an intent. Every non-NULL `outcome_json` must pass `_parse_outcome` (`:969-980`). A NULL outcome needs a `PREPARED` or `RECOVERY_REQUIRED` status.
+- A plain-list (pre-digest) plan cannot be verified. It imports as `legacy` and always holds (R9). This is today's behaviour (`:1275-1278`).
+- Any other failure blocks the site (item 2.4).
+- Migrated rows are then MAC'd so that later tampering is detected. `origin = legacy` sits inside the MAC'd bytes, and recovery always holds a legacy deployment (R9, question 3).
 
 2.4 **(P) Ambiguity fails closed for the whole site.** Any of the following sets `migration_state = blocked` and writes nothing else:
-- two main rows that fold to the same `(C, idempotency_key)` or the same `deployment_id`;
+- a duplicate `(C, idempotency_key)` or `(C, deployment_id)` under the **journal table's own collation**, detected by the database and not by Python folding (item 2.5, U7);
 - an evidence row with no main row, an unparseable name or an unknown status;
-- a main row whose status is not a known value;
+- an unknown main-row status;
+- a failed verification under item 2.3;
 - a source read error.
 
-While a site is `blocked` or `none`, every deployment and every recovery on it refuses with `journal_migration_pending`.
-- A site whose old table is absent or empty becomes `complete` at once.
-- The patch records `blocked` and returns success, so `bench migrate` is not stopped for unrelated apps.
-- Resolution is a reviewed runbook. On a dev bench, rebuild the site.
+While a site is `blocked` or `none`, every deployment, hold decision, replay and recovery on it refuses with `journal_migration_pending`. A site whose old table is absent or empty becomes `complete` at once. The patch records `blocked` and returns success, so `bench migrate` is not stopped for unrelated apps. Resolution is a reviewed runbook; on a dev bench, rebuild the site.
 
 2.5 **Idempotent and atomic.**
 - The table DDL runs first, in its own step. The row copy and the head update then run in one transaction with no DDL inside.
+- A duplicate-key error (1062) on insert rolls the whole transaction back. A second transaction then records `blocked` with reason `duplicate_key`. The dry run finds duplicates first with `GROUP BY ... COLLATE <journal collation> HAVING COUNT(*) > 1`.
 - A crash leaves no partial rows.
-- `migration_source_sha256` is a SHA-256 over the canonical dump of all source rows. A re-run with `complete` and the same hash is a no-op. A changed source refuses with `migration_source_changed`.
-- The migration never runs DDL against business tables, never dispatches a journalled statement and never finalizes anything.
-- The old table is kept read-only for history and is never dropped by this ADR.
+- `migration_source_sha256` is a SHA-256 over the canonical dump of all source rows.
 
-2.6 **Dry run.** `bench --site <site> execute change_engine.patches.ce_sec_010_journal.dry_run` (P). It prints JSON:
-- `C`;
-- counts by mapping reason and by evidence kind;
-- held deployment ids;
-- each ambiguous group with its reason;
-- `would_complete`;
-- the source hash.
+| Head state | Source hash | Action |
+|---|---|---|
+| `complete` | same | no-op, report `already_migrated` |
+| `complete` | changed | refuse `migration_source_changed`; stays complete; nothing written |
+| `blocked` or `none` | any | run again from scratch (a blocked run wrote no rows) |
 
-It writes nothing, and its output never goes into the repo (synthetic data only on dev hosts).
+- The migration never runs DDL against business tables, never dispatches a journalled statement and never finalizes anything. The old table is kept read-only for history and is never dropped by this ADR.
+
+2.6 **Dry run.** `bench --site <site> execute change_engine.patches.ce_sec_010_journal.dry_run` (P) prints JSON: `C`, counts by mapping reason and evidence kind, held deployment ids, each ambiguous group or failed verification with its reason, `would_complete` and the source hash. It writes nothing, and its output never goes into the repo (synthetic data only on dev hosts).
 
 ### 3. Keyed MAC (CE-SEC-011 part, CE-SEC-010 store)
 3.1 **(P) Key.** One 256-bit HMAC-SHA256 key per tenant per version, a new ADR-0038 inventory entry. The number is allocated by the coordinator; ADR-0068 proposes `S24`.
 - It lives in the secret store, is read by the engine workers of the tenant's bench pool (the same reach as `S21`) and is held only in memory.
 - It is never written to the site database, `site_config.json`, logs or responses.
-- Until SEC-002 delivers a store, a `JournalKeyProvider` interface has a dev and test provider (throwaway keys, `S20`). A production adapter without a provider refuses to prepare (`journal_key_unavailable`), and recovery refuses too.
+- A `JournalKeyProvider` interface has dev and test providers (throwaway keys, `S20`). Under ADR-0041's production guard, a missing provider or key fails closed for **every** journal reader and writer: prepare refuses (`journal_key_unavailable`); the hold lookup and `inspect_step_plan` report blocked; replay, revert, health (`database` reported down) and recovery refuse.
 
 3.2 **Construction.** `mac = kid + ":" + hex(HMAC-SHA256(K[tenant, kid], canonical_json(...)))`.
-- The MAC'd value is `{"v": 1, "t": <table tag>, "site": site_id, all columns except mac, "prev": prev_mac}`, in contract 5.8 canonical form.
-- Comparison is constant-time.
-- The table tag separates domains. Because the site and the per-tenant key are inside, a row copied from another tenant's database fails.
+- The MAC'd value is `{"v": 1, "t": <table tag>, "site": site_id, all columns except mac (LONGTEXT replaced by its sha256), "site_seq", "prev": prev_mac}`, in contract 5.8 canonical form.
+- Comparison is constant-time. The table tag separates domains. Because the site and the per-tenant key are inside, a row copied from another tenant's database fails.
 
 3.3 **(P) Rotation and versioning.**
 - New writes use the current `kid`.
@@ -158,18 +169,20 @@ It writes nothing, and its output never goes into the repo (synthetic data only 
 - A compromised `kid` goes on a deny list. Rows under it read as unverified, so their deployments hold and their targets block until an incident runbook (follow-up) re-attests them.
 
 3.4 **What it detects.**
-- An edit to any column of any journal row, including status, outcome, base revision and idempotency key (closes T12 to T14).
-- A forged event or deployment row.
-- A row transplanted from another tenant.
-- An event deleted or reordered inside a deployment (gap-free `seq` plus `prev_mac`; covers the M19 position mutant).
-- A deleted deployment that is not the latest one (`site_seq` gap).
-- A deleted latest deployment when the head was not rewound (`deployment_count` mismatch).
 
-Every detection reads as held (`evidence_invalid`) and never as absent. A head mismatch holds every target on the site.
+| Tamper | Caught by |
+|---|---|
+| Edit of any column of any row, including status, outcome, base revision, key, doctype (T12 to T14) | row MAC; holds from the signed head, replay absence from the site check (1.6) |
+| Forged row, or a row from another tenant | MAC with the per-tenant key |
+| Deleted or reordered event inside a deployment (M19) | `seq` and `prev_mac` |
+| Any deleted row that is not the last append | `site_seq` gap, or a count against the head |
+| Deleted last append(s), including a final, `ROLLED_BACK` or `QUARANTINED` outcome or a trailing `dispatch_intent` | `last_row_mac` row missing or different |
+| Edited or replaced head | `head_mac` |
 
-3.5 **What it does not detect, and why the tail is mostly harmless.**
-- **Tail truncation inside a deployment.** Removing the final outcome reads as held. Removing dispatch rows cannot make recovery finalize `APPLIED` on a false claim: recovery decides from the live schema against the MAC'd baseline, and reads the dispatching connection from the deployment row, not the events.
-- **Consistent rollback is NOT detected.** An attacker restores an earlier valid head row they saved, and deletes every later deployment. Locally this is indistinguishable from a legitimate restore (ADR-0041). Only an off-box anchor of the head MAC closes it (SEC-008, Eldon G2; question 6).
+Every detection reads as held (`evidence_invalid`), never as absent. A head or site-check failure holds every target on the site.
+
+3.5 **What it does not detect.**
+- **Consistent rollback.** An attacker restores a saved, earlier valid head row and deletes every later row. Locally this is indistinguishable from a legitimate restore (ADR-0041). Even then, recovery never finalizes `APPLIED` on a journal claim: it decides from the live schema against the MAC'd baseline and checks dispatcher liveness from the deployment row (R13). Only an off-box anchor of `head_mac` closes it (SEC-008, Eldon G2; question 6).
 - **Anyone holding the key** (code execution in an engine worker of the pool) can forge rows. This is the same residual as `S05` in ADR-0038.
 
 ### 4. Recovery entry point (CE-SEC-009)
@@ -180,126 +193,139 @@ recover_deployment(deployment_id: str, mode: "classify" | "finalize" = "classify
                    lock_wait_seconds: int = 3) -> {
   deployment_id, mode, status: APPLIED | FAILED_CLEAN | RECOVERY_REQUIRED | REJECTED,
   recovered: bool,         # true only when THIS call appended the final outcome
-  classification: "R1".."R16", reason_code, stage: "RECOVER", execution_time_ms }
+  classification: "R1".."R18", reason_code, stage: "RECOVER", execution_time_ms }
 ```
 
-- `classify` writes only a `recovery_attempt` event. `finalize` also appends the final `outcome` when the row allows it.
-- Responses carry stable codes only: no exception text, SQL, schema contents or engine names (`_stable_reason_code`, `CE/api/endpoints.py:2092`).
+- `classify` appends only a `recovery_attempt` event. `finalize` also appends the final `outcome` when the row allows it.
+- Responses carry stable codes only (`_stable_reason_code`, `CE/api/endpoints.py:2092`): no exception text, SQL, schema contents or engine names.
 - Whitelisted POST-only (U8). Tests inject an adapter through a non-whitelisted `_recover_deployment_impl`, never through RPC kwargs.
 
 4.2 **(P) Caller.**
-- Roles come only from the authenticated session, via `get_current_user_roles` inside the engine.
-- The caller needs `RECOVERY_ROLES = {"System Manager"}` (question 4).
-- Refused before any read when present: `site_id`, `site`, `user_roles`, `caller_roles`, `actor`, `governance_tier`, `adapter`, `db`, `status` and `outcome`. The caller cannot choose the site, the roles or the result; classification is deterministic from evidence.
+- Roles come only from the authenticated session (`get_current_user_roles`). The caller needs `RECOVERY_ROLES = {"System Manager"}` (question 4).
+- Refused before any read when present: `site_id`, `site`, `user_roles`, `caller_roles`, `actor`, `governance_tier`, `adapter`, `db`, `status` and `outcome`. The caller cannot choose site, roles or result; the classification is deterministic from evidence.
 - An unauthorised caller gets the same refusal for known and unknown ids, and nothing is read.
 
-4.3 **Locks and view.** The function:
-1. Resolves `C` with `_resolve_site_id(None, ...)` and refuses on `journal_migration_pending`.
-2. Reads the deployment row by `(C, deployment_id)` and verifies its MAC. This settles F4: the site is part of the key, and the doctype comes from the stored row, never from the caller.
-3. Takes the same two locks in the same order as `execute_single_field_deployment` (`schema_reconciler.py:217-249`): the idempotency lock for `(C, stored idempotency_key)`, then the target lock for `(C, stored doctype)`.
-4. Calls `begin_fresh_read_view`, then re-reads and re-verifies the row and all its events.
+4.3 **Sequence.**
+1. Resolve `C` with `_resolve_site_id(None, ...)`.
+2. Read the deployment row by `(C, deployment_id)` and verify its MAC. This is done only to learn the lock keys; nothing is written. It settles F4: the site is part of the key, and the doctype comes from the stored row.
+3. Take the same two locks in the same order as `execute_single_field_deployment` (`schema_reconciler.py:217-249`): the idempotency lock for `(C, stored key)`, then the target lock for `(C, stored doctype)`.
+4. Call `begin_fresh_read_view`, then run the site check and the deployment check (1.6) again under the locks.
+5. Run the fresh read (4.4) and classify (4.5).
 
-The function runs on CE-SEC-011's dedicated deployment connection. Every exit uses the verified release, and an unverified release discards the session (CE-SEC-008).
+It runs on CE-SEC-011's dedicated deployment connection. Every exit uses the verified release, and an unverified release discards the session (CE-SEC-008).
 
 4.4 **Fresh complete read, under the locks:**
-- `_read_table_schema(doctype)`: every fingerprint key, meaning columns, order, indexes, constraints, checks, triggers and table options (`CE/api/endpoints.py:1019`);
-- the field's `tabCustom Field` row;
+- `_read_table_schema(doctype)`: every fingerprint key (`CE/api/endpoints.py:1019`);
+- the field's `tabCustom Field` row, compared field by field with the stored `field_def` (Data, Link and Select all yield `varchar(140)`, so the column alone proves nothing);
 - `has_col`;
-- dispatcher liveness: `SELECT ID FROM information_schema.PROCESSLIST WHERE ID = dispatch_connection_id` (U3).
+- **liveness (P), for every field deployment, whether or not D is empty:**
+  - `CURRENT_USER()` on the recovery connection equals `dispatch_db_user`;
+  - `SELECT ID FROM information_schema.PROCESSLIST WHERE ID IN (CONNECTION_ID(), dispatch_connection_id)` returns the recovery's own id, which proves the view works for this user;
+  - it does not return `dispatch_connection_id`. Only then is the dispatcher "gone"; anything else is "alive or unknown" (U3).
 
 Any error, an empty answer where a row must exist, or a partial fingerprint is "unreadable", never "equal".
 
-4.5 **Classification table.** The rows are checked in order and the first match wins. B is the MAC'd baseline, L the live fingerprint, M the metadata row and D the dispatched statements from the events.
+4.5 **Classification table.** The rows are checked in order and the first match wins. B is the MAC'd baseline, L the live fingerprint, M the metadata row, F the stored `field_def` and D the dispatched statements from the events. "Attempt" means a `recovery_attempt` event is appended under the locks; "none" means the call is in the server log only.
 
 | Row | State | Result | Write |
 |---|---|---|---|
-| R1 | caller lacks the role, or a refused parameter is present | REJECTED `not_permitted` | none (server log only) |
-| R2 | id fails `caller_id_problem` or lies in the evidence namespace | REJECTED `invalid_deployment_id` | none |
+| R1 | caller lacks the role, or a refused parameter is present | REJECTED `not_permitted` | none |
+| R2 | `evidence_namespace_problem(id)` (empty, `#`, control characters; looser legacy ids pass) | REJECTED `invalid_deployment_id` | none |
 | R3 | site migration not `complete` | REJECTED `journal_migration_pending` | none |
-| R4 | no deployment row under `(C, id)` | REJECTED `not_found` | none |
-| R5 | journal key unavailable | REJECTED `journal_key_unavailable` | none |
-| R6 | a lock is not granted, or the fresh view fails | REJECTED `locked` / `engine_unavailable` | none |
-| R7 | latest outcome is final and verified | its stored status, `already_final` (idempotent) | `recovery_attempt` |
-| R8 | MAC, chain, gap, head or parse failure | RECOVERY_REQUIRED `evidence_invalid` | `recovery_attempt` |
-| R9 | `origin = legacy` (N3: `verified: False` holds) | RECOVERY_REQUIRED `evidence_unverified` | `recovery_attempt` |
-| R10 | `engine_kind` is not `field`, or a field deployment has no baseline | RECOVERY_REQUIRED `kind_not_recoverable` | `recovery_attempt` |
-| R11 | schema, metadata or liveness read failed or incomplete | RECOVERY_REQUIRED `schema_unreadable` | `recovery_attempt` |
-| R12 | D is not a prefix of the approved plan | RECOVERY_REQUIRED `unapproved_dispatch` | `recovery_attempt` |
-| R13 | D non-empty and the dispatching connection is alive or unknown | RECOVERY_REQUIRED `dispatch_may_be_in_flight` (retry later) | `recovery_attempt` |
-| R14 | L == B on every key, M absent, has_col false | FAILED_CLEAN `baseline_verified` | final `outcome` (finalize mode) |
-| R15 | L == B plus exactly the approved column (`new_column_matches_plan`, indexes unchanged, `assess_applied_ddl` clean), M present and matching, D equals the full approved plan, dispatcher gone | APPLIED `provenance: inferred` (question 2), then the doctype cache is cleared | final `outcome` (finalize mode) |
-| R16 | anything else (orphan metadata, orphan column, a definition or index difference, an unapproved side effect) | RECOVERY_REQUIRED, with the reconciler's disposition | `recovery_attempt` |
+| R4 | journal key unavailable | REJECTED `journal_key_unavailable` | none |
+| R5 | no deployment row under `(C, id)` | REJECTED `not_found` | none |
+| R6 | the deployment row's MAC fails before the locks | RECOVERY_REQUIRED `evidence_invalid` | none |
+| R7 | a lock is not granted, or the fresh view fails | REJECTED `locked` / `engine_unavailable` | none |
+| R8 | under the locks: the head, site or deployment check fails, or a current field deployment lacks its baseline event | RECOVERY_REQUIRED `evidence_invalid` | none (a broken chain gets no new link) |
+| R9 | `origin = legacy` (N3: `verified: False` holds) | RECOVERY_REQUIRED `evidence_unverified` | attempt |
+| R10 | latest outcome is final | its stored status, `already_final` (idempotent) | attempt |
+| R11 | `engine_kind` is not `field` | RECOVERY_REQUIRED `kind_not_recoverable` | attempt |
+| R12 | schema, metadata or liveness read failed or incomplete | RECOVERY_REQUIRED `schema_unreadable` | attempt |
+| R13 | dispatcher alive or unknown (4.4), whatever D holds | RECOVERY_REQUIRED `dispatch_may_be_in_flight` (retry later) | attempt |
+| R14 | `ddl_batch_rejection(doctype, fieldname, approved, D, B, complete=False)` returns a reason | RECOVERY_REQUIRED `unapproved_dispatch` | attempt |
+| R15 | L == B on every key, M absent, has_col false | FAILED_CLEAN `baseline_verified` | final `outcome` (finalize) |
+| R16 | L == B, has_col false, M present and equal to F, D non-empty | RECOVERY_REQUIRED `metadata_without_column` (question 8) | attempt |
+| R17 | `assess_applied_ddl(doctype, fieldname, approved, D, B, L)` reports no side effect; `new_column_matches_plan`; indexes unchanged; M present and equal to F | APPLIED `provenance: inferred` (question 2); then clear the doctype cache | final `outcome` (finalize) |
+| R18 | anything else (orphan metadata, orphan column, a definition or index difference, a side effect) | RECOVERY_REQUIRED, with the reconciler's disposition | attempt |
+
+R16 is not R15. Finalizing `FAILED_CLEAN` would release the target while the engine still reads a field with no column, and recovery never deletes metadata (phase-1 "no auto-delete"). Committing the intent earlier cannot prevent the state, because MariaDB commits implicitly before an ALTER. The state is therefore named and held. R14 and R17 call the gate's own functions, so the allowlisted no-op decimal `MODIFY` clauses (`ddl_plan_gate.py:650-690`) pass exactly as they do at dispatch.
 
 4.6 **Never re-runs DDL.**
-- The recovery module imports no dispatch function and is handed no field definition.
-- Its SQL is restricted to `SELECT`, `GET_LOCK`, `RELEASE_LOCK`, `IS_USED_LOCK`, `CONNECTION_ID`, the head `FOR UPDATE` and `INSERT` into the event table.
+- The recovery module imports no dispatch function and is handed no field definition to apply.
+- Its SQL is restricted to: `SELECT`; `GET_LOCK`, `RELEASE_LOCK`, `IS_USED_LOCK`; `CONNECTION_ID()`, `CURRENT_USER()`; the head `SELECT ... FOR UPDATE`; and the event `INSERT` with its head `UPDATE`.
 - A test recorder fails on anything else.
-- `R15` finalizes only what already exists. Nothing is created, dropped or repaired.
+- R17 finalizes only what already exists. Nothing is created, dropped or repaired.
 
-4.7 **Audit and idempotency.** For an authorised caller and an existing deployment, every call appends one MAC'd `recovery_attempt` event with:
+4.7 **Audit and idempotency.** An "attempt" event records:
 - the session user and their roles;
 - the mode and classification row;
 - the reason code;
 - the SHA-256 of the encoded live fingerprint;
 - dispatcher liveness.
 
-Finalization appends one `outcome` event (`final: true`, actor, classification) in the same transaction. A second call returns R7. Two concurrent calls serialize on the locks, and the second sees R7.
+Finalization appends one `outcome` event (`final: true`, actor, classification) and removes the `open_deployments` entry, in the same transaction. A second call returns R10. Concurrent calls serialize on the locks, and the second sees R10.
 
 ### 5. Threats and proposed tests
 `bench:` means a real MariaDB test (CI service per ADR-0041).
 
 | Threat | Control | Test |
 |---|---|---|
-| Status edit lifts a hold (T12) | outcome events MAC'd; hold lookup verifies | `test_ce_sec_010_forged_or_edited_outcome_keeps_target_held` |
-| Base revision or key edited (T13, T14); replay or revert on an edited row (N4) | deployment row MAC'd; replay and revert verify | `test_ce_sec_010_edited_deployment_row_refused_by_replay_revert_and_recovery` |
-| Held deployment deleted to unblock its table | `site_seq` plus head count | `test_ce_sec_010_deleted_deployment_holds_every_target_on_site` |
-| Event deleted, reordered or renumbered (M19) | gap-free `seq`, `prev_mac` | `test_ce_sec_010_event_gap_or_reorder_is_evidence_invalid` |
-| Dispatch tail truncated to fake "nothing ran" | decision from L against B, dispatcher id in the deployment row | `test_ce_sec_009_truncated_dispatch_tail_with_changed_schema_holds` |
-| Row copied from another tenant's database | per-tenant key, site in the MAC | `test_ce_sec_010_row_from_other_tenant_fails_mac` |
-| Two prepares with one key race | `UNIQUE (site_id, idempotency_key)` | bench: `test_ce_sec_010_concurrent_same_key_second_insert_refused` |
+| Status edit lifts a hold (T12) | holds only from the signed head; outcome events MAC'd | `test_ce_sec_010_forged_or_edited_outcome_keeps_target_held` |
+| Held row's `doctype` edited to unblock its table | holds from `open_deployments`, never a filtered row query | `test_ce_sec_010_edited_doctype_of_held_row_still_holds` |
+| Finished row's `idempotency_key` edited to bypass replay | replay miss runs the site check | `test_ce_sec_010_edited_key_of_finished_row_refuses_prepare` |
+| Base revision or field edited (T13, T14); replay or revert on an edited row (N4) | row MAC; replay and revert run the deployment check | `test_ce_sec_010_edited_deployment_row_refused_by_replay_revert_and_recovery` |
+| Held deployment, or any middle row, deleted | `site_seq` gap; counts against the head | `test_ce_sec_010_deleted_row_holds_every_target_on_site` |
+| Tail event deleted: `ROLLED_BACK` outcome, trailing `dispatch_intent`, or all events | `last_row_mac`; R8 when the baseline is missing | `test_ce_sec_010_deleted_last_event_is_evidence_invalid`, `test_ce_sec_009_current_field_without_baseline_is_r8` |
+| Event reordered or renumbered (M19) | `seq`, `prev_mac` | `test_ce_sec_010_event_gap_or_reorder_is_evidence_invalid` |
+| Row copied from another tenant's database | per-tenant key; site in the MAC | `test_ce_sec_010_row_from_other_tenant_fails_mac` |
+| Two prepares with one key race | `UNIQUE (site_id, idempotency_key)`; head lock | bench: `test_ce_sec_010_concurrent_same_key_second_insert_refused` |
+| ALTER sent from another session or user | `_admit_ddl` connection and user check | `test_ce_sec_010_admit_refuses_other_connection_or_user` |
+| Dispatcher hidden by dual-slot users | `CURRENT_USER()` must equal `dispatch_db_user`; own id must be visible | `test_ce_sec_009_other_db_user_holds`, `test_ce_sec_009_invisible_own_connection_holds` |
+| Finalize while an ALTER still runs | liveness on every field row, even with D empty | `test_ce_sec_009_live_or_unknown_dispatcher_holds_with_empty_d`; bench: `test_ce_sec_009_killed_client_alter_still_running_holds` |
+| Timed-out ALTER leaves metadata without column | R16 named hold | bench: `test_ce_sec_009_lock_timeout_alter_classifies_r16` |
+| Wrong field type behind a matching column | M compared with stored `field_def` | `test_ce_sec_009_select_instead_of_data_is_not_applied` |
+| Allowlisted decimal no-op MODIFY refused | R14 and R17 use the gate's functions | `test_ce_sec_009_decimal_noop_modify_finalizes` |
 | Alias spelling opens a second scope | migration rekeys; writes use `C` only | `test_ce_sec_010_migration_rekeys_host_slug_and_caller_ids` |
-| Ambiguous legacy rows merged silently | site `blocked`, deployments refused | `test_ce_sec_010_collision_or_orphan_blocks_site_and_dry_run_reports_it` |
-| Migration launders tampered rows | `origin = legacy` inside the MAC; R9 | `test_ce_sec_009_legacy_origin_always_holds` |
-| Partial or repeated migration | one transaction; source hash | `test_ce_sec_010_migration_crash_leaves_no_rows`, `test_ce_sec_010_rerun_noop_and_changed_source_refused` |
+| Ambiguous or tampered legacy rows imported | verify (2.3); database-collation duplicates; site `blocked` | `test_ce_sec_010_tampered_digest_or_outcome_blocks_site`; bench: `test_ce_sec_010_non_ascii_fold_duplicate_blocks_site` |
+| Legacy events misordered | ordering rule (2.2) | `test_ce_sec_010_completion_follows_intent_after_migration` |
+| Migration launders tampering | `origin = legacy` inside the MAC; R9 | `test_ce_sec_009_legacy_origin_always_holds` |
+| Partial migration, or a site stuck in `blocked` | one transaction; state table (2.5) | `test_ce_sec_010_migration_crash_leaves_no_rows`, `test_ce_sec_010_rerun_from_blocked_and_changed_source_refused` |
 | Recovery runs DDL | no dispatch import; SQL allow-list | `test_ce_sec_009_recovery_issues_no_ddl_in_any_row` |
 | Recovery races a deployment or another recovery | both locks from the stored row; fresh view | `test_ce_sec_009_blocks_while_target_lock_held`, `test_ce_sec_009_two_recoveries_one_finalizes` |
-| Finalize while an ALTER still runs server-side | dispatcher liveness (R13) | `test_ce_sec_009_live_or_unknown_dispatcher_holds`; bench: `test_ce_sec_009_killed_client_alter_still_running_holds` |
-| Partial schema read taken as "equal" | complete read or R11 | `test_ce_sec_009_partial_fingerprint_holds` |
-| Caller chooses site, roles or outcome | refused parameters; session roles only | `test_ce_sec_009_caller_context_params_refused`, `test_ce_sec_009_non_system_manager_refused_without_reading` |
-| Existence probing | identical refusal before any read | `test_ce_sec_009_unauthorised_same_response_for_known_and_unknown_id` |
-| Evidence of another site or table (F4) | key `(C, id)`; doctype from the stored row | `test_ce_sec_009_other_site_row_not_found_and_doctype_from_store` |
-| Key missing, or a `kid` compromised | fail closed; deny list | `test_ce_sec_010_missing_key_refuses_prepare_and_recovery`, `test_ce_sec_010_denied_kid_holds` |
-| Out-of-band identical column finalized as APPLIED | accepted residual, flagged `inferred` (question 2) | `test_ce_sec_009_identical_out_of_band_column_is_inferred` |
-| Update or delete through plain SQL | triggers (dev, CI) | bench: `test_ce_sec_010_update_and_delete_signal` |
-| Recovery reached from outside | not routed (ADR-0016) | `test_ce_sec_009_gateway_has_no_route_to_recover_deployment` (`services/gateway/`) |
-| Engine names or raw text in a response | stable codes | `test_ce_sec_009_responses_carry_no_engine_names_or_exception_text` |
-| Consistent rollback | none locally (item 3.5) | residual; SEC-008 |
+| Broken chain extended by a signed attempt | no append in R6 or R8 | `test_ce_sec_009_broken_chain_gets_no_new_event` |
+| Caller chooses site, roles or outcome; existence probing | refused parameters; session roles; uniform refusal | `test_ce_sec_009_caller_context_params_refused`, `test_ce_sec_009_unauthorised_same_response_for_known_and_unknown_id` |
+| Key missing, or a `kid` compromised | every reader fails closed; deny list | `test_ce_sec_010_missing_key_blocks_hold_replay_plan_revert_and_recovery`, `test_ce_sec_010_denied_kid_holds` |
+| Out-of-band identical field finalized as APPLIED | accepted residual, flagged `inferred` (question 2) | `test_ce_sec_009_identical_out_of_band_field_is_inferred` |
+| Update or delete through plain SQL; head misuse | triggers (1.7) | bench: `test_ce_sec_010_triggers_signal_and_allow_migration_batch` |
+| Recovery reached from outside; names or raw text leak | not routed (ADR-0016); stable codes | `test_ce_sec_009_gateway_has_no_route_to_recover_deployment` (`services/gateway/`), `test_ce_sec_009_responses_carry_no_engine_names_or_exception_text` |
+| Consistent rollback | none locally (3.5) | residual; SEC-008 |
 
 ### 6. Proposed follow-up rows (partner lane, G1; IDs for the coordinator to confirm)
 Each depends only on partner rows (ADR-0025):
-- `| CE-SEC-012 | Change engine: deployment journal tables, triggers and keyed MAC per ADR-0070 sections 1 and 3 (JournalKeyProvider with dev and test providers, production refuses without a key); switch every FrappeDeploymentAdapter writer and reader (prepare, finalize, hold, replay, revert record, evidence, health check, phase-0 proof) to the journal; refuse deployments while the site's migration is not complete, and mark an absent or empty old table complete; add the key to the secrets inventory | Security | G1 | CE-SEC-010,CE-SEC-011 | partner | todo |`
-- `| CE-SEC-013 | Change engine: legacy audit rows to journal migration per ADR-0070 section 2 (rekey to the canonical identity, legacy origin, whole-site block on ambiguity, one transaction, source hash, dry-run report), with the section 5 migration tests on real MariaDB | Security | G1 | CE-SEC-012 | partner | todo |`
-- `| CE-SEC-014 | Change engine: locked recovery entry point per ADR-0070 section 4 (classification R1 to R16, never DDL, audit events, System Manager only, no route in the gateway), with the section 5 recovery tests | Security | G1 | CE-SEC-012,CE-SEC-013 | partner | todo |`
+- `| CE-SEC-012 | Change engine: deployment journal tables, journal head (site-wide gap-free site_seq, open_deployments, head_mac), triggers and keyed MAC per ADR-0070 sections 1 and 3; the head, site and deployment checks of item 1.6; store field_def, dispatch_connection_id and dispatch_db_user at prepare and refuse in _admit_ddl unless CONNECTION_ID() and CURRENT_USER() match them; journal commits on the dedicated connection; JournalKeyProvider with dev and test providers, and every journal reader and writer fails closed without a key under the production guard; switch every FrappeDeploymentAdapter writer and reader (prepare, finalize, hold, replay, revert record, evidence, inspect_step_plan, health check, phase-0 proof); refuse while the site's migration is not complete, and mark an absent or empty old table complete; add the key and the dual-slot revocation rule to the secrets inventory | Security | G1 | CE-SEC-010,CE-SEC-011 | partner | todo |`
+- `| CE-SEC-013 | Change engine: legacy audit rows to journal migration per ADR-0070 section 2 (rekey to the canonical identity, verify CE-SEC-008 digests and stored outcomes first, intent-before-completion event order, legacy origin, duplicates by the journal collation, whole-site block on ambiguity, one transaction, source hash, re-run from blocked, dry-run report), with the section 5 migration tests on real MariaDB | Security | G1 | CE-SEC-012 | partner | todo |`
+- `| CE-SEC-014 | Change engine: locked recovery entry point per ADR-0070 section 4 (classification R1 to R18, liveness by dispatch_db_user and own-connection visibility, never DDL, attempt and outcome events, System Manager only, no route in the gateway), with the section 5 recovery tests | Security | G1 | CE-SEC-012,CE-SEC-013 | partner | todo |`
 
 ### 7. UNVERIFIED claims
 - U1. In MariaDB with binary logging on, `CREATE TRIGGER` needs `SUPER` unless `log_bin_trust_function_creators` is set. Unchecked for the pinned version and the host.
 - U2. The engine's site database user holds the `TRIGGER` privilege (the engine grants all privileges on the site database).
-- U3. Without the `PROCESS` privilege, a user sees its own threads in `PROCESSLIST`. A disconnected client's `ALTER` keeps its thread until it ends or is killed. A reused connection id only causes a false "alive", which holds.
+- U3. Without the `PROCESS` privilege, a user sees only its own threads in `PROCESSLIST`. A disconnected client's `ALTER` keeps its thread until it ends or is killed. A revoked database user's open sessions keep running. A reused connection id only causes a false "alive", which holds.
 - U4. MariaDB atomic DDL recovers or rolls back an interrupted `ALTER` at server restart (10.6 and later).
 - U5. Each site has its own database, custom `site_map` sites included (A2).
 - U6. No legacy rows exist on a real customer site (A3).
-- U7. The table collation folds exactly as `_collation_fold` does, so the unique index and the lock keys agree.
+- U7. The journal tables' collation decides key equality, and `_collation_fold` matches it for the lock keys on ASCII ids. Non-ASCII ids are detected by the database (2.5), not by the fold.
 - U8. `frappe.whitelist(methods=["POST"])` exists in the pinned engine version.
-- U9. The hold lookup's per-row MAC verification costs little at realistic deployment counts. To be measured.
+- U9. The site check's O(*D*) HMACs and counts stay cheap at realistic deployment counts. To be measured. The hold path is O(1).
 - U10. The gateway routes no engine method path.
 
 ## Alternatives rejected
-- **Keep the evidence in the audit table and add a unique index.** The index cannot cover main rows only, because MariaDB has no partial unique index. A generated-column workaround keeps the mixed table and its in-place status updates.
-- **A mutable status column guarded by triggers.** Triggers do not stop the attacker who holds the database credential. A derived status makes a deleted outcome fail closed.
-- **A per-site hash chain over every event.** It serializes all appends per site. Per-deployment chains plus a deployment-count head give the same detection, except the residual that remains either way.
+- **Keep the evidence in the audit table and add a unique index.** MariaDB has no partial unique index, and the mixed table keeps its in-place status updates.
+- **A mutable status column guarded by triggers.** Triggers do not stop the attacker who holds the database credential.
+- **Holds from a filtered row query, with per-row MAC checks.** An edited filter column hides the row (review finding 1). Holds come from the signed head instead.
+- **Replaying the whole site hash chain on every check.** It is O(*E*). The signed head plus `last_row_mac` gives O(1) holds, and the O(*D*) site check runs only on replay and recovery.
 - **Recompute `payload_hash` under the canonical id during migration.** That would let a legacy key replay as if it were verified.
 - **Map unmappable rows to a quarantine key.** It drops a hold or a replay record. Blocking the whole site is simpler and fails closed.
-- **Recovery that repairs, by dropping an orphan column or re-sending a statement.** Never in phase 1 (reconciler rule "no auto-delete"; ADR-0068 item 18).
+- **Recovery that repairs, by dropping an orphan column or metadata, or by re-sending a statement.** Never in phase 1 (reconciler rule "no auto-delete"; ADR-0068 item 18).
 
 ## Consequences
 - **Easier.**
@@ -307,15 +333,24 @@ Each depends only on partner rows (ADR-0025):
   - Holds, replay and revert become tamper-evident.
   - One key maps to one deployment at the database level.
 - **Harder.**
-  - A secret-store dependency on the deploy path.
-  - A head-row lock at every prepare.
-  - A legacy or migrated hold stays held until a runbook or a founder decision.
+  - A secret-store dependency on every journal read.
+  - A head-row lock on every append.
+  - A legacy hold or an R16 hold stays held until a runbook or a founder decision (questions 3, 8).
   - Non-DDL holds wait for CE-SEC-011.
+  - Rotation must respect open deployments.
 - **Builds and records.**
   - The rows in section 6.
-  - The inventory entry and rotation row in `docs/security/secrets-management.md` (shared path, Eldon reviews).
+  - The inventory entry, rotation row and dual-slot rule in `docs/security/secrets-management.md` (shared path, Eldon reviews).
   - The incident runbook for a compromised `kid`.
   - SEC-008's off-box head anchor (Eldon, G2) for the rollback residual.
 
 ## Supersedes
 None.
+
+## Review history
+Security review Gemini 4 Argon at 5fe539bb ("changes required"), addressed in revision 2:
+- **1 filtered lookups:** holds come from the signed head; replay absence and recovery need the site check (1.5, 1.6).
+- **2 tail truncation:** `event_count`, `last_row_mac`, `head_mac`; liveness even with D empty; a missing baseline is R8 (1.5, 3.4, 4.4, 4.5).
+- **3 dual-slot liveness:** `dispatch_db_user`, the `_admit_ddl` connection and user check, own-connection visibility (1.2, 1.8, 4.4); U3 stays UNVERIFIED.
+- **4 medium:** (a) stored `field_def`; (b) gate functions in R14 and R17; (d) MAC re-verified under the locks, no append in R6 or R8; (e) R2 uses `evidence_namespace_problem`. (c) is partly rebutted: the implicit commit before the ALTER publishes the metadata whatever connection commits the intent. Journal commits move to the dedicated connection anyway, and the state is held as R16, because finalizing `FAILED_CLEAN` would release a target with an orphan field.
+- **5 migration:** (a) event order; (b) digest and outcome verification before the MAC; (c) duplicates by the database collation; (d) head trigger states and re-run from `blocked`; (e) every reader fails closed without a key; `mac` widened to VARCHAR(140), and every VARCHAR given a length.

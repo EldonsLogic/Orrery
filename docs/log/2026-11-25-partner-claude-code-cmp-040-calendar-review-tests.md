@@ -24,3 +24,8 @@ Unknown.
 
 ## Next step
 None for CMP-040. CMP-023 stays `doing` for its remaining scope.
+
+## Review round 1 (gpt-6.1-sol at `31302b9`: APPROVE, two Lows, fixed by the coordinator)
+- R1 Low: removing only the engine-install pin survived, because another pin in the same file stayed. New `test_engine_install_step_pins_hijridate` requires the pin inside the `Install dependencies (apps/engine)` step; dropping it fails the test (seen on a temporary edit, restored).
+- R2 Low: bypassing the helper in the real check survived. The real check is now one method, `assert_no_disallowed_numbers`, which the planted test calls with `48` and `29.53` (both must raise) and with allowed values (must pass); a bypass in that method fails the planted test (seen, restored).
+- `company_calendar`: 48 tests OK; `country_pack`: 129 OK.

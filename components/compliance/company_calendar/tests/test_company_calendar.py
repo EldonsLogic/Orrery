@@ -362,10 +362,18 @@ class TestSource(unittest.TestCase):
     def test_no_statutory_limit_or_lunar_arithmetic_constants_in_code(self) -> None:
         # Hour caps (48), lunar-year lengths (354, 355), the synodic month (29.53), month lengths (29, 30) or any
         # other literal number would show up here: only the allowed numbers may appear as code constants.
-        self.assertEqual(disallowed_numbers(self.SETTINGS.read_text(encoding="utf-8")), set())
+        self.assert_no_disallowed_numbers(self.SETTINGS.read_text(encoding="utf-8"))
+
+    def assert_no_disallowed_numbers(self, source: str) -> None:
+        """The real check, shared with the planted-constant test below."""
+        self.assertEqual(disallowed_numbers(source), set())
 
     def test_source_check_detects_a_planted_constant(self) -> None:
-        # Same helper as the real check; booleans and allowed numbers are ignored, anything else is reported.
+        # The real check refuses planted literals; booleans and allowed numbers are ignored, anything else is reported.
+        for planted in ("MAX_WEEKLY_HOURS = 48", "SYNODIC_MONTH = 29.53"):
+            with self.subTest(planted=planted), self.assertRaises(AssertionError):
+                self.assert_no_disallowed_numbers(planted)
+        self.assert_no_disallowed_numbers("a = 0\nb = 9\nc = True")
         self.assertEqual(disallowed_numbers("MAX_WEEKLY_HOURS = 48"), {48})
         self.assertEqual(disallowed_numbers("a = 29.53\nb = True\nc = 7\nd = 354"), {29.53, 354})
         self.assertEqual(disallowed_numbers("a = 0\nb = 9"), set())
@@ -393,6 +401,14 @@ class TestHijridatePin(unittest.TestCase):
             with self.subTest(file=rel):
                 self.assertTrue(pins, f"no hijridate== pin found in {rel}")
                 self.assertEqual(set(pins), set(runtime), f"hijridate pin in {rel} differs from the runtime pin")
+
+    def test_engine_install_step_pins_hijridate(self) -> None:
+        # The engine suites' install line must carry its own pin; another step's pin must not stand in for it.
+        runtime = self.PIN.findall((REPO_ROOT / "apps/engine/change_engine/pyproject.toml").read_text(encoding="utf-8"))
+        workflow = (REPO_ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+        step = re.search(r"- name: Install dependencies \(apps/engine\)\n(.*?)(?=\n      - name:|\Z)", workflow, re.S)
+        self.assertIsNotNone(step, "engine install step not found in tests.yml")
+        self.assertEqual(self.PIN.findall(step.group(1)), runtime, "engine install step lacks the runtime hijridate pin")
 
     def test_installed_library_is_the_pinned_version(self) -> None:
         runtime = self.PIN.findall((REPO_ROOT / "apps/engine/change_engine/pyproject.toml").read_text(encoding="utf-8"))

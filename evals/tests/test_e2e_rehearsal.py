@@ -13,6 +13,7 @@ ledger maths. What is a stand-in is listed in the QA-009 log, not hidden here.
 """
 import copy
 import datetime as dt
+import json
 import os
 import sys
 
@@ -20,7 +21,7 @@ import pytest
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 for sub in ("services/blueprint", "services/blueprint/tests/simulator", "services/blueprint/tests/build_state",
-            "services/blueprint/tests/compiler", "services/discovery", "services/discovery/templates"):
+            "services/blueprint/tests/compiler", "services/discovery", "services/discovery/templates", "services/operate"):
     if os.path.join(REPO, sub) not in sys.path:
         sys.path.insert(0, os.path.join(REPO, sub))
 
@@ -29,7 +30,7 @@ import bs_support as bs  # noqa: E402
 import cmp_helpers as cmp  # noqa: E402
 import owner_approval as oa  # noqa: E402
 from adapter import testkit  # noqa: E402
-from adapter.harness import make_harness  # noqa: E402
+from adapter.harness import FakeHarness  # noqa: E402
 from build_state import BuildStateError, BuildStateMachine, SignOffLedger, content_digest  # noqa: E402
 from compiler import compile_blueprint  # noqa: E402
 from gap_analysis import analyse  # noqa: E402
@@ -37,6 +38,10 @@ from instantiate import instantiate  # noqa: E402
 from interview import Interviewer, load_catalog  # noqa: E402
 from quote import default_price_book, generate_quote  # noqa: E402
 from simulator import review, signoff  # noqa: E402
+from simulator.money import minor_to_str  # noqa: E402
+from toolapi.generate import generate_tool_api  # noqa: E402
+from validator.report import ValidationContext  # noqa: E402
+from validator.validate import validate  # noqa: E402
 
 from evals.harness import sim_accuracy as sa  # noqa: E402
 
@@ -45,13 +50,44 @@ T = bs.T
 KEYS = {"k1": b"r" * 32}
 CONFIRM = ["gaps", "quote", "summary"]
 # Golden path (spec section 5): 10 pieces sold at 15.00 out of 100 opened at cost 10.00; no tax on this path.
+# The generated Tool API carries no unit cost on a purchase receipt and its delivery note needs a sales order, so the
+# stock legs (and the 900.00 stock value) are not replayable through it: opening stock is an opening balance at cutover
+# (`opening_balances` check) and the month replays the sale only. Listed as open in the QA-009 log.
 GOLDEN_ROWS = [
-    sa._r(1, "stock_in", "OPEN-1", "2026-03-01", "opening stock", item="ITEM-001", warehouse="W1", qty="100", unit_price="10.00"),
-    sa._r(2, "stock_out", "DN-1", "2026-03-02", "delivery", item="ITEM-001", warehouse="W1", qty="10"),
-    sa._r(3, "sales_invoice", "SI-1", "2026-03-02", "invoice", party="CUST-001", item="ITEM-001", qty="10", unit_price="15.00",
+    sa._r(1, "sales_invoice", "SI-1", "2026-03-02", "invoice", party="CUST-001", item="ITEM-001", qty="10", unit_price="15.00",
           vat="0", tax_code="ZERO", due_date="2026-03-31"),
 ]
-GOLDEN_EXPECTED = {"sales_net": 15000, "vat_output": 0, "stock_value": 90000, "receivables_not_due": 15000}   # minor units
+GOLDEN_EXPECTED = {"sales_net": 15000, "vat_output": 0, "receivables_not_due": 15000}   # minor units
+MAPPING_FIXTURE = os.path.join(REPO, "evals/tests/fixtures/engine-mapping-interview-template.json")
+
+
+def mapping_fixture():
+    """The compiler mapping that matches the interview template (the shared golden-path mapping names three ZATCA
+    invoice fields the template does not carry). A test fixture: contracts/ is not edited."""
+    with open(MAPPING_FIXTURE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def replay_mapping(tool_set):
+    """The simulator's replay mapping, read off the generated tool set: required single-value fields (branch,
+    warehouse) become constants; the invoice posts through its `submit_invoice` transition."""
+    props = next(t for t in tool_set["tools"] if t["name"] == "sales_invoice.create")["input_schema"]["properties"]
+    return {"sales_invoice": {"entity": "sales_invoice", "lines": "lines", "post": {"transition": "submit_invoice"},
+                              "constants": {"branch": props["branch"]["enum"][0]},
+                              "header": {"party": "customer", "date": "invoice_date"},
+                              "line": {"item": "item", "qty": "quantity", "unit_price": "unit_price"}}}
+
+
+class RealValidator:
+    """The Blueprint validator the machine runs at the owner gate: real rules, fixture registry (what the host wires)."""
+    def __init__(self):
+        reg = {}
+        for m in cmp.manifests():
+            reg.setdefault(m["id"], []).append(m)
+        self.ctx = ValidationContext(registry=reg)
+
+    def __call__(self, content):
+        return [str(i) for i in validate(content, self.ctx).errors]
 
 
 class NamePort:
@@ -86,11 +122,11 @@ class NoHolds:
 class EnginePort:
     """The machine's engine port over the compiler and the adapter fake: compile what the host holds (never what the
     caller sends), apply to one fake site per kind, answer only confirmed or failed. A production compile needs the
-    certified registry and a verified mapping (synthetic, from the compiler test inputs); a sandbox takes the draft."""
+    certified registry and a verified mapping (synthetic, from the interview-template mapping fixture); a sandbox takes the draft."""
     SITES = {"sandbox": ("t_rehearsal_sbx", "sandbox"), "live": ("t_rehearsal_live", "production")}
 
     def __init__(self, blueprints, bp_id):
-        self.blueprints, self.bp_id, self.h = blueprints, bp_id, make_harness()
+        self.blueprints, self.bp_id, self.h = blueprints, bp_id, FakeHarness()   # not make_harness(): ADAPTER_HARNESS must not switch it
         self.calls, self.artifacts, self.sites = [], {}, set()
 
     def apply(self, t, kind, key, digest):
@@ -99,10 +135,12 @@ class EnginePort:
         if content_digest(content) != digest:
             return "failed"
         if kind == "live":
-            _, reg, mapping = cmp.production_inputs()
-            res = compile_blueprint(content, reg, mapping, environment="production")
+            mapping = mapping_fixture()
+            mapping["status"] = "verified"   # synthetic, as cmp.production_inputs does; the real mapping stays draft until the bench run
+            mapping["engine"]["versionSet"] = content["meta"]["engineTarget"]["versionSet"]
+            res = compile_blueprint(content, cmp.registry([cmp.certify(m) for m in cmp.manifests()]), mapping, environment="production")
         else:
-            res = cmp.compile_fixture(bp=content, environment="sandbox")
+            res = cmp.compile_fixture(bp=content, mp=mapping_fixture(), environment="sandbox")
         if not res.ok:
             return "failed"
         site, klass = self.SITES[kind]
@@ -141,7 +179,7 @@ class Rehearsal:
         self.rev.patch = {"subjectRef": self.bp_id}
         self.ledger = SignOffLedger(KEYS, "k1")
         late = _Late()
-        self.m = BuildStateMachine(identity=Ident(), blueprints=self.bps, validator=lambda c: [], reviews=self.rev, simulations=self.sims,
+        self.m = BuildStateMachine(identity=Ident(), blueprints=self.bps, validator=RealValidator(), reviews=self.rev, simulations=self.sims,
                                    signoffs=self.ledger, engine=self.engine, clock=self.clock, owner_approvals=late, integrity_keys=KEYS,
                                    key_id="k1")
         self.oa = oa.OwnerApproval(identity=Ident(oa.Principal), blueprints=self.bps, quotes=Store(self.quote), gaps=Store(self.gap),
@@ -170,10 +208,14 @@ class Rehearsal:
         return self.m.pass_team_review("rev", **self.args(pinned_seq=self.rev.seq, pinned_head=self.rev.head))
 
     def simulate_month(self):
-        ts = sa.tool_set()
-        ts["blueprintRevision"] = self.bp["meta"]["revision"]
-        port = sa.SimulatedPort(ts, copy.deepcopy(sa.MAPPING), tax_rates=sa.TAX_RATES)
-        self.report = sa.simulate(copy.deepcopy(GOLDEN_ROWS), tenant_id=T, period=sa.PERIOD, tool_set=ts, mapping=copy.deepcopy(sa.MAPPING),
+        """Tools and replay mapping come from the sandbox Blueprint (the generated Tool API), not from a fixture."""
+        res = generate_tool_api(self.bps.load(T, self.bp_id))
+        assert res.ok
+        ts = res.definition_set()
+        assert ts["blueprintRevision"] == self.bp["meta"]["revision"]
+        mp = replay_mapping(ts)
+        port = sa.SimulatedPort(ts, mp, tax_rates=sa.TAX_RATES)
+        self.report = sa.simulate(copy.deepcopy(GOLDEN_ROWS), tenant_id=T, period=sa.PERIOD, tool_set=ts, mapping=mp,
                                   caller=dict(sa.CALLER), port=port, blueprint_id=self.bp_id, blueprint_digest=content_digest(self.bps.v),
                                   tolerances={"default": {"per_line_minor": 1}})
         self.sims.put(self.report)
@@ -186,6 +228,18 @@ class Rehearsal:
                                       decision="accepted", decided_at=bs.T0, now=bs.T0, note="checked",
                                       acknowledged=view["signOff"]["toAcknowledge"])
         self.ledger.append(new[-1])
+
+
+def approve_held(report, port):
+    """Stand-in for the owner or accountant releasing the held R3 posts: the simulated port parks R3 and has no approval
+    queue, so the approved post is applied to the draft it created. Returns the kinds posted."""
+    kinds = []
+    for step in report["steps"]:
+        if step["outcome"] == "held":
+            create = next(s for s in report["steps"] if s["sourceId"] == step["sourceId"] and s["stage"] == "create")
+            assert port._post({"id": create["recordId"]})["status"] == "ok"
+            kinds.append(step["kind"])
+    return kinds
 
 
 class _Late:
@@ -244,10 +298,23 @@ def test_e2e_discovery_to_simulated_month_with_golden_sale_to_live(w):
     assert testkit.status(w.engine.h, "t_rehearsal_sbx")["applied"]["artifactId"] == sbx["artifactId"]
     # 6 simulated month on the fake tenant: the golden path, expected rows from the spec; then the owner signs off
     port = w.simulate_month()
+    # the generated trading tool set holds invoice posting for approval (R3): the hold comes first, nothing is posted yet
+    post = next(s for s in w.report["steps"] if s["stepId"].endswith("SI-1#post"))
+    assert (post["tool"], post["riskClass"], post["action"], post["outcome"]) == ("sales_invoice.transition", "R3", "needs_approval", "held")
+    assert w.report["summary"]["held"] == 1 and port.post_order == [] and w.report["verdict"] == "pass_with_warnings"
     got = {r["metric"]: r for r in w.report["comparison"] if r["currency"] == "SAR"}
-    for metric, minor in GOLDEN_EXPECTED.items():   # spec numbers, not recomputed here
-        assert (got[metric]["actualMinor"], got[metric]["expectedMinor"], got[metric]["status"]) == (minor, minor, "match"), metric
-    assert w.report["verdict"] == "pass"
+    # the receivable exists only once the invoice is posted, so it is not compared while the hold stands; the draft's net and VAT match
+    assert (got["receivables_not_due"]["actualMinor"], got["receivables_not_due"]["status"]) == (None, "blocked_by_approval")
+    for metric in ("sales_net", "vat_output"):
+        assert (got[metric]["actualMinor"], got[metric]["expectedMinor"], got[metric]["status"]) == (GOLDEN_EXPECTED[metric],) * 2 + ("match",)
+    # the approval is granted (stand-in for the R3 `approval.decide`), then the posted totals are the spec's
+    assert approve_held(w.report, port) == ["sales_invoice"]
+    totals = port.report_totals(T, dict(sa.CALLER), sa.PERIOD)
+    for metric in ("sales_net", "vat_output"):
+        assert totals[metric]["SAR"] == minor_to_str(GOLDEN_EXPECTED[metric], "SAR"), metric
+    # the generated invoice has payment_terms_days, not a due date, so the port ages it from the invoice date: the spec's
+    # 150.00 receivable is all there, in an aging bucket the spec does not name (open item in the QA-009 log)
+    assert sum(float(v["SAR"]) for k, v in totals.items() if k.startswith("receivables_")) == GOLDEN_EXPECTED["receivables_not_due"] / 100
     assert w.report["status"] == "completed" and w.report["blueprintDigest"] == content_digest(w.bp)
     assert w.m.confirm_simulated("rev", **w.args(simulation_id=w.report["simulationId"]))["state"] == "simulated"
     assert w.m.start_cutover("rev", **w.args(checks=["opening_balances", "backups_verified", "compliance_onboarding"]))["cutoverStarted"]
@@ -258,8 +325,8 @@ def test_e2e_discovery_to_simulated_month_with_golden_sale_to_live(w):
     live = w.engine.artifacts["live"]
     assert live["blueprint"]["target"]["hash"] == sbx["blueprint"]["target"]["hash"]   # the content the owner approved
     assert [c[0] for c in w.engine.calls] == ["sandbox", "live"] and {c[2] for c in w.engine.calls} == {content_digest(w.bp)}
-    # 8 the simulated month's golden-path sale posted its documents in order (before go-live), totals as the spec expects
-    assert [port.docs[i]["kind"] for i in port.post_order] == ["stock_in", "stock_out", "sales_invoice"]
+    # 8 the golden-path sale posted only after its approval (before go-live)
+    assert [port.docs[i]["kind"] for i in port.post_order] == ["sales_invoice"]
     assert w.m.verify_tenant(T) == [] and w.m.status(T, w.bp_id)["state"] == "live"
 
 
@@ -365,3 +432,22 @@ def test_content_changed_between_sandbox_and_live_never_goes_live(w):
     assert refused(w.m.go_live, "owner", **w.args()) == "BS-008"
     assert [c[0] for c in w.engine.calls] == ["sandbox"] and "live" not in w.engine.artifacts
     assert w.m.status(T, w.bp_id)["state"] == "simulated"
+
+
+def test_an_invalid_draft_stays_in_draft_at_the_owner_gate(w):
+    assert RealValidator()(w.bp) == []   # the interview's draft is valid as built
+    del w.bps.v["company"]["legalName"]["en"]   # a draft that breaks the Blueprint schema
+    assert RealValidator()(w.bps.v) != []
+    w.m.create("author", **w.args())
+    v = w.oa.review("owner", **w.args())
+    with pytest.raises((BuildStateError, oa.OwnerApprovalError)):
+        w.oa.decide("owner", **w.args(decision="approve", reason="agree", note="", seen_blueprint_digest=content_digest(w.bps.v),
+                                      seen_quote_digest=v["quoteDigest"], confirmations=CONFIRM))
+    assert refused(w.m.approve_owner, "owner", **w.args(confirmations=CONFIRM, expected_digest=content_digest(w.bps.v),
+                                                        quote_digest=v["quoteDigest"])) == "BS-006"
+    assert w.m.status(T, w.bp_id)["state"] == "draft" and w.engine.calls == []
+
+
+def test_an_inherited_adapter_harness_variable_cannot_switch_the_backend(monkeypatch):
+    monkeypatch.setenv("ADAPTER_HARNESS", "no_such_module:factory")   # would raise if the rehearsal went through make_harness()
+    assert isinstance(Rehearsal(monkeypatch).engine.h, FakeHarness)

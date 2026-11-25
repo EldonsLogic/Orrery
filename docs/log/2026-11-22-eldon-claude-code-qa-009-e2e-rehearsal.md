@@ -30,3 +30,10 @@ Not measured.
 
 ## Next step
 QA-009: add the Operate chat leg and a real-bench golden-path sale (BPL-028) before `done`; fix the adapter fake target and `attachment` type gaps.
+
+## Review fixes (partner review at 51a36b8d, main merged in)
+- High: both sandbox and live builds now use `evals/tests/fixtures/engine-mapping-interview-template.json` (the shared golden-path mapping minus the three ZATCA invoice fields the interview Blueprint lacks; contracts/ untouched). The happy path reaches `live`.
+- Medium: the simulated month now uses the Tool API generated from the sandbox Blueprint and a replay mapping read off it. The R3 invoice post is asserted held (nothing posted, receivable `blocked_by_approval`) before the approval stand-in releases it and the posted totals are checked against the spec.
+- Medium: the build state machine runs the real Blueprint validator (fixture registry); new test: an invalid draft stays in `draft` (BS-006, no engine call).
+- Low: `FakeHarness()` directly, not `make_harness()`; new test sets a bogus `ADAPTER_HARNESS`.
+- Replaces the earlier gap "month runs on the QA-011 tool set and mapping" and narrows it: the generated Tool API cannot carry the stock legs (a purchase receipt has no unit cost, a delivery note needs a sales order), so the month replays the sale only and the 900.00 stock value is no longer asserted (opening stock is a cutover opening balance). The generated invoice has `payment_terms_days`, not a due date, so the simulated port ages the 150.00 receivable from the invoice date (bucket 0_30, not "not due"); the test sums the buckets. The approval release is a test stand-in: the simulated port parks R3 and has no approval queue.

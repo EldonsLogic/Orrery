@@ -6,11 +6,11 @@ Tool and model: claude-code (Claude Opus 5.5, coordinator)
 Plan IDs: SEC-004,CMP-023
 
 ## Summary
-Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-24-partner-claude-code-partner-coordination.md (merged in #307). In progress.
+Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-24-partner-claude-code-partner-coordination.md (merged in #307). Opened six follow-up rows (#308, merged) and five PRs: #309 BPL-040 ADR-0068 (Proposed, three security-review rounds, parked for Eldon), #310 BPL-041 slice 1 (check_ready refusals, two review rounds, approved), #311 CMP-040 (calendar review tests, approved), #312 BPL-043 (closes a live constraint-DDL bypass, approved, stacked on #310). The ChatGPT reviewer account hit its usage limit; later reviews ran on Gemini 4 Argon on the partner's say-so. Nothing from Eldon arrived this session.
 
 ## Files touched
 - `docs/log/2026-11-25-partner-claude-code-partner-coordination.md`: this live log. Code changes are in the PRs below, each with its own log.
-- `docs/PLAN.md`: follow-up rows ERP-034, SEC-025, BPL-040, BPL-041, BPL-042, CMP-040 (partner, todo); BPL-031 set `done`.
+- `docs/PLAN.md` (in #308): follow-up rows ERP-034, SEC-025, BPL-040, BPL-041, BPL-042, CMP-040 (partner, todo); BPL-031 set `done`. Row status changes for BPL-040, BPL-041, CMP-040, BPL-043, CE-SEC-008 and BPL-044 are in their own PRs.
 
 ## Delegated tasks and coordinator actions (dispatch, then result)
 - Session start: `gh` user is sayegh9. Nothing merged since #307. No new review or comment from Eldon on #300 (CMP-036, head `d07db0e`, Eldon's old CHANGES_REQUESTED still shown) or #306 (ERP-033, head `2aa0a93`). Eldon's #296 and #305 are approved by sayegh9 and wait on Eldon to merge. Both #300 and #306 CI green.
@@ -62,7 +62,12 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
 - Partner: while the ChatGPT reviewer account is at its usage limit, cross-model reviews run on Gemini (Antigravity, gemini-4-argon, high).
 
 ## Tokens or cost
-Unknown.
+Unknown. The ChatGPT reviewer account (`codex_39c1269a`) reached its usage limit mid-session.
 
 ## Next step
-- In progress.
+- Eldon's reviews: #310 BPL-041 (Tier 2), then #312 BPL-043 (Tier 2, retargets to main after #310), #311 CMP-040 (Tier 2); Tier 3 reads of #300 CMP-036, #306 ERP-033 and #309 ADR-0068 (three questions for Eldon on #309: where grant state lives, policy-version grammar, compiler and schema ownership). Then the partner's Tier 3 say-so for #300, #306, #309.
+- After #310 merges: BPL-041 slice 2 (a BPL-027 phase in `infra/dev/docker/run_real_bench_ci.py` with `REQUIRE_BPL027_LIVE=1`, fresh `BPL027_BENCH_SITE`, the BPL-027 compose mounts, minimum 10 tests, update `infra/dev/docker/tests/test_erp_031_real_bench_valuation.py`).
+- After #312 merges: CE-SEC-008 (deploy-path durability defects), BPL-044 (DocField snapshot gap), BPL-042 (Eldon's six BPL-033 Lows).
+- After #306 merges: ERP-034; SEC-025 needs an ADR and security review first. After #296 merges: GOV-071.
+- Ready large rows for a fresh session: CMP-039, CMP-010, CMP-011 (rigid zone, Tier 3).
+- Open with the partner: restart of the GitHub watcher (stopped at its 2-hour limit, no events), deleting the 41 rescued worktrees. Eldon: Q-605, Q-311 confirmation, Q-604 confirmation.

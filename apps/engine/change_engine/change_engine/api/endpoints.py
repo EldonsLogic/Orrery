@@ -6,6 +6,7 @@ Implements supported Frappe REST and Desk RPC interfaces for the AI Control Plan
 import hashlib
 import logging
 import json
+import re
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -41,7 +42,9 @@ from change_engine.guarded_apply.schema_reconciler import (
     DurableEvidenceError,
     ExhaustiveSnapshot,
     IdempotencyConflictError,
+    InvalidDeploymentIdError,
     LockTimeoutError,
+    caller_id_problem,
     RevisionHashError,  # defined in schema_reconciler (shared with property_setter_engine); re-exported here
     Rev23DeploymentAdapter,
     compute_canonical_payload_hash,
@@ -466,6 +469,17 @@ _AUDIT_ROW_COLUMNS = (
 )
 
 
+# Every lookup and finalizer on the audit table is restricted to main rows with this predicate.
+_MAIN_ROWS_ONLY = "status NOT IN ('EVIDENCE_BASELINE', 'EVIDENCE_DDL_DISPATCH', 'EVIDENCE_DDL_COMPLETED')"
+
+
+def _require_main_row_id(deployment_id: Any) -> None:
+    """Finalizers and lookups accept only caller-grade ids, never names inside the evidence namespace."""
+    problem = caller_id_problem(deployment_id)
+    if problem:
+        raise InvalidDeploymentIdError(f"deployment id {problem}")
+
+
 def _evidence_key(deployment_id: str) -> str:
     return f"{deployment_id}#evidence"
 
@@ -656,6 +670,24 @@ class FrappeDeploymentAdapter:
         except Exception:
             pass
 
+    def begin_fresh_read_view(self) -> None:
+        """End the current transaction so the next read opens a fresh view (CE-SEC-008).
+
+        Called right after the advisory locks are granted: under REPEATABLE READ a view opened by an earlier
+        read would not show a row another session committed while this one waited for the lock. A commit
+        also publishes whatever the same request wrote earlier, as the apply path's own commits do. Raises
+        when neither commit nor rollback is available; the caller then blocks.
+        """
+        if self.in_memory:
+            return
+        db = self._frappe.db
+        if hasattr(db, "commit"):
+            db.commit()
+        elif hasattr(db, "rollback"):
+            db.rollback()
+        else:
+            raise DurableEvidenceError("no way to open a fresh read view")
+
     def acquire_advisory_lock(self, lock_key: str, wait_seconds: int) -> Optional[int]:
         if not self.in_memory:
             try:
@@ -707,8 +739,18 @@ class FrappeDeploymentAdapter:
                 raise LockTimeoutError(f"lock_wait_timeout is {effective} after setting {seconds}")
         self.lock_wait_timeout_seconds = seconds
 
+    def _verify_session_lock_timeout(self, sql: Any = None) -> None:
+        try:
+            rows = (sql or self._frappe.db.sql)("SELECT @@SESSION.lock_wait_timeout")
+            effective = int(rows[0][0])
+        except Exception as exc:
+            raise LockTimeoutError("lock_wait_timeout could not be re-read before dispatch") from exc
+        if effective != self.lock_wait_timeout_seconds:
+            raise LockTimeoutError("lock_wait_timeout on the dispatching session is not the verified value")
+
     def mark_recovery_required(self, deployment_id: str, reason: str = "") -> None:
-        """Best-effort recovery marker when Stage 6 finalization fails after DDL."""
+        """Best-effort recovery marker when Stage 6 finalization fails after DDL (main rows only)."""
+        _require_main_row_id(deployment_id)
         if not self.in_memory:
             try:
                 self._ensure_audit_table()
@@ -717,7 +759,7 @@ class FrappeDeploymentAdapter:
                     SET status = 'RECOVERY_REQUIRED',
                         outcome_json = %s,
                         updated_at = NOW(6)
-                    WHERE deployment_id = %s
+                    WHERE deployment_id = %s AND {_MAIN_ROWS_ONLY}
                 """, (json.dumps({"deployment_id": deployment_id, "status": "RECOVERY_REQUIRED", "reason": reason}), deployment_id))
                 if hasattr(self._frappe.db, "commit"):
                     self._frappe.db.commit()
@@ -739,8 +781,16 @@ class FrappeDeploymentAdapter:
             res = self._frappe.db.sql(f"""
                 SELECT COUNT(*) FROM `{self.audit_table}`
                 WHERE site_id = %s AND doctype = %s AND status IN ('RECOVERY_REQUIRED', 'PREPARED')
+                AND {_MAIN_ROWS_ONLY}
             """, (site_id, doctype))
-            return bool(res and res[0][0] > 0)
+            # An empty or odd-shaped answer is a failed read, never "no blocked deployment".
+            try:
+                count = res[0][0]
+            except (IndexError, TypeError, KeyError):
+                count = None
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                raise DurableEvidenceError("the recovery lookup returned no usable count")
+            return count > 0
         for rec in self.audit_journal.values():
             if rec.get("site_id") == site_id and rec.get("doctype") == doctype:
                 if rec.get("status") in ("RECOVERY_REQUIRED", "PREPARED"):
@@ -751,18 +801,51 @@ class FrappeDeploymentAdapter:
         self, site_id: str, idempotency_key: str
     ) -> Optional[Dict[str, Any]]:
         if not self.in_memory:
-            # CE-SEC-008: a database error or an unparseable stored outcome propagates and blocks; it is
-            # never read as "no earlier attempt".
+            # CE-SEC-008: a database error, a missing row shape or an unusable stored outcome propagates and
+            # blocks; it is never read as "no earlier attempt". A main row without an outcome is an unfinished
+            # deployment: the key is held, and the hold is what a matching request is told.
             res = self._frappe.db.sql(f"""
-                SELECT payload_hash, outcome_json FROM `{self.audit_table}`
-                WHERE site_id = %s AND idempotency_key = %s AND outcome_json IS NOT NULL
+                SELECT payload_hash, outcome_json, status FROM `{self.audit_table}`
+                WHERE site_id = %s AND idempotency_key = %s AND {_MAIN_ROWS_ONLY}
             """, (site_id, idempotency_key))
-            if res and res[0]:
-                payload_hash, outcome_json = res[0]
-                if outcome_json:
-                    return {"payload_hash": payload_hash, "outcome": json.loads(outcome_json)}
-            return None
-        return self.idempotency_store.get((site_id, idempotency_key))
+            if not res:
+                return None
+            completed: List[Tuple[str, Dict[str, Any]]] = []
+            held: List[str] = []
+            for row in res:
+                if not isinstance(row, (tuple, list)) or len(row) < 2 or not isinstance(row[0], str):
+                    raise DurableEvidenceError("an idempotency row has an unexpected shape")
+                payload_hash, outcome_json = row[0], row[1]
+                status = row[2] if len(row) > 2 else None
+                if outcome_json is None:
+                    if status not in ("PREPARED", "RECOVERY_REQUIRED"):
+                        raise DurableEvidenceError("an idempotency row has no outcome and no hold status")
+                    held.append(payload_hash)
+                    continue
+                if not isinstance(outcome_json, str) or not outcome_json.strip():
+                    raise DurableEvidenceError("a stored outcome is empty")
+                outcome = json.loads(outcome_json)
+                if not isinstance(outcome, dict):
+                    raise DurableEvidenceError("a stored outcome is not an object")
+                completed.append((payload_hash, outcome))
+            if len({h for h, _ in completed} | set(held)) > 1:
+                raise DurableEvidenceError("one idempotency key is bound to several payloads")
+            if completed:
+                return {"payload_hash": completed[0][0], "outcome": completed[0][1]}
+            return {"payload_hash": held[0], "outcome": self._hold_outcome()}
+        stored = self.idempotency_store.get((site_id, idempotency_key))
+        if stored is not None and stored.get("outcome") is None:
+            return {"payload_hash": stored.get("payload_hash"), "outcome": self._hold_outcome()}
+        return stored
+
+    @staticmethod
+    def _hold_outcome() -> Dict[str, Any]:
+        return {
+            "status": "RECOVERY_REQUIRED",
+            "stage": "INSPECT",
+            "reason_code": "idempotency_key_held",
+            "reason": "An earlier deployment with this idempotency key is unfinished; it holds the key until recovered.",
+        }
 
     def _get_default_columns(self, doctype: str) -> List[ColumnDesc]:
         return [
@@ -974,11 +1057,13 @@ class FrappeDeploymentAdapter:
                 indexes_unchanged = True
                 definition_matches = True
                 unapproved = False
+                provenance = True  # offline mode: nothing ran, so there is nothing to attribute
                 restarted_dispatched: Optional[List[str]] = None
                 if self.offline_ddl_simulator:
                     pass  # explicit offline mode: no real DDL ran, nothing to compare
                 else:
                     post_apply = expected_deployment_id in self._applied_deployments
+                    restarted = False
                     if not post_apply:
                         # CE-SEC-008: a deployment with durable evidence is never re-baselined from the
                         # live (possibly post-DDL) schema: after a restart the committed baseline wins.
@@ -991,11 +1076,21 @@ class FrappeDeploymentAdapter:
                             self._approved_ddl.setdefault(expected_deployment_id, evidence["approved"])
                             restarted_dispatched = evidence["dispatched"]
                             post_apply = True
+                            restarted = True
                     if not post_apply:
                         if schema is None:
                             raise RuntimeError("before-apply table schema unreadable")
                         self._before_schema[(doctype, expected_deployment_id)] = schema
                 if not self.offline_ddl_simulator and post_apply:
+                    # Provenance is computed, never assumed: this process vouches for the change only when it
+                    # sent the statements itself and every one of them returned. After a restart the journal
+                    # holds intent, not proof, so a restarted deployment is never attributable here and the
+                    # reconciler classifies it RECOVERY_REQUIRED instead of APPLIED.
+                    provenance = (
+                        not restarted
+                        and self._dispatched_ddl.get(expected_deployment_id) is not None
+                        and self._dispatched_ddl.get(expected_deployment_id) == self._executed_ddl.get(expected_deployment_id)
+                    )
                     # ERP-027: what ran must match the approved plan; unknown means unapproved.
                     before_schema = self._before_schema.get((doctype, expected_deployment_id))
                     approved = self._approved_ddl.get(expected_deployment_id)
@@ -1032,7 +1127,7 @@ class FrappeDeploymentAdapter:
                     has_col=has_col,
                     definition_matches=definition_matches,
                     indexes_unchanged=indexes_unchanged,
-                    provenance_matches=True,
+                    provenance_matches=provenance,
                     unapproved_side_effects=unapproved,
                     revision_hash=rev_hash,
                 )
@@ -1240,12 +1335,18 @@ class FrappeDeploymentAdapter:
             raise RuntimeError("Fail-closed: Simulated audit prepare failure")
 
         dep_id = record["deployment_id"]
+        _require_main_row_id(dep_id)
+        if caller_id_problem(record.get("idempotency_key", f"idemp-{dep_id}")):
+            raise InvalidDeploymentIdError("idempotency key must not contain '#' or control characters")
         approved = list(record.get("ddl_plan_statements", []))
         binding = self._intent_binding(record)
+        # Only physical DDL has a schema baseline and a dispatch journal. Property-setter, workflow and
+        # report deployments carry no plan statements and keep the plain strict intent row.
+        physical_ddl = bool(approved)
 
         if not self.in_memory:
-            baseline = self._before_schema.get((binding["doctype"], dep_id))
-            if baseline is None and not self.offline_ddl_simulator:
+            baseline = self._before_schema.get((binding["doctype"], dep_id)) if physical_ddl else None
+            if physical_ddl and baseline is None and not self.offline_ddl_simulator:
                 raise DurableEvidenceError("no baseline schema was captured before the intent; refusing to prepare")
             self._ensure_audit_table()
             self._intent_context[dep_id] = {**binding, "base_revision_hash": record.get("base_revision_hash", "rev_default")}
@@ -1254,10 +1355,11 @@ class FrappeDeploymentAdapter:
                     name=dep_id, deployment_id=dep_id, blob=json.dumps(approved),
                     base_revision_hash=record.get("base_revision_hash", "rev_default"),
                     status=record.get("status", "PREPARED"), **binding)
-                self._insert_evidence_row(dep_id, "baseline", _EVIDENCE_BASELINE, {
-                    "kind": "baseline", "doctype": binding["doctype"],
-                    "schema": _encode_schema(baseline) if baseline is not None else None,
-                })
+                if physical_ddl:
+                    self._insert_evidence_row(dep_id, "baseline", _EVIDENCE_BASELINE, {
+                        "kind": "baseline", "doctype": binding["doctype"],
+                        "schema": _encode_schema(baseline) if baseline is not None else None,
+                    })
                 self._commit_durable()
             except Exception as exc:
                 self._rollback_durable()
@@ -1273,7 +1375,8 @@ class FrappeDeploymentAdapter:
                     )
                     raise DeploymentIntentConflictError(
                         dep_id, "already_recorded" if same else "binding_mismatch") from exc
-                raise
+                logger.exception("could not persist the deployment intent for %s", dep_id)
+                raise DurableEvidenceError("the deployment intent could not be persisted") from exc
             self._approved_ddl[dep_id] = approved
         else:
             if dep_id in self.audit_journal:
@@ -1294,6 +1397,7 @@ class FrappeDeploymentAdapter:
     ) -> None:
         if self.simulate_finalize_error:
             raise RuntimeError("Final audit persistence simulated failure")
+        _require_main_row_id(deployment_id)
 
         outcome = outcome_record.get("outcome", {})
         status = outcome.get("status", "COMPLETED")
@@ -1304,7 +1408,7 @@ class FrappeDeploymentAdapter:
             self._frappe.db.sql(f"""
                 UPDATE `{self.audit_table}`
                 SET status = %s, outcome_json = %s, updated_at = NOW(6)
-                WHERE deployment_id = %s
+                WHERE deployment_id = %s AND {_MAIN_ROWS_ONLY}
             """, (status, outcome_json, deployment_id))
             if hasattr(self._frappe.db, "commit"):
                 self._frappe.db.commit()
@@ -1366,6 +1470,10 @@ class FrappeDeploymentAdapter:
                 )
                 if reason:
                     raise ValueError("DDL rejected before execution: " + reason)
+                # The timeout verified when it was set must still hold on THIS session, the one that sends the
+                # statement (a reconnect or a reset in between would otherwise let DDL wait unbounded).
+                if self.lock_wait_timeout_seconds is not None:
+                    self._verify_session_lock_timeout(original_sql)
                 seq = len(dispatched) + 1
                 self._journal_dispatch_intent(deployment_id, statement, seq, original_sql)
                 dispatched.append(statement)
@@ -1518,30 +1626,35 @@ class FrappeDeploymentAdapter:
                 pass
 
     def get_deployment_record(self, deployment_id: str) -> Optional[Dict[str, Any]]:
+        """The main deployment row, or ``None`` when it does not exist (also for any id inside the evidence
+        namespace). A failed read raises ``DurableEvidenceError``: it is never reported as "not found"."""
+        if caller_id_problem(deployment_id):
+            return None
         if self.in_memory:
             return self.audit_journal.get(deployment_id)
         try:
             self._ensure_audit_table()
             res = self._frappe.db.sql(
-                f"SELECT * FROM `{self.audit_table}` WHERE deployment_id = %s",
+                f"SELECT * FROM `{self.audit_table}` WHERE deployment_id = %s AND {_MAIN_ROWS_ONLY}",
                 (deployment_id,),
                 as_dict=True,
             )
-            if res:
-                row = dict(res[0])
-                if row.get("outcome_json"):
-                    try:
-                        extra = json.loads(row["outcome_json"])
-                        if isinstance(extra, dict):
-                            for k, v in extra.items():
-                                if k not in row or row[k] is None:
-                                    row[k] = v
-                    except Exception:
-                        pass
-                return row
+        except Exception as exc:
+            logger.exception("deployment record lookup failed for %s", deployment_id)
+            raise DurableEvidenceError("the deployment record could not be read") from exc
+        if not res:
             return None
-        except Exception:
-            return None
+        row = dict(res[0])
+        if row.get("outcome_json"):
+            try:
+                extra = json.loads(row["outcome_json"])
+            except ValueError as exc:
+                raise DurableEvidenceError("the stored deployment outcome is unreadable") from exc
+            if isinstance(extra, dict):
+                for k, v in extra.items():
+                    if k not in row or row[k] is None:
+                        row[k] = v
+        return row
 
     def update_deployment_status(
         self, deployment_id: str, status: str, outcome: Optional[Dict[str, Any]] = None
@@ -1733,6 +1846,78 @@ class FrappeDeploymentAdapter:
 
 
 
+def _stable_reason_code(exc: BaseException) -> str:
+    """A fixed, non-sensitive code for an exception that reaches an RPC response."""
+    if isinstance(exc, DeploymentIntentConflictError):
+        return "intent_conflict"
+    if isinstance(exc, LockTimeoutError):
+        return "lock_timeout_not_effective"
+    if isinstance(exc, InvalidDeploymentIdError):
+        return "invalid_deployment_id"
+    return "engine_unavailable"
+
+
+def _unexpected_failure(exc: BaseException, label: str, deployment_id: Any, start_time: float, **extra: Any) -> Dict[str, Any]:
+    """The RPC response for an unhandled error: a stable code and fixed text only; the details stay in the log."""
+    logger.error("%s raised an unhandled exception for %s", label, deployment_id, exc_info=exc)
+    return {
+        "deployment_id": deployment_id,
+        "status": "FAILED_CLEAN",
+        "success": False,
+        "stage": "UNKNOWN",
+        "disposition": "UNEXPECTED_ERROR",
+        "reason_code": _stable_reason_code(exc),
+        "reason": f"{label} failed; the details are in the server log.",
+        **extra,
+        "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+    }
+
+
+def _reject_invalid_deployment_id(deployment_id: Any, start_time: float, **extra: Any) -> Optional[Dict[str, Any]]:
+    """RPC boundary check: ids that could name or collide with an evidence row are refused before any work."""
+    problem = caller_id_problem(deployment_id)
+    if not problem:
+        return None
+    return {
+        "deployment_id": None,
+        "status": "REJECTED",
+        "success": False,
+        "stage": "VALIDATE",
+        "disposition": "INVALID_DEPLOYMENT_ID",
+        "reason_code": "invalid_deployment_id",
+        "reason": f"The deployment id {problem}.",
+        **extra,
+        "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+    }
+
+
+_LOCK_WAIT_TEXT = re.compile(r"[0-9]{1,9}")
+
+
+def _parse_lock_wait_seconds(value: Any) -> Optional[int]:
+    """The RPC timeout: an integer, or the digits of one as sent over the wire; anything else is ``None``."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str) and _LOCK_WAIT_TEXT.fullmatch(value):
+        value = int(value)
+    if not isinstance(value, int) or not 1 <= value <= _MAX_LOCK_WAIT_SECONDS:
+        return None
+    return value
+
+
+def _invalid_lock_wait(deployment_id: Any, start_time: float) -> Dict[str, Any]:
+    return {
+        "deployment_id": deployment_id,
+        "status": "REJECTED",
+        "success": False,
+        "stage": "VALIDATE",
+        "disposition": "INVALID_LOCK_WAIT_SECONDS",
+        "reason_code": "invalid_lock_wait_seconds",
+        "reason": f"lock_wait_seconds must be an integer from 1 to {_MAX_LOCK_WAIT_SECONDS}.",
+        "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+    }
+
+
 def apply_configuration_change(
     doctype: str,
     deployment_id: Optional[str] = None,
@@ -1758,6 +1943,12 @@ def apply_configuration_change(
     # Normalize deployment_id
     if not deployment_id:
         deployment_id = kwargs.get("deployment_id") or f"dep_{uuid.uuid4().hex[:12]}"
+    rejected = _reject_invalid_deployment_id(deployment_id, start_time)
+    if rejected:
+        return rejected
+    lock_wait_seconds = _parse_lock_wait_seconds(kwargs.get("lock_wait_seconds", 3))
+    if lock_wait_seconds is None:
+        return _invalid_lock_wait(deployment_id, start_time)
 
     # Normalize JSON proposal if serialized over RPC
     if isinstance(proposal, str):
@@ -1945,7 +2136,6 @@ def apply_configuration_change(
                 "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
             }
 
-    lock_wait_seconds = int(kwargs.get("lock_wait_seconds", 3))
 
     # Step 4.5: Verify preview & DDL plan gate binding if preview metadata was provided (BPL-007)
     ddl_plan_container = proposal_envelope if proposal_envelope is not None else proposal
@@ -2084,16 +2274,7 @@ def apply_configuration_change(
             "execution_time_ms": execution_time_ms,
         }
     except Exception as exc:
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "FAILED_CLEAN",
-            "success": False,
-            "stage": "UNKNOWN",
-            "disposition": "UNEXPECTED_ERROR",
-            "reason": f"Deployment execution raised unhandled exception: {exc}",
-            "execution_time_ms": execution_time_ms,
-        }
+        return _unexpected_failure(exc, "Deployment execution", deployment_id, start_time)
 
     execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
     outcome["execution_time_ms"] = execution_time_ms
@@ -2138,6 +2319,11 @@ def apply_property_setter_change(
 
     if not deployment_id:
         deployment_id = kwargs.get("deployment_id") or f"dep_ps_{uuid.uuid4().hex[:12]}"
+    rejected = _reject_invalid_deployment_id(deployment_id, start_time)
+    if rejected:
+        return rejected
+    if "lock_wait_seconds" in kwargs and _parse_lock_wait_seconds(kwargs["lock_wait_seconds"]) is None:
+        return _invalid_lock_wait(deployment_id, start_time)
 
     if not property_name and "property" in kwargs:
         property_name = kwargs.get("property")
@@ -2200,16 +2386,7 @@ def apply_property_setter_change(
             **forward_kwargs,
         )
     except Exception as exc:
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "FAILED_CLEAN",
-            "success": False,
-            "stage": "UNKNOWN",
-            "disposition": "UNEXPECTED_ERROR",
-            "reason": f"Property Setter execution raised unhandled exception: {exc}",
-            "execution_time_ms": execution_time_ms,
-        }
+        return _unexpected_failure(exc, "Property Setter execution", deployment_id, start_time)
 
     return outcome
 
@@ -2232,6 +2409,11 @@ def apply_workflow_change(
 
     if not deployment_id:
         deployment_id = kwargs.get("deployment_id") or f"dep_wf_{uuid.uuid4().hex[:12]}"
+    rejected = _reject_invalid_deployment_id(deployment_id, start_time, doctype=doctype)
+    if rejected:
+        return rejected
+    if "lock_wait_seconds" in kwargs and _parse_lock_wait_seconds(kwargs["lock_wait_seconds"]) is None:
+        return _invalid_lock_wait(deployment_id, start_time)
 
     if workflow_def is None and "workflow" in kwargs:
         workflow_def = kwargs.get("workflow")
@@ -2320,17 +2502,7 @@ def apply_workflow_change(
             **forward_kwargs,
         )
     except Exception as exc:
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "FAILED_CLEAN",
-            "success": False,
-            "stage": "UNKNOWN",
-            "disposition": "UNEXPECTED_ERROR",
-            "reason": f"Workflow deployment execution raised unhandled exception: {exc}",
-            "doctype": doctype,
-            "execution_time_ms": execution_time_ms,
-        }
+        return _unexpected_failure(exc, "Workflow deployment execution", deployment_id, start_time, doctype=doctype)
 
     return outcome
 
@@ -2354,6 +2526,11 @@ def apply_report_change(
 
     if not deployment_id:
         deployment_id = kwargs.get("deployment_id") or f"dep_rep_{uuid.uuid4().hex[:12]}"
+    rejected = _reject_invalid_deployment_id(deployment_id, start_time, doctype=doctype)
+    if rejected:
+        return rejected
+    if "lock_wait_seconds" in kwargs and _parse_lock_wait_seconds(kwargs["lock_wait_seconds"]) is None:
+        return _invalid_lock_wait(deployment_id, start_time)
 
     if report_def is None and "report" in kwargs:
         report_def = kwargs.get("report")
@@ -2442,17 +2619,7 @@ def apply_report_change(
             **forward_kwargs,
         )
     except Exception as exc:
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "FAILED_CLEAN",
-            "success": False,
-            "stage": "UNKNOWN",
-            "disposition": "UNEXPECTED_ERROR",
-            "reason": f"Report deployment execution raised unhandled exception: {exc}",
-            "doctype": doctype,
-            "execution_time_ms": execution_time_ms,
-        }
+        return _unexpected_failure(exc, "Report deployment execution", deployment_id, start_time, doctype=doctype)
 
     return outcome
 
@@ -2482,12 +2649,27 @@ def revert_configuration_change(
     forward_kwargs.pop("adapter", None)
     forward_kwargs.pop("db", None)
 
-    return execute_rollback(
-        deployment_id=deployment_id,
-        caller_roles=user_roles,
-        db=db,
-        **forward_kwargs,
-    )
+    start_time = time.perf_counter()
+    try:
+        return execute_rollback(
+            deployment_id=deployment_id,
+            caller_roles=user_roles,
+            db=db,
+            **forward_kwargs,
+        )
+    except (DurableEvidenceError, InvalidDeploymentIdError) as exc:
+        # The audit store could not be read (or the id is unusable): "unavailable", never "not found".
+        logger.error("rollback lookup failed for %s", deployment_id, exc_info=exc)
+        return {
+            "deployment_id": deployment_id if isinstance(deployment_id, str) and "#" not in deployment_id else None,
+            "status": "REJECTED",
+            "success": False,
+            "stage": "INSPECT",
+            "disposition": "ENGINE_UNAVAILABLE",
+            "reason_code": "engine_unavailable",
+            "reason": "The deployment record could not be read; the rollback was not attempted.",
+            "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+        }
 
 
 

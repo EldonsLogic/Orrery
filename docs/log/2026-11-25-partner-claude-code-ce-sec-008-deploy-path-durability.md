@@ -55,6 +55,26 @@ All under `apps/engine/change_engine/change_engine/`:
 - The workflow, report and property-setter engines call the same lookups, so they now raise on a database outage. That is fail closed, but they have no clean refusal yet.
 - The new test file has 734 lines, above the ~500-line guideline.
 
+## Review round 1 (GPT-6.2 Sol at 56b00a23: changes required; 4 High, 4 Medium, 1 Low)
+- Fixed:
+  - non-DDL deployments (workflow, report, property setter) no longer need a DDL baseline;
+  - caller ids that could collide with evidence keys are rejected, and rollback, lookups and finalizers act on main rows only;
+  - a fresh read view is taken after the locks;
+  - provenance is computed, and a restarted deployment always ends in RECOVERY_REQUIRED;
+  - lookup row shapes are strict and read failures are typed;
+  - a site-scoped idempotency lock, with `already_recorded` replaying the stored outcome;
+  - stable reason codes, with exception text in internal logs only;
+  - timeout validation at the RPC boundary, with a re-read on the dispatching session;
+  - a stateful live mock.
+- Red then green: the new `test_ce_sec_008_review_fixes.py` went from 69 failed and 16 passed to all passing. The two CE-SEC-008 files now give 77 passed with 76 subtests.
+- Full suite: 1591 passed, 86 skipped, 0 failed.
+- Follow-ups added to PLAN:
+  - CE-SEC-009: a locked recovery entry point (needs an ADR).
+  - CE-SEC-010: a dedicated journal table with a unique idempotency index (needs an ADR).
+- Other follow-ups:
+  - Adapter lane, part 2: in `frappe_backend.py`, the decimal backend must set the timeout before the intent. The workflow, report and property-setter engines need the idempotency lock and a fresh read view.
+  - A bench proof with two MariaDB sessions.
+
 ## Tokens or cost
 Unknown.
 

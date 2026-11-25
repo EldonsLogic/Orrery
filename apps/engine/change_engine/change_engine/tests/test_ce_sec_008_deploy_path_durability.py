@@ -63,6 +63,15 @@ class _DurableDb(_LiveDb):
         self.readback = "value"  # "value" | "empty"
         self.locks: set[str] = set()
         self.commits = 0
+        self.view: dict[str, dict] | None = None  # REPEATABLE READ: the read view the first table read opens
+        self.on_lock = None  # called with the lock name once it is granted (another session may commit meanwhile)
+        self.readback_values: list[int] | None = None  # consumed in order by @@SESSION reads
+
+    def get_value(self, *a, **k):
+        return None
+
+    def exists(self, *a, **k):
+        return False
 
     # -- transaction model ---------------------------------------------------------------
     def commit(self):
@@ -75,18 +84,30 @@ class _DurableDb(_LiveDb):
                     if row["deployment_id"] == dep:
                         row.update(fields)
         self.pending = []
+        self.view = None  # a commit ends the transaction, so the next read opens a fresh view
         self.commits += 1
 
     def rollback(self):
         self.pending = []
+        self.view = None
 
     def crash(self):
         """Process death: whatever was not committed is gone, and the server drops the session lock."""
         self.pending = []
+        self.view = None
         self.locks.clear()
 
+    def _latest(self) -> dict[str, dict]:
+        """Committed rows plus this session's own writes (what constraint checks see)."""
+        return self._merged({k: dict(v) for k, v in self.committed.items()})
+
     def _visible(self) -> dict[str, dict]:
-        rows = {k: dict(v) for k, v in self.committed.items()}
+        """What a plain SELECT sees: the read view opened by the first table read, plus own writes."""
+        if self.view is None:
+            self.view = {k: dict(v) for k, v in self.committed.items()}
+        return self._merged({k: dict(v) for k, v in self.view.items()})
+
+    def _merged(self, rows: dict[str, dict]) -> dict[str, dict]:
         for op in self.pending:
             if op[0] == "insert":
                 rows[op[1]] = dict(op[2])
@@ -118,6 +139,8 @@ class _DurableDb(_LiveDb):
             if values[0] in self.locks:
                 return ((0,),)
             self.locks.add(values[0])
+            if self.on_lock:
+                self.on_lock(values[0])
             return ((1,),)
         if q.startswith("SELECT RELEASE_LOCK"):
             self.sql_log.append(query)
@@ -130,7 +153,11 @@ class _DurableDb(_LiveDb):
             return ()
         if q.startswith("SELECT @@SESSION.LOCK_WAIT_TIMEOUT"):
             self.sql_log.append(query)
-            return () if self.readback == "empty" else ((self.lock_wait_timeout,),)
+            if self.readback == "empty":
+                return ()
+            if self.readback_values:
+                return ((self.readback_values.pop(0),),)
+            return ((self.lock_wait_timeout,),)
         if q.startswith("CREATE TABLE IF NOT EXISTS"):
             self.sql_log.append(query)
             self.commit()  # DDL commits implicitly
@@ -152,10 +179,12 @@ class _DurableDb(_LiveDb):
         if f"`{AUDIT.upper()}`" in q:
             self.sql_log.append(query)
             return self._audit(q, values, as_dict)
+        if q.startswith("SELECT") and " FROM " in q and self.view is None:
+            self._visible()  # any table read opens the transaction's read view
         return super().sql(query, values)
 
     def _audit(self, q, p, as_dict):
-        rows = self._visible()
+        rows = self._latest() if q.startswith(("INSERT", "UPDATE")) else self._visible()
         if q.startswith("INSERT INTO"):
             name = p[0]
             row = {
@@ -188,8 +217,9 @@ class _DurableDb(_LiveDb):
             return ((n,),)
         if "SELECT PAYLOAD_HASH, OUTCOME_JSON" in q:
             site, key = p
-            return tuple((r["payload_hash"], r["outcome_json"]) for r in rows.values()
-                         if r["site_id"] == site and r["idempotency_key"] == key and r["outcome_json"] is not None)
+            return tuple((r["payload_hash"], r["outcome_json"], r["status"]) for r in rows.values()
+                         if r["site_id"] == site and r["idempotency_key"] == key
+                         and not r["status"].startswith("EVIDENCE_"))
         if "WHERE IDEMPOTENCY_KEY = %S" in q and "SELECT NAME" in q:
             hit = sorted((r for r in rows.values() if r["idempotency_key"] == p[0]), key=lambda r: r["name"])
             return tuple((r["name"], r["status"], r["ddl_plan_statements"]) for r in hit)
@@ -220,6 +250,8 @@ class _Bench:
         self.module = types.SimpleNamespace(db=self.db, clear_cache=lambda **kw: None, get_doc=self._get_doc)
 
     def _get_doc(self, args):
+        if args.get("doctype") != "Custom Field":  # workflow, report and similar documents: nothing to emulate
+            return types.SimpleNamespace(insert=lambda **kw: None, save=lambda **kw: None, name=args.get("name"))
         field = args["fieldname"]
 
         def insert(ignore_permissions=True):
@@ -624,6 +656,7 @@ class TestDatabaseErrorsBlockAndAreNeverAbsent(unittest.TestCase):
             "name": "x", "deployment_id": "x", "idempotency_key": "k", "payload_hash": "h", "site_id": "site-a",
             "doctype": "Item", "fieldname": "f", "base_revision_hash": "r", "ddl_plan_statements": "[]",
             "status": "PREPARED", "outcome_json": None}
+        bench.db.commit()  # the other session's commit is visible to a transaction that starts after it
         self.assertTrue(adapter.is_target_in_recovery_required("site-a", "Item"))
 
     def test_deploy_is_blocked_with_no_effect_when_the_idempotency_lookup_fails(self):

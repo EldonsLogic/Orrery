@@ -83,6 +83,32 @@ None yet; claim PR must merge first.
   - #300 CMP-036: waiting for a partner decision on Q-601 (mark answered: ZATCA mandates half-up; negative-amount question kept open). Not acted on.
   - GOV-071: unblocked by #296; not started yet.
 
+- After #327:
+  - CMP-010 (#319):
+    - Round 5 (ea847a20) made the UUID to source-document binding one-to-one (T43).
+    - Partner decisions on 2026-11-25 recorded at 84732556: the code goes in `components/compliance/zatca_sa/vat_return.py`, and Q-601 is answered.
+    - Ready for Eldon's re-review and the founders' Tier 3 read; status posted.
+  - #310 BPL-041:
+    - M1, L1 and L2 fixed test-first (c095a415), by a Sonnet child. Full suite 1543 passed.
+    - Merged into #312 (29faa4d3), which gives 1556 passed. Findings table posted.
+    - Waiting for Eldon.
+  - GOV-071 (#328): rename to Seshna in partner-lane prose and visible text, by a Sonnet child.
+    - Environment variables and package names are kept for GOV-002 (ADR-0066 item 7).
+    - Tests pass. Waiting for Eldon (Tier 2).
+  - CE-SEC-008 (#322):
+    - Review rounds 2 to 7 (GPT-6.2 Sol). The child fixed rounds 2 to 4.
+    - The coordinator fixed rounds 5 to 7 directly:
+      - one authoritative site identity per site;
+      - a read-only alias for legacy host-name rows;
+      - the alias taken from the injected runtime;
+      - the simulator's `IN` lookup.
+    - Follow-up rows CE-SEC-009, CE-SEC-010 and CE-SEC-011 carry the deferred parts.
+    - Review loop stopped after round 7. Full suite 1698 passed, 0 failed. Ready for Tier 3; status posted.
+  - The partner said "approve", read as approving all three pending decisions:
+    - #306 ERP-033: merged. Eldon approved at e28ec6e8, and the partner gave the Tier 3 say-so.
+    - Q-601: marked answered on #300 (f6b22274), with the negative-amount question kept open. Main merged in; 205 country-pack tests pass. Waiting for Eldon's re-review and a Tier 3 say-so.
+    - CMP-010 code location: `zatca_sa/vat_return.py`.
+
 ## Tokens or cost
 Unknown.
 

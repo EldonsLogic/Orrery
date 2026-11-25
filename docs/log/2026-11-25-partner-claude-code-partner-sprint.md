@@ -83,6 +83,50 @@ None yet; claim PR must merge first.
   - #300 CMP-036: waiting for a partner decision on Q-601 (mark answered: ZATCA mandates half-up; negative-amount question kept open). Not acted on.
   - GOV-071: unblocked by #296; not started yet.
 
+- After #327:
+  - CMP-010 (#319):
+    - Round 5 (ea847a20) made the UUID to source-document binding one-to-one (T43).
+    - Partner decisions on 2026-11-25 recorded at 84732556: the code goes in `components/compliance/zatca_sa/vat_return.py`, and Q-601 is answered.
+    - Ready for Eldon's re-review and the founders' Tier 3 read; status posted.
+  - #310 BPL-041:
+    - M1, L1 and L2 fixed test-first (c095a415), by a Sonnet child. Full suite 1543 passed.
+    - Merged into #312 (29faa4d3), which gives 1556 passed. Findings table posted.
+    - Waiting for Eldon.
+  - GOV-071 (#328): rename to Seshna in partner-lane prose and visible text, by a Sonnet child.
+    - Environment variables and package names are kept for GOV-002 (ADR-0066 item 7).
+    - Tests pass. Waiting for Eldon (Tier 2).
+  - CE-SEC-008 (#322):
+    - Review rounds 2 to 7 (GPT-6.2 Sol). The child fixed rounds 2 to 4.
+    - The coordinator fixed rounds 5 to 7 directly:
+      - one authoritative site identity per site;
+      - a read-only alias for legacy host-name rows;
+      - the alias taken from the injected runtime;
+      - the simulator's `IN` lookup.
+    - Follow-up rows CE-SEC-009, CE-SEC-010 and CE-SEC-011 carry the deferred parts.
+    - Review loop stopped after round 7. Full suite 1698 passed, 0 failed. Ready for Tier 3; status posted.
+  - The partner said "approve", read as approving all three pending decisions:
+    - #306 ERP-033: merged. Eldon approved at e28ec6e8, and the partner gave the Tier 3 say-so.
+    - Q-601: marked answered on #300 (f6b22274), with the negative-amount question kept open. Main merged in; 205 country-pack tests pass. Waiting for Eldon's re-review and a Tier 3 say-so.
+    - CMP-010 code location: `zatca_sa/vat_return.py`.
+
+- After #329 (partner: "proceed"):
+  - Merged:
+    - #329 (Tier 1 log).
+    - #310 BPL-041 (Tier 2, Eldon approved at c095a415).
+    - #312 BPL-043 (Tier 2, Eldon approved at 29faa4d3). It was retargeted from the #310 branch to main through the REST API, because `gh pr edit` fails on the deprecated Projects-classic field.
+  - #328 GOV-071: Eldon's blocker fixed at 5c051142.
+    - The tax invoice's font stack is now Readex Pro for body text and Cairo for titles and number columns, with `tabular-nums`. Alexandria and Arial are removed.
+    - Added a fonts-and-footer test. GOV-071 marked done.
+    - ERP-035 (todo) carries moving the invoice's 36 hard-coded colours to tokens and adding it to the literal guard.
+    - Waiting for Eldon's re-review.
+  - #322 CE-SEC-008: Eldon's security review (at 56b00a23) sent to the child as round 5.
+    - F1 and F5 are already fixed.
+    - F2, F3, F4 and F6 to F10 are in progress.
+    - `frappe_backend.py` is now allowed, since #310 and #312 have merged.
+    - real-bench-tests passes on the PR.
+  - #319 CMP-010: main merged (07a191f5; open-questions kept both the Q-609 to Q-614 and the Q-615 to Q-626 blocks). Eldon's narrow re-review (N1 to N4, M3, M5, Lows) sent to the author as round 6.
+  - #300 CMP-036: Eldon approved at f6b22274 after a line-by-line read. Waiting for the partner's Tier 3 say-so.
+
 ## Tokens or cost
 Unknown.
 

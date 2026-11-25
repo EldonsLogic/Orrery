@@ -39,8 +39,11 @@ export function ChatScreen({ port, roles }: ChatScreenProps) {
       )}
       {running ? <Typing label={state.run === 'cancelling' ? t('stream.cancelling') : t('stream.working')} /> : null}
       <ActivityList steps={state.activity} />
-      {state.clarifyKey ? <ClarifyPrompt clarifyKey={state.clarifyKey} /> : null}
-      {state.confirm ? <ConfirmCard confirm={state.confirm} onAnswer={(ok) => respond((state.confirm as { confirmId: string }).confirmId, ok)} /> : null}
+      {/* Persistent polite live region: a card that appears after the user acts elsewhere is announced. */}
+      <div aria-live="polite" aria-atomic="false">
+        {state.clarifyKey ? <ClarifyPrompt clarifyKey={state.clarifyKey} /> : null}
+        {state.confirm ? <ConfirmCard confirm={state.confirm} onAnswer={(ok) => respond((state.confirm as { confirmId: string }).confirmId, ok)} /> : null}
+      </div>
       {state.approvals.map((a) => (
         <ApprovalCard key={a.approvalId} approval={a} />
       ))}

@@ -514,8 +514,8 @@ class TestSec022GrantAllowlist(_Base):
 
     def test_a_custom_document_type_the_adapter_did_not_make_is_refused(self) -> None:
         self.engine.add_doctype("Gizmo", module="Selling", custom=1)  # made by hand in the desk, another module
-        self.engine.add_doctype("Supplier", module="Buying", custom=0)  # an engine document type outside the mapping
-        for entity in ("gizmo", "supplier"):
+        self.engine.add_doctype("Stock Entry", module="Stock", custom=0)  # an engine document type outside the mapping
+        for entity in ("gizmo", "stock_entry"):
             self.refused(lambda: self.upsert(role("clerk", [grant(entity, "read")])))
         self.assertNotIn("bp-clerk", self.roles())
 
@@ -574,7 +574,7 @@ class TestSec022GrantAllowlist(_Base):
         self.assertEqual(self.granted("bp-clerk", "Delivery Note"), {"read", "create", "write", "submit", "export"})
 
     def test_plan_time_agrees_with_apply_time_for_unmapped_builtin_entities(self) -> None:
-        """Review round 2, finding 2: even when the Blueprint declares entity.add for supplier or price_list,
+        """Review round 2, finding 2: even when the Blueprint declares entity.add for payment_entry or data_import,
         an unmapped built-in DocType (custom=0) must be refused at PLAN time with no write, while delivery_note
         and a Blueprint-created custom entity are allowed."""
         from change_engine.adapter import make_frappe_adapter
@@ -619,8 +619,8 @@ class TestSec022GrantAllowlist(_Base):
         self.assertTrue(prov["ok"], prov)
 
         entity_defs = [
-            st(1, "entity.add", "supplier", {"id": "supplier", "labels": {"en": "Supplier", "ar": "Supplier"}, "fields": []}, "entities", "data_shape"),
-            st(2, "entity.add", "price_list", {"id": "price_list", "labels": {"en": "Price List", "ar": "Price List"}, "fields": []}, "entities", "data_shape"),
+            st(1, "entity.add", "payment_entry", {"id": "payment_entry", "labels": {"en": "Payment Entry", "ar": "Payment Entry"}, "fields": []}, "entities", "data_shape"),
+            st(2, "entity.add", "data_import", {"id": "data_import", "labels": {"en": "Data Import", "ar": "Data Import"}, "fields": []}, "entities", "data_shape"),
             st(3, "entity.add", "delivery_note", {"id": "delivery_note", "labels": {"en": "Delivery Note", "ar": "Delivery Note"}, "fields": []}, "entities", "data_shape"),
             st(4, "entity.add", "widget", {"id": "widget", "labels": {"en": "Widget", "ar": "Widget"}, "fields": []}, "entities", "data_shape"),
         ]
@@ -628,11 +628,11 @@ class TestSec022GrantAllowlist(_Base):
         perms_before = engine.rows("Custom DocPerm")
         doctypes_before = engine.rows("DocType")
 
-        # 1) supplier and price_list grants are refused at PLAN time, even with entity.add in the same Blueprint; delivery_note and widget are allowed.
+        # 1) payment_entry and data_import grants are refused at PLAN time, even with entity.add in the same Blueprint; delivery_note and widget are allowed.
         mixed = make_art([
             *entity_defs,
-            st(5, "role.upsert", "r_sup", role("r_sup", [grant("supplier", "read")]), "roles", "access"),
-            st(6, "role.upsert", "r_pl", role("r_pl", [grant("price_list", "read")]), "roles", "access"),
+            st(5, "role.upsert", "r_pay", role("r_pay", [grant("payment_entry", "read")]), "roles", "access"),
+            st(6, "role.upsert", "r_imp", role("r_imp", [grant("data_import", "read")]), "roles", "access"),
             st(7, "role.upsert", "r_dn", role("r_dn", [grant("delivery_note", "read", "export")]), "roles", "access"),
             st(8, "role.upsert", "r_wid", role("r_wid", [grant("widget", "read", "update")]), "roles", "access"),
         ])

@@ -1,6 +1,6 @@
 # KSA VAT return report: design
 
-Status: Design draft (revision 7) for Tier 3 line-by-line founder review and Saudi accountant review. No code in this file. Not tax advice.
+Status: Design draft (revision 8) for Tier 3 line-by-line founder review and Saudi accountant review. No code in this file. Not tax advice.
 
 Plan ID: CMP-010 (G2, rigid zone, Tier 3). Depends on CMP-006 ([KSA chart and VAT codes](ksa-coa-and-tax-codes.md)).
 
@@ -148,7 +148,7 @@ The 15% rate is read from the SA country pack version passed in `rate_source`. T
 
 ## 8. Closed input contract (`cmp-010.input.v1`)
 
-Every object has a fixed key set: an unknown or missing key is R-SCHEMA. So is a non-`null` value where a field's rule says "else null", or "null on invoices". Amounts are JSON strings: a JSON number is R-TYPE, a leading minus is R-NEG, more than 2 decimals is R-PREC, more than 12 integer digits is R-BOUND, and any other mismatch is R-TYPE. Dates are Gregorian `YYYY-MM-DD`. Every pattern below is applied with `re.fullmatch` and uses ASCII `[0-9]`, never `\d` (which matches non-ASCII digits) or `^…$` anchoring (`$` accepts a trailing newline).
+Every object has a fixed key set: an unknown or missing key is R-SCHEMA. So is a non-`null` value where a field's rule below says "else null", "null on invoices", "notes only", "customs rows only" or "input rows". These conditions are keyed on stage-1 enums only: notes are rows whose `document_kind` is `credit_note` or `debit_note`; customs rows are rows whose `source_doctype` is `customs_declaration`; input rows are rows whose `source_doctype` is `purchase_invoice`, `customs_declaration` or `reverse_charge_record`. Every JSON string anywhere in the input, keys and values, including inside `prior_period_corrections`, must be printable ASCII (U+0020 to U+007E), else R-SCHEMA. No input field needs Arabic text, so this costs nothing, and it means no string that reaches a later stage or the digest can fail to encode. Amounts are JSON strings: a JSON number is R-TYPE, a leading minus is R-NEG, more than 2 decimals is R-PREC, more than 12 integer digits is R-BOUND, and any other mismatch is R-TYPE. Dates are Gregorian `YYYY-MM-DD`. Every pattern below is applied with `re.fullmatch` and uses ASCII `[0-9]`, never `\d` (which matches non-ASCII digits) or `^…$` anchoring (`$` accepts a trailing newline).
 
 ```text
 ReturnInput {
@@ -172,7 +172,7 @@ TaxRow {
   special_case: "none" | "bad_debt" | "capital_asset" | "nominal_supply" | "internal_supply"
               | "proportional_deduction" | "state_borne" | "other"     # not "none": R-SPECIAL
   vat_settlement: "paid_at_customs" | "through_return" | null          # customs rows only
-  customs_payment_reference: [A-Za-z0-9._:/-]{1,64} | null           # required if paid_at_customs
+  customs_payment_reference: [A-Za-z0-9._:/-]{1,64} | null           # customs rows only; required if paid_at_customs
   document_kind: "invoice" | "credit_note" | "debit_note"
   supply_date: date            # tax due date, or the note's issue date
   claim_date: date | null      # required on input invoice rows, inside the period; else null
@@ -185,7 +185,7 @@ TaxRow {
   vat_source: "zatca_xml_bg23" | "ledger_only" | "supplier_document" | "customs_declaration"   # §4 matrix
   xml_uuid: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} | null   # lower case only
   xml_sha256: [0-9a-f]{64} | null                                               # both required on output rows
-  deductible_share: "full" | "partial" | "none" | null   # input rows; not "full": R-PARTIAL
+  deductible_share: "full" | "partial" | "none" | null   # input rows only; not "full": R-PARTIAL
   currency: "SAR"                                        # conversion happens upstream at the SAMA rate
 }
 ```
@@ -193,7 +193,7 @@ TaxRow {
 **Allocation key and replay.** The key is (`source_doctype`, `source_document_id`, `invoice_category`, `vat_rate_percent`, `reason_code`, `original_document_id`). A repeated key is R-DUP, even with a new `row_id`, so a replayed SAR 1,500 subtotal cannot double. The binding is one-to-one in both directions. Every output source document (`source_doctype`, `source_document_id`) carries exactly one `xml_uuid` and one `xml_sha256` on all its rows, and each `xml_uuid` and each `xml_sha256` belongs to exactly one source document. Any other pairing is R-DUP. The stage-3 binding check skips `null` UUIDs and hashes; an output row with a `null` is refused as R-SOURCE in stage 4. A UUID that is not lower-case 8-4-4-4-12 hex is R-SCHEMA, so a case-changed copy cannot pass as a new UUID. This function sees one period only. Preventing a replay across periods, and preventing one supplier invoice entered under two `source_document_id`s (which would double Box 7), is the **extractor's duty**. This means SI-1's XML replayed under another document ID cannot add SAR 1,500, and one document cannot carry two XMLs whose subtotals would add up separately. Rows sharing a reconciliation group must carry identical `group_*` values and sum to them exactly (R-RECON). For output rows the group is (`source_document_id`, `xml_uuid`, `invoice_category`, `vat_rate_percent`). The binding makes this one subtotal per document, category and rate, so a document's rows can never sum past its own subtotals; for input rows it is (`source_doctype`, `source_document_id`, `invoice_category`, `vat_rate_percent`). A row from another VAT registration is R-TAXPAYER. All rows of one source document (`source_doctype`, `source_document_id`) must share one `document_kind`, checked before the sums, or R-RECON. This stops an invoice row of 600/90 and a credit row of 400/60 from reconciling to a 1,000/150 subtotal while posting 30.
 
 **Refusal precedence.** Checks run in stages. The first stage that finds a refusal stops evaluation and reports every refusal from that stage. Within stage 4 and stage 5, checks on one row run in the listed order, and only the row's first failure is reported. R-TAXPAYER sits in stage 2, so a foreign-registration row that passed stage 1 is always reported, even alongside header refusals. `primary_code` is defined by the refusal ordering below. Each single-change vector in §11 yields one distinct code.
-1. Shape: R-SCHEMA (unknown or missing key, malformed date, a value outside its enum such as `document_kind`, `frequency` or `currency`, any pattern mismatch including `xml_uuid`), R-TYPE, R-NEG, R-PREC, R-BOUND (single amounts).
+1. Shape: R-SCHEMA (unknown or missing key, malformed date, a value outside its enum such as `document_kind`, `frequency` or `currency`, any pattern mismatch including `xml_uuid`, a string that is not printable ASCII, a non-`null` value in a field that must be `null` for that row), R-TYPE, R-NEG, R-PREC, R-BOUND (single amounts or row count).
 2. Header and registration: R-TAXPAYER (every row), R-BASIS, R-DATE, R-RATE (period start or `rate_source`), R-PERIOD (period shape), R-CORR, R-CFWD.
 3. Identity: R-DUP (allocation key and XML binding).
 4. Classification, per row: R-TREAT (including the row rate), R-SOURCE, R-ZMAP, R-SPECIAL, R-IMPRET, R-PARTIAL, R-ZEROVAT.
@@ -208,7 +208,7 @@ TaxRow {
 - `boxes: {key: {amount, adjustment, vat | null, row_ids}}` for 1–9 and 12 (`vat` is `null` for 2–5), and a single value for 13.
 - `not_computed: [10, 11, 14, 15, 16]`, `purch_total_incomplete: true`, `filing_due_date`.
 - `reconciliation: {rcm_self_assessed_vat, excluded_out_of_scope: {taxable, row_ids, coverage: "xml_only"}}`.
-- `input_sha256`: hex SHA-256 of the canonical input. It is computed only after stage 1 passes, so every string has already matched an ASCII pattern or enum and encoding cannot fail. It is `null` whenever `prior_period_corrections` is non-empty, because its entries are opaque and refused (R-CORR). Canonical form: the input with `rows` sorted by `row_id`, ties (duplicate `row_id`s) broken by each row's own canonical bytes; every object's keys sorted by Unicode code point; separators `,` and `:` with no whitespace; JSON literals for `true`, `false` and `null`; amounts and dates kept as their input strings; UTF-8 without BOM and with non-ASCII characters unescaped. In Python: `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")`. Golden value: T28.
+- `input_sha256`: hex SHA-256 of the canonical input. It is computed only after stage 1 passes, so every string in the input has already been checked as printable ASCII (§8) and encoding cannot fail. It is `null` whenever `prior_period_corrections` is non-empty, because its entries are opaque and refused (R-CORR). Canonical form: the input with `rows` sorted by `row_id`, ties (duplicate `row_id`s) broken by each row's own canonical bytes; every object's keys sorted by Unicode code point; separators `,` and `:` with no whitespace; JSON literals for `true`, `false` and `null`; amounts and dates kept as their input strings; UTF-8 without BOM and with non-ASCII characters unescaped. In Python: `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")`. Golden value: T28.
 - `diagnostics` and `warnings[]`. Each warning is `{code, source_doctype, source_document_id, row_ids, xml_uuid | null}`, so input-side warnings carry their document. W-BRCO17 is emitted once per reconciliation group (document subtotal), not once per row. W-NOTELATE is emitted once per note document and lists every row of that note. A warning never changes a box value.
 - **Ordering** (deterministic): every `row_ids` list is sorted ascending by code point. `warnings[]` is sorted by (`code`, `source_doctype`, `source_document_id`, first `row_id`). `refusals[]` is sorted by (stage, the check's position in its stage list, `row_id` with `null` first, `message_key`). The check's position matters because R-PERIOD appears twice in stage 5. `primary_code` is the code of the first refusal in this order.
 - `draft_complete: false` with `incomplete_boxes: [10, 11, 14, 15, 16]`. It stays false while any box is not computed, which is always the case in this version.
@@ -236,7 +236,7 @@ TaxRow {
 
 ## 10. Worked synthetic example (monthly, 2026-10-01 to 2026-10-31)
 
-Fixture **F**. All rows share these values: `taxpayer_vat_number` `300000000000003` (also top level); `currency` `SAR`; `special_case` `none`; `claim_date` equal to `supply_date` on L7–L9 and `null` elsewhere; on output rows, `xml_uuid` and `xml_sha256` are distinct synthetic values; `vat_settlement`, `customs_payment_reference`, `original_*` and `adjustment_event_date` `null` unless stated; and `group_*` equal to the row's own amounts. Top level: `accounting_basis` `invoice`; `rate_source` `{sa, 0.1.0, "15"}`; `empty_period_confirmed` `false`; corrections `[]`; carried-forward credit `"0.00"`.
+Fixture **F**. All rows share these values: `taxpayer_vat_number` `300000000000003` (also top level); `currency` `SAR`; `special_case` `none`; `claim_date` equal to `supply_date` on L7–L9 and `null` elsewhere; on output rows, `xml_uuid` and `xml_sha256` are distinct synthetic values; `vat_settlement`, `customs_payment_reference`, `original_*` and `adjustment_event_date` `null` unless stated; `deductible_share` `null` on output rows; and `group_*` equal to the row's own amounts. Top level: `accounting_basis` `invoice`; `rate_source` `{sa, 0.1.0, "15"}`; `empty_period_confirmed` `false`; corrections `[]`; carried-forward credit `"0.00"`.
 
 | row | doctype / doc id | treatment, cat, reason, rate | kind, `supply_date`, note fields | taxable | VAT | `vat_source`, share | box, col |
 |---|---|---|---|---|---|---|---|

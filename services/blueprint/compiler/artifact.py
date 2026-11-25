@@ -44,10 +44,12 @@ def seal(artifact: dict) -> dict:
 
 
 def assemble(*, blueprint_ref: dict, engine_target: dict, components: list[dict], steps: list[dict],
-             skipped: list[dict], post_conditions: list[dict], risk: dict) -> dict:
-    art = {"artifactSchema": ARTIFACT_SCHEMA, "artifactId": "", "kind": "forward", "compiler": dict(COMPILER),
+             skipped: list[dict], post_conditions: list[dict], risk: dict, kind: str = "forward",
+             inverse: dict | None = None) -> dict:
+    """The sealed artifact. An embedded `inverse` must already be sealed: it is hashed as it stands (9.1)."""
+    art = {"artifactSchema": ARTIFACT_SCHEMA, "artifactId": "", "kind": kind, "compiler": dict(COMPILER),
            "blueprint": blueprint_ref, "engineTarget": engine_target, "components": components, "steps": steps,
-           "skippedOps": skipped, "postConditions": post_conditions, "risk": risk, "inverse": None, "integrity": {}}
+           "skippedOps": skipped, "postConditions": post_conditions, "risk": risk, "inverse": inverse, "integrity": {}}
     return seal(art)
 
 

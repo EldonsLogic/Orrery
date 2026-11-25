@@ -33,3 +33,8 @@ test('token files are exempt', () => {
 test('logical properties are not flagged', () => {
   assert.deepEqual(rules('.a { inset-inline-start: 0; border-inline-end: 1px solid var(--color-text); }'), []);
 });
+test('the @font-face file may name families, nothing else may', () => {
+  assert.deepEqual(rules('@font-face { font-family: "Cairo"; }', 'app/src/styles/fonts.css'), []);
+  assert.deepEqual(rules('@font-face { font-family: "Cairo"; }', 'app/src/styles/other.css'), ['font-family']);
+  assert.deepEqual(rules('@font-face { color: #fff; }', 'app/src/styles/fonts.css'), ['colour-hex']);
+});

@@ -1,0 +1,18 @@
+/* Self-hosted brand fonts (WEB-028, BRD-011, ADR-0066). Subset variable WOFF2 files in public/fonts; provenance and
+   licence in public/fonts/PROVENANCE.md. The family names match the --font-heading and --font-body tokens. The Studio
+   serves this same file at /fonts/fonts.css. Never load Google Fonts at runtime. */
+@font-face {
+  font-family: "Cairo";
+  src: url("/fonts/Cairo-subset.woff2") format("woff2");
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Readex Pro";
+  src: url("/fonts/ReadexPro-subset.woff2") format("woff2");
+  font-weight: 400 500;
+  font-style: normal;
+  font-display: swap;
+}

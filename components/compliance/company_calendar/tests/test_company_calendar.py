@@ -23,6 +23,17 @@ from components.compliance.country_pack import (
     UnknownCountryError,
 )
 
+# Numbers the settings module may contain: 0 and 1 (offsets, counts), 7 (days a week), 9 (Ramadan is Hijri month 9).
+ALLOWED_NUMBERS = {0, 1, 7, 9}
+
+
+def disallowed_numbers(source: str) -> set:
+    """Literal numbers in `source` that are not allowed as code constants (bool is not a number here)."""
+    return {n.value for n in ast.walk(ast.parse(source))
+            if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) and not isinstance(n.value, bool)
+            } - ALLOWED_NUMBERS
+
+
 PACKS_DIR = Path(__file__).resolve().parents[2] / "country_pack" / "packs"
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -100,6 +111,20 @@ class TestSettingsAreValues(unittest.TestCase):
         for proto in range(pickle.HIGHEST_PROTOCOL + 1):
             with self.subTest(protocol=proto):
                 self.assertEqual(pickle.loads(pickle.dumps(s, protocol=proto)), s)
+
+    def test_labels_are_sorted_and_input_order_does_not_matter(self) -> None:
+        def settings(labels: dict):
+            period = {"id": "summer", "labels": labels, "rule": "fixed_dates", "gregorianFrom": "2026-07-01",
+                      "gregorianTo": "2026-08-31", "hours": {"from": "07:00", "to": "13:00"}}
+            return resolve("EG", {"workingTime": {"reducedPeriods": [period]}})
+
+        en_first = settings({"en": "Summer", "ar": "صيف"})
+        ar_first = settings({"ar": "صيف", "en": "Summer"})
+        period = en_first.reduced_periods[0]
+        self.assertEqual(period.labels, (("ar", "صيف"), ("en", "Summer")))  # sorted by language, not input order
+        self.assertEqual(en_first, ar_first)
+        self.assertEqual(hash(en_first), hash(ar_first))
+        self.assertEqual((period.label("en"), period.label("ar"), period.label("fr")), ("Summer", "صيف", None))
 
     def test_asdict(self) -> None:
         s = resolve("SA")
@@ -333,27 +358,32 @@ class TestNumberSystem(unittest.TestCase):
 
 class TestSource(unittest.TestCase):
     SETTINGS = Path(__file__).resolve().parents[1] / "settings.py"
-    # Numbers the module may contain: 0 and 1 (offsets, counts), 7 (days a week), 9 (Ramadan is Hijri month 9).
-    ALLOWED_NUMBERS = {0, 1, 7, 9}
 
     def test_no_statutory_limit_or_lunar_arithmetic_constants_in_code(self) -> None:
         # Hour caps (48), lunar-year lengths (354, 355), the synodic month (29.53), month lengths (29, 30) or any
         # other literal number would show up here: only the allowed numbers may appear as code constants.
-        tree = ast.parse(self.SETTINGS.read_text(encoding="utf-8"))
-        numbers = {n.value for n in ast.walk(tree)
-                   if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) and not isinstance(n.value, bool)}
-        self.assertLessEqual(numbers, self.ALLOWED_NUMBERS)
+        self.assert_no_disallowed_numbers(self.SETTINGS.read_text(encoding="utf-8"))
+
+    def assert_no_disallowed_numbers(self, source: str) -> None:
+        """The real check, shared with the planted-constant test below."""
+        self.assertEqual(disallowed_numbers(source), set())
 
     def test_source_check_detects_a_planted_constant(self) -> None:
-        planted = ast.parse("MAX_WEEKLY_HOURS = 48")
-        numbers = {n.value for n in ast.walk(planted) if isinstance(n, ast.Constant)}
-        self.assertFalse(numbers <= self.ALLOWED_NUMBERS)
+        # The real check refuses planted literals; booleans and allowed numbers are ignored, anything else is reported.
+        for planted in ("MAX_WEEKLY_HOURS = 48", "SYNODIC_MONTH = 29.53"):
+            with self.subTest(planted=planted), self.assertRaises(AssertionError):
+                self.assert_no_disallowed_numbers(planted)
+        self.assert_no_disallowed_numbers("a = 0\nb = 9\nc = True")
+        self.assertEqual(disallowed_numbers("MAX_WEEKLY_HOURS = 48"), {48})
+        self.assertEqual(disallowed_numbers("a = 29.53\nb = True\nc = 7\nd = 354"), {29.53, 354})
+        self.assertEqual(disallowed_numbers("a = 0\nb = 9"), set())
 
 
 class TestHijridatePin(unittest.TestCase):
     """L4: one runtime pin (the engine package) and a CI pin that must match it."""
 
     PIN = re.compile(r"hijridate==([0-9][0-9A-Za-z.]*)")
+    OTHER_PIN_FILES = (".github/workflows/tests.yml", "services/discovery/requirements.txt")  # read only
 
     def test_ci_step_pin_equals_runtime_pin(self) -> None:
         runtime = self.PIN.findall((REPO_ROOT / "apps/engine/change_engine/pyproject.toml").read_text(encoding="utf-8"))
@@ -362,6 +392,23 @@ class TestHijridatePin(unittest.TestCase):
         step = re.search(r"- name: Company calendar settings tests \(CMP-023\)\n(.*?)(?=\n      - name:|\Z)", workflow, re.S)
         self.assertIsNotNone(step)
         self.assertEqual(self.PIN.findall(step.group(1)), runtime)
+
+    def test_every_other_pin_in_the_repo_equals_the_runtime_pin(self) -> None:
+        runtime = self.PIN.findall((REPO_ROOT / "apps/engine/change_engine/pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(len(runtime), 1)
+        for rel in self.OTHER_PIN_FILES:
+            pins = self.PIN.findall((REPO_ROOT / rel).read_text(encoding="utf-8"))
+            with self.subTest(file=rel):
+                self.assertTrue(pins, f"no hijridate== pin found in {rel}")
+                self.assertEqual(set(pins), set(runtime), f"hijridate pin in {rel} differs from the runtime pin")
+
+    def test_engine_install_step_pins_hijridate(self) -> None:
+        # The engine suites' install line must carry its own pin; another step's pin must not stand in for it.
+        runtime = self.PIN.findall((REPO_ROOT / "apps/engine/change_engine/pyproject.toml").read_text(encoding="utf-8"))
+        workflow = (REPO_ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+        step = re.search(r"- name: Install dependencies \(apps/engine\)\n(.*?)(?=\n      - name:|\Z)", workflow, re.S)
+        self.assertIsNotNone(step, "engine install step not found in tests.yml")
+        self.assertEqual(self.PIN.findall(step.group(1)), runtime, "engine install step lacks the runtime hijridate pin")
 
     def test_installed_library_is_the_pinned_version(self) -> None:
         runtime = self.PIN.findall((REPO_ROOT / "apps/engine/change_engine/pyproject.toml").read_text(encoding="utf-8"))

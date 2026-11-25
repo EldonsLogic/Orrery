@@ -43,5 +43,8 @@ First slice of BPL-039: `compile_blueprint(target, registry, mapping, environmen
 ## Tokens or cost
 Unknown.
 
+## Review follow-up notes (slice 1)
+- The mapping is checked against both revisions, so a field removal that the mapping lists is refused for now (a later slice). A forward widening can have an inverse with irreversible steps. Relation `cardinality` and `kind` changes are not classified yet (UNVERIFIED, to confirm with the adapter owner).
+
 ## Next step
 BPL-039 slice 2 (Studio real rollback); then close Q-61 and Q-76.

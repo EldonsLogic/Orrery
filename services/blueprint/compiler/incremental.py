@@ -24,6 +24,7 @@ from .result import Issue
 from .steps import ADD_KIND, ADDITIVE, I18N_SETTINGS, PHASE, SETTINGS_SECTIONS, SKIP, _esc
 
 MISSING = object()
+OP_KINDS = ("add", "remove", "replace", "reorder")
 _SEVERITY = list(reversed(bpdiff.classify._SEVERITY))  # bpdiff impact severity, lowest first
 REMOVE_KIND = {"locations": "location.disable", "components": "component.disable", "entities": "entity.quarantine",
                "roles": "role.disable", "workflows": "workflow.disable", "approvals": "approval.disable",
@@ -78,6 +79,8 @@ def _subject(kind: str, ident: Any, parents: list) -> dict:
 def _classify(op: dict, base: dict, target: dict) -> tuple | str:
     """(kind, subject, pointer, params) for one op, "skip:<reason>", or "" when no rule covers it."""
     path, kind = op["path"], op["op"]
+    if kind not in OP_KINDS:  # fail closed: an unknown kind must never fall through to a property change
+        return ""
     head, n = (path[0] if path else None), len(path)
     if head in SKIP or "provenance" in bpdiff.model.path_info(path)[0]:
         return "skip:" + SKIP.get(head, "provenance")

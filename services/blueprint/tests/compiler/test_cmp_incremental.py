@@ -214,3 +214,117 @@ def test_each_kind_compiles_with_an_inverse_that_names_the_same_subject(edit, ki
     a = _compile(t, base, reg, mp)
     assert not list(H.ARTIFACT_VALIDATOR.iter_errors(a)) and kind in {s["kind"] for s in a["steps"]}
     assert {s["pointer"] for s in a["steps"]} == {s["pointer"] for s in a["inverse"]["steps"]}
+
+
+# ------------------------------------------------------------------ review fixes (BPL-039)
+def test_an_unknown_op_kind_is_refused_not_read_as_a_property_change():
+    from compiler.incremental import _classify, steps_from_diff
+    base, _, _ = _inputs()
+    t = copy.deepcopy(base)
+    t["meta"]["revision"] = 2
+    _entity(t, "customer")["labels"]["en"] = "Client"
+    d = diff(base, t)
+    op = next(o for o in d["ops"] if o["op"] == "replace" and o["path"][:2] == ["entities", "customer"])
+    assert _classify(op, base, t)[0] == "entity.set_property"
+    moved = {**op, "op": "move"}
+    assert _classify(moved, base, t) == ""
+    steps, _, issues = steps_from_diff({**d, "ops": [moved]}, base, t)
+    assert steps == [] and [i.code for i in issues] == ["CMP-ART-001"]
+
+
+def test_an_engine_target_change_is_refused_when_both_revisions_validate():
+    """Both revisions pass every gate (manifests tested against both version sets, draft mapping UNVERIFIED), so only
+    CMP-INC-002 stops it."""
+    from compiler import compile_blueprint
+    base, _, mp = _inputs()
+    mans = copy.deepcopy(H.manifests())
+    for m in mans:
+        m["engineCompatibility"]["testedAgainst"].append("set-example-2")
+    reg = H.registry(mans)
+    t = copy.deepcopy(base)
+    t["meta"]["revision"] = 2
+    t["meta"]["engineTarget"]["versionSet"] = "set-example-2"
+    assert compile_blueprint(base, reg, mp, environment="sandbox").ok
+    assert compile_blueprint(t, reg, mp, environment="sandbox").ok
+    r = compile_blueprint(t, reg, mp, environment="sandbox", base=base)
+    assert not r.ok and r.artifact is None and [i.code for i in r.errors] == ["CMP-INC-002"]
+
+
+def test_equal_precision_or_length_is_not_a_cut_and_one_less_is():
+    mk = lambda prop, b, a: {"kind": "field.set_property", "params": {"property": prop, "before": b, "after": a}}  # noqa: E731
+    for prop in ("/precision", "/maxLength"):
+        assert irreversible_reason(mk(prop, 5, 5)) is None
+        assert irreversible_reason(mk(prop, 5, 6)) is None
+    assert irreversible_reason(mk("/precision", 5, 4)) == "precision_reduction"
+    assert irreversible_reason(mk("/maxLength", 5, 4)) == "length_reduction"
+
+
+@pytest.mark.parametrize("kind", ["field.set_property", "relation.set_property"])
+def test_a_link_target_change_is_flagged(kind):
+    step = {"kind": kind, "params": {"property": "/target", "before": "customer", "after": "supplier"}}
+    assert irreversible_reason(step) == "link_target_change"
+
+
+# contract 9.4 phases, written out independently of compiler.steps
+PHASES = {"settings.set": 1, "component.enable": 2, "component.configure": 2, "location.upsert": 3, "entity.add": 4,
+          "field.add": 5, "relation.add": 5, "option.add": 5, "binding.add": 5, "field.reorder": 6, "option.reorder": 6,
+          "entity.set_property": 6, "field.set_property": 6, "relation.set_property": 6, "binding.set_property": 6,
+          "role.upsert": 7, "workflow.upsert": 8, "approval.upsert": 9, "report.upsert": 10, "report.disable": 11,
+          "approval.disable": 12, "workflow.disable": 13, "role.disable": 14, "binding.disable": 15,
+          "option.quarantine": 15, "relation.quarantine": 15, "field.quarantine": 15, "entity.quarantine": 16,
+          "location.disable": 17, "component.disable": 18}
+
+
+def test_steps_are_ordered_by_phase_then_pointer_then_kind_per_contract_9_4():
+    base, reg, mp = _inputs()
+    t = _edit(base)
+    _entity(t, "supplier")["fields"].reverse()
+    t["roles"][0]["labels"]["en"] = "Renamed"
+    _drop_vat_summary(t)
+    a = _compile(t, base, reg, mp)
+    for art in (a, a["inverse"]):
+        steps = art["steps"]
+        assert len(steps) > 8 and [s["seq"] for s in steps] == list(range(1, len(steps) + 1))
+        assert all(s["phase"] == PHASES[s["kind"]] for s in steps)
+        assert [(s["phase"], s["pointer"], s["kind"]) for s in steps] == \
+            sorted((s["phase"], s["pointer"], s["kind"]) for s in steps)
+    # phase 6 holds kinds whose alphabetical order differs from their pointer order: pointer must win
+    p6 = [s for s in a["steps"] if s["phase"] == 6]
+    assert [s["pointer"] for s in p6] == sorted(s["pointer"] for s in p6)
+    assert [s["kind"] for s in p6] != sorted(s["kind"] for s in p6)
+
+
+def test_the_inverse_lists_the_base_components_not_the_target_ones():
+    base, reg_, mp = _inputs()
+    mans = copy.deepcopy(H.manifests())
+    extra = copy.deepcopy(next(m for m in mans if m["id"] == "core.customer"))
+    extra["id"] = "core.extra"
+    reg = H.registry(mans + [extra])
+    t = copy.deepcopy(base)
+    t["meta"]["revision"] = 2
+    t["components"].append({"id": "core.extra", "versionRange": "^0.1.0",
+                            "provenance": copy.deepcopy(t["components"][0]["provenance"])})
+    a = _compile(t, base, reg, mp)
+    ids = lambda x: {c["id"] for c in x["components"]}  # noqa: E731
+    assert "core.extra" in ids(a) and "core.extra" not in ids(a["inverse"])
+    assert ids(a["inverse"]) == {c["id"] for c in base["components"]}
+    assert "component.enable" in {s["kind"] for s in a["steps"]}
+
+
+def test_a_step_takes_the_highest_impact_of_its_coalesced_ops():
+    from compiler.incremental import _SEVERITY, steps_from_diff
+    base, _, _ = _inputs()
+    t = copy.deepcopy(base)
+    t["meta"]["revision"] = 2
+    wf = t["workflows"][0]
+    wf["labels"]["en"] = "Order flow"
+    wf["states"][0]["labels"]["en"] = "Changed state"
+    d = diff(base, t)
+    ops = [o for o in d["ops"] if o["path"][:2] == ["workflows", wf["id"]]]
+    assert len(ops) >= 2
+    lo, hi = _SEVERITY[0], _SEVERITY[-1]
+    for order in (ops, ops[::-1]):
+        marked = [{**o, "impact": hi if i == 1 else lo} for i, o in enumerate(order)]
+        steps, _, _ = steps_from_diff({**d, "ops": marked}, base, t)
+        step = next(s for s in steps if s["kind"] == "workflow.upsert")
+        assert len(step["sourceOps"]) == len(ops) and step["impact"] == hi

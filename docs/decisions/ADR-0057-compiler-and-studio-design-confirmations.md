@@ -1,8 +1,8 @@
 # ADR-0057: Compiler, token-resolver and Studio design confirmations
 
-Status: Proposed
+Status: Accepted
 Owner: eldon
-Approved by: pending (partner review)
+Approved by: Eldon, answering for both founders, 2026-11-25, recorded in docs/log/2026-11-25-eldon-claude-code-founder-answers-adr-0057-0058.md
 
 ## Context
 The Blueprint compiler (BPL-004), the token resolver (BRD-004), Studio (WEB-020) and the Blueprint migration framework (BPL-021) each took a conservative reading of points their contracts did not settle, and listed those points in their docstrings. They were copied into [docs/open-questions.md](../open-questions.md) as rows that ask someone to "confirm" a design choice. No ADR recorded an answer, so the rows stayed open. Eldon has asked agents to decide technical calls themselves. This ADR decides the rows that are purely technical, all in Eldon's lane (`services/blueprint`, `services/studio`). Rows that touch tax, ledger, e-invoicing, security, tenancy or approvals, that need a founder decision, or that depend on unbuilt work are left open (listed below).

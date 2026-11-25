@@ -51,6 +51,11 @@ All paths are under `apps/engine/change_engine/change_engine/`.
 - Not changed: the property setter's second write (`reqd=0`) after a successful main property is still swallowed. It is outside this slice.
 - Red then green: 37 failed and 40 passed, then all pass. Full suite: 1827 passed, 86 skipped, 0 failed.
 
+## Review round 2 (Gemini 4 Argon at c61972ef): items 1, 2 and 4 resolved, item 3 partly; one Medium fixed
+- The property setter no longer swallows a failed second write (`reqd=0`) after the main property has committed. It sets `partial_apply`, `settle_apply(failed=True)` rolls back the uncommitted write, and the deployment is held as RECOVERY_REQUIRED, never APPLIED or FAILED_CLEAN. If the rollback fails, the session is discarded and nothing is finalized.
+- Tests: `TestR5QuarantineSecondWriteFailureIsAHold` (4 tests; 3 failed before the fix, all pass after).
+- Full suite: 1831 passed, 86 skipped, 0 failed.
+
 ## Tokens or cost
 Unknown.
 

@@ -894,3 +894,62 @@ class TestR4SiteResolverIsValidatedAndGuarded(unittest.TestCase):
                 self.assertEqual((out["status"], out["reason_code"]), ("REJECTED", "site_unresolvable"), out)
                 self.assertNotIn("SECRET", json.dumps(out))
         self.assertTrue(_no_row(bench))
+
+
+# ===========================================================================================
+# Revision round 2
+# ===========================================================================================
+class TestR5QuarantineSecondWriteFailureIsAHold(unittest.TestCase):
+    """``hidden=1`` also sets ``reqd=0``. The first write is committed; if the second fails the field is hidden but
+    still mandatory, so the deployment is held, never recorded as APPLIED or FAILED_CLEAN."""
+
+    def _hide(self, *, rollback_fails=False):
+        bench = _Bench()
+        calls = {"n": 0}
+
+        def make_property_setter(args=None, **kw):
+            calls["n"] += 1
+            if calls["n"] == 2:  # the reqd=0 write: it queues an uncommitted write and then fails
+                bench.db.meta_pending.add("custom_half")
+                if rollback_fails:
+                    bench.db.rollback_error = _DbDown(SECRET)
+                raise _DbDown(SECRET)
+
+        bench.module.make_property_setter = make_property_setter
+        adapter = bench.new_adapter()
+        out = endpoints.apply_property_setter_change(
+            doctype="Item", deployment_id="dep_ps", fieldname="note", property_name="hidden", value=1,
+            adapter=adapter, user_roles=ADMIN)
+        self.assertEqual(calls["n"], 2, "both writes were attempted")
+        return bench, adapter, out
+
+    def test_a_failed_reqd_write_after_the_main_property_committed_is_held(self):
+        bench, adapter, out = self._hide()
+        self.assertEqual((out["status"], out["stage"], out["reason_code"]),
+                         ("RECOVERY_REQUIRED", "APPLY", "partial_apply"), out)
+        self.assertFalse(out["success"])
+        self.assertNotIn("SECRET", json.dumps(out))
+        self.assertEqual(bench.db.row("dep_ps")["status"], "RECOVERY_REQUIRED")
+        self.assertNotEqual(out["status"], "APPLIED")
+
+    def test_the_partial_uncommitted_write_is_rolled_back(self):
+        bench, adapter, out = self._hide()
+        self.assertEqual(bench.db.transaction_writes, 0)
+        self.assertNotIn("custom_half", bench.db.inserted, "the half write was not committed by finalization")
+        self.assertEqual(bench.db.locks, set())
+
+    def test_the_target_stays_blocked_until_it_is_recovered(self):
+        bench, adapter, out = self._hide()
+        again = endpoints.apply_property_setter_change(
+            doctype="Item", deployment_id="dep_ps_2", fieldname="other", property_name="label", value="X",
+            adapter=adapter, user_roles=ADMIN)
+        self.assertEqual(again["status"], "RECOVERY_REQUIRED", again)
+        self.assertEqual(again["disposition"], "TARGET_IN_RECOVERY_REQUIRED")
+
+    def test_a_failed_rollback_discards_the_session_and_finalizes_nothing(self):
+        bench, adapter, out = self._hide(rollback_fails=True)
+        self.assertEqual((out["status"], out["reason_code"]), ("RECOVERY_REQUIRED", "session_discarded"), out)
+        self.assertNotIn("SECRET", json.dumps(out))
+        self.assertEqual(bench.db.row("dep_ps")["status"], "PREPARED")
+        self.assertTrue(bench.db.closed)
+        self.assertNotIn("custom_half", bench.db.inserted)

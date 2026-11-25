@@ -399,6 +399,7 @@ def execute_property_setter_deployment(
 
         # Step 4: Applies Property Setter via native frappe.make_property_setter or db adapter
         apply_error: Optional[str] = None
+        main_committed = False
         try:
             if hasattr(db, "apply_property_setter") and callable(getattr(db, "apply_property_setter", None)):
                 db.apply_property_setter(
@@ -431,40 +432,40 @@ def execute_property_setter_deployment(
             # ADR-001 Rev 2.3 (§9.1): When quarantining a field (hidden=1), also set reqd=0
             # to guarantee that hiding the field does not cause mandatory validation errors on document save.
             if property_name == "hidden" and int(normalized_value) == 1 and fieldname:
-                try:
-                    if hasattr(db, "apply_property_setter") and callable(getattr(db, "apply_property_setter", None)):
-                        db.apply_property_setter(
+                # The main property is committed by now: a failure of this second write leaves the field hidden but
+                # still mandatory, so it is a partial apply (held), never swallowed and never "clean".
+                main_committed = True
+                if hasattr(db, "apply_property_setter") and callable(getattr(db, "apply_property_setter", None)):
+                    db.apply_property_setter(
+                        doctype=doctype,
+                        fieldname=fieldname,
+                        property_name="reqd",
+                        value=0,
+                        property_type="Check",
+                    )
+                elif frappe and hasattr(frappe, "make_property_setter"):
+                    try:
+                        frappe.make_property_setter({
+                            "doctype": doctype,
+                            "fieldname": fieldname,
+                            "property": "reqd",
+                            "value": 0,
+                            "property_type": "Check",
+                        })
+                    except TypeError:
+                        frappe.make_property_setter(
                             doctype=doctype,
                             fieldname=fieldname,
-                            property_name="reqd",
+                            property="reqd",
                             value=0,
                             property_type="Check",
                         )
-                    elif frappe and hasattr(frappe, "make_property_setter"):
-                        try:
-                            frappe.make_property_setter({
-                                "doctype": doctype,
-                                "fieldname": fieldname,
-                                "property": "reqd",
-                                "value": 0,
-                                "property_type": "Check",
-                            })
-                        except TypeError:
-                            frappe.make_property_setter(
-                                doctype=doctype,
-                                fieldname=fieldname,
-                                property="reqd",
-                                value=0,
-                                property_type="Check",
-                            )
-                        if hasattr(frappe, "db") and hasattr(frappe.db, "commit"):
-                            frappe.db.commit()
-                except Exception:
-                    pass
+                    if hasattr(frappe, "db") and hasattr(frappe.db, "commit"):
+                        frappe.db.commit()
         except Exception:
             # The raw error stays in the log.
             logger.exception("Property Setter apply for %s raised", deployment_id)
-            apply_error = "apply_failed"
+            apply_error = "partial_apply" if main_committed else "apply_failed"
 
         # A failed apply leaves uncommitted writes: they are rolled back before any outcome is recorded, and a
         # session that cannot be relied on is never finalized (the intent stays as the hold).
@@ -487,12 +488,15 @@ def execute_property_setter_deployment(
         if apply_error:
             outcome = {
                 "deployment_id": deployment_id,
-                "status": "FAILED_CLEAN",
+                "status": "RECOVERY_REQUIRED" if main_committed else "FAILED_CLEAN",
                 "success": False,
                 "stage": "APPLY",
                 "disposition": "PROPERTY_SETTER_APPLY_FAILED",
                 "reason_code": apply_error,
-                "reason": "The Property Setter could not be applied; the details are in the server log.",
+                "reason": (
+                    "The Property Setter was only partly applied; the deployment is held for recovery."
+                    if main_committed else
+                    "The Property Setter could not be applied; the details are in the server log."),
                 "doctype": doctype,
                 "fieldname": fieldname,
                 "property_name": property_name,

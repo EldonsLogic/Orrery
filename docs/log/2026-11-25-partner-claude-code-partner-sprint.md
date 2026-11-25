@@ -41,6 +41,10 @@ None yet; claim PR must merge first.
 - Claim sets CMP-010, PLT-027, CE-SEC-008 and BPL-043 doing. GOV-071 remains todo because #296 remains open. BPL-044 is recorded todo; its adapter lane is unavailable.
 - SEC-004 dispatched run 45646846161 on main at 1fa88849; in progress. An additional historical successful SEC-004 run 45088110814 exists after the previously reported failing run; no closure claimed without inspecting the fresh run.
 
+- Coordinator handoff: the thread moved from Codex GPT-6.1 Sol to Claude Opus 5.5 (high) at the partner's request; sprint state recovered from this log and the child worktrees.
+- Dispatched after the claim merged: T1a CMP-010 design (Claude Opus, running) and T2 PLT-027 design (Claude Opus). T3 CE-SEC-008 part 1 and T5 PLT-024 header tests not yet dispatched.
+- T2 PLT-027 result: ADR-0069 Proposed (154 lines, design only, 29 threats each with a named proposed test). Coordinator added the INDEX entry, follow-up rows PLT-028 to PLT-031 (G3 go-live row depends only on earlier-gate Eldon rows) and Q-609 to Q-614 for Eldon's lane. check_docs, check_repo_hygiene and check_plan_independence pass. Security review by a different model is pending.
+
 ## Tokens or cost
 Unknown.
 

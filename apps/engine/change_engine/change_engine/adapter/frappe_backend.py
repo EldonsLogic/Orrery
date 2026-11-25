@@ -888,14 +888,13 @@ class FrappeRuntimeBackend:
 
     def _project_new_type(self, f: Any, doctype: str, made_types: set[str], made: dict[tuple[str, str], Any],
                           fields: list[dict[str, Any]]) -> None:
-        """Record the type `_ensure_doctype_exists` would create (adapter-owned, with these fields' unique and index flags)."""
+        """Record the type `_ensure_doctype_exists` would create. It never carries a unique or index constraint (BPL-043)."""
         if doctype in made_types or self._doctype_exists(f, doctype):
             return
         made_types.add(doctype)
         known = [fld for fld in fields if fld.get("type", "string") in BLUEPRINT_TO_FRAPPE_FIELDTYPE]
         for fld in known:
-            name = _sanitize_custom_fieldname(str(fld.get("id") or "field"))
-            made[(doctype, name)] = SimpleNamespace(unique=int(bool(fld.get("unique"))), search_index=int(bool(fld.get("indexed"))))
+            made[(doctype, _sanitize_custom_fieldname(str(fld.get("id") or "field")))] = _NO_CONSTRAINT
         if not known:
             made[(doctype, "title")] = _NO_CONSTRAINT
 
@@ -907,6 +906,7 @@ class FrappeRuntimeBackend:
         if not is_contract_mapped_entity(entity_id):
             if exists and doctype not in made_types and not self._adapter_owns_doctype(f, doctype):
                 raise self._refuse("protected_subject")
+            self._refuse_constrained_fields(fields)
             self._project_new_type(f, doctype, made_types, made, fields)
             return
         if not exists:
@@ -1104,7 +1104,14 @@ class FrappeRuntimeBackend:
         row = f.db.get_value("DocType", doctype, ["name", "custom", "module"])  # a failed read raises
         return bool(row) and str(row[0]) == doctype and int(row[1] or 0) == 1 and row[2] == ADAPTER_DOCTYPE_MODULE
 
+    def _refuse_constrained_fields(self, fields: list[Any]) -> None:
+        """BPL-043 (Q-603): a type this adapter makes never carries `unique` or `indexed` fields, with or without a gate
+        approval: creating one would deploy constraint DDL outside the guarded DDL gate. Refused before any write."""
+        if any(isinstance(fld, dict) and (fld.get("unique") or fld.get("indexed")) for fld in fields):
+            raise self._refuse("unique_or_index")
+
     def _ensure_doctype_exists(self, f: Any, doctype: str, defn: dict[str, Any]) -> None:
+        self._refuse_constrained_fields(defn.get("fields") or [])
         if getattr(f.db, "table_exists", None) and f.db.table_exists(doctype):
             return
         fields = []

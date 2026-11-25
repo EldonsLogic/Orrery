@@ -146,6 +146,15 @@ None yet; claim PR must merge first.
     - A new part-2 log was added for the task trail.
     - Full suite: 1775 passed, 0 failed.
 
+- After #332:
+  - Eldon approved #331, #332 and #328.
+  - Merged:
+    - **#332** (Tier 1 log).
+    - **#331** (CE-SEC-008 part 2), on the partner's Tier 3 say-so ("yes merge it").
+  - **CE-SEC-008 marked done.** Parts 1 and 2 are merged. Follow-ups stay in CE-SEC-009, CE-SEC-010 and CE-SEC-011.
+  - #328 GOV-071: main merged in (PLAN conflict: kept the CE-SEC rows and ERP-035). CI running; the PR is watched and will merge on green (Tier 2, Eldon approved).
+  - #319 CMP-010: Eldon's re-review at 8c341e0b found no number or vector wrong (T1 to T53 pass). Two sentence-level fixes (F1 ledger_only duty; F2 digest edge cases and a golden value) plus Lows sent to the author as round 7.
+
 ## Tokens or cost
 Unknown.
 

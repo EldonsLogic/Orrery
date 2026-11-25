@@ -23,3 +23,6 @@ Unknown.
 
 ## Next step
 Founder decision on tabular figures for amounts (Cairo digits, accept proportional, or a tabular instance) and on the riyal sign (use the code). Arabic shaping visual review is UNVERIFIED. Print format still names Alexandria and Arial (ERP-007 owner).
+
+## Addendum: tabular figures decision (2026-11-25)
+Implemented Eldon's decision: `.numeric` in Table and TextField and `.day` in DatePicker set `font-family: var(--font-heading)` (Cairo) with `tabular-nums`. No new token. Recorded in `docs/brand/font-licence-check.md` item 7. Known limit: Arabic-Indic digits stay proportional until a tabular instance exists.

@@ -127,6 +127,7 @@
 .day {
   inline-size: max(var(--button-height), var(--touch-target));
   block-size: max(var(--button-height), var(--touch-target));
+  font-family: var(--font-heading);
   font-variant-numeric: tabular-nums;
 }
 

@@ -18,10 +18,22 @@ import re
 from typing import Any, Callable, Iterator
 
 from change_engine.adapter.mapping import (
+    ADAPTER_DOCTYPE_MODULE,
     BLUEPRINT_TO_FRAPPE_FIELDTYPE,
+    CONTRACT_NATIVE_FIELDS,
+    ENGINE_NAME_PREFIX,
+    ENTITY_TO_DOCTYPE,
+    RULE_FLAGS,
     _DECIMAL_ADD_RE,
+    EngineNameError,
     _sanitize_custom_fieldname,
+    engine_role_name,
+    engine_state_name,
     entity_to_doctype,
+    is_contract_mapped_entity,
+    is_protected_entity,
+    reviewed_grant_doctype,
+    rule_flags,
 )
 from change_engine.api.endpoints import FrappeDeploymentAdapter
 from change_engine.guarded_apply.property_setter_engine import (
@@ -39,6 +51,7 @@ from change_engine.guarded_apply.workflow_engine import (
     TERMINAL_REJECT_STATE_NAMES,
     execute_workflow_deployment,
 )
+
 
 COUNTRY_DEFAULTS: dict[str, dict[str, str]] = {
     "sa": {"country": "Saudi Arabia", "currency": "SAR", "language": "ar", "timezone": "Asia/Riyadh"},
@@ -68,8 +81,14 @@ _BP_PROP_TO_FRAPPE = {
 }
 
 
+# BPL-032: highest engine permission level (levels 1..9 carry field masks, ADR-0039 item 3).
+MAX_PERMLEVEL = 9
+_ZERO_RULE = {**dict.fromkeys(RULE_FLAGS, 0), "if_owner": 0}
+
 ENGINE_ENV_VAR = "CHANGE_ENGINE_ENV"
 OFFLINE_SIMULATOR_ENVS = frozenset({"dev", "test"})
+LOCATION_KINDS = frozenset({"branch", "warehouse", "department"})  # contracts/blueprint.schema.json location.kind
+_STATE_TABLE = "tabChange Engine Blueprint State"  # the tenant-database copy of the site state
 
 
 class FrappeBackendError(Exception):
@@ -280,10 +299,17 @@ class FrappeRuntimeBackend:
                 history_json LONGTEXT NOT NULL,
                 sync_version INT NOT NULL DEFAULT 0,
                 config_json LONGTEXT NOT NULL,
-                retained_json LONGTEXT NOT NULL
+                retained_json LONGTEXT NOT NULL,
+                write_token VARCHAR(64) NULL
             )
             """
         )
+        # BPL-033: a table made before the token column existed gets it on first touch
+        if not f.db.sql(
+            "SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = %s AND column_name = %s",
+            (_STATE_TABLE, "write_token"),
+        ):
+            f.db.sql(f"ALTER TABLE `{_STATE_TABLE}` ADD COLUMN IF NOT EXISTS write_token VARCHAR(64) NULL")
 
     def _ensure_audit_table(self, f: Any) -> None:
         self._deployment_adapter(f)._ensure_audit_table()
@@ -335,16 +361,35 @@ class FrappeRuntimeBackend:
 
             self.persist_site_state(tenant_id, site_state)
 
-    def persist_site_state(self, tenant_id: str, site_state: dict[str, Any]) -> None:
+    def persist_site_state(self, tenant_id: str, site_state: dict[str, Any]) -> bool:
+        """Write the tenant-database copy of the site state; the operation store stays the source of truth (BPL-033).
+
+        `write_token` tags the write. With an `expect_token` key the write is a compare-and-set: it replaces the copy only
+        while the copy still carries that token (None: a copy with no token, or no copy at all); otherwise it changes
+        nothing and returns False, so a writer that was overtaken cannot put an older state over a newer one. Without
+        `expect_token` the write is unconditional: provisioning, and the operation that still holds the site lock."""
         with self._site_session(tenant_id) as (f, _):
             self._ensure_state_table(f)
+            if "expect_token" in site_state:
+                # the row lock lasts until the commit below, so the check and the write are one step for other writers
+                rows = f.db.sql(
+                    f"SELECT write_token FROM `{_STATE_TABLE}` WHERE tenant_id = %s FOR UPDATE", (tenant_id,), as_dict=True
+                )
+                row = rows[0] if rows else None
+                current = (row.get("write_token") if isinstance(row, dict) else row[0]) if row is not None else None
+                if (row is None and site_state["expect_token"] is not None) or (
+                    row is not None and current != site_state["expect_token"]
+                ):
+                    if hasattr(f.db, "commit"):
+                        f.db.commit()  # nothing changed; release the row lock
+                    return False
             f.db.sql(
-                """
-                INSERT INTO `tabChange Engine Blueprint State` (
+                f"""
+                INSERT INTO `{_STATE_TABLE}` (
                     tenant_id, state, site_class, engine_target_json, blueprint_id,
                     country_pack, applied_json, applied_ids_json, history_json,
-                    sync_version, config_json, retained_json
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    sync_version, config_json, retained_json, write_token
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     state = VALUES(state),
                     site_class = VALUES(site_class),
@@ -356,7 +401,8 @@ class FrappeRuntimeBackend:
                     history_json = VALUES(history_json),
                     sync_version = VALUES(sync_version),
                     config_json = VALUES(config_json),
-                    retained_json = VALUES(retained_json)
+                    retained_json = VALUES(retained_json),
+                    write_token = VALUES(write_token)
                 """,
                 (
                     tenant_id,
@@ -371,20 +417,23 @@ class FrappeRuntimeBackend:
                     int(site_state["sync_version"]),
                     json.dumps(site_state["config"]),
                     json.dumps(site_state["retained"]),
+                    site_state.get("write_token"),
                 ),
             )
             if hasattr(f.db, "commit"):
                 f.db.commit()
+        return True
 
     def load_site_state(self, tenant_id: str) -> dict[str, Any] | None:
         try:
             with self._site_session(tenant_id, create_if_missing=False) as (f, _):
+                self._ensure_state_table(f)  # adds the token column to a table made before it existed
                 rows = f.db.sql(
-                    """
+                    f"""
                     SELECT tenant_id, state, site_class, engine_target_json, blueprint_id,
                            country_pack, applied_json, applied_ids_json, history_json,
-                           sync_version, config_json, retained_json
-                    FROM `tabChange Engine Blueprint State`
+                           sync_version, config_json, retained_json, write_token
+                    FROM `{_STATE_TABLE}`
                     WHERE tenant_id = %s
                     """,
                     (tenant_id,),
@@ -409,6 +458,7 @@ class FrappeRuntimeBackend:
                 "sync_version",
                 "config_json",
                 "retained_json",
+                "write_token",
             )
             row = dict(zip(keys, row))
         return {
@@ -424,6 +474,7 @@ class FrappeRuntimeBackend:
             "sync_version": int(row["sync_version"]),
             "config": json.loads(row["config_json"]),
             "retained": json.loads(row["retained_json"]),
+            "write_token": row.get("write_token"),
         }
 
     def check_health(self, tenant_id: str, site_state_value: str | None = None) -> list[dict[str, str]]:
@@ -555,12 +606,19 @@ class FrappeRuntimeBackend:
             try:
                 if kind == "entity.add":
                     entity_id = str(subject.get("id") or (segs[1] if len(segs) > 1 else "entity"))
+                    self._refuse_protected_entity(entity_id)
                     doctype = entity_to_doctype(entity_id)
-                    self._ensure_doctype_exists(f, doctype, params.get("definition") or {})
+                    self._add_entity(f, dep, tenant_id, entity_id, doctype, params.get("definition") or {})
+
+                elif kind == "entity.quarantine":
+                    entity_id = str(subject.get("id") or (segs[1] if len(segs) > 1 else "entity"))
+                    if is_contract_mapped_entity(entity_id):
+                        self._quarantine_entity_fields(f, dep, tenant_id, entity_to_doctype(entity_id))
 
                 elif kind in ("field.add", "relation.add"):
                     parents = subject.get("parents") or []
                     entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
+                    self._refuse_protected_entity(entity_id)
                     doctype = entity_to_doctype(entity_id)
                     defn = params.get("definition") or {"id": subject.get("id") or "field", "type": "string"}
                     if kind == "relation.add":
@@ -583,7 +641,16 @@ class FrappeRuntimeBackend:
                     fieldname = _sanitize_custom_fieldname(str(subject.get("id") or segs[-1]))
                     prop_ptr = str(params.get("property") or "")
                     mapped = _BP_PROP_TO_FRAPPE.get(prop_ptr)
-                    if mapped:
+                    if prop_ptr in ("/unique", "/indexed"):
+                        # Unique and index are DDL this backend deploys nowhere (Q-603), so the step applies only when the
+                        # engine field already holds exactly the requested value, and then there is nothing to write.
+                        meta = f.get_meta(doctype)
+                        named = (fieldname, str(subject.get("id") or segs[-1]))
+                        holders = [x for x in (meta.get_field(n) for n in named) if x is not None]
+                        wanted = bool(params.get("after"))
+                        if not holders or any(self._has_constraint(x, prop_ptr) != wanted for x in holders):
+                            raise self._refuse("unique_or_index")
+                    elif mapped:
                         frappe_prop, frappe_ptype = mapped
                         if "after" not in params or params.get("after") is None:
                             self._delete_property_setter(dep, doctype, fieldname, frappe_prop)
@@ -627,25 +694,26 @@ class FrappeRuntimeBackend:
                             dep.clear_doctype_cache(str(rep_dt))
 
                 elif kind == "role.upsert":
-                    defn = params.get("definition") or {}
-                    role_id = str(defn.get("id") or subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
-                        f.db.set_value("Role", role_id, "disabled", 0)
-                    else:
-                        f.get_doc({"doctype": "Role", "role_name": role_id, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
-                    if hasattr(f.db, "commit"):
-                        f.db.commit()
+                    defn = params.get("definition")
+                    # The gated subject, the pointer and the definition must name one role (ADR-0051).
+                    if not (
+                        isinstance(defn, dict)
+                        and isinstance(subject, dict)
+                        and segs[:1] == ["roles"]
+                        and len(segs) == 2
+                        and subject.get("id") == segs[1] == defn.get("id")
+                    ):
+                        raise self._refuse("definition_conflict")
+                    self._upsert_role(f, defn["id"], defn)
 
                 elif kind == "role.disable":
-                    role_id = str(subject.get("id") or segs[-1])
-                    if hasattr(f.db, "exists") and f.db.exists("Role", role_id):
-                        f.db.set_value("Role", role_id, "disabled", 1)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
+                    self._disable_role(f, subject.get("id") or segs[-1])
 
                 elif kind == "location.upsert":
                     defn = params.get("definition") or {}
-                    if defn.get("kind") == "warehouse":
+                    # BPL-033: dispatch on the Blueprint location kind. A branch or a department has no engine record
+                    # yet (engine-adapter open question 11), so it is an explicit no-op, never a Warehouse.
+                    if self._location_kind(defn.get("kind")) == "warehouse":
                         wh_name = str(defn.get("id") or subject.get("id"))
                         explicit_company = defn.get("company") or params.get("company")
                         existing, company = self._find_warehouse(
@@ -668,16 +736,19 @@ class FrappeRuntimeBackend:
                     loc_id = str(subject.get("id") or segs[-1])
                     defn = params.get("definition") if isinstance(params.get("definition"), dict) else {}
                     explicit_company = params.get("company") or defn.get("company")
-                    existing, _company = self._find_warehouse(
-                        f,
-                        loc_id,
-                        company_name=explicit_company if isinstance(explicit_company, str) else None,
-                        require_company=False,
-                    )
-                    if existing:
-                        f.db.set_value("Warehouse", existing, "disabled", 1)
-                        if hasattr(f.db, "commit"):
-                            f.db.commit()
+                    # BPL-033 (review of PR #301): the kind is required. A disable never defaults to a Warehouse, because
+                    # the Blueprint location may be a branch or department that shares the id; unresolved fails closed.
+                    if self._location_kind(defn.get("kind")) == "warehouse":
+                        existing, _company = self._find_warehouse(
+                            f,
+                            loc_id,
+                            company_name=explicit_company if isinstance(explicit_company, str) else None,
+                            require_company=False,
+                        )
+                        if existing:
+                            f.db.set_value("Warehouse", existing, "disabled", 1)
+                            if hasattr(f.db, "commit"):
+                                f.db.commit()
 
                 elif kind == "settings.set":
                     has_after = "after" in params and params.get("after") is not None
@@ -696,6 +767,43 @@ class FrappeRuntimeBackend:
                     except Exception:
                         pass
                 raise
+
+    @staticmethod
+    def _location_kind(kind: Any) -> str:
+        """The Blueprint location kind (branch, warehouse, department). Anything else, including none, is refused before
+        any write."""
+        if not isinstance(kind, str) or kind not in LOCATION_KINDS:  # a list or dict kind is unhashable: test the type first
+            raise FrappeBackendError(
+                "invalid_request", {"fields": ["/params/definition/kind"]}, stage="execute", side_effect_free=True
+            )
+        return str(kind)
+
+    def check_ready(self, tenant_id: str, steps: list[dict[str, Any]]) -> None:
+        """Read-only readiness check before the first step of an apply or rollback (BPL-033, contract 5.6.1).
+
+        Refuses with a side-effect-free error when the engine site cannot take the artifact: its database does not
+        answer, a location upsert or disable step has no kind the adapter knows, or a warehouse step has no resolvable company. The
+        engine turns the refusal into ``failed_clean`` (nothing ran) instead of compensating committed steps."""
+        with self._site_session(tenant_id) as (f, _site_name):
+            try:
+                f.db.sql("SELECT 1")
+            except Exception as exc:
+                raise FrappeBackendError("engine_unavailable", stage="prepare", side_effect_free=True) from exc
+            for step in steps:
+                if step.get("kind") not in ("location.upsert", "location.disable"):
+                    continue
+                params = step.get("params") or {}
+                defn = params.get("definition") if isinstance(params.get("definition"), dict) else {}
+                if self._location_kind(defn.get("kind")) != "warehouse" or step["kind"] == "location.disable":
+                    continue
+                explicit_company = defn.get("company") or params.get("company")
+                subject = step.get("subject") or {}
+                self._find_warehouse(
+                    f,
+                    str(defn.get("id") or subject.get("id")),
+                    company_name=explicit_company if isinstance(explicit_company, str) else None,
+                    require_company=True,
+                )
 
     def _find_warehouse(
         self,
@@ -743,6 +851,138 @@ class FrappeRuntimeBackend:
         existing = f.db.get_value("Warehouse", {"warehouse_name": wh_name, "company": company}, "name")
         return (str(existing) if existing else None), company
 
+    def _refuse_protected_entity(self, entity_id: str) -> None:
+        """No field or type is added to a protected or locked entity, or to a reserved internal name, whatever the plan
+        said (SEC-022, ADR-0051; BPL-031 review). Raised before any write."""
+        if is_protected_entity(entity_id):
+            raise self._refuse("protected_subject")
+
+    def _add_entity(self, f: Any, dep: FrappeDeploymentAdapter, tenant_id: str, entity_id: str, doctype: str,
+                    defn: dict[str, Any]) -> None:
+        """entity.add (BPL-031). The rule comes from the mapping contract and ADR-0051 item 3:
+        - an entity the contract maps to a built-in type gets the Blueprint's fields as custom fields on that type,
+          through the guarded field path; a missing built-in is refused, never created under its name;
+        - an entity with no mapping becomes one adapter-owned custom type (custom=1 in the adapter's module); if the
+          derived name is already an engine type the adapter did not make, it is refused instead of applying nothing.
+        Every refusal is raised before any write."""
+        exists = self._doctype_exists(f, doctype)
+        if not is_contract_mapped_entity(entity_id):
+            if exists and not self._adapter_owns_doctype(f, doctype):
+                raise self._refuse("protected_subject")
+            self._ensure_doctype_exists(f, doctype, defn)
+            return
+        if not exists:
+            raise self._refuse("subject_missing")
+        fields = [fld for fld in defn.get("fields") or [] if isinstance(fld, dict)]
+        if any(fld.get("type", "string") not in BLUEPRINT_TO_FRAPPE_FIELDTYPE for fld in fields):
+            raise self._refuse("unsupported_value_type")
+        meta = f.get_meta(doctype)
+        journaled = self._journaled_fields(f, doctype)
+        add: list[tuple[str, dict[str, Any]]] = []
+        restore: list[tuple[str, dict[str, Any]]] = []
+        present: list[str] = []
+        for fld in fields:
+            fieldname = _sanitize_custom_fieldname(str(fld.get("id") or "field"))
+            held = meta.get_field(fieldname)
+            holders = [x for x in (held, meta.get_field(str(fld.get("id")))) if x is not None]
+            if holders:
+                # A field the type already holds (a native field of the same name, or one added earlier) is left alone, but
+                # only if it already enforces what the definition asks for: skipping it must never apply the field without
+                # its unique or index constraint (Q-603). The exception is a field this adapter added that a rollback hid:
+                # re-applying the entity restores it.
+                if any(self._lacks_constraint(x, fld.get("unique"), fld.get("indexed")) for x in holders):
+                    raise self._refuse("unique_or_index")
+                present.append(fieldname)
+                if held is not None and fieldname in journaled and int(getattr(held, "hidden", 0) or 0):
+                    restore.append((fieldname, fld))
+                continue
+            if fld.get("unique") or fld.get("indexed"):
+                # The guarded field path cannot deploy unique or index DDL here (it queues it for a controlled admin
+                # deployment and the gate approval is not passed to the backend), so the field is never added without
+                # its constraint: refuse the entity before any write (Q-603).
+                raise self._refuse("unique_or_index")
+            add.append((fieldname, fld))
+        # Intent first, so a rollback finds every field this step may have created; a row becomes "created" only once this
+        # call has created the field itself, and one whose field appeared without us is dropped, never adopted.
+        if add or present:
+            self._record_entity_fields(f, doctype, [name for name, _ in add], present)
+        for fieldname, fld in add:
+            if self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, fld):
+                self._confirm_entity_field(f, doctype, fieldname)
+        for fieldname, fld in restore:
+            self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, fld)
+
+    @staticmethod
+    def _has_constraint(field: Any, prop_ptr: str) -> bool:
+        """Does the engine field carry unique (/unique) or an index (/indexed; a unique field is indexed)?"""
+        is_unique = bool(int(getattr(field, "unique", 0) or 0))
+        return is_unique if prop_ptr == "/unique" else is_unique or bool(int(getattr(field, "search_index", 0) or 0))
+
+    @classmethod
+    def _lacks_constraint(cls, field: Any, unique: Any, indexed: Any) -> bool:
+        """True when a definition asks for unique or index and this engine field does not carry it."""
+        return bool((unique and not cls._has_constraint(field, "/unique")) or (indexed and not cls._has_constraint(field, "/indexed")))
+
+    _ENTITY_FIELD_TABLE = "Change Engine Entity Field"
+
+    def _journaled_fields(self, f: Any, doctype: str) -> set[str]:
+        """Custom fields this adapter created for an entity.add on this existing type (never native, earlier or pending)."""
+        if not f.db.table_exists(self._ENTITY_FIELD_TABLE):
+            return set()
+        rows = f.db.sql(
+            f"SELECT fieldname FROM `tab{self._ENTITY_FIELD_TABLE}` WHERE doctype = %s AND status = 'created'", (doctype,)
+        )
+        return {str(r[0]) for r in rows or []}
+
+    def _record_entity_fields(self, f: Any, doctype: str, fieldnames: list[str], present: list[str]) -> None:
+        """Journal the intent to create fieldnames as pending; drop a stale pending row of a field that now exists."""
+        if fieldnames:
+            f.db.sql(
+                f"CREATE TABLE IF NOT EXISTS `tab{self._ENTITY_FIELD_TABLE}` ("
+                "doctype VARCHAR(140) NOT NULL, fieldname VARCHAR(140) NOT NULL, "
+                "status VARCHAR(16) NOT NULL DEFAULT 'pending', PRIMARY KEY (doctype, fieldname))"
+            )
+        if f.db.table_exists(self._ENTITY_FIELD_TABLE):
+            for fieldname in present:
+                f.db.sql(
+                    f"DELETE FROM `tab{self._ENTITY_FIELD_TABLE}` WHERE doctype = %s AND fieldname = %s AND status = 'pending'",
+                    (doctype, fieldname),
+                )
+        for fieldname in fieldnames:
+            f.db.sql(
+                f"INSERT IGNORE INTO `tab{self._ENTITY_FIELD_TABLE}` (doctype, fieldname, status) VALUES (%s, %s, 'pending')",
+                (doctype, fieldname),
+            )
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
+    def _confirm_entity_field(self, f: Any, doctype: str, fieldname: str) -> None:
+        f.db.sql(
+            f"UPDATE `tab{self._ENTITY_FIELD_TABLE}` SET status = 'created' "
+            "WHERE doctype = %s AND fieldname = %s AND status = 'pending'",
+            (doctype, fieldname),
+        )
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
+    def _quarantine_entity_fields(self, f: Any, dep: FrappeDeploymentAdapter, tenant_id: str, doctype: str) -> None:
+        """entity.quarantine on a built-in type: hide exactly the custom fields its entity.add created; data stays."""
+        meta = f.get_meta(doctype)
+        for fieldname in sorted(self._journaled_fields(f, doctype)):
+            if fieldname.startswith("custom_") and meta.get_field(fieldname) is not None:
+                self._quarantine_field(dep, tenant_id, doctype, fieldname)
+
+    @staticmethod
+    def _doctype_exists(f: Any, doctype: str) -> bool:
+        if f.db.exists("DocType", doctype):
+            return True
+        return bool(getattr(f.db, "table_exists", None) and f.db.table_exists(doctype))
+
+    @staticmethod
+    def _adapter_owns_doctype(f: Any, doctype: str) -> bool:
+        row = f.db.get_value("DocType", doctype, ["name", "custom", "module"])  # a failed read raises
+        return bool(row) and str(row[0]) == doctype and int(row[1] or 0) == 1 and row[2] == ADAPTER_DOCTYPE_MODULE
+
     def _ensure_doctype_exists(self, f: Any, doctype: str, defn: dict[str, Any]) -> None:
         if getattr(f.db, "table_exists", None) and f.db.table_exists(doctype):
             return
@@ -757,7 +997,7 @@ class FrappeRuntimeBackend:
             fields.append(self._to_frappe_field_def(doctype, fname, fld))
         if not fields:
             fields = [{"fieldname": "title", "fieldtype": "Data", "label": "Title"}]
-        doc = f.get_doc({"doctype": "DocType", "name": doctype, "module": "Custom", "custom": 1, "fields": fields})
+        doc = f.get_doc({"doctype": "DocType", "name": doctype, "module": ADAPTER_DOCTYPE_MODULE, "custom": 1, "fields": fields})
         doc.insert(ignore_permissions=True)
         if hasattr(f.db, "commit"):
             f.db.commit()
@@ -770,16 +1010,20 @@ class FrappeRuntimeBackend:
         doctype: str,
         fieldname: str,
         defn: dict[str, Any],
-    ) -> None:
+    ) -> bool:
+        """Create the custom field, or restore a quarantined one; True only when this call created it."""
         dep_id = self._next_id("dep_cf")
         snap = dep.take_snapshot(doctype, fieldname, expected_deployment_id=dep_id)
         if snap.has_meta and snap.has_col:
-            # Non-destructive restore of a quarantined field (preserve column & existing rows!)
+            # Non-destructive restore of a quarantined field (preserve column & existing rows!). The field exists, so a
+            # unique or index request is only accepted if it already carries it (it is never added here, Q-603).
+            if self._lacks_constraint(f.get_meta(doctype).get_field(fieldname), defn.get("unique"), defn.get("indexed")):
+                raise self._refuse("unique_or_index")
             self._apply_property_setter(dep, tenant_id, doctype, fieldname, "hidden", 0, "Check")
             self._apply_property_setter(dep, tenant_id, doctype, fieldname, "reqd", 1 if defn.get("required") else 0, "Check")
             self._apply_property_setter(dep, tenant_id, doctype, fieldname, "read_only", 1 if defn.get("readOnly") else 0, "Check")
             dep.clear_doctype_cache(doctype)
-            return
+            return False
 
         if snap.has_meta != snap.has_col:
             raise FrappeBackendError("recovery_required", stage="execute")
@@ -820,6 +1064,7 @@ class FrappeRuntimeBackend:
             raise FrappeBackendError("recovery_required", stage="execute")
         if status not in ("APPLIED", "ALREADY_APPLIED"):
             raise FrappeBackendError("engine_unavailable", stage="execute")
+        return status == "APPLIED"
 
     def _execute_six_stage_field(
         self,
@@ -930,11 +1175,25 @@ class FrappeRuntimeBackend:
         wf_id = str(defn.get("id") or "workflow")
         entity_id = str(defn.get("entity") or "sales_order")
         doctype = entity_to_doctype(entity_id)
-        self._ensure_doctype_exists(f, doctype, {})
-
         transitions = defn.get("transitions") or []
         states_raw = defn.get("states") or []
         draft_sources = {t.get("from") for t in transitions if isinstance(t, dict)}
+
+        # SEC-022 (ADR-0051): states and roles get adapter-owned names; refuse, before any write, a name that is not
+        # a Blueprint id or that the engine already holds under another spelling (it matches names without case).
+        state = self._managed_state_name
+        state_names = {state(s.get("id")) for s in states_raw}
+        state_names |= {state(t.get(k)) for t in transitions for k in ("from", "to")}
+        for name in sorted(state_names):  # a failed read raises: no lookup error is taken as "no collision"
+            stored = f.db.get_value("Workflow State", name, "name")
+            if stored and str(stored) != name:
+                raise self._refuse("protected_subject")
+        # Every transition names its roles (the Blueprint requires at least one); none falls back to a default.
+        if not all(isinstance(t, dict) and isinstance(t.get("allowedRoles"), list) and t["allowedRoles"] for t in transitions):
+            raise self._refuse("unsupported_value_type")
+        role = {r: self._managed_role(f, r)[0] for t in transitions for r in t["allowedRoles"]}
+
+        self._ensure_doctype_exists(f, doctype, {})
 
         # Ensure initial state is first and map doc_status cleanly without direct 0->2 jumps
         ordered_states = sorted(
@@ -964,13 +1223,13 @@ class FrappeRuntimeBackend:
 
             allow_edit = "System Manager"
             for t in transitions:
-                if t.get("from") == sid and t.get("allowedRoles"):
-                    allow_edit = str(t["allowedRoles"][0])
+                if t.get("from") == sid:
+                    allow_edit = role[t["allowedRoles"][0]]
                     break
 
             wf_states.append(
                 {
-                    "state": sid,
+                    "state": state(sid),
                     "doc_status": doc_status,
                     "allow_edit": allow_edit,
                     "style": style,
@@ -987,14 +1246,13 @@ class FrappeRuntimeBackend:
                     f.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action}).insert(ignore_permissions=True)
                 except Exception:
                     pass
-            roles = t.get("allowedRoles") or ["System Manager"]
-            for role in roles:
+            for r in t["allowedRoles"]:
                 wf_transitions.append(
                     {
-                        "state": str(t["from"]),
+                        "state": state(t["from"]),
                         "action": action,
-                        "next_state": str(t["to"]),
-                        "allowed": str(role),
+                        "next_state": state(t["to"]),
+                        "allowed": role[r],
                         "allow_self_approval": False,
                     }
                 )
@@ -1021,6 +1279,8 @@ class FrappeRuntimeBackend:
         status = outcome.get("status")
         if status == "RECOVERY_REQUIRED":
             raise FrappeBackendError("recovery_required", stage="execute")
+        if outcome.get("disposition") == "WORKFLOW_STATE_NAME_COLLISION":  # a state appeared since the check above
+            raise FrappeBackendError("plan_rejected", {"reasonCode": "protected_subject"}, stage="execute")
         if status != "APPLIED":
             raise FrappeBackendError("engine_unavailable", stage="execute")
 
@@ -1028,6 +1288,11 @@ class FrappeRuntimeBackend:
         report_id = str(defn.get("id") or "report")
         entity_id = str(defn.get("entity") or "sales_order")
         doctype = entity_to_doctype(entity_id)
+        # SEC-022 (ADR-0051): validate the roles before any write; no roles is refused, never "All" (fail closed).
+        visible = defn.get("visibleToRoles")
+        if not isinstance(visible, list) or not visible:
+            raise self._refuse("unsupported_value_type")
+        roles = [self._managed_role(f, r)[0] for r in visible]
         self._ensure_doctype_exists(f, doctype, {})
 
         columns: list[dict[str, Any]] = []
@@ -1041,7 +1306,6 @@ class FrappeRuntimeBackend:
         if not columns:
             columns = [{"fieldname": "name", "label": "ID"}]
 
-        roles = [str(r) for r in (defn.get("visibleToRoles") or ["All"])]
         rep_payload = {
             "report_name": report_id,
             "ref_doctype": doctype,
@@ -1107,6 +1371,316 @@ class FrappeRuntimeBackend:
         if hasattr(f.db, "commit"):
             f.db.commit()
 
+    # ------------------------------------------------------------------ roles and permission rules (SEC-022, BPL-032)
+    @staticmethod
+    def _refuse(reason: str) -> FrappeBackendError:
+        """A step the adapter will not apply, raised before any write (plan reason code in details)."""
+        return FrappeBackendError("plan_rejected", {"reasonCode": reason}, stage="execute", side_effect_free=True)
+
+    def _managed_state_name(self, state_id: Any) -> str:
+        try:
+            return engine_state_name(state_id)
+        except EngineNameError:
+            raise self._refuse("unsupported_value_type") from None
+
+    def _managed_role(self, f: Any, role_id: Any) -> tuple[str, int | None]:
+        """(managed name, disabled flag or None when absent) for a Blueprint role id (ADR-0051).
+
+        The engine matches names without case; when its lookup returns a record under another spelling, that
+        record is not ours (a built-in or someone else's role) and the step is refused."""
+        try:
+            name = engine_role_name(role_id)
+        except EngineNameError:
+            raise self._refuse("unsupported_value_type") from None
+        row = f.db.get_value("Role", name, ["name", "disabled"])
+        if not row:
+            return name, None
+        if str(row[0]) != name:
+            raise self._refuse("protected_subject")
+        return name, int(row[1] or 0)
+
+    def _upsert_role(self, f: Any, role_id: Any, defn: dict[str, Any]) -> None:
+        """Create or re-enable the managed role and reconcile its rules; every check runs before the first write."""
+        name, disabled = self._managed_role(f, role_id)
+        grants = self._role_grants(f, defn)
+        plans = [self._plan_rules(f, dt, name, grants.get(dt)) for dt in sorted(set(grants) | self._rule_doctypes(f, name))]
+        if disabled is None:
+            f.get_doc({"doctype": "Role", "role_name": name, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
+        elif disabled:
+            f.db.set_value("Role", name, "disabled", 0)
+        for plan in plans:
+            self._write_rules(f, plan)
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
+    def _disable_role(self, f: Any, role_id: Any) -> None:
+        """A disabled role keeps its record and holds no rules (ADR-0039 RM-008)."""
+        name, disabled = self._managed_role(f, role_id)
+        if disabled is None:
+            return
+        for plan in [self._plan_rules(f, dt, name, None, revoking=True) for dt in sorted(self._rule_doctypes(f, name))]:
+            self._write_rules(f, plan)
+        f.db.set_value("Role", name, "disabled", 1)
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
+    def can_grant_own_doctype(self, tenant_id: str, entity: str) -> bool:
+        """Plan-time check: True only when an unmapped entity's derived doctype is adapter-owned or not yet created."""
+        if is_protected_entity(entity) or entity in ENTITY_TO_DOCTYPE:
+            return False
+        doctype = entity_to_doctype(entity)
+        if not _SAFE_SQL_IDENT_RE.fullmatch(doctype):
+            return False
+        with self._site_session(tenant_id) as (f, _):
+            row = f.db.get_value("DocType", doctype, ["name", "custom", "module"])
+            if row:
+                return str(row[0]) == doctype and int(row[1] or 0) == 1 and row[2] == ADAPTER_DOCTYPE_MODULE
+            if getattr(f.db, "table_exists", None) and f.db.table_exists(doctype):
+                return False
+            return True
+
+    def _role_grants(self, f: Any, defn: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """ADR-0051 grant table: {doctype: {"flags", "hidden"}} for one Blueprint role; refuses or withholds, never widens."""
+        scope = defn.get("scope").get("type") if isinstance(defn.get("scope"), dict) else None
+        if scope == "assigned_records":
+            raise self._refuse("unsupported_value_type")
+        perms = defn.get("permissions") or []
+        if not isinstance(perms, list) or not all(isinstance(p, dict) for p in perms):
+            raise self._refuse("unsupported_value_type")
+        resolved: dict[str, dict[str, Any]] = {}
+        for p in perms:
+            entity = p.get("entity")
+            if not isinstance(entity, str):
+                raise self._refuse("unsupported_value_type")
+            doctype = self._grant_doctype(f, entity)
+            if doctype in resolved:
+                raise self._refuse("definition_conflict")
+            resolved[doctype] = p
+        if scope not in ("company", "own_records"):
+            return {}  # branch, warehouse, department: withheld until record scoping on holders exists (ADR-0051)
+        grants: dict[str, dict[str, Any]] = {}
+        for doctype, p in resolved.items():
+            meta = f.get_meta(doctype)
+            fieldnames = {getattr(d, "fieldname", None) for d in meta.fields}
+            hidden = self._hidden_fields(meta, fieldnames, p["entity"], p.get("hiddenFields") or [])
+            if hidden is None:
+                continue  # a hidden field that cannot be masked where its data lives: withhold the grant
+            flags = rule_flags(
+                p.get("actions"),
+                masked=bool(p.get("hiddenFields") or p.get("readOnlyFields")),
+                submittable=bool(int(getattr(meta, "is_submittable", 0) or 0)),
+            )
+            if flags:
+                grants[doctype] = {"flags": {**flags, "if_owner": int(scope == "own_records")}, "hidden": hidden}
+        return grants
+
+    @staticmethod
+    def _hidden_fields(meta: Any, fieldnames: set[Any], entity: str, hidden_fields: list[Any]) -> list[str] | None:
+        """Engine fields the adapter lays out on permission levels for a grant's hiddenFields; None withholds the grant.
+
+        Fail closed: a hidden Blueprint field is masked on EVERY engine field that can hold its data, or the grant is
+        withheld. The representations are the contract's native field (CONTRACT_NATIVE_FIELDS: cost_price is
+        valuation_rate), a native field of the Blueprint's own name (customer_name, the contract's same-name mapping),
+        and the custom twin entity.add or field.add materialised (custom_<id>). The adapter never moves a native field,
+        so each native one must already sit above level 0 (tenant provisioning puts valuation_rate on level 1); one the
+        contract keeps on another record (None) or does not find on the type cannot be masked here. The custom twin, when
+        it exists, is laid out on a protected level. A field with no representation at all cannot be masked either."""
+        layout: set[str] = set()
+        for h in hidden_fields:
+            hid = str(h)
+            natives = {hid} & fieldnames
+            if (entity, hid) in CONTRACT_NATIVE_FIELDS:
+                contract = CONTRACT_NATIVE_FIELDS[(entity, hid)]
+                if contract is None or contract not in fieldnames:
+                    return None
+                natives.add(contract)
+            if any(int(getattr(meta.get_field(n), "permlevel", 0) or 0) < 1 for n in natives):
+                return None
+            custom = _sanitize_custom_fieldname(hid)
+            if custom in fieldnames:
+                layout.add(custom)
+            elif not natives:
+                return None
+        return sorted(layout)
+
+    def _grant_doctype(self, f: Any, entity: str) -> str:
+        """Allowlist (ADR-0051 item 3): the reviewed mapping minus protected entities, or a document type the adapter
+        created for an unmapped entity (custom=1 in the adapter's module, stored under exactly that name)."""
+        if is_protected_entity(entity):
+            raise self._refuse("protected_subject")
+        reviewed = reviewed_grant_doctype(entity)
+        if reviewed is not None:
+            exists = f.db.table_exists(reviewed) if hasattr(f.db, "table_exists") else f.db.exists("DocType", reviewed)
+            if not exists:
+                raise self._refuse("subject_missing")
+            return reviewed
+        doctype = entity_to_doctype(entity)
+        if entity in ENTITY_TO_DOCTYPE or not _SAFE_SQL_IDENT_RE.fullmatch(doctype):
+            raise self._refuse("protected_subject")
+        row = f.db.get_value("DocType", doctype, ["name", "custom", "module"])  # a failed read raises
+        if not row or str(row[0]) != doctype or int(row[1] or 0) != 1 or row[2] != ADAPTER_DOCTYPE_MODULE:
+            raise self._refuse("protected_subject")
+        return doctype
+
+    @staticmethod
+    def _rule_doctypes(f: Any, role_name: str) -> set[str]:
+        return {str(r.get("parent")) for r in f.get_all("Custom DocPerm", filters={"role": role_name}, fields=["parent"])}
+
+    @staticmethod
+    def _rule_rows(f: Any, doctype: str) -> list[dict[str, Any]]:
+        rows = []
+        for r in f.get_all("Custom DocPerm", filters={"parent": doctype}, fields=["name"]):
+            d = f.get_doc("Custom DocPerm", r.get("name"))
+            rows.append({
+                "name": r.get("name"),
+                "role": str(getattr(d, "role", "") or ""),
+                "permlevel": int(getattr(d, "permlevel", 0) or 0),
+                **{k: int(getattr(d, k, 0) or 0) for k in (*RULE_FLAGS, "if_owner")},
+            })
+        return rows
+
+    def _plan_rules(
+        self,
+        f: Any,
+        doctype: str,
+        role_name: str,
+        grant: dict[str, Any] | None,
+        *,
+        revoking: bool = False,
+    ) -> dict[str, Any]:
+        """Target rules and field levels on one document type after this role's change (ADR-0039 item 3).
+
+        Other managed roles' field visibility is read back from their rules, so the result does not depend on the
+        order roles are applied in. Fields are grouped by the set of reading managed roles that hide them; each
+        group keeps the level it holds or takes the lowest free one. A level holding a field the adapter did not
+        place, or a rule of a role it does not own, is never used."""
+        rows = self._rule_rows(f, doctype)
+        foreign = [r["permlevel"] for r in rows if not r["role"].startswith(ENGINE_NAME_PREFIX)]
+        if not rows:
+            foreign = [int(r.get("permlevel") or 0) for r in f.get_all("DocPerm", filters={"parent": doctype}, fields=["permlevel"])]
+        managed = [r for r in rows if r["role"].startswith(ENGINE_NAME_PREFIX)]
+        level_of = {d.fieldname: int(getattr(d, "permlevel", 0) or 0) for d in f.get_meta(doctype).fields if getattr(d, "fieldname", None)}
+        ours = {r["permlevel"] for r in managed if r["permlevel"] >= 1}
+        reading = {r["role"]: (r["write"], r["if_owner"]) for r in managed if r["permlevel"] == 0 and r["read"] and r["role"] != role_name}
+        if grant:
+            reading[role_name] = (grant["flags"]["write"], grant["flags"]["if_owner"])
+        reads_at = {(r["role"], r["permlevel"]) for r in managed if r["read"]}
+        hidden = set(grant["hidden"]) if grant else set()
+        # Only fields the adapter placed may sit on a level it owns: a custom_ field it moved with a level setter.
+        # Any other field (or foreign role rule) on an owned level is drift and is never adopted or moved: grant and
+        # upsert paths refuse (fail closed), while revocation proceeds without touching the foreign field.
+        placed = {
+            (str(r.get("field_name")), int(str(r.get("value"))))
+            for r in f.get_all(
+                "Property Setter",
+                filters={"doc_type": doctype, "property": "permlevel"},
+                fields=["field_name", "value"],
+            )
+            if r.get("value") is not None and str(r.get("value")).isdigit()
+        }
+        adapter_placed = {fn for fn, lvl in level_of.items() if fn.startswith("custom_") and (fn, lvl) in placed}
+        drifted = {lvl for lvl in foreign if lvl in ours} | {
+            lvl for fn, lvl in level_of.items() if lvl in ours and fn not in adapter_placed
+        }
+        if drifted and not revoking:
+            raise self._refuse("protected_subject")
+        layout = {fn for fn, lvl in level_of.items() if lvl in ours and fn in adapter_placed} | {
+            fn for fn in hidden if level_of[fn] in ours | {0}
+        }
+        reserved = (
+            {lvl for fn, lvl in level_of.items() if lvl >= 1 and fn not in layout}
+            | {lvl for lvl in foreign if lvl >= 1}
+            | drifted
+        )
+        sig = {}
+        for fn in layout:
+            lvl = level_of[fn]
+            hiders = {y for y in reading if y != role_name and lvl >= 1 and (y, lvl) not in reads_at}
+            sig[fn] = tuple(sorted(hiders | ({role_name} if fn in hidden else set())))
+        level_for: dict[tuple[str, ...], int] = {}
+        groups = sorted({s for s in sig.values() if s})
+        for s in groups:
+            held = sorted(
+                {level_of[fn] for fn in layout if sig[fn] == s and level_of[fn] in ours}
+                - set(level_for.values())
+                - reserved
+            )
+            if held:
+                level_for[s] = held[0]
+        for s in groups:
+            if s not in level_for:
+                free = [lvl for lvl in range(1, MAX_PERMLEVEL + 1) if lvl not in reserved and lvl not in level_for.values()]
+                if not free:
+                    if revoking:
+                        by_key_only: dict[tuple[str, int], list[dict[str, Any]]] = {}
+                        for r in managed:
+                            by_key_only.setdefault((r["role"], r["permlevel"]), []).append(r)
+                        return {
+                            "doctype": doctype,
+                            "custom": bool(rows),
+                            "target": {},
+                            "rows": by_key_only,
+                            "clear": [r for r in managed if r["role"] == role_name],
+                            "setters": [],
+                        }
+                    raise FrappeBackendError("limit_exceeded", {"limit": "permission_levels"}, stage="execute", side_effect_free=True)
+                level_for[s] = free[0]
+        target: dict[tuple[str, int], dict[str, int]] = {}
+        if grant:
+            target[(role_name, 0)] = dict(grant["flags"])
+        for s, lvl in level_for.items():
+            for y, (write, if_owner) in reading.items():
+                read = int(y not in s)
+                target[(y, lvl)] = {**_ZERO_RULE, "read": read, "write": int(read and write), "if_owner": if_owner}
+        by_key: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        for r in managed:
+            by_key.setdefault((r["role"], r["permlevel"]), []).append(r)
+        clear = [r for key, rs in by_key.items() for i, r in enumerate(rs)
+                 if key not in target and (key[0] == role_name or key[1] >= 1) or key in target and i > 0]
+        setters = sorted((fn, level_for.get(sig[fn], 0)) for fn in layout if level_for.get(sig[fn], 0) != level_of[fn])
+        return {"doctype": doctype, "custom": bool(rows), "target": target, "rows": by_key, "clear": clear, "setters": setters}
+
+    @staticmethod
+    def _set_rule(f: Any, row: dict[str, Any], values: dict[str, int]) -> None:
+        if any(int(row.get(k) or 0) != v for k, v in values.items()):
+            doc = f.get_doc("Custom DocPerm", row["name"])
+            doc.update(values)
+            doc.save(ignore_permissions=True)
+
+    def _write_rules(self, f: Any, plan: dict[str, Any]) -> None:
+        """Apply a _plan_rules result: narrow first, then move fields, then write the target rules."""
+        doctype = plan["doctype"]
+        if not (plan["target"] or plan["clear"] or plan["setters"]):
+            return
+        if not plan["custom"]:
+            # The engine ignores standard rules once a custom rule exists, so copy them first, through its own API.
+            perms_api = getattr(f, "permissions", None)
+            if perms_api is None and getattr(f, "__name__", None) == "frappe":
+                import importlib
+
+                perms_api = importlib.import_module("frappe.permissions")
+            if perms_api is not None:
+                perms_api.setup_custom_perms(doctype)
+            else:  # a runtime without that API (the offline simulator): the same copy, row by row
+                for r in f.get_all("DocPerm", filters={"parent": doctype}, fields=["name"]):
+                    d = f.get_doc("DocPerm", r.get("name"))
+                    f.get_doc({"doctype": "Custom DocPerm", "parent": doctype, "parenttype": "DocType", "parentfield": "permissions",
+                               "role": getattr(d, "role", None), "permlevel": int(getattr(d, "permlevel", 0) or 0),
+                               **{k: int(getattr(d, k, 0) or 0) for k in (*RULE_FLAGS, "if_owner")}}).insert(ignore_permissions=True)
+        for row in plan["clear"]:
+            self._set_rule(f, row, _ZERO_RULE)
+        for fieldname, level in plan["setters"]:
+            f.make_property_setter({"doctype": doctype, "fieldname": fieldname, "property": "permlevel", "value": level, "property_type": "Int"})
+        for (role_name, level), values in sorted(plan["target"].items()):
+            existing = plan["rows"].get((role_name, level))
+            if existing:
+                self._set_rule(f, existing[0], values)
+            else:
+                f.get_doc({"doctype": "Custom DocPerm", "parent": doctype, "parenttype": "DocType", "parentfield": "permissions",
+                           "role": role_name, "permlevel": level, **values}).insert(ignore_permissions=True)
+        if hasattr(f, "clear_cache"):
+            f.clear_cache(doctype=doctype)
+
     # ------------------------------------------------------------------ shadow users
     def sync_members(
         self,
@@ -1122,6 +1696,19 @@ class FrappeRuntimeBackend:
             if mode == "full":
                 target_refs |= set(listed_members.keys())
 
+            # SEC-022 (ADR-0051): every role must be an enabled adapter-owned role held under exactly its managed
+            # name; anything else changes no member (unknown_role). sync_members never creates a role.
+            engine_roles: dict[str, str] = {}
+            for ref in sorted(target_refs):
+                for r in (listed_members.get(ref) or {}).get("roleIds", []):
+                    try:
+                        name, disabled = self._managed_role(f, r)
+                    except FrappeBackendError:
+                        disabled = None
+                    if disabled != 0:
+                        raise FrappeBackendError("unknown_role", {"fields": ["/members/roleIds"]}, side_effect_free=True)
+                    engine_roles[r] = name
+
             for ref in sorted(target_refs):
                 rec = listed_members.get(ref)
                 if rec is None:
@@ -1129,11 +1716,7 @@ class FrappeRuntimeBackend:
                 email = shadow_user_email(ref)
                 label = shadow_user_label(ref)
                 enabled = 1 if rec["status"] == "active" else 0
-                roles_payload = [{"role": r} for r in rec.get("roleIds", [])]
-
-                for r in rec.get("roleIds", []):
-                    if hasattr(f.db, "exists") and not f.db.exists("Role", r):
-                        f.get_doc({"doctype": "Role", "role_name": r, "desk_access": 0, "disabled": 0}).insert(ignore_permissions=True)
+                roles_payload = [{"role": engine_roles[r]} for r in rec.get("roleIds", [])]
 
                 if hasattr(f.db, "exists") and f.db.exists("User", email):
                     u_doc = f.get_doc("User", email)
@@ -1171,7 +1754,7 @@ class FrappeRuntimeBackend:
         entity_id = segs[1] if segs[:1] == ["entities"] and len(segs) >= 2 else "entity"
         field_id = segs[3] if len(segs) >= 4 and segs[2] == "fields" else segs[-1]
         doctype = entity_to_doctype(entity_id)
-        if not _SAFE_SQL_IDENT_RE.match(doctype):
+        if not _SAFE_SQL_IDENT_RE.fullmatch(doctype):
             raise FrappeBackendError("invalid_request", stage="validate")
         col = _sanitize_custom_fieldname(field_id)
         table = f"tab{doctype}"

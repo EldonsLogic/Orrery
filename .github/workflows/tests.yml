@@ -88,7 +88,7 @@ jobs:
             case "$path" in
               */test_*.py|*/tests.py|*/tests/*_test.py)
                 case "$path" in
-                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/core/hrms_skeleton/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*) continue ;;
+                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/core/hrms_skeleton/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*|components/compliance/company_calendar/tests/*) continue ;;
                   components/sales/trading/tests/*) continue ;;
                   services/discovery/accountant_view/tests/*|services/discovery/gap_analysis/tests/*|services/discovery/quote/tests/*|services/discovery/template_flow/tests/*|services/operate/memory/tests/*) continue ;;
                 esac
@@ -129,7 +129,9 @@ jobs:
           # - Evals exercise the discovery connectors and the operate runtime.
           # - Blueprint tests use discovery templates, component manifests and brand tokens.
           # - ERP-003 and ERP-021 use the dev bench; its tests discover ERP-014 in apps/engine.
+          # - ERP-013 uses the Discovery prevalidation contract and tabular connector.
           # - Components are also used by discovery, studio and the engine.
+          # - ERP-016 print documents read docs/brand/tokens/tokens.json, so it selects the engine suite.
           echo "brand=$(check_path '^docs/brand/(tools|tokens)/')" >> "$GITHUB_OUTPUT"
           echo "blueprint=$(check_path '^(services/(blueprint|discovery/templates)/|components/|docs/brand/(tools|tokens)/)')" >> "$GITHUB_OUTPUT"
           echo "control_plane=$(check_path '^services/control-plane/')" >> "$GITHUB_OUTPUT"
@@ -138,7 +140,7 @@ jobs:
           echo "gateway=$(check_path '^(services/gateway/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
           echo "operate=$(check_path '^(services/(operate|blueprint|control-plane|gateway)/)')" >> "$GITHUB_OUTPUT"
           echo "studio=$(check_path '^(services/studio/|services/blueprint/|services/datasets/|components/)')" >> "$GITHUB_OUTPUT"
-          echo "engine=$(check_path '^(apps/engine/|services/blueprint/|components/|infra/dev/docker/)')" >> "$GITHUB_OUTPUT"
+          echo "engine=$(check_path '^(apps/engine/|services/blueprint/|services/discovery/(prevalidate|connectors)/|components/|infra/dev/docker/|docs/brand/tokens/tokens\.json$)')" >> "$GITHUB_OUTPUT"
           echo "evals=$(check_path '^(evals/|services/(blueprint|discovery|operate)/)')" >> "$GITHUB_OUTPUT"
           echo "scripts=$(check_path '^scripts/')" >> "$GITHUB_OUTPUT"
           echo "infra=$(check_path '^(infra/|apps/engine/)')" >> "$GITHUB_OUTPUT"
@@ -259,7 +261,7 @@ jobs:
       # --- apps/engine ---
       - name: Install dependencies (apps/engine)
         if: steps.filter.outputs.engine == 'true'
-        run: pip install -r services/blueprint/requirements.txt "pydantic>=2" "werkzeug==3.1.3" "pymysql>=1.1"
+        run: pip install -r services/blueprint/requirements.txt "pydantic>=2" "werkzeug==3.1.3" "pymysql>=1.1" "hijridate==2.6.0"
 
       - name: Lint (apps/engine)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -282,11 +284,27 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_003_tenant_provisioning.py -v
 
+      - name: Live isolation suite decision helpers, offline (SEC-004)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_sec_004_live_helpers.py -v
+
       - name: Bilingual tax invoice print format tests (ERP-007)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine:.
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_007_bilingual_tax_invoice.py -v
+
+      - name: Umm al-Qura entry, companion fields and print tests (CMP-005)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine:.
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_cmp_005_calendar.py apps/engine/change_engine/change_engine/tests/test_cmp_005_hijri_dates.py -v
+
+      - name: Tenant-branded document templates tests (ERP-016)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine:.
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_016_branded_templates.py -v
 
       - name: Apply with preview and DDL plan gate tests (BPL-007)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -312,6 +330,12 @@ jobs:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_012_engine_adapter.py apps/engine/change_engine/change_engine/tests/test_erp_012_frappe_adapter.py -q
 
+      - name: Opening balances and master data importer tests (ERP-013)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine:.
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_013_opening_importer.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_fixes.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_round4.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_round6.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_followups.py apps/engine/change_engine/change_engine/tests/test_erp_013_review_followups_r2.py -q
+
       - name: Durable adapter state and production guard tests (ERP-026, offline)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
@@ -326,7 +350,30 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_027_fixture_real_adapter.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_027_fixture_real_adapter.py apps/engine/change_engine/change_engine/tests/test_bpl_031_entity_add_existing_doctype.py apps/engine/change_engine/change_engine/tests/test_bpl_031_review_fixes.py -q
+
+      - name: Real-adapter hardening, journal order and state persistence (BPL-033, offline)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: >
+          python3 -m pytest -q
+          apps/engine/change_engine/change_engine/tests/test_bpl_033_engine_hardening.py
+          apps/engine/change_engine/change_engine/tests/test_bpl_033_location_hardening.py
+
+      - name: Adapter role and state namespacing and mapped grants (SEC-022, BPL-032, offline)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: >
+          python3 -m pytest -q
+          apps/engine/change_engine/change_engine/tests/test_sec_022_bpl_032_roles.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_2.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_4.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_5.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_6.py
+          apps/engine/change_engine/change_engine/tests/test_sec_022_review_followups_7.py
+          apps/engine/change_engine/change_engine/tests/test_bpl_032_purchasing_mapping.py
 
       - name: Phase 0 engine proof unit and contract tests (ERP-021)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -334,11 +381,17 @@ jobs:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_021_phase0_proofs.py -v
 
-      - name: Engine action-policy tests (ERP-023)
+      - name: Engine action-policy and outcome reconciliation tests (ERP-023, ERP-029)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_023_action_policy.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_erp_023_action_policy.py apps/engine/change_engine/change_engine/tests/test_erp_029_action_outcome_reconciliation.py -q
+
+      - name: Inventory valuation correctness tests (ERP-015; live layer skips without a bench)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_erp_015_inventory_valuation.py -v
 
       - name: Headless request guard tests (ERP-020)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -448,6 +501,12 @@ jobs:
       - name: Country pack framework tests (CMP-021)
         if: steps.filter.outputs.components == 'true' && !cancelled()
         run: python3 -m unittest discover -s components/compliance/country_pack/tests -t . -v
+
+      - name: Company calendar settings tests (CMP-023)
+        if: steps.filter.outputs.components == 'true' && !cancelled()
+        run: |
+          pip install "hijridate==2.6.0"
+          python3 -m unittest discover -s components/compliance/company_calendar/tests -t . -v
 
       - name: Trading and distribution pack unit and factory sandbox checks (ERP-011)
         if: steps.filter.outputs.components == 'true' && !cancelled()

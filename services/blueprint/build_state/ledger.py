@@ -29,7 +29,7 @@ def _rec(d) -> review.SignOffRecord:
 
 class SignOffLedger:
     def __init__(self, integrity_keys: dict, key_id: str):
-        self._log = SealedLog(integrity_keys, key_id, "orrery.signoff.ledger.v1")
+        self._log = SealedLog(integrity_keys, key_id, "seshna.signoff.ledger.v1")
 
     def append(self, record) -> None:
         if not isinstance(record, review.SignOffRecord) or not review._valid_record(record):

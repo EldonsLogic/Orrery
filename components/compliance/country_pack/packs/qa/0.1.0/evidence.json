@@ -1,0 +1,192 @@
+{
+  "packId": "qa",
+  "version": "0.1.0",
+  "purpose": "Per-fact evidence for pack.json (CMP-031), moved unchanged from the former SOURCES.md. Status: tested (structure only, schema and unit tests pass). Every fact in pack.json is UNVERIFIED (evidenceStatus: unverified). Source: the CMP-030 research, docs/compliance/qatar-research.md. Access date for every URL read: 2026-11-18; the KPMG and vatupdate pages were search excerpts only, so they carry read: false and no access date. Labels: VERIFIED-OFFICIAL, SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim). Each claim keeps the former value and evidence text. The pack holds declarative metadata only: no tax maths, no rates (ADR-0031). Nothing here is legal or tax advice.",
+  "facts": [
+    {
+      "paths": ["tax.vatSupported", "tax.taxCodesRef", "tax.filingPeriods"],
+      "claim": "Value: false, null, []. Absence of VAT on the tax authority's list is VERIFIED; \"no VAT in force and no date\" is UNVERIFIED (secondary sources). Not assumed: re-check before every release.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://www.gta.gov.qa/en", "accessed": "2026-11-18", "note": "lists Global Minimum Tax, Income Tax, Capital Gains Tax, Withholding Tax, Excise Tax; no VAT"},
+        {"url": "https://taxsummaries.pwc.com/qatar/corporate/other-taxes", "accessed": "2026-11-18"},
+        {"url": "https://trykintsugi.com/sales-tax-guides/middle-east/qatar.md", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["tax.vatNumberPattern"],
+      "claim": "Value: ^(?!)$ (matches nothing: no VAT number exists). UNVERIFIED, follows from no VAT.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://www.gta.gov.qa/en", "accessed": "2026-11-18"},
+        {"url": "https://taxsummaries.pwc.com/qatar/corporate/other-taxes", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["tax.crNumberPattern"],
+      "claim": "Value: ^[A-Za-z0-9/-]{1,30}$. UNVERIFIED, no source: permissive placeholder, the real commercial registration format was not researched.",
+      "status": "UNVERIFIED"
+    },
+    {
+      "paths": ["tax.roundingRule"],
+      "claim": "Value: half_away_from_zero. Platform default (ADR-0033), not a Qatar statutory fact.",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/decisions/ADR-0033-v1-valuation-rounding-and-arabic-review.md"
+    },
+    {
+      "paths": ["eInvoicing.required", "eInvoicing.mode", "eInvoicing.authority", "eInvoicing.componentId", "eInvoicing.mandatoryDocumentLanguages"],
+      "claim": "Value: false, none, null, null, []. UNVERIFIED. Cabinet approved a draft e-invoicing law on 2026-05-06; not enacted as far as found; scope, format and dates unknown. Only one page was actually read for the absence claim: the tax authority's home page (https://www.gta.gov.qa/en) does not mention e-invoicing (VERIFIED for that page only; enactment status after August 2026 is unknown). The KPMG and vatupdate URLs were read only as search excerpts, not as full pages (qatar-research.md Q2); the EY page is the main source for the draft law and is UNVERIFIED.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/qatar-research.md section Q2",
+      "sources": [
+        {"url": "https://www.ey.com/en_gl/technical/tax-alerts/qatar-approves-draft-e-invoicing-law-and-implementing-regulations", "accessed": "2026-11-18"},
+        {"url": "https://kpmg.com/us/en/taxnewsflash/news/2026/05/qatar-cabinet-approves-draft-law-e-invoicing-executive-regulations.html", "read": false, "note": "search excerpt only, full page not read (search of 2026-11-18)"},
+        {"url": "https://www.vatupdate.com/2026/06/05/qatar-cabinet-approves-draft-e-invoicing-law-and-regulations/", "read": false, "note": "search excerpt only, full page not read (search of 2026-11-18)"},
+        {"url": "https://www.gta.gov.qa/en", "accessed": "2026-11-18", "note": "read"}
+      ]
+    },
+    {
+      "paths": ["eInvoicing.archiveRetentionYears"],
+      "claim": "Value: 10. UNVERIFIED. Books kept in Qatar for 10 years (accounting records, not an e-invoice archive rule; the schema needs a number).",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://taxsummaries.pwc.com/qatar/corporate/tax-administration", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.week.weekendDays"],
+      "claim": "Value: fri, sat. UNVERIFIED. Friday rest day is normal; Saturday varies by employer (\"commonly also off\"). Saturday is a default, not statute.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://www.pinsentmasons.com/out-law/guides/qatar-labour-law-employers-need-know", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.week.startDay", "localeDefaults.workingTime.workDays"],
+      "claim": "Value: sun, sun to thu. UNVERIFIED, no source: conventional default that follows from the weekend above.",
+      "status": "UNVERIFIED"
+    },
+    {
+      "paths": ["localeDefaults.workingTime.hours"],
+      "claim": "Value: 08:00 to 16:00. UNVERIFIED. The 8-hours-a-day and 48-a-week limit is from the secondary sources; the clock times are a placeholder.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://www.dohaguides.com/qatar-labour-law-about-working-hours/", "accessed": "2026-11-18"},
+        {"url": "https://www.pinsentmasons.com/out-law/guides/qatar-labour-law-employers-need-know", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.workingTime.reducedPeriods"],
+      "claim": "Value: ramadan, 08:00 to 14:00 (6 hours). UNVERIFIED. Sources conflict (one says 4 hours in Ramadan). Overridable by the company.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://www.dohaguides.com/qatar-labour-law-about-working-hours/", "accessed": "2026-11-18"},
+        {"url": "https://www.pinsentmasons.com/out-law/guides/qatar-labour-law-employers-need-know", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.fiscalYear"],
+      "claim": "Value: Gregorian, 1 January. UNVERIFIED. Calendar tax year unless the tax authority approves another.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://taxsummaries.pwc.com/qatar/corporate/tax-administration", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.calendar"],
+      "claim": "Value: primary Gregorian, secondary display none. UNVERIFIED. Research says Gregorian civil and fiscal calendar and Hijri for Islamic holidays; tabular vs announced Hijri dates is an open risk, and the schema only offers the Umm al-Qura variant, so no secondary display is asserted.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/qatar-research.md section Q6 (repo file; its sources are in the entries above)"
+    },
+    {
+      "paths": ["localeDefaults.holidays.calendarRef"],
+      "claim": "Value: qa.holidays 0.1.0. UNVERIFIED and UNRESOLVED: no holiday calendar exists yet. Holidays are announced by the Ministry of Labour (moon sighting), so dates cannot be computed in advance.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://thepeninsulaqatar.com/article/15/03/2026/labour-ministry-announces-three-day-eid-al-fitr-holiday-for-private-sector", "accessed": "2026-11-18"},
+        {"url": "https://s.thepeninsula.qa/article/24/05/2026/qatar-declares-three-day-eid-al-adha-holiday-for-private-sector", "accessed": "2026-11-18"},
+        {"url": "https://s.thepeninsula.qa/article/16/12/2025/labour-ministry-announces-national-day-holiday-for-private-sector", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.timezone", "localeDefaults.currency", "formats", "localeDefaults.numberSystem"],
+      "claim": "Value: Asia/Qatar, QAR, 2 decimals, western digits. UNVERIFIED, no source in the research (standard IANA and ISO 4217 values, not read in this session).",
+      "status": "UNVERIFIED"
+    },
+    {
+      "paths": ["payrollHooks"],
+      "claim": "Value: wpsEnabled false, all refs null. Out of v1 scope (payroll is not AI-written, AGENTS.md). WPS via banks and end-of-service gratuity exist per the research: UNVERIFIED.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://www.dohaguides.com/wage-protection-system-wps-qatar/", "accessed": "2026-11-18"},
+        {"url": "https://www.greythr.com/middle-east/blog/qatar-wps-compliance-2026/", "accessed": "2026-11-18"},
+        {"url": "https://www.gulf-times.com/story/371296/qatar-labour-law-end-of-service-benefits", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["coaTemplate"],
+      "claim": "Value: finance.coa_qa_unresolved. UNRESOLVED placeholder. No Qatar chart component exists. IFRS is the accounting standard (UNVERIFIED); no mandatory national chart found.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://www.ifac.org/about-ifac/membership/profile/qatar", "accessed": "2026-11-18"},
+        {"url": "https://taxsummaries.pwc.com/qatar/corporate/tax-administration", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["printFormats.mandatoryLanguages"],
+      "claim": "Value: ar. UNVERIFIED. The Arabic requirement is UNVERIFIED for invoices: the source covers statutory financial statements only (secondary source); invoice language rules not found. en is dropped because it has no source.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://taxsummaries.pwc.com/qatar/corporate/tax-administration", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["printFormats.templates"],
+      "claim": "Value: sales.invoice_print_qa_unresolved. UNRESOLVED placeholder. No Qatar template exists, and the schema has no invoice kind without tax, so tax_invoice is a stand-in. UNVERIFIED, no source.",
+      "status": "UNVERIFIED"
+    },
+    {
+      "paths": ["printFormats.legalLayoutPrecedence"],
+      "claim": "Value: true. Fixed by the pack schema (const: true), not a Qatar fact. UNVERIFIED, no source.",
+      "status": "UNVERIFIED"
+    }
+  ],
+  "factsOutsideSchema": [
+    {
+      "claim": "Data protection: Law No. 13 of 2016, regulator NCSA, 72-hour breach notice (unconfirmed against the text), no general localisation duty found.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://www.dlapiperdataprotection.com/index.html?c=QA&t=law", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "claim": "Corporate income tax (10% on the foreign-owned share) and withholding tax (5% to non-residents): no rates are stored here.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://taxsummaries.pwc.com/qatar/corporate/taxes-on-corporate-income", "accessed": "2026-11-18"},
+        {"url": "https://taxsummaries.pwc.com/qatar/corporate/withholding-taxes", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "claim": "Accounting standard: IFRS.",
+      "status": "UNVERIFIED",
+      "sources": [
+        {"url": "https://www.ifac.org/about-ifac/membership/profile/qatar", "accessed": "2026-11-18"}
+      ]
+    }
+  ],
+  "pendingRefs": [
+    {"path": "coaTemplate.componentId", "value": "finance.coa_qa_unresolved", "blockedBy": "UNRESOLVED placeholder: no Qatar chart component exists."},
+    {"path": "coaTemplate.artifactRef", "value": "unresolved_no_qatar_coa_component_yet", "blockedBy": "UNRESOLVED placeholder: no Qatar chart component exists."},
+    {"path": "printFormats.templates[0].templateRef", "value": "unresolved_no_qatar_invoice_template_yet", "blockedBy": "UNRESOLVED placeholder: no Qatar template exists."},
+    {"path": "printFormats.templates[0].componentId", "value": "sales.invoice_print_qa_unresolved", "blockedBy": "UNRESOLVED placeholder: no Qatar template exists."},
+    {"path": "localeDefaults.holidays.calendarRef.id", "value": "qa.holidays", "blockedBy": "UNRESOLVED: no holiday calendar exists yet (CMP-024 holiday calendars)."}
+  ],
+  "goLiveBlockers": [],
+  "arabicLabels": [
+    {"file": "pack.json", "path": "name.ar", "text": "حزمة دولة قطر", "review": "unreviewed", "rule": "ADR-0033"},
+    {"file": "pack.json", "path": "localeDefaults.workingTime.reducedPeriods[0].labels.ar", "text": "ساعات العمل في رمضان", "review": "unreviewed", "rule": "ADR-0033"},
+    {"file": "manifest.json", "path": "name.ar", "text": "حزمة دولة قطر", "review": "unreviewed", "rule": "ADR-0033"}
+  ],
+  "arabicReviewNote": "Do not promote past tested before a native Arabic reviewer signs off (ADR-0033, Q-28)."
+}

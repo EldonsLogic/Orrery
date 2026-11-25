@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from .certification import certification_refusals
+
 SCHEMA_PATH = Path(__file__).resolve().parent / "pack.schema.json"
 COUNTRY_CODE_RE = re.compile(r"^[A-Za-z]{2}$")
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$")
@@ -20,6 +22,11 @@ TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 SNAKE_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 LOCALE_TAG_RE = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Go-live gate (CMP-034): mirrors ADR-0034's production boundary for components.
+ENVIRONMENTS = ("sandbox", "test", "production")
+PRODUCTION_STATUSES = frozenset({"certified", "regulated"})
+# Q-560: secondary evidence requires the same market-accountant sign-off as official evidence.
+PRODUCTION_EVIDENCE = frozenset({"verified_official", "secondary"})
 
 
 class CountryPackError(ValueError):
@@ -214,6 +221,27 @@ def validate_pack_or_raise(pack: Any, schema_path: Path | None = None) -> None:
         raise PackValidationError(f"Invalid country pack ({len(errors)} error(s)): {errors[0]}", errors=errors)
 
 
+def _check_environment(environment: Any) -> None:
+    # Exact type: a str subclass could override __eq__ to pass the membership test and skip the gate.
+    if type(environment) is not str or environment not in ENVIRONMENTS:
+        raise CountryPackError(f"Unknown environment {environment!r} (allowed: {', '.join(ENVIRONMENTS)})")
+
+
+def _check_go_live(pack: dict[str, Any], directory: Path, label: str, environment: str) -> None:
+    """Refuse production packs lacking certification records, accepted evidence or a matching manifest."""
+    if environment != "production":
+        return
+    reasons = certification_refusals(pack, directory)
+    if pack["status"] not in PRODUCTION_STATUSES:
+        reasons.append(f"status '{pack['status']}' is below certified")
+    if pack["evidenceStatus"] not in PRODUCTION_EVIDENCE:
+        reasons.append(f"evidenceStatus '{pack['evidenceStatus']}' is not verified_official or secondary")
+    if pack.get("testOnly") is True:
+        reasons.append("pack is marked testOnly=true (allow_test_packs never applies in production)")
+    if reasons:
+        raise PackValidationError(f"Country pack {label} cannot be used in production: {'; '.join(reasons)}", errors=reasons)
+
+
 def _semver_key(version: str) -> tuple[int, int, int, int, str] | None:
     m = SEMVER_RE.match(version)
     if not m:
@@ -228,11 +256,18 @@ def load_country_pack(
     version: str | None = None,
     *,
     allow_test_packs: bool = False,
+    environment: str = "production",
 ) -> dict[str, Any]:
     """Load and validate a country pack from `<packs_dir>/<country>/<version>/pack.json`.
 
-    Packs marked `testOnly: true` are rejected unless `allow_test_packs=True`.
+    Packs marked `testOnly: true` are rejected unless `allow_test_packs=True`. In `environment="production"`
+    (the default) a pack must be certified/regulated, have official or secondary evidence, a matching
+    companion manifest naming its reviewer, and a market-accountant sign-off plus founder approval in
+    evidence.json. A `testOnly` pack is always refused in production. `"sandbox"` and `"test"` skip these
+    certification checks and are for synthetic data only (caller's responsibility, ADR-0059).
+    Any other environment, including a `str` subclass, is rejected.
     """
+    _check_environment(environment)
     if not isinstance(country_code, str) or not COUNTRY_CODE_RE.match(country_code.strip()):
         raise UnknownCountryError(f"Invalid or missing country code: {country_code!r}")
     code_upper = country_code.strip().upper()
@@ -280,6 +315,7 @@ def load_country_pack(
         raise PackValidationError(f"Pack countryCode '{pack['countryCode']}' does not match '{code_upper}'")
     if pack["version"] != chosen_version:
         raise PackValidationError(f"Pack version '{pack['version']}' does not match directory '{chosen_version}'")
+    _check_go_live(pack, pack_file.parent, f"{code_upper}@{chosen_version}", environment)
     return copy.deepcopy(pack)
 
 
@@ -407,8 +443,11 @@ def _validate_merged_locale(
         errors.append(f"currency '{merged.get('currency')}' not in allowedCurrencies {allowed_cur}")
 
 
-def apply_company_overrides(pack: dict[str, Any], company_overrides: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Merge allowed company overrides onto a validated pack; fail closed on locked/unknown paths."""
+def _apply_company_overrides(pack: dict[str, Any], company_overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Merge allowed company overrides onto a validated pack; fail closed on locked/unknown paths.
+
+    Private (CMP-034): it runs no go-live gate. `resolve_country_pack` is the only production entry.
+    """
     validate_pack_or_raise(pack)
     overrides = {} if company_overrides is None else company_overrides
     if not isinstance(overrides, dict):
@@ -464,12 +503,15 @@ def resolve_country_pack(
     *,
     allow_test_packs: bool = False,
     allow_unpinned: bool = False,
+    environment: str = "production",
 ) -> dict[str, Any]:
     """Select, validate, and resolve a country pack with company overrides from explicit inputs.
 
     Requires a pinned `version` unless `allow_unpinned=True` and rejects `testOnly: true`
-    packs unless `allow_test_packs=True`.
+    packs unless `allow_test_packs=True` (never in production). `environment` gates go-live as in
+    `load_country_pack`. This is the only production entry: the override merger is private and ungated.
     """
+    _check_environment(environment)
     if version is None and not allow_unpinned:
         raise PackNotFoundError(
             f"resolve_country_pack requires an explicit pinned version for country '{country_code}'"
@@ -479,7 +521,8 @@ def resolve_country_pack(
         packs_dir=packs_dir,
         version=version,
         allow_test_packs=allow_test_packs,
+        environment=environment,
     )
     if pack_id is not None and pack_id != pack["packId"]:
         raise PackValidationError(f"Requested pack_id '{pack_id}' does not match loaded pack '{pack['packId']}'")
-    return apply_company_overrides(pack, company_overrides=company_overrides)
+    return _apply_company_overrides(pack, company_overrides=company_overrides)

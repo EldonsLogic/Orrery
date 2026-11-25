@@ -15,7 +15,7 @@ HR skeleton for v1 (plan row `ERP-010`). It prepares employees, leave and salary
 | Action | Roles |
 |---|---|
 | `Employee`, `Leave Policy`, `Leave Allocation`, `Salary Component`, `Salary Structure`, `Salary Structure Assignment` | `HR Manager`, `System Manager` |
-| `Department`, `Designation`, `Branch`, `Leave Type`, `Leave Period` | the two above and `HR User` |
+| `Department`, `Designation`, `Branch`, `Leave Type` (except pay-affecting fields `is_lwp`, `is_ppl`, `fraction_of_daily_salary_per_leave`, which need `HR Manager` or `System Manager`), `Leave Period` | the two above and `HR User` |
 | File or edit a `Leave Application` (only while `Open`) | the three above, and `Employee` for their own record only |
 | Approve or reject a `Leave Application` | `HR Manager`, `Leave Approver`, `System Manager`; **never the applicant**, whatever roles they hold. A `Leave Approver` who is not `HR Manager` or `System Manager` must be the application's designated approver: an absent, blank or non-text designation denies them. |
 

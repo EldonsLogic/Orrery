@@ -48,13 +48,13 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual(self.manifest["i18n"]["locales"], ["ar", "en"])
         self.assertEqual(self.manifest["i18n"]["stringsFile"], "strings.json")
 
-    def test_entities_are_exactly_the_twelve_and_payroll_is_not_plain(self):
+    def test_entities_are_exactly_the_twelve_and_pay_affecting_entities_are_ledger(self):
         entities = {
             a["ref"]: a.get("riskClass")
             for p in self.manifest["provides"] for a in p["artifacts"] if a["type"] == "entity"
         }
         self.assertEqual(set(entities), SPEC_DOCTYPES)
-        for name in ("Salary Component", "Salary Structure", "Salary Structure Assignment"):
+        for name in ("Leave Type", "Salary Component", "Salary Structure", "Salary Structure Assignment"):
             self.assertEqual(entities[name], "ledger")
 
     def test_every_referenced_function_and_test_file_exists(self):

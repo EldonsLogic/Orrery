@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from .errors import load_strings
+
 # Roles (engine role names, resolved from the authenticated session only).
 HR_ADMIN_ROLES = frozenset({"HR Manager", "System Manager"})
 HR_SETUP_ROLES = HR_ADMIN_ROLES | {"HR User"}
@@ -51,7 +53,9 @@ APPLICANT_IDENTITY_FIELD = "custom_applicant_user"
 PLATFORM_CUSTOM_FIELDS = {
     "Leave Application": (
         {
-            "fieldname": APPLICANT_IDENTITY_FIELD, "label": "Applicant account", "fieldtype": "Data",
+            "fieldname": APPLICANT_IDENTITY_FIELD,
+            "label": load_strings()["fieldLabels"]["applicant_account"]["en"],
+            "fieldtype": "Data",
             "read_only": 1, "permlevel": 2, "no_copy": 1, "print_hide": 1, "hidden": 1,
         },
     ),
@@ -103,6 +107,7 @@ class DocSpec:
     employee_field: str | None = None  # must reference an employee of the scoped company
     date_range: tuple[str, str] | None = None
     children: dict[str, ChildSpec] = field(default_factory=dict)
+    admin_fields: frozenset[str] = frozenset()
 
 
 _SALARY_DETAIL = ChildSpec(
@@ -145,6 +150,7 @@ SPECS: dict[str, DocSpec] = {
             "include_holiday": BOOL, "allow_negative": BOOL,
         },
         ("leave_type_name",), HR_SETUP_ROLES,
+        admin_fields=frozenset({"is_lwp", "is_ppl", "fraction_of_daily_salary_per_leave"}),
     ),
     "Leave Period": DocSpec(
         "Leave Period", ("company", "from_date", "to_date"),

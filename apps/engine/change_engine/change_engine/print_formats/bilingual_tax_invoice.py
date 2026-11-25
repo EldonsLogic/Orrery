@@ -14,14 +14,21 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import time, timedelta
 from decimal import Decimal, InvalidOperation
 import html
 import json
+import logging
 import re
 from typing import Any, Mapping
 
+from change_engine.i18n.hijri import (
+    HijriDateError, canonical_date, display_enabled, format_hijri, localise_digits, to_hijri,
+)
+
 from .qr_svg import render_qr_svg
+
+_log = logging.getLogger(__name__)
 
 DEFAULT_BRANDING_PRIMARY = "#2443D0"
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -448,23 +455,47 @@ def _render_party_card(
     )
 
 
-def render_tax_invoice_html(
-    invoice_data: Mapping[str, Any],
-    *,
-    mode: str = "zatca_sa",
-    branding: InvoiceBranding | Mapping[str, Any] | None = None,
-) -> str:
-    """Render a bilingual Arabic/English RTL print-ready HTML tax invoice.
+@dataclass(frozen=True)
+class TaxInvoiceView:
+    """Rendered, escaped fragments of a tax invoice shared by every layout (ERP-007, ERP-016)."""
 
-    Args:
-        invoice_data: Invoice payload matching ZATCA Phase 1 schema (or neutral schema in ``neutral`` mode).
-        mode: ``"zatca_sa"`` (ZATCA Phase 1 validation + mandatory TLV QR) or ``"neutral"``.
-        branding: Optional tenant branding validated against WCAG AA 4.5:1 on white and logo rules.
+    mode: str
+    invoice_id: str
+    title_ar: str
+    title_en: str
+    badge_ar: str
+    badge_en: str
+    currency: str
+    meta_rows_html: str
+    adjustment_html: str
+    line_rows_html: list[str]
+    qr_html: str
+    totals_html: str
+    notes_html: str
+    seller_card: str
+    buyer_card: str
+    thead_cells: str
+    invoice_type: str = ""  # "standard" or "simplified" in ZATCA mode (ERP-016 verifier kind)
+
+
+def prepare_tax_invoice_view(invoice_data: Mapping[str, Any], mode: str, *,
+                             discount_row: Decimal | None = None,
+                             included_discount_row: tuple[tuple[str, str], Decimal] | None = None,
+                             locale: dict[str, Any] | None = None,
+                             compliance_profile: dict[str, Any] | None = None,
+                             country_default: bool | None = None,
+                             ) -> TaxInvoiceView:
+    """Validate the invoice (fail closed) and build the escaped HTML fragments both layouts use.
+
+    ``discount_row`` is a document discount already reconciled by the caller (ERP-016); when it
+    is above zero a Discount row is printed first in the totals. ``included_discount_row`` is a
+    (label pair, amount) for the reconciled invoice discount the line amounts already carry; it
+    is printed as an informational row above that and is never subtracted. Nothing is derived
+    from the payload here, so ERP-007's own print is unchanged without them.
+
+    ``locale``, ``compliance_profile`` and ``country_default`` decide the secondary Hijri date
+    row exactly as in ``render_tax_invoice_html`` (CMP-005).
     """
-    if mode not in ("zatca_sa", "neutral"):
-        raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
-
-    resolved_branding = resolve_invoice_branding(branding)
     raw_dict = dict(invoice_data)
     qr_tlv: str | None = None
 
@@ -509,30 +540,33 @@ def render_tax_invoice_html(
 
     seller_map = raw_dict.get("seller") or {}
     buyer_map = raw_dict.get("buyer")
-    hijri_date = str(raw_dict.get("hijri_date") or "").strip()
+    # Companions and legacy hijri_date payloads are untrusted caches, never sources.
+    resolved_locale = {} if locale is None else locale
+    resolved_profile = {} if compliance_profile is None else compliance_profile
+    resolved_default = (mode == "zatca_sa") if country_default is None else bool(country_default)
+    show_hijri = display_enabled(resolved_locale, resolved_profile, country_default=resolved_default)
+    number_system = resolved_locale.get("numberSystem", "western")
+    localise_digits("", number_system)  # explicit settings errors fail closed
+    # Mandatory legal Gregorian date: Western ASCII digits always; invalid input fails closed.
+    issue_date = canonical_date(raw_dict["issue_date"])
+    hijri_html = ""
+    if show_hijri:
+        # Secondary display only: the legal invoice must render without it.
+        try:
+            ar_date = format_hijri(issue_date, language="ar", number_system=number_system)
+            en_date = format_hijri(issue_date, language="en", number_system=number_system)
+            hijri_html = (
+                _ltr(localise_digits(to_hijri(issue_date), number_system)) + '<br/>'
+                f'<bdi dir="rtl" lang="ar" data-review-status="{ar_date.review_status}" '
+                f'data-calendar-source="{ar_date.source}">{_esc(ar_date.text)}</bdi><br/>'
+                f'<bdi dir="ltr" lang="en">{_esc(en_date.text)}</bdi>'
+            )
+        except HijriDateError as error:
+            if error.code not in ("calendar_unavailable", "calendar_range"):
+                raise
+            hijri_html = ""
+            _log.warning("Hijri date omitted from invoice print: %s", error.code)
     notes_text = str(raw_dict.get("notes") or "").strip()
-
-    # Branding header elements (never displace mandatory legal layout or QR clear zone)
-    logo_html = ""
-    if resolved_branding.logo_data_uri:
-        mono_cls = " logo-mono" if resolved_branding.mono_logo else ""
-        logo_html = (
-            f'<div class="brand-logo-wrap">'
-            f'<img class="brand-logo{mono_cls}" src="{_esc(resolved_branding.logo_data_uri)}" '
-            f'alt="Tenant Logo"/>'
-            f"</div>"
-        )
-
-    tenant_banner = ""
-    if resolved_branding.display_name_ar or resolved_branding.display_name_en:
-        dn_ar = resolved_branding.display_name_ar or resolved_branding.display_name_en or ""
-        dn_en = resolved_branding.display_name_en or resolved_branding.display_name_ar or ""
-        tenant_banner = (
-            '<div class="brand-name bi-row">'
-            f'<span class="bi-ar">{_esc(dn_ar)}</span>'
-            f'<span class="bi-en">{_esc(dn_en)}</span>'
-            "</div>"
-        )
 
     # Metadata grid rows
     meta_entries: list[tuple[tuple[str, str], str]] = [
@@ -541,8 +575,8 @@ def render_tax_invoice_html(
     ]
     if issue_time:
         meta_entries.append((BILINGUAL_LABELS["issue_time"], _ltr(issue_time)))
-    if hijri_date:
-        meta_entries.append((BILINGUAL_LABELS["hijri_date"], _ltr(hijri_date)))
+    if hijri_html:
+        meta_entries.append((BILINGUAL_LABELS["hijri_date"], hijri_html))
     meta_entries.append((BILINGUAL_LABELS["currency"], _ltr(currency)))
 
     meta_rows_html = "".join(
@@ -672,9 +706,35 @@ def render_tax_invoice_html(
     lbl_vat = BILINGUAL_LABELS["total_vat_amount"]
     lbl_grand = BILINGUAL_LABELS["grand_total"]
 
+    discount_html = ""
+    if discount_row is not None and discount_row > _ZERO:
+        lbl_discount = BILINGUAL_LABELS["discount"]
+        discount_str = _fmt_money(discount_row, "discount")
+        discount_html = (
+            "<tr>"
+            f'<th class="tot-ar">{_esc(lbl_discount[0])}</th>'
+            f'<td class="tot-val">{_ltr(f"{discount_str} {currency}")}</td>'
+            f'<th class="tot-en">{_esc(lbl_discount[1])}</th>'
+            "</tr>"
+        )
+
+    included_html = ""
+    if included_discount_row is not None and included_discount_row[1] > _ZERO:
+        (lbl_inc_ar, lbl_inc_en), included_amount = included_discount_row
+        included_str = _fmt_money(included_amount, "included discount")
+        included_html = (
+            '<tr class="info-row">'
+            f'<th class="tot-ar">{_esc(lbl_inc_ar)}</th>'
+            f'<td class="tot-val">{_ltr(f"{included_str} {currency}")}</td>'
+            f'<th class="tot-en">{_esc(lbl_inc_en)}</th>'
+            "</tr>"
+        )
+
     totals_html = (
         '<table class="totals-table">'
-        "<tr>"
+        + included_html
+        + discount_html
+        + "<tr>"
         f'<th class="tot-ar">{_esc(lbl_taxable[0])}</th>'
         f'<td class="tot-val">{_ltr(f"{taxable_str} {currency}")}</td>'
         f'<th class="tot-en">{_esc(lbl_taxable[1])}</th>'
@@ -703,16 +763,6 @@ def render_tax_invoice_html(
             "</div>"
         )
 
-    footer_powered = (
-        ""
-        if resolved_branding.remove_powered_by
-        else (
-            '<span class="powered-by">'
-            f'مدعوم من {_ltr("Orrery")} &nbsp;|&nbsp; Powered by {_ltr("Orrery")}'
-            "</span>"
-        )
-    )
-
     seller_card = _render_party_card(*BILINGUAL_LABELS["seller"], seller_map)
     buyer_card = _render_party_card(*BILINGUAL_LABELS["customer"], buyer_map)
 
@@ -733,6 +783,101 @@ def render_tax_invoice_html(
         + (f'<div class="th-en">{_esc(h[1])}</div>' if h[1] != h[0] else "")
         + "</th>"
         for h in headers
+    )
+
+    return TaxInvoiceView(
+        mode=mode,
+        invoice_id=invoice_id,
+        title_ar=title_ar,
+        title_en=title_en,
+        badge_ar=badge_ar,
+        badge_en=badge_en,
+        currency=currency,
+        meta_rows_html=meta_rows_html,
+        adjustment_html=adjustment_html,
+        line_rows_html=line_rows_html,
+        qr_html=qr_html,
+        totals_html=totals_html,
+        notes_html=notes_html,
+        seller_card=seller_card,
+        buyer_card=buyer_card,
+        thead_cells=thead_cells,
+        invoice_type=invoice_type,
+    )
+
+
+def render_tax_invoice_html(
+    invoice_data: Mapping[str, Any],
+    *,
+    mode: str = "zatca_sa",
+    branding: InvoiceBranding | Mapping[str, Any] | None = None,
+    locale: dict[str, Any] | None = None,
+    compliance_profile: dict[str, Any] | None = None,
+    country_default: bool | None = None,
+) -> str:
+    """Render a bilingual Arabic/English RTL print-ready HTML tax invoice.
+
+    Args:
+        invoice_data: Invoice payload matching ZATCA Phase 1 schema (or neutral schema in ``neutral`` mode).
+        mode: ``"zatca_sa"`` (ZATCA Phase 1 validation + mandatory TLV QR) or ``"neutral"``.
+        branding: Optional tenant branding validated against WCAG AA 4.5:1 on white and logo rules.
+        locale: Resolved company.locale settings; Gregorian issue date stays mandatory.
+        compliance_profile: Resolved profile; hijriDisplay.enabled takes precedence.
+        country_default: Override whether ``zatca_sa`` shows Hijri when no settings are given.
+    """
+    if mode not in ("zatca_sa", "neutral"):
+        raise ValueError(f"Unsupported print format mode '{mode}'; expected 'zatca_sa' or 'neutral'")
+
+    resolved_branding = resolve_invoice_branding(branding)
+    view = prepare_tax_invoice_view(invoice_data, mode, locale=locale,
+                                    compliance_profile=compliance_profile,
+                                    country_default=country_default)
+    mode = view.mode
+    invoice_id = view.invoice_id
+    title_ar = view.title_ar
+    title_en = view.title_en
+    badge_ar = view.badge_ar
+    badge_en = view.badge_en
+    currency = view.currency
+    meta_rows_html = view.meta_rows_html
+    adjustment_html = view.adjustment_html
+    line_rows_html = view.line_rows_html
+    qr_html = view.qr_html
+    totals_html = view.totals_html
+    notes_html = view.notes_html
+    seller_card = view.seller_card
+    buyer_card = view.buyer_card
+    thead_cells = view.thead_cells
+    # Branding header elements (never displace mandatory legal layout or QR clear zone)
+    logo_html = ""
+    if resolved_branding.logo_data_uri:
+        mono_cls = " logo-mono" if resolved_branding.mono_logo else ""
+        logo_html = (
+            f'<div class="brand-logo-wrap">'
+            f'<img class="brand-logo{mono_cls}" src="{_esc(resolved_branding.logo_data_uri)}" '
+            f'alt="Tenant Logo"/>'
+            f"</div>"
+        )
+
+    tenant_banner = ""
+    if resolved_branding.display_name_ar or resolved_branding.display_name_en:
+        dn_ar = resolved_branding.display_name_ar or resolved_branding.display_name_en or ""
+        dn_en = resolved_branding.display_name_en or resolved_branding.display_name_ar or ""
+        tenant_banner = (
+            '<div class="brand-name bi-row">'
+            f'<span class="bi-ar">{_esc(dn_ar)}</span>'
+            f'<span class="bi-en">{_esc(dn_en)}</span>'
+            "</div>"
+        )
+
+    footer_powered = (
+        ""
+        if resolved_branding.remove_powered_by
+        else (
+            '<span class="powered-by">'
+            f'مدعوم من {_ltr("Orrery")} &nbsp;|&nbsp; Powered by {_ltr("Orrery")}'
+            "</span>"
+        )
     )
 
     primary_hex = resolved_branding.primary_color
@@ -765,6 +910,9 @@ def render_tax_invoice_html(
   bdi {{
     unicode-bidi: isolate;
     direction: ltr;
+  }}
+  bdi[dir="rtl"] {{
+    direction: rtl;
   }}
   .invoice-page {{
     width: 100%;
@@ -1193,12 +1341,15 @@ def render_tax_invoice_pdf(
     mode: str = "zatca_sa",
     branding: InvoiceBranding | Mapping[str, Any] | None = None,
     backend: str = "auto",
+    locale: dict[str, Any] | None = None,
+    compliance_profile: dict[str, Any] | None = None,
 ) -> bytes:
     """Render the bilingual tax invoice directly to PDF bytes using WeasyPrint or wkhtmltopdf."""
     if backend not in ("auto", "weasyprint", "wkhtmltopdf"):
         raise ValueError(f"Unsupported PDF backend '{backend}'")
 
-    html_str = render_tax_invoice_html(invoice_data, mode=mode, branding=branding)
+    html_str = render_tax_invoice_html(invoice_data, mode=mode, branding=branding,
+                                      locale=locale, compliance_profile=compliance_profile)
 
     if backend in ("auto", "weasyprint"):
         try:
@@ -1250,11 +1401,8 @@ def _get_attr_or_key(obj: Any, key: str, default: Any = None) -> Any:
 
 
 def _format_issue_date(val: Any) -> str:
-    if isinstance(val, datetime):
-        return val.strftime("%Y-%m-%d")
-    if isinstance(val, date):
-        return val.isoformat()
-    return str(val or "").strip()
+    """Require a canonical date; timestamp truncation can silently change the day."""
+    return canonical_date(val)
 
 
 def _format_issue_time(val: Any) -> str:
@@ -1342,6 +1490,15 @@ def _doc_num_to_dec(val: Any, field_name: str) -> Decimal:
             raise ValueError(f"{field_name} must be finite")
         return Decimal(str(val))
     return _to_dec(val, field_name)
+
+
+def _optional_engine_amount(source: Any, name: str, negate_return: bool) -> Decimal | None:
+    """An engine amount that is absent (None) or zero on most documents, as a magnitude."""
+    raw = _get_attr_or_key(source, name)
+    if raw in (None, ""):
+        return None
+    value = _doc_num_to_dec(raw, name)
+    return abs(value) if negate_return and value < _ZERO else value
 
 
 def _extract_doc_tax_rate(doc: Any) -> Decimal | None:
@@ -1552,11 +1709,6 @@ def sales_invoice_to_zatca_dict(
         if line_amount_dec is not None and negate_return and line_amount_dec < _ZERO:
             line_amount_dec = abs(line_amount_dec)
 
-        discount_amt = _get_attr_or_key(item, "discount_amount", 0)
-        discount_dec = _doc_num_to_dec(discount_amt or 0, "item discount_amount")
-        if negate_return and discount_dec < _ZERO:
-            discount_dec = abs(discount_dec)
-
         line_dict: dict[str, Any] = {
             "item_code": str(_get_attr_or_key(item, "item_code") or "").strip(),
             "description": str(
@@ -1568,8 +1720,13 @@ def sales_invoice_to_zatca_dict(
             "description_ar": _get_attr_or_key(item, "custom_item_name_ar")
             or _get_attr_or_key(item, "item_name_ar"),
             "quantity": format(qty_dec, "f"),
+            # The engine's posted rate is already net of the item discount (its
+            # ``discount_amount`` is per unit, price_list_rate - rate) and amount = rate x qty
+            # (taxes_and_totals.py L193-268 at the pinned commit). It is the ZATCA item net
+            # price (BT-146), so the line carries no discount of its own beyond its share of a
+            # document discount below; subtracting the item discount again would count it twice.
             "unit_price": _fmt_engine_total(rate_dec),
-            "discount": _fmt_engine_total(discount_dec),
+            "discount": "0.00",
             "vat_rate": format(vat_rate, "f"),
             "vat_category": vat_cat,
             "exemption_reason_code": ex_code,
@@ -1577,7 +1734,28 @@ def sales_invoice_to_zatca_dict(
         }
         if line_amount_dec is not None:
             line_dict["line_net_amount"] = _fmt_engine_total(line_amount_dec)
+        # The engine's spread of a document discount onto this line, passed through as it is
+        # (the line_net_amount above already carries it); absent when there is none.
+        allocated_dec = _optional_engine_amount(item, "distributed_discount_amount", negate_return)
+        if allocated_dec:
+            line_dict["distributed_discount_amount"] = _fmt_engine_total(allocated_dec)
         lines.append(line_dict)
+
+    totals_dict: dict[str, str] = {
+        "total_taxable_amount": _fmt_engine_total(net_total),
+        "total_vat_amount": _fmt_engine_total(tax_total),
+        "grand_total": _fmt_engine_total(grand_total),
+    }
+    document_discount = _optional_engine_amount(doc, "discount_amount", negate_return)
+    if document_discount:
+        totals_dict["discount_amount"] = _fmt_engine_total(document_discount)
+        # "Grand Total" (VAT included) or "Net Total": the total the engine spread it over.
+        apply_on = _get_attr_or_key(doc, "apply_discount_on")
+        if apply_on not in (None, ""):
+            totals_dict["apply_discount_on"] = str(apply_on).strip()
+        if _get_attr_or_key(doc, "is_cash_or_non_trade_discount"):
+            # Taken off the grand total only; passed on so the branded check refuses it.
+            totals_dict["is_cash_or_non_trade_discount"] = "1"
 
     invoice_dict: dict[str, Any] = {
         "invoice_id": str(_get_attr_or_key(doc, "name") or "").strip(),
@@ -1590,18 +1768,13 @@ def sales_invoice_to_zatca_dict(
         "seller": seller_dict,
         "buyer": buyer_dict,
         "lines": lines,
-        "totals": {
-            "total_taxable_amount": _fmt_engine_total(net_total),
-            "total_vat_amount": _fmt_engine_total(tax_total),
-            "grand_total": _fmt_engine_total(grand_total),
-        },
+        "totals": totals_dict,
         "preceding_invoice_reference": _get_attr_or_key(doc, "return_against"),
         "amendment_reason": (
             _get_attr_or_key(doc, "custom_amendment_reason")
             or _get_attr_or_key(doc, "reason_for_issuance")
             or _get_attr_or_key(doc, "remarks")
         ),
-        "hijri_date": _get_attr_or_key(doc, "custom_hijri_date") or _get_attr_or_key(doc, "hijri_date"),
     }
     return invoice_dict, resolved_mode
 
@@ -1612,6 +1785,8 @@ def render_frappe_sales_invoice_html(
     mode: str = "auto",
     branding: InvoiceBranding | Mapping[str, Any] | None = None,
     frappe_module: Any = None,
+    locale: dict[str, Any] | None = None,
+    compliance_profile: dict[str, Any] | None = None,
 ) -> str:
     """Jinja-callable entrypoint: convert an ERPNext Sales Invoice and render bilingual HTML."""
     invoice_dict, resolved_mode = sales_invoice_to_zatca_dict(
@@ -1619,7 +1794,16 @@ def render_frappe_sales_invoice_html(
         frappe_module=frappe_module,
         mode=mode,
     )
-    return render_tax_invoice_html(invoice_dict, mode=resolved_mode, branding=branding)
+    # The installed print template invokes {{ render_frappe_sales_invoice_html(doc) }} without
+    # resolved per-site settings until CMP-023; keep the Hijri row OFF unless enabled by settings.
+    return render_tax_invoice_html(
+        invoice_dict,
+        mode=resolved_mode,
+        branding=branding,
+        locale=locale,
+        compliance_profile=compliance_profile,
+        country_default=False,
+    )
 
 
 def install_bilingual_tax_invoice_print_format(

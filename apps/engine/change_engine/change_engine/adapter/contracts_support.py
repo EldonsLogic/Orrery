@@ -146,14 +146,32 @@ _SUPPORT_GRANT_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 _SERVICES = {"control_plane", "compiler", "simulator", "operate_gateway", "identity", "observability"}
 
 
+def _newline_violations(context: Any) -> list[str]:
+    """Pointers of context identifiers that the schema patterns accept only through a trailing newline."""
+    if not isinstance(context, dict):
+        return []
+    bad: list[str] = []
+    for key, rx in (("contractVersion", _SEMVER_RE), ("requestId", _ULID_RE), ("correlationId", _CORR_RE), ("tenantId", _TENANT_RE)):
+        value = context.get(key)
+        if isinstance(value, str) and not rx.fullmatch(value):
+            bad.append(f"/context/{key}")
+    caller = context.get("caller")
+    who = caller.get("onBehalfOf") if isinstance(caller, dict) else None
+    grant = who.get("supportGrantId") if isinstance(who, dict) else None
+    if isinstance(grant, str) and not _SUPPORT_GRANT_RE.fullmatch(grant):
+        bad.append("/context/caller/onBehalfOf/supportGrantId")
+    return bad
+
+
 def validate_context(context: Any) -> list[str]:
     """Validate envelope context, returning JSON pointer fields for any violation."""
     validator = _validator_for(schema_urn("common") + "#/$defs/context")
     if validator is not None:
         errors = list(validator.iter_errors(context))
-        if not errors:
-            return []
-        return [("/context" + f if f != "/" else "/context") for f in _fields_of(errors)]
+        # JSON Schema `pattern` is a search, and `$` also matches before a final "\n", so the schema alone accepts
+        # "t_abcd\n". The same identifier grammars are re-checked with fullmatch (SEC-022 follow-up 2).
+        fields = [("/context" + f if f != "/" else "/context") for f in _fields_of(errors)] if errors else []
+        return sorted(set(fields) | set(_newline_violations(context)))[:32]
 
     # Pure-Python fallback when jsonschema / contracts dir is unavailable
     if not isinstance(context, dict):
@@ -165,13 +183,13 @@ def validate_context(context: Any) -> list[str]:
             bad.append(f"/context/{_esc(key)}")
     for key in req - set(context):
         bad.append("/context")
-    if "contractVersion" in context and not (isinstance(context["contractVersion"], str) and _SEMVER_RE.match(context["contractVersion"])):
+    if "contractVersion" in context and not (isinstance(context["contractVersion"], str) and _SEMVER_RE.fullmatch(context["contractVersion"])):
         bad.append("/context/contractVersion")
-    if "requestId" in context and not (isinstance(context["requestId"], str) and _ULID_RE.match(context["requestId"])):
+    if "requestId" in context and not (isinstance(context["requestId"], str) and _ULID_RE.fullmatch(context["requestId"])):
         bad.append("/context/requestId")
-    if "correlationId" in context and not (isinstance(context["correlationId"], str) and _CORR_RE.match(context["correlationId"])):
+    if "correlationId" in context and not (isinstance(context["correlationId"], str) and _CORR_RE.fullmatch(context["correlationId"])):
         bad.append("/context/correlationId")
-    if "tenantId" in context and not (isinstance(context["tenantId"], str) and _TENANT_RE.match(context["tenantId"])):
+    if "tenantId" in context and not (isinstance(context["tenantId"], str) and _TENANT_RE.fullmatch(context["tenantId"])):
         bad.append("/context/tenantId")
     deadline = context.get("deadlineMs")
     if "deadlineMs" in context and (isinstance(deadline, bool) or not isinstance(deadline, int) or not (1 <= deadline <= 3600000)):
@@ -188,7 +206,7 @@ def validate_context(context: Any) -> list[str]:
                 if not isinstance(who, dict) or "kind" not in who or "id" not in who:
                     bad.append("/context/caller/onBehalfOf")
                 elif who.get("kind") == "support" and not (
-                    isinstance(who.get("supportGrantId"), str) and _SUPPORT_GRANT_RE.match(who["supportGrantId"])
+                    isinstance(who.get("supportGrantId"), str) and _SUPPORT_GRANT_RE.fullmatch(who["supportGrantId"])
                 ):
                     bad.append("/context/caller/onBehalfOf")
     return sorted(set(bad))[:32]

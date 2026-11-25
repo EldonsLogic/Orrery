@@ -10,9 +10,14 @@ silently skips live attacks and reports green. When `CI_REQUIRE_LIVE_SEC004=1` i
 without a usable `SEC004_CONTEXT`, setUpClass fails closed instead of skipping.
 
 Known leaks are `unittest.expectedFailure` tracked by plan rows and `docs/risks.md`
-(SEC-021 / R-032 for RQ Job prefix matching; INF-015 / R-033 for Redis auth). Once a
+(SEC-021 / R-032 for RQ Job prefix matching). The Redis auth leak (INF-015 / R-033) is fixed
+and now a plain check. Once a
 leak is fixed, unittest reports `unexpected success` as a loud failure so the marker
 must be removed. Combined testing with the headless guard (ERP-020) is tracked in SEC-021.
+
+The bench serves HTTP through `infra/dev/docker/isolation/raw_engine_wsgi.py`, which drops the
+ERP-020 `before_request` hook: with it on, login, session cookies and every route this suite
+attacks answer a blanket 404. This suite certifies the engine's own isolation without that guard.
 """
 
 from __future__ import annotations
@@ -33,7 +38,59 @@ CONTEXT_ENV = "SEC004_CONTEXT"
 REQUIRE_LIVE_ENV = "CI_REQUIRE_LIVE_SEC004"
 PROBE = "change_engine.tests.sec004_isolation_probe"
 DENIED = (401, 403, 404, 417)
+# The adapter endpoints refuse with the builtin PermissionError (not frappe.PermissionError), which
+# the engine reports as HTTP 500 with a JSON body carrying the traceback. It is a refusal, not a crash,
+# only when the FINAL exception of that traceback is the adapter's "Not permitted" PermissionError: an
+# unrelated crash whose chained traceback mentions the refusal earlier must not pass.
+APP_REFUSAL_RE = re.compile(r"^(?:builtins\.)?PermissionError: Not permitted(?:: .*)?$")
+RQ_PAGE = 20  # the engine's RQ Job list ignores limit_page_length and start: one fixed page of 20
 _GRANT_TARGET_RE = re.compile(r"^GRANT\s+.+\s+ON\s+(.+?)\s+TO\s+", re.IGNORECASE)
+
+
+def _last_line(text: str) -> str | None:
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    return lines[-1] if lines else None
+
+
+def final_exception_lines(body: bytes) -> list[str]:
+    """The final exception line of a JSON error response (from `exc`, else `exception`); [] if unparseable."""
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return []
+    if not isinstance(doc, dict):
+        return []
+    for key in ("exc", "exception"):
+        val = doc.get(key)
+        if isinstance(val, str):
+            try:
+                val = json.loads(val)
+            except ValueError:
+                pass
+        if isinstance(val, list):
+            val = val[-1] if val else None  # the last traceback is the one that ended the request
+        if isinstance(val, str) and _last_line(val):
+            return [_last_line(val)]
+    return []
+
+
+def is_app_refusal(status: int, body: bytes) -> bool:
+    """HTTP 500 whose final exception is the adapter's builtin PermissionError("Not permitted...")."""
+    lines = final_exception_lines(body)
+    return status == 500 and bool(lines) and all(APP_REFUSAL_RE.match(ln) for ln in lines)
+
+
+def assert_bucket_complete(body: bytes, what: str, page: int = RQ_PAGE) -> list:
+    """The rows of one RQ Job list page; a full page may hide rows beyond it, so the scan is inconclusive."""
+    try:
+        rows = json.loads(body)["data"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise AssertionError(f"{what}: RQ Job list is not a JSON data page, leak check inconclusive") from exc
+    if not isinstance(rows, list):
+        raise AssertionError(f"{what}: RQ Job list has no data page, leak check inconclusive")
+    if len(rows) >= page:
+        raise AssertionError(f"{what}: bucket is full ({len(rows)} rows), leak check inconclusive")
+    return rows
 
 
 def _should_skip_live() -> bool:
@@ -44,8 +101,12 @@ def _should_skip_live() -> bool:
     return True
 
 
-@unittest.skipIf(_should_skip_live(), f"live SEC-004 bench only; set {CONTEXT_ENV}")
-class CrossTenantIsolation(unittest.TestCase):
+_live_only = unittest.skipIf(_should_skip_live(), f"live SEC-004 bench only; set {CONTEXT_ENV}")
+
+
+class LiveBench(unittest.TestCase):
+    """Harness shared by the live classes below; holds no tests of its own."""
+
     ctx: dict
 
     # ---------- harness ----------
@@ -146,10 +207,49 @@ class CrossTenantIsolation(unittest.TestCase):
         except ValueError:
             return status, None
 
+    def assert_refused(self, resp, what=""):
+        """DENIED, or the adapter's explicit PermissionError refusal (HTTP 500 naming it)."""
+        status, body, _ = resp
+        refused = status in DENIED or is_app_refusal(status, body)
+        self.assertTrue(refused, f"{what}: not refused (HTTP {status})")
+
     def assert_no_leak(self, resp, marker, what):
         status, body, _ = resp
         self.assertNotIn(marker.encode(), body, f"{what}: tenant marker leaked (HTTP {status})")
 
+    RQ_QUEUES = ("default", "long", "short")
+    RQ_STATUSES = ("queued", "started", "failed", "finished", "deferred", "scheduled", "canceled")
+
+    @classmethod
+    def rq_job_buckets_as(cls, tenant, sid, queues=RQ_QUEUES, require_complete=True):
+        """One RQ Job list per (queue, status) bucket, so site background jobs cannot push a row off the page.
+        A full page may hide rows beyond it: unless the caller only looks for a row it found, that fails."""
+        for queue in queues:
+            for status in cls.RQ_STATUSES:
+                filters = json.dumps([["RQ Job", "queue", "=", queue], ["RQ Job", "status", "=", status]])
+                path = "/api/resource/RQ%20Job?" + urlencode(
+                    {"fields": '["*"]', "filters": filters, "order_by": "creation desc"})
+                resp = cls.http("GET", path, tenant["site"], sid=sid)
+                if resp[0] != 200:
+                    raise AssertionError(f"RQ Job list {queue}/{status} must answer (HTTP {resp[0]}), or the leak check is vacuous")
+                if require_complete:
+                    assert_bucket_complete(resp[1], f"{tenant['site']} {queue}/{status}")
+                yield queue, status, resp
+
+    @classmethod
+    def wait_for_rq_job_marker(cls, tenant, sid, marker, timeout=30):
+        """Poll the `short` queue buckets (where the probe enqueues) until a job carries the marker."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            for _, _, resp in cls.rq_job_buckets_as(tenant, sid, queues=("short",), require_complete=False):
+                if marker.encode() in resp[1]:
+                    return resp[1]
+            time.sleep(0.5)
+        raise AssertionError(f"positive control failed: {tenant['site']} RQ Job list never showed {marker}")
+
+
+@_live_only
+class CrossTenantIsolation(LiveBench):
     # ---------- 1. A's credentials (Admin + low-role) against B's host ----------
     def test_control_a_credentials_work_on_a(self):
         self.assertEqual(self.logged_user(self.A["site"], sid=self.sid_a), (200, "Administrator"))
@@ -196,7 +296,7 @@ class CrossTenantIsolation(unittest.TestCase):
         ):
             with self.subTest(host=host, path=path):
                 resp = self.http("GET", path, host, token=low_tok)
-                self.assertIn(resp[0], DENIED)
+                self.assert_refused(resp, f"low-role {host}{path}")
                 self.assert_no_leak(resp, self.mark_b, f"low-role {host}{path}")
 
         reg_body = json.dumps({"policy_data": {"policy_id": "POL_LOW_BAD", "doctype": "ToDo",
@@ -205,15 +305,15 @@ class CrossTenantIsolation(unittest.TestCase):
                                                "error_message": "bad"}})
         resp = self.http("POST", "/api/method/change_engine.api.endpoints.register_runtime_policy",
                          self.A["site"], body=reg_body, headers={"Content-Type": "application/json"}, token=low_tok)
-        self.assertIn(resp[0], DENIED)
+        self.assert_refused(resp, "low-role register_runtime_policy")
 
     # ---------- 2. Host / X-Forwarded-Host / site-selector header swaps ----------
     def test_header_swaps_do_not_reach_b(self):
         a, b = self.A["site"], self.B["site"]
         list_path = "/api/resource/ToDo?fields=%5B%22description%22%5D&limit_page_length=0"
 
-        # Positive controls: spoofed site headers on Host: B with B's credentials must still route to B.
-        for extra in ({"X-Forwarded-Host": a}, {"X-Frappe-Site-Name": a}):
+        # Positive controls: spoofed forwarding headers on Host: B with B's credentials must still route to B.
+        for extra in ({"X-Forwarded-Host": a},):
             for auth in ({"sid": self.sid_b}, {"token": self.token_b}):
                 with self.subTest(control=True, headers=extra, auth=list(auth)):
                     st, body, _ = self.http("GET", f"/api/resource/ToDo/{self.todo_b}", b, headers=extra, **auth)
@@ -221,13 +321,32 @@ class CrossTenantIsolation(unittest.TestCase):
                     self.assertIn(self.mark_b.encode(), body)
 
         # Attacks on Host: B with spoofed A headers and A's credentials must fail closed (never 200 on A).
-        for extra in ({"X-Forwarded-Host": a}, {"X-Frappe-Site-Name": a}):
+        for extra in ({"X-Forwarded-Host": a},):
             for auth in ({"sid": self.sid_a}, {"token": self.token_a}):
                 with self.subTest(host=b, headers=extra, auth=list(auth)):
                     for path in (f"/api/resource/ToDo/{self.todo_b}", list_path):
                         resp = self.http("GET", path, b, headers=extra, **auth)
                         self.assertIn(resp[0], DENIED, f"Host:B + {extra} with A creds not denied: HTTP {resp[0]}")
                         self.assert_no_leak(resp, self.mark_b, f"{b} {extra} {path}")
+
+        # X-Frappe-Site-Name is the engine's own site selector and overrides Host (frappe/app.py
+        # init_request). That is why the gateway must strip it (PLT-024) and the ERP-020 guard refuses
+        # any request that carries it. This pins that behaviour and what must still hold: credentials
+        # stay bound to the site the header selects, and B's data never reaches A's credentials.
+        sel = {"X-Frappe-Site-Name": a}
+        with self.subTest(selector="header routes the request to the site it names"):
+            self.assertEqual(self.logged_user(b, headers=sel, sid=self.sid_a), (200, "Administrator"))
+            self.assertEqual(self.logged_user(b, headers=sel, token=self.token_a), (200, "Administrator"))
+        for auth in ({"sid": self.sid_b}, {"token": self.token_b}):
+            with self.subTest(selector="B's credentials fail on the site the header names", auth=list(auth)):
+                resp = self.http("GET", f"/api/resource/ToDo/{self.todo_b}", b, headers=sel, **auth)
+                self.assertIn(resp[0], DENIED)
+                self.assert_no_leak(resp, self.mark_b, f"{b} {sel} B creds")
+        for auth in ({"sid": self.sid_a}, {"token": self.token_a}):
+            with self.subTest(selector="A's credentials with the header never read B's data", auth=list(auth)):
+                for path in (f"/api/resource/ToDo/{self.todo_b}", list_path):
+                    resp = self.http("GET", path, b, headers=sel, **auth)
+                    self.assert_no_leak(resp, self.mark_b, f"{b} {sel} {path}")
 
         # Attacks on Host: A with spoofed B headers must keep routing on A and deny B's doc.
         swaps_on_a = [
@@ -382,7 +501,7 @@ class CrossTenantIsolation(unittest.TestCase):
             with self.subTest(method=method, host=host, path=path):
                 hdrs = {"Content-Type": "application/json"} if body else {}
                 resp = self.http(method, path, host, headers=hdrs, body=body, token=self.token_a)
-                self.assertIn(resp[0], DENIED)
+                self.assert_refused(resp, f"{method} {host}{path}")
                 self.assert_no_leak(resp, self.mark_b, f"{method} {host}{path}")
 
     # ---------- 6. Site config keys & MariaDB grants / symmetric DML denial ----------
@@ -477,12 +596,15 @@ class CrossTenantIsolation(unittest.TestCase):
         self.assertNotEqual(raw_b, self.probe(self.A, "cache_key_bytes", key=key))
 
     def test_shared_cache_keys_hold_no_tenant_data(self):
-        """Unprefixed keys in redis-cache and non-B keys in redis-queue must not carry B's data or DB password."""
+        """Unprefixed keys in redis-cache and non-B keys in redis-queue must not carry B's data or DB password.
+
+        Connects with the bench's own authenticated URLs (INF-015), so a refused login fails the test."""
         inspector = (
             "import gzip, json, pickle, redis, sys, zlib\n"
-            "host, mark_b, pwd_b, prefixes_json = sys.argv[1:5]\n"
+            "key, mark_b, pwd_b, prefixes_json = sys.argv[1:5]\n"
             "prefixes = tuple(json.loads(prefixes_json))\n"
-            "r = redis.Redis(host=host)\n"
+            "r = redis.Redis.from_url(json.load(open('sites/common_site_config.json'))[key])\n"
+            "r.ping()\n"
             "leaks = []\n"
             "for k in r.scan_iter(count=200):\n"
             "    ks = k.decode('utf-8', 'replace')\n"
@@ -520,29 +642,39 @@ class CrossTenantIsolation(unittest.TestCase):
         )
         cache_prefixes = [f"{t['db_name']}|" for t in (self.A, self.B, self.T)]
         queue_prefixes = [f"{self.B['db_name']}|", f"rq:job:{self.B['site']}::"]
-        for host, prefixes in (("redis-cache", cache_prefixes), ("redis-queue", queue_prefixes)):
-            with self.subTest(service=host):
+        for key, prefixes in (("redis_cache", cache_prefixes), ("redis_queue", queue_prefixes)):
+            with self.subTest(config_key=key):
                 res = self.compose(
                     "exec", "-T", "engine", "env/bin/python", "-c", inspector,
-                    host, self.mark_b, self.B["db_password"], json.dumps(prefixes),
+                    key, self.mark_b, self.B["db_password"], json.dumps(prefixes),
                 )
                 self.assertEqual(res.returncode, 0, res.stderr)
                 leaks = json.loads(res.stdout.strip().splitlines()[-1])
-                self.assertEqual(leaks, [], f"{host} shared/unprefixed keys leaked B data: {leaks}")
+                self.assertEqual(leaks, [], f"{key} shared/unprefixed keys leaked B data: {leaks}")
 
-    @unittest.expectedFailure
     def test_redis_requires_authentication(self):
-        """CONFIRMED LEAK (HIGH defence-in-depth; tracked by INF-015 & docs/risks.md R-033):
-        redis-cache and redis-queue (also backing redis_socketio) accept unauthenticated clients.
-        Isolation is key-prefix convention only, so any SSRF (T18), sidecar, or code reaching the
-        engine network can read all tenant sessions and enqueue arbitrary jobs for any site.
-        Note: shared-bench requirepass stops unauthenticated network pivots (T18) but not
-        compromised code inside the shared engine/worker process. Once INF-015 is implemented,
-        unittest reports `unexpected success` loudly so this marker must be removed."""
-        for service in ("redis-cache", "redis-queue"):
-            res = self.compose("exec", "-T", "engine", "python", "-c",
-                               f"import redis;print(redis.Redis(host='{service}').ping())")
-            self.assertNotIn("True", res.stdout, f"{service} answered an unauthenticated PING")
+        """INF-015 / R-033 (fixed): redis-cache and redis-queue (also backing redis_socketio) refuse
+        unauthenticated clients with NOAUTH, while the bench's own password URLs still answer.
+        Residual: code inside the shared engine or worker holds the password (key-prefix isolation)."""
+        checker = (
+            "import json, redis, sys\n"
+            "service, key = sys.argv[1:3]\n"
+            "conf = json.load(open('sites/common_site_config.json'))\n"
+            "out = {'authed': redis.Redis.from_url(conf[key], socket_timeout=5).ping()}\n"
+            "try:\n"
+            "    out['anonymous'] = repr(redis.Redis(host=service, socket_timeout=5).ping())\n"
+            "except Exception as exc:\n"
+            "    out['anonymous'] = type(exc).__name__\n"
+            "print(json.dumps(out))\n"
+        )
+        for service, key in (("redis-cache", "redis_cache"), ("redis-queue", "redis_queue")):
+            with self.subTest(service=service):
+                res = self.compose("exec", "-T", "engine", "env/bin/python", "-c", checker, service, key)
+                self.assertEqual(res.returncode, 0, res.stderr[-2000:])
+                out = json.loads(res.stdout.strip().splitlines()[-1])
+                self.assertIs(out["authed"], True, f"{service} did not answer the bench's password (control)")
+                self.assertEqual(out["anonymous"], "AuthenticationError",
+                                 f"{service} did not refuse an unauthenticated PING with NOAUTH")
 
     # ---------- 8. Background job context & RQ Job API ----------
     def test_job_enqueued_by_a_runs_in_a_only(self):
@@ -552,24 +684,6 @@ class CrossTenantIsolation(unittest.TestCase):
         self.assertIsNotNone(ran, "worker did not run A's job (is the worker service up?)")
         self.assertTrue(ran.startswith(f"sec004_job_{token}|{self.A['site']}|Administrator|"), ran)
         self.assertIsNone(self.probe(self.B, "get_job_record", token=token)["value"])
-
-    def rq_jobs_as(self, tenant, sid):
-        path = "/api/resource/RQ%20Job?" + urlencode(
-            {"fields": '["*"]', "limit_page_length": 500, "order_by": "creation desc"})
-        resp = self.http("GET", path, tenant["site"], sid=sid)
-        self.assertEqual(resp[0], 200, "RQ Job list must answer, or the leak checks are vacuous")
-        return resp
-
-    def wait_for_rq_job_marker(self, tenant, sid, marker, timeout=30):
-        deadline = time.time() + timeout
-        last_body = b""
-        while time.time() < deadline:
-            _, body, _ = self.rq_jobs_as(tenant, sid)
-            last_body = body
-            if marker.encode() in body:
-                return body
-            time.sleep(0.5)
-        self.fail(f"positive control failed: {tenant['site']} RQ Job list never showed {marker} ({len(last_body)}B)")
 
     def test_b_jobs_invisible_to_a_rq_job_api(self):
         job_id = self.probe(self.B, "enqueue_marker_job", marker=self.mark_b)
@@ -581,23 +695,11 @@ class CrossTenantIsolation(unittest.TestCase):
         self.assertEqual(ctrl[0], 200)
         self.assertIn(self.mark_b.encode(), ctrl[1])
 
-        self.assert_no_leak(self.rq_jobs_as(self.A, self.sid_a), self.mark_b, "RQ Job list as A")
+        for queue, status, resp in self.rq_job_buckets_as(self.A, self.sid_a):
+            self.assert_no_leak(resp, self.mark_b, f"RQ Job list as A ({queue}/{status})")
         resp = self.http("GET", job_path, self.A["site"], sid=self.sid_a)
         self.assertIn(resp[0], DENIED)
         self.assert_no_leak(resp, self.mark_b, "RQ Job by id as A")
-
-    @unittest.expectedFailure
-    def test_prefix_twin_jobs_invisible_to_a(self):
-        """CONFIRMED LEAK (HIGH when custom domains exist; tracked by SEC-021 & docs/risks.md R-032):
-        Frappe's `filter_current_site_jobs` filters with `job_id.startswith(site)` (no `::`), so
-        site `acme.com` lists jobs/kwargs/exc_info of `acme.com.sa` (or `acme.co` -> `acme.com`).
-        A site-naming prefix rule alone is NOT sufficient (case/FQDN trailing-dot/Punycode IDN
-        mismatch, order-dependent DoS, lifecycle reuse); SEC-021 tracks exact `f"{site}::"` fix,
-        gateway route blocking (PLT-024), and canonical hostname validation (PLT-003). Once fixed,
-        unittest reports `unexpected success` loudly so this marker must be removed."""
-        self.probe(self.T, "enqueue_marker_job", marker=self.mark_t)
-        self.wait_for_rq_job_marker(self.T, self.sid_t, self.mark_t)  # positive control on T
-        self.assert_no_leak(self.rq_jobs_as(self.A, self.sid_a), self.mark_t, "twin-site RQ Job list as A")
 
     # ---------- 9. Backups and restore paths (DB, site_config, file tarballs) ----------
     def backup(self, tenant):
@@ -670,6 +772,39 @@ class CrossTenantIsolation(unittest.TestCase):
                     self.assertIn(status, DENIED, f"unauthorized backup read HTTP {status}: {host}{path}")
                     self.assertNotEqual(hashlib.sha256(body).hexdigest(), digest, f"B backup served: {host}{path}")
                     self.assertNotIn(self.B["db_password"].encode(), body, f"B db_password leaked: {host}{path}")
+
+
+@_live_only
+class PrefixTwinJobLeak(LiveBench):
+    """Prefix-twin RQ Job leak (SEC-021 / R-032). The positive control on T and the complete enumeration of
+    A's RQ Job buckets run in setUpClass, so an inconclusive scan is a plain error, never an expected failure.
+    Only the known leak assertion is wrapped in `expectedFailure`."""
+
+    scans: list
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.probe(cls.T, "enqueue_marker_job", marker=cls.mark_t)
+        cls.wait_for_rq_job_marker(cls.T, cls.sid_t, cls.mark_t)  # positive control on T
+        # The default list shows only the first 20 matched jobs, in queue and status order, so A's own
+        # background jobs can hide the twin's: scan every bucket; a full bucket raises (inconclusive).
+        cls.scans = list(cls.rq_job_buckets_as(cls.A, cls.sid_a))
+
+    def test_prefix_twin_scan_covers_every_bucket(self):
+        self.assertEqual(len(self.scans), len(self.RQ_QUEUES) * len(self.RQ_STATUSES))
+
+    @unittest.expectedFailure
+    def test_prefix_twin_jobs_invisible_to_a(self):
+        """CONFIRMED LEAK (HIGH when custom domains exist; tracked by SEC-021 & docs/risks.md R-032):
+        Frappe's `filter_current_site_jobs` filters with `job_id.startswith(site)` (no `::`), so
+        site `acme.com` lists jobs/kwargs/exc_info of `acme.com.sa` (or `acme.co` -> `acme.com`).
+        A site-naming prefix rule alone is NOT sufficient (case/FQDN trailing-dot/Punycode IDN
+        mismatch, order-dependent DoS, lifecycle reuse); SEC-021 tracks exact `f"{site}::"` fix,
+        gateway route blocking (PLT-024), and canonical hostname validation (PLT-003). Once fixed,
+        unittest reports `unexpected success` loudly so this marker must be removed."""
+        for queue, status, resp in self.scans:
+            self.assert_no_leak(resp, self.mark_t, f"twin-site RQ Job list as A ({queue}/{status})")
 
 
 if __name__ == "__main__":

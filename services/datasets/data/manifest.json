@@ -1,7 +1,7 @@
 {
   "base_date": "2026-10-04",
   "classification": "C1",
-  "dataset": "orrery-synthetic-trading-distribution",
+  "dataset": "seshna-synthetic-trading-distribution",
   "files": [
     {
       "bytes": 53662,

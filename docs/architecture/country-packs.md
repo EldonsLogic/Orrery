@@ -3,7 +3,7 @@
 Status: draft
 Owner: eldon
 
-A **Country Pack** is a certified, rigid-zone component bundle for one operating country. It carries everything that differs by country so that the rest of the platform stays country-neutral. Operating countries and launch order: **KSA, then UAE, then Egypt**. Egypt's regulations are UNVERIFIED (see [regulations research](../research/03-regulations.md)); no Egypt pack is started before its legal basis is checked.
+A **Country Pack** is a certified, rigid-zone component bundle for one operating country. It carries everything that differs by country so that the rest of the platform stays country-neutral. Operating countries: **KSA, UAE, Egypt and Qatar**, with no fixed launch order; packs follow in readiness order (ADR-0024, ADR-0026). Egypt's regulations are UNVERIFIED (see [regulations research](../research/03-regulations.md)); no Egypt pack is started before its legal basis is checked.
 
 ## What a pack contains
 

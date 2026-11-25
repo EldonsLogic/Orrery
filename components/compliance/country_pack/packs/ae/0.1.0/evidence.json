@@ -1,0 +1,207 @@
+{
+  "packId": "ae",
+  "version": "0.1.0",
+  "purpose": "Per-fact evidence for pack.json (CMP-029). pack.schema.json has no per-fact evidence field and caps notes at 500 characters, so sources live here. Labels: VERIFIED-OFFICIAL (official source read, per the cited repo doc), SECONDARY (treat as UNVERIFIED), UNVERIFIED, PLATFORM-DEFAULT (a platform choice, not a statutory claim). Access dates are those recorded in the cited repo doc; no source was re-read in this session. A source not read in full (a snippet or not fetched) carries read: false and no access date. NOT legal advice.",
+  "facts": [
+    {
+      "paths": ["coaTemplate"],
+      "claim": "No UAE chart of accounts exists yet. The reference is pending and the pack must not be used for a tenant until a reviewed chart is registered.",
+      "status": "UNVERIFIED",
+      "ref": "docs/PLAN.md row CMP-029"
+    },
+    {
+      "paths": ["tax.vatSupported", "tax.taxCodesRef"],
+      "claim": "VAT applies in the UAE (5%). No UAE tax codes exist yet, so taxCodesRef is pending and finance.vat_ae_treatments is a placeholder (goLiveBlockers); the pack holds no rate.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row U5",
+      "sources": [
+        {"url": "https://tax.gov.ae/en/taxes/Vat/vat.topics/registration.for.vat.aspx", "read": false, "note": "snippets of official pages only, per country-matrix.md row U5 (research of 2026-11-04)"}
+      ]
+    },
+    {
+      "paths": ["tax.filingPeriods"],
+      "claim": "VAT returns are usually quarterly and monthly where the FTA assigns it. Filing frequency was not confirmed.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row U5"
+    },
+    {
+      "paths": ["tax.roundingRule"],
+      "claim": "Commercial rounding, half away from zero, so credit notes mirror invoices. A founder decision, not an FTA rule.",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/decisions/ADR-0033-v1-valuation-rounding-and-arabic-review.md"
+    },
+    {
+      "paths": ["tax.vatNumberPattern"],
+      "claim": "A Tax Registration Number (TRN) has 15 digits, as the Blueprint contract already assumes.",
+      "status": "UNVERIFIED",
+      "ref": "contracts/blueprint.schema.json company.vatNumber"
+    },
+    {
+      "paths": ["tax.crNumberPattern"],
+      "claim": "There is no single national trade licence number format: each emirate and free zone issues its own. The pattern is deliberately permissive (letters, digits, slash and hyphen, up to 30).",
+      "status": "UNVERIFIED"
+    },
+    {
+      "paths": ["eInvoicing.mode"],
+      "claim": "The UAE model is DCTCE (Peppol five-corner): the supplier sends PINT AE data to its accredited service provider (ASP), which reports onward. The mode id uae_e_invoicing is the Blueprint contract value, itself a placeholder id.",
+      "status": "VERIFIED-OFFICIAL",
+      "ref": "docs/compliance/uae-einvoicing-provider-selection.md section 1, items 1 and 9; contracts/blueprint.schema.json compliance.eInvoicing.mode",
+      "sources": [
+        {"url": "https://mof.gov.ae/en/about-us/initiatives/einvoicing/", "accessed": "2026-11-18"},
+        {"url": "https://docs.peppol.eu/poac/ae/pint-ae/", "accessed": "2026-11-18"}
+      ]
+    },
+    {
+      "paths": ["eInvoicing.authority"],
+      "claim": "The Ministry of Finance runs the programme (read). That the FTA is Corner 5, the tax authority that receives the reports, is an inference, so naming both is UNVERIFIED.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/uae-einvoicing-provider-selection.md section 1, items 1 and 3",
+      "sources": [
+        {"url": "https://mof.gov.ae/en/about-us/initiatives/einvoicing/", "accessed": "2026-11-18"}
+      ],
+      "sourceNote": "The PINT AE page (https://docs.peppol.eu/poac/ae/pint-ae/, provider-selection item 9) was removed as a source here: it backs neither item 1 nor item 3 (review of #267). It still backs eInvoicing.mode."
+    },
+    {
+      "paths": ["eInvoicing.required", "eInvoicing.componentId"],
+      "claim": "Pack 0.1.0 marks e-invoicing not yet required because no go-live date has passed, but it is required for businesses with revenue of AED 50 million or more from 2027-01-01 (goLiveBlockers uae_e_invoicing); smaller businesses by 2027-07-01 (unverified). No UAE e-invoicing component exists until CMP-011, so compliance.pint_ae is a placeholder id. The pack computes no threshold.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/uae-einvoicing-provider-selection.md section Phase dates and conflicts",
+      "sources": [
+        {"url": "https://mof.gov.ae/en/news/ministry-of-finance-announces-targeted-amendments-to-einvoicing-system-decisions/", "accessed": "2026-11-18", "note": "AED 50 million band dates, VERIFIED in the cited doc"}
+      ]
+    },
+    {
+      "paths": ["eInvoicing.mandatoryDocumentLanguages"],
+      "claim": "No language requirement for UAE e-invoices was found, so none is declared.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row U7"
+    },
+    {
+      "paths": ["printFormats.mandatoryLanguages"],
+      "claim": "No official source says any language is mandatory on a UAE tax invoice; it is often cited as not mandatory. The schema needs at least one language, so the minimal list is Arabic (Arabic first, principle 4). English is a template option, not locked.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row U7"
+    },
+    {
+      "paths": ["eInvoicing.archiveRetentionYears"],
+      "claim": "Five years for VAT records is commonly cited (longer for real estate and corporate tax). No source was read. The number is locked but UNVERIFIED; the retention for the ASP copy and ours is open (Q-213).",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row U16"
+    },
+    {
+      "paths": ["localeDefaults.timezone"],
+      "claim": "The UAE uses one time zone, the IANA zone Asia/Dubai. The loader checks that the zone exists; no official source was read.",
+      "status": "UNVERIFIED",
+      "ref": "docs/architecture/calendars-and-locale.md"
+    },
+    {
+      "paths": ["localeDefaults.calendar", "formats.hijriDateFormat"],
+      "claim": "Commerce and tax use the Gregorian calendar and no Hijri requirement was found, so no second date is shown by default. The Hijri format is kept only because the schema requires it.",
+      "status": "UNVERIFIED",
+      "ref": "docs/compliance/country-matrix.md row U17"
+    },
+    {
+      "paths": ["localeDefaults.week", "localeDefaults.workingTime.workDays"],
+      "claim": "Most employers keep a Saturday and Sunday weekend and a Monday to Friday week after the 2022 change; government Fridays are partial. Companies can override it.",
+      "status": "UNVERIFIED",
+      "ref": "docs/architecture/calendars-and-locale.md section Week, weekend and working time"
+    },
+    {
+      "paths": ["localeDefaults.workingTime.hours"],
+      "claim": "08:00 to 17:00 is a platform default that companies override. The statutory limits in Federal Decree-Law 33 of 2021 were not read.",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/architecture/calendars-and-locale.md",
+      "sources": [
+        {"url": "https://uaelegislation.gov.ae", "read": false, "note": "not fetched (country-matrix U11)"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.workingTime.reducedPeriods"],
+      "claim": "Private-sector hours are reported to be two hours shorter in Ramadan (08:00 to 15:00 here). Not read.",
+      "status": "UNVERIFIED",
+      "ref": "docs/architecture/calendars-and-locale.md",
+      "sources": [
+        {"url": "https://uaelegislation.gov.ae", "read": false, "note": "not fetched"}
+      ]
+    },
+    {
+      "paths": ["localeDefaults.fiscalYear"],
+      "claim": "Gregorian year from 1 January is a platform default; companies may move the start month. A Hijri fiscal year is not offered in the UAE pack (no Hijri use found, U17).",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/architecture/calendars-and-locale.md section Fiscal year and periods"
+    },
+    {
+      "paths": ["localeDefaults.holidays"],
+      "claim": "Holidays come from the ae.holidays calendar, which CMP-024 builds; it does not exist yet. The pack holds no holiday dates.",
+      "status": "UNVERIFIED",
+      "ref": "docs/PLAN.md row CMP-024"
+    },
+    {
+      "paths": ["localeDefaults.numberSystem", "formats.numberSystem", "formats.decimalSeparator", "formats.thousandsSeparator", "formats.gregorianDateFormat"],
+      "claim": "Western digits, a dot for decimals, a comma for thousands and day/month/year dates are platform display defaults; the user can switch to Eastern Arabic digits.",
+      "status": "PLATFORM-DEFAULT",
+      "ref": "docs/architecture/calendars-and-locale.md"
+    },
+    {
+      "paths": ["localeDefaults.currency", "formats.currency", "formats.currencyDecimals"],
+      "claim": "The currency is the UAE dirham (ISO 4217 AED) with two decimals. ISO 4217 was not read.",
+      "status": "UNVERIFIED",
+      "ref": "docs/architecture/country-packs.md"
+    },
+    {
+      "paths": ["payrollHooks"],
+      "claim": "Payroll, WPS (SIF files) and gratuity are off: payroll is out of v1 scope and arrives with CMP-015 (gate G3). The underlying rules are unread.",
+      "status": "UNVERIFIED",
+      "ref": "docs/specs/core-module-scope-trading.md section 4",
+      "sources": [
+        {"url": "https://www.mohre.gov.ae", "read": false, "note": "WPS, not fetched (U10)"}
+      ]
+    },
+    {
+      "paths": ["printFormats.legalLayoutPrecedence", "printFormats.templates"],
+      "claim": "No UAE tax invoice mode exists: the neutral layout refuses UAE invoices (Q-553). The template and its component are pending CMP-011. The legal layout always wins over tenant branding.",
+      "status": "UNVERIFIED",
+      "ref": "docs/decisions/ADR-0014-theming-and-tenant-branding.md",
+      "sources": [
+        {"url": "https://tax.gov.ae/en/legislation.aspx", "accessed": "2026-11-21", "note": "Cabinet Decision 52 of 2017 Art. 59(1), cited UNVERIFIED in the ERP-016 print formats"}
+      ]
+    }
+  ],
+  "pendingRefs": [
+    {"path": "coaTemplate.artifactRef", "value": "pending:ae_trading_chart_of_accounts", "blockedBy": "No UAE chart of accounts exists; needs its own plan row and accountant review."},
+    {"path": "coaTemplate.componentId", "value": "finance.coa_ae_trading", "blockedBy": "Component not registered; same as the chart."},
+    {"path": "tax.taxCodesRef", "value": "pending:ae_vat_treatments", "blockedBy": "No UAE tax codes exist; needs its own plan row and accountant review."},
+    {"path": "eInvoicing.componentId", "value": "compliance.pint_ae", "blockedBy": "CMP-011 UAE e-invoicing component; the id is a placeholder."},
+    {"path": "printFormats.templates[0].templateRef", "value": "pending:ae_tax_invoice_mode", "blockedBy": "UAE tax invoice mode (Q-553) and CMP-011."},
+    {"path": "printFormats.templates[0].componentId", "value": "compliance.pint_ae", "blockedBy": "CMP-011 UAE e-invoicing component; the id is a placeholder."},
+    {"path": "localeDefaults.holidays.calendarRef.id", "value": "ae.holidays", "blockedBy": "CMP-024 holiday calendars"}
+  ],
+  "goLiveBlockers": [
+    {
+      "id": "uae_e_invoicing",
+      "backs": "eInvoicing",
+      "requires": {"component": "compliance.pint_ae", "versionRange": ">=0.1.0 <1.0.0"},
+      "claim": "E-invoicing goes live by 2027-01-01 for businesses with revenue of AED 50 million or more.",
+      "status": "VERIFIED-OFFICIAL",
+      "blockedBy": "No UAE e-invoicing component exists until CMP-011, so the manifest requires compliance.pint_ae as an unresolvable placeholder. The platform's own status, the ASP agreement model and liability and retention are open (Q-210, Q-211, Q-213). The pack computes no threshold.",
+      "refs": ["docs/compliance/uae-einvoicing-provider-selection.md section Phase dates and conflicts", "Q-210", "Q-211", "Q-213", "Q-559"],
+      "sources": [
+        {"url": "https://mof.gov.ae/en/news/ministry-of-finance-announces-targeted-amendments-to-einvoicing-system-decisions/", "accessed": "2026-11-18", "note": "AED 50 million band dates, VERIFIED in the cited doc"}
+      ]
+    },
+    {
+      "id": "vat_treatments_component",
+      "backs": "tax.taxCodesRef",
+      "requires": {"component": "finance.vat_ae_treatments", "versionRange": ">=0.1.0 <0.2.0"},
+      "claim": "No UAE tax codes exist; finance.vat_ae_treatments is a placeholder id.",
+      "status": "UNVERIFIED",
+      "blockedBy": "A UAE VAT treatments file, its component manifest and accountant review; needs its own plan row.",
+      "refs": ["docs/compliance/country-matrix.md row U5"]
+    }
+  ],
+  "arabicLabels": [
+    {"file": "pack.json", "path": "name.ar", "text": "حزمة الإمارات العربية المتحدة", "review": "unreviewed", "rule": "ADR-0033"},
+    {"file": "pack.json", "path": "localeDefaults.workingTime.reducedPeriods[0].labels.ar", "text": "ساعات العمل في رمضان", "review": "unreviewed", "rule": "ADR-0033"},
+    {"file": "manifest.json", "path": "name.ar", "text": "حزمة الإمارات العربية المتحدة", "review": "unreviewed", "rule": "ADR-0033"}
+  ]
+}

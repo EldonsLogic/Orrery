@@ -4,6 +4,28 @@
 # directory (infra/dev/docker), so the worker builds the same engine image.
 # Use only with a throwaway project name (run_isolation_suite.py sets one).
 services:
+  # The engine answers HTTP through raw_engine_wsgi.py: same gunicorn settings as the dev
+  # entrypoint's `start` (--chdir is relative to the image WORKDIR, the bench root), but without the ERP-020 before_request hook (see that file for why).
+  engine:
+    command:
+      - gunicorn
+      - --chdir=sites
+      - --bind=0.0.0.0:8000
+      - --threads=4
+      - --workers=2
+      - --worker-class=gthread
+      - --worker-tmp-dir=/dev/shm
+      - --timeout=120
+      - raw_engine_wsgi:application
+    environment:
+      - SEC004_RAW_ENGINE=1
+      - COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-}
+      - PYTHONPATH=/opt/sec004
+    volumes:
+      # Relative to infra/dev/docker (the first compose file), not to this directory.
+      - ./isolation/raw_engine_wsgi.py:/opt/sec004/raw_engine_wsgi.py:ro
+      - ./isolation/sec004_project.py:/opt/sec004/sec004_project.py:ro
+
   worker:
     build:
       context: .
@@ -18,9 +40,11 @@ services:
       - DB_PORT=3306
       - REDIS_CACHE_HOST=redis-cache
       - REDIS_QUEUE_HOST=redis-queue
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
     volumes:
       - ../../../apps/engine/change_engine:/home/frappe/frappe-bench/apps/change_engine:rw
       - sites_data:/home/frappe/frappe-bench/sites
       - logs_data:/home/frappe/frappe-bench/logs
+    networks: [default, redis_internal]

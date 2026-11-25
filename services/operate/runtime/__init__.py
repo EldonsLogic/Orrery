@@ -9,10 +9,12 @@ from .memory import MemoryTraceStore, SequentialIds, StoreEventSink, TickClock
 from .models import (Caller, DataItem, Limits, ModelReply, ModelRequest, RunEvent, RunResult, Span, Step, TaintState,
                      ToolCall, ToolRequest, ToolResponse, ToolSpec, Usage)
 from .ports import BudgetStop, CancelToken
+from .ratelimit import DEFAULT_RULES, BudgetGuard, RateLimited, RateLimitedTools, RateLimiter, RateRule
 from .untrusted import args_hash, redact_args, sanitise_text, wrap_data
 
 __all__ = ["Allowlist", "AssistantConfig", "Decision", "resolve_allowlist", "firewall_exception", "map_tool_error",
            "AgentLoop", "MemoryTraceStore", "SequentialIds", "StoreEventSink", "TickClock", "Caller", "DataItem",
            "Limits", "ModelReply", "ModelRequest", "RunEvent", "RunResult", "Span", "Step", "TaintState", "ToolCall",
            "ToolRequest", "ToolResponse", "ToolSpec", "Usage", "BudgetStop", "CancelToken", "args_hash", "redact_args",
-           "sanitise_text", "wrap_data"]
+           "sanitise_text", "wrap_data", "DEFAULT_RULES", "BudgetGuard", "RateLimited", "RateLimitedTools",
+           "RateLimiter", "RateRule"]

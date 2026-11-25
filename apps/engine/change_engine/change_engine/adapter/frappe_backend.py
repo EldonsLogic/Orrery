@@ -629,6 +629,8 @@ class FrappeRuntimeBackend:
                     if kind == "relation.add":
                         defn = {**defn, "type": "link", "id": defn.get("id") or subject.get("id") or "rel"}
                     fieldname = _sanitize_custom_fieldname(str(defn.get("id") or subject.get("id") or "field"))
+                    if (defn.get("unique") or defn.get("indexed")) and not self._held_fields(f, doctype, [fieldname], set(), {}):
+                        raise self._refuse("unique_or_index")  # before `_ensure_doctype_exists` writes; Q-603
                     self._ensure_doctype_exists(f, doctype, {})
                     self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, defn)
 
@@ -869,6 +871,8 @@ class FrappeRuntimeBackend:
                 if any(self._lacks_constraint(x, defn.get("unique"), defn.get("indexed")) for x in held):
                     raise self._refuse("unique_or_index")
             else:  # execute creates the type if it is missing (`_ensure_doctype_exists`), then the field, never with a constraint
+                if defn.get("unique") or defn.get("indexed"):  # no field holds it, so it would be added without it (Q-603)
+                    raise self._refuse("unique_or_index")
                 self._project_new_type(f, doctype, made_types, made, [])
                 made[(doctype, fieldname)] = _NO_CONSTRAINT
 

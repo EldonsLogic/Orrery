@@ -21,6 +21,7 @@ from change_engine.tests.test_bpl_031_entity_add_existing_doctype import (
     entity,
     entity_add,
     field_add_step,
+    seed_constraint,
     setUpModule,  # noqa: F401  (starts the test environment patch)
     tearDownModule,  # noqa: F401
     written_state,
@@ -292,6 +293,69 @@ class TestEarlierStepsOfTheSamePlan(unittest.TestCase):
         self.assert_refused_up_front_as_execute_does(engine, plan, "unique_or_index")
 
 
+class TestConstraintOnAFieldNoEngineFieldHolds(unittest.TestCase):
+    """Review round 3, M1: unique or indexed asked of a field no existing engine field holds is refused before any write.
+
+    The field would be added without its constraint (Q-603), so readiness refuses it up front instead of letting step 1
+    write and the DDL gate fail step 2 as engine_unavailable. The execute path refuses it too, before its first write."""
+
+    def assert_refused(self, eng, steps: list[dict]) -> None:
+        with no_writes(self, eng):
+            with self.assertRaises(FrappeBackendError) as err:
+                backend_for(eng).check_ready(TENANT, steps)
+        self.assertEqual((err.exception.code, err.exception.details.get("reasonCode")), ("plan_rejected", "unique_or_index"))
+        self.assertTrue(err.exception.side_effect_free)
+
+    def assert_execute_refuses_without_writing(self, eng, step: dict) -> None:
+        before = site_state(eng)
+        with self.assertRaises(FrappeBackendError) as err:
+            backend_for(eng).execute_step(TENANT, step)
+        self.assertEqual((err.exception.code, err.exception.details.get("reasonCode")), ("plan_rejected", "unique_or_index"))
+        self.assertTrue(err.exception.side_effect_free)
+        self.assertEqual(site_state(eng), before, "execute must refuse before its first write")
+
+    def test_the_reviewers_two_step_probe_is_refused_at_readiness_with_nothing_written(self) -> None:
+        plan = [field_step(1, "customer", {"id": "a", "type": "string"}),
+                relation_step(2, "customer", {"id": "owner", "target": "customer", "indexed": True})]
+        self.assert_refused(engine(), plan)
+
+    def test_a_unique_field_add_on_a_missing_table_is_refused(self) -> None:
+        step = field_step(1, "purchase_order_line", {"id": "code", "type": "string", "unique": True})
+        self.assert_refused(missing_engine(), [step])
+        self.assert_execute_refuses_without_writing(missing_engine(), step)
+
+    def test_an_indexed_relation_add_is_refused(self) -> None:
+        step = relation_step(1, "customer", {"id": "owner", "target": "customer", "indexed": True})
+        self.assert_refused(engine(), [step])
+        self.assert_execute_refuses_without_writing(engine(), step)
+
+    def test_a_unique_field_add_on_an_existing_table_is_refused_on_both_paths(self) -> None:
+        step = field_step(1, "customer", {"id": "fresh_code", "type": "string", "unique": True})
+        self.assert_refused(engine(), [step])
+        self.assert_execute_refuses_without_writing(engine(), step)
+
+    def test_a_truthy_non_bool_value_counts_as_asking_for_the_constraint(self) -> None:
+        for prop in ("unique", "indexed"):
+            step = field_step(1, "customer", {"id": "fresh_code", "type": "string", prop: "1"})
+            self.assert_refused(engine(), [step])
+            self.assert_execute_refuses_without_writing(engine(), step)
+
+    def test_a_falsy_constraint_on_a_new_field_still_passes_and_runs(self) -> None:
+        step = field_step(1, "customer", {"id": "fresh_note", "type": "string", "unique": False, "indexed": 0})
+        eng = engine()
+        with no_writes(self, eng):
+            backend_for(eng).check_ready(TENANT, [step])
+        backend_for(eng).execute_step(TENANT, step)
+
+    def test_a_held_field_that_already_carries_the_constraint_keeps_its_behaviour(self) -> None:
+        eng = held_engine()
+        seed_constraint(eng, "Customer", "custom_review_code", unique=1)
+        step = field_step(1, "customer", {"id": "review_code", "type": "string", "unique": True, "indexed": True})
+        with no_writes(self, eng):
+            backend_for(eng).check_ready(TENANT, [step])
+        backend_for(eng).execute_step(TENANT, step)
+
+
 class TestUnsupportedTypeAndMalformedSteps(unittest.TestCase):
     def test_a_field_type_the_adapter_does_not_know_is_refused_with_nothing_written(self) -> None:
         step = entity_step(2, entity("customer", ("vat_number", "no_such_type")))
@@ -333,7 +397,7 @@ class TestUnsupportedTypeAndMalformedSteps(unittest.TestCase):
 
 
 class TestRequireFlagOfTheBenchTest(unittest.TestCase):
-    """BPL-041: REQUIRE_BPL027_LIVE=1 (set by real-bench CI) turns test_05's skip into a failure."""
+    """BPL-041: REQUIRE_BPL027_LIVE=1 (to be set by real-bench CI, slice 2) turns test_05's skip into a failure."""
 
     def test_without_the_flag_a_missing_bench_skips(self) -> None:
         with mock.patch.object(bpl027, "BENCH_SITE", ""):
@@ -355,8 +419,14 @@ class TestRequireFlagOfTheBenchTest(unittest.TestCase):
 
     def test_a_missing_prerequisite_fails_with_the_flag_and_skips_without_it(self) -> None:
         """Review round 1, R3: need() skipped the rest of the class when an earlier step had not run, even with the flag."""
-        with self.assertRaises(AssertionError):
+        try:
             bpl027.missing_prerequisite({bpl027.REQUIRE_LIVE_ENV: "1"}, {}, "plan")
+        except unittest.SkipTest:  # SkipTest is not an AssertionError: without this catch a skip would pass for a failure
+            self.fail("with the flag a missing prerequisite must fail, not skip")
+        except AssertionError:
+            pass
+        else:
+            self.fail("with the flag a missing prerequisite must raise")
         with self.assertRaises(unittest.SkipTest):
             bpl027.missing_prerequisite({}, {}, "plan")
         with self.assertRaises(unittest.SkipTest):
@@ -368,8 +438,14 @@ class TestRequireFlagOfTheBenchTest(unittest.TestCase):
         stub = unittest.TestCase()
         stub.state = {}
         with mock.patch.dict(bpl027.os.environ, {bpl027.REQUIRE_LIVE_ENV: "1"}):
-            with self.assertRaises(AssertionError):
+            try:
                 bpl027.TestBpl027FixtureRealAdapter.need(stub, "plan")
+            except unittest.SkipTest:
+                self.fail("with the flag need() must fail, not skip")
+            except AssertionError:
+                pass
+            else:
+                self.fail("with the flag need() must raise")
         with mock.patch.dict(bpl027.os.environ, {}, clear=False):
             bpl027.os.environ.pop(bpl027.REQUIRE_LIVE_ENV, None)
             with self.assertRaises(unittest.SkipTest):

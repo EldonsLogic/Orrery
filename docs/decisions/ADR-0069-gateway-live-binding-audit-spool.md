@@ -208,6 +208,31 @@ PLT-028 (local durability) and PLT-032 (forwarding and integrity) both come befo
 - Residual risks: a lost volume loses every unforwarded record (2.13); records written after the last confirmed checkpoint can be removed undetected by someone with volume write access (2.7); unknown outcomes need a human until Q-611; timing side channels (6.4); all (P) values, the overhead and memory factors and crash durability on the production volume are UNVERIFIED.
 - Must be done: PLT-028, PLT-032, PLT-029, PLT-030, PLT-031; Q-609 to Q-614 by Eldon's lane; the ADR-0040 deprovisioning probe (5.5) by its owner.
 
+## Open items before Accepted
+Merged as Proposed on the partner's Tier 3 say-so (2026-11-25). Eldon's fix-before-merge items H1 (open-intent row until the outcome commits, 2.4) and H2 (separate bounded `preauth` budget and a per-tenant cap, 2.1, 2.10, 3.2) are met. The items below stay open. Each must be fixed in this ADR, or carried by the named row's specification and security review, before the status moves to Accepted.
+
+From GPT-6.2 Sol security review round 3 (head 35f53c26):
+- R3-1 (High, 2.4, 2.11): restart recovery treats a request as having lost its open row when the intent reached the store and the outcome committed locally, but the outcome was not forwarded before the crash. Reconcile the store's open intents against verified local outcomes first. Owner: PLT-028.
+- R3-2 (High, 2.7): a prune can move `pruned_through` past the watermark a verifier just read, so verification fails closed for no real fault. Serialise verification and pruning per stream, or revalidate the store version before declaring corruption. Owner: PLT-032.
+- R3-3 (High, 2.8, 2.9, Q-614): after a lost reply, the `wm_seq + 1` guard rejects a batch prefix the store already committed, before any receipt lookup. Return the original receipts for committed sequences and enforce contiguity only on the new suffix. Owner: PLT-032, SEC-008.
+- R3-4 (High, 2.4, 2.5, 2.11): an `open_intents` row can outlive its retired MAC key. Keep verification keys until no dependent local rows remain, or reauthenticate those rows atomically during rotation. Owner: PLT-028.
+- R3-5 (High, 2.10, 7): a verified tenant's reads and denials can use up the shared tenant budget while forwarding is slow. Enforce the tenant share on every path that produces audit, and protect capacity for reserved outcomes. Owner: PLT-028.
+- R3-6 (High, 2.14, Q-613): two authorised subjects using one client key derive different adapter keys, so the second call runs again. The durable provider must atomically bind tenant, operation, key, first subject and input hash, and reject a mismatch before execution. Owner: Q-613, PLT-031.
+- R3-7 (Medium, 3.2, 5.4): an unexpired token for a revoked session passes the signature check and can saturate membership lookups. Bound lookup admission before verification, and send membership failures to `preauth`. Owner: PLT-030.
+
+From Eldon's review (Fable 5.2, head 5c58206). M1 (head anchor, 2.6) and M2 (listener-level tests, 1.2, 6.3) are addressed. These remain:
+- M3: `user_id` is the central person id, but ADR-0060 item 14 and ADR-0061 6.1 use a per-tenant `memberRef`. Waiting on Eldon's decision.
+- M4: the platform security stream (5.4) has no owner, location, retention or plan row. It belongs with SEC-008.
+- M5: remote identity verification (Q-14, Q-151) is not yet a dependency of PLT-031.
+- M6: one volume key covers all tenants, against the hosting rule of an envelope key per tenant. State the exception or fix it.
+- Lows still to confirm or fix:
+  - restate ADR-0060 items 9 and 10 deny cases in 3.5;
+  - add a distinct audit reason for an identity or role outage;
+  - define the host when running behind a proxy;
+  - allow several `reconcile` records per `audit_id`;
+  - measure sync throughput.
+- Lane note: the record schema (5.1), the security stream (5.4) and the `AuditStore` rules (2.6 to 2.9, Q-614) belong to SEC-008 and are provisional here.
+
 ## Follow-up plan rows (in PLAN as PLT-028 to PLT-032)
 1. PLT-028: local audit spool durability and recovery (sections 2.1 to 2.5, 2.10, 2.11, 5.5, 7): `tenant` and `preauth` spools, 4 KiB record ceiling, records and `open_intents` with authenticated recovery metadata, chained writes with versioned keys, persisted atomic reservations, tenant share, recovery and missing-row check, against a fake `AuditStore`; tests GLB-T01 to T03, T08, T09, T30, T31, T35, T44 to T46. G2, depends PLT-027, partner.
 2. PLT-032: audit forwarding and integrity conformance (sections 2.6 to 2.9, 2.12, 2.13, 2.15): forwarder, checkpoint, receipt and quarantine protocols, per-instance store credential, a conformance suite that any `AuditStore` (the fake now, SEC-008 later) must pass, metrics and alerts; tests GLB-T04 to T07, T29, T32 to T34, T48. G2, depends PLT-028, partner.

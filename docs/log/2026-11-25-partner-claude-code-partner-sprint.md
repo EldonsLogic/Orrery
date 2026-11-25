@@ -127,6 +127,25 @@ None yet; claim PR must merge first.
   - #319 CMP-010: main merged (07a191f5; open-questions kept both the Q-609 to Q-614 and the Q-615 to Q-626 blocks). Eldon's narrow re-review (N1 to N4, M3, M5, Lows) sent to the author as round 6.
   - #300 CMP-036: Eldon approved at f6b22274 after a line-by-line read. Waiting for the partner's Tier 3 say-so.
 
+- After #330:
+  - Reviewer switch (partner instruction): GPT models hit their usage limits, so cross-model reviews now use Antigravity (Gemini 4 Argon, high) and Claude.
+  - CMP-010 (#319):
+    - Round 6 (8c341e0b) answers Eldon's N1 to N4, M3, M5 and the Lows.
+    - Q-628 added. Q-627 was skipped because Eldon's #326 uses it.
+    - The PR body counts are corrected.
+    - Waiting for Eldon.
+  - CE-SEC-008:
+    - Eldon approved #322 at 750dc543. The F2 to F10 work (049c349c) had landed after that, so it was reverted on #322 (b6bb4840) to keep the approved content, and moved to `ce-sec-008-part-2`.
+    - On part 2, the child fixed GPT's two Medium findings. Gemini 4 Argon then gave "approve with nits", and the coordinator fixed its two Lows (CE-SEC-011 text; N13 and N20 mutant tests).
+    - PR #331 is open.
+  - Partner: "proceed and merge":
+    - **#322 merged** (CE-SEC-008 part 1).
+    - **#300 merged** (CMP-036).
+  - #331 retargeted to main:
+    - When main was merged in, part 2's versions of the files #322 reverted were kept (a revert of the revert), after checking that main touched them only through the revert.
+    - A new part-2 log was added for the task trail.
+    - Full suite: 1775 passed, 0 failed.
+
 ## Tokens or cost
 Unknown.
 

@@ -106,6 +106,10 @@ class ActionContext:
     currency: str | None = None
     break_glass_until: datetime | None = None
     break_glass_step_up: bool = False
+    # Q-41, Q-563: role name -> ids of every human in the tenant who holds it now, including people
+    # who are away or suspended (role holding, not availability). Server-resolved, never from a payload.
+    # None or malformed means no sole-owner fallback.
+    tenant_role_holders: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -136,6 +140,9 @@ class PolicyTable:
     currency: str | None = None
 
 
+# Rows that need a different approver and are R1 to R3 (Q-41, Q-563). An allow-list, so a new row
+# never gets the sole-owner fallback by default; R4 rows (AP-FIN-02, AP-PERM-01, AP-BPL-01) stay out.
+_SOLE_OWNER_ROWS = frozenset({"AP-STOCK-01", "AP-FIN-01"})
 _OWNER = frozenset({"owner", "tenant_admin"})
 _FINANCE = frozenset({"finance"})
 _ROWS = (
@@ -306,9 +313,31 @@ def _check_permission_change(
                  and _money(limit, table.currency) <= _money(rule.cap, table.currency), "invalid_limits")
 
 
+def _sole_owner(
+    row: PolicyRow, context: ActionContext, approval: Approval, required: int,
+) -> bool:
+    """Q-41 and Q-563: the tenant owner is the only human holding any approving role of this R1 to R3 row.
+
+    The exclusion is lifted only for an owner who initiated the request (Q-41) or who owns the drafting
+    agent and did not also edit it (Q-563). Authoring or editing somebody else's request stays excluded.
+    """
+    actor, holders = approval.approver, context.tenant_role_holders
+    own_agent = (context.drafter.kind == "agent" and context.drafter.owner_id == actor.id
+                 and not (row.author_sod and actor.id in context.editor_ids))
+    if (row.action_id not in _SOLE_OWNER_ROWS or required != 1 or approval.step_up is not True
+            or not (actor.id == context.submitter.id or own_agent)
+            or "owner" not in actor.roles or type(holders) is not dict
+            or not all(role in holders for role in row.approvers)):
+        return False
+    people = [holders[role] for role in row.approvers]
+    return (all(type(group) is frozenset and all(map(_identifier, group)) for group in people)
+            and frozenset().union(*people) == {actor.id}
+            and holders.get("owner") == frozenset({actor.id}))  # the approver is the authoritative sole owner
+
+
 def _approve(
     row: PolicyRow, request: ActionRequest, context: ActionContext, digest: str, required: int, now: datetime,
-) -> tuple[str, ...]:
+) -> tuple[tuple[str, ...], bool]:
     _require(type(context.approvals) is tuple and len(context.approvals) == required, "approval_count")
     excluded = {context.submitter.id, context.drafter.id, context.drafter.owner_id}
     if row.author_sod:
@@ -318,6 +347,7 @@ def _approve(
     if row.action_id == "AP-PERM-01":
         excluded.add(request.payload["target_user"])
     tokens = []
+    self_approved = False
     for approval in context.approvals:
         _require(type(approval) is Approval and _identifier(approval.id) and approval.id not in tokens
                  and approval.tenant_id == request.tenant_id and approval.action_id == request.action_id
@@ -326,11 +356,15 @@ def _approve(
                  and valid_instant(approval.expires_at) and approval.expires_at > now, "invalid_approval")
         actor = approval.approver
         _require(_check_identity(actor, submitter=True) and actor.kind == "human"
-                 and actor.roles & row.approvers and actor.id not in excluded
-                 and (not row.step_up or approval.step_up is True), "ineligible_approver")
+                 and actor.roles & row.approvers and (not row.step_up or approval.step_up is True),
+                 "ineligible_approver")
+        if actor.id in excluded:
+            # Only the sole-owner fallback may lift the submitter, agent-owner and editor exclusions.
+            _require(_sole_owner(row, context, approval, required), "ineligible_approver")
+            self_approved = True
         excluded.add(actor.id)
         tokens.append(approval.id)
-    return tuple(tokens)
+    return tuple(tokens), self_approved
 
 
 @dataclass(frozen=True)
@@ -339,6 +373,7 @@ class AuthorizedAction:
 
     request: ActionRequest
     submitter_id: str
+    self_approved: bool = False
 
     @property
     def payload(self) -> dict:
@@ -377,6 +412,7 @@ class ActionPolicyEnforcer:
         now = None
         expires_at = None
         tokens: tuple[str, ...] = ()
+        self_approved = False
         decision, reason = "deny", "policy_unavailable"
         envelope = request if type(request) is ActionRequest else None
         try:
@@ -426,7 +462,7 @@ class ActionPolicyEnforcer:
                 decision, reason = "break_glass", reason_text.strip()
             else:
                 _require(context.submitter.roles & row.initiators, "initiator_denied")
-                tokens = _approve(row, request, context, digest, required, now)
+                tokens, self_approved = _approve(row, request, context, digest, required, now)
                 expires_at = min((approval.expires_at for approval in context.approvals), default=None)
                 decision, reason = "allow", "policy_satisfied"
         except _Denied as exc:
@@ -435,11 +471,12 @@ class ActionPolicyEnforcer:
             pass
 
         try:
-            audit = self.store.record(self._audit(envelope, context, digest, now, decision, reason),
+            audit = self.store.record(self._audit(envelope, context, digest, now, decision, reason,
+                                                  self_approved and decision == "allow"),
                                       request.idempotency_key if envelope else None, tokens,
                                       expires_at=expires_at, clock=self._clock)
             if audit.decision != "deny":
-                return AuthorizedAction(request, context.submitter.id)
+                return AuthorizedAction(request, context.submitter.id, audit.self_approved)
         except Exception:
             # A decision that cannot be durably recorded never reaches the engine.
             return None
@@ -471,7 +508,7 @@ class ActionPolicyEnforcer:
     @staticmethod
     def _audit(
         request: ActionRequest | None, context: ActionContext | None, digest: str | None,
-        now: datetime | None, decision: str, reason: str,
+        now: datetime | None, decision: str, reason: str, self_approved: bool = False,
     ) -> ActionAudit:
         """Record authenticated identities even on a refusal, without copying untrusted payload fields."""
         def actor(field: str) -> Principal | None:
@@ -495,4 +532,5 @@ class ActionPolicyEnforcer:
             decision=decision,
             reason=reason,
             break_glass=decision == "break_glass",
+            self_approved=self_approved,
         )

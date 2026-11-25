@@ -39,6 +39,11 @@ FIELD = {"fieldname": "custom_x", "fieldtype": "Data", "label": "X"}
 AUDIT = "tabChange Engine Audit"
 
 
+def _same(a: str, b: str) -> bool:
+    """MariaDB's default collations compare case-insensitively and ignore trailing spaces (PAD SPACE)."""
+    return a.rstrip(" ").lower() == b.rstrip(" ").lower()
+
+
 class _Crash(BaseException):
     """Process death: it is not an ``Exception``, so no ``except Exception`` can absorb it."""
 
@@ -66,6 +71,18 @@ class _DurableDb(_LiveDb):
         self.view: dict[str, dict] | None = None  # REPEATABLE READ: the read view the first table read opens
         self.on_lock = None  # called with the lock name once it is granted (another session may commit meanwhile)
         self.readback_values: list[int] | None = None  # consumed in order by @@SESSION reads
+        self.meta_pending: set[str] = set()  # Custom Field rows inserted in the open transaction
+        self.release_result = 1  # what RELEASE_LOCK answers (1 released, 0 not ours, None no such lock)
+        self.closed = False
+
+    @property
+    def transaction_writes(self) -> int:
+        """Frappe counts the writes of the open transaction; the engine refuses to proceed over caller writes."""
+        return len(self.pending) + len(self.meta_pending)
+
+    def close(self):
+        self.closed = True
+        self.locks.clear()  # the server frees a closed session's advisory locks
 
     def get_value(self, *a, **k):
         return None
@@ -84,16 +101,20 @@ class _DurableDb(_LiveDb):
                     if row["deployment_id"] == dep:
                         row.update(fields)
         self.pending = []
+        self.inserted |= self.meta_pending
+        self.meta_pending = set()
         self.view = None  # a commit ends the transaction, so the next read opens a fresh view
         self.commits += 1
 
     def rollback(self):
         self.pending = []
+        self.meta_pending = set()
         self.view = None
 
     def crash(self):
         """Process death: whatever was not committed is gone, and the server drops the session lock."""
         self.pending = []
+        self.meta_pending = set()
         self.view = None
         self.locks.clear()
 
@@ -145,7 +166,7 @@ class _DurableDb(_LiveDb):
         if q.startswith("SELECT RELEASE_LOCK"):
             self.sql_log.append(query)
             self.locks.discard(values[0])
-            return ((1,),)
+            return ((self.release_result,),)
         if q.startswith("SET SESSION LOCK_WAIT_TIMEOUT"):
             self.sql_log.append(query)
             if not self.ignore_timeout_set:
@@ -192,6 +213,9 @@ class _DurableDb(_LiveDb):
                 "site_id": p[4], "doctype": p[5], "fieldname": p[6], "base_revision_hash": p[7],
                 "ddl_plan_statements": p[8], "status": p[9], "outcome_json": None,
             }
+            for column, limit in (("name", 140), ("deployment_id", 140), ("idempotency_key", 140)):
+                if len(row[column]) > limit:
+                    raise RuntimeError(f"(1406, \"Data too long for column '{column}'\")")
             if name in rows:
                 if "ON DUPLICATE KEY UPDATE" in q:  # the old upsert
                     self.pending.append(("update", rows[name]["deployment_id"], {
@@ -212,13 +236,13 @@ class _DurableDb(_LiveDb):
         if "SELECT COUNT(*)" in q:
             site, doctype = p
             n = sum(1 for r in rows.values()
-                    if r["site_id"] == site and r["doctype"] == doctype
+                    if _same(r["site_id"], site) and _same(r["doctype"], doctype)
                     and r["status"] in ("RECOVERY_REQUIRED", "PREPARED"))
             return ((n,),)
         if "SELECT PAYLOAD_HASH, OUTCOME_JSON" in q:
             site, key = p
             return tuple((r["payload_hash"], r["outcome_json"], r["status"]) for r in rows.values()
-                         if r["site_id"] == site and r["idempotency_key"] == key
+                         if _same(r["site_id"], site) and _same(r["idempotency_key"], key)
                          and not r["status"].startswith("EVIDENCE_"))
         if "WHERE IDEMPOTENCY_KEY = %S" in q and "SELECT NAME" in q:
             hit = sorted((r for r in rows.values() if r["idempotency_key"] == p[0]), key=lambda r: r["name"])
@@ -244,7 +268,8 @@ class _DurableDb(_LiveDb):
 class _Bench:
     """One database that outlives adapters: ``new_adapter()`` is a process restart."""
 
-    def __init__(self, db: _DurableDb | None = None, statements=None):
+    def __init__(self, db: _DurableDb | None = None, statements=None, meta_first: bool = False):
+        self.meta_first = meta_first  # Frappe inserts the Custom Field row before it alters the table
         self.db = db or _DurableDb()
         self.statements = [STMT] if statements is None else statements
         self.module = types.SimpleNamespace(db=self.db, clear_cache=lambda **kw: None, get_doc=self._get_doc)
@@ -255,9 +280,12 @@ class _Bench:
         field = args["fieldname"]
 
         def insert(ignore_permissions=True):
+            if self.meta_first:
+                self.db.meta_pending.add(field)  # committed by the DDL's implicit commit, or rolled back
             for stmt in self.statements:
                 self.db.sql_ddl(stmt)  # through the adapter's recorder
-            self.db.inserted.add(field)
+            if not self.meta_first:
+                self.db.inserted.add(field)
 
         return types.SimpleNamespace(insert=insert)
 
@@ -638,7 +666,7 @@ class TestDatabaseErrorsBlockAndAreNeverAbsent(unittest.TestCase):
             "name": "x", "deployment_id": "x", "idempotency_key": "key-1", "payload_hash": "h", "site_id": "site-a",
             "doctype": "Item", "fieldname": "f", "base_revision_hash": "r", "ddl_plan_statements": "[]",
             "status": "APPLIED", "outcome_json": "{not json"}
-        with self.assertRaises(ValueError):
+        with self.assertRaises(endpoints.DurableEvidenceError):
             adapter.get_existing_deployment_by_idempotency("site-a", "key-1")
 
     def test_recovery_lookup_raises_on_a_database_error(self):

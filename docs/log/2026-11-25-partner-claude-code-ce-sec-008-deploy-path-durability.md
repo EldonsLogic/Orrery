@@ -75,6 +75,19 @@ All under `apps/engine/change_engine/change_engine/`:
   - Adapter lane, part 2: in `frappe_backend.py`, the decimal backend must set the timeout before the intent. The workflow, report and property-setter engines need the idempotency lock and a fresh read view.
   - A bench proof with two MariaDB sessions.
 
+## Review round 2 (GPT-6.2 Sol at ea12c1f1: changes required; 2 High, 3 Medium, 6 partly resolved)
+- Fixed:
+  - N1: the fresh read view no longer commits; it refuses over pending caller writes and otherwise rolls back a read-only transaction.
+  - N2: locks fold site, doctype and key by case and trailing spaces, matching the column collation; new ids and keys must be canonical ASCII.
+  - N3: both locks are acquired in one try/finally; release is verified, and a failed release discards the session.
+  - N4: new ids are limited to 100 characters so derived keys fit; existing longer ids still look up and revert.
+  - N5: the timeout is rechecked before the Custom Field insert, and pending writes are rolled back when no DDL was sent.
+  - Round 1 remainders: the main-row filter on the internal lookup; an ordinary revert refused while a deployment is on hold (DEPLOYMENT_ON_HOLD); strict outcome objects; `revision_unavailable`.
+- Red to green: the two CE-SEC-008 files went from 37 failed and 86 passed to 99 passed with 103 subtests.
+- Full suite: 1613 passed, 86 skipped, 0 failed.
+- UNVERIFIED: the Frappe 15 attribute name `transaction_writes`.
+- Follow-up added to PLAN: CE-SEC-011, the adapter lane, bringing the non-DDL engines and the decimal backend onto the same lock discipline.
+
 ## Tokens or cost
 Unknown.
 

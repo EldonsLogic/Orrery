@@ -582,5 +582,308 @@ class TestFinding8TimeoutIsValidatedAndVerifiedWhereDdlIsDispatched(unittest.Tes
         self.assertEqual(bench.db.altered(), [STMT])
 
 
+# ===========================================================================================
+# Revision round 2
+# ===========================================================================================
+def _crashed(bench: _Bench, dep="dep_1", key="key-1"):
+    """Leave ``dep`` PREPARED: the process dies after the DDL, before finalization."""
+    adapter = bench.new_adapter()
+    adapter.persist_final_outcome_and_audit = lambda *a, **k: (_ for _ in ()).throw(_Crash("x"))
+    try:
+        bench.deploy(adapter, dep=dep, key=key)
+    except _Crash:
+        pass
+    bench.db.crash()
+
+
+class TestN1FreshViewNeverCommitsTheCallersWork(unittest.TestCase):
+    CALLER_ROW = {
+        "name": "caller_row", "deployment_id": "caller_row", "idempotency_key": "caller", "payload_hash": "h",
+        "site_id": "other", "doctype": "Other", "fieldname": "", "base_revision_hash": "r",
+        "ddl_plan_statements": "[]", "status": "CALLER", "outcome_json": None}
+
+    def test_pending_caller_writes_survive_a_rejection_uncommitted(self):
+        for rejection in ("replay", "preflight"):
+            with self.subTest(rejection=rejection):
+                bench = _Bench()
+                adapter = bench.new_adapter()
+                first = bench.deploy(adapter)
+                base_rev = adapter.get_doctype_revision_hash("Item")
+                bench.db.pending.append(("insert", "caller_row", dict(self.CALLER_ROW)))
+                commits = bench.db.commits
+                out = execute_single_field_deployment(
+                    adapter, "dep_2", "key-1" if rejection == "replay" else "key-2", "site-a", "Item", base_rev, dict(FIELD))
+                self.assertNotEqual(out, first, "the engine refuses to run over uncommitted caller writes")
+                self.assertEqual(out["status"], "REJECTED")
+                self.assertEqual(out["reason_code"], "engine_unavailable")
+                self.assertEqual(bench.db.commits, commits, "nothing was committed on the caller's behalf")
+                self.assertIn(("insert", "caller_row", self.CALLER_ROW), bench.db.pending, "and nothing was rolled back")
+                self.assertNotIn("caller_row", bench.db.committed)
+                self.assertEqual(len(bench.db.altered()), 1)
+
+    def test_a_replay_with_no_pending_writes_commits_nothing(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        first = bench.deploy(adapter)
+        adapter = bench.new_adapter()
+        commits = bench.db.commits
+        self.assertEqual(bench.deploy(adapter, dep="dep_2"), first)
+        self.assertEqual(bench.db.commits, commits, "the fresh read view is opened without a commit")
+
+    def test_begin_fresh_read_view_refuses_over_pending_writes_and_ends_a_clean_transaction(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        bench.db.pending.append(("insert", "caller_row", dict(self.CALLER_ROW)))
+        with self.assertRaises(endpoints.DurableEvidenceError):
+            adapter.begin_fresh_read_view()
+        bench.db.pending.clear()
+        bench.db.view = {}
+        adapter.begin_fresh_read_view()
+        self.assertIsNone(bench.db.view)
+
+
+class TestN2OneEqualityForLocksLookupsAndUniqueness(unittest.TestCase):
+    def test_lock_names_follow_the_collation_equality(self):
+        from change_engine.guarded_apply.schema_reconciler import make_bounded_lock_key, make_idempotency_lock_key
+
+        self.assertEqual(make_idempotency_lock_key("site-a", "KEY-1"), make_idempotency_lock_key("site-a", "key-1"))
+        self.assertEqual(make_idempotency_lock_key("site-a", "key-1  "), make_idempotency_lock_key("site-a", "key-1"))
+        self.assertEqual(make_idempotency_lock_key("SITE-A ", "key-1"), make_idempotency_lock_key("site-a", "key-1"))
+        self.assertNotEqual(make_idempotency_lock_key("site-a", "key-1"), make_idempotency_lock_key("site-a", "key-2"))
+        self.assertEqual(make_bounded_lock_key("Site-A", "Item "), make_bounded_lock_key("site-a", "item"))
+        self.assertNotEqual(make_bounded_lock_key("site-a", "Item"), make_bounded_lock_key("site-a", "Customer"))
+
+    def test_keys_that_are_not_canonical_are_refused_before_any_effect(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        for key in ("key-1 ", " key-1", "key 1", "kéy", "كلمة", "key/1", "k" * 129):
+            with self.subTest(key=key):
+                out = execute_single_field_deployment(adapter, "dep_1", key, "site-a", "Item", "rev", dict(FIELD))
+                self.assertEqual(out["reason_code"], "invalid_idempotency_key")
+        for dep in ("dep 1", "dep_1 ", "dép", "d" * 101):
+            with self.subTest(dep=dep):
+                out = execute_single_field_deployment(adapter, dep, "key-1", "site-a", "Item", "rev", dict(FIELD))
+                self.assertEqual(out["reason_code"], "invalid_deployment_id")
+        self.assertEqual(bench.db.committed, {})
+
+    def test_a_key_differing_only_in_case_waits_on_the_same_lock(self):
+        from change_engine.guarded_apply.schema_reconciler import make_idempotency_lock_key
+
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        base_rev = adapter.get_doctype_revision_hash("Item")
+        bench.db.locks.add(make_idempotency_lock_key("site-a", "KEY-1"))  # another session holds the key
+        out = execute_single_field_deployment(adapter, "dep_1", "key-1", "site-a", "Item", base_rev, dict(FIELD))
+        self.assertEqual(out["status"], "REJECTED")
+        self.assertEqual(out["stage"], "ACQUIRE")
+        self.assertEqual(bench.db.altered(), [])
+
+    def test_the_lookup_and_the_lock_agree_for_case_and_padding(self):
+        bench = _Bench()
+        _crashed(bench, key="KEY-1")
+        for key in ("key-1", "Key-1"):
+            with self.subTest(key=key):
+                held = bench.new_adapter().get_existing_deployment_by_idempotency("site-a", key)
+                self.assertEqual(held["outcome"]["reason_code"], "idempotency_key_held")
+        self.assertIsNotNone(bench.new_adapter().get_existing_deployment_by_idempotency("site-a", "key-1  "))
+
+
+class TestN3LocksAreAlwaysReleased(unittest.TestCase):
+    def test_a_target_lock_acquire_that_raises_still_releases_the_idempotency_lock(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        released, calls = [], []
+        real_acquire, real_release = adapter.acquire_advisory_lock, adapter.release_advisory_lock
+
+        def acquire(key, wait_seconds):
+            calls.append(key)
+            if len(calls) == 2:
+                raise _DbDown(SECRET)
+            return real_acquire(key, wait_seconds)
+
+        adapter.acquire_advisory_lock = acquire
+        adapter.release_advisory_lock = lambda k: (released.append(k), real_release(k))[1]
+        out = bench.deploy(adapter)
+        self.assertEqual(out["status"], "REJECTED")
+        self.assertEqual(out["stage"], "ACQUIRE")
+        self.assertNotIn("SECRET", json.dumps(out))
+        self.assertEqual(released, [calls[0]])
+        self.assertEqual(bench.db.locks, set())
+        self.assertEqual(bench.db.altered(), [])
+
+    def test_a_first_lock_acquire_that_raises_is_a_stable_rejection(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        adapter.acquire_advisory_lock = lambda *a, **k: (_ for _ in ()).throw(_DbDown(SECRET))
+        out = bench.deploy(adapter)
+        self.assertEqual((out["status"], out["stage"]), ("REJECTED", "ACQUIRE"))
+        self.assertNotIn("SECRET", json.dumps(out))
+
+    def test_a_failed_release_makes_the_session_unusable_and_discards_it(self):
+        for fault in ("raises", "not_held"):
+            with self.subTest(fault=fault):
+                bench = _Bench()
+                adapter = bench.new_adapter()
+                if fault == "raises":
+                    bench.db.fail("SELECT RELEASE_LOCK", _DbDown(SECRET))
+                else:
+                    bench.db.release_result = 0
+                out = bench.deploy(adapter)
+                self.assertEqual(out["status"], "APPLIED", "the applied outcome is still reported")
+                self.assertTrue(bench.db.closed, "the connection that may still hold a lock is discarded")
+                again = bench.deploy(adapter, dep="dep_2", key="key-2", field={**FIELD, "fieldname": "custom_y"})
+                self.assertEqual((again["status"], again["stage"]), ("REJECTED", "ACQUIRE"))
+                self.assertEqual(len(bench.db.altered()), 1)
+
+    def test_the_reconciler_marks_an_adapter_whose_release_raises_unusable(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        marked = []
+        adapter.release_advisory_lock = lambda k: (_ for _ in ()).throw(_DbDown(SECRET))
+        adapter.mark_session_unusable = lambda: marked.append(True)
+        self.assertEqual(bench.deploy(adapter)["status"], "APPLIED")
+        self.assertTrue(marked)
+
+
+class TestN4IdLengthsAndExistingRows(unittest.TestCase):
+    def test_every_derived_name_of_a_maximum_length_id_fits_the_columns(self):
+        bench = _Bench(statements=[_T + "ADD COLUMN `custom_xyz` varchar(140)"])
+        dep = "d" * 100
+        out = endpoints.apply_configuration_change(
+            doctype="Item", deployment_id=dep, field_def={**FIELD, "fieldname": "custom_xyz"},
+            adapter=bench.new_adapter(), user_roles=ADMIN)
+        self.assertEqual(out["status"], "APPLIED", out)
+        for row in bench.db.committed.values():
+            self.assertLessEqual(max(len(row["name"]), len(row["deployment_id"]), len(row["idempotency_key"])), 140)
+
+    def test_a_longer_id_is_refused_for_a_new_deployment_at_the_rpc(self):
+        bench = _Bench()
+        out = endpoints.apply_configuration_change(
+            doctype="Item", deployment_id="d" * 101, field_def=dict(FIELD), adapter=bench.new_adapter(), user_roles=ADMIN)
+        self.assertEqual(out["disposition"], "INVALID_DEPLOYMENT_ID")
+
+    def test_existing_long_ids_still_look_up_finalize_and_revert(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        old = "o" * 135
+        bench.db.committed[old] = {
+            "name": old, "deployment_id": old, "idempotency_key": "idemp-old", "payload_hash": "h", "site_id": "site-a",
+            "doctype": "Item", "fieldname": "custom_old", "base_revision_hash": "r", "ddl_plan_statements": "[]",
+            "status": "APPLIED", "outcome_json": json.dumps({"status": "APPLIED"})}
+        self.assertEqual(adapter.get_deployment_record(old)["deployment_id"], old)
+        adapter.persist_final_outcome_and_audit(old, {"outcome": {"status": "ROLLED_BACK"}})
+        self.assertEqual(bench.db.committed[old]["status"], "ROLLED_BACK")
+        out = endpoints.revert_configuration_change(deployment_id=old, adapter=adapter, user_roles=ADMIN)
+        self.assertNotIn(out.get("disposition"), ("DEPLOYMENT_NOT_FOUND", "INVALID_DEPLOYMENT_ID", "ENGINE_UNAVAILABLE"))
+
+
+class TestN5NoOrphanMetadataWhenNoDdlWasSent(unittest.TestCase):
+    def _field_state(self, bench):
+        return {"pending": set(bench.db.meta_pending), "committed": "custom_x" in bench.db.inserted}
+
+    def test_the_timeout_is_re_checked_before_the_metadata_insert(self):
+        bench = _Bench(meta_first=True)
+        adapter = bench.new_adapter()
+        bench.db.readback_values = [3, 50]
+        out = bench.deploy(adapter)
+        self.assertEqual(bench.db.altered(), [])
+        self.assertEqual(self._field_state(bench), {"pending": set(), "committed": False})
+        self.assertEqual(out["status"], "FAILED_CLEAN", out)
+
+    def test_a_refusal_at_dispatch_rolls_the_pending_metadata_back(self):
+        bench = _Bench(meta_first=True)
+        adapter = bench.new_adapter()
+        bench.db.readback_values = [3, 3, 50]  # fine before the insert, drifted when the statement is admitted
+        out = bench.deploy(adapter)
+        self.assertEqual(bench.db.altered(), [])
+        self.assertEqual(self._field_state(bench), {"pending": set(), "committed": False}, "no orphan Custom Field")
+        self.assertEqual(out["status"], "FAILED_CLEAN", out)
+        self.assertEqual(bench.db.row("dep_1")["status"], "FAILED_CLEAN")
+
+    def test_a_journal_write_failure_before_dispatch_rolls_the_metadata_back_too(self):
+        bench = _Bench(meta_first=True)
+        adapter = bench.new_adapter()
+        orig = bench.db._audit
+        n = {"i": 0}
+
+        def flaky(q, p, as_dict):
+            if q.startswith("INSERT INTO"):
+                n["i"] += 1
+                if n["i"] == 3:
+                    raise _DbDown("journal unavailable")
+            return orig(q, p, as_dict)
+
+        bench.db._audit = flaky
+        out = bench.deploy(adapter)
+        self.assertEqual(bench.db.altered(), [])
+        self.assertEqual(self._field_state(bench), {"pending": set(), "committed": False})
+        self.assertNotEqual(out["status"], "APPLIED")
+
+    def test_the_normal_apply_still_commits_the_metadata(self):
+        bench = _Bench(meta_first=True)
+        self.assertEqual(bench.deploy(bench.new_adapter())["status"], "APPLIED")
+        self.assertTrue(self._field_state(bench)["committed"])
+
+
+class TestRemaindersFromRound1(unittest.TestCase):
+    def test_the_internal_main_row_lookup_carries_the_evidence_filter(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        self.assertEqual(bench.deploy(adapter)["status"], "APPLIED")
+        bench.db.sql_log.clear()
+        adapter.load_durable_evidence("dep_1")
+        with self.assertRaises(endpoints.DeploymentIntentConflictError):
+            adapter.take_snapshot("Item", "custom_x", "dep_1")
+            adapter.persist_prepare_and_audit_intent(_record(ddl_plan_statements=[STMT], fieldname="custom_x"))
+        by_id = [q for q in bench.db.sql_log if "WHERE deployment_id" in q]
+        self.assertTrue(by_id)
+        for q in by_id:
+            self.assertIn("NOT IN ('EVIDENCE_BASELINE'", q.replace("\n", " "), q)
+
+    def test_an_ordinary_revert_cannot_clear_a_hold(self):
+        for status in ("PREPARED", "RECOVERY_REQUIRED"):
+            with self.subTest(status=status):
+                bench = _Bench()
+                _crashed(bench)
+                if status == "RECOVERY_REQUIRED":
+                    bench.new_adapter().mark_recovery_required("dep_1", "x")
+                row = dict(bench.db.row("dep_1"))
+                bench.db.sql_log.clear()
+                out = endpoints.revert_configuration_change(
+                    deployment_id="dep_1", adapter=bench.new_adapter(), user_roles=ADMIN)
+                self.assertEqual(out["status"], "REJECTED")
+                self.assertEqual(out["disposition"], "DEPLOYMENT_ON_HOLD")
+                self.assertEqual(out["reason_code"], "recovery_hold")
+                self.assertEqual(bench.db.row("dep_1"), row)
+                self.assertFalse([q for q in bench.db.sql_log if q.lstrip().upper().startswith("UPDATE")])
+
+    def test_replay_and_rollback_require_a_real_outcome_object(self):
+        for stored in ("{}", '{"deployment_id": "x"}', '{"status": ""}', '{"status": 3}', "[]", "42", "", "null"):
+            with self.subTest(stored=stored):
+                bench = _Bench()
+                adapter = bench.new_adapter()
+                bench.db.committed["x"] = {
+                    "name": "x", "deployment_id": "x", "idempotency_key": "key-1", "payload_hash": "h",
+                    "site_id": "site-a", "doctype": "Item", "fieldname": "f", "base_revision_hash": "r",
+                    "ddl_plan_statements": "[]", "status": "APPLIED", "outcome_json": stored}
+                with self.assertRaises(endpoints.DurableEvidenceError):
+                    adapter.get_existing_deployment_by_idempotency("site-a", "key-1")
+                with self.assertRaises(endpoints.DurableEvidenceError):
+                    adapter.get_deployment_record("x")
+                out = endpoints.revert_configuration_change(deployment_id="x", adapter=adapter, user_roles=ADMIN)
+                self.assertEqual(out["disposition"], "ENGINE_UNAVAILABLE")
+
+    def test_a_revision_read_failure_returns_a_stable_code(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        adapter.get_doctype_revision_hash = lambda dt: (_ for _ in ()).throw(endpoints.RevisionHashError(SECRET))
+        out = endpoints.apply_configuration_change(
+            doctype="Item", deployment_id="dep_1", field_def={**FIELD, "fieldname": "custom_xyz"},
+            adapter=adapter, user_roles=ADMIN)
+        self.assertEqual(out["status"], "REJECTED")
+        self.assertEqual(out["reason_code"], "revision_unavailable")
+        self.assertNotIn("SECRET", json.dumps(out))
+
+
 if __name__ == "__main__":
     unittest.main()

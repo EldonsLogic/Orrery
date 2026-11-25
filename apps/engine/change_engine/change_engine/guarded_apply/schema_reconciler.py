@@ -12,6 +12,7 @@ Implements ADR-001 (Rev 2.3) Sections 6, 7, 8, and 9:
 import hashlib
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Protocol
 
@@ -49,20 +50,41 @@ class InvalidDeploymentIdError(ValueError):
     """CE-SEC-008: a caller-chosen deployment id or idempotency key could reach the evidence namespace."""
 
 
-_MAX_CALLER_ID_LENGTH = 128
+# New deployment ids and idempotency keys are canonical: a short ASCII charset, no spaces. The id limit leaves
+# room for every derived name (``idemp-<id>``, ``<id>#evidence``, ``<id>#d0001``) inside VARCHAR(140). Because the
+# charset is ASCII with no spaces, MariaDB's case-insensitive, space-padded comparison is the only equivalence
+# left, and the lock names fold exactly that (``_collation_fold``): one equality for locks, lookups and rows.
+MAX_DEPLOYMENT_ID_LENGTH = 100
+MAX_IDEMPOTENCY_KEY_LENGTH = 128
+_CANONICAL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:\-]*")
 
 
-def caller_id_problem(value: Any) -> Optional[str]:
-    """Why a caller-chosen deployment id or idempotency key is refused, or ``None``.
+def caller_id_problem(value: Any, max_length: int = MAX_DEPLOYMENT_ID_LENGTH) -> Optional[str]:
+    """Why a NEW caller-chosen deployment id or idempotency key is refused, or ``None``.
 
-    Evidence rows live next to the main rows as ``<deployment_id>#...``; a caller value may never contain the
-    ``#`` separator (or control characters), so no caller-selected key can name or collide with one.
+    Evidence rows live next to the main rows as ``<deployment_id>#...``; the charset keeps every caller value
+    out of that namespace and out of the collation's equivalence classes.
     """
-    if not isinstance(value, str) or not value or len(value) > _MAX_CALLER_ID_LENGTH:
-        return "must be a non-empty string of at most 128 characters"
+    if not isinstance(value, str) or not value or len(value) > max_length:
+        return f"must be a non-empty string of at most {max_length} characters"
+    if not _CANONICAL_ID.fullmatch(value):
+        return "may only use letters, digits and _ . : - and must start with a letter or digit"
+    return None
+
+
+def evidence_namespace_problem(value: Any) -> Optional[str]:
+    """Lookups, finalizers and rollback accept any EXISTING main row id (older ids may be longer or looser),
+    but never one inside the evidence namespace."""
+    if not isinstance(value, str) or not value:
+        return "must be a non-empty string"
     if "#" in value or any(ord(c) < 32 or ord(c) == 127 for c in value):
         return "must not contain '#' or control characters"
     return None
+
+
+def _collation_fold(value: str) -> str:
+    """How the audit table's default collations compare text: ignoring case and trailing spaces."""
+    return str(value).rstrip(" ").lower()
 
 
 class LockTimeoutError(RuntimeError):
@@ -109,22 +131,34 @@ def make_bounded_lock_key(site_id: str, doctype: str) -> str:
     Maps (site_id, doctype) to a bounded, collision-resistant lock identifier <= 64 chars
     respecting MariaDB GET_LOCK limits and avoiding raw string concatenation (§7.2).
     """
-    digest = hashlib.sha256(f"{site_id}\x00{doctype}".encode("utf-8")).hexdigest()[:48]
+    digest = hashlib.sha256(f"{_collation_fold(site_id)}\x00{_collation_fold(doctype)}".encode("utf-8")).hexdigest()[:48]
     return f"ce:v1:{digest}"
 
 
 def make_idempotency_lock_key(site_id: str, idempotency_key: str) -> str:
     """Site-scoped lock for one idempotency key (<= 64 chars), distinct from every target lock."""
-    digest = hashlib.sha256(f"{site_id}\x00idem\x00{idempotency_key}".encode("utf-8")).hexdigest()[:40]
+    digest = hashlib.sha256(
+        f"{_collation_fold(site_id)}\x00idem\x00{_collation_fold(idempotency_key)}".encode("utf-8")).hexdigest()[:40]
     return f"ce:v1:idem:{digest}"
 
 
-def _release_quietly(db: Any, lock_key: str) -> None:
-    """A lock release that fails must never escape past the response (the session dropping frees it anyway)."""
+def _release_checked(db: Any, lock_key: str) -> bool:
+    """Release one advisory lock; ``True`` only when it is verified released. A release that fails or raises
+    never escapes past the response, but the caller must then discard the session."""
     try:
-        db.release_advisory_lock(lock_key)
+        return db.release_advisory_lock(lock_key) is not False
     except Exception:
         logger.exception("could not release advisory lock %s", lock_key)
+        return False
+
+
+def _discard_session(db: Any) -> None:
+    mark = getattr(db, "mark_session_unusable", None)
+    if callable(mark):
+        try:
+            mark()
+        except Exception:
+            logger.exception("could not discard the database session")
 
 
 def compute_canonical_payload_hash(site_id: str, doctype: str, field_def: Dict[str, Any]) -> str:
@@ -151,13 +185,14 @@ def execute_single_field_deployment(
     Executes the 6-Stage Durable Deployment Sequence defined in ADR-001 Rev 2.3 (§8 & §9).
     """
     fieldname = field_def["fieldname"]
-    for label, value, code in (
-        ("deployment id", deployment_id, "invalid_deployment_id"), ("idempotency key", idempotency_key, "invalid_idempotency_key"),
+    for label, value, code, limit in (
+        ("deployment id", deployment_id, "invalid_deployment_id", MAX_DEPLOYMENT_ID_LENGTH),
+        ("idempotency key", idempotency_key, "invalid_idempotency_key", MAX_IDEMPOTENCY_KEY_LENGTH),
     ):
-        problem = caller_id_problem(value)
+        problem = caller_id_problem(value, limit)
         if problem:
             return {
-                "deployment_id": deployment_id if isinstance(deployment_id, str) and "#" not in deployment_id else None,
+                "deployment_id": None,
                 "status": "REJECTED",
                 "stage": "VALIDATE",
                 "reason_code": code,
@@ -169,20 +204,31 @@ def execute_single_field_deployment(
 
     # Stage 1: Acquire verified connection-scoped advisory locks (1 = acquired, 0 = timeout, None = error):
     # the site-scoped idempotency lock first, so one key cannot reserve two targets, then the target lock.
-    for key in (idem_lock_key, lock_key):
-        lock_result = db.acquire_advisory_lock(key, wait_seconds=5)
-        if lock_result != 1:
-            if key == lock_key:
-                _release_quietly(db, idem_lock_key)
-            reason = "Lock wait timeout (0)" if lock_result == 0 else "Database lock error (NULL)"
-            return {
-                "deployment_id": deployment_id,
-                "status": "REJECTED",
-                "stage": "ACQUIRE",
-                "reason": f"Could not acquire MariaDB GET_LOCK ({reason})",
-            }
-
+    # Both are acquired inside the try, so whatever is held is released whichever way this returns or raises.
+    held: List[str] = []
     try:
+        for key in (idem_lock_key, lock_key):
+            try:
+                lock_result = db.acquire_advisory_lock(key, wait_seconds=5)
+            except Exception:
+                logger.exception("advisory lock acquisition raised for %s", deployment_id)
+                return {
+                    "deployment_id": deployment_id,
+                    "status": "REJECTED",
+                    "stage": "ACQUIRE",
+                    "reason_code": "engine_unavailable",
+                    "reason": "Could not acquire the MariaDB advisory lock (database error).",
+                }
+            if lock_result != 1:
+                reason = "Lock wait timeout (0)" if lock_result == 0 else "Database lock error (NULL)"
+                return {
+                    "deployment_id": deployment_id,
+                    "status": "REJECTED",
+                    "stage": "ACQUIRE",
+                    "reason": f"Could not acquire MariaDB GET_LOCK ({reason})",
+                }
+            held.append(key)
+
         # Everything below reads fresh: a read view opened before the locks could miss a row another session
         # committed while this one waited for them. A view that cannot be refreshed blocks.
         refresh = getattr(db, "begin_fresh_read_view", None)
@@ -383,8 +429,13 @@ def execute_single_field_deployment(
 
         return outcome
     finally:
-        _release_quietly(db, lock_key)
-        _release_quietly(db, idem_lock_key)
+        unusable = False
+        for key in reversed(held):
+            unusable = not _release_checked(db, key) or unusable
+        if unusable:
+            # A lock that may still be held keeps blocking others for as long as this connection lives: the
+            # session is declared unusable and discarded, which frees every lock it owns.
+            _discard_session(db)
 
 
 def _replay_or_conflict(existing: Dict[str, Any], payload_hash: str, idempotency_key: str) -> Optional[Dict[str, Any]]:

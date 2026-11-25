@@ -44,7 +44,9 @@ from change_engine.guarded_apply.schema_reconciler import (
     IdempotencyConflictError,
     InvalidDeploymentIdError,
     LockTimeoutError,
+    MAX_IDEMPOTENCY_KEY_LENGTH,
     caller_id_problem,
+    evidence_namespace_problem,
     RevisionHashError,  # defined in schema_reconciler (shared with property_setter_engine); re-exported here
     Rev23DeploymentAdapter,
     compute_canonical_payload_hash,
@@ -333,12 +335,14 @@ def propose_configuration_change(
             else "rev_default"
         )
     except RevisionHashError as exc:
+        logger.error("DocType revision hash unreadable for %s", doctype, exc_info=exc)
         return {
             "status": "REJECTED",
             "success": False,
             "stage": "INSPECT",
             "disposition": "REVISION_HASH_UNAVAILABLE",
-            "reason": f"Cannot read the DocType configuration revision: {exc}",
+            "reason_code": "revision_unavailable",
+            "reason": "Cannot read the DocType configuration revision.",
             "proposal": proposal_payload,
             "ddl_plan": None,
         }
@@ -474,8 +478,9 @@ _MAIN_ROWS_ONLY = "status NOT IN ('EVIDENCE_BASELINE', 'EVIDENCE_DDL_DISPATCH', 
 
 
 def _require_main_row_id(deployment_id: Any) -> None:
-    """Finalizers and lookups accept only caller-grade ids, never names inside the evidence namespace."""
-    problem = caller_id_problem(deployment_id)
+    """Finalizers and lookups work on any existing main row (older ids may be longer or looser than a new
+    deployment's), but never on a name inside the evidence namespace."""
+    problem = evidence_namespace_problem(deployment_id)
     if problem:
         raise InvalidDeploymentIdError(f"deployment id {problem}")
 
@@ -602,6 +607,7 @@ class FrappeDeploymentAdapter:
             self.in_memory = self._frappe is None
 
         self.apply_called: bool = False
+        self._session_unusable = False
         # ERP-027: applied state per deployment (an adapter may be reused for several).
         self._applied_deployments: Set[str] = set()
         # ERP-027: approved plan vs what Frappe actually executed (live mode only).
@@ -671,24 +677,41 @@ class FrappeDeploymentAdapter:
             pass
 
     def begin_fresh_read_view(self) -> None:
-        """End the current transaction so the next read opens a fresh view (CE-SEC-008).
+        """Start the locked reads on a fresh view WITHOUT committing anyone's work (CE-SEC-008).
 
         Called right after the advisory locks are granted: under REPEATABLE READ a view opened by an earlier
-        read would not show a row another session committed while this one waited for the lock. A commit
-        also publishes whatever the same request wrote earlier, as the apply path's own commits do. Raises
-        when neither commit nor rollback is available; the caller then blocks.
+        read would not show a row another session committed while this one waited for the lock. Ending the
+        transaction is only safe when it holds no writes, so uncommitted writes already in it (the caller's, not
+        ours) make this refuse (the deployment is blocked, the writes stay pending and untouched). With none,
+        a rollback ends the read-only transaction; it can never commit or discard anything.
         """
+        if self._session_unusable:
+            raise DurableEvidenceError("the database session was discarded")
         if self.in_memory:
             return
         db = self._frappe.db
-        if hasattr(db, "commit"):
-            db.commit()
-        elif hasattr(db, "rollback"):
+        if getattr(db, "transaction_writes", 0):
+            raise DurableEvidenceError("uncommitted writes are pending in this transaction; not touching them")
+        if hasattr(db, "rollback"):
             db.rollback()
+        elif hasattr(db, "commit"):
+            db.commit()  # nothing is pending (checked above), so this only ends the read view
         else:
             raise DurableEvidenceError("no way to open a fresh read view")
 
+    def mark_session_unusable(self) -> None:
+        """A lock may still be held on this connection (a release failed): refuse further deployments on it and
+        discard the connection, which frees every advisory lock it owns."""
+        self._session_unusable = True
+        if not self.in_memory:
+            try:
+                self._frappe.db.close()
+            except Exception:
+                logger.exception("could not close the unusable database session")
+
     def acquire_advisory_lock(self, lock_key: str, wait_seconds: int) -> Optional[int]:
+        if self._session_unusable:
+            return None
         if not self.in_memory:
             try:
                 res = self._frappe.db.sql("SELECT GET_LOCK(%s, %s)", (lock_key, wait_seconds))
@@ -707,14 +730,22 @@ class FrappeDeploymentAdapter:
         self.locks.add(lock_key)
         return 1
 
-    def release_advisory_lock(self, lock_key: str) -> None:
-        if not self.in_memory:
-            try:
-                self._frappe.db.sql("SELECT RELEASE_LOCK(%s)", (lock_key,))
-            except Exception:
-                pass
-        else:
+    def release_advisory_lock(self, lock_key: str) -> bool:
+        """Release a lock and verify it (``RELEASE_LOCK`` answers 1). Never raises, so a deployment that has
+        already run is never reported as failed because of its own cleanup; a release that is not verified
+        marks the session unusable and returns ``False``."""
+        if self.in_memory:
             self.locks.discard(lock_key)
+            return True
+        try:
+            res = self._frappe.db.sql("SELECT RELEASE_LOCK(%s)", (lock_key,))
+            if res and res[0] and res[0][0] == 1:
+                return True
+            logger.error("RELEASE_LOCK did not confirm the release of %s", lock_key)
+        except Exception:
+            logger.exception("RELEASE_LOCK failed for %s", lock_key)
+        self.mark_session_unusable()
+        return False
 
     def set_lock_wait_timeout(self, seconds: int) -> None:
         """Set the session ``lock_wait_timeout`` and read the effective value back (CE-SEC-008).
@@ -822,12 +853,7 @@ class FrappeDeploymentAdapter:
                         raise DurableEvidenceError("an idempotency row has no outcome and no hold status")
                     held.append(payload_hash)
                     continue
-                if not isinstance(outcome_json, str) or not outcome_json.strip():
-                    raise DurableEvidenceError("a stored outcome is empty")
-                outcome = json.loads(outcome_json)
-                if not isinstance(outcome, dict):
-                    raise DurableEvidenceError("a stored outcome is not an object")
-                completed.append((payload_hash, outcome))
+                completed.append((payload_hash, self._parse_outcome(outcome_json)))
             if len({h for h, _ in completed} | set(held)) > 1:
                 raise DurableEvidenceError("one idempotency key is bound to several payloads")
             if completed:
@@ -837,6 +863,20 @@ class FrappeDeploymentAdapter:
         if stored is not None and stored.get("outcome") is None:
             return {"payload_hash": stored.get("payload_hash"), "outcome": self._hold_outcome()}
         return stored
+
+    @staticmethod
+    def _parse_outcome(outcome_json: Any) -> Dict[str, Any]:
+        """A stored outcome must be a non-empty JSON object that says what it was (a ``status`` string)."""
+        if not isinstance(outcome_json, str) or not outcome_json.strip():
+            raise DurableEvidenceError("a stored outcome is empty")
+        try:
+            outcome = json.loads(outcome_json)
+        except ValueError as exc:
+            raise DurableEvidenceError("a stored outcome is not valid JSON") from exc
+        status = outcome.get("status") if isinstance(outcome, dict) else None
+        if not isinstance(status, str) or not status:
+            raise DurableEvidenceError("a stored outcome is not an object with a status")
+        return outcome
 
     @staticmethod
     def _hold_outcome() -> Dict[str, Any]:
@@ -1214,7 +1254,8 @@ class FrappeDeploymentAdapter:
     def _read_audit_row(self, deployment_id: str) -> Optional[Dict[str, Any]]:
         """The main intent row, or ``None`` only when the database answered with no row. Raises on error."""
         res = self._frappe.db.sql(
-            f"SELECT {', '.join(_AUDIT_ROW_COLUMNS)} FROM `{self.audit_table}` WHERE deployment_id = %s",
+            f"SELECT {', '.join(_AUDIT_ROW_COLUMNS)} FROM `{self.audit_table}` "
+            f"WHERE deployment_id = %s AND {_MAIN_ROWS_ONLY}",
             (deployment_id,),
         )
         if not res:
@@ -1335,9 +1376,11 @@ class FrappeDeploymentAdapter:
             raise RuntimeError("Fail-closed: Simulated audit prepare failure")
 
         dep_id = record["deployment_id"]
-        _require_main_row_id(dep_id)
-        if caller_id_problem(record.get("idempotency_key", f"idemp-{dep_id}")):
-            raise InvalidDeploymentIdError("idempotency key must not contain '#' or control characters")
+        # A NEW deployment gets the strict canonical grammar (existing rows are not re-validated).
+        if caller_id_problem(dep_id):
+            raise InvalidDeploymentIdError("the deployment id is not canonical")
+        if caller_id_problem(record.get("idempotency_key", f"idemp-{dep_id}"), MAX_IDEMPOTENCY_KEY_LENGTH):
+            raise InvalidDeploymentIdError("the idempotency key is not canonical")
         approved = list(record.get("ddl_plan_statements", []))
         binding = self._intent_binding(record)
         # Only physical DDL has a schema baseline and a dispatch journal. Property-setter, workflow and
@@ -1507,8 +1550,18 @@ class FrappeDeploymentAdapter:
             if original_sql is not None:
                 db.sql = _recording_sql
             try:
+                # Re-verify the timeout on this session BEFORE the metadata insert: a refusal later (at the first
+                # statement) would find the Custom Field row already written.
+                if self.lock_wait_timeout_seconds is not None:
+                    self._verify_session_lock_timeout(original_sql)
                 cf_doc = self._frappe.get_doc(cf_args)
                 cf_doc.insert(ignore_permissions=True)
+            except Exception:
+                if not dispatched:
+                    # No statement was sent, so nothing the engine wrote during this apply may stay: roll the
+                    # pending metadata back, or the finalization commit would persist an orphan Custom Field.
+                    self._rollback_durable()
+                raise
             finally:
                 if original_sql_ddl is not None:
                     db.sql_ddl = original_sql_ddl
@@ -1628,7 +1681,7 @@ class FrappeDeploymentAdapter:
     def get_deployment_record(self, deployment_id: str) -> Optional[Dict[str, Any]]:
         """The main deployment row, or ``None`` when it does not exist (also for any id inside the evidence
         namespace). A failed read raises ``DurableEvidenceError``: it is never reported as "not found"."""
-        if caller_id_problem(deployment_id):
+        if evidence_namespace_problem(deployment_id):
             return None
         if self.in_memory:
             return self.audit_journal.get(deployment_id)
@@ -1645,15 +1698,11 @@ class FrappeDeploymentAdapter:
         if not res:
             return None
         row = dict(res[0])
-        if row.get("outcome_json"):
-            try:
-                extra = json.loads(row["outcome_json"])
-            except ValueError as exc:
-                raise DurableEvidenceError("the stored deployment outcome is unreadable") from exc
-            if isinstance(extra, dict):
-                for k, v in extra.items():
-                    if k not in row or row[k] is None:
-                        row[k] = v
+        if row.get("outcome_json") is not None:  # an empty string is a damaged outcome, not "none"
+            extra = self._parse_outcome(row["outcome_json"])
+            for k, v in extra.items():
+                if k not in row or row[k] is None:
+                    row[k] = v
         return row
 
     def update_deployment_status(
@@ -2126,13 +2175,15 @@ def apply_configuration_change(
             else:
                 base_revision_hash = "rev_default"
         except RevisionHashError as exc:
+            logger.error("DocType revision hash unreadable for %s", deployment_id, exc_info=exc)
             return {
                 "deployment_id": deployment_id,
                 "status": "REJECTED",
                 "success": False,
                 "stage": "INSPECT",
                 "disposition": "REVISION_HASH_UNAVAILABLE",
-                "reason": f"Cannot read the DocType configuration revision: {exc}",
+                "reason_code": "revision_unavailable",
+                "reason": "Cannot read the DocType configuration revision.",
                 "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
             }
 
@@ -2651,6 +2702,22 @@ def revert_configuration_change(
 
     start_time = time.perf_counter()
     try:
+        # A deployment that is still PREPARED or RECOVERY_REQUIRED is a hold: an ordinary revert must not clear
+        # it (the locked recovery path is CE-SEC-009).
+        getter = getattr(db, "get_deployment_record", None)
+        record = getter(deployment_id) if callable(getter) else None
+        if isinstance(record, dict) and record.get("status") in ("PREPARED", "RECOVERY_REQUIRED"):
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "success": False,
+                "stage": "INSPECT",
+                "disposition": "DEPLOYMENT_ON_HOLD",
+                "reason_code": "recovery_hold",
+                "reason": "The deployment is held for recovery; it cannot be reverted until it is recovered.",
+                "doctype": record.get("doctype"),
+                "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+            }
         return execute_rollback(
             deployment_id=deployment_id,
             caller_roles=user_roles,

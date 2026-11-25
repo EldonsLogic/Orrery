@@ -432,10 +432,16 @@ class SimulatedFrappeDB:
             site.locks.add(lock_key)
             return [(1,)]
 
+        if "IS_USED_LOCK(" in q_upper:
+            return [(1 if str(p[0]) in site.locks else 0,)]
+
         if "RELEASE_LOCK(" in q_upper:
             lock_key = str(p[0])
             site.locks.discard(lock_key)
             return [(1,)]
+
+        if q_upper.startswith("SELECT @@SESSION.LOCK_WAIT_TIMEOUT"):
+            return [(site.lock_wait_timeout,)]
 
         if q_upper.startswith("SET SESSION LOCK_WAIT_TIMEOUT"):
             m = re.search(r"=\s*(\d+)", q)
@@ -558,9 +564,9 @@ class SimulatedFrappeDB:
                     cnt = sum(1 for r in tbl.values() if r.get("status") == "RECOVERY_REQUIRED")
                 return [(cnt,)]
             if "SELECT PAYLOAD_HASH, OUTCOME_JSON" in q_upper:
-                site_id, idemp = p
+                *site_ids, idemp = p  # ``site_id IN (...)``: the identity and its read-only legacy alias
                 for r in tbl.values():
-                    if r.get("site_id") == site_id and r.get("idempotency_key") == idemp and r.get("outcome_json"):
+                    if r.get("site_id") in site_ids and r.get("idempotency_key") == idemp and r.get("outcome_json"):
                         return [(r["payload_hash"], r["outcome_json"])]
                 return []
             if "WHERE DEPLOYMENT_ID = %S" in q_upper:
@@ -620,6 +626,9 @@ class SimulatedFrappeDB:
             return ()
 
         return ()
+
+    # The simulator has no real transaction: nothing is ever pending (Frappe's own counter of uncommitted writes).
+    transaction_writes = 0
 
     def commit(self) -> None:
         return None

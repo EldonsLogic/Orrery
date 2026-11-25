@@ -109,6 +109,43 @@ None yet; claim PR must merge first.
     - Q-601: marked answered on #300 (f6b22274), with the negative-amount question kept open. Main merged in; 205 country-pack tests pass. Waiting for Eldon's re-review and a Tier 3 say-so.
     - CMP-010 code location: `zatca_sa/vat_return.py`.
 
+- After #329 (partner: "proceed"):
+  - Merged:
+    - #329 (Tier 1 log).
+    - #310 BPL-041 (Tier 2, Eldon approved at c095a415).
+    - #312 BPL-043 (Tier 2, Eldon approved at 29faa4d3). It was retargeted from the #310 branch to main through the REST API, because `gh pr edit` fails on the deprecated Projects-classic field.
+  - #328 GOV-071: Eldon's blocker fixed at 5c051142.
+    - The tax invoice's font stack is now Readex Pro for body text and Cairo for titles and number columns, with `tabular-nums`. Alexandria and Arial are removed.
+    - Added a fonts-and-footer test. GOV-071 marked done.
+    - ERP-035 (todo) carries moving the invoice's 36 hard-coded colours to tokens and adding it to the literal guard.
+    - Waiting for Eldon's re-review.
+  - #322 CE-SEC-008: Eldon's security review (at 56b00a23) sent to the child as round 5.
+    - F1 and F5 are already fixed.
+    - F2, F3, F4 and F6 to F10 are in progress.
+    - `frappe_backend.py` is now allowed, since #310 and #312 have merged.
+    - real-bench-tests passes on the PR.
+  - #319 CMP-010: main merged (07a191f5; open-questions kept both the Q-609 to Q-614 and the Q-615 to Q-626 blocks). Eldon's narrow re-review (N1 to N4, M3, M5, Lows) sent to the author as round 6.
+  - #300 CMP-036: Eldon approved at f6b22274 after a line-by-line read. Waiting for the partner's Tier 3 say-so.
+
+- After #330:
+  - Reviewer switch (partner instruction): GPT models hit their usage limits, so cross-model reviews now use Antigravity (Gemini 4 Argon, high) and Claude.
+  - CMP-010 (#319):
+    - Round 6 (8c341e0b) answers Eldon's N1 to N4, M3, M5 and the Lows.
+    - Q-628 added. Q-627 was skipped because Eldon's #326 uses it.
+    - The PR body counts are corrected.
+    - Waiting for Eldon.
+  - CE-SEC-008:
+    - Eldon approved #322 at 750dc543. The F2 to F10 work (049c349c) had landed after that, so it was reverted on #322 (b6bb4840) to keep the approved content, and moved to `ce-sec-008-part-2`.
+    - On part 2, the child fixed GPT's two Medium findings. Gemini 4 Argon then gave "approve with nits", and the coordinator fixed its two Lows (CE-SEC-011 text; N13 and N20 mutant tests).
+    - PR #331 is open.
+  - Partner: "proceed and merge":
+    - **#322 merged** (CE-SEC-008 part 1).
+    - **#300 merged** (CMP-036).
+  - #331 retargeted to main:
+    - When main was merged in, part 2's versions of the files #322 reverted were kept (a revert of the revert), after checking that main touched them only through the revert.
+    - A new part-2 log was added for the task trail.
+    - Full suite: 1775 passed, 0 failed.
+
 ## Tokens or cost
 Unknown.
 

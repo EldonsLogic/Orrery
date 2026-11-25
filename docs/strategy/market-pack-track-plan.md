@@ -21,7 +21,7 @@ Nothing is promised before that. A pack never waits for another market's pack, a
 | UAE | CMP-001 (eldon) | CMP-029 (partner) | UAE e-invoicing is a separate rule set; do not reuse Saudi rules |
 | Egypt | CMP-027 (eldon) | CMP-028 (partner) | All rows start UNVERIFIED; researched before built |
 
-Capacity rule: at most two packs are in active build at the same time (one per founder lane's builder). A third pack starts only when one of the two reaches its release checklist. Research is separate: it may run for all four at once, because it produces documents, not code. Priority when more than two are ready: Qatar first if its entry conditions are met, otherwise the pack whose research is verified first.
+Capacity rule: at most two packs are in active build at the same time (the partner owns every pack build row, so this limits the partner's parallel builds; research rows sit with Eldon). A third pack starts only when one of the two reaches its release checklist. Research is separate: it may run for all four at once, because it produces documents, not code. Priority when more than two are ready: readiness order (ADR-0024, ADR-0026), so Qatar first only if its entry conditions are met, otherwise the pack whose research is verified first.
 
 ## Country release checklist
 Every pack follows the template in CMP-032 (legal and accounting scope, e-invoicing, data processing, evidence, accountant review, operational controls). Until CMP-032 exists, a pack is not released. Common minimums, all market-independent:

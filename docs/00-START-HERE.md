@@ -3,7 +3,7 @@
 Status: accepted
 Owner: eldon
 
-The platform (working name Orrery, not trademark-cleared) is an AI-native business platform for owner-led companies in Saudi Arabia, the UAE, Egypt and Qatar. One chat, in Arabic or English, interviews the owner, drafts a Blueprint, assembles an ERP from vetted components, simulates a month, then runs the business and changes it through the same chat. We are a product company, not a software house. Two founders work here in parallel with different AI tools.
+Seshna ([ADR-0066](decisions/ADR-0066-final-name-seshna-and-nuqta-s-mark.md); trademark clearance still open under LEG-008) is an AI-native business platform for owner-led companies in Saudi Arabia, the UAE, Egypt and Qatar. One chat, in Arabic or English, interviews the owner, drafts a Blueprint, assembles an ERP from vetted components, simulates a month, then runs the business and changes it through the same chat. We are a product company, not a software house. Two founders work here in parallel with different AI tools.
 
 ## First 10 minutes (any agent, any tool)
 0. New founder or new machine? Do the one-time setup and read the lanes in [ONBOARDING.md](ONBOARDING.md).
@@ -22,7 +22,7 @@ The platform (working name Orrery, not trademark-cleared) is an AI-native busine
 | Specs and architecture | Five part specs; overview, tenancy and identity, data, AI layer, engine adapter, change engine, component library, theming, country packs, calendars | `docs/specs/`, `docs/architecture/` |
 | Product, security, compliance, legal | Written as plans and rules (website, post-sign-in screens, journey, threat model, hosting rules, country matrix incl. Egypt, legal checklist) | `docs/product/`, `docs/security/`, `docs/compliance/`, `docs/legal/` |
 | Research and strategy | Evidence with caveats; strategy figures are hypotheses | `docs/research/`, `docs/strategy/` |
-| Design system | Brand guidelines v1 (Quadrant), PROPOSED v1.1 additions, tenant theming derivation with tests, logo set with outlined wordmark; logo is a placeholder until the name is cleared | `docs/brand/` |
+| Design system | Brand guidelines v1 (Quadrant), PROPOSED v1.1 additions, tenant theming derivation with tests, logo set with outlined wordmark. These assets (Quadrant mark, Alexandria headings) are legacy, to be replaced by the Nuqta S kit with Cairo headings under BRD-014 and ADR-0066 | `docs/brand/` |
 | Change engine module | Guarded apply layer (guardrails, DDL plan gate, audited deploy, rollback, workflow and report validators, runtime policies); 74 standalone tests pass; roles from session only; policy persistence and real-bench CI still open | `apps/engine/change_engine/` |
 | Everything else | Not built: engine bench and tenant creation, Blueprint validator and compiler, ZATCA, Discovery, Operate and Platform services, the web app and marketing site, connectors, components, evals, infrastructure | `services/`, `web/`, `connectors/`, `components/`, `evals/`, `infra/` (placeholders) |
 

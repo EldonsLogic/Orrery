@@ -6,7 +6,7 @@ Canonical for all tools (Claude, Codex, Antigravity, others). Two founders work 
 An AI-native business platform for owner-led companies (10-100 staff) in the Middle East: Saudi Arabia, the UAE, Egypt and Qatar (four phase-1 operating markets, no fixed launch order, ADR-0024).
 One chat, Arabic or English: interview the owner, draft a Blueprint, assemble an ERP from vetted components, simulate a month, go live, then run it.
 Five parts: Discovery, Blueprint and Library (the spine), ERP Runtime (Frappe + ERPNext), Operate, Platform. Four contracts in `/contracts`.
-We are a product company, not a software house. "Orrery" is a working name, not cleared: say "the platform" in new text.
+We are a product company, not a software house. The product is named **Seshna** (seshna.com), always in Latin letters, never in Arabic script ([ADR-0066](docs/decisions/ADR-0066-final-name-seshna-and-nuqta-s-mark.md)); trademark clearance (LEG-008) is still open. The repo stays `EldonsLogic/Orrery` until GOV-002 renames it.
 
 ## Principles
 1. Build on open source; record every licence. 2. Configuration over code; never per-client code.
@@ -26,9 +26,10 @@ See `Current gate:` in [docs/GATES.md](docs/GATES.md) and the status printed by 
 2. `git pull` (or confirm you are on the latest main). If the person you work with has not done the one-time setup, walk them through [docs/ONBOARDING.md](docs/ONBOARDING.md) first; it also defines the two founders' lanes (stay in your lane's paths).
 3. Read [docs/RULES.md](docs/RULES.md) (every standing founder rule), the output of `python3 scripts/build_status.py` and the latest 3 files in `docs/log/` (or run `python3 scripts/session_start.py`).
 4. Pick a `todo` row in [docs/PLAN.md](docs/PLAN.md) whose Depends are `done`; set it `doing` with an owner.
+5. Create your session log now (`scripts/new_log.py`) and keep it live: log every delegated task and its result as it happens and push after each task, so another account or provider can resume (RULES 51).
 
 ## Session end checklist
-1. `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>`; fill it in.
+1. Finish the live session log created at the start (step 5 above; create it now with `python3 scripts/new_log.py --author <eldon|partner> --tool <tool> --slug <topic> --ids <PLAN-IDs>` only if none exists yet).
 2. Update statuses in `docs/PLAN.md`; add ADR or open-question entries if a decision or doubt arose.
 3. Run `python3 scripts/finish_session.py` (runs every check and the task trail, verifies the branch is pushed and a PR is open). Do not stop until it prints FINISHED. Every commit message names a plan ID; never bypass hooks.
 4. If your work closes a phase or a gate, run `python3 scripts/phase_exit_check.py --phase <name>` and record the exit in a log (see [docs/GATES.md](docs/GATES.md)). Nothing from the next phase counts as passed before that run is recorded.

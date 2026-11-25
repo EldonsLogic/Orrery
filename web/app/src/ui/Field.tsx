@@ -47,7 +47,7 @@ export function Field({
       ) : null}
       {children({ id, 'aria-describedby': describedBy, 'aria-invalid': error ? true : undefined })}
       {error ? (
-        <div id={errorId} className={styles.error}>
+        <div id={errorId} role="alert" className={styles.error}>
           {error}
         </div>
       ) : null}

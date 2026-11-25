@@ -12,6 +12,7 @@ import { fixturePort, type FactoryReviewPort, type ListResult } from '../../fact
 import { plainText } from '../../factory/text';
 import { REQUEST_STATUSES, type RequestStatus } from '../../factory/types';
 import { RequestDetail } from './RequestDetail';
+import { LoadingMark } from '../marks/LoadingMark';
 import styles from './Factory.module.css';
 
 /**
@@ -56,7 +57,7 @@ export function FactoryScreen({ port = fixturePort }: { port?: FactoryReviewPort
   if (gate !== 'ok') return <AuditGate state={gate} />;
 
   const body = () => {
-    if (load === 'loading') return <p role="status">{t('loading')}</p>;
+    if (load === 'loading') return <LoadingMark label={t('loading')} />;
     if (!load.ok)
       return (
         <Alert tone="danger" title={t('error.title')}>

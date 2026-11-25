@@ -56,7 +56,7 @@ def content_digest(content) -> str:
     if type(content) not in (dict, list, tuple):
         raise ReviewError("RQ-001", "content_type")
     body = json.dumps(_walk(content, 0, [MAX_NODES, MAX_TOTAL]), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256(b"orrery.review.content.v1\n" + body.encode("utf-8")).hexdigest()
+    return hashlib.sha256(b"seshna.review.content.v1\n" + body.encode("utf-8")).hexdigest()
 
 
 def ident(v, what="id") -> str:

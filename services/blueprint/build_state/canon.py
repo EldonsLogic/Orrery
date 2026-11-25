@@ -61,7 +61,7 @@ def content_digest(content) -> str:
     """sha256 over a domain tag and the canonical JSON of a Blueprint (a content digest, not a seal)."""
     if type(content) is not dict:
         raise BuildStateError("BS-001", "content")
-    return hashlib.sha256(b"orrery.buildstate.content.v1\n" + canonical(content).encode("utf-8")).hexdigest()
+    return hashlib.sha256(b"seshna.buildstate.content.v1\n" + canonical(content).encode("utf-8")).hexdigest()
 
 
 def ident(v, what="id") -> str:

@@ -35,7 +35,7 @@ GRID = [
     ("#FF0000", "pure red"), ("#00FF00", "pure green"), ("#0000FF", "pure blue"), ("#FFFF00", "pure yellow"), ("#00FFFF", "cyan"), ("#FF00FF", "magenta"),
     ("#FFD400", "yellow"), ("#F59E0B", "amber"), ("#7DB6FF", "sky"), ("#14B8A6", "teal-500"), ("#1A1040", "very dark violet"),
     ("#767676", "AA boundary grey"), ("#E8E8FF", "very low contrast lavender"), ("#FFF5F5", "very low contrast blush"),
-    ("#2443D0", "Orrery Cobalt"), ("#C21F3A", "Orrery Crimson"), ("#E0552C", "Orrery Coral"), ("#13795B", "Orrery Jade"), ("#9E5600", "Orrery Ochre"),
+    ("#2443D0", "Seshna Cobalt"), ("#C21F3A", "Seshna Crimson"), ("#E0552C", "Seshna Coral"), ("#13795B", "Seshna Jade"), ("#9E5600", "Seshna Ochre"),
     # hue extremes at medium lightness (every 30 degrees)
     *[(T.oklch_to_hex(0.55, 0.15, h), f"hue {h}") for h in range(0, 360, 30)],
     *[(T.oklch_to_hex(0.80, 0.12, h), f"light hue {h}") for h in range(0, 360, 60)],
@@ -280,7 +280,7 @@ def test_generated_tokens_default_theme_has_no_pair_below_aa():
             assert ref_ratio(p["fg"], p["bg"]) + 1e-9 >= p["min"], (m, p["id"], p["fg"], p["bg"], round(ref_ratio(p["fg"], p["bg"]), 3))
 
 def test_generated_tokens_match_the_derivation_of_cobalt():
-    # The default theme is the identity tenant: deriving Orrery Cobalt must not move any light colour the CSS ships.
+    # The default theme is the identity tenant: deriving Seshna Cobalt must not move any light colour the CSS ships.
     tok = _read_tokens(); r = der("#2443D0")
     assert r["light"]["vars"]["--color-primary"].upper() == tok["light"]["--color-primary"].upper()
     for k in ("--color-primary-label", "--color-surface-raised", "--color-text-muted"):

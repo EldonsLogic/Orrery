@@ -13,7 +13,7 @@ import { fixtureScript } from './fixture';
 import { parseChatEvent } from './events';
 import { chatReducer, initialChatState } from './reducer';
 import { suggestionKeys } from './suggestions';
-import { composerKeyAction, plainText } from './text';
+import { composerKeyAction, plainText, textLang } from './text';
 import type { ChatEvent, ChatState } from './types';
 
 const render = (locale: 'en' | 'ar', node: ReactElement) =>
@@ -46,14 +46,29 @@ describe('screen in both languages', () => {
     expect(suggestionKeys(['nobody'])[0]).toBe('generic.what');
     expect(suggestionKeys(['accountant', 'owner'])[0]).toBe('accountant.overdue');
   });
-  it('disables the composer and offers stop while a run is active', () => {
+  it('keeps the composer focusable but read-only and offers stop while a run is active', () => {
     const idle = render('en', <Composer mode="ask" running={false} onMode={() => {}} onSend={() => true} onCancel={() => {}} />);
     const busy = render('en', <Composer mode="ask" running onMode={() => {}} onSend={() => true} onCancel={() => {}} />);
-    expect(idle).not.toMatch(/<textarea[^>]*disabled/);
-    expect(busy).toMatch(/<textarea[^>]*disabled/);
+    expect(idle).not.toMatch(/<textarea[^>]*(?:disabled|readOnly|aria-disabled)/);
+    expect(busy).not.toMatch(/<textarea[^>]*\sdisabled/);
+    expect(busy).toMatch(/<textarea[^>]*readOnly/);
+    expect(busy).toMatch(/<textarea[^>]*aria-disabled="true"/);
     expect(busy).toContain('>Stop<');
     expect(busy).not.toContain('>Send<');
     expect(idle).toContain('maxLength="4000"');
+  });
+});
+
+describe('language of text (A-11)', () => {
+  it('detects by script and leaves mixed text to inherit', () => {
+    expect(textLang('مرحبا')).toBe('ar');
+    expect(textLang('hello 123')).toBe('en');
+    expect(textLang('فاتورة INV-001')).toBeUndefined();
+    expect(textLang('123')).toBeUndefined();
+  });
+  it('sets lang on single-language bubbles', () => {
+    const out = render('en', <MessageList messages={[{ id: 'a', role: 'assistant', text: 'مرحبا', streaming: false }]} />);
+    expect(out).toContain('<bdi lang="ar">');
   });
 });
 
@@ -65,7 +80,7 @@ describe('text safety', () => {
     expect(out).toContain('&lt;img');
     expect(out).toContain('**b**');
     expect(out).toContain('dir="auto"');
-    expect(out).toContain('<bdi>');
+    expect(out).toContain('<bdi lang="en">');
   });
   it('mixes Arabic and English in one message', () => {
     const out = render('ar', <MessageList messages={[{ id: 'a', role: 'assistant', text: 'Invoice INV-001 مستحقة', streaming: false }]} />);
@@ -153,6 +168,8 @@ describe('flows with the fake port', () => {
   it('abstain shows a clarify prompt and errors map to domain messages', () => {
     const s = fold([{ type: 'abstain', clarifyKey: 'whichPeriod' }]);
     expect(render('en', <ClarifyPrompt clarifyKey={s.clarifyKey!} />)).toContain(messages.en.chat.clarify.whichPeriod);
+    // QA-014 review: it sits inside the persistent live region, so it must not be a second live region.
+    expect(render('en', <ClarifyPrompt clarifyKey="generic" />)).not.toContain('role="status"');
     expect(render('ar', <ClarifyPrompt clarifyKey="made-up" />)).toContain(messages.ar.chat.clarify.generic);
     const e = fold([{ type: 'run_error', code: 'forbidden' }]);
     expect(e.run).toBe('idle');

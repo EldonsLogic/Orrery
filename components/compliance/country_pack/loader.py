@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+from .certification import certification_refusals
+
 SCHEMA_PATH = Path(__file__).resolve().parent / "pack.schema.json"
 COUNTRY_CODE_RE = re.compile(r"^[A-Za-z]{2}$")
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$")
@@ -23,8 +25,8 @@ ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Go-live gate (CMP-034): mirrors ADR-0034's production boundary for components.
 ENVIRONMENTS = ("sandbox", "test", "production")
 PRODUCTION_STATUSES = frozenset({"certified", "regulated"})
-# `secondary` counts as UNVERIFIED (country-matrix.md) until Q-560 is answered; allowlist, not denylist.
-PRODUCTION_EVIDENCE = frozenset({"verified_official"})
+# Q-560: secondary evidence requires the same market-accountant sign-off as official evidence.
+PRODUCTION_EVIDENCE = frozenset({"verified_official", "secondary"})
 
 
 class CountryPackError(ValueError):
@@ -225,15 +227,15 @@ def _check_environment(environment: Any) -> None:
         raise CountryPackError(f"Unknown environment {environment!r} (allowed: {', '.join(ENVIRONMENTS)})")
 
 
-def _check_go_live(pack: dict[str, Any], label: str, environment: str) -> None:
-    """Refuse, in production, a pack below `certified`, without official evidence, or marked testOnly (fail closed)."""
+def _check_go_live(pack: dict[str, Any], directory: Path, label: str, environment: str) -> None:
+    """Refuse production packs lacking certification records, accepted evidence or a matching manifest."""
     if environment != "production":
         return
-    reasons = []
+    reasons = certification_refusals(pack, directory)
     if pack["status"] not in PRODUCTION_STATUSES:
         reasons.append(f"status '{pack['status']}' is below certified")
     if pack["evidenceStatus"] not in PRODUCTION_EVIDENCE:
-        reasons.append(f"evidenceStatus '{pack['evidenceStatus']}' is not verified_official")
+        reasons.append(f"evidenceStatus '{pack['evidenceStatus']}' is not verified_official or secondary")
     if pack.get("testOnly") is True:
         reasons.append("pack is marked testOnly=true (allow_test_packs never applies in production)")
     if reasons:
@@ -259,9 +261,11 @@ def load_country_pack(
     """Load and validate a country pack from `<packs_dir>/<country>/<version>/pack.json`.
 
     Packs marked `testOnly: true` are rejected unless `allow_test_packs=True`. In `environment="production"`
-    (the default) a pack whose `status` is below `certified`, whose `evidenceStatus` is not `verified_official`,
-    or that is marked `testOnly` (whatever `allow_test_packs` says) is rejected; `"sandbox"` and `"test"` accept
-    them. Any other environment, including a `str` subclass, is rejected.
+    (the default) a pack must be certified/regulated, have official or secondary evidence, a matching
+    companion manifest naming its reviewer, and a market-accountant sign-off plus founder approval in
+    evidence.json. A `testOnly` pack is always refused in production. `"sandbox"` and `"test"` skip these
+    certification checks and are for synthetic data only (caller's responsibility, ADR-0059).
+    Any other environment, including a `str` subclass, is rejected.
     """
     _check_environment(environment)
     if not isinstance(country_code, str) or not COUNTRY_CODE_RE.match(country_code.strip()):
@@ -311,7 +315,7 @@ def load_country_pack(
         raise PackValidationError(f"Pack countryCode '{pack['countryCode']}' does not match '{code_upper}'")
     if pack["version"] != chosen_version:
         raise PackValidationError(f"Pack version '{pack['version']}' does not match directory '{chosen_version}'")
-    _check_go_live(pack, f"{code_upper}@{chosen_version}", environment)
+    _check_go_live(pack, pack_file.parent, f"{code_upper}@{chosen_version}", environment)
     return copy.deepcopy(pack)
 
 

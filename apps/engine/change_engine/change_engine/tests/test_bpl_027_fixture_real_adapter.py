@@ -102,6 +102,20 @@ def bench_skip_reason() -> str | None:
     return None
 
 
+REQUIRE_LIVE_ENV = "REQUIRE_BPL027_LIVE"
+
+
+def live_skip_reason(env) -> str | None:
+    """Why the bench class skips, or None when it must run. BPL-041: REQUIRE_BPL027_LIVE=1 (set by real-bench CI) never
+    skips; the class then fails in ``live_config_problem`` when no bench is usable (same rule as ERP-031)."""
+    return None if env.get(REQUIRE_LIVE_ENV) == "1" else bench_skip_reason()
+
+
+def live_config_problem(env) -> str | None:
+    """The fail-closed rule: REQUIRE_BPL027_LIVE=1 without a usable bench is an error, never a skip."""
+    return bench_skip_reason() if env.get(REQUIRE_LIVE_ENV) == "1" else None
+
+
 def load_fixture() -> dict:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))
 
@@ -737,7 +751,7 @@ class TestBpl027Offline(unittest.TestCase):
         self.assertEqual(calls[-1], {"warehouse_name": "wh_riyadh", "company": "Synthetic Co"})
 
 
-@unittest.skipIf(bench_skip_reason() is not None, bench_skip_reason() or "")
+@unittest.skipIf(live_skip_reason(os.environ) is not None, live_skip_reason(os.environ) or "")
 class TestBpl027FixtureRealAdapter(unittest.TestCase):
     """End to end on a real bench site. Tests run in name order and share one site."""
 
@@ -745,6 +759,9 @@ class TestBpl027FixtureRealAdapter(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        problem = live_config_problem(os.environ)
+        if problem:  # REQUIRE_BPL027_LIVE=1 without a usable bench: a failure, never a skip (BPL-041)
+            raise AssertionError(f"{REQUIRE_LIVE_ENV}=1 but the bench is not usable: {problem}")
         cls.tmp = tempfile.TemporaryDirectory()
         cls.db_path = os.path.join(cls.tmp.name, "adapter.sqlite")
         cls.bp_raw = load_fixture()

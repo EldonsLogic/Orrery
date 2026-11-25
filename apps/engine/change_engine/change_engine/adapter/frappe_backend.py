@@ -804,6 +804,57 @@ class FrappeRuntimeBackend:
                     company_name=explicit_company if isinstance(explicit_company, str) else None,
                     require_company=True,
                 )
+            self._check_entity_refusals(f, steps)
+
+    def _check_entity_refusals(self, f: Any, steps: list[dict[str, Any]]) -> None:
+        """BPL-041: the BPL-031 refusals of entity.add, field.add and relation.add, found before the first step runs.
+
+        Same checks, error type and reason codes as the execute path (``protected_subject``, ``subject_missing``,
+        ``unique_or_index``), read-only, against the engine as it is now. The execute-time checks stay as a second line."""
+        for step in steps:
+            kind = step.get("kind")
+            if kind not in ("entity.add", "field.add", "relation.add"):
+                continue
+            subject = step.get("subject") or {}
+            params = step.get("params") or {}
+            segs = [s.replace("~1", "/").replace("~0", "~") for s in str(step.get("pointer") or "").split("/")[1:]]
+            if kind == "entity.add":
+                entity_id = str(subject.get("id") or (segs[1] if len(segs) > 1 else "entity"))
+                self._refuse_protected_entity(entity_id)
+                self._check_entity_add(f, entity_id, entity_to_doctype(entity_id), params.get("definition") or {})
+                continue
+            parents = subject.get("parents") or []
+            entity_id = str(parents[0]["id"]) if parents else (segs[1] if len(segs) > 1 else "entity")
+            self._refuse_protected_entity(entity_id)
+            doctype = entity_to_doctype(entity_id)
+            defn = params.get("definition") or {"id": subject.get("id") or "field", "type": "string"}
+            fieldname = _sanitize_custom_fieldname(str(defn.get("id") or subject.get("id") or ("rel" if kind == "relation.add" else "field")))
+            if self._doctype_exists(f, doctype):
+                held = f.get_meta(doctype).get_field(fieldname)
+                if held is not None and self._lacks_constraint(held, defn.get("unique"), defn.get("indexed")):
+                    raise self._refuse("unique_or_index")
+
+    def _check_entity_add(self, f: Any, entity_id: str, doctype: str, defn: dict[str, Any]) -> None:
+        """The refusals `_add_entity` raises, without its writes."""
+        exists = self._doctype_exists(f, doctype)
+        if not is_contract_mapped_entity(entity_id):
+            if exists and not self._adapter_owns_doctype(f, doctype):
+                raise self._refuse("protected_subject")
+            return
+        if not exists:
+            raise self._refuse("subject_missing")
+        fields = [fld for fld in defn.get("fields") or [] if isinstance(fld, dict)]
+        if any(fld.get("type", "string") not in BLUEPRINT_TO_FRAPPE_FIELDTYPE for fld in fields):
+            raise self._refuse("unsupported_value_type")
+        meta = f.get_meta(doctype)
+        for fld in fields:
+            holders = [x for x in (meta.get_field(_sanitize_custom_fieldname(str(fld.get("id") or "field"))),
+                                   meta.get_field(str(fld.get("id")))) if x is not None]
+            if holders:
+                if any(self._lacks_constraint(x, fld.get("unique"), fld.get("indexed")) for x in holders):
+                    raise self._refuse("unique_or_index")
+            elif fld.get("unique") or fld.get("indexed"):
+                raise self._refuse("unique_or_index")
 
     def _find_warehouse(
         self,

@@ -1044,7 +1044,7 @@ class TestLayoutReadsTokenSource(unittest.TestCase):
     def test_no_colour_or_font_literals_outside_the_token_loader(self):
         modules = ("document_layout.py", "branded_documents.py", "brand_tokens.py",
                    "brand_assets.py", "document_labels.py", "bilingual_tax_invoice.py")
-        font_names = ("Readex", "Alexandria", "DejaVu", "Noto", "Arial", "Helvetica", "Tahoma")
+        font_names = ("Readex", "Cairo", "Alexandria", "DejaVu", "Noto", "Arial", "Helvetica", "Tahoma")
         for name in modules:
             with self.subTest(name):
                 src = (_PRINT_FORMATS / name).read_text(encoding="utf-8")

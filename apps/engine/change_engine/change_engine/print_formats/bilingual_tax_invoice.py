@@ -212,11 +212,17 @@ def resolve_invoice_branding(
     else:
         raise TypeError("branding must be an InvoiceBranding, mapping, or None")
 
-    primary = (raw_primary or document_tokens().primary).strip()
-    ratio = contrast_ratio_on_white(primary)
+    tokens = document_tokens()
+    primary = (raw_primary or tokens.primary).strip()
+    contrast_ratio_on_white(primary)  # validates the '#RRGGBB' shape with the existing message
+    # The primary is drawn on the page surface and on the panel background (labels, table
+    # headers, totals row), so it must reach WCAG AA on both, not only on white.
+    from change_engine.print_formats.brand_tokens import contrast_ratio
+
+    ratio = min(contrast_ratio(primary, tokens.surface), contrast_ratio(primary, tokens.background))
     if ratio < 4.5:
         raise ValueError(
-            f"Branding primary color '{primary}' fails WCAG AA contrast on white "
+            f"Branding primary color '{primary}' fails WCAG AA contrast on the invoice surfaces "
             f"({ratio:.2f}:1 < 4.50:1)"
         )
 

@@ -17,6 +17,7 @@ from change_engine.print_formats import (
     DEFAULT_BRANDING_PRIMARY,
     InvoiceBranding,
     build_qr_matrix,
+    contrast_ratio,
     contrast_ratio_on_white,
     install_bilingual_tax_invoice_print_format,
     render_frappe_sales_invoice_html,
@@ -295,8 +296,10 @@ class TestSeshnaTypographyAndName(unittest.TestCase):
                 self.assertIn("color: var(--doc-text);", body)
                 opacity = float(re.search(r"opacity:\s*([0-9.]+);", body).group(1))
                 self.assertTrue(0 < opacity < 1, opacity)
-                blended = "#" + "".join(f"{round(255 - opacity * (255 - c)):02x}" for c in text)
-                self.assertGreaterEqual(contrast_ratio_on_white(blended), 4.5, (selector, blended))
+                for bg_hex in (tokens.surface, tokens.background):  # cells sit on both
+                    bg = [int(bg_hex[i:i + 2], 16) for i in (1, 3, 5)]
+                    blended = "#" + "".join(f"{round(b - opacity * (b - c)):02x}" for c, b in zip(text, bg))
+                    self.assertGreaterEqual(contrast_ratio(blended, bg_hex), 4.5, (selector, blended, bg_hex))
 
     def test_borders_use_a_hairline_on_the_token_not_a_literal(self):
         import re
@@ -336,6 +339,12 @@ class TestSeshnaTypographyAndName(unittest.TestCase):
                         render_tax_invoice_html(_sample_zatca_standard(), mode="zatca_sa")
                     with self.assertRaises(dt.DocumentTokenError):
                         resolve_invoice_branding(None)
+                    import change_engine.print_formats as pf
+                    from change_engine.print_formats import bilingual_tax_invoice as bti
+
+                    for mod in (pf, bti):  # the lazy default primary fails closed too
+                        with self.assertRaises(dt.DocumentTokenError):
+                            getattr(mod, "DEFAULT_BRANDING_PRIMARY")
             finally:
                 dt.document_tokens.cache_clear()
 
@@ -623,3 +632,15 @@ class TestFrappeSalesInvoiceIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBrandPrimaryContrastOnEverySurface(unittest.TestCase):
+    """ERP-035 review: the brand primary is drawn on the panel background too, not only on white."""
+
+    def test_a_primary_that_passes_on_white_but_fails_on_the_panel_is_refused(self):
+        self.assertGreaterEqual(contrast_ratio_on_white("#757575"), 4.5)  # passes on white alone
+        with self.assertRaisesRegex(ValueError, "WCAG AA"):
+            resolve_invoice_branding({"primary_color": "#757575"})
+
+    def test_the_default_primary_passes_on_every_surface(self):
+        resolve_invoice_branding(None)

@@ -29,7 +29,16 @@ All paths are under `apps/engine/change_engine/change_engine/`.
 - UNVERIFIED: opacity, and whether the 0.5pt hairline is rendered as 1px, in the engine's PDF renderer.
 
 ## Decisions
-- The brand set has no `muted` or `border` colour. Until it does, muted text uses opacity on the text token and borders use a text-coloured hairline, with no new token invented. Whether to add proper `muted` and `border` tokens goes to Eldon as a question (brand lane).
+- The brand set has no `muted` or `border` colour. Until it does, muted text uses opacity on the text token and borders use a text-coloured hairline, with no new token invented. Whether to add proper `muted` and `border` tokens is Q-643 for Eldon (brand lane).
+
+## Gemini 4 Argon review (at 5512122d): approve with nits; 3 Lows fixed by the coordinator
+- `resolve_invoice_branding` now requires the brand primary to reach WCAG AA on both the page surface and the panel background. For example, `#757575` passes on white but fails on the panel, and is now refused.
+- The muted-text test composites against both surfaces.
+- "Cairo" is added to the literal guard's font names.
+- The fail-closed test also checks the lazy `DEFAULT_BRANDING_PRIMARY` on both modules.
+- Gemini verified that the diff is CSS-only (QR, mandatory fields and RTL layout untouched), that the snapshot matches `write_snapshot()` byte for byte, and that the lazy loading has no import-time side effects.
+- Full suite: 1785 passed, 86 skipped, 0 failed.
+- Q-643 asks Eldon, as the brand-lane owner, to add proper `muted` and `border` colour tokens.
 
 ## Tokens or cost
 Unknown.

@@ -104,6 +104,9 @@ def test_tc23_second_human_holding_the_role_denies_even_if_unavailable(policy, t
     pytest.param({"owner": frozenset(), "tenant_admin": frozenset()}, id="approver-not-listed"),
     pytest.param({"owner": frozenset({"owner-b"}), "tenant_admin": frozenset()}, id="approver-not-the-holder"),
     pytest.param({"owner": frozenset({"owner-a", ""}), "tenant_admin": frozenset()}, id="blank-id"),
+    # #306 review (Eldon, Medium): a stale `owner` on the approver must not pass when the authoritative map
+    # lists nobody as owner, even if the approver is the only other approving-role holder.
+    pytest.param({"owner": frozenset(), "tenant_admin": frozenset({"owner-a"})}, id="approver-not-the-owner-holder"),
     pytest.param(["owner-a"], id="not-a-map"),
 ])
 def test_untrusted_or_malformed_role_holder_fact_fails_closed(policy, tmp_path, holders):

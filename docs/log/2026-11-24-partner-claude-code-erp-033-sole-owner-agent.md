@@ -58,3 +58,9 @@ Implementation sub-agent (Sonnet 5.5) fixing the code-correctness review of PR #
 - Finding 4: no change; the holder-id validation in `_sole_owner` stays as defence in depth.
 - Not built (follow-up, needs a plan row): scheduling and delivery of the periodic report, who receives it, and the resolver that fills `tenant_role_holders`. This replaces the earlier "Not built" note that no report hook existed: the read side now exists, the periodic run does not.
 - Tests: ERP-023, ERP-029 and ERP-033 files together pass: 202 passed (ERP-033 file 56). `check_docs.py` and `check_repo_hygiene.py` clean. Cross-model review of this fix is still required (Tier 3).
+
+## Review fix (2026-11-25, Eldon's Fable 5.2 review at 2aa0a931, Medium)
+- `_sole_owner` now also requires `holders["owner"] == {actor.id}`, so an approver whose principal still carries a stale `owner` role is refused when the authoritative map lists no owner, even if that approver is the only other holder of an approving role (`action_policy_enforcer.py`).
+- Test-first: new case `approver-not-the-owner-holder` (holders `{"owner": frozenset(), "tenant_admin": {"owner-a"}}`) in `test_untrusted_or_malformed_role_holder_fact_fails_closed`. It failed before the fix and passes after.
+- ERP-023, ERP-029 and ERP-033 tests: 203 passed (202 before, plus the new case).
+- Still open from the review, as tracking only: plan rows for the `tenant_role_holders` resolver and for the periodic report. The Lows are not changed here.

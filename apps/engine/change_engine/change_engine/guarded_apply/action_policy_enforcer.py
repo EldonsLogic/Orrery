@@ -331,7 +331,8 @@ def _sole_owner(
         return False
     people = [holders[role] for role in row.approvers]
     return (all(type(group) is frozenset and all(map(_identifier, group)) for group in people)
-            and frozenset().union(*people) == {actor.id})
+            and frozenset().union(*people) == {actor.id}
+            and holders.get("owner") == frozenset({actor.id}))  # the approver is the authoritative sole owner
 
 
 def _approve(

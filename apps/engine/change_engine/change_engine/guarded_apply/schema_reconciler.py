@@ -56,6 +56,7 @@ class InvalidDeploymentIdError(ValueError):
 # left, and the lock names fold exactly that (``_collation_fold``): one equality for locks, lookups and rows.
 MAX_DEPLOYMENT_ID_LENGTH = 100
 MAX_IDEMPOTENCY_KEY_LENGTH = 128
+MAX_SITE_ID_LENGTH = 140  # VARCHAR(140)
 _CANONICAL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:\-]*")
 
 
@@ -188,6 +189,7 @@ def execute_single_field_deployment(
     for label, value, code, limit in (
         ("deployment id", deployment_id, "invalid_deployment_id", MAX_DEPLOYMENT_ID_LENGTH),
         ("idempotency key", idempotency_key, "invalid_idempotency_key", MAX_IDEMPOTENCY_KEY_LENGTH),
+        ("site identity", site_id, "invalid_site_id", MAX_SITE_ID_LENGTH),
     ):
         problem = caller_id_problem(value, limit)
         if problem:
@@ -392,6 +394,17 @@ def execute_single_field_deployment(
             # Do NOT assume rollback on exception; proceed to Stage 5 Reconciliation. The raw error stays in the log.
             logger.exception("DDL dispatch for %s raised; reconciling from the live schema", deployment_id)
             apply_error = "ddl_dispatch_failed"
+
+        # A session that was discarded (a rollback failed, so unknown writes may be pending on it) never reconciles
+        # or finalizes: finalization would commit them. The PREPARED row stays as the hold; the target is blocked.
+        if getattr(db, "session_unusable", False):
+            return {
+                "deployment_id": deployment_id,
+                "status": "RECOVERY_REQUIRED",
+                "stage": "APPLY",
+                "reason_code": "session_discarded",
+                "reason": "The database session was discarded before finalization; the deployment is held for recovery.",
+            }
 
         # Stage 5: Reconcile Exhaustive Snapshot (§9 — Non-Destructive by Default)
         after = db.take_snapshot(doctype, fieldname, expected_deployment_id=deployment_id)

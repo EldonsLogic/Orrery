@@ -539,6 +539,11 @@ class TestApiDeployment(unittest.TestCase):
         session = {"lock_wait_timeout": 50}  # the server default until the engine sets it
 
         class MockFrappeDB:
+            transaction_writes = 0  # nothing pending: the engine may open a fresh read view
+
+            def rollback(self):
+                sql_calls.append(("ROLLBACK", None))
+
             def sql(self, query, values=None):
                 sql_calls.append((query.strip(), values))
                 q_upper = query.upper()

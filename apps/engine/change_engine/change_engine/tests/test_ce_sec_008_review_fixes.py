@@ -885,5 +885,207 @@ class TestRemaindersFromRound1(unittest.TestCase):
         self.assertNotIn("SECRET", json.dumps(out))
 
 
+# ===========================================================================================
+# Revision round 3
+# ===========================================================================================
+class _NoCounterDb(_DurableDb):
+    @property
+    def transaction_writes(self):
+        raise AttributeError("transaction_writes")
+
+
+class _BadCounterDb(_DurableDb):
+    counter = None
+
+    @property
+    def transaction_writes(self):
+        return self.counter
+
+
+class _NoRollbackDb(_DurableDb):
+    rollback = None
+
+
+class TestR3FreshViewFailsClosed(unittest.TestCase):
+    def test_a_missing_or_invalid_write_counter_is_a_refusal_not_zero(self):
+        cases = [("missing", _Bench(_NoCounterDb()))]
+        for bad in (None, "0", True, -1, 1.5):
+            db = _BadCounterDb()
+            db.counter = bad
+            cases.append((f"invalid {bad!r}", _Bench(db)))
+        for name, bench in cases:
+            with self.subTest(counter=name):
+                adapter = bench.new_adapter()
+                with self.assertRaises(endpoints.DurableEvidenceError):
+                    adapter.begin_fresh_read_view()
+                commits = bench.db.commits
+                out = bench.deploy(adapter)
+                self.assertEqual(out["status"], "REJECTED")
+                self.assertEqual(out["reason_code"], "engine_unavailable")
+                self.assertEqual(bench.db.altered(), [])
+                self.assertEqual(bench.db.committed, {})
+                self.assertEqual(bench.db.commits, commits)
+
+    def test_there_is_no_commit_fallback_without_a_rollback(self):
+        bench = _Bench(_NoRollbackDb())
+        adapter = bench.new_adapter()
+        commits = bench.db.commits
+        with self.assertRaises(endpoints.DurableEvidenceError):
+            adapter.begin_fresh_read_view()
+        self.assertEqual(bench.db.commits, commits, "nothing was committed to get a fresh view")
+
+    def test_a_zero_counter_opens_the_view_with_a_rollback_only(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        bench.db.view = {}
+        commits = bench.db.commits
+        adapter.begin_fresh_read_view()
+        self.assertIsNone(bench.db.view)
+        self.assertEqual(bench.db.commits, commits)
+
+
+def _frappe_stub(site):
+    """A Frappe runtime that resolves ``site`` and an authenticated administrator."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(local=SimpleNamespace(site=site), session=SimpleNamespace(user="admin@example.test"),
+                           get_roles=lambda user: ["System Manager", "Sales Manager"])
+
+
+class TestR3SiteIdentityIsTrustedAndCanonical(unittest.TestCase):
+    def test_a_site_that_is_not_canonical_is_refused_before_any_effect(self):
+        bench = _Bench()
+        adapter = bench.new_adapter()
+        for site in ("sité", "موقع", "site-a ", "site a", "s" * 141, "", None):
+            with self.subTest(site=site):
+                out = execute_single_field_deployment(adapter, "dep_1", "key-1", site, "Item", "rev", dict(FIELD))
+                self.assertEqual(out["reason_code"], "invalid_site_id")
+        self.assertEqual(bench.db.committed, {})
+        with self.assertRaises(endpoints.InvalidDeploymentIdError):
+            adapter.persist_prepare_and_audit_intent(_record(site_id="sité"))
+
+    def test_the_resolved_site_is_used_and_a_caller_site_that_differs_is_refused(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        bench = _Bench(statements=[_T + "ADD COLUMN `custom_xyz` varchar(140)"])
+        adapter = bench.new_adapter()
+        field = {**FIELD, "fieldname": "custom_xyz"}
+        with mock.patch.object(endpoints, "frappe", _frappe_stub("Site-A")):
+            out = endpoints.apply_configuration_change(
+                doctype="Item", deployment_id="dep_1", field_def=field, adapter=adapter, user_roles=ADMIN,
+                site_id="other.site")
+            self.assertEqual(out["disposition"], "SITE_MISMATCH")
+            self.assertEqual(bench.db.altered(), [])
+            out = endpoints.apply_configuration_change(
+                doctype="Item", deployment_id="dep_1", field_def=field, adapter=adapter, user_roles=ADMIN,
+                site_id="site-a ")
+            self.assertEqual(out["disposition"], "SITE_MISMATCH", "a collation-equal spelling is still not the resolved site")
+            out = endpoints.apply_configuration_change(
+                doctype="Item", deployment_id="dep_1", field_def=field, adapter=adapter, user_roles=ADMIN)
+            self.assertEqual(out["status"], "APPLIED", out)
+            self.assertEqual(bench.db.row("dep_1")["site_id"], "Site-A", "the resolved identity, verbatim")
+
+    def test_a_resolved_site_that_is_not_canonical_is_refused_at_every_rpc(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        bench = _Bench()
+        calls, adapter = _entry_points(bench)
+        with mock.patch.object(endpoints, "frappe", _frappe_stub("sit\u00e9")):
+            for name in ("property_setter", "workflow", "report"):
+                with self.subTest(entry_point=name):
+                    out = calls[name]()
+                    self.assertEqual(out["disposition"], "INVALID_SITE_ID", out)
+            out = endpoints.apply_configuration_change(
+                doctype="Item", deployment_id="dep_1", field_def={**FIELD, "fieldname": "custom_xyz"},
+                adapter=adapter, user_roles=ADMIN)
+            self.assertEqual(out["disposition"], "INVALID_SITE_ID")
+        self.assertEqual(bench.db.committed, {})
+
+
+class TestR3FailedRollbackHoldsTheDeployment(unittest.TestCase):
+    def _run(self, drift):
+        bench = _Bench(meta_first=True)
+        adapter = bench.new_adapter()
+        bench.db.readback_values = drift
+
+        def arm():  # the rollback breaks after the engine's own fresh read view was opened
+            bench.db.rollback_error = _DbDown(SECRET)
+
+        bench.db.on_set_timeout = arm
+        return bench, adapter, bench.deploy(adapter)
+
+    def test_a_rollback_that_fails_holds_the_deployment_and_discards_the_session(self):
+        for name, drift in (("at dispatch", [3, 3, 50]), ("before the insert", [3, 50])):
+            with self.subTest(drift=name):
+                bench, adapter, out = self._run(drift)
+                self.assertEqual(out["status"], "RECOVERY_REQUIRED", out)
+                self.assertNotEqual(out["status"], "FAILED_CLEAN")
+                self.assertNotIn("SECRET", json.dumps(out))
+                self.assertEqual(bench.db.altered(), [])
+                self.assertTrue(bench.db.closed, "the connection with the unrolled metadata is discarded")
+                self.assertTrue(adapter.session_unusable)
+                self.assertNotIn("custom_x", bench.db.inserted, "the orphan metadata was never committed")
+                row = bench.db.row("dep_1")
+                self.assertEqual(row["status"], "PREPARED", "no finalization ran: the hold stands")
+                self.assertIsNone(row["outcome_json"])
+
+    def test_the_hold_survives_for_every_later_request(self):
+        bench, adapter, _ = self._run([3, 3, 50])
+        again = bench.deploy(adapter, dep="dep_2", key="key-2")
+        self.assertEqual((again["status"], again["stage"]), ("REJECTED", "ACQUIRE"))
+        bench.db.rollback_error = None
+        bench.db.closed = False
+        fresh = bench.deploy(bench.new_adapter(), dep="dep_3", key="key-3")
+        self.assertEqual(fresh["status"], "RECOVERY_REQUIRED")
+        self.assertEqual(bench.db.altered(), [])
+
+    def test_a_failed_journal_rollback_before_dispatch_holds_too(self):
+        bench = _Bench(meta_first=True)
+        adapter = bench.new_adapter()
+        orig = bench.db._audit
+        n = {"i": 0}
+
+        def flaky(q, p, as_dict):
+            if q.startswith("INSERT INTO"):
+                n["i"] += 1
+                if n["i"] == 3:
+                    bench.db.rollback_error = _DbDown(SECRET)
+                    raise _DbDown("journal unavailable")
+            return orig(q, p, as_dict)
+
+        bench.db._audit = flaky
+        out = bench.deploy(adapter)
+        self.assertEqual(out["status"], "RECOVERY_REQUIRED", out)
+        self.assertTrue(adapter.session_unusable)
+        self.assertEqual(bench.db.altered(), [])
+
+
+class TestR3RevertHoldCheckComesAfterAuthorization(unittest.TestCase):
+    def test_an_unauthorised_caller_learns_nothing_about_a_held_deployment(self):
+        bench = _Bench()
+        _crashed(bench)
+        adapter = bench.new_adapter()
+        reads = []
+        real = adapter.get_deployment_record
+        adapter.get_deployment_record = lambda dep: (reads.append(dep), real(dep))[1]
+        held = endpoints.revert_configuration_change(deployment_id="dep_1", adapter=adapter, user_roles=["Guest"])
+        other = endpoints.revert_configuration_change(deployment_id="dep_unknown", adapter=adapter, user_roles=["Guest"])
+        for out in (held, other):
+            out.pop("execution_time_ms")
+            out.pop("deployment_id")
+        self.assertEqual(held, other, "the same refusal as for any other unauthorised revert")
+        self.assertEqual(held["disposition"], "UNAUTHORIZED_ROLE")
+        self.assertNotIn("Item", json.dumps(held))
+        self.assertEqual(reads, [], "the record is not even read for an unauthorised caller")
+
+    def test_an_authorised_caller_still_gets_the_hold(self):
+        bench = _Bench()
+        _crashed(bench)
+        out = endpoints.revert_configuration_change(deployment_id="dep_1", adapter=bench.new_adapter(), user_roles=ADMIN)
+        self.assertEqual(out["disposition"], "DEPLOYMENT_ON_HOLD")
+
+
 if __name__ == "__main__":
     unittest.main()

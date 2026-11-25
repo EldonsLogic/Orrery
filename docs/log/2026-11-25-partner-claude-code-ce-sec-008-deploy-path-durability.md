@@ -88,6 +88,16 @@ All under `apps/engine/change_engine/change_engine/`:
 - UNVERIFIED: the Frappe 15 attribute name `transaction_writes`.
 - Follow-up added to PLAN: CE-SEC-011, the adapter lane, bringing the non-DDL engines and the decimal backend onto the same lock discipline.
 
+## Review round 3 (GPT-6.2 Sol at 510fcfb9: changes required; 1 High, 3 Medium; N3 and N4 fixed)
+- Fixed:
+  - The fresh read view refuses a write counter that is missing, invalid or non-zero, with no commit fallback. A dedicated connection is follow-up work in CE-SEC-011.
+  - The site identity comes from the resolved site, never from caller input. Anything else is refused as `SITE_MISMATCH` or `INVALID_SITE_ID`.
+  - A failed rollback discards the session and returns RECOVERY_REQUIRED (`session_discarded`), so the PREPARED hold stays.
+  - The revert hold check runs only after authorisation. Moving it under the target lock is follow-up work in CE-SEC-011.
+- Red then green: the two CE-SEC-008 files went from 21 failed and 103 passed to 124 passed, with 118 subtests.
+- Full suite: 1624 passed, 86 skipped, 0 failed.
+- The CE-SEC-011 row text now includes the dedicated connection and the locked hold check.
+
 ## Tokens or cost
 Unknown.
 

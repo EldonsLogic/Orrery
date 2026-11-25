@@ -74,6 +74,8 @@ class _DurableDb(_LiveDb):
         self.meta_pending: set[str] = set()  # Custom Field rows inserted in the open transaction
         self.release_result = 1  # what RELEASE_LOCK answers (1 released, 0 not ours, None no such lock)
         self.closed = False
+        self.rollback_error: Exception | None = None
+        self.on_set_timeout = None  # runs when the engine sets the session timeout (after its fresh read view)
 
     @property
     def transaction_writes(self) -> int:
@@ -82,6 +84,9 @@ class _DurableDb(_LiveDb):
 
     def close(self):
         self.closed = True
+        self.pending = []  # closing ends the transaction without committing it
+        self.meta_pending = set()
+        self.view = None
         self.locks.clear()  # the server frees a closed session's advisory locks
 
     def get_value(self, *a, **k):
@@ -107,6 +112,8 @@ class _DurableDb(_LiveDb):
         self.commits += 1
 
     def rollback(self):
+        if self.rollback_error is not None:
+            raise self.rollback_error
         self.pending = []
         self.meta_pending = set()
         self.view = None
@@ -169,6 +176,8 @@ class _DurableDb(_LiveDb):
             return ((self.release_result,),)
         if q.startswith("SET SESSION LOCK_WAIT_TIMEOUT"):
             self.sql_log.append(query)
+            if self.on_set_timeout:
+                self.on_set_timeout()
             if not self.ignore_timeout_set:
                 self.lock_wait_timeout = int(re.search(r"=\s*(\d+)", q).group(1))
             return ()

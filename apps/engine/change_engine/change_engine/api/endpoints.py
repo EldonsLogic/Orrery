@@ -45,6 +45,7 @@ from change_engine.guarded_apply.schema_reconciler import (
     InvalidDeploymentIdError,
     LockTimeoutError,
     MAX_IDEMPOTENCY_KEY_LENGTH,
+    MAX_SITE_ID_LENGTH,
     caller_id_problem,
     evidence_namespace_problem,
     RevisionHashError,  # defined in schema_reconciler (shared with property_setter_engine); re-exported here
@@ -63,7 +64,7 @@ from change_engine.guarded_apply.policy_enforcer import (
 )
 
 from change_engine.guarded_apply.property_setter_engine import execute_property_setter_deployment
-from change_engine.guarded_apply.rollback_engine import execute_rollback
+from change_engine.guarded_apply.rollback_engine import AUTHORIZED_ROLLBACK_ROLES, execute_rollback
 from change_engine.guarded_apply.workflow_engine import (
     WorkflowDefinition,
     WorkflowStateModel,
@@ -677,27 +678,35 @@ class FrappeDeploymentAdapter:
             pass
 
     def begin_fresh_read_view(self) -> None:
-        """Start the locked reads on a fresh view WITHOUT committing anyone's work (CE-SEC-008).
+        """Start the locked reads on a fresh view WITHOUT touching anyone's work (CE-SEC-008).
 
         Called right after the advisory locks are granted: under REPEATABLE READ a view opened by an earlier
         read would not show a row another session committed while this one waited for the lock. Ending the
-        transaction is only safe when it holds no writes, so uncommitted writes already in it (the caller's, not
-        ours) make this refuse (the deployment is blocked, the writes stay pending and untouched). With none,
-        a rollback ends the read-only transaction; it can never commit or discard anything.
+        transaction is only safe when it holds no writes. Everything fails closed: the write counter must exist
+        and be a non-negative integer and be zero, and a rollback must be available (there is no commit
+        fallback). Otherwise this raises, the deployment is blocked, and the caller's work is left as it is.
+
+        Limit: Frappe's counter does not see every kind of write (for example ``REPLACE``). The robust fix is a
+        dedicated deployment connection for the locked reads and the deployment's own writes (CE-SEC-011).
         """
         if self._session_unusable:
             raise DurableEvidenceError("the database session was discarded")
         if self.in_memory:
             return
         db = self._frappe.db
-        if getattr(db, "transaction_writes", 0):
+        counter = getattr(db, "transaction_writes", None)
+        if isinstance(counter, bool) or not isinstance(counter, int) or counter < 0:
+            raise DurableEvidenceError("cannot tell whether the transaction holds uncommitted writes")
+        if counter:
             raise DurableEvidenceError("uncommitted writes are pending in this transaction; not touching them")
-        if hasattr(db, "rollback"):
-            db.rollback()
-        elif hasattr(db, "commit"):
-            db.commit()  # nothing is pending (checked above), so this only ends the read view
-        else:
+        rollback = getattr(db, "rollback", None)
+        if not callable(rollback):
             raise DurableEvidenceError("no way to open a fresh read view")
+        rollback()  # nothing is pending (checked above): this only ends the read-only transaction
+
+    @property
+    def session_unusable(self) -> bool:
+        return self._session_unusable
 
     def mark_session_unusable(self) -> None:
         """A lock may still be held on this connection (a release failed): refuse further deployments on it and
@@ -737,6 +746,8 @@ class FrappeDeploymentAdapter:
         if self.in_memory:
             self.locks.discard(lock_key)
             return True
+        if self._session_unusable:
+            return True  # the connection is gone, and the server freed its locks with it
         try:
             res = self._frappe.db.sql("SELECT RELEASE_LOCK(%s)", (lock_key,))
             if res and res[0] and res[0][0] == 1:
@@ -1214,12 +1225,17 @@ class FrappeDeploymentAdapter:
         if hasattr(self._frappe.db, "commit"):
             self._frappe.db.commit()
 
-    def _rollback_durable(self) -> None:
+    def _rollback_durable(self) -> bool:
+        """Roll the open transaction back. A rollback that fails leaves unknown writes pending on this
+        connection, so the session is declared unusable and discarded (the caller then holds, never finalizes)."""
         try:
             if hasattr(self._frappe.db, "rollback"):
                 self._frappe.db.rollback()
+            return True
         except Exception:
-            logger.exception("rollback after a failed durable write also failed")
+            logger.exception("rollback after a failed durable write also failed; discarding the session")
+            self.mark_session_unusable()
+            return False
 
     def _insert_audit_row(
         self, *, name: str, deployment_id: str, idempotency_key: str, payload_hash: str, site_id: str,
@@ -1381,6 +1397,8 @@ class FrappeDeploymentAdapter:
             raise InvalidDeploymentIdError("the deployment id is not canonical")
         if caller_id_problem(record.get("idempotency_key", f"idemp-{dep_id}"), MAX_IDEMPOTENCY_KEY_LENGTH):
             raise InvalidDeploymentIdError("the idempotency key is not canonical")
+        if caller_id_problem(record.get("site_id", "default"), MAX_SITE_ID_LENGTH):
+            raise InvalidDeploymentIdError("the site identity is not canonical")
         approved = list(record.get("ddl_plan_statements", []))
         binding = self._intent_binding(record)
         # Only physical DDL has a schema baseline and a dispatch journal. Property-setter, workflow and
@@ -1940,6 +1958,41 @@ def _reject_invalid_deployment_id(deployment_id: Any, start_time: float, **extra
     }
 
 
+def _resolve_site_id(caller_site: Any, deployment_id: Any, start_time: float, **extra: Any):
+    """The site identity for the lock, the lookups and the audit rows: the RESOLVED site, never caller input.
+
+    A caller-supplied site is accepted only when no site is resolved (offline use) or when it is exactly the
+    resolved one. The result must be canonical (the same grammar as ids), so collation-equivalent spellings
+    cannot take different locks. Returns ``(site_id, None)`` or ``(None, rejection)``.
+    """
+    resolved = getattr(getattr(frappe, "local", None), "site", None)
+    if resolved:
+        if caller_site is not None and caller_site != resolved:
+            return None, _site_rejection(deployment_id, start_time, "SITE_MISMATCH", "site_mismatch",
+                                         "The site is resolved by the server and cannot be chosen by the caller.", **extra)
+        site = resolved
+    else:
+        site = caller_site or "default"
+    if caller_id_problem(site, MAX_SITE_ID_LENGTH):
+        return None, _site_rejection(deployment_id, start_time, "INVALID_SITE_ID", "invalid_site_id",
+                                     "The site identity is not canonical.", **extra)
+    return site, None
+
+
+def _site_rejection(deployment_id: Any, start_time: float, disposition: str, code: str, reason: str, **extra: Any):
+    return {
+        "deployment_id": deployment_id,
+        "status": "REJECTED",
+        "success": False,
+        "stage": "VALIDATE",
+        "disposition": disposition,
+        "reason_code": code,
+        "reason": reason,
+        **extra,
+        "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+    }
+
+
 _LOCK_WAIT_TEXT = re.compile(r"[0-9]{1,9}")
 
 
@@ -2155,12 +2208,9 @@ def apply_configuration_change(
         db = FrappeDeploymentAdapter()
 
     # Step 3: Resolve site_id and idempotency_key
-    if not site_id:
-        site_id = (
-            getattr(getattr(frappe, "local", None), "site", None)
-            or kwargs.get("site")
-            or "default"
-        )
+    site_id, site_rejection = _resolve_site_id(site_id or kwargs.get("site"), deployment_id, start_time)
+    if site_rejection:
+        return site_rejection
 
     if not idempotency_key:
         idempotency_key = kwargs.get("idempotency_key") or f"idemp-{deployment_id}"
@@ -2409,12 +2459,10 @@ def apply_property_setter_change(
     if db is None:
         db = FrappeDeploymentAdapter()
 
-    site_id = (
-        getattr(getattr(frappe, "local", None), "site", None)
-        or kwargs.get("site")
-        or kwargs.get("site_id")
-        or "default"
-    )
+    site_id, site_rejection = _resolve_site_id(
+        kwargs.get("site") or kwargs.get("site_id"), deployment_id, start_time, doctype=doctype)
+    if site_rejection:
+        return site_rejection
 
     forward_kwargs = dict(kwargs)
     forward_kwargs.pop("user_roles", None)
@@ -2527,12 +2575,10 @@ def apply_workflow_change(
     if db is None:
         db = FrappeDeploymentAdapter()
 
-    site_id = (
-        getattr(getattr(frappe, "local", None), "site", None)
-        or kwargs.get("site")
-        or kwargs.get("site_id")
-        or "default"
-    )
+    site_id, site_rejection = _resolve_site_id(
+        kwargs.get("site") or kwargs.get("site_id"), deployment_id, start_time, doctype=doctype)
+    if site_rejection:
+        return site_rejection
 
     forward_kwargs = dict(kwargs)
     forward_kwargs.pop("user_roles", None)
@@ -2644,12 +2690,10 @@ def apply_report_change(
     if db is None:
         db = FrappeDeploymentAdapter()
 
-    site_id = (
-        getattr(getattr(frappe, "local", None), "site", None)
-        or kwargs.get("site")
-        or kwargs.get("site_id")
-        or "default"
-    )
+    site_id, site_rejection = _resolve_site_id(
+        kwargs.get("site") or kwargs.get("site_id"), deployment_id, start_time, doctype=doctype)
+    if site_rejection:
+        return site_rejection
 
     forward_kwargs = dict(kwargs)
     forward_kwargs.pop("user_roles", None)
@@ -2704,8 +2748,11 @@ def revert_configuration_change(
     try:
         # A deployment that is still PREPARED or RECOVERY_REQUIRED is a hold: an ordinary revert must not clear
         # it (the locked recovery path is CE-SEC-009).
+        # It is read only for an authorised caller: an unauthorised one gets the same refusal as for any other
+        # revert and learns nothing about the deployment. (Under the target lock: CE-SEC-011.)
+        authorised = bool(set(user_roles) & AUTHORIZED_ROLLBACK_ROLES)
         getter = getattr(db, "get_deployment_record", None)
-        record = getter(deployment_id) if callable(getter) else None
+        record = getter(deployment_id) if authorised and callable(getter) else None
         if isinstance(record, dict) and record.get("status") in ("PREPARED", "RECOVERY_REQUIRED"):
             return {
                 "deployment_id": deployment_id,

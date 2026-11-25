@@ -624,6 +624,9 @@ class SimulatedFrappeDB:
 
         return ()
 
+    # The simulator has no real transaction: nothing is ever pending (Frappe's own counter of uncommitted writes).
+    transaction_writes = 0
+
     def commit(self) -> None:
         return None
 

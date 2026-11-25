@@ -43,6 +43,7 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
   - Narrow re-check dispatched: gpt-6.1-sol (high), `c1666d1..2cae216`.
 - #309 round 2 fixes returned (Opus), revision 3 (143 lines): no compiler split (a constrained field must be alone in its authored revision, else `constraint_change_not_isolated`); stored policy floor raised before activation and re-read under lock at reservation; `siteId` rotated in both copies on every remap, clone and restore; grant budget charged only after signature and tenant binding; `sha256:` hash grammar; citation fixed. Coordinator read the diff. Pushed `7212399`; table posted.
   - Final re-review dispatched: gpt-6.1-sol (high), `9160d33..7212399`.
+- Both re-reviews (#309 `9160d33..7212399`, #310 `c1666d1..2cae216`) failed at start: the ChatGPT account on `codex_39c1269a` reached its usage limit. No review result; nothing changed. Asking the partner how to continue the cross-model reviews.
 
 ## Decisions
 - Partner: run a third review round on #309 ADR-0068 (2026-11-25).

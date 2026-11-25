@@ -5,6 +5,7 @@ export { Card, type CardProps } from './Card';
 export { Checkbox, type CheckboxProps } from './Checkbox';
 export { DatePicker, type Calendar, type DatePickerLabels, type DatePickerProps } from './DatePicker';
 export { Select, type SelectProps } from './Select';
+export { Mark, SMALL_CUT_BELOW, type MarkFill, type MarkProps, type MarkTone } from './Mark';
 export { Spinner, type SpinnerProps } from './Spinner';
 export { Stack, type StackProps } from './Stack';
 export { Table, type TableColumn, type TableProps } from './Table';

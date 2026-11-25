@@ -47,9 +47,9 @@ def load() -> Tuple[ModuleType, ModuleType]:
     prev_bytecode, prev_mod = sys.dont_write_bytecode, sys.modules.get("themelib")
     sys.dont_write_bytecode = True
     try:
-        themelib = _exec("orrery_brand_themelib", t_path)
+        themelib = _exec("seshna_brand_themelib", t_path)
         sys.modules["themelib"] = themelib
-        derive = _exec("orrery_brand_derive", d_path)
+        derive = _exec("seshna_brand_derive", d_path)
     finally:
         sys.dont_write_bytecode = prev_bytecode
         if prev_mod is None:

@@ -42,5 +42,6 @@ Thumbs.db
 
 # Web: token copies generated at build time (web/scripts/copy-tokens.mjs)
 web/*/src/styles/tokens.generated.css
+web/*/src/styles/tokens.proposed.generated.css
 web/*/next-env.d.ts
 web/*/tsconfig.tsbuildinfo

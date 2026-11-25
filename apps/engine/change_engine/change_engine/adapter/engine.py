@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import re
 import secrets
 import time
@@ -37,6 +38,7 @@ from change_engine.adapter.mapping import (
 from change_engine.adapter.storage import SQLiteAdapterStore, SiteRecord, TenantMismatch
 from change_engine.adapter.store_api import AdapterStore, StoreRefused, assert_store_allowed, is_production
 from change_engine.guarded_apply.action_policy_enforcer import ActionPolicyEnforcer, ActionRequest, AuthorizedAction
+from change_engine.guarded_apply.safety_guardrails import is_locked_doctype
 
 ADAPTER_ID = "frappe"
 ADAPTER_VERSION = "0.1.0"
@@ -117,6 +119,24 @@ SECTION_OF = {
     "report": "reports",
 }
 SETTINGS = ("company", "compliance", "i18n")
+# SEC-022 (ADR-0051 item 7): the only first pointer segments a step may target. Anything else, in particular a `_`
+# prefixed key such as the adapter's own `_typeChangedPointers` record, is refused at plan time.
+ALLOWED_POINTER_ROOTS = frozenset(SECTION_OF.values()) | frozenset(SETTINGS)
+
+# SEC-022 (ADR-0051 item 7): the root a step's pointer must start at, by kind. A kind's section is the part before
+# the dot (`location.upsert` -> `location` -> `/locations`); the sub-element kinds `field.*`, `relation.*` and
+# `option.*` live inside an entity, so they sit under `/entities`; `settings.set` takes only the settings roots.
+# Unsupported kinds (`binding.*`) get no entry and so no root.
+_SECTION_OF_KIND_PREFIX = {**{p: p for p in SECTION_OF}, "field": "entity", "relation": "entity", "option": "entity"}
+KIND_ROOTS: dict[str, frozenset[str]] = {
+    kind: (
+        frozenset(SETTINGS)
+        if kind == "settings.set"
+        else frozenset({SECTION_OF[_SECTION_OF_KIND_PREFIX[kind.split(".")[0]]]})
+    )
+    for kind, support in STEP_KINDS.items()
+    if support != "unsupported"
+}
 
 EXPORTED = {
     "settings_company": ["legalName", "tradeName", "country", "crNumber", "vatNumber", "sizeBand", "industry", "languages", "locale"],
@@ -211,8 +231,15 @@ class _Missing:
 _MISSING = _Missing()
 
 
+_NO_EXPECT = object()  # `_site_snapshot(expect=...)` left out: an unconditional copy write
+
+
 class _LeaseLost(Exception):
     """This worker no longer owns its operation (lease expired, or another worker recovered it): stop, write nothing."""
+
+
+class _StatePersistFailed(Exception):
+    """The tenant-database copy of the site state could not be written (BPL-033): the operation ends recovery_required."""
 
 
 class _Early(Exception):
@@ -224,6 +251,63 @@ class _Early(Exception):
 
 def _segs(pointer: str) -> list[str]:
     return [s.replace("~1", "/").replace("~0", "~") for s in pointer.split("/")[1:]]
+
+
+def min_pointer_segments(kind: str) -> int:
+    """Fewest pointer segments a step of `kind` needs (ADR-0051 item 7); anything shorter names no element.
+
+    `settings.set` addresses a settings document (`/company`); `field.reorder` a field list
+    (`/entities/<id>/fields`, 3); `option.reorder` an option list (`/entities/<id>/fields/<id>/options`, 5);
+    `option.add` and `option.quarantine` one option (6); `field.*` and `relation.*` elements 4; every other kind
+    one element of a section (`/<section>/<id>`, 2).
+    """
+    if kind == "settings.set":
+        return 1
+    if kind == "field.reorder":
+        return 3
+    section = kind.split(".")[0]
+    if section == "option":
+        return 5 if kind == "option.reorder" else 6
+    if section in ("field", "relation"):
+        return 4
+    return 2
+
+
+# SEC-022 (ADR-0051 items 3, 7 and 8): `entity.*` steps address the entity itself, `/entities/<id>`, exactly. A
+# set_property step names only a Blueprint property of its element (`contracts/blueprint.schema.json`, where each of
+# these has `additionalProperties: false`), never the identity (`id`: renaming a field onto another's id defeats the
+# checks keyed on it) nor an entity's element lists (`fields`, `relations`: only the `field.*` and `relation.*` kinds
+# change those, each with its own checks). An allow list, so a case or encoding variant (`/Fields`, `/%66ields`) is
+# refused too. `tests/test_sec_022_review_followups_7.py` pins these sets to the schema.
+SETTABLE_PROPERTIES = {
+    "entity.set_property": frozenset({"labels", "pluralLabels", "kind", "numbering", "workflow", "components", "provenance"}),
+    "field.set_property": frozenset({
+        "type", "required", "unique", "maxLength", "precision", "min", "max", "options", "target", "computed",
+        "readOnly", "labels", "default", "visibleToRoles",
+    }),
+    # `options` on a relation is not a Blueprint property: it is the engine link target, which `frappe_backend` maps and
+    # the `/options` target checks in `_judge` guard (SEC-022 follow-up 4), so it stays settable.
+    "relation.set_property": frozenset({"labels", "target", "kind", "cardinality", "onDelete", "required", "options"}),
+}
+# The kinds that carry `params.property` (contract: a pointer below the subject, pattern `^(/[^/]+)+$`). `_segs` drops
+# any text before the first `/`, so `_judge` needs a well-formed pointer itself: schema validation can be skipped.
+PROPERTY_KINDS = frozenset({
+    "settings.set", "component.configure", "entity.set_property", "field.set_property", "relation.set_property",
+})
+# Element properties with their own checks keyed on the exact spelling (`/type` gated and recorded, `/options` and
+# `/target` target checks): any other spelling that reaches them (`/type/x`, `/options/0`) is refused.
+EXACT_ELEMENT_PROPERTIES = {
+    "field.set_property": frozenset({"type", "options", "target"}),
+    "relation.set_property": frozenset({"options", "target"}),
+}
+
+
+def _property_head(prop: Any) -> str | None:
+    """The first decoded segment of a step's `property` pointer, or None when it is not a well-formed pointer."""
+    if not isinstance(prop, str) or not prop.startswith("/"):
+        return None
+    parts = _segs(prop)
+    return parts[0] if parts and "" not in parts else None
 
 
 def _cfg_segs(pointer: str) -> list[str]:
@@ -272,6 +356,18 @@ def _set_path(doc: dict[str, Any], prop: str, params: dict[str, Any]) -> None:
         cur[segs[-1]] = copy.deepcopy(params["after"])
     else:
         cur.pop(segs[-1], None)
+
+
+def _options_target_str(after: Any) -> str | None:
+    """Mirror frappe_backend's `/options` value formatting so plan-time checks inspect what the backend writes."""
+    if isinstance(after, str):
+        return after
+    if isinstance(after, list):
+        return "\n".join(
+            str(o.get("value") or o.get("id") or "") if isinstance(o, dict) else str(o)
+            for o in after
+        )
+    return None
 
 
 def _prune_empty(doc: dict[str, Any]) -> None:
@@ -323,9 +419,14 @@ class ChangeEngineAdapter:
         self.recover_interrupted()
 
     @staticmethod
-    def _site_snapshot(site: SiteRecord) -> dict[str, Any]:
-        return {
-            "state": site.state,
+    def _site_snapshot(
+        site: SiteRecord, *, pending: bool = False, token: str | None = None, expect: Any = _NO_EXPECT
+    ) -> dict[str, Any]:
+        """The state copy for the tenant database. `pending` writes it as recovery_required: the store has not yet
+        committed the outcome this snapshot describes (BPL-033). `token` tags the write; `expect` makes it a compare-and-set
+        on the token the copy must still carry (see `ChangeEngineAdapter._repair_state_copy`); left out, it is unconditional."""
+        snap = {
+            "state": "recovery_required" if pending else site.state,
             "site_class": site.site_class,
             "engine_target": site.engine_target,
             "blueprint_id": site.blueprint_id,
@@ -336,7 +437,49 @@ class ChangeEngineAdapter:
             "sync_version": site.sync_version,
             "config": site.config,
             "retained": site.retained,
+            "write_token": token,
         }
+        if expect is not _NO_EXPECT:
+            snap["expect_token"] = expect
+        return snap
+
+    @staticmethod
+    def _mirror_key(snap: dict[str, Any], *, with_state: bool) -> str:
+        """What the copy mirrors, as canonical text: equal keys mean the copy says what the store says."""
+        fields = ("site_class", "engine_target", "blueprint_id", "country_pack", "applied", "applied_ids", "history",
+                  "sync_version", "config", "retained") + (("state",) if with_state else ())
+        return json.dumps({k: snap[k] for k in fields}, sort_keys=True, default=sorted)
+
+    def _repair_state_copy(self, tenant_id: str, *, rotate: bool = False) -> None:
+        """Make the tenant-database copy say what the operation store says (BPL-033). Best effort: it never raises.
+
+        The store is the source of truth. A copy can lag it (a crash or a failed write after the store committed). Skipped
+        while an operation holds the site (it writes its own copy). The copy is read before the store and the rewrite is a
+        compare-and-set on the token read, so a writer that got in between wins and nothing newer is overwritten.
+        `rotate` rewrites even a matching copy with a fresh token: recovery uses it so no writer from before the recovered
+        operation can still pass its compare-and-set and promote the copy (re-review 2 at aa8849d)."""
+        backend = self.frappe_backend
+        loader = getattr(backend, "load_site_state", None)
+        if backend is None or not callable(loader) or tenant_id == "platform":
+            return
+        try:
+            seen = loader(tenant_id)
+            site = self.store.get_site(tenant_id)
+            if site is None or site.lock is not None:
+                return
+            want = self._site_snapshot(site)
+            # A site the store holds blocked is fenced on every repair, even when the copy already matches: a rotation
+            # that failed once is retried by the next sweep, so no earlier writer can promote the copy (re-review 3).
+            rotate = rotate or site.state == "recovery_required"
+            if (not rotate and seen is not None
+                    and self._mirror_key(seen, with_state=True) == self._mirror_key(want, with_state=True)):
+                return
+            backend.persist_site_state(
+                tenant_id,
+                self._site_snapshot(site, token=self._new_id("cp"), expect=seen.get("write_token") if seen else None),
+            )
+        except Exception:
+            pass  # retried by the next recovery sweep, replay or already_applied
 
     def _execute_as_caller(
         self,
@@ -747,6 +890,7 @@ class ChangeEngineAdapter:
         blocked and unlocked for a human (ADR-0028, never a second blind run); other operations are released to retry.
         Safe to call from every worker at any time: each operation is closed once (compare and set)."""
         closed = 0
+        recovered: set[str] = set()
         for rec in self.store.expired_operations():
             try:
                 if rec["operation"] in ("apply", "rollback"):
@@ -771,12 +915,22 @@ class ChangeEngineAdapter:
                             {"change_id": pend["artifactId"], "revision": rec["meta"].get("revision"), "error_code": "recovery_required"},
                             rec["tenant"],
                         )
+                    recovered.add(rec["tenant"])
                 else:
                     if not self.store.recover_operation(rec, None):
                         continue
                 closed += 1
             except Exception:  # a recovery that cannot run now must not break the caller; it is retried next time
                 continue
+        # BPL-033: the copy mirrors the store. A recovery changed a site, or a worker died or failed after its store commit
+        # and before its copy write: bring every copy that disagrees back in line with the store.
+        if self.frappe_backend is not None:
+            try:
+                tenants = self.store.site_tenants()
+            except Exception:
+                tenants = []
+            for tenant in tenants:
+                self._repair_state_copy(tenant, rotate=tenant in recovered)
         return closed
 
     def _release_on_error(self, tenant: str, op: str, inp: dict[str, Any], op_id: str) -> None:
@@ -938,8 +1092,17 @@ class ChangeEngineAdapter:
                     own_cache[entity] = bool(checker(site.tenant_id, entity)) if callable(checker) else False
             return own_cache[entity]
 
+        recorded_type_changes = site.config.get("_typeChangedPointers")
+        type_changed_pointers: set[str] = (
+            {p for p in recorded_type_changes if isinstance(p, str)}
+            if isinstance(recorded_type_changes, list)
+            else set()
+        )
+        for s in artifact["steps"]:
+            if s["kind"] == "field.set_property" and (s.get("params") or {}).get("property") == "/type":
+                type_changed_pointers.add(s["pointer"])
         for step in artifact["steps"]:
-            disp, reason, ddl = self._judge(site, step, blueprint_entities, own_allowed)
+            disp, reason, ddl = self._judge(site, step, blueprint_entities, own_allowed, type_changed_pointers)
             if ddl == "additive":
                 additive += 1
             elif ddl == "semantic":
@@ -978,6 +1141,7 @@ class ChangeEngineAdapter:
         step: dict[str, Any],
         blueprint_entities: set[str],
         own_allowed: Callable[[str], bool] | None = None,
+        type_changed_pointers: set[str] | None = None,
     ) -> tuple[str, str | None, str]:
         kind, pointer, params = step["kind"], step["pointer"], step["params"]
         ddl = step["ddlImpact"]
@@ -986,20 +1150,56 @@ class ChangeEngineAdapter:
             return "unsupported", "unsupported_step_kind", ddl
         if kind in ("field.add", "relation.add", "entity.add") and ddl == "none":
             ddl = "additive"
-        if kind.endswith("set_property") and params.get("property") in SEMANTIC_PROPS:
+        if kind.endswith("set_property") and isinstance(params.get("property"), str) and params["property"] in SEMANTIC_PROPS:
             ddl = "semantic"
         if has_prohibited_expression(params):
             return "blocked", "prohibited_expression", ddl
         segs = _segs(pointer)
+        if (
+            not pointer.startswith("/")
+            or not segs
+            or "" in segs
+            or segs[0] not in ALLOWED_POINTER_ROOTS
+            # The root must be the one this kind belongs to (KIND_ROOTS); an unmapped kind gets none.
+            or segs[0] not in KIND_ROOTS.get(kind, frozenset())
+            # field.* and relation.* keep their exact-length check below (definition_conflict).
+            or (len(segs) < min_pointer_segments(kind) and not kind.startswith(("field.", "relation.")))
+            # entity.* addresses exactly /entities/<id>: a deeper pointer reaches a field, relation or option.
+            or (kind.startswith("entity.") and len(segs) != 2)
+        ):
+            return "blocked", "unsupported_value_type", ddl
+        if kind in PROPERTY_KINDS:
+            prop = params.get("property")
+            head = _property_head(prop)
+            if (
+                head is None
+                or (kind in SETTABLE_PROPERTIES and head not in SETTABLE_PROPERTIES[kind])
+                # A field's type changes only as exactly `/type` (gated, and recorded in the `/type` history).
+                or (head in EXACT_ELEMENT_PROPERTIES.get(kind, ()) and prop != "/" + head)
+            ):
+                return "blocked", "unsupported_value_type", ddl
         if segs[:1] == ["entities"] and len(segs) > 1:
             ids: list[Any] = [segs[1]]
+            subject = step["subject"]
             if kind == "entity.add":
-                ids.append(step["subject"].get("id"))
+                ids.append(subject.get("id"))
+            elif kind == "field.reorder":
+                parents = subject.get("parents")
+                if not isinstance(parents, list) or len(parents) > 1:
+                    return "blocked", "unsupported_value_type", ddl
+                if len(parents) == 1:
+                    if not isinstance(parents[0], dict):
+                        return "blocked", "unsupported_value_type", ddl
+                    ids.append(parents[0].get("id"))
+                    if subject.get("kind") == "entity":
+                        ids.append(subject.get("id"))
+                else:
+                    ids.append(subject.get("id"))
             elif kind.startswith(("field.", "relation.")):
-                parents = step["subject"].get("parents")
+                parents = subject.get("parents")
                 parent_id = (
                     parents[0].get("id")
-                    if isinstance(parents, list) and parents and isinstance(parents[0], dict)
+                    if isinstance(parents, list) and len(parents) == 1 and isinstance(parents[0], dict)
                     else None
                 )
                 ids.append(parent_id)
@@ -1007,12 +1207,90 @@ class ChangeEngineAdapter:
                 return "blocked", "unsupported_value_type", ddl
             if any(is_protected_entity(i) for i in ids):
                 return "blocked", "protected_subject", ddl
-            if len(ids) > 1 and ids[1] != ids[0]:
+            if len(ids) > 1 and any(i != ids[0] for i in ids[1:]):
                 return "blocked", "definition_conflict", ddl
+            if kind == "field.reorder":
+                if (
+                    len(segs) != 3
+                    or segs[2] != "fields"
+                    or subject.get("kind") != "entity"
+                    or subject.get("parents") != []
+                    or subject.get("id") != segs[1]
+                ):
+                    return "blocked", "definition_conflict", ddl
+            elif kind.startswith(("field.", "relation.")):
+                expected_coll = "fields" if kind.startswith("field.") else "relations"
+                if len(segs) != 4 or segs[2] != expected_coll or subject.get("id") != segs[3]:
+                    return "blocked", "definition_conflict", ddl
+                if kind in ("field.add", "relation.add"):
+                    defn_add = params.get("definition")
+                    if not isinstance(defn_add, dict) or defn_add.get("id") != segs[3]:
+                        return "blocked", "definition_conflict", ddl
         elif kind == "entity.add" or kind.startswith(("field.", "relation.")):
             return "blocked", "unsupported_value_type", ddl
 
+        elem = _walk(site.config, _cfg_segs(pointer))
         defn = params.get("definition")
+        if kind == "entity.add":
+            if not isinstance(defn, dict):
+                return "blocked", "unsupported_value_type", ddl
+            inline_fields = defn.get("fields")
+            if inline_fields is not None:
+                if not isinstance(inline_fields, list):
+                    return "blocked", "unsupported_value_type", ddl
+                for fld in inline_fields:
+                    if not isinstance(fld, dict):
+                        return "blocked", "unsupported_value_type", ddl
+                    if fld.get("type") == "link" or "target" in fld:
+                        target_entity = fld.get("target")
+                        if not is_valid_entity_id(target_entity):
+                            return "blocked", "unsupported_value_type", ddl
+                        if is_protected_entity(target_entity):
+                            return "blocked", "protected_subject", ddl
+            inline_relations = defn.get("relations")
+            if inline_relations is not None:
+                if not isinstance(inline_relations, list):
+                    return "blocked", "unsupported_value_type", ddl
+                for rel in inline_relations:
+                    if not isinstance(rel, dict):
+                        return "blocked", "unsupported_value_type", ddl
+                    target_entity = rel.get("target")
+                    if not is_valid_entity_id(target_entity):
+                        return "blocked", "unsupported_value_type", ddl
+                    if is_protected_entity(target_entity):
+                        return "blocked", "protected_subject", ddl
+        elif (kind == "field.add" and isinstance(defn, dict) and defn.get("type") == "link") or kind == "relation.add":
+            target_entity = defn.get("target") if isinstance(defn, dict) else None
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
+        elif kind.startswith("relation.") and isinstance(defn, dict) and "target" in defn:
+            target_entity = defn["target"]
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
+        elif kind in ("field.set_property", "relation.set_property") and params.get("property") == "/options":
+            proven_non_link = (
+                kind == "field.set_property"
+                and isinstance(elem, dict)
+                and elem.get("type") in SUPPORTED_BLUEPRINT_TYPES
+                and elem.get("type") != "link"
+                and (type_changed_pointers is None or pointer not in type_changed_pointers)
+            )
+            if not proven_non_link:
+                raw_target = _options_target_str(params.get("after"))
+                if raw_target is not None and (is_protected_entity(raw_target) or is_locked_doctype(raw_target)):
+                    return "blocked", "protected_subject", ddl
+                return "blocked", "unsupported_value_type", ddl
+        elif kind in ("field.set_property", "relation.set_property") and params.get("property") == "/target":
+            # Config-only guard: frappe_backend does not map `/target` (it maps `/options`, guarded above).
+            target_entity = params.get("after")
+            if not is_valid_entity_id(target_entity):
+                return "blocked", "unsupported_value_type", ddl
+            if is_protected_entity(target_entity):
+                return "blocked", "protected_subject", ddl
         if kind == "workflow.upsert":
             target_entity = defn.get("entity") if isinstance(defn, dict) else None
             if not is_valid_entity_id(target_entity):
@@ -1033,7 +1311,6 @@ class ChangeEngineAdapter:
             if grant_reason:
                 return "blocked", grant_reason, ddl
         coll = self._collection(site, segs)
-        elem = _walk(site.config, _cfg_segs(pointer))
         if kind.endswith((".add", ".upsert", ".enable")):
             if coll is None:
                 return "blocked", "subject_missing", ddl
@@ -1304,6 +1581,8 @@ class ChangeEngineAdapter:
             site.tenant_id, operation, inp, op_id, lock=True, pending=running, meta={"revision": target_rev}
         )
         if verdict in ("replay", "in_progress"):
+            if verdict == "replay":
+                self._repair_state_copy(site.tenant_id)  # a replay is the retry of a run that may have died before its copy write
             return stored, True
         # whether to put the site back to ready is decided by the acquire itself, in the transaction that took the lock;
         # reading the state earlier races with a worker that finishes in between and leaves the site stuck in applying
@@ -1312,6 +1591,9 @@ class ChangeEngineAdapter:
         # the row may have changed under us (another worker, or a recovery just run): continue from what the database holds
         site = self._need_site(self.store.get_site(tenant), ready=False)
         stages.append({"stage": "acquire", "status": "done"})
+        # what the store holds before this run changes anything: the copy is rewritten only when the run changes it
+        state_before = "ready" if ready_before else site.state
+        mirror_before = self._mirror_key(self._site_snapshot(site), with_state=False)
 
         def owned() -> None:
             """Called before every engine or DDL step: a worker whose lease expired or was recovered stops at once."""
@@ -1366,47 +1648,92 @@ class ChangeEngineAdapter:
             if ready_before and site.state == "applying":
                 site.state = "ready"
 
-        status, error = state["status"], state["error"]
-        outcome: dict[str, Any] = {
-            "operationId": op_id,
-            "operation": operation,
-            "artifactId": artifact["artifactId"],
-            "status": status,
-            "stages": stages,
-            "steps": steps,
-            "postConditions": pcs,
-            "site": site.status(),
-        }
-        if state["export_hash"]:
-            outcome["exportHash"] = state["export_hash"]
-        if error:
-            outcome["error"] = error
-        event: tuple[str, str, dict[str, Any]] | None = None
-        if status != "already_applied":
-            event_art = forward if operation == "rollback" and status == "applied" else artifact
-            etype, data = self._event_data(operation, status, event_art, target_rev, error)
-            if operation == "rollback" and status == "applied":
-                data["revision"] = forward["blueprint"]["base"]["revision"] if forward["blueprint"]["base"] else target_rev
-            event = (_new_event_id(), etype, data)
-            outcome["eventIds"] = [event[0]]
+        marker = self._new_id("cp")  # the write token of this run's pending marker
 
-        # finalize (5.6): the stored outcome, the site state and the event commit together or not at all. The outcome
-        # write goes first and is compare-and-set on our reservation: a worker whose lease was recovered by another
-        # one writes nothing (its site and event writes roll back with the transaction).
-        try:
+        def settle(persist_state: bool, *, mark_ready: bool = False) -> dict[str, Any]:
+            status, error = state["status"], state["error"]
+            outcome: dict[str, Any] = {
+                "operationId": op_id,
+                "operation": operation,
+                "artifactId": artifact["artifactId"],
+                "status": status,
+                "stages": stages,
+                "steps": steps,
+                "postConditions": pcs,
+                "site": site.status(),
+            }
+            if state["export_hash"]:
+                outcome["exportHash"] = state["export_hash"]
+            if error:
+                outcome["error"] = error
+            event: tuple[str, str, dict[str, Any]] | None = None
+            if status != "already_applied":
+                event_art = forward if operation == "rollback" and status == "applied" else artifact
+                etype, data = self._event_data(operation, status, event_art, target_rev, error)
+                if operation == "rollback" and status == "applied":
+                    data["revision"] = forward["blueprint"]["base"]["revision"] if forward["blueprint"]["base"] else target_rev
+                event = (_new_event_id(), etype, data)
+                outcome["eventIds"] = [event[0]]
+
+            # finalize (5.6): the stored outcome, the site state and the event commit together or not at all. The outcome
+            # write goes first and is compare-and-set on our reservation: a worker whose lease was recovered by another
+            # one writes nothing (its site and event writes roll back with the transaction).
             with self.store.transaction():
                 if not self.store.idem_complete(site.tenant_id, operation, inp["idempotencyKey"], op_id, outcome):
                     raise _LeaseLost()  # rolls the site and event writes back with the transaction
                 self.store.save_site(site)
                 if event is not None:
                     self.store.append_event(*event, tenant_id=site.tenant_id)
+                if persist_state and self.frappe_backend is not None:
+                    # BPL-033: the tenant-database copy of the state is written inside the transaction, after the lease
+                    # check, so a failure rolls the outcome back instead of being swallowed after it was committed. The
+                    # backend commits its own connection, so this write goes in as a pending marker (never `ready`): a
+                    # process death before the store commit leaves a copy that matches what lease recovery will record.
+                    try:
+                        self.frappe_backend.persist_site_state(
+                            site.tenant_id, self._site_snapshot(site, pending=True, token=marker)
+                        )
+                    except Exception as exc:
+                        raise _StatePersistFailed() from exc
+            if mark_ready and self.frappe_backend is not None and site.state != "recovery_required":
+                # The store has committed and the lock is free: the copy may now say what the store says, but only while it
+                # still carries this run's marker. If another run wrote the copy since, this write is stale and changes
+                # nothing. A failure leaves the marker, which blocks the site (fail closed); the next recovery sweep,
+                # replay or already_applied rewrites the copy from the store. The committed outcome is true and stands.
+                try:
+                    self.frappe_backend.persist_site_state(
+                        site.tenant_id, self._site_snapshot(site, token=self._new_id("cp"), expect=marker)
+                    )
+                except Exception:
+                    pass
+            return outcome
+
+        try:
+            try:
+                # BPL-033: a run in which no step took effect (readiness refusal, rejection, already applied) leaves the
+                # engine and the tenant-state copy unchanged, so it neither needs the tenant database nor escalates.
+                took_effect = any(st["status"] not in ("not_run", "already_present") for st in steps)
+                # the store changed when a step ran, the state moved, or the site content differs from before (a zero-step
+                # apply moves applied and history without running a step)
+                store_changed = (
+                    took_effect
+                    or site.state != state_before
+                    or self._mirror_key(self._site_snapshot(site), with_state=False) != mirror_before
+                )
+                outcome = settle(store_changed, mark_ready=store_changed)
+            except _StatePersistFailed:
+                # Fail closed: the engine may hold effects the tenant-database state does not describe. Record that in
+                # the outcome, the audit result and the event, block the site for a human (ADR-0028) and say so.
+                site.state = "recovery_required"
+                stages[:] = [st for st in stages if st["stage"] != "finalize"] + [{"stage": "finalize", "status": "failed"}]
+                state.update(status="recovery_required", error=AdapterError("recovery_required", stage="finalize").to_error(),
+                             export_hash=None)
+                outcome = settle(False)
+                self._repair_state_copy(site.tenant_id)  # keep the copy from claiming a ready site; the failure is reported above
         except _LeaseLost:
             return self._lost_lease_outcome(site.tenant_id, operation, inp)
-        if self.frappe_backend is not None:
-            try:
-                self.frappe_backend.persist_site_state(site.tenant_id, self._site_snapshot(site))
-            except Exception:
-                pass
+        if state["status"] == "already_applied":
+            self._repair_state_copy(site.tenant_id)  # nothing ran; the copy may still lag a store that did commit earlier
         if timed_out["v"]:
             raise AdapterError("timeout", stage="execute")
         return outcome, False
@@ -1479,6 +1806,18 @@ class ChangeEngineAdapter:
             finish("failed_clean", AdapterError("engine_unavailable", stage="prepare").to_error())
             return
 
+        # BPL-033: a read-only readiness check of the engine site before the first step, so a site that cannot take the
+        # artifact fails clean here (nothing ran, contract 5.6) instead of compensating after earlier steps committed.
+        check_ready = getattr(self.frappe_backend, "check_ready", None) if self.frappe_backend is not None else None
+        if callable(check_ready):
+            try:
+                check_ready(site.tenant_id, artifact["steps"])
+            except Exception as exc:
+                code = getattr(exc, "code", None)
+                stages.append({"stage": "prepare", "status": "failed"})
+                finish("failed_clean", AdapterError(code if isinstance(code, str) else "engine_unavailable", stage="prepare").to_error())
+                return
+
         self.store.save_prepare_intent(
             op_id,
             site.tenant_id,
@@ -1513,8 +1852,7 @@ class ChangeEngineAdapter:
                 comp_fault = bool(fault["comp"])
                 break
             if guard is not None:
-                guard()  # before the journal entry: a step that never ran must not appear as run
-            self.store.append_journal(site.tenant_id, artifact["artifactId"], seq, "execute")
+                guard()  # before the step: a worker that lost its lease must not start one
             try:
                 self._exec(site, step, persist_storage=True, guard=guard)
             except _LeaseLost:
@@ -1534,6 +1872,17 @@ class ChangeEngineAdapter:
                 break
             entry_j["executed"] = True
             entry["status"] = "applied"
+            # BPL-033: the durable journal lists a step only once it took effect (contract 15.1: a step that failed
+            # before taking effect is not listed). The in-memory journal above already counts the step as executed, so
+            # a journal write that fails now cannot hide it: fail closed, a human decides (ADR-0028).
+            try:
+                self.store.append_journal(site.tenant_id, artifact["artifactId"], seq, "execute")
+            except _LeaseLost:
+                raise
+            except Exception:
+                failure = AdapterError("recovery_required", {"stepSeq": seq}, stage="execute")
+                comp_fault = True
+                break
 
         stages.append({"stage": "execute", "status": "failed" if failure else "done"})
         doc = self._export(site)
@@ -1571,6 +1920,16 @@ class ChangeEngineAdapter:
                 "revision": copy.deepcopy(artifact["blueprint"]["target"]),
             }
             site.history.append(copy.deepcopy(site.applied))
+        type_ptrs = [
+            step["pointer"]
+            for step in artifact["steps"]
+            if step["kind"] == "field.set_property" and (step.get("params") or {}).get("property") == "/type"
+        ]
+        if type_ptrs:
+            changed = site.config.setdefault("_typeChangedPointers", [])
+            for ptr in type_ptrs:
+                if ptr not in changed:
+                    changed.append(ptr)
         site.applied_ids.add(artifact["artifactId"])
         stages.append({"stage": "finalize", "status": "done"})
         finish("applied", None, sha(self._export(site)))
@@ -1717,8 +2076,7 @@ class ChangeEngineAdapter:
                     raise AdapterError("stale_sync_version")
                 self.store.replace_members(tenant, members)
             site.sync_version = inp["syncVersion"]
-            if self.frappe_backend is not None:
-                self.frappe_backend.persist_site_state(tenant, self._site_snapshot(site))
+            self._repair_state_copy(tenant)  # the store has committed: mirror it (compare-and-set, never an older state)
             return result, False
         except BaseException:
             self._release_on_error(tenant, "sync_members", inp, op_id)

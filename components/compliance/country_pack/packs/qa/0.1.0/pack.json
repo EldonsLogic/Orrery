@@ -8,10 +8,10 @@
   "status": "tested",
   "evidenceStatus": "unverified",
   "testOnly": false,
-  "notes": "Tested for structure only; all facts UNVERIFIED (CMP-030 research, accessed 2026-11-18; see SOURCES.md). No VAT in force, no e-invoicing law enacted, payroll and WPS out of v1 scope. CoA and print template refs are unresolved placeholders. Arabic text is unreviewed (ADR-0033). Declarative metadata only, no tax maths.",
+  "notes": "Tested for structure only; all facts UNVERIFIED (CMP-030 research, accessed 2026-11-18; see evidence.json). No VAT in force, no e-invoicing law enacted, payroll and WPS out of v1 scope. CoA and print template refs are unresolved placeholders. Arabic text is unreviewed (ADR-0033). Declarative metadata only, no tax maths.",
   "name": {
-    "ar": "حزمة دولة قطر (مسودة غير مراجعة)",
-    "en": "Qatar Country Pack (draft, unverified)"
+    "ar": "حزمة دولة قطر",
+    "en": "Qatar Country Pack"
   },
   "coaTemplate": {
     "componentId": "finance.coa_qa_unresolved",
@@ -54,8 +54,8 @@
         {
           "id": "ramadan",
           "labels": {
-            "ar": "ساعات العمل في رمضان (غير مراجعة)",
-            "en": "Ramadan working hours (unverified)"
+            "ar": "ساعات العمل في رمضان",
+            "en": "Ramadan working hours"
           },
           "rule": "ramadan",
           "hours": {

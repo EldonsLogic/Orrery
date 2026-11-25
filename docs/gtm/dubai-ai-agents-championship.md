@@ -77,7 +77,7 @@ Backup: pre-recorded run of the same path; synthetic data banner on screen.
 | Finalists must run a fully working agent live | Eval-backed path, fallback transcript, rehearse |
 | Distraction from G1 interviews (GTM-002) | Hard cap about 2 weeks of effort; stop if GTM-002 slips |
 | Demo leaks "Frappe" or "ERPNext", or real customer data | Check deck, video and UI strings before submit (ADR-0016, ADR-0018) |
-| Name "Orrery" is not cleared | Say "the platform" in deck and video (LEG-008) |
+| Name "Seshna" is not yet cleared | Use Seshna without TM or (R); counsel clearance under LEG-008; domain under LEG-005 |
 | Claims in the deck unsupported | Only VERIFIED figures; label targets as ours |
 
 ## 6. Success measures (set before building)

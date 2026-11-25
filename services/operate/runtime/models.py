@@ -169,7 +169,7 @@ class RunResult:
     status: str                     # completed | interrupted | stopped | cancelled | failed
     stop_reason: str                # none | interrupt | max_steps | max_tool_calls | max_tokens | max_cost |
                                     # wall_clock | loop_guard | refusals | needs_approval | propose_unavailable |
-                                    # cancelled | budget | error
+                                    # cancelled | budget | rate_limited | error
     answer: str = ""
     error_code: str | None = None
     approval_ids: tuple = ()

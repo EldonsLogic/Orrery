@@ -1,0 +1,11 @@
+/* Seshna mark colours from the brand tokens only (dark values included). Never the tenant primary: the mark is the Seshna logo (founders, 2026-11-24). Never rotated or mirrored. */
+.root {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+  color: var(--seshna-mark);
+}
+
+.accent {
+  color: var(--seshna-mark-accent);
+}

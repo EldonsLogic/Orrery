@@ -31,6 +31,7 @@ Components read variables only. The server stores the resolved tokens at apply t
 | Focus ring width, offset and the 3:1 rule (colour follows the primary) | Accessibility |
 | Arabic and RTL behaviour, Western digits, mirroring rules, the Latin name "Seshna" | v1 rule |
 | The Seshna mark in "Powered by" | Seshna's own mark, mono |
+| Product state marks (Status, Progress, Loading, bullets): `--seshna-mark` and `--seshna-mark-accent` | Decided by both founders 2026-11-24: the mark is the Seshna logo and the guidelines forbid recolouring it, so these marks stay Seshna Cobalt (Coral for the one accent bullet) in every tenant workspace. The tokens live in `tokens.json` `brandMark`; `derive_tenant_theme.py` refuses to emit any `--seshna-*` variable (`09-applications.md`) |
 
 ## 3. Derivation algorithm (`derive_tenant_theme.py`)
 Input: one primary hex, optional accent hex. Work in OKLCH (L lightness, C chroma, H hue; Ottosson matrices). Every colour is gamut-mapped by reducing chroma only; contrast is measured with WCAG 2.x on the final rounded hex.

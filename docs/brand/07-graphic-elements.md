@@ -10,4 +10,4 @@ The Nuqta S mark (`02-logo.md`) is the source of every brand graphic. Everything
 - **Photography.** Real owner-led businesses in Saudi Arabia, the UAE, Egypt and Qatar at work: shops, warehouses, workshops, offices, in natural light. No posed stock scenes, futuristic screens or robots.
 - **Never.** Gradients, glows, sparkles, orbs, 3D planets, neural networks, Islamic geometric patterns used as decoration.
 
-Sizes and states of the status and progress marks are not specified yet (see `10-open-items.md`).
+States are built in the product (`09-applications.md`); sizes and stroke are inferred, see `10-open-items.md`.

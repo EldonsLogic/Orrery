@@ -7,6 +7,7 @@ import type { FactoryReviewPort } from '../../factory/port';
 import { asList, detailLines, plainText } from '../../factory/text';
 import type { ComponentRequestRecord } from '../../factory/types';
 import { ReviewActions } from './ReviewActions';
+import { StatusMark, type StatusMarkKind } from '../marks/StatusMark';
 import styles from './Factory.module.css';
 
 /** Untrusted text: always a text node inside <bdi> (so reordering characters cannot leak out), never HTML. */
@@ -26,6 +27,15 @@ function Code({ v }: { v: unknown }) {
   );
 }
 
+/** Brand status mark for the request (BRD-014): no draft yet, drafted by the AI and awaiting review, approved by a person. */
+const STATUS_MARK: Partial<Record<string, StatusMarkKind>> = {
+  requested: 'not_started',
+  needs_human_classification: 'not_started',
+  drafted: 'drafted',
+  in_review: 'drafted',
+  approved: 'approved',
+};
+
 type Props = { record: ComponentRequestRecord; reviewer: Reviewer; minTenants: number; port: FactoryReviewPort; locale: 'ar' | 'en'; onDone: () => void };
 
 export function RequestDetail({ record: r, reviewer, minTenants, port, locale, onDone }: Props) {
@@ -36,6 +46,7 @@ export function RequestDetail({ record: r, reviewer, minTenants, port, locale, o
   const cls = r.classification;
   const nTenants = evidencedTenants(r);
   const needWhy = [...asList(r.history)].reverse().find((e) => e.event === 'needs_classification' && typeof e.detail?.why === 'string')?.detail.why;
+  const mark = typeof r.status === 'string' && Object.hasOwn(STATUS_MARK, r.status) ? STATUS_MARK[r.status] : undefined;
   const attestedDraft = !!d && !!r.draft_digest && cls?.draft_attested_digest === r.draft_digest;
 
   return (
@@ -45,6 +56,7 @@ export function RequestDetail({ record: r, reviewer, minTenants, port, locale, o
           <Code v={r.id} />
         </h1>
         <p>
+          {mark ? <><StatusMark status={mark} />{' '}</> : null}
           <Badge tone={statusTone(r.status)}>{known('status', r.status) ?? <Code v={r.status} />}</Badge>{' '}
           <Badge tone="neutral">{known('kind', r.need?.kind) ?? <Code v={r.need?.kind} />}</Badge>
         </p>

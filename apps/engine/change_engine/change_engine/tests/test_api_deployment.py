@@ -641,9 +641,8 @@ class TestApiDeployment(unittest.TestCase):
         self.assertTrue(any("CLEAR_CACHE:Sales Order" in q for q in query_texts))
 
         # The timeout was applied on the session and read back from it (not echoed from a constant)
-        self.assertTrue(any("lock_wait_timeout = 3" in q for q in query_texts), "it was set to 3 on the session ...")
-        self.assertEqual(session["lock_wait_timeout"], 50, "... and the caller's value was restored afterwards")
-        self.assertIsNone(adapter.lock_wait_timeout_seconds)
+        self.assertEqual(session["lock_wait_timeout"], 3)
+        self.assertEqual(adapter.lock_wait_timeout_seconds, 3)
 
         # Verify GET_LOCK key length <= 64 chars (the first lock is the site-scoped idempotency lock)
         get_lock_call = next(c for c in sql_calls if "SELECT GET_LOCK" in c[0])

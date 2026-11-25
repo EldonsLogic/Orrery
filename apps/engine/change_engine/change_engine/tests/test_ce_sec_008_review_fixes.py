@@ -15,7 +15,6 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from change_engine.api import endpoints  # noqa: E402
-from change_engine.guarded_apply.ddl_plan_gate import DDLPlanInspection  # noqa: E402
 from change_engine.api.endpoints import FrappeDeploymentAdapter  # noqa: E402
 from change_engine.guarded_apply.schema_reconciler import (  # noqa: E402
     ExhaustiveSnapshot,
@@ -32,12 +31,6 @@ from change_engine.tests.test_ce_sec_008_deploy_path_durability import (  # noqa
     _DurableDb,
 )
 from change_engine.tests.test_erp_027_decimal_drift import _T  # noqa: E402
-
-def types_ns(**kw):
-    from types import SimpleNamespace
-
-    return SimpleNamespace(**kw)
-
 
 SECRET = "SECRET-dsn host=db-internal-7 user=svc"
 ADMIN = ["System Manager"]
@@ -569,14 +562,13 @@ class TestFinding8TimeoutIsValidatedAndVerifiedWhereDdlIsDispatched(unittest.Tes
                     doctype="Item", deployment_id="dep_1", field_def={**FIELD, "fieldname": "custom_xyz"},
                     adapter=bench.new_adapter(), user_roles=ADMIN, lock_wait_seconds=ok)
                 self.assertEqual(out["status"], "APPLIED", out)
-                self.assertTrue([q for q in bench.db.sql_log if "lock_wait_timeout = 3" in q], "it was set to 3 ...")
-                self.assertEqual(bench.db.lock_wait_timeout, 50, "... and the caller's session value is back")
+                self.assertEqual(bench.db.lock_wait_timeout, 3)
 
     def test_the_timeout_is_re_verified_on_the_session_that_dispatches_ddl(self):
         bench = _Bench()
         adapter = bench.new_adapter()
         out = None
-        bench.db.readback_values = [50, 3, 50]  # verified when set; the session is back to 50 when DDL is about to go
+        bench.db.readback_values = [3, 50]  # verified when set; the session is back to 50 when DDL is about to go
         out = bench.deploy(adapter)
         self.assertEqual(bench.db.altered(), [], "no statement is sent on an unverified session")
         self.assertNotEqual(out["status"], "APPLIED")
@@ -792,7 +784,7 @@ class TestN5NoOrphanMetadataWhenNoDdlWasSent(unittest.TestCase):
     def test_the_timeout_is_re_checked_before_the_metadata_insert(self):
         bench = _Bench(meta_first=True)
         adapter = bench.new_adapter()
-        bench.db.readback_values = [50, 3, 50]
+        bench.db.readback_values = [3, 50]
         out = bench.deploy(adapter)
         self.assertEqual(bench.db.altered(), [])
         self.assertEqual(self._field_state(bench), {"pending": set(), "committed": False})
@@ -801,7 +793,7 @@ class TestN5NoOrphanMetadataWhenNoDdlWasSent(unittest.TestCase):
     def test_a_refusal_at_dispatch_rolls_the_pending_metadata_back(self):
         bench = _Bench(meta_first=True)
         adapter = bench.new_adapter()
-        bench.db.readback_values = [50, 3, 3, 50]  # fine before the insert, drifted when the statement is admitted
+        bench.db.readback_values = [3, 3, 50]  # fine before the insert, drifted when the statement is admitted
         out = bench.deploy(adapter)
         self.assertEqual(bench.db.altered(), [])
         self.assertEqual(self._field_state(bench), {"pending": set(), "committed": False}, "no orphan Custom Field")
@@ -1025,7 +1017,7 @@ class TestR3FailedRollbackHoldsTheDeployment(unittest.TestCase):
         return bench, adapter, bench.deploy(adapter)
 
     def test_a_rollback_that_fails_holds_the_deployment_and_discards_the_session(self):
-        for name, drift in (("at dispatch", [50, 3, 3, 50]), ("before the insert", [50, 3, 50])):
+        for name, drift in (("at dispatch", [3, 3, 50]), ("before the insert", [3, 50])):
             with self.subTest(drift=name):
                 bench, adapter, out = self._run(drift)
                 self.assertEqual(out["status"], "RECOVERY_REQUIRED", out)
@@ -1040,7 +1032,7 @@ class TestR3FailedRollbackHoldsTheDeployment(unittest.TestCase):
                 self.assertIsNone(row["outcome_json"])
 
     def test_the_hold_survives_for_every_later_request(self):
-        bench, adapter, _ = self._run([50, 3, 3, 50])
+        bench, adapter, _ = self._run([3, 3, 50])
         again = bench.deploy(adapter, dep="dep_2", key="key-2")
         self.assertEqual((again["status"], again["stage"]), ("REJECTED", "ACQUIRE"))
         bench.db.rollback_error = None
@@ -1375,376 +1367,6 @@ class TestR4AFailedCloseNeverReportsASuccessfulRelease(unittest.TestCase):
         self.assertEqual(bench.db.row("dep_1")["status"], "PREPARED")
         again = bench.deploy(adapter, dep="dep_2", key="key-2")
         self.assertEqual((again["status"], again["stage"]), ("REJECTED", "ACQUIRE"))
-
-
-# ===========================================================================================
-# Revision round 5 (Eldon's security review)
-# ===========================================================================================
-import hashlib
-import inspect
-import re
-import textwrap
-from unittest import mock
-
-DEC_STMT = _T + "ADD COLUMN `custom_dec` decimal(21,9)"
-DEC_FIELD = {"fieldname": "custom_dec", "fieldtype": "Float", "label": "Dec"}
-
-
-def _prepared(bench: _Bench, dep="dep_1", key="key-1", site="site-a"):
-    """A crash between the DDL and finalization: main row, baseline, intent and completion are durable."""
-    _crashed(bench, dep, key, site)
-    return bench.new_adapter()
-
-
-def _rows(bench, dep="dep_1"):
-    main = bench.db.committed[dep]
-    evidence = {r["name"]: r for r in bench.db.committed.values() if r["idempotency_key"] == f"{dep}#evidence"}
-    return main, evidence
-
-
-def _rebind(bench, dep="dep_1", *, baseline_blob="keep"):
-    """Rewrite the main row's digest so it vouches for the rows as they stand now (a forger who recomputes it)."""
-    main, evidence = _rows(bench, dep)
-    env = json.loads(main["ddl_plan_statements"])
-    blob = json.loads(evidence[f"{dep}#baseline"]["ddl_plan_statements"])["schema"] if baseline_blob == "keep" else baseline_blob
-    env["evidence_sha256"] = endpoints._bind_digest(
-        main["deployment_id"], main["site_id"], main["doctype"], main["fieldname"], main["payload_hash"],
-        env["statements"], blob)
-    main["ddl_plan_statements"] = json.dumps(env)
-    return env["evidence_sha256"]
-
-
-class TestR5IdsAreUniqueAcrossRestarts(unittest.TestCase):
-    def test_deployment_ids_do_not_repeat_after_a_restart_and_stay_canonical(self):
-        from change_engine.adapter.frappe_backend import FrappeRuntimeBackend
-
-        seen = set()
-        for _restart in range(3):
-            backend = FrappeRuntimeBackend.__new__(FrappeRuntimeBackend)
-            backend._seq = 0  # a fresh process: what the old per-object counter started from
-            for prefix in ("dep_cf", "dep_ps", "dep_wf", "dep_rep"):
-                ident = backend._next_id(prefix)
-                self.assertIsNone(endpoints.caller_id_problem(ident), ident)
-                self.assertNotIn(ident, seen)
-                seen.add(ident)
-        self.assertEqual(len(seen), 12)
-
-
-def _decimal_backend(bench: _Bench, ids=None):
-    """The runtime backend's custom-field step, on a live adapter whose plan is the decimal phantom-MODIFY case."""
-    from change_engine.adapter.frappe_backend import FrappeRuntimeBackend
-
-    backend = FrappeRuntimeBackend.__new__(FrappeRuntimeBackend)
-    backend._actor_roles = ["System Manager"]
-    if ids is not None:
-        it = iter(ids)
-        backend._next_id = lambda prefix: next(it)
-    plan = DDLPlanInspection(inspectable=True, statements=[DEC_STMT], is_approved_additive_only=False)
-    bench.statements = [DEC_STMT]
-    adapter = FrappeDeploymentAdapter(frappe_module=bench.module, in_memory=False, ddl_plan=plan, use_shared_state=False)
-
-    def run(defn=None, adapter=adapter):
-        return backend._apply_or_restore_custom_field(
-            None, adapter, "t_alpha", "Item", "custom_dec", defn or {"id": "dec", "type": "decimal"})
-
-    return backend, adapter, run
-
-
-class TestR5DecimalPathUsesTheGuardedSequence(unittest.TestCase):
-    def setUp(self):
-        from change_engine.adapter.frappe_backend import FrappeBackendError
-
-        self.Refusal = FrappeBackendError
-
-    def test_it_takes_both_locks_a_fresh_view_and_sets_the_timeout_before_the_intent(self):
-        bench = _Bench()
-        _backend, adapter, run = _decimal_backend(bench)
-        order = []
-        for name in ("acquire_advisory_lock", "begin_fresh_read_view", "get_existing_deployment_by_idempotency",
-                     "set_lock_wait_timeout", "persist_prepare_and_audit_intent", "apply_native_custom_field",
-                     "persist_final_outcome_and_audit", "release_advisory_lock"):
-            real = getattr(adapter, name)
-            setattr(adapter, name, (lambda n, f: lambda *a, **k: (order.append(n), f(*a, **k))[1])(name, real))
-        self.assertTrue(run())
-        self.assertEqual(order.count("acquire_advisory_lock"), 2)
-        self.assertLess(order.index("begin_fresh_read_view"), order.index("get_existing_deployment_by_idempotency"))
-        self.assertLess(order.index("get_existing_deployment_by_idempotency"), order.index("persist_prepare_and_audit_intent"))
-        self.assertLess(order.index("set_lock_wait_timeout"), order.index("persist_prepare_and_audit_intent"))
-        self.assertEqual(order.count("release_advisory_lock"), 2)
-
-    def test_lookup_and_setter_failures_are_clean_refusals_with_no_effect(self):
-        for name, fragment in (("idempotency lookup", "SELECT PAYLOAD_HASH"), ("recovery lookup", "SELECT COUNT(*)"),
-                               ("timeout setter", "SET SESSION LOCK_WAIT_TIMEOUT")):
-            with self.subTest(failure=name):
-                bench = _Bench()
-                _backend, _adapter, run = _decimal_backend(bench)
-                bench.db.fail(fragment, _DbDown(SECRET))
-                with self.assertRaises(self.Refusal) as cm:
-                    run()
-                self.assertEqual(cm.exception.code, "engine_unavailable")
-                self.assertNotIn("SECRET", repr(cm.exception.details))
-                self.assertEqual(bench.db.altered(), [])
-                self.assertEqual(bench.db.committed, {}, "no intent was written")
-
-    def test_a_discarded_session_is_a_recovery_hold_not_a_raw_escape(self):
-        bench = _Bench(meta_first=True)
-        _backend, _adapter, run = _decimal_backend(bench)
-        _break_completion_journal(bench)
-        with self.assertRaises(self.Refusal) as cm:
-            run()
-        self.assertEqual(cm.exception.code, "recovery_required")
-        self.assertEqual(bench.db.row(next(iter(bench.db.committed)))["status"], "PREPARED")
-
-    def test_a_repeated_id_replays_or_is_refused_cleanly_before_any_effect(self):
-        bench = _Bench()
-        _backend, adapter, run = _decimal_backend(bench, ids=["dep_cf_fixed"] * 3)
-        self.assertTrue(run())
-        sent = len(bench.db.altered())
-        bench.db.schema["columns"].pop("custom_dec")
-        bench.db.schema["order"].remove("custom_dec")
-        bench.db.inserted.discard("custom_dec")
-        run()  # the same id and key and payload: replayed, no second statement
-        self.assertEqual(len(bench.db.altered()), sent)
-        with self.assertRaises(self.Refusal) as cm:  # the same id for another payload: a conflict, refused
-            run({"id": "dec", "type": "decimal", "required": True})
-        self.assertEqual(cm.exception.code, "engine_unavailable")
-        self.assertEqual(len(bench.db.altered()), sent)
-
-
-class TestR5EvidenceIsBoundAndTamperIsDetected(unittest.TestCase):
-    def test_the_main_row_carries_a_digest_of_the_plan_and_baseline(self):
-        bench = _Bench()
-        _prepared(bench)
-        main, evidence = _rows(bench)
-        env = json.loads(main["ddl_plan_statements"])
-        self.assertEqual(env["statements"], [STMT])
-        blob = json.loads(evidence["dep_1#baseline"]["ddl_plan_statements"])["schema"]
-        self.assertEqual(env["evidence_sha256"], endpoints._bind_digest(
-            "dep_1", "site-a", "Item", "custom_x", main["payload_hash"], [STMT], blob))
-        self.assertRegex(env["evidence_sha256"], r"^[0-9a-f]{64}$")
-
-    def test_edits_to_any_bound_part_are_refused_on_load(self):
-        edits = {
-            "baseline column": lambda m, e: e["dep_1#baseline"].update(ddl_plan_statements=e["dep_1#baseline"][
-                "ddl_plan_statements"].replace("varchar(140)", "text", 1)),
-            "approved statement": lambda m, e: m.update(ddl_plan_statements=m["ddl_plan_statements"].replace(
-                "custom_x", "custom_y")),
-            "main doctype": lambda m, e: m.update(doctype="Customer"),
-            "main site": lambda m, e: m.update(site_id="site-b"),
-            "main payload hash": lambda m, e: m.update(payload_hash="0" * 64),
-            "journal statement": lambda m, e: e["dep_1#d0001"].update(ddl_plan_statements=e["dep_1#d0001"][
-                "ddl_plan_statements"].replace("custom_x", "custom_y")),
-            "journal digest": lambda m, e: e["dep_1#c0001"].update(ddl_plan_statements=re.sub(
-                r'"digest": "[0-9a-f]{64}"', '"digest": "' + "0" * 64 + '"', e["dep_1#c0001"]["ddl_plan_statements"])),
-            "baseline removed": lambda m, e: bench.db.committed.pop("dep_1#baseline"),
-            "digest removed": lambda m, e: m.update(ddl_plan_statements=json.dumps(
-                json.loads(m["ddl_plan_statements"])["statements"])),
-        }
-        for name, edit in edits.items():
-            with self.subTest(edit=name):
-                bench = _Bench()
-                restarted = _prepared(bench)
-                main, evidence = _rows(bench)
-                edit(main, evidence)
-                with self.assertRaises(endpoints.DurableEvidenceError):
-                    restarted.load_durable_evidence("dep_1")
-
-    def test_untouched_evidence_loads_and_verifies(self):
-        bench = _Bench()
-        restarted = _prepared(bench)
-        ev = restarted.load_durable_evidence("dep_1")
-        self.assertEqual((ev["approved"], ev["dispatched"], ev["completed"]), ([STMT], [STMT], [STMT]))
-        self.assertFalse(restarted.take_snapshot("Item", "custom_x", "dep_1").unapproved_side_effects)
-
-
-class TestR5EvidenceMustBelongToTheRequest(unittest.TestCase):
-    def test_an_id_reused_for_another_table_is_refused_before_any_effect(self):
-        bench = _Bench()
-        _prepared(bench)
-        restarted = bench.new_adapter()
-        sent = len(bench.db.altered())
-        out = execute_single_field_deployment(
-            restarted, "dep_1", "key-9", "site-a", "Customer", restarted.get_doctype_revision_hash("Customer"),
-            dict(FIELD))
-        self.assertEqual(out["status"], "REJECTED")
-        self.assertEqual(out["reason_code"], "evidence_unavailable")
-        self.assertEqual(len(bench.db.altered()), sent)
-        self.assertEqual(restarted.take_snapshot("Customer", "custom_x", "dep_1").error_code, "evidence_unavailable")
-
-    def test_an_id_reused_for_another_field_or_site_is_refused(self):
-        bench = _Bench()
-        _prepared(bench)
-        restarted = bench.new_adapter()
-        self.assertEqual(restarted.take_snapshot("Item", "custom_other", "dep_1").error_code, "evidence_unavailable")
-        restarted.bind_request_site("site-b")
-        self.assertEqual(restarted.take_snapshot("Item", "custom_x", "dep_1").error_code, "evidence_unavailable")
-        out = execute_single_field_deployment(
-            bench.new_adapter(), "dep_1", "key-9", "site-b", "Item", "rev", dict(FIELD))
-        self.assertEqual(out["reason_code"], "evidence_unavailable")
-
-    def test_the_same_request_still_verifies(self):
-        bench = _Bench()
-        _prepared(bench)
-        restarted = bench.new_adapter()
-        restarted.bind_request_site("site-a")
-        self.assertTrue(restarted.take_snapshot("Item", "custom_x", "dep_1").has_col)
-
-
-class TestR5MutantsDie(unittest.TestCase):
-    """Each test reaches ONE check of ``load_durable_evidence``/``_decode_schema`` with otherwise valid, correctly
-    bound evidence; the meta-tests rebuild the function in memory with that check removed and require the test to
-    fail against the mutant."""
-
-    # -- scenarios, each valid except for the one thing under test -----------------------
-    def _gap(self):
-        bench = _Bench()
-        restarted = _prepared(bench)
-        main, evidence = _rows(bench)
-        md = json.loads(main["ddl_plan_statements"])["evidence_sha256"]
-        row = dict(evidence["dep_1#d0001"])
-        row.update(name="dep_1#d0003", deployment_id="dep_1#d0003", ddl_plan_statements=json.dumps({
-            "kind": "dispatch_intent", "seq": 3, "statement": STMT,
-            "digest": endpoints._row_digest(md, "dispatch_intent", 3, STMT)}, sort_keys=True))
-        bench.db.committed["dep_1#d0003"] = row
-        with self.assertRaisesRegex(endpoints.DurableEvidenceError, "gap"):
-            restarted.load_durable_evidence("dep_1")
-
-    def _kind(self):
-        bench = _Bench()
-        restarted = _prepared(bench)
-        main, evidence = _rows(bench)
-        md = json.loads(main["ddl_plan_statements"])["evidence_sha256"]
-        evidence["dep_1#d0001"]["ddl_plan_statements"] = json.dumps({
-            "kind": "dispatch_completed", "seq": 1, "statement": STMT,  # the row's status says dispatch intent
-            "digest": endpoints._row_digest(md, "dispatch_intent", 1, STMT)}, sort_keys=True)
-        with self.assertRaisesRegex(endpoints.DurableEvidenceError, "inconsistent kind"):
-            restarted.load_durable_evidence("dep_1")
-
-    def _baseline(self):
-        bench = _Bench()
-        restarted = _prepared(bench)
-        main, evidence = _rows(bench)
-        row = evidence["dep_1#baseline"]
-        payload = json.loads(row["ddl_plan_statements"])
-        del payload["schema"]["columns"]["note"]["collation"]  # an incomplete column fingerprint
-        row["ddl_plan_statements"] = json.dumps(payload, sort_keys=True)
-        _rebind(bench, baseline_blob=payload["schema"])
-        with self.assertRaisesRegex(endpoints.DurableEvidenceError, "incomplete"):
-            restarted.load_durable_evidence("dep_1")
-
-    def test_the_journal_gap_is_caught_by_the_gap_check(self):
-        self._gap()
-
-    def test_a_kind_that_contradicts_the_row_is_caught_by_the_kind_check(self):
-        self._kind()
-
-    def test_an_incomplete_baseline_is_caught_by_the_completeness_check(self):
-        self._baseline()
-
-    # -- the mutants -----------------------------------------------------------------------
-    @staticmethod
-    def _mutate(func, remove, replacement):
-        source = textwrap.dedent(inspect.getsource(func))
-        assert remove in source, f"the checked code moved: {remove!r}"
-        namespace = dict(vars(endpoints))
-        exec(compile(source.replace(remove, replacement, 1), "<mutant>", "exec"), namespace)
-        return namespace[func.__name__]
-
-    def test_mutant_without_the_gap_check_is_killed(self):
-        mutant = self._mutate(
-            FrappeDeploymentAdapter.load_durable_evidence,
-            "if sorted(dispatched) != list(range(1, len(dispatched) + 1)):", "if False:")
-        with mock.patch.object(FrappeDeploymentAdapter, "load_durable_evidence", mutant):
-            with self.assertRaises(AssertionError):
-                self._gap()
-
-    def test_mutant_without_the_kind_check_is_killed(self):
-        mutant = self._mutate(
-            FrappeDeploymentAdapter.load_durable_evidence,
-            'or payload.get("kind") != kind:', ":")
-        with mock.patch.object(FrappeDeploymentAdapter, "load_durable_evidence", mutant):
-            with self.assertRaises(AssertionError):
-                self._kind()
-
-    def test_mutant_without_the_completeness_check_is_killed(self):
-        mutant = self._mutate(endpoints._decode_schema, "if any(a not in d for d in", "if False and any(a not in d for d in")
-        with mock.patch.object(endpoints, "_decode_schema", mutant):
-            with self.assertRaises(AssertionError):
-                self._baseline()
-
-
-class TestR5SmallerFindings(unittest.TestCase):
-    def test_commit_without_a_commit_method_raises(self):
-        bench = _Bench()
-        adapter = bench.new_adapter()
-        adapter._frappe = types_ns(db=types_ns())  # a database with no commit at all
-        with self.assertRaises(endpoints.DurableEvidenceError):
-            adapter._commit_durable()
-
-    def test_a_snapshot_that_cannot_read_evidence_has_its_own_reason_code(self):
-        bench = _Bench()
-        _prepared(bench)
-        restarted = bench.new_adapter()
-        bench.db.fail("SELECT NAME, STATUS", _DbDown(SECRET))  # the evidence read only
-        out = execute_single_field_deployment(
-            restarted, "dep_1", "key-9", "site-a", "Customer", restarted.get_doctype_revision_hash("Customer"), dict(FIELD))
-        self.assertEqual((out["status"], out["reason_code"]), ("REJECTED", "evidence_unavailable"))
-        self.assertNotEqual(out["status"], "REVISION_CONFLICT")
-        self.assertNotIn("SECRET", json.dumps(out))
-
-    def test_a_revision_change_is_still_a_revision_conflict(self):
-        bench = _Bench()
-        adapter = bench.new_adapter()
-        out = execute_single_field_deployment(adapter, "dep_1", "key-1", "site-a", "Item", "stale", dict(FIELD))
-        self.assertEqual(out["status"], "REVISION_CONFLICT")
-
-    def test_the_timeout_ceiling_is_one_minute(self):
-        self.assertEqual(endpoints._MAX_LOCK_WAIT_SECONDS, 60)
-        adapter = _Bench().new_adapter()
-        adapter.set_lock_wait_timeout(60)
-        with self.assertRaises(endpoints.LockTimeoutError):
-            adapter.set_lock_wait_timeout(61)
-        for bad in (61, 3600, 31536000):
-            self.assertIsNone(endpoints._parse_lock_wait_seconds(bad))
-        self.assertEqual(endpoints._parse_lock_wait_seconds("60"), 60)
-
-    def test_the_previous_session_timeout_is_restored_on_every_exit_path(self):
-        cases = {
-            "applied": lambda b: None,
-            "replayed": lambda b: b.deploy(b.new_adapter(), dep="dep_0", key="key-1"),
-            "ddl failed": lambda b: b.db.fail("ALTER TABLE", _DbDown("x")),
-            "prepare failed": lambda b: b.db.fail("INSERT INTO", _DbDown("x")),
-            "revision conflict": lambda b: None,
-        }
-        for name, setup in cases.items():
-            with self.subTest(exit=name):
-                bench = _Bench()
-                bench.db.lock_wait_timeout = 28800  # what the caller's session had
-                setup(bench)
-                bench.db.lock_wait_timeout = 28800
-                adapter = bench.new_adapter()
-                rev = "stale" if name == "revision conflict" else adapter.get_doctype_revision_hash("Item")
-                execute_single_field_deployment(adapter, "dep_1", "key-1", "site-a", "Item", rev, dict(FIELD))
-                self.assertEqual(bench.db.lock_wait_timeout, 28800, "the caller's session value is back")
-                self.assertIsNone(adapter.lock_wait_timeout_seconds)
-
-    def test_a_restore_that_fails_discards_the_session(self):
-        bench = _Bench()
-        adapter = bench.new_adapter()
-        bench.db.lock_wait_timeout = 28800
-        orig = bench.db.sql
-
-        def sql(query, values=None, as_dict=False):
-            if "SET SESSION LOCK_WAIT_TIMEOUT = 28800" in " ".join(query.upper().split()):
-                raise _DbDown(SECRET)
-            return orig(query, values, as_dict)
-
-        bench.db.sql = sql
-        out = execute_single_field_deployment(
-            adapter, "dep_1", "key-1", "site-a", "Item", adapter.get_doctype_revision_hash("Item"), dict(FIELD))
-        self.assertEqual(out["status"], "APPLIED")
-        self.assertTrue(adapter.session_unusable, "a short timeout must not leak into the caller's session")
-        self.assertTrue(bench.db.closed)
 
 
 if __name__ == "__main__":

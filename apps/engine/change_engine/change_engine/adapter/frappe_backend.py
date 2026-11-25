@@ -15,7 +15,6 @@ import hashlib
 import json
 import os
 import re
-import uuid
 from types import SimpleNamespace
 from typing import Any, Callable, Iterator
 
@@ -43,14 +42,11 @@ from change_engine.guarded_apply.property_setter_engine import (
     execute_property_setter_deployment,
 )
 from change_engine.guarded_apply.report_engine import execute_report_deployment
-from change_engine.guarded_apply.ddl_plan_gate import DDLPlanInspection
 from change_engine.guarded_apply.schema_reconciler import (
-    DeploymentIntentConflictError,
-    DurableEvidenceError,
-    IdempotencyConflictError,
-    LockTimeoutError,
-    SessionDiscardedError,
+    compute_canonical_payload_hash,
     execute_single_field_deployment,
+    make_bounded_lock_key,
+    reconcile_exhaustive_snapshot,
 )
 from change_engine.guarded_apply.workflow_engine import (
     TERMINAL_REJECT_STATE_NAMES,
@@ -186,12 +182,11 @@ class FrappeRuntimeBackend:
         self._actor_roles = list(actor_roles) if actor_roles is not None else list(GOVERNANCE_ACTOR_ROLES)
         self._auto_create_sites = auto_create_sites
         self._sites_path = sites_path
+        self._seq = 0
 
     def _next_id(self, prefix: str) -> str:
-        """A deployment id that never repeats, across objects and restarts: the audit table's primary key is the id
-        and its intent insert is strict, so a per-object counter that restarted at 1 would collide with older rows.
-        ``prefix_<32 hex>`` is inside the canonical id grammar (at most 100 characters)."""
-        return f"{prefix}_{uuid.uuid4().hex}"
+        self._seq += 1
+        return f"{prefix}_{self._seq:08d}"
 
     @staticmethod
     def _safe_attr(obj: Any, *names: str) -> Any:
@@ -1171,15 +1166,18 @@ class FrappeRuntimeBackend:
             and len(ddl_plan.statements) == 1
             and bool(_DECIMAL_ADD_RE.match(ddl_plan.statements[0]))
         )
-        # The decimal phantom-MODIFY case supplies its own judged plan; everything else (both locks, the fresh read
-        # view, the idempotency and recovery lookups, the timeout before the intent, the journal, finalization) is
-        # the one guarded sequence.
-        approved_plan = (
-            DDLPlanInspection(inspectable=True, statements=list(ddl_plan.statements), is_approved_additive_only=True)
-            if is_decimal_additive and not ddl_plan.is_approved_additive_only
-            else None
-        )
-        try:
+        if is_decimal_additive and not ddl_plan.is_approved_additive_only:
+            outcome = self._execute_six_stage_field(
+                dep=dep,
+                deployment_id=dep_id,
+                idempotency_key=f"idemp-{dep_id}",
+                site_id=tenant_id,
+                doctype=doctype,
+                base_revision_hash=base_rev,
+                field_def=frappe_field_def,
+                statements=ddl_plan.statements,
+            )
+        else:
             outcome = execute_single_field_deployment(
                 db=dep,
                 deployment_id=dep_id,
@@ -1188,20 +1186,70 @@ class FrappeRuntimeBackend:
                 doctype=doctype,
                 base_revision_hash=base_rev,
                 field_def=frappe_field_def,
-                approved_plan=approved_plan,
             )
-        except SessionDiscardedError:
-            raise FrappeBackendError("recovery_required", stage="execute") from None
-        except (IdempotencyConflictError, DeploymentIntentConflictError, DurableEvidenceError, LockTimeoutError):
-            # A clean refusal with no effect: the deployment id or key is already bound to something else, or
-            # the durable evidence or the timeout could not be established. The details stay in the log.
-            raise FrappeBackendError("engine_unavailable", stage="execute") from None
         status = outcome.get("status")
         if status == "RECOVERY_REQUIRED":
             raise FrappeBackendError("recovery_required", stage="execute")
         if status not in ("APPLIED", "ALREADY_APPLIED"):
             raise FrappeBackendError("engine_unavailable", stage="execute")
         return status == "APPLIED"
+
+    def _execute_six_stage_field(
+        self,
+        dep: FrappeDeploymentAdapter,
+        deployment_id: str,
+        idempotency_key: str,
+        site_id: str,
+        doctype: str,
+        base_revision_hash: str,
+        field_def: dict[str, Any],
+        statements: list[str],
+    ) -> dict[str, Any]:
+        fieldname = field_def["fieldname"]
+        payload_hash = compute_canonical_payload_hash(site_id, doctype, field_def)
+        lock_key = make_bounded_lock_key(site_id, doctype)
+        if dep.acquire_advisory_lock(lock_key, wait_seconds=5) != 1:
+            return {"deployment_id": deployment_id, "status": "REJECTED", "stage": "ACQUIRE"}
+        try:
+            if dep.is_target_in_recovery_required(site_id, doctype):
+                return {"deployment_id": deployment_id, "status": "RECOVERY_REQUIRED", "stage": "INSPECT"}
+            before = dep.take_snapshot(doctype, fieldname, expected_deployment_id=deployment_id)
+            if before.revision_hash != base_revision_hash:
+                return {"deployment_id": deployment_id, "status": "REVISION_CONFLICT", "stage": "INSPECT"}
+            dep.persist_prepare_and_audit_intent(
+                {
+                    "deployment_id": deployment_id,
+                    "idempotency_key": idempotency_key,
+                    "payload_hash": payload_hash,
+                    "site_id": site_id,
+                    "doctype": doctype,
+                    "fieldname": fieldname,
+                    "base_revision_hash": base_revision_hash,
+                    "ddl_plan_statements": statements,
+                    "status": "PREPARED",
+                }
+            )
+            dep.set_lock_wait_timeout(3)
+            apply_error: str | None = None
+            try:
+                dep.apply_native_custom_field(deployment_id, doctype, field_def)
+            except Exception as exc:
+                apply_error = str(exc)
+            after = dep.take_snapshot(doctype, fieldname, expected_deployment_id=deployment_id)
+            outcome = reconcile_exhaustive_snapshot(
+                deployment_id=deployment_id,
+                doctype=doctype,
+                fieldname=fieldname,
+                before=before,
+                after=after,
+                apply_error=apply_error,
+            )
+            if outcome["status"] == "APPLIED":
+                dep.clear_doctype_cache(doctype)
+            dep.persist_final_outcome_and_audit(deployment_id, {"payload_hash": payload_hash, "outcome": outcome})
+            return outcome
+        finally:
+            dep.release_advisory_lock(lock_key)
 
     def _quarantine_field(self, dep: FrappeDeploymentAdapter, tenant_id: str, doctype: str, fieldname: str) -> None:
         self._apply_property_setter(dep, tenant_id, doctype, fieldname, "hidden", 1, "Check")

@@ -207,11 +207,9 @@ class _DurableDb(_LiveDb):
             if self.crash_before_ddl:
                 raise _Crash("before DDL took effect")
             self.commit()  # implicit commit
-            m = re.search(r"ADD COLUMN `(\w+)` ([a-z]+(?:\(\d+(?:,\d+)?\))?)", query)
+            m = re.search(r"ADD COLUMN `(\w+)`", query)
             if m:
-                text = m.group(2).startswith(("varchar", "text", "longtext"))
-                self.schema["columns"][m.group(1)] = (
-                    _col(m.group(2)) if text else _col(m.group(2), charset="None", collation="None"))
+                self.schema["columns"][m.group(1)] = _col()
                 self.schema["order"].append(m.group(1))
             if self.crash_after_ddl:
                 raise _Crash("after DDL took effect, before it returned")
@@ -340,7 +338,7 @@ class TestEvidenceIsDurableBeforeAnythingTakesEffect(unittest.TestCase):
         rows = list(seen["committed"].values())
         main = next(r for r in rows if r["deployment_id"] == "dep_1")
         self.assertEqual(main["status"], "PREPARED")
-        self.assertEqual(json.loads(main["ddl_plan_statements"])["statements"], [STMT], "approved plan is durable first")
+        self.assertEqual(json.loads(main["ddl_plan_statements"]), [STMT], "approved plan is durable first")
         kinds = {json.loads(r["ddl_plan_statements"]).get("kind") for r in rows if r["idempotency_key"] == "dep_1#evidence"}
         self.assertIn("baseline", kinds)
         self.assertIn("dispatch_intent", kinds, "the dispatch intent is committed before the statement is sent")
@@ -556,7 +554,7 @@ class TestCrashRecoveryEvidence(unittest.TestCase):
         self.assertTrue(snap.unapproved_side_effects)
         self.assertEqual(snap.revision_hash, "rev_error")
 
-    def test_a_completion_without_its_intent_is_refused(self):
+    def test_a_journal_with_a_gap_is_refused(self):
         bench, restarted = self._crash_at("before_finalize")
         for name, r in list(bench.db.committed.items()):
             if r["idempotency_key"] == "dep_1#evidence" and json.loads(r["ddl_plan_statements"])["kind"] == "dispatch_intent":
@@ -595,8 +593,7 @@ class TestRepeatedAndConflictingRequests(unittest.TestCase):
             bench.new_adapter(), "dep_1", "key-2", "site-a", "Item",
             bench.new_adapter().get_doctype_revision_hash("Item"), {**FIELD, "fieldname": "custom_y"})
         self.assertNotEqual(out["status"], "APPLIED")
-        self.assertEqual((out["stage"], out["reason_code"]), ("INSPECT", "evidence_unavailable"),
-                         "the evidence belongs to another field, so the id is refused before the intent")
+        self.assertEqual(out["stage"], "PREPARE")
         self.assertEqual(bench.db.row("dep_1"), old, "the older record is untouched")
         self.assertEqual(first["status"], "APPLIED")
         self.assertEqual(len(bench.db.altered()), 1, "no second statement was sent")

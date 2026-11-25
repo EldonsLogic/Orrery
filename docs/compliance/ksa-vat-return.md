@@ -1,6 +1,6 @@
 # KSA VAT return report: design
 
-Status: Design draft (revision 4) for Tier 3 line-by-line founder review and Saudi accountant review. No code in this file. Not tax advice.
+Status: Design draft (revision 6) for Tier 3 line-by-line founder review and Saudi accountant review. No code in this file. Not tax advice.
 
 Plan ID: CMP-010 (G2, rigid zone, Tier 3). Depends on CMP-006 ([KSA chart and VAT codes](ksa-coa-and-tax-codes.md)).
 
@@ -79,6 +79,10 @@ Labels come from the **illustrative form in S7 p.15 (FETCHED, Arabic image)**, r
 
 **Allowed `vat_source` (R-SOURCE otherwise).** Every output row, including notes and `O` rows, must be `zatca_xml_bg23` and carry `xml_uuid` (the document's `cbc:UUID`, BR-KSA-03) and `xml_sha256` (hex SHA-256 of the issued XML as stored). Input rows must use `supplier_document` for `domestic_purchase_standard`, `customs_declaration` for `goods_import_standard_at_customs`, and `ledger_only` for `services_reverse_charge_standard` (a self-assessed value with no ZATCA XML). On input rows both `xml_*` fields are `null`. **The extractor's binding duty**: take output rows only from the issued XML's BG-23 breakdown and never synthesise them from ledger postings. Until CMP-004 issues XML, every output row is therefore refused, and the draft computes nothing for sales. That is deliberate (Q-601).
 
+**Sales without a tax invoice (option a, fail-closed).** S8 p.38 shows supplies outside the scope of VAT for which no tax invoice is required. That example concerns non-registered suppliers selling through a marketplace; we read it as showing that `O` and possibly `E` supplies can lack XML. `O` and `E` rows keep the XML requirement.
+- An exempt sale without XML can only arrive as a non-XML row, which is R-SOURCE. Box 5 can never be quietly understated.
+- An out-of-scope supply without XML is not an input row, so the extractor omits it. Because it affects no box, the output marks `excluded_out_of_scope.coverage: "xml_only"` to flag that the total may be incomplete.
+
 **Mixed zero-rated documents (S5 §8.4).** One BG-23 breakdown covers every line with the same category and rate. A single invoice can therefore put medicines (Box 3) and exports (Box 4) into one `Z` subtotal. The input carries one row per (document, category, rate, reason, original document), and each row repeats its BG-23 subtotal. The rows of a subtotal must add up to it exactly (R-RECON). An extractor that cannot attribute every item of a subtotal to exactly one reason must not emit the document. How a mixed `Z` invoice states its reasons in XML is an open question (§12).
 
 ## 5. Calculation
@@ -102,7 +106,7 @@ All arithmetic runs on integer halalas after strict parsing, with no floats. The
 - `filed_on` must be after `period_end`.
 - `not_filed_as_of` must be on or after the note's `supply_date`, so the evidence covers the issue date.
 - If `original_supply_date` is in the draft period, the period must equal the draft period and `filed_on` must be `null`.
-- The extractor resolves this evidence **once per `original_document_id`**. All note rows that share an `original_document_id` must carry an identical `original_supply_date` and `original_return`, or every one of them is R-NOTECTX.
+- The extractor resolves the evidence **once per original period**: `filed_on` is the actual filing date if the return was filed by extraction time, else `not_filed_as_of` is the extraction date. All note rows naming the same (`period_start`, `period_end`) must carry identical `filed_on` and `not_filed_as_of`. Periods named by different rows must be identical or must not overlap. Rows sharing an `original_document_id` must carry an identical `original_supply_date`. Any conflict makes every row involved R-NOTECTX.
 
 | Condition (S3 §7.1.1) | Column and period |
 |---|---|
@@ -113,9 +117,9 @@ All arithmetic runs on integer halalas after strict parsing, with no floats. The
 
 The selected date must fall inside the period, or the row is refused (R-PERIOD). The function never moves a row. Art. 54 requires a note "within 15 days following the end of the month" of the triggering event (S8 and S3 §7.2, FETCHED guidance; the Arabic regulation text was not read). A later note produces a warning, not a refusal, because it is a document-compliance issue, not a return amount.
 
-**Input notes.** Same-period purchase notes are netted in the Amount column (S2 §10; Art. 40(6)). Cross-period purchase notes are refused (R-PNOTE, Q-622).
+**Input notes.** Same-period purchase notes are netted in the Amount column (S2 §10; Art. 40(6)). The last paragraph of S3 §7.1.1 sets the period for a cross-period purchase note: the customer corrects input tax "in the tax period in which the credit or debit note was issued". It does not set the column, so such notes are refused (R-PNOTE, Q-622).
 
-**Input timing (S2 §9.1–9.2, Art. 49(8)).** An input invoice row has `supply_date` (when the tax became due) and a required `claim_date` (the return it is claimed in), with `supply_date` ≤ `claim_date`. `claim_date` must fall inside the draft period, or the row is refused (R-PERIOD), so an October draft can never take a November claim. Input notes use `supply_date` only, and their `claim_date` is `null`. If `supply_date` is before `period.start` (a late claim, which Art. 49(8) allows up to five calendar years after the calendar year of supply), the row is refused (R-LATECLAIM). Neither the column nor the five-year boundary is set out in official text (§12). This refusal is explicit, not a silent R-PERIOD.
+**Input timing (S2 §9.1–9.2, Art. 49(8)).** An input invoice row has `supply_date` (when the tax became due) and a required `claim_date` (the return it is claimed in), with `supply_date` ≤ `claim_date` (else R-PERIOD). `claim_date` must fall inside the draft period, or the row is refused (R-PERIOD), so an October draft can never take a November claim. Input notes use `supply_date` only, and their `claim_date` is `null`. If `supply_date` is before `period.start` (a late claim, which Art. 49(8) allows up to five calendar years after the calendar year of supply), the row is refused (R-LATECLAIM). Neither the column nor the five-year boundary is set out in official text (§12). This refusal is explicit, not a silent R-PERIOD.
 
 **Periods (S7 §4.1, FETCHED).** "In the KSA, the tax period is either a calendar month or a calendar quarter." Monthly is mandatory above SAR 40 million of annual taxable supplies (S4 Art. 58(1): "during the previous twelve months"). `period.frequency` is an input (ZATCA assigns it), and the function never derives it.
 - `monthly`: one calendar month.
@@ -136,11 +140,11 @@ The selected date must fall inside the period, or the row is refused (R-PERIOD).
 |---|---|---|---|
 | 0. Document VAT | Upstream: engine, CMP-003, CMP-004 | Half-up, BT-117 rounded to 2 decimals per category at document level, on final results only | S5 §10, BR-CO-17 (FETCHED). Q-601 answered 2026-11-25: ZATCA mandates half-up, so the Saudi rounding rule is statutory; rounding of negative amounts stays open. |
 | 0a. Platform setting | Engine | Commercial Rounding, ties away from zero, including negatives | ADR-0033 (a founder decision). It matches S5 for positive values. Python `ROUND_HALF_UP` also rounds ties away from zero (checked: `-0.015` → `-0.02`). |
-| 1. Input check | This function | No rounding. More than 2 decimals is R-PREC. If an output `S` subtotal's `group_vat` ≠ half-up(`group_taxable` × rate / 100), or an input row mismatches, the result is warning **W-BRCO17** listing the `row_id`s and `xml_uuid`, and the draft is still built from the issued figures. Nothing is recomputed or substituted (CMP-003: no second calculator). | S5 BR-CO-17; founder decision "A, warn only" (PR #319 comment, Eldon for both founders, 2026-11-25) |
+| 1. Input check | This function | No rounding. More than 2 decimals is R-PREC. If an output `S` subtotal's `group_vat` ≠ half-up(`group_taxable` × rate / 100), or an input row mismatches, the result is warning **W-BRCO17** listing the `row_id`s and `xml_uuid`, and the draft is still built from the issued figures. No box value is recomputed or substituted (CMP-003: no second calculator); the §5 diagnostic is not a box value. | S5 BR-CO-17; founder decision "A, warn only" (PR #319 comment, Eldon for both founders, 2026-11-25) |
 | 2. Aggregation | This function | Exact integer sum, no rounding | S3 §4.2.4: "the rounded figures used must be the same figures used for … filing the VAT return" |
 | 3. Presentation | Portal | Halalas or whole riyals: UNVERIFIED. No whole-riyal rounding is done. | Q-618 |
 
-The 15% rate is read from the SA country pack version passed in `rate_source`. That version is echoed in the output, and a row whose rate differs from it is refused (R-RATE).
+The 15% rate is read from the SA country pack version passed in `rate_source`. That version is echoed in the output. `rate_source.standard_rate_percent` other than `"15"` is R-RATE (stage 2). A row's rate is part of the closed §4 combination, so a wrong row rate is R-TREAT. There is no row-level R-RATE: the old path was dead because R-TREAT always ran first.
 
 ## 8. Closed input contract (`cmp-010.input.v1`)
 
@@ -179,20 +183,21 @@ TaxRow {
   taxable_amount: amount, vat_amount: amount   # magnitudes, SAR
   group_taxable: amount, group_vat: amount     # the document's BG-23 subtotal for (category, rate)
   vat_source: "zatca_xml_bg23" | "ledger_only" | "supplier_document" | "customs_declaration"   # §4 matrix
-  xml_uuid: UUID string | null, xml_sha256: [0-9a-f]{64} | null   # required on output rows
+  xml_uuid: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} | null   # lower case only
+  xml_sha256: [0-9a-f]{64} | null                                               # both required on output rows
   deductible_share: "full" | "partial" | "none" | null   # input rows; not "full": R-PARTIAL
   currency: "SAR"                                        # conversion happens upstream at the SAMA rate
 }
 ```
 
-**Allocation key and replay.** The key is (`source_doctype`, `source_document_id`, `invoice_category`, `vat_rate_percent`, `reason_code`, `original_document_id`). A repeated key is R-DUP, even with a new `row_id`, so a replayed SAR 1,500 subtotal cannot double. The binding is one-to-one in both directions. Every output source document (`source_doctype`, `source_document_id`) carries exactly one `xml_uuid` and one `xml_sha256` on all its rows, and each `xml_uuid` and each `xml_sha256` belongs to exactly one source document. Any other pairing is R-DUP. This means SI-1's XML replayed under another document ID cannot add SAR 1,500, and one document cannot carry two XMLs whose subtotals would add up separately. Rows sharing a reconciliation group must carry identical `group_*` values and sum to them exactly (R-RECON). For output rows the group is (`source_document_id`, `xml_uuid`, `invoice_category`, `vat_rate_percent`). The binding makes this one subtotal per document, category and rate, so a document's rows can never sum past its own subtotals; for input rows it is (`source_doctype`, `source_document_id`, `invoice_category`, `vat_rate_percent`). A row from another VAT registration is R-TAXPAYER. All rows of one source document (`source_doctype`, `source_document_id`) must share one `document_kind`, checked before the sums, or R-RECON. This stops an invoice row of 600/90 and a credit row of 400/60 from reconciling to a 1,000/150 subtotal while posting 30.
+**Allocation key and replay.** The key is (`source_doctype`, `source_document_id`, `invoice_category`, `vat_rate_percent`, `reason_code`, `original_document_id`). A repeated key is R-DUP, even with a new `row_id`, so a replayed SAR 1,500 subtotal cannot double. The binding is one-to-one in both directions. Every output source document (`source_doctype`, `source_document_id`) carries exactly one `xml_uuid` and one `xml_sha256` on all its rows, and each `xml_uuid` and each `xml_sha256` belongs to exactly one source document. Any other pairing is R-DUP. The stage-3 binding check skips `null` UUIDs and hashes; an output row with a `null` is refused as R-SOURCE in stage 4. A UUID that is not lower-case 8-4-4-4-12 hex is R-SCHEMA, so a case-changed copy cannot pass as a new UUID. This function sees one period only. Preventing a replay across periods, and preventing one supplier invoice entered under two `source_document_id`s (which would double Box 7), is the **extractor's duty**. This means SI-1's XML replayed under another document ID cannot add SAR 1,500, and one document cannot carry two XMLs whose subtotals would add up separately. Rows sharing a reconciliation group must carry identical `group_*` values and sum to them exactly (R-RECON). For output rows the group is (`source_document_id`, `xml_uuid`, `invoice_category`, `vat_rate_percent`). The binding makes this one subtotal per document, category and rate, so a document's rows can never sum past its own subtotals; for input rows it is (`source_doctype`, `source_document_id`, `invoice_category`, `vat_rate_percent`). A row from another VAT registration is R-TAXPAYER. All rows of one source document (`source_doctype`, `source_document_id`) must share one `document_kind`, checked before the sums, or R-RECON. This stops an invoice row of 600/90 and a credit row of 400/60 from reconciling to a 1,000/150 subtotal while posting 30.
 
 **Refusal precedence.** Checks run in stages. The first stage that finds a refusal stops evaluation and reports every refusal from that stage. Within stage 4 and stage 5, checks on one row run in the listed order, and only the row's first failure is reported. R-TAXPAYER sits in stage 2, so a foreign-registration row that passed stage 1 is always reported, even alongside header refusals. `primary_code` is the reported code that comes first in this list. Each single-change vector in §11 yields one distinct code.
-1. Shape: R-SCHEMA, R-TYPE, R-NEG, R-PREC, R-BOUND (single amounts).
+1. Shape: R-SCHEMA (unknown or missing key, malformed date, a value outside its enum such as `document_kind`, `frequency` or `currency`, any pattern mismatch including `xml_uuid`), R-TYPE, R-NEG, R-PREC, R-BOUND (single amounts).
 2. Header and registration: R-TAXPAYER (every row), R-BASIS, R-DATE, R-RATE (period start or `rate_source`), R-PERIOD (period shape), R-CORR, R-CFWD.
 3. Identity: R-DUP (allocation key and XML binding).
-4. Classification, per row: R-TREAT, R-SOURCE, R-ZMAP, R-SPECIAL, R-IMPRET, R-PARTIAL, R-ZEROVAT, R-RATE (row rate).
-5. Dates, per row: R-NOTECTX, R-PNOTE, R-LATECLAIM, R-PERIOD (row dates).
+4. Classification, per row: R-TREAT (including the row rate), R-SOURCE, R-ZMAP, R-SPECIAL, R-IMPRET, R-PARTIAL, R-ZEROVAT.
+5. Dates, per row: R-NOTECTX, R-PNOTE, R-PERIOD (`supply_date` after `claim_date`), R-LATECLAIM, R-PERIOD (dates outside the period).
 6. Documents: R-RECON. (BR-CO-17 is a warning, never a refusal.)
 7. Totals: R-BOUND (sums).
 
@@ -202,11 +207,13 @@ TaxRow {
 - `status: "draft-unreviewed"` and `rate_source` (echoed).
 - `boxes: {key: {amount, adjustment, vat | null, row_ids}}` for 1–9 and 12 (`vat` is `null` for 2–5), and a single value for 13.
 - `not_computed: [10, 11, 14, 15, 16]`, `purch_total_incomplete: true`, `filing_due_date`.
-- `reconciliation: {rcm_self_assessed_vat, excluded_out_of_scope: {taxable, row_ids}}`.
-- `diagnostics` and `warnings[]`. Each warning is `{code, row_ids, xml_uuid | null}`, for example W-BRCO17 or W-NOTELATE. A warning never changes a box value.
+- `reconciliation: {rcm_self_assessed_vat, excluded_out_of_scope: {taxable, row_ids, coverage: "xml_only"}}`.
+- `input_sha256`: hex SHA-256 of the canonical input. Canonical form: the input with `rows` sorted by `row_id`; every object's keys sorted by Unicode code point; separators `,` and `:` with no whitespace; JSON literals for `true`, `false` and `null`; amounts and dates kept as their input strings; UTF-8 without BOM and with non-ASCII characters unescaped. In Python: `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")`.
+- `diagnostics` and `warnings[]`. Each warning is `{code, source_doctype, source_document_id, row_ids, xml_uuid | null}`, so input-side warnings carry their document. W-BRCO17 is emitted once per reconciliation group (document subtotal), not once per row. W-NOTELATE is emitted once per note document. A warning never changes a box value.
+- **Ordering** (deterministic): every `row_ids` list is sorted ascending by code point. `warnings[]` is sorted by (`code`, `source_doctype`, `source_document_id`, first `row_id`). `refusals[]` is sorted by (stage, the code's position in the precedence list, `row_id`, with `null` first).
 - `draft_complete: false` with `incomplete_boxes: [10, 11, 14, 15, 16]`. It stays false while any box is not computed, which is always the case in this version.
 
-**`RefusedResult`**: `{status: "refused", schema_version, primary_code, refusals: [{code, row_id | null, message_key}], warnings: [{code, row_ids, xml_uuid | null}]}`, with no other keys and no amounts. Messages go through i18n.
+**`RefusedResult`**: `{status: "refused", schema_version, primary_code, input_sha256 | null, refusals: [{code, row_id | null, message_key}], warnings: []}`, with no other keys and no amounts. `warnings` is always empty on a refusal. `input_sha256` is `null` when stage 1 fails. Messages go through i18n.
 
 ## 9. What the draft may calculate, and what it refuses
 
@@ -276,7 +283,7 @@ Each refusal vector except T41 changes **one** thing in F and expects a `Refused
 | T18 | L1 taxable and group `"1000000000000.00"` | R-BOUND |
 | T19 | L7 `taxpayer_vat_number` `300000000000013` | R-TAXPAYER |
 | T20 | L7 `supply_date` 09-20 (`claim_date` stays 10-06) | R-LATECLAIM |
-| T21 | L7 VAT and group VAT `"900.01"` | accepted, a warning, Box 13 = **139.99** |
+| T21 | L7 VAT and group VAT `"900.01"` | accepted, one W-BRCO17 on PI-1, Box 13 = **139.99** |
 | T22 | L3 split into two rows of SI-3 (`-32` 3,000.00 and `-35` 2,000.00, group 5,000.00) | accepted: Box 3 2,000.00 and Box 4 3,000.00, both VAT `null` |
 | T23 | T22 with the `-35` row at 1,900.00 (rows sum 4,900.00, SAR 100.00 short of the 5,000.00 group) | R-RECON |
 | T24 | quarterly 2026-08-01 to 2026-10-31 (all dates still inside) | R-PERIOD (not a calendar quarter) |
@@ -298,6 +305,16 @@ Each refusal vector except T41 changes **one** thing in F and expects a `Refused
 | T40 | L6 `original_return` `null` | R-SCHEMA (no fallback to Amount) |
 | T42 | L2 as a VAT-inclusive sale: total 100.01 issued as taxable 86.97 and VAT 13.04 (group the same; 86.97 × 15% = 13.0455 → 13.05) | accepted, W-BRCO17 on L2; issued figures kept: Box 1 9,086.97 / −400.00 / 1,303.04; Box 13 103.04 |
 | T43 | L3 plus a second SI-3 row: `-35`, 5,000.00/0.00, group 5,000.00/0.00, but a different `xml_uuid` and `xml_sha256` | R-DUP (one document, two XMLs; without the check Box 6 would gain 5,000.00) |
+| T44 | add CN-4: credit 10-16 on SI-9 (orig 08-20), 100.00/15.00, its own XML, `original_return` {08-01, 08-31, not filed as of 10-16} (same period as L6, different evidence) | R-NOTECTX |
+| T45 | L1 copied as SI-1B with a new `row_id`, `xml_uuid` upper-cased and a different `xml_sha256` | R-SCHEMA |
+| T46 | L1 `supply_date` `"2026-10-32"` | R-SCHEMA |
+| T47 | L1 `document_kind` `"Invoice"` | R-SCHEMA |
+| T48 | `period.frequency` `"annual"` | R-SCHEMA |
+| T49 | L7 `currency` `"USD"` | R-SCHEMA |
+| T50 | L7 `claim_date` 10-05 (`supply_date` 10-06) | R-PERIOD |
+| T51 | L6 `adjustment_event_date` 08-20 (note due by 09-15, issued 10-15) | accepted, one W-NOTELATE on CN-2, §10 boxes |
+| T52 | L5 `original_return` {10-01, 10-31, filed 11-02} (original inside the draft period) | R-NOTECTX |
+| T53 | add SI-10…SI-20: eleven S invoices, each 999,999,999,999.99 / 150,000,000,000.00, valid XML | R-BOUND (Box 1 amount exceeds 10^15 halalas; stage 7) |
 | T41 | T16 and T19 together | refusals R-TAXPAYER and R-CFWD; `primary_code` R-TAXPAYER |
 
 Properties:
@@ -305,7 +322,8 @@ Properties:
 - **Additivity**: for disjoint valid row sets A and B whose union is valid, every leaf-box column of A∪B equals A plus B.
 - **Coverage**: every accepted `row_id` appears in exactly one leaf box (1–5, 7–9; never in totals 6, 12 or 13) or in `excluded_out_of_scope`.
 - **Order independence**: shuffling the rows gives identical output.
-- **No leakage**: every refusal vector's result has exactly the `RefusedResult` keys.
+- **No leakage**: every refusal vector's result has exactly the `RefusedResult` keys and `warnings: []`.
+- **Digest**: `input_sha256` is unchanged when rows or object keys are reordered, and changes when any value changes.
 
 ## 12. Accountant questions (open; nothing here closes them)
 
@@ -314,6 +332,7 @@ Properties:
 - **Q-601 (ANSWERED in part, 2026-11-25)**: ZATCA mandates half-up (S5 §10), so the Saudi rounding rule is statutory. Still open for the accountant: rounding of negative amounts (`half_away_from_zero` versus half-up). The return itself still does no rounding, and W-BRCO17 stays a warning (founder decision, §7).
 - **Q-615–Q-622 (OPEN)**: live-portal labels (Q-615); the VAT column (Q-616); Adjustment entry (Q-617); halala or riyal (Q-618); out-of-scope reporting (Q-619); Art. 63 correction routes at SAR 15,000 (Q-620); quarter exceptions (Q-621); cross-period purchase notes and late claims (Q-622).
 - **Q-623–Q-626 (OPEN)**: how a mixed `Z` invoice (Box 3 and Box 4 items) states reasons in one BG-23 (S5 §8.4) (Q-623); the Art. 54 note deadline after Resolution (01-06-24) (S8 guidance read; Arabic text not read) (Q-624); which consolidated Arabic Implementing Regulations text governs, given that S4 predates S6 (Q-625); the Art. 49(8) five-year boundary (Q-626).
+- **Q-628 (OPEN)**: whether out-of-scope and exempt sales issued without a ZATCA tax invoice must be reported, and from what evidence (§4: exempt rows without XML are refused; out-of-scope rows without XML are omitted and flagged `xml_only`).
 
 ## 13. Not claimed
 

@@ -4,6 +4,7 @@ Implements supported Frappe REST and Desk RPC interfaces for the AI Control Plan
 """
 
 import hashlib
+import hmac
 import logging
 import json
 import re
@@ -450,8 +451,10 @@ if frappe and hasattr(frappe, "whitelist"):
 
 _LOCK_SENTINEL = object()
 
-# MariaDB's lock_wait_timeout ceiling (one year); anything outside 1..this is refused before any SQL.
-_MAX_LOCK_WAIT_SECONDS = 31536000
+# Ceiling for the DDL lock wait, refused beyond it before any SQL. An ALTER that waits for a metadata lock
+# queues every later query on that table behind it, so any wait longer than a minute is a visible outage; the
+# callers use 3 to 5 seconds. (MariaDB itself allows a year.)
+_MAX_LOCK_WAIT_SECONDS = 60
 
 # CE-SEC-008: durable deployment evidence lives in the existing audit table as append-only rows that
 # share the evidence key ``<deployment_id>#evidence`` (so the idempotency lookup, which needs an outcome,
@@ -485,6 +488,41 @@ def _require_main_row_id(deployment_id: Any) -> None:
     problem = evidence_namespace_problem(deployment_id)
     if problem:
         raise InvalidDeploymentIdError(f"deployment id {problem}")
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def _bind_digest(deployment_id: str, site_id: str, doctype: str, fieldname: str, payload_hash: str,
+                 statements: List[str], baseline_blob: Any) -> str:
+    """SHA-256 binding the approved plan and the baseline schema to the deployment's identity. It is stored in
+    the main row's plan column, so editing the baseline, the plan or the identity (or deleting the baseline) is
+    detected on load. UNKEYED: someone who can write the table AND recomputes it is not detected (a keyed MAC
+    needs key management, CE-SEC-010); and truncating the journal's tail is not detected either."""
+    return hashlib.sha256(_canonical_json({
+        "v": 1, "deployment_id": deployment_id, "site_id": site_id, "doctype": doctype, "fieldname": fieldname,
+        "payload_hash": payload_hash, "statements": list(statements), "baseline": baseline_blob,
+    }).encode("utf-8")).hexdigest()
+
+
+def _row_digest(main_digest: str, kind: str, seq: int, statement: str) -> str:
+    """Binds one journal row to the main row's digest, its kind, its position and its statement."""
+    return hashlib.sha256(_canonical_json(
+        {"v": 1, "main": main_digest, "kind": kind, "seq": seq, "statement": statement}).encode("utf-8")).hexdigest()
+
+
+def _stored_statements(blob: Any) -> List[str]:
+    """The approved statements from a main row's plan column: a plain JSON list (non-DDL rows) or the envelope
+    ``{"statements": [...], "evidence_sha256": ...}`` that physical-DDL rows carry."""
+    try:
+        data = json.loads(blob or "null")
+    except ValueError as exc:
+        raise DurableEvidenceError("stored approved plan is not valid JSON") from exc
+    statements = data.get("statements") if isinstance(data, dict) else data
+    if not isinstance(statements, list) or not all(isinstance(x, str) for x in statements):
+        raise DurableEvidenceError("stored approved plan is not a list of statements")
+    return statements
 
 
 def _evidence_key(deployment_id: str) -> str:
@@ -609,6 +647,8 @@ class FrappeDeploymentAdapter:
             self.in_memory = self._frappe is None
 
         self.apply_called: bool = False
+        self._request_site: Optional[str] = None
+        self._previous_lock_wait_timeout: Optional[int] = None
         self._session_unusable = False
         self._discard_confirmed = False  # True only once the connection is really closed
         self._held_locks: Set[str] = set()
@@ -772,11 +812,17 @@ class FrappeDeploymentAdapter:
         self.mark_session_unusable()
         return False
 
+    def bind_request_site(self, site_id: str) -> None:
+        """The site identity of the request being served, so evidence loaded for a deployment id can be checked
+        against it (an id reused for another site is refused)."""
+        self._request_site = site_id
+
     def set_lock_wait_timeout(self, seconds: int) -> None:
         """Set the session ``lock_wait_timeout`` and read the effective value back (CE-SEC-008).
 
-        Raises ``LockTimeoutError`` when the value is not a positive integer, the statement fails, the
-        read-back fails or is empty, or the effective value differs. Nothing is recorded as effective
+        The session's previous value is remembered (once) so ``restore_lock_wait_timeout`` can put it back.
+        Raises ``LockTimeoutError`` when the value is not an integer from 1 to the ceiling, the statement fails,
+        the read-back fails or is empty, or the effective value differs. Nothing is recorded as effective
         until the read-back matches.
         """
         self.lock_wait_timeout_seconds = None
@@ -784,6 +830,9 @@ class FrappeDeploymentAdapter:
             raise LockTimeoutError(f"lock_wait_timeout must be an integer from 1 to {_MAX_LOCK_WAIT_SECONDS}")
         if not self.in_memory:
             try:
+                if self._previous_lock_wait_timeout is None:
+                    previous = self._frappe.db.sql("SELECT @@SESSION.lock_wait_timeout")
+                    self._previous_lock_wait_timeout = int(previous[0][0])
                 self._frappe.db.sql(f"SET SESSION lock_wait_timeout = {seconds}")
                 rows = self._frappe.db.sql("SELECT @@SESSION.lock_wait_timeout")
                 effective = int(rows[0][0])
@@ -794,6 +843,29 @@ class FrappeDeploymentAdapter:
             if effective != seconds:
                 raise LockTimeoutError(f"lock_wait_timeout is {effective} after setting {seconds}")
         self.lock_wait_timeout_seconds = seconds
+
+    def restore_lock_wait_timeout(self) -> bool:
+        """Put the session's previous ``lock_wait_timeout`` back and verify it, so a short deployment timeout never
+        leaks into the caller's session. A restore that cannot be verified discards the session. Never raises;
+        ``True`` when nothing needed restoring or it was restored."""
+        previous = self._previous_lock_wait_timeout
+        self.lock_wait_timeout_seconds = None
+        if previous is None or self.in_memory:
+            self._previous_lock_wait_timeout = None
+            return True
+        if self._session_unusable:
+            return False
+        try:
+            self._frappe.db.sql(f"SET SESSION lock_wait_timeout = {previous}")
+            rows = self._frappe.db.sql("SELECT @@SESSION.lock_wait_timeout")
+            if int(rows[0][0]) != previous:
+                raise LockTimeoutError("the restored lock_wait_timeout did not take")
+        except Exception:
+            logger.exception("could not restore the session lock_wait_timeout; discarding the session")
+            self.mark_session_unusable()
+            return False
+        self._previous_lock_wait_timeout = None
+        return True
 
     def _verify_session_lock_timeout(self, sql: Any = None) -> None:
         try:
@@ -1129,6 +1201,7 @@ class FrappeDeploymentAdapter:
                 unapproved = False
                 provenance = True  # offline mode: nothing ran, so there is nothing to attribute
                 restarted_dispatched: Optional[List[str]] = None
+                evidence_unverified = False
                 if self.offline_ddl_simulator:
                     pass  # explicit offline mode: no real DDL ran, nothing to compare
                 else:
@@ -1138,13 +1211,29 @@ class FrappeDeploymentAdapter:
                         # CE-SEC-008: a deployment with durable evidence is never re-baselined from the
                         # live (possibly post-DDL) schema: after a restart the committed baseline wins.
                         # A failed or malformed read raises and fails the snapshot closed.
-                        evidence = self.load_durable_evidence(expected_deployment_id)
+                        try:
+                            evidence = self.load_durable_evidence(expected_deployment_id)
+                        except DurableEvidenceError:
+                            raise
+                        except Exception as exc:  # a database error: the evidence is unavailable, never "absent"
+                            raise DurableEvidenceError("the durable evidence could not be read") from exc
+                        main_row = evidence["main"]
+                        if main_row is not None:
+                            # The evidence must belong to THIS request: an id reused for another table, field or
+                            # site is refused, not assessed against someone else's baseline.
+                            if main_row.get("doctype") != doctype or main_row.get("fieldname") != fieldname:
+                                raise DurableEvidenceError("the evidence belongs to another table or field")
+                            if self._request_site is not None and str(main_row.get("site_id")) not in _read_site_ids(
+                                self._request_site, self._frappe
+                            ):
+                                raise DurableEvidenceError("the evidence belongs to another site")
                         if evidence["main"] is not None or evidence["baseline"] is not None:
                             if evidence["baseline"] is None or evidence["approved"] is None:
                                 raise DurableEvidenceError("durable baseline or approved plan is missing")
                             self._before_schema.setdefault((doctype, expected_deployment_id), evidence["baseline"])
                             self._approved_ddl.setdefault(expected_deployment_id, evidence["approved"])
                             restarted_dispatched = evidence["dispatched"]
+                            evidence_unverified = not evidence.get("verified", True)
                             post_apply = True
                             restarted = True
                     if not post_apply:
@@ -1183,6 +1272,10 @@ class FrappeDeploymentAdapter:
                         before_schema,
                         schema,
                     )
+                    if evidence_unverified and not unapproved:
+                        # Legacy evidence carries no digest: it is read, but never trusted as untouched, so the
+                        # reconciler classifies the deployment RECOVERY_REQUIRED instead of finalizing it.
+                        unapproved, _why = True, "the durable evidence is a legacy, unverified record"
                     if unapproved:
                         logger.warning("DDL apply on %s.%s has unapproved side effects: %s", doctype, fieldname, _why)
                     indexes_unchanged = (
@@ -1201,7 +1294,7 @@ class FrappeDeploymentAdapter:
                     unapproved_side_effects=unapproved,
                     revision_hash=rev_hash,
                 )
-            except Exception:
+            except Exception as exc:
                 logger.exception("live snapshot of %s.%s failed; failing closed", doctype, fieldname)
                 return ExhaustiveSnapshot(
                     has_meta=False,
@@ -1211,6 +1304,10 @@ class FrappeDeploymentAdapter:
                     provenance_matches=False,
                     unapproved_side_effects=True,
                     revision_hash="rev_error",
+                    error_code=(
+                        "evidence_unavailable" if isinstance(exc, (DurableEvidenceError, SessionDiscardedError))
+                        else "snapshot_unavailable"
+                    ),
                 )
         else:
             has_meta = (doctype, fieldname) in self.custom_fields
@@ -1264,8 +1361,10 @@ class FrappeDeploymentAdapter:
 
     def _commit_durable(self) -> None:
         self._require_usable_session()
-        if hasattr(self._frappe.db, "commit"):
-            self._frappe.db.commit()
+        commit = getattr(self._frappe.db, "commit", None)
+        if not callable(commit):
+            raise DurableEvidenceError("the database cannot commit; nothing was made durable")
+        commit()
 
     def _rollback_durable(self) -> bool:
         """Roll the open transaction back. A rollback that fails leaves unknown writes pending on this
@@ -1336,22 +1435,31 @@ class FrappeDeploymentAdapter:
             return {
                 "deployment_id": deployment_id, "main": dict(rec) if rec else None,
                 "approved": list(rec.get("ddl_plan_statements", [])) if rec else None,
-                "baseline": None, "dispatched": [], "completed": [],
+                "baseline": None, "dispatched": [], "completed": [], "verified": True,
             }
         main = self._read_audit_row(deployment_id)
         approved: Optional[List[str]] = None
+        stored_digest: Optional[str] = None
+        legacy = False  # a physical-DDL row written before the digest format: readable, never verified
         if main is not None:
-            try:
-                approved = json.loads(main.get("ddl_plan_statements") or "null")
-            except ValueError as exc:
-                raise DurableEvidenceError("stored approved plan is not valid JSON") from exc
-            if not isinstance(approved, list) or not all(isinstance(x, str) for x in approved):
-                raise DurableEvidenceError("stored approved plan is not a list of statements")
+            approved = _stored_statements(main.get("ddl_plan_statements"))
+            envelope = json.loads(main["ddl_plan_statements"])
+            if isinstance(envelope, dict):
+                stored_digest = envelope.get("evidence_sha256")
+                if not isinstance(stored_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", stored_digest):
+                    raise DurableEvidenceError("the stored evidence digest is malformed")
+            elif approved:
+                legacy = True
         rows = self._frappe.db.sql(
             f"SELECT name, status, ddl_plan_statements FROM `{self.audit_table}` WHERE idempotency_key = %s",
             (_evidence_key(deployment_id),),
         )
+        if rows and main is None:
+            raise DurableEvidenceError("evidence rows exist without their deployment row")
+        if rows and stored_digest is None and not legacy:
+            raise DurableEvidenceError("evidence rows exist but the deployment row has no plan to bind them to")
         baseline: Optional[Dict[str, Any]] = None
+        baseline_blob: Any = None
         offline_baseline = False
         dispatched: Dict[int, str] = {}
         completed: Dict[int, str] = {}
@@ -1370,13 +1478,24 @@ class FrappeDeploymentAdapter:
                 if payload.get("schema") is None:
                     offline_baseline = True
                 else:
-                    baseline = _decode_schema(payload["schema"])
+                    baseline_blob = payload["schema"]
+                    baseline = _decode_schema(baseline_blob)
             else:
                 seq, statement = payload.get("seq"), payload.get("statement")
                 table = dispatched if kind == "dispatch_intent" else completed
                 if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1 or not isinstance(statement, str) or seq in table:
                     raise DurableEvidenceError(f"journal row '{_name}' is malformed or repeated")
+                if not legacy and (
+                    stored_digest is None or payload.get("digest") != _row_digest(stored_digest, kind, seq, statement)
+                ):
+                    raise DurableEvidenceError(f"journal row '{_name}' does not match the deployment's digest")
                 table[seq] = statement
+        if stored_digest is not None:
+            expected = _bind_digest(
+                main["deployment_id"], main["site_id"], main["doctype"], main["fieldname"], main["payload_hash"],
+                approved, baseline_blob)
+            if not hmac.compare_digest(expected, stored_digest):
+                raise DurableEvidenceError("the evidence (plan, baseline or identity) does not match its digest")
         if sorted(dispatched) != list(range(1, len(dispatched) + 1)):
             raise DurableEvidenceError("dispatch journal has a gap")
         for seq, statement in completed.items():
@@ -1385,16 +1504,22 @@ class FrappeDeploymentAdapter:
         return {
             "deployment_id": deployment_id, "main": main, "approved": approved, "baseline": baseline,
             "offline_baseline": offline_baseline,
+            # False for a legacy plain-list plan: nothing in it can prove the evidence is untouched.
+            "verified": not legacy,
             "dispatched": [dispatched[i] for i in sorted(dispatched)],
             "completed": [completed[i] for i in sorted(completed)],
         }
+
+    def _main_digest(self, deployment_id: str) -> str:
+        return self._intent_context.get(deployment_id, {}).get("digest", "")
 
     def _journal_dispatch_intent(self, deployment_id: str, statement: str, seq: int, sql: Any) -> None:
         """Commit the intent to send ``statement`` BEFORE it is sent; a failure here means it is not sent."""
         try:
             self._insert_evidence_row(
                 deployment_id, f"d{seq:04d}", _EVIDENCE_DISPATCH,
-                {"kind": "dispatch_intent", "seq": seq, "statement": statement}, sql=sql)
+                {"kind": "dispatch_intent", "seq": seq, "statement": statement,
+                 "digest": _row_digest(self._main_digest(deployment_id), "dispatch_intent", seq, statement)}, sql=sql)
             self._commit_durable()
         except Exception:
             self._rollback_durable()
@@ -1406,7 +1531,8 @@ class FrappeDeploymentAdapter:
         try:
             self._insert_evidence_row(
                 deployment_id, f"c{seq:04d}", _EVIDENCE_COMPLETED,
-                {"kind": "dispatch_completed", "seq": seq, "statement": statement}, sql=sql)
+                {"kind": "dispatch_completed", "seq": seq, "statement": statement,
+                 "digest": _row_digest(self._main_digest(deployment_id), "dispatch_completed", seq, statement)}, sql=sql)
             self._commit_durable()
         except Exception:
             logger.exception("could not journal the completion of DDL statement %d of %s", seq, deployment_id)
@@ -1453,16 +1579,23 @@ class FrappeDeploymentAdapter:
             if physical_ddl and baseline is None and not self.offline_ddl_simulator:
                 raise DurableEvidenceError("no baseline schema was captured before the intent; refusing to prepare")
             self._ensure_audit_table()
-            self._intent_context[dep_id] = {**binding, "base_revision_hash": record.get("base_revision_hash", "rev_default")}
+            baseline_blob = _encode_schema(baseline) if baseline is not None else None
+            blob = json.dumps(approved)
+            digest = ""
+            if physical_ddl:
+                digest = _bind_digest(dep_id, binding["site_id"], binding["doctype"], binding["fieldname"],
+                                      binding["payload_hash"], approved, baseline_blob)
+                blob = json.dumps({"statements": approved, "evidence_sha256": digest})
+            self._intent_context[dep_id] = {
+                **binding, "base_revision_hash": record.get("base_revision_hash", "rev_default"), "digest": digest}
             try:
                 self._insert_audit_row(
-                    name=dep_id, deployment_id=dep_id, blob=json.dumps(approved),
+                    name=dep_id, deployment_id=dep_id, blob=blob,
                     base_revision_hash=record.get("base_revision_hash", "rev_default"),
                     status=record.get("status", "PREPARED"), **binding)
                 if physical_ddl:
                     self._insert_evidence_row(dep_id, "baseline", _EVIDENCE_BASELINE, {
-                        "kind": "baseline", "doctype": binding["doctype"],
-                        "schema": _encode_schema(baseline) if baseline is not None else None,
+                        "kind": "baseline", "doctype": binding["doctype"], "schema": baseline_blob,
                     })
                 self._commit_durable()
             except Exception as exc:
@@ -1473,9 +1606,12 @@ class FrappeDeploymentAdapter:
                 except Exception:
                     existing = None
                 if existing is not None:
+                    try:
+                        stored = _stored_statements(existing.get("ddl_plan_statements"))
+                    except DurableEvidenceError:
+                        stored = None
                     same = (
-                        all(str(existing.get(k)) == str(v) for k, v in binding.items())
-                        and existing.get("ddl_plan_statements") == json.dumps(approved)
+                        all(str(existing.get(k)) == str(v) for k, v in binding.items()) and stored == approved
                     )
                     raise DeploymentIntentConflictError(
                         dep_id, "already_recorded" if same else "binding_mismatch") from exc

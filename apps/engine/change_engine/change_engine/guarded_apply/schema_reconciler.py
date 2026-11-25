@@ -106,9 +106,11 @@ class ExhaustiveSnapshot:
     provenance_matches: bool = True
     unapproved_side_effects: bool = False
     revision_hash: str = ""
+    error_code: Optional[str] = None  # set when the snapshot could not be taken: a refusal, not a revision change
 
 
 from .ddl_plan_gate import (
+    APPROVED_DDL_REGEX,
     DDLPlanInspection,
     inspect_frappe_ddl_plan,
     validate_ddl_plan,
@@ -186,9 +188,15 @@ def execute_single_field_deployment(
     base_revision_hash: str,
     field_def: Dict[str, Any],
     lock_wait_seconds: int = 3,
+    approved_plan: Optional[DDLPlanInspection] = None,
 ) -> Dict[str, Any]:
     """
     Executes the 6-Stage Durable Deployment Sequence defined in ADR-001 Rev 2.3 (§8 & §9).
+
+    ``approved_plan`` lets a caller that has already judged the plan itself (the runtime backend's decimal
+    phantom-MODIFY case, where Frappe's own diff is not additive-only) supply the statements; every other
+    stage, lock, lookup and journal rule is the same. Every statement is still checked against the approved
+    plan at dispatch.
     """
     fieldname = field_def["fieldname"]
     for label, value, code, limit in (
@@ -236,6 +244,10 @@ def execute_single_field_deployment(
                 }
             held.append(key)
 
+        bind = getattr(db, "bind_request_site", None)
+        if callable(bind):
+            bind(site_id)
+
         # Everything below reads fresh: a read view opened before the locks could miss a row another session
         # committed while this one waited for them. A view that cannot be refreshed blocks.
         refresh = getattr(db, "begin_fresh_read_view", None)
@@ -272,6 +284,17 @@ def execute_single_field_deployment(
         # Stage 2: Inspect Revision, Before-Snapshot, and Approved-Only DDL Plan (§6.1, §8)
         before = db.take_snapshot(doctype, fieldname, expected_deployment_id=deployment_id)
 
+        if getattr(before, "error_code", None):
+            # The snapshot (or the evidence behind it) could not be read: a refusal with its own code, never a
+            # "the revision changed" that would send the caller to retry.
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "stage": "INSPECT",
+                "reason_code": before.error_code,
+                "reason": "Fail-closed: the table snapshot or its durable evidence could not be read.",
+            }
+
         if before.revision_hash != base_revision_hash:
             return {
                 "deployment_id": deployment_id,
@@ -293,30 +316,36 @@ def execute_single_field_deployment(
                 ),
             }
 
-        # Mandatory DDL Plan Safety Gate (§6.1 & §6.2)
-        if hasattr(db, "inspect_ddl_plan") and callable(getattr(db, "inspect_ddl_plan", None)):
-            ddl_plan = db.inspect_ddl_plan(doctype, field_def)
+        # Mandatory DDL Plan Safety Gate (§6.1 & §6.2), unless the caller supplied its own judged plan
+        if approved_plan is not None:
+            problem = _approved_plan_problem(approved_plan, doctype, fieldname)
+            ddl_plan = approved_plan if problem is None else DDLPlanInspection(
+                inspectable=True, statements=list(approved_plan.statements), is_approved_additive_only=False,
+                rejection_reason=problem, reason_code="invalid_approved_plan")
         else:
-            existing_cols = None
-            if hasattr(db, "get_table_columns_description") and callable(getattr(db, "get_table_columns_description", None)):
-                existing_cols = db.get_table_columns_description(doctype)
-            ddl_plan = inspect_frappe_ddl_plan(
-                doctype,
-                field_def,
-                existing_columns_desc=existing_cols,
-                offline_simulator=bool(getattr(db, "in_memory", False) or getattr(db, "offline_ddl_simulator", False)),
-            )
-
-        # Enforce fail-closed gate validation on planned statements (§6.1 & §6.2)
-        if ddl_plan.inspectable and ddl_plan.is_approved_additive_only:
-            is_valid, validation_reason = validate_ddl_plan(ddl_plan.statements)
-            if not is_valid:
-                ddl_plan = DDLPlanInspection(
-                    inspectable=True,
-                    statements=ddl_plan.statements,
-                    is_approved_additive_only=False,
-                    rejection_reason=validation_reason,
+            if hasattr(db, "inspect_ddl_plan") and callable(getattr(db, "inspect_ddl_plan", None)):
+                ddl_plan = db.inspect_ddl_plan(doctype, field_def)
+            else:
+                existing_cols = None
+                if hasattr(db, "get_table_columns_description") and callable(getattr(db, "get_table_columns_description", None)):
+                    existing_cols = db.get_table_columns_description(doctype)
+                ddl_plan = inspect_frappe_ddl_plan(
+                    doctype,
+                    field_def,
+                    existing_columns_desc=existing_cols,
+                    offline_simulator=bool(getattr(db, "in_memory", False) or getattr(db, "offline_ddl_simulator", False)),
                 )
+
+            # Enforce fail-closed gate validation on planned statements (§6.1 & §6.2)
+            if ddl_plan.inspectable and ddl_plan.is_approved_additive_only:
+                is_valid, validation_reason = validate_ddl_plan(ddl_plan.statements)
+                if not is_valid:
+                    ddl_plan = DDLPlanInspection(
+                        inspectable=True,
+                        statements=ddl_plan.statements,
+                        is_approved_additive_only=False,
+                        rejection_reason=validation_reason,
+                    )
 
         if not ddl_plan.inspectable or not ddl_plan.is_approved_additive_only:
             return {
@@ -325,6 +354,7 @@ def execute_single_field_deployment(
                 "stage": "INSPECT",
                 "fallback_action": "QUEUE_FOR_CONTROLLED_ADMIN_DEPLOYMENT",
                 "reason": ddl_plan.rejection_reason or "Unprovable or non-additive DDL plan from updatedb().",
+                **({"reason_code": ddl_plan.reason_code} if ddl_plan.reason_code == "invalid_approved_plan" else {}),
             }
 
         # The session lock-wait timeout is set and read back BEFORE any intent exists: if it is not
@@ -448,6 +478,15 @@ def execute_single_field_deployment(
         return outcome
     finally:
         unusable = False
+        restore = getattr(db, "restore_lock_wait_timeout", None)
+        if callable(restore):
+            # The caller's session gets its own lock_wait_timeout back on every exit path (a restore that does
+            # not verify discards the session).
+            try:
+                unusable = restore() is False or unusable
+            except Exception:
+                logger.exception("could not restore the session lock_wait_timeout")
+                unusable = True
         for key in reversed(held):
             unusable = not _release_checked(db, key) or unusable
         if unusable:
@@ -466,6 +505,22 @@ def _replay_or_conflict(existing: Dict[str, Any], payload_hash: str, idempotency
             f"IDEMPOTENCY_CONFLICT: Key '{idempotency_key}' was already used with a different payload."
         )
     return existing["outcome"]
+
+
+def _approved_plan_problem(plan: DDLPlanInspection, doctype: str, fieldname: str) -> Optional[str]:
+    """Why a caller-supplied plan is not acceptable, or ``None``. It goes through the gate a computed plan goes
+    through (``validate_ddl_plan``: exactly one additive ADD COLUMN statement), and must also name this table and
+    this field, so an empty, extra, foreign or non-additive plan never reaches an intent or a dispatch."""
+    if not isinstance(plan, DDLPlanInspection) or not plan.inspectable or not plan.is_approved_additive_only:
+        return "the supplied plan is not an inspectable, approved additive plan"
+    statements = list(plan.statements or [])
+    valid, why = validate_ddl_plan(statements)
+    if not valid:
+        return f"the supplied plan does not pass the DDL plan gate: {why}"
+    match = APPROVED_DDL_REGEX.fullmatch(statements[0])
+    if match is None or match["table"] != f"`tab{doctype}`" or match["name"] != fieldname:
+        return "the supplied plan does not add this field to this table"
+    return None
 
 
 def _blocked_by_lookup_failure(deployment_id: str, lookup: str, exc: Exception) -> Dict[str, Any]:

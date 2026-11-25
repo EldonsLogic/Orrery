@@ -136,6 +136,38 @@ All under `apps/engine/change_engine/change_engine/`:
 - To keep the approved content intact, 049c349c is reverted here (b6bb4840) and moved to the branch `ce-sec-008-part-2` (a3050409). There it is fixed and reviewed as its own PR.
 - The PR's own files are identical to 750dc543, plus the merge of main.
 
+## Part 2, commit 049c349c (reverted on #322, re-applied here): Eldon's security review (Fable 5.2 at 56b00a23)
+- F1 (non-DDL engines) and F5 (`#` in keys) were already fixed, and re-checked.
+- Fixed in this round:
+  - F2: deployment ids are `prefix_<uuid4 hex>`, unique across restarts.
+  - F3: an evidence digest over baseline, plan, id, site, doctype, field and payload hash, stored in the existing plan column. Each journal row is chained to it, and all of it is verified on load. Limit: the digest is unkeyed and journal-tail truncation is not detected; a keyed MAC is in CE-SEC-010 and CE-SEC-011.
+  - F4: evidence must match the request's doctype, field and bound site.
+  - F6: the decimal path now runs through `execute_single_field_deployment` (`approved_plan`). It inherits both locks, the fresh view, the idempotency and recovery lookups and the timeout before the intent. Failures map to `engine_unavailable` or `recovery_required`.
+  - F7: the three surviving mutants are now killed, with meta-tests.
+  - F8: `_commit_durable` raises when there is no `commit`.
+  - F9: distinct `evidence_unavailable` and `snapshot_unavailable` codes.
+  - F10: the timeout ceiling is now 60 s, and the previous session value is restored and verified on every exit path.
+- `frappe_backend.py` was edited in this PR, because #310 and #312 had merged.
+- Red then green: 38 failed and 128 passed before, 150 passed after (two CE-SEC-008 files).
+- Full suite: 1721 passed, 86 skipped, 0 failed.
+- CE-SEC-011 text trimmed to what remains.
+
+## Part 2, round 1: the two Medium issues from the cross-model check of 049c349c
+- Legacy physical-DDL evidence (a non-empty plain-list plan) now loads as `verified: False`. It is never trusted: a restart from it holds at RECOVERY_REQUIRED and never finalizes, while lookup, replay and revert keep working. Evidence rows with no bound plan still raise.
+- An `approved_plan` override is validated like a computed plan before any intent is written (`_approved_plan_problem`, `validate_ddl_plan`). It must be exactly one additive ADD COLUMN for this table and field, else `invalid_approved_plan`.
+- Tests: `TestP2LegacyEvidenceLoadsAsUnverified` (6) and `TestP2ApprovedPlanOverrideIsValidatedLikeAComputedPlan` (4). The two CE-SEC-008 files went from 15 failed to 161 passed.
+- Full suite: 1773 passed, 86 skipped, 0 failed.
+
+## Part 2, Gemini 4 Argon review (at 7260840f): approve with nits; 2 Lows fixed by the coordinator
+- Gemini verified:
+  - the decimal path keeps the BPL-041 and BPL-043 refusals and inherits locks, fresh view, lookups and timeout-before-intent;
+  - `approved_plan` is validated before the intent;
+  - a canonical digest; stripping the digest from a current row raises, and a plain-list rewrite loads unverified and always holds;
+  - the timeout is restored on every exit;
+  - no raw text or engine names in new strings.
+- Low 1: CE-SEC-011 now also lists stable reason codes for the raw exception text in the three non-DDL engines.
+- Low 2: new `TestP2RemainingMutantsDie` covers lock loss during the statement (N13) and an underscore in the first host label (N20). Both tests fail with their check removed (in-memory mutation, restored) and pass on the code.
+
 ## Tokens or cost
 Unknown.
 

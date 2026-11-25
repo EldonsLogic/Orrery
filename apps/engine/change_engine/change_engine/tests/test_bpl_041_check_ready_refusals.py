@@ -275,6 +275,14 @@ class TestEarlierStepsOfTheSamePlan(unittest.TestCase):
                 entity_step(2, entity("purchase_order_line", ("line_note", "string")))]
         self.assert_refused_up_front_as_execute_does(missing_engine, plan, "subject_missing")
 
+    def test_fields_of_one_entity_add_are_judged_against_the_state_before_that_step(self) -> None:
+        """Re-review N1: `note` and `custom_note` in one entity.add both become new fields (custom_note and
+        custom_custom_note), because execute judges each against the metadata before the step; a later unique on
+        custom_custom_note must then be refused up front, not after step 1 has written."""
+        plan = [entity_step(1, entity("customer", ("note", "string"), ("custom_note", "string"))),
+                field_step(2, "customer", {"id": "custom_note", "type": "string", "unique": True})]
+        self.assert_refused_up_front_as_execute_does(engine, plan, "unique_or_index")
+
     def test_a_unique_field_of_a_type_an_earlier_entity_add_creates_is_held_by_it(self) -> None:
         """An adapter-made type is created with its fields' unique and index flags, so a later step asking for the same passes."""
         made = entity("vendor_ref", ("code", "string"))

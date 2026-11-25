@@ -909,6 +909,7 @@ class FrappeRuntimeBackend:
             raise self._refuse("subject_missing")
         if any(fld.get("type", "string") not in BLUEPRINT_TO_FRAPPE_FIELDTYPE for fld in fields):
             raise self._refuse("unsupported_value_type")
+        added: dict[tuple[str, str], Any] = {}  # every field is judged against the state before this step, as execute does
         for fld in fields:
             names = [_sanitize_custom_fieldname(str(fld.get("id") or "field")), str(fld.get("id"))]
             holders = self._held_fields(f, doctype, names, made_types, made)
@@ -918,7 +919,8 @@ class FrappeRuntimeBackend:
             elif fld.get("unique") or fld.get("indexed"):
                 raise self._refuse("unique_or_index")
             else:
-                made[(doctype, names[0])] = _NO_CONSTRAINT
+                added[(doctype, names[0])] = _NO_CONSTRAINT
+        made.update(added)
 
     def _find_warehouse(
         self,

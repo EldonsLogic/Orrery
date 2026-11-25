@@ -42,3 +42,8 @@ BPL-041 slice 2: add a BPL-027 phase to `infra/dev/docker/run_real_bench_ci.py` 
 - R5 (`get_meta` cache fill): accepted; one comment in `_held_fields`.
 - R6 (malformed steps): `_check_step_shapes` runs first and raises the backend's existing side-effect-free `invalid_request` with `details.fields` (as `_location_kind` does). Covers step, subject, params, definition, fields (list of dicts), parents (list of dicts with `id`).
 - Counts: new file 8 -> 21 tests (13 added; all pass). Both `test_bpl_031_*`, `test_bpl_033`, `test_bpl_027`, `test_bpl_012` and the new file: 103 passed, 10 skipped. All 59 engine files in `tests.yml`: 1,514 passed, 86 skipped, 27 failed (only the known Hijri-date ones).
+
+## Review round 2 (gpt-6.1-sol re-review `d0c93e2..c1666d1`: REQUEST_CHANGES; fixed by the coordinator)
+- R2 to R6 closed; R1 partly: N1 Medium, the projection was updated during one `entity.add`'s field scan, so `note` plus `custom_note` skipped projecting `custom_custom_note` (execute judges every field against the metadata before the step). Fixed: additions are collected per step and merged after the scan. New regression `test_fields_of_one_entity_add_are_judged_against_the_state_before_that_step` fails without the fix, passes with it.
+- N2 Low, not fixed here (existing execute gap, follow-up): fields of an adapter-made type live in DocField, while execute's snapshots read only Custom Field metadata, so a second step on such a field returns `recovery_required`. The readiness-only test stays, documented.
+- All 59 engine files: 1,515 passed, 86 skipped, 27 Hijri-only failures.

@@ -108,6 +108,11 @@ All under `apps/engine/change_engine/change_engine/`:
 - Full suite: 1633 passed, 86 skipped, 0 failed.
 - The CE-SEC-011 text now includes mapping `SessionDiscardedError` in the decimal path, and resolving a custom `site_map` through the backend's resolver.
 
+## Review round 5 (GPT-6.2 Sol at 54aab24b: 1 new High; discarded-session commits and failed close resolved)
+- High: `t_alpha`, `t-alpha` and `t-alpha.localhost` were all accepted for one site, but gave separate lock and audit scopes. The coordinator fixed it directly (a small fix): `_resolve_site_id` now derives ONE identity per site. A tenant site (`t-alpha.<domain>`) maps to exactly the tenant id the backend binds (`t_alpha`), using the backend's injective grammar. Any other spelling is refused as `SITE_MISMATCH`. With no caller identity the derived tenant id is used, so holds and replays apply. A non-tenant site keeps its own name as its only identity. Custom `site_map` sites stay with CE-SEC-011.
+- Tests first: `TestR5OneAuthoritativeSiteIdentity` (aliases refused, a missing identity still hits the hold, a non-tenant site). 6 failed before the fix, then passed.
+- Full suite: 1636 passed, 86 skipped, 0 failed.
+
 ## Tokens or cost
 Unknown.
 

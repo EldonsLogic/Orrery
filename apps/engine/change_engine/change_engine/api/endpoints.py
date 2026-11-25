@@ -1994,28 +1994,39 @@ def _reject_invalid_deployment_id(deployment_id: Any, start_time: float, **extra
     }
 
 
-def _identity_belongs_to_site(identity: str, resolved: str) -> bool:
-    """Is ``identity`` (the tenant id the runtime backend binds as ``site_id`` on every audit row) the one that
-    belongs to the resolved Frappe site? The backend names a tenant's site ``<tenant with _ as ->.<domain>``."""
-    return identity == resolved or resolved.split(".")[0].lower() == identity.replace("_", "-").lower()
+# The runtime backend's tenant-id grammar (frappe_backend._SAFE_TENANT_RE). It forbids '-', '.', uppercase and a
+# trailing '_', so the backend's site name ``<tenant with _ as ->.<domain>`` maps back to exactly one tenant id.
+_TENANT_ID_RE = re.compile(r"t_[a-z0-9][a-z0-9_]{1,59}[a-z0-9]")
+
+
+def _tenant_of_site(resolved: str) -> Optional[str]:
+    """The one tenant id whose backend site name is ``resolved``, or ``None`` for a site that is not a tenant site
+    (a custom ``site_map`` entry, a bench or test site). CE-SEC-011 resolves custom ``site_map`` sites."""
+    label, dot, _domain = resolved.partition(".")
+    if not dot:
+        return None
+    tenant = label.replace("-", "_")
+    return tenant if _TENANT_ID_RE.fullmatch(tenant) and tenant.replace("_", "-") == label else None
 
 
 def _resolve_site_id(caller_site: Any, deployment_id: Any, start_time: float, **extra: Any):
-    """The ``site_id`` for the lock, the lookups and the audit rows.
+    """The ``site_id`` for the lock, the lookups and the audit rows: ONE authoritative identity per site.
 
-    The backend binds the TENANT id there, so that is the identity (a caller passes it, as the backend does).
-    It is accepted only if it belongs to the resolved Frappe site (a caller can not pick another tenant's
-    identity inside this site and so step around its holds and replay records), and it must be canonical (the
-    same grammar as ids, so collation-equivalent spellings can not take different locks). With no caller
-    identity the resolved site name is used. Returns ``(site_id, None)`` or ``(None, rejection)``.
+    On a tenant site the identity is the tenant id the backend binds (``t-alpha.<domain>`` -> ``t_alpha``),
+    whether or not the caller passes it; any other spelling (the host name, ``t-alpha``, other case) is refused,
+    so no alias can open a second lock and audit scope that steps around holds and replay records. On a site that
+    is not a tenant site the site name is the only identity. With no resolved site (in-memory) the caller's
+    canonical identity, else ``default``, is used. Returns ``(site_id, None)`` or ``(None, rejection)``.
     """
     resolved = getattr(getattr(frappe, "local", None), "site", None)
-    if resolved and caller_site is not None and (
-        not isinstance(caller_site, str) or not _identity_belongs_to_site(caller_site, resolved)
-    ):
-        return None, _site_rejection(deployment_id, start_time, "SITE_MISMATCH", "site_mismatch",
-                                     "The site identity does not belong to the site this request runs on.", **extra)
-    site = caller_site if caller_site is not None else (resolved or "default")
+    if resolved:
+        site = _tenant_of_site(resolved) or resolved
+        if caller_site is not None and caller_site != site:
+            return None, _site_rejection(deployment_id, start_time, "SITE_MISMATCH", "site_mismatch",
+                                         "The site identity does not belong to the site this request runs on.",
+                                         **extra)
+    else:
+        site = caller_site if caller_site is not None else "default"
     if caller_id_problem(site, MAX_SITE_ID_LENGTH):
         return None, _site_rejection(deployment_id, start_time, "INVALID_SITE_ID", "invalid_site_id",
                                      "The site identity is not canonical.", **extra)

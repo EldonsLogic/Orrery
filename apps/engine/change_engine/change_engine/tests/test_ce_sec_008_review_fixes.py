@@ -1135,8 +1135,47 @@ class TestR4SiteIdentityIsTheOneTheBackendBinds(unittest.TestCase):
                 out = self._rpc(bench, adapter, deployment_id="dep_1", site_id=site)
                 self.assertIn(out["disposition"], ("SITE_MISMATCH", "INVALID_SITE_ID"))
                 self.assertEqual(bench.db.committed, {})
-        out = self._rpc(bench, adapter, deployment_id="dep_1", site_id=HOST)
-        self.assertEqual(out["status"], "APPLIED", "the host name itself is still a valid identity")
+        out = self._rpc(bench, adapter, deployment_id="dep_1", site_id=TENANT)
+        self.assertEqual(out["status"], "APPLIED", "the tenant id the backend binds is the identity")
+
+
+class TestR5OneAuthoritativeSiteIdentity(unittest.TestCase):
+    """Round 5 (High): every spelling of one site must map to ONE lock and audit scope, or be refused."""
+
+    _rpc = TestR4SiteIdentityIsTheOneTheBackendBinds._rpc
+
+    def test_aliases_of_the_same_site_are_refused(self):
+        bench = _Bench(statements=[XYZ_STMT])
+        adapter = bench.new_adapter()
+        for site in ("t-alpha", HOST, "T_ALPHA", "t-alpha.localhost.", "talpha"):
+            with self.subTest(site=site):
+                out = self._rpc(bench, adapter, deployment_id="dep_1", site_id=site)
+                self.assertIn(out["disposition"], ("SITE_MISMATCH", "INVALID_SITE_ID"), out)
+                self.assertEqual(bench.db.committed, {})
+
+    def test_no_caller_identity_uses_the_tenant_id_so_holds_and_replays_still_apply(self):
+        bench = _Bench(statements=[XYZ_STMT])
+        adapter = bench.new_adapter()
+        adapter.persist_final_outcome_and_audit = lambda *a, **k: (_ for _ in ()).throw(_Crash("x"))
+        with self.assertRaises(_Crash):
+            bench.deploy(adapter, key="idemp-dep_1", site=TENANT, field=XYZ)
+        bench.db.crash()
+        sent = len(bench.db.altered())
+        out = self._rpc(bench, bench.new_adapter(), deployment_id="dep_2", idempotency_key="idemp-other")
+        self.assertEqual(out["status"], "RECOVERY_REQUIRED", out)
+        self.assertEqual(len(bench.db.altered()), sent)
+
+    def test_a_site_that_is_not_a_tenant_site_keeps_its_own_name_as_the_only_identity(self):
+        from unittest import mock
+
+        bench = _Bench(statements=[XYZ_STMT])
+        with mock.patch.object(endpoints, "frappe", _frappe_stub("bench.localhost")):
+            ok = endpoints.apply_configuration_change(doctype="Item", field_def=dict(XYZ), adapter=bench.new_adapter(),
+                                                      user_roles=ADMIN, deployment_id="dep_1")
+            bad = endpoints.apply_configuration_change(doctype="Item", field_def=dict(XYZ), adapter=bench.new_adapter(),
+                                                       user_roles=ADMIN, deployment_id="dep_2", site_id="t_bench")
+        self.assertEqual(ok["status"], "APPLIED", ok)
+        self.assertEqual(bad["disposition"], "SITE_MISMATCH", bad)
 
 
 def _decimal_style(bench: _Bench, adapter, dep="dep_1", key="idemp-dep_1", site="site-a"):

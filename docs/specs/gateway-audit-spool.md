@@ -71,7 +71,7 @@ Every write runs under the process writer lock as `BEGIN IMMEDIATE` ... `COMMIT`
 | TX4 | aggregate | admission G (5.1); `INSERT records` (`aggregate`); head; usage +1 | DP4 | `head_seq` |
 | TX5 | apply receipts (PLT-032) | checks of 6.3; `DELETE records` committed; for rejected or conflict `INSERT quarantine` with `row_mac`, `DELETE records`; `UPDATE checkpoint` pruned fields; usage per tenant | DP5 | `pruned_through`, `prune_receipt_version` |
 | TX6 | recovery close | open row as in TX2; `INSERT records` with `phase = 'outcome'`, `seq = head_seq + 1`, `key_id = active_key_id`, `ts` = wall clock now, identity and route fields copied from `intent_body`, `status`, `error_code`, `latency_ms` and `upstream_correlation` null, `reason = "unknown_after_restart"`; `DELETE open_intents`; head; usage -1 | DP6 | `head_seq`; open row absent |
-| TX7 | key rotation (each file) | admission Platform; `INSERT records` (`key_rotation`, under the old key, naming the new `key_id`); `UPDATE checkpoint SET active_key_id = new` | DP7 | `head_seq`, `active_key_id` |
+| TX7 | key rotation (each file) | admission K (5.1); `INSERT records` (`key_rotation`, `tenant_id = ''`, under the old key, naming the new `key_id`); `UPDATE checkpoint SET active_key_id = new`; head; usage `''` and `'*'` +1 | DP7 | `head_seq`, `active_key_id` |
 | TX8 | destroy quarantine (deprovisioning, operator, audited) | `DELETE quarantine WHERE tenant_id = ?`; usage | DP8 | `count(quarantine WHERE tenant_id = ?)` |
 **WAL truncation after a drain or TX8 (M6, finding 6):** hold `stream_guard` (6.1) so PLT-032 is paused, close the read connection, run `PRAGMA wal_checkpoint(TRUNCATE)` and require the result `(busy = 0, log = 0)`; otherwise retry up to 10 times at 1 s, then page. Deprovisioning certification refuses without this result (UNVERIFIED: 10).
 
@@ -79,8 +79,8 @@ Every write runs under the process writer lock as `BEGIN IMMEDIATE` ... `COMMIT`
 ### 4.1 A record in a spool file
 | State | Event | Guard | Action | Next | DP |
 |---|---|---|---|---|---|
-| none | TX1, TX2, TX3, TX4, TX6 or TX7 | file `serving` (4.4); body ≤ 4,096; admission for TX1, TX3, TX4, TX7 | append with `seq = head_seq + 1`, chain under `active_key_id` | unforwarded | DP1 to DP4, DP6, DP7 |
-| none | same | not `serving`, body > 4,096 or admission refused | `ROLLBACK`; 503 `audit_unavailable` (TX2 and TX6 never refused by admission: 5.1) | none | none |
+| none | TX1, TX2, TX3, TX4, TX6 or TX7 | file `serving` (4.4) for TX1 to TX4 and TX7, file in `close` (4.4 step 6) for TX6; body ≤ 4,096; admission for TX1, TX3, TX4, TX7 | append with `seq = head_seq + 1`, chain under `active_key_id` | unforwarded | DP1 to DP4, DP6, DP7 |
+| none | same | not in the required state, body > 4,096 or admission refused | `ROLLBACK`; 503 `audit_unavailable` (TX2 and TX6 never refused by admission: 5.1) | none | none |
 | unforwarded | PLT-032 reads a batch | none | nothing local changes | unforwarded | none |
 | unforwarded | TX5 with receipt `committed` | 6.3 | delete row | pruned | DP5 |
 | unforwarded | TX5 with `rejected` or `conflict` | 6.3 | move to `quarantine` with receipt and `row_mac` | quarantined | DP5 |
@@ -111,7 +111,7 @@ Every write runs under the process writer lock as `BEGIN IMMEDIATE` ... `COMMIT`
 | none | TX1 | 5.1 W | `reserved_units = 1` in the open row; usage +2 for the row | held | DP1 |
 | held | TX2 or TX6 | none (net -1 unit) | outcome +1, open row -2 | released | DP2, DP6 |
 | held | restart | none | survives in the row; usage recomputed at start | held | (DP1) |
-| held | any admission of W, R, G or Platform | none | cannot consume it: every limit counts held units in `'*'`, and every physical floor (5.3) keeps `8 KiB × held` free | held | none |
+| held | any admission of W, R, G or K | none | cannot consume it: every limit counts held units in `'*'`, and every physical floor (5.3) keeps `8 KiB × held` free | held | none |
 
 ### 4.4 Restart recovery (R3-1), per file
 | Step | State | Check | On success | On failure |
@@ -121,9 +121,9 @@ Every write runs under the process writer lock as `BEGIN IMMEDIATE` ... `COMMIT`
 | 3 | open | TX0 | 4 | `corrupt` |
 | 4 | fenced | every `key_id` in any table and `checkpoint.active_key_id` loads; chain verifies from `(pruned_through, pruned_chain)` to `(head_seq, head_chain)`; column binding of every row; every open-row and quarantine-row `row_mac` verifies; `usage` equals the recomputation | 5 | `failed_closed`, not ready for any traffic on this file (no append onto unverified state), page; a `usage` mismatch alone: rewrite it and page |
 | 5 | verified locally | store snapshot compared under 4.7, **before any append** | 6 | mismatch: `failed_closed`, not ready, page; store unreachable: `waiting_store` |
-| 5a | `waiting_store` | not ready: no transaction on this file. `tenant`: health reports not ready, so no audited traffic reaches the instance. `preauth`: unverified requests get 429 and are counted in memory only. Retry step 5 every 5 s | 6 | stays, alert after 60 s |
+| 5a | `waiting_store` | not ready: no transaction on this file. `tenant`: health reports not ready, so no audited traffic reaches the instance. `preauth`: unverified requests get 429 and are counted in memory only. Retry the step that found the store unreachable (5 or 7) every 5 s | 6 (from 5) or 7 (from 7) | stays, alert after 60 s |
 | 6 | close | for each open row in `seq` order: TX6, one transaction per row | 7 | TX6 fails: stop at that row, `failed_closed` |
-| 7 | reconcile | `O = list_open_intents(instance)` from the store, read under the lock while the forwarder is stopped, so it cannot shrink. Required set `Q = O ∪ {audit_id of every intent in records}`. Each `audit_id` in `Q` is **satisfied** by an `outcome` in `records` (chain verified in step 4) or in `quarantine` (`row_mac` verified in step 4); else **missing**. A quarantined intent that is not in `O` is not required (finding 1: no wedge when its outcome was committed and pruned) | `serving`: reads ready; `writes_ready` after the first confirmed report; start the forwarder | any missing: `serving` with writes refused, page with the list; operator resolution is PLT-032's |
+| 7 | reconcile | `O = list_open_intents(instance)` from the store, read under the lock while the forwarder is stopped, so it cannot shrink. Required set `Q = O ∪ {audit_id of every intent in records}`. Each `audit_id` in `Q` is **satisfied** by an `outcome` in `records` (chain verified in step 4) or in `quarantine` (`row_mac` verified in step 4); else **missing**. A quarantined intent that is not in `O` is not required (finding 1: no wedge when its outcome was committed and pruned) | `serving`: reads ready; `writes_ready` after the first confirmed report; start the forwarder | any missing: `serving` with writes refused, page with the list; operator resolution is PLT-032's. Store unreachable: `waiting_store` (5a), then retry step 7 (open rows are already closed) |
 Why this closes R3-1: step 6 turns every surviving open row into a local outcome first, so step 7 has one rule: a required intent is satisfied by a verified local outcome, either the original (committed locally, not yet forwarded) or the rebuilt one. A required intent with neither has truly lost its row, and a forged quarantine outcome cannot satisfy it without `K_mac`. Invariant (tested): after step 6, `open_intents` is empty or the file is `failed_closed`. Step 5a is stricter than ADR-0069 2.11 and 7 (which serve reads with the store unreachable at start); the ADR text must follow.
 
 ### 4.5 MAC and chain key rotation (R3-4)
@@ -168,19 +168,19 @@ Verified requests never call `preauth` admission (ADR-0069 3.2). No `open_intent
 |---|---|---|---|---|
 | W: write intent (TX1) | 3 | total + 3 ≤ `0.90 U` = 58,982 | tenant + 3 ≤ S | `writes_ready`; confirmed report within 30 s; floor `M_hi` |
 | R: read, denial or validation outcome (TX3) | 1 | total + 1 ≤ `U - B` = 64,881 (`preauth`: 7,936) | tenant + 1 ≤ S (`preauth`: none) | floor `M_hi` |
-| G: aggregate (TX4) | 1 | total + 1 ≤ `U - P` = 65,520 (`preauth`: 8,176) | that tenant's unforwarded aggregates < `A` (`preauth`: < 64) | floor `M_lo` |
-| Platform: TX7, platform aggregates | 1 | total + 1 ≤ U (`preauth`: 8,192) | platform unforwarded aggregates < `A` | floor `M_lo` |
+| G: tenant or platform aggregate (TX4) | 1 | total + 1 ≤ `U - P` = 65,520 (`preauth`: 8,176) | that tenant's (or the platform's, `tenant_id = ''`) unforwarded aggregates < `A` (`preauth`: < 64) | floor `M_lo` |
+| K: key rotation (TX7) | 1 | total + 1 ≤ U (`preauth`: 8,192) | none (no `records_agg` limit) | floor `M_lo` |
 | O: late outcome (TX2), recovery close (TX6) | -1 net | none | none | never refused by admission |
-The band holds `B - P = 639` units for tenant aggregates: at `A = 8` each, 79 tenants with full backlogs; beyond that, counters keep accumulating in memory. The last `P` units serve only key rotation and platform aggregates, so no tenant can block TX7 (finding 4b).
+The band holds `B - P = 639` units for tenant aggregates: at `A = 8` each, 79 tenants with full backlogs; beyond that, counters keep accumulating in memory. The last `P` units serve only key rotation (row K), so no aggregate, tenant or platform, can block TX7 (finding 4b; round 2 F1).
 ### 5.2 Algorithm (finding 4c)
 1. Take the writer lock, `BEGIN IMMEDIATE`, check the epoch. The in-memory flags (`serving`, `failed_closed`, `writes_ready`, `last_confirmed`) and the cached physical reading (5.3) are changed only under the same writer lock, so reading them here is atomic with the insert.
 2. Inside the transaction: refuse if the file is not `serving` or is `failed_closed`; for W, also if not `writes_ready` or `now_monotonic - last_confirmed > 30 s`; then the floor of 5.3 for the path.
-3. Read `usage` for `'*'` and the tenant (and `count(records_agg)` for G and Platform). Apply the 5.1 row. On any refusal: `ROLLBACK`, 503 `audit_unavailable` (429 on `preauth`), handler not called, in-memory counter `(tenant, path, reason)` +1.
+3. Read `usage` for `'*'` and the tenant (and `count(records_agg)` for G). Apply the 5.1 row. On any refusal: `ROLLBACK`, 503 `audit_unavailable` (429 on `preauth`), handler not called, in-memory counter `(tenant, path, reason)` +1.
 4. Otherwise insert, update `usage` for the tenant and `'*'`, `COMMIT`.
 5. Every 60 s, per tenant with a non-zero counter: TX4 writes one `aggregate` record (counts per path and reason, window start and end, ≤ 4,096 bytes). If refused, counting continues and the window grows.
 Refused requests never ran a handler; they are not admitted records, so `audit_drop_count` stays a count of admitted records lost. A crash loses unwritten counts (residual, 9).
 ### 5.3 Physical guard (P; findings 4a, 4d)
-Refreshed at most once per second under the writer lock. `H` = held reservations in the `tenant` file. Per file: `size(db) + size(wal) + 8 KiB × H_file ≤ cap` (512 MiB `tenant`, 64 MiB `preauth`, `H_preauth = 0`). Volume, shared by both files: `statvfs` free bytes ≥ `8 KiB × H + M`, with `M_hi = 64 MiB` for W and R, `M_lo = 16 MiB` for G and Platform, and no floor for O. So no path except O can write into the space kept for reserved outcomes. The unit count stays the admission authority; the guard catches a wrong overhead factor.
+Refreshed at most once per second under the writer lock. `H` = held reservations in the `tenant` file. Per file: `size(db) + size(wal) + 8 KiB × H_file ≤ cap` (512 MiB `tenant`, 64 MiB `preauth`, `H_preauth = 0`). Volume, shared by both files: `statvfs` free bytes ≥ `8 KiB × H + M`, with `M_hi = 64 MiB` for W and R, `M_lo = 16 MiB` for G and K, and no floor for O. So no path except O can write into the space kept for reserved outcomes. The unit count stays the admission authority; the guard catches a wrong overhead factor.
 ### 5.4 Worked example
 The store confirms reports but ingests slower than arrivals. `tenant` state: A 13,100 units (a read-heavy dashboard), B 4,000 (10 open writes = 20 units of open rows), C 2,000, platform 36; total 19,136.
 - A's next 7 reads pass (tenant 13,107 = S). The 8th: 13,108 > 13,107, refused 503; counter `(A, R, tenant_share)`. A's writes: 13,107 + 3 > S, refused.
@@ -254,7 +254,7 @@ TX1 and TX3: `ROLLBACK`, 503, handler not called. TX2: real result returned, ret
 | GLB-T70 (P) | `test_caught_up_spool_anchor_compared_with_store_watermark` | 4.7 |
 | GLB-T71 (P) | `test_store_unreachable_at_start_no_append_and_not_ready` | 4.4 step 5a |
 | GLB-T72 (P) | `test_open_row_audit_id_or_tenant_swap_detected_and_missing_row_fails_closed` | 1 MAC; 4.2 absent |
-| GLB-T73 (P) | `test_aggregate_band_per_tenant_cap_platform_slot_and_floors` (both files) | 5.1 G, Platform; 5.3 |
+| GLB-T73 (P) | `test_aggregate_band_per_tenant_cap_rotation_slot_and_floors` (both files; 8 platform aggregates do not block TX7) | 5.1 G, K; 5.3 |
 | GLB-T74 (P) | `test_fail_closed_flag_set_concurrently_blocks_next_admission` | 5.2 steps 1 and 2 |
 | GLB-T75 (P) | `test_key_retirement_probe_fails_closed_on_unreachable_or_corrupt_volume` | 4.5 retirable |
 | GLB-T76 (P) | `test_ambiguous_commit_resolved_per_transaction_and_rollback_after_error` | 3 |

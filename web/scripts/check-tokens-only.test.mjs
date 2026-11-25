@@ -37,4 +37,7 @@ test('the @font-face file may name families, nothing else may', () => {
   assert.deepEqual(rules('@font-face { font-family: "Cairo"; }', 'app/src/styles/fonts.css'), []);
   assert.deepEqual(rules('@font-face { font-family: "Cairo"; }', 'app/src/styles/other.css'), ['font-family']);
   assert.deepEqual(rules('@font-face { color: #fff; }', 'app/src/styles/fonts.css'), ['colour-hex']);
+  assert.deepEqual(rules('@font-face { font-family: "Cairo"; }', 'marketing/src/styles/fonts.css'), ['font-family']);
+  assert.deepEqual(rules('@font-face { font-family: "Cairo"; }', 'app/src/components/styles/fonts.css'), ['font-family']);
+  assert.deepEqual(rules('@font-face { font-family: "Cairo"; }', '/repo/web/app/src/styles/fonts.css'), []);
 });

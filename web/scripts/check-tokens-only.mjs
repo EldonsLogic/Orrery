@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const EXEMPT = /(^|\/)tokens(\.proposed)?(\.generated)?\.css$/;
 // The @font-face file names the families once; every other font-family stays token-only.
-const FACE_FILE = /(^|\/)styles\/fonts\.css$/;
+const FACE_FILE = /(^|\/)app\/src\/styles\/fonts\.css$/;
 const EXT = /\.(css|ts|tsx)$/;
 const SKIP_DIRS = new Set(['node_modules', '.next', 'out', 'theme']);
 

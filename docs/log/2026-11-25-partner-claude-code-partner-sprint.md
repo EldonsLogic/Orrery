@@ -55,6 +55,9 @@ None yet; claim PR must merge first.
 
 - PLT-027 revision round 1: author fixed all 15 findings (none rebutted; the code claims in findings 7, 10, 11 and 12 were confirmed in the code), and the ADR grew from 154 to 187 lines. Coordinator applied the PLAN changes (PLT-028 to PLT-031 text; PLT-029 and PLT-030 now depend on PLT-028; PLT-031 gated on Q-609, Q-302 and Q-613) and reworded Q-609, Q-610, Q-611, Q-613 and Q-614. Fresh re-review dispatched.
 
+- PLT-027 re-review round 2 (GPT-6.2 Sol, head 4c7176a9): changes required. Resolved: findings 8, 9, 10, 12 and 13. The rest are partly resolved, with 6 new High defects (recovery metadata after pruning, checkpoint race, placeholder HMAC and crash before quarantine, preauth isolation and record-size ceiling, one stalled tenant stopping the instance, cross-principal dedupe disclosure and admin step-up) and 2 Medium. Advice accepted: split PLT-028. Sent to the author as revision round 2.
+- CMP-010 review (GPT-6.2 Sol, head 7b0d9880): changes required, 9 High and 4 Medium. Main points: the Art. 63 threshold reportedly amended to SAR 15,000; reverse-charge VAT in Box 9 under full recovery; mixed zero-rated subtotals; deferred versus customs-paid imports; note filing state; calendar quarters; deferred input claims; refusal output must carry no amounts; a replay and taxpayer-binding key. Sent to the author as revision round 1, with an instruction to verify every reviewer citation against the official text before acting.
+
 ## Tokens or cost
 Unknown.
 

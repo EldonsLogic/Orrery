@@ -42,6 +42,79 @@ ENTITY_TO_DOCTYPE = {
     "session_token": "Session",
 }
 
+# BPL-031 review: where the mapping contract (contracts/examples/engine-mapping-*.json) stores a Blueprint field under a
+# name other than its own, {(entity, field): engineField}; None when the contract names no field on the entity's own type
+# (the data is stored on another record, such as Item.selling_price on Item Price). A Blueprint hiddenFields mask must land
+# on the engine field that holds the data, not on the custom twin entity.add adds next to it (Q-604). A test pins this
+# table to the contract files; the engine names are UNVERIFIED until a recorded bench run.
+CONTRACT_NATIVE_FIELDS: dict[tuple[str, str], str | None] = {
+    ("item", "unit"): "stock_uom",
+    ("item", "cost_price"): "valuation_rate",
+    ("item", "selling_price"): None,
+    ("sales_order", "order_date"): "transaction_date",
+    ("sales_order", "warehouse"): "set_warehouse",
+    ("sales_order", "discount_percent"): "additional_discount_percentage",
+    ("sales_order", "subtotal"): "total",
+    ("sales_order", "vat_amount"): "total_taxes_and_charges",
+    ("sales_order", "total_amount"): "grand_total",
+    ("sales_order_line", "item"): "item_code",
+    ("sales_order_line", "quantity"): "qty",
+    ("sales_order_line", "unit_price"): "rate",
+    ("sales_order_line", "discount_percent"): "discount_percentage",
+    ("sales_order_line", "line_total"): "amount",
+    ("delivery_note", "sales_order"): None,
+    ("delivery_note", "delivery_date"): "posting_date",
+    ("delivery_note", "warehouse"): "set_warehouse",
+    ("delivery_note_line", "item"): "item_code",
+    ("delivery_note_line", "quantity"): "qty",
+    ("sales_invoice", "sales_order"): None,
+    ("sales_invoice", "invoice_date"): "posting_date",
+    ("sales_invoice", "discount_percent"): "additional_discount_percentage",
+    ("sales_invoice", "subtotal"): "total",
+    ("sales_invoice", "vat_amount"): "total_taxes_and_charges",
+    ("sales_invoice", "total_amount"): "grand_total",
+    ("sales_invoice_line", "item"): "item_code",
+    ("sales_invoice_line", "quantity"): "qty",
+    ("sales_invoice_line", "unit_price"): "rate",
+    ("sales_invoice_line", "discount_percent"): "discount_percentage",
+    ("sales_invoice_line", "line_total"): "amount",
+    ("supplier", "supplier_type"): "supplier_group",
+    ("supplier", "vat_number"): "tax_id",
+    ("price_list_item", "item"): "item_code",
+    ("price_list_item", "rate"): "price_list_rate",
+    ("purchase_order", "order_date"): "transaction_date",
+    ("purchase_order", "expected_date"): "schedule_date",
+    ("purchase_order", "warehouse"): "set_warehouse",
+    ("purchase_order", "discount_percent"): "additional_discount_percentage",
+    ("purchase_order", "subtotal"): "total",
+    ("purchase_order", "vat_amount"): "total_taxes_and_charges",
+    ("purchase_order", "total_amount"): "grand_total",
+    ("purchase_order_line", "item"): "item_code",
+    ("purchase_order_line", "quantity"): "qty",
+    ("purchase_order_line", "unit_cost"): "price_list_rate",
+    ("purchase_order_line", "discount_percent"): "discount_percentage",
+    ("purchase_order_line", "line_total"): "amount",
+    ("purchase_receipt", "purchase_order"): None,
+    ("purchase_receipt", "receipt_date"): "posting_date",
+    ("purchase_receipt", "warehouse"): "set_warehouse",
+    ("purchase_receipt", "supplier_delivery_ref"): "supplier_delivery_note",
+    ("purchase_receipt_line", "item"): "item_code",
+    ("purchase_receipt_line", "quantity"): "qty",
+    ("purchase_receipt_line", "rejected_quantity"): "rejected_qty",
+    ("purchase_invoice", "purchase_order"): None,
+    ("purchase_invoice", "supplier_invoice_number"): "bill_no",
+    ("purchase_invoice", "invoice_date"): "bill_date",
+    ("purchase_invoice", "discount_percent"): "additional_discount_percentage",
+    ("purchase_invoice", "subtotal"): "total",
+    ("purchase_invoice", "vat_amount"): "total_taxes_and_charges",
+    ("purchase_invoice", "total_amount"): "grand_total",
+    ("purchase_invoice_line", "item"): "item_code",
+    ("purchase_invoice_line", "quantity"): "qty",
+    ("purchase_invoice_line", "unit_cost"): "price_list_rate",
+    ("purchase_invoice_line", "discount_percent"): "discount_percentage",
+    ("purchase_invoice_line", "line_total"): "amount",
+}
+
 PROTECTED_ENTITY_IDS = {
     "general_ledger",
     "tax_ledger",
@@ -136,6 +209,11 @@ def entity_to_doctype(entity_id: str) -> str:
     return " ".join(part.capitalize() for part in str(entity_id).replace("-", "_").split("_") if part) or "Custom Entity"
 
 
+def is_contract_mapped_entity(entity_id: Any) -> bool:
+    """True when the mapping contract maps this entity to a built-in engine document type (BPL-031)."""
+    return isinstance(entity_id, str) and entity_id in ENTITY_TO_DOCTYPE
+
+
 # The Blueprint contract's id grammar (contracts/blueprint.schema.json `$defs/id`). Checked at plan time
 # (`unsupported_value_type`, and `protected_subject` for protected entities) on `/entities/<id>` pointers,
 # `entity.add` subject ids and inline `definition.fields[]` / `definition.relations[]` targets,
@@ -164,11 +242,20 @@ def _protected_key(name: Any) -> str:
     return re.sub(r"[\s_]+", "_", str(name).strip()).casefold()
 
 
+# The adapter's own tables (`Change Engine Audit`, `... Blueprint State`, `... Entity Field`, ...) share this name prefix.
+# A Blueprint entity whose id or derived type name starts with it would take one of them over, so none may be named so.
+_INTERNAL_NAME_PREFIX = "change_engine_"
+
+
 def is_protected_entity(entity_id: str) -> bool:
-    """Compared on a normalised key: `gl_entry`, `GL Entry` and `gl_entry ` are one protected entity."""
+    """Compared on a normalised key: `gl_entry`, `GL Entry` and `gl_entry ` are one protected entity. The adapter's own
+    internal table names are reserved the same way (BPL-031 review)."""
     if _protected_key(entity_id) in {_protected_key(i) for i in PROTECTED_ENTITY_IDS}:
         return True
-    return is_locked_doctype(entity_to_doctype(entity_id))
+    doctype = entity_to_doctype(entity_id)
+    if _protected_key(entity_id).startswith(_INTERNAL_NAME_PREFIX) or _protected_key(doctype).startswith(_INTERNAL_NAME_PREFIX):
+        return True
+    return is_locked_doctype(doctype)
 
 
 # SEC-022 / ADR-0051 item 3: the document types a Blueprint role may get permission rules on are an allowlist:

@@ -58,3 +58,8 @@ Dated 2026-11-24. Eldon's review of #300 at 4ea5173 found stale text and several
 ## Founder decision on display formats (2026-11-24)
 - Eldon's decision on #300 (for both founders; the partner agreed on 2026-11-24): Saudi and UAE `formats.numberSystem`, `formats.decimalSeparator`, `formats.thousandsSeparator`, `formats.gregorianDateFormat`, and Saudi `printFormats.legalLayoutPrecedence` and `printFormats.templates` are active product choices (display, not tax). These are exactly the locked paths the SA and AE packs back with `PLATFORM-DEFAULT` today; `formats.currency`, `formats.currencyDecimals`, `formats.hijriDateFormat` and the UAE `printFormats.*` carry UNVERIFIED evidence and stay unlisted.
 - Changed by the coordinator (Claude Opus 5.5), test-first: `product_choice_paths.json`; `test_production_rules.py` (pinned list; new `test_display_format_choices_are_active_exact_leaves`, 11 failures before the data change); `test_production_review_fixes.py` (settled Saudi list); ADR-0067 item 1; framework doc. Country pack suite: 205 OK.
+
+## Founder decision and review fix (2026-11-25, Eldon's Fable 5.2 re-review at d07db0eb, blocking Medium 1)
+- The partner decided on 2026-11-25 to mark Q-601 answered: ZATCA mandates half-up rounding (XML Implementation Standard v1.2, section 10), so Saudi `tax.roundingRule` is statutory. The negative-amount question (`half_away_from_zero` versus half-up) stays open for the accountant. `docs/open-questions.md` is updated, and it now matches ADR-0067 and the framework text.
+- Merged `origin/main` (INDEX conflict resolved: kept ADR-0066 and ADR-0069 from main, and this PR's ADR-0063 edit and ADR-0067).
+- The Lows are optional and unchanged here.

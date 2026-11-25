@@ -7,7 +7,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 
 | ADR | Title | Status |
 |---|---|---|
-| [ADR-0001-working-codename.md](ADR-0001-working-codename.md) | Working codename Orrery, not cleared | Accepted |
+| [ADR-0001-working-codename.md](ADR-0001-working-codename.md) | Working codename Orrery, not cleared | Accepted; superseded by ADR-0066 (working-name rule) |
 | [ADR-0002-seed-engine-frappe-erpnext.md](ADR-0002-seed-engine-frappe-erpnext.md) | Seed engine is Frappe + ERPNext, behind an adapter | Accepted |
 | [ADR-0003-five-parts-four-contracts.md](ADR-0003-five-parts-four-contracts.md) | Five parts and four contracts | Accepted |
 | [ADR-0004-one-chat-role-based-views.md](ADR-0004-one-chat-role-based-views.md) | One chat, anyone chats, role-based views | Accepted |
@@ -17,7 +17,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0008-no-client-specific-code.md](ADR-0008-no-client-specific-code.md) | No client-specific code; component factory; autonomy metrics | Accepted |
 | [ADR-0009-repo-workflow.md](ADR-0009-repo-workflow.md) | Repo workflow | Accepted |
 | [ADR-0010-model-strategy.md](ADR-0010-model-strategy.md) | Model strategy | Accepted |
-| [ADR-0011-interim-design-system.md](ADR-0011-interim-design-system.md) | Interim design system is brand guidelines v1 (Quadrant); logo is a placeholder | Accepted |
+| [ADR-0011-interim-design-system.md](ADR-0011-interim-design-system.md) | Interim design system is brand guidelines v1 (Quadrant); logo is a placeholder | Accepted; partly superseded by ADR-0066 (logo, heading typeface) |
 | [ADR-0012-phase-2-strategy-decisions.md](ADR-0012-phase-2-strategy-decisions.md) | Phase 2 strategy decisions D-P2-1..11 | Accepted |
 | [ADR-0013-change-engine-module.md](ADR-0013-change-engine-module.md) | The prototype change engine becomes a module of Part 2 | Accepted |
 | [ADR-0014-theming-and-tenant-branding.md](ADR-0014-theming-and-tenant-branding.md) | Theming and tenant branding | Accepted |
@@ -67,4 +67,6 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0059-draft-country-packs-in-sandbox.md](ADR-0059-draft-country-packs-in-sandbox.md) | Draft country packs may run in sandbox and test (synthetic data only); partly supersedes ADR-0034 | Accepted |
 | [ADR-0060-role-assignments-in-regional-store.md](ADR-0060-role-assignments-in-regional-store.md) | Role assignments live in a regional store outside the tenant site, under the security conditions of the GOV-066 review; supersedes ADR-0007 item 9 | Accepted |
 | [ADR-0063-country-pack-certification-record.md](ADR-0063-country-pack-certification-record.md) | Country pack certification records: market accountant sign-off, one founder, matching manifest and named reviewer (CMP-035, Q-560); amends ADR-0059 Decision 2's production requirements | Accepted |
+| [ADR-0066-final-name-seshna-and-nuqta-s-mark.md](ADR-0066-final-name-seshna-and-nuqta-s-mark.md) | Final product name Seshna (seshna.com) and the Nuqta S mark with Cairo headings; supersedes the ADR-0001 working-name rule and the logo and heading typeface of ADR-0011 (trademark not cleared) | Accepted |
 | [ADR-0067-country-pack-production-blockers-and-product-choice.md](ADR-0067-country-pack-production-blockers-and-product-choice.md) | Country pack production rules: per-market product-choice list for PLATFORM-DEFAULT, open blockers refuse production, record checks (CMP-036); amends ADR-0063 and ADR-0059 | Proposed |
+| [ADR-0069-gateway-live-binding-audit-spool.md](ADR-0069-gateway-live-binding-audit-spool.md) | Gateway live binding: durable audit spool, identity-bound audit records, request and response size caps (PLT-027) | Proposed |

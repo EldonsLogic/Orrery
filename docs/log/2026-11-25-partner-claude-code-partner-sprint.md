@@ -65,6 +65,24 @@ None yet; claim PR must merge first.
 - CMP-010 re-review round 2 (GPT-6.2 Sol, head 5baf921e): changes required, converging. Resolved: 1, 4, 6, 8, 9, 10 and 12; the rest partly resolved. All FETCHED sources were confirmed. New: 3 High (mixed document kinds reconciling to one subtotal, `claim_date` not bound to the period, non-XML source bypassing BR-CO-17) and 2 Medium, plus vector fixes. Sent to the author as revision round 2.
 - CE-SEC-008 review (GPT-6.2 Sol, head 56b00a23): changes required. The suite counts were confirmed (1555 passed, 86 skipped). Findings: 4 High (a regression where live workflow, report and property-setter deployments fail at prepare; the evidence namespace collides with caller keys and rollback accepts evidence rows; a pre-lock read view; no recovery entry point consumes the journal), 4 Medium, 1 Low. Sent to the implementation child as revision round 1, with the write paths widened to the two test doubles and a schema change or new API reported as follow-up. PR #322 must not merge before this is fixed.
 
+- Later in the sprint (after the ADR-0069 park entry above; the earlier review entries were on #316 and are merged):
+  - CMP-010: GPT re-review round 3 found 1 High and 3 Medium. Fixed in round 3 (68ba9b17). Round 4 (d184b227) applied Eldon's #319 review, including the founder decision recorded by Eldon for both founders that BR-CO-17 becomes a warning, not a refusal. The April 2025 amendments: Art. 54 and Art. 40(10) FETCHED, Art. 63 routes UNVERIFIED. Q-616, Q-620 and Q-624 updated. A final narrow GPT re-check is dispatched.
+  - CE-SEC-008 (#322): round 1 fixes committed (500134f6). Full suite 1591 passed, 0 failed. Follow-ups CE-SEC-009 (recovery entry point) and CE-SEC-010 (journal table) added on the PR. GPT round 2: changes required (2 High: the fresh read view commits caller writes, and lock and lookup equality differ; 3 Medium). Sent back as round 2.
+- Partner instructions relayed from the side thread "Count Completed Rows" at about 16:26Z. Verified against the partner's own words before acting.
+  - #318 PLT-024: merged (Tier 2, Eldon approved at ad99d276).
+  - #316 PLT-027: merged as Proposed on the partner's Tier 3 say-so. Eldon's H1 and H2 checked as met at dc41fb05, with a findings table posted. The GPT round 3 items (R3-1 to R3-7) and Eldon's M3 to M6 and Lows are recorded in the ADR section "Open items before Accepted". Main merged in; the INDEX conflict was resolved by keeping ADR-0066 and ADR-0069.
+  - #311 CMP-040: main merged in (PLAN conflict resolved: main's rows kept, CMP-040 marked done, a stray blank table line removed), then merged (Tier 2, Eldon approved at c9249ae8; the only change since was the merge of main).
+  - #312 BPL-043: P1 fixed. Main was merged into the #310 base (1b44f015), and the base was merged into #312 (fd81304f), taking the base PLAN.md, so #312 no longer touches PLAN.md. The first attempt (dropping the hunk alone) failed the pre-push task trail, because the base lacked the BPL-043 row. An unpushed local merge from the previous coordinator, in the old bpl-043 worktree, was left untouched and not pushed. Full suite 1549 passed. Waiting for Eldon's re-review (Tier 2).
+  - #306 ERP-033: Medium fixed test-first (8d043225; new case `approver-not-the-owner-holder`, red then green), main merged (e28ec6e8). Full suite 1571 passed. Findings table posted. Waiting for the partner's Tier 3 say-so.
+  - #310 BPL-041: M1, L1 and L2 dispatched to a Claude Sonnet 5.5 child, test-first, in a fresh worktree at 1b44f015.
+  - Cross-model reviews (GPT-6.2 Sol) of Eldon's Claude-authored PRs, posted as sayegh9 request-changes reviews; none were merged:
+    - #321 BPL-039: 3 High (field order breaks apply and rollback, an unapplied precision change reported as applied, the secret-key check bypassed) and 3 Medium.
+    - #279 QA-009: 1 High (fails against current main with CMP-MAP-002 then BS-015) and 2 Medium.
+    - #278 WEB-007: 1 High (branding saved with the wrong permission) and 3 Medium.
+    - #275 WEB-008: 1 High (credentials can reach the URL through a native GET) and 2 Medium.
+  - #300 CMP-036: waiting for a partner decision on Q-601 (mark answered: ZATCA mandates half-up; negative-amount question kept open). Not acted on.
+  - GOV-071: unblocked by #296; not started yet.
+
 ## Tokens or cost
 Unknown.
 

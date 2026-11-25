@@ -47,7 +47,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) | Legal | G0 | GOV-004 | eldon | doing |
 | LEG-003 | Engage counsel in KSA, UAE, Egypt and Qatar; scope of work | Legal | G0 | - | eldon | doing |
 | LEG-004 | Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) | Legal | G0 | GOV-004 | partner | done |
-| LEG-005 | Register domains and social handles for the working name (hold only) | Legal | G0 | - | eldon | todo |
+| LEG-005 | Register seshna.com and the @seshna handles (ADR-0066) | Legal | G0 | - | eldon | todo |
 | LEG-006 | GPL licence-boundary review: SaaS-only engine, separate services, no distribution | Legal | G1 | LEG-003 | eldon | todo |
 | LEG-007 | Counsel opinion: vendor certification needed to sell ZATCA-compliant software | Legal | G1 | LEG-003 | eldon | todo |
 | LEG-008 | Name clearance: trademark search and counsel opinion (KSA, UAE, Egypt, Qatar, international) | Legal | G1 | LEG-003 | eldon | todo |
@@ -231,13 +231,13 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | INF-014 | OS-level sandbox for untrusted uploads (container or VM with no network, read-only mount, CPU, memory and time limits, seccomp) that runs the intake parsers; required before any real customer upload (Q-133 to Q-140 follow-ups, connector runtime is only logically sandboxed today) | Infrastructure | G2 | INF-004,DSC-010 | partner | todo |
 | BRD-001 | Brand guidelines v1 (Quadrant) and placeholder logo | Brand | G0 | - | eldon | done |
 | BRD-002 | Design tokens: light and dark, CSS and JSON | Brand | G0 | BRD-001 | eldon | done |
-| BRD-003 | Identity decision: final name, logo direction, Arabic spelling | Brand | G1 | LEG-008 | eldon | todo |
+| BRD-003 | Identity decision: final name, logo direction, Arabic spelling. Decided 2026-11-23 (ADR-0066): Seshna, Latin letters only, Nuqta S mark, Cairo headings; the name was adopted before clearance, which is tracked under LEG-008 as a rollout risk (ADR-0066, R-034) | Brand | G1 | - | eldon | done |
 | BRD-004 | Token layering: base, product theme, tenant overrides, user preference | Brand | G1 | BRD-002 | eldon | done |
 | BRD-005 | Theme engine: light, dark, system, per-user persistence | Brand | G2 | BRD-004 | eldon | done |
 | BRD-006 | Tenant colour guardrails: WCAG AA check in both themes, auto-adjust or reject | Brand | G1 | BRD-004 | eldon | done |
 | BRD-007 | Brand asset pipeline: logo variants, auto-derived dark variant, size generation | Brand | G2 | BRD-004,SEC-018 | eldon | doing |
 | BRD-008 | Favicon generation from the tenant logo | Brand | G2 | BRD-007 | eldon | todo |
-| BRD-009 | Design system rollout: generate all logo files, sizes, favicons, social sizes, the product design system and brand guidelines | Brand | G2 | BRD-003,LEG-008 | eldon | todo |
+| BRD-009 | Design system rollout: generate all logo files, sizes, favicons, social sizes, the product design system and brand guidelines from the Nuqta S kit, with Cairo headings and Readex Pro body (ADR-0066) | Brand | G2 | BRD-003,LEG-008 | eldon | todo |
 | BRD-010 | UI component library built from tokens | Brand | G2 | BRD-005 | eldon | done |
 | BRD-011 | Font licence and Arabic typography verification | Brand | G1 | BRD-001 | eldon | doing |
 | BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | eldon | done |
@@ -408,7 +408,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-060 | Design-confirmation batch 2: settle open questions answered by code (ADR-0058) | Governance | G1 | - | eldon | doing |
 | BPL-039 | Incremental compile: base-to-target artifact with an embedded inverse; Studio uses it to show a real rollback (Q-61, Q-76, ADR-0058); split when picked | Blueprint | G1 | BPL-004 | eldon | todo |
 | SEC-023 | Name contact-detail changes (email, phone, notify-to, webhook) in the R4 row of docs/security/action-policy-table.md and in prompt-injection-defence.md 5.1, matching the Tool API (Q-139, ADR-0058) | Security | G2 | GOV-060 | eldon | todo |
-| WEB-028 | Self-host Alexandria and Readex Pro (subset WOFF2 with OFL text and PROVENANCE.md, @font-face, font-display swap) in web/app, and remove the Studio's runtime Google Fonts link and CSP allowance (Q-119, ADR-0058) | Web | G1 | BRD-011 | eldon | todo |
+| WEB-028 | Self-host Cairo and Readex Pro (subset WOFF2 with OFL text and PROVENANCE.md, @font-face, font-display swap) in web/app, and remove the Studio's runtime Google Fonts link and CSP allowance (Q-119, ADR-0058) | Web | G1 | BRD-011 | eldon | todo |
 | GOV-061 | Record founder answers given in chat (16 questions: Q-560, Q-70, Q-312, Q-23, Q-25, Q-29, Q-123, Q-43, Q-42, Q-41, Q-128, Q-294, Q-296, Q-291, Q-292, Q-293) and accept ADR-0027 with the three Q-294 checks | Governance | G1 | - | eldon | done |
 | GOV-062 | Supersede ADR-0034's sandbox rule so draft country packs may run in sandbox (Eldon's Q-560 answer) | Governance | G1 | GOV-061 | eldon | done |
 | GOV-063 | Apply Eldon's Q-292 and Q-293 answers: ADR superseding ADR-0007 item 9 (regional role store), align the phase table, GOV-039 wording and `phase-exit-criteria.json` with readiness order | Governance | G1 | GOV-061 | eldon | done |
@@ -417,7 +417,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-024 | Regional role-assignment store: design ADR (schema, writers, per-tenant keying, syncVersion binding, revocation, audit, deletion) and its security review before any implementation (ADR-0060 item 15; ERP-008 and PLT-003 consume it) | Security | G1 | GOV-066 | eldon | todo |
 | GOV-067 | Rule 52: candidate names and their screening stay out of the public repo until domains and handles are reserved and counsel clears the name (Eldon's answer on #292, given for both founders) | Governance | G1 | - | eldon | done |
 | GOV-068 | Set up the shared private place for name and brand screening (rule 52): pick it (for example a private repo in the new organisation after GOV-002), confirm both founders can read it, and record its name (not its contents) in ONBOARDING | Governance | G1 | - | eldon | todo |
-| GOV-069 | Adopt the final product name Seshna (domain seshna.com) and the Nuqta S mark with Cairo headings, decided by both founders 2026-11-23: ADR-0066 supersedes ADR-0001's working-name rule; update AGENTS.md, CLAUDE.md, GEMINI.md, RULES, START-HERE, README and ONBOARDING; record the open trademark and domain risks | Governance | G0 | - | eldon | todo |
+| GOV-069 | Adopt the final product name Seshna (domain seshna.com) and the Nuqta S mark with Cairo headings, decided by both founders 2026-11-23: ADR-0066 supersedes ADR-0001's working-name rule; update AGENTS.md, CLAUDE.md, GEMINI.md, RULES, START-HERE, README and ONBOARDING; record the open trademark and domain risks | Governance | G0 | - | eldon | done |
 | GOV-070 | Rename Orrery to Seshna across Eldon-lane and shared code and docs (not session logs or accepted ADRs, which stay as written); list partner-lane files for GOV-071 | Governance | G0 | - | eldon | done |
 | GOV-071 | Rename Orrery to Seshna in partner-lane files (apps/engine, infra, components, services/gateway, services/provisioning) | Governance | G0 | - | partner | todo |
 | GOV-065 | Tool API ADR: change `contracts/tool-api.md` section 4 step 2 to load the caller's roles from the regional assignment store (ADR-0060, ADR-0007 item 9), after ADR-0060 is Accepted | Governance | G1 | GOV-066 | eldon | todo |

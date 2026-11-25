@@ -39,7 +39,7 @@ Update the plan row statuses, write the session log (`scripts/new_log.py`), comm
 ## 8. Start a session in any tool
 Paste this as the first message (Claude Code reads CLAUDE.md automatically; for other tools point to AGENTS.md; whether Codex or Antigravity auto-read AGENTS.md or GEMINI.md is UNVERIFIED):
 ```
-You are working in the Orrery repo with two founders working in parallel.
+You are working in the Seshna repo with two founders working in parallel.
 Read AGENTS.md, then docs/RULES.md, then docs/STATUS.md and the latest 3 files in docs/log/.
 Then confirm which plan row in docs/PLAN.md you are taking (or pick one from "Ready to start" in STATUS.md),
 claim it (status doing + owner), work on a branch named with its plan ID, delegate scoped sub-tasks by model tier

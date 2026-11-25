@@ -1043,7 +1043,7 @@ class TestLayoutReadsTokenSource(unittest.TestCase):
 
     def test_no_colour_or_font_literals_outside_the_token_loader(self):
         modules = ("document_layout.py", "branded_documents.py", "brand_tokens.py",
-                   "brand_assets.py", "document_labels.py")
+                   "brand_assets.py", "document_labels.py", "bilingual_tax_invoice.py")
         font_names = ("Readex", "Alexandria", "DejaVu", "Noto", "Arial", "Helvetica", "Tahoma")
         for name in modules:
             with self.subTest(name):
@@ -1094,6 +1094,40 @@ class TestLayoutReadsTokenSource(unittest.TestCase):
                 lambda d: d["typography"]["families"]["body"].update(family="-"),
                 lambda d: d["typography"]["families"]["body"].update(family=""),
                 lambda d: d.pop("typography"),
+            ):
+                broken = json.loads(json.dumps(good))
+                mutate(broken)
+                with self.subTest(mutate=mutate), self.assertRaises(DocumentTokenError):
+                    load_document_tokens(written(tmp, broken))
+
+    def test_heading_font_comes_from_the_tokens_and_fails_closed(self):
+        from change_engine.print_formats.document_tokens import (
+            DocumentTokenError,
+            load_document_tokens,
+        )
+
+        good = _light_tokens()
+        heading = good["typography"]["families"]["heading"]
+        self.assertEqual(load_document_tokens(_TOKENS_JSON).heading_font_stack,
+                         f"'{heading['family']}', {heading['fallback']}")
+
+        def written(tmp, data) -> Path:
+            path = Path(tmp) / "tokens.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            return path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            for mutate in (
+                lambda d: d["typography"]["families"].pop("heading"),
+                lambda d: d["typography"]["families"]["heading"].pop("family"),
+                lambda d: d["typography"]["families"]["heading"].pop("fallback"),
+                lambda d: d["typography"]["families"]["heading"].update(family="x}"),
+                lambda d: d["typography"]["families"]["heading"].update(fallback="a;b"),
+                lambda d: d["typography"]["families"]["heading"].update(fallback="a,,b"),
+                lambda d: d["typography"]["families"]["heading"].update(fallback=""),
+                lambda d: d["typography"]["families"]["heading"].update(fallback=None),
+                lambda d: d["typography"]["families"]["heading"].update(family="serif"),
+                lambda d: d["typography"]["families"]["heading"].update(family="inherit"),
             ):
                 broken = json.loads(json.dumps(good))
                 mutate(broken)
@@ -2576,8 +2610,9 @@ class TestPackagedTokenSnapshot(unittest.TestCase):
         for entry in snapshot["color"]["light"].values():
             self.assertEqual(set(entry), {"hex"})
         self.assertEqual(set(snapshot["typography"]), {"families"})
-        self.assertEqual(set(snapshot["typography"]["families"]), {"body"})
-        self.assertEqual(set(snapshot["typography"]["families"]["body"]), {"family", "fallback"})
+        self.assertEqual(set(snapshot["typography"]["families"]), {"body", "heading"})
+        for family in snapshot["typography"]["families"].values():
+            self.assertEqual(set(family), {"family", "fallback"})
 
     def test_bench_without_the_repo_file_renders_from_the_snapshot(self):
         from change_engine.print_formats import document_tokens as dt

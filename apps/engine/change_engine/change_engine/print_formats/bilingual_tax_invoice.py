@@ -26,11 +26,18 @@ from change_engine.i18n.hijri import (
     HijriDateError, canonical_date, display_enabled, format_hijri, localise_digits, to_hijri,
 )
 
+from .document_tokens import document_tokens
 from .qr_svg import render_qr_svg
 
 _log = logging.getLogger(__name__)
 
-DEFAULT_BRANDING_PRIMARY = "#2443D0"
+
+def __getattr__(name: str):  # PEP 562: the default primary is the token, read on first access
+    if name == "DEFAULT_BRANDING_PRIMARY":
+        return document_tokens().primary
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 _DATA_IMAGE_URI_RE = re.compile(
     r"^data:image/(png|jpeg|jpg);base64,([A-Za-z0-9+/=\s]+)$",
@@ -112,7 +119,7 @@ class InvoiceBranding:
     """Tenant branding overrides constrained by docs/brand/12-tenant-theming.md."""
 
     display_name: dict[str, str] | str | None = None
-    primary_color: str = DEFAULT_BRANDING_PRIMARY
+    primary_color: str | None = None  # None: the primary token
     logo_data_uri: str | None = None
     mono_logo: bool = False
     remove_powered_by: bool = False
@@ -134,7 +141,7 @@ def _srgb_channel_to_linear(channel: int) -> float:
 
 
 def contrast_ratio_on_white(hex_color: str) -> float:
-    """Compute WCAG 2.x contrast ratio of `#RRGGBB` against `#FFFFFF`."""
+    """Compute WCAG 2.x contrast ratio of a ``#RRGGBB`` colour against white."""
     if not isinstance(hex_color, str) or not _HEX_COLOR_RE.fullmatch(hex_color.strip()):
         raise ValueError(f"Invalid hex color '{hex_color}'; expected '#RRGGBB'")
     cleaned = hex_color.strip()
@@ -182,7 +189,7 @@ def resolve_invoice_branding(
         return ResolvedBranding(
             display_name_ar=None,
             display_name_en=None,
-            primary_color=DEFAULT_BRANDING_PRIMARY,
+            primary_color=document_tokens().primary,
             logo_data_uri=None,
             mono_logo=False,
             remove_powered_by=False,
@@ -196,7 +203,7 @@ def resolve_invoice_branding(
         remove_powered_by = bool(branding.remove_powered_by)
     elif isinstance(branding, Mapping):
         raw_display = branding.get("display_name", branding.get("displayName"))
-        raw_primary = branding.get("primary_color", branding.get("primary", DEFAULT_BRANDING_PRIMARY))
+        raw_primary = branding.get("primary_color", branding.get("primary"))
         raw_logo = branding.get("logo_data_uri", branding.get("logoDataUri"))
         mono_logo = bool(branding.get("mono_logo", branding.get("monoLogo", False)))
         remove_powered_by = bool(
@@ -205,7 +212,7 @@ def resolve_invoice_branding(
     else:
         raise TypeError("branding must be an InvoiceBranding, mapping, or None")
 
-    primary = (raw_primary or DEFAULT_BRANDING_PRIMARY).strip()
+    primary = (raw_primary or document_tokens().primary).strip()
     ratio = contrast_ratio_on_white(primary)
     if ratio < 4.5:
         raise ValueError(
@@ -881,6 +888,7 @@ def render_tax_invoice_html(
     )
 
     primary_hex = resolved_branding.primary_color
+    tokens = document_tokens()  # fails closed (DocumentTokenError) when unreadable; no fallback
     return f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -888,6 +896,15 @@ def render_tax_invoice_html(
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>{_esc(title_ar)} / {_esc(title_en)} — {_esc(invoice_id)}</title>
 <style>
+  :root {{
+    --doc-surface: {tokens.surface};
+    --doc-panel: {tokens.background};
+    --doc-text: {tokens.text};
+    --doc-border: {tokens.text};
+    --brand-primary: {primary_hex};
+    --font-doc: {tokens.font_stack};
+    --font-heading: {tokens.heading_font_stack};
+  }}
   @page {{
     size: A4 portrait;
     margin: 14mm 14mm 16mm 14mm;
@@ -898,9 +915,9 @@ def render_tax_invoice_html(
   html, body {{
     margin: 0;
     padding: 0;
-    background: #ffffff;
-    color: #0e1117;
-    font-family: 'Readex Pro', 'Noto Sans Arabic', 'DejaVu Sans', sans-serif;
+    background: var(--doc-surface);
+    color: var(--doc-text);
+    font-family: var(--font-doc);
     font-size: 9.5pt;
     line-height: 1.45;
     direction: rtl;
@@ -918,12 +935,12 @@ def render_tax_invoice_html(
     width: 100%;
     max-width: 182mm;
     margin: 0 auto;
-    background: #ffffff;
+    background: var(--doc-surface);
   }}
   .top-header {{
     display: table;
     width: 100%;
-    border-bottom: 2px solid {primary_hex};
+    border-bottom: 2px solid var(--brand-primary);
     padding-bottom: 4mm;
     margin-bottom: 4.5mm;
   }}
@@ -958,7 +975,7 @@ def render_tax_invoice_html(
   .brand-name {{
     font-size: 11pt;
     font-weight: 700;
-    color: {primary_hex};
+    color: var(--brand-primary);
     margin-bottom: 1.5mm;
   }}
   .doc-title-row {{
@@ -967,12 +984,12 @@ def render_tax_invoice_html(
     margin-bottom: 1mm;
   }}
   .doc-title-ar, .doc-title-en {{
-    font-family: 'Cairo', 'Noto Sans Arabic', 'DejaVu Sans', sans-serif;
+    font-family: var(--font-heading);
     display: table-cell;
     width: 50%;
     font-size: 14pt;
     font-weight: 700;
-    color: {primary_hex};
+    color: var(--brand-primary);
   }}
   .doc-title-ar {{
     text-align: right;
@@ -986,7 +1003,8 @@ def render_tax_invoice_html(
     width: 100%;
     font-size: 9pt;
     font-weight: 600;
-    color: #334155;
+    color: var(--doc-text);
+    opacity: 0.82;
   }}
   .doc-badge-row .bi-ar {{
     display: table-cell;
@@ -1020,7 +1038,7 @@ def render_tax_invoice_html(
   .party-name .bi-ar, .party-name .bi-en {{
     font-size: 10pt;
     font-weight: 700;
-    color: #0e1117;
+    color: var(--doc-text);
     margin-bottom: 1.5mm;
   }}
   .detail-row {{
@@ -1029,7 +1047,8 @@ def render_tax_invoice_html(
     margin-top: 1mm;
     font-size: 9pt;
     font-weight: 400;
-    color: #1e293b;
+    color: var(--doc-text);
+    opacity: 0.9;
   }}
   .detail-row .bi-ar, .detail-row .bi-en {{
     font-size: 9pt;
@@ -1039,33 +1058,33 @@ def render_tax_invoice_html(
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 4.5mm;
-    border: 1px solid #d5dce6;
+    border: 0.5pt solid var(--doc-border);
   }}
   .meta-table th, .meta-table td {{
     padding: 1.8mm 2.5mm;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 0.5pt solid var(--doc-border);
     font-size: 9.2pt;
   }}
   .meta-label-ar {{
     width: 30%;
     text-align: right;
     font-weight: 600;
-    background: #f8fafc;
-    color: {primary_hex};
+    background: var(--doc-panel);
+    color: var(--brand-primary);
   }}
   .meta-value {{
     width: 40%;
     text-align: center;
     font-weight: 600;
-    color: #0e1117;
+    color: var(--doc-text);
   }}
   .meta-label-en {{
     width: 30%;
     text-align: left;
     direction: ltr;
     font-weight: 600;
-    background: #f8fafc;
-    color: {primary_hex};
+    background: var(--doc-panel);
+    color: var(--brand-primary);
   }}
   .parties-grid {{
     display: table;
@@ -1080,28 +1099,29 @@ def render_tax_invoice_html(
     vertical-align: top;
   }}
   .party-card {{
-    border: 1px solid #d5dce6;
+    border: 0.5pt solid var(--doc-border);
     border-radius: 1.5mm;
-    background: #ffffff;
+    background: var(--doc-surface);
     break-inside: avoid;
   }}
   .card-header {{
     display: table;
     width: 100%;
-    background: #f5f7fa;
-    border-bottom: 1.5px solid {primary_hex};
+    background: var(--doc-panel);
+    border-bottom: 1.5px solid var(--brand-primary);
     padding: 2mm 2.5mm;
-    color: {primary_hex};
+    color: var(--brand-primary);
   }}
   .card-body {{
     padding: 2.5mm;
   }}
   .muted {{
-    color: #64748b;
+    color: var(--doc-text);
+    opacity: 0.62;
   }}
   .adjustment-box {{
-    border: 1px solid {primary_hex};
-    background: #f8fafc;
+    border: 1px solid var(--brand-primary);
+    background: var(--doc-panel);
     padding: 2.5mm 3mm;
     margin-bottom: 4.5mm;
     break-inside: avoid;
@@ -1112,12 +1132,12 @@ def render_tax_invoice_html(
     margin-bottom: 5mm;
   }}
   .lines-table th {{
-    background: #f5f7fa;
-    color: {primary_hex};
-    border-top: 1.5px solid {primary_hex};
-    border-bottom: 1.5px solid {primary_hex};
-    border-left: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0;
+    background: var(--doc-panel);
+    color: var(--brand-primary);
+    border-top: 1.5px solid var(--brand-primary);
+    border-bottom: 1.5px solid var(--brand-primary);
+    border-left: 0.5pt solid var(--doc-border);
+    border-right: 0.5pt solid var(--doc-border);
     padding: 2mm 1.5mm;
     text-align: center;
     font-size: 8.8pt;
@@ -1131,7 +1151,7 @@ def render_tax_invoice_html(
     direction: ltr;
   }}
   .lines-table td {{
-    border: 1px solid #e2e8f0;
+    border: 0.5pt solid var(--doc-border);
     padding: 2mm 1.5mm;
     vertical-align: top;
     font-size: 9pt;
@@ -1139,7 +1159,7 @@ def render_tax_invoice_html(
   .num-col {{
     text-align: center;
     white-space: nowrap;
-    font-family: 'Cairo', 'Noto Sans Arabic', 'DejaVu Sans', sans-serif;
+    font-family: var(--font-heading);
     font-variant-numeric: tabular-nums;
   }}
   .code-col {{
@@ -1152,17 +1172,19 @@ def render_tax_invoice_html(
   }}
   .item-desc-ar {{
     font-weight: 600;
-    color: #0e1117;
+    color: var(--doc-text);
   }}
   .item-desc-en {{
     direction: ltr;
     text-align: left;
     font-weight: 500;
-    color: #1e293b;
+    color: var(--doc-text);
+    opacity: 0.9;
   }}
   .item-exemption {{
     font-size: 8.2pt;
-    color: #475569;
+    color: var(--doc-text);
+    opacity: 0.73;
     margin-top: 0.8mm;
   }}
   .cat-col {{
@@ -1196,11 +1218,11 @@ def render_tax_invoice_html(
   .totals-table {{
     width: 100%;
     border-collapse: collapse;
-    border: 1px solid #d5dce6;
+    border: 0.5pt solid var(--doc-border);
   }}
   .totals-table th, .totals-table td {{
     padding: 2.2mm 2.5mm;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 0.5pt solid var(--doc-border);
     font-size: 9.5pt;
   }}
   .tot-ar {{
@@ -1221,10 +1243,10 @@ def render_tax_invoice_html(
     width: 34%;
   }}
   .grand-row th, .grand-row td {{
-    background: #f5f7fa;
-    border-top: 1.5px solid {primary_hex};
-    border-bottom: 1.5px solid {primary_hex};
-    color: {primary_hex};
+    background: var(--doc-panel);
+    border-top: 1.5px solid var(--brand-primary);
+    border-bottom: 1.5px solid var(--brand-primary);
+    color: var(--brand-primary);
     font-size: 10.5pt;
     font-weight: 700;
   }}
@@ -1236,9 +1258,9 @@ def render_tax_invoice_html(
   }}
   .qr-clear-zone {{
     display: inline-block;
-    background: #ffffff;
+    background: var(--doc-surface);
     padding: 4.5mm;
-    border: 1px solid #d5dce6;
+    border: 0.5pt solid var(--doc-border);
     margin: 0;
   }}
   .qr-clear-zone svg {{
@@ -1248,27 +1270,30 @@ def render_tax_invoice_html(
     max-width: 72mm;
     margin: 1.5mm auto 0 auto;
     font-size: 8.5pt;
-    color: #334155;
+    color: var(--doc-text);
+    opacity: 0.82;
   }}
   .notes-box {{
     margin-top: 4mm;
     padding: 2.5mm 3mm;
-    border: 1px solid #e2e8f0;
-    background: #ffffff;
+    border: 0.5pt solid var(--doc-border);
+    background: var(--doc-surface);
   }}
   .notes-body {{
     margin-top: 1mm;
     font-size: 9pt;
-    color: #334155;
+    color: var(--doc-text);
+    opacity: 0.82;
   }}
   .doc-footer {{
     margin-top: 6mm;
     padding-top: 2.5mm;
-    border-top: 1px solid #d5dce6;
+    border-top: 0.5pt solid var(--doc-border);
     display: table;
     width: 100%;
     font-size: 8.5pt;
-    color: #475569;
+    color: var(--doc-text);
+    opacity: 0.73;
   }}
   .footer-ref {{
     display: table-cell;

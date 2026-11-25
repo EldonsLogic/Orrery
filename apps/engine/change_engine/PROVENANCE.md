@@ -3,7 +3,7 @@
 Status: accepted | Owner: eldon
 
 ## Source
-Adapted from a prototype written by the partner (GitHub `sayegh9/EXRP`, branch `develop`, commit `f0ce226dd8d050fbc947caf50657e651e01792b8`, snapshot of 2026-11-05). The prototype was a standalone Frappe app for natural-language form customisation inside Frappe's Desk. We kept the parts that fit the Orrery architecture and removed the rest. The prototype repository is not modified and remains the original reference. This file is the only place in the repo that names the prototype.
+Adapted from a prototype written by the partner (GitHub `sayegh9/EXRP`, branch `develop`, commit `f0ce226dd8d050fbc947caf50657e651e01792b8`, snapshot of 2026-11-05). The prototype was a standalone Frappe app for natural-language form customisation inside Frappe's Desk. We kept the parts that fit the Seshna architecture and removed the rest. The prototype repository is not modified and remains the original reference. This file is the only place in the repo that names the prototype.
 
 ## Kept (renamed, code logic unchanged unless listed under "Changed")
 Safety guardrails, DDL plan inspection gate, six-stage deploy with advisory lock and audit journal, property-setter engine, workflow engine (reachability checks), report engine (operator allowlist), rollback and soft quarantine, runtime and cross-document policy engines, compact schema extractor, the API layer without its LLM paths, and the unit tests for all of these.

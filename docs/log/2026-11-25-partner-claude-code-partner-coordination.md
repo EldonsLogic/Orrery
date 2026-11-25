@@ -29,6 +29,8 @@ Live coordinator log for the partner's lane (RULES 51), continuing from 2026-11-
 - Dispatched CMP-040: Claude Sonnet 5.5 (high), T3 worktree, no git. Allowed: `components/compliance/company_calendar/tests/test_company_calendar.py` only. Covers the other two `hijridate` pins (read only; `services/discovery/requirements.txt` is Eldon's lane and is not edited), the N1 label-sort test and the N2 shared planted-constant helper.
 - CMP-040 returned (Sonnet): +40/-9 in the one allowed test file; pins in `tests.yml` (two) and `services/discovery/requirements.txt` checked read only; N1 and N2 added; each seen failing on a copy or in memory. Coordinator re-ran: `company_calendar` 47 OK (was 45), `country_pack` 129 OK. Opened #311 (Tier 2, tests only, CMP-040 `done` on merge).
   - Review dispatched: gpt-6.1-sol (high), read-only code-correctness review of #311 at `31302b9`.
+- #310 review result, gpt-6.1-sol at `d0c93e2`: REQUEST_CHANGES. Medium: R1 earlier planned fields ignored, R2 false `subject_missing` when an earlier step creates the type, R3 `need()` still skips with `REQUIRE_BPL027_LIVE=1`. Low: R4 untested `unsupported_value_type` and narrow write spies (two mutants survive), R5 `get_meta` fills the cache, R6 malformed steps give `engine_unavailable`. Posted on #310.
+  - Fixes dispatched: Claude Sonnet 5.5 (high), in the #310 checkout only, test-first, no git. Allowed: `frappe_backend.py`, the BPL-041 test file, the REQUIRE and `need()` handling in the BPL-027 test, the PR's log (append). R5 accepted with a code comment (the execute path and the existing `check_ready` already call `get_meta`; a cache fill is not a business write).
 
 ## Decisions
 - None yet.

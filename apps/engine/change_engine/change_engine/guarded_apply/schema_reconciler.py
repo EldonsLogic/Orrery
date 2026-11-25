@@ -24,6 +24,28 @@ class IdempotencyConflictError(Exception):
     pass
 
 
+class DeploymentIntentConflictError(RuntimeError):
+    """CE-SEC-008: a Stage 3 intent for this deployment id already exists; it is never overwritten.
+
+    ``reason`` is ``binding_mismatch`` (another key, payload, site, target or plan) or
+    ``already_recorded`` (the same binding: the earlier attempt is replayed or recovered, never
+    re-run under a second intent).
+    """
+
+    def __init__(self, deployment_id: str, reason: str):
+        super().__init__(f"Deployment intent '{deployment_id}' already exists ({reason}); refusing to overwrite it")
+        self.deployment_id = deployment_id
+        self.reason = reason
+
+
+class DurableEvidenceError(RuntimeError):
+    """CE-SEC-008: durable deployment evidence (baseline, plan, dispatch journal) is missing or malformed."""
+
+
+class LockTimeoutError(RuntimeError):
+    """CE-SEC-008: the session lock-wait timeout could not be set or its effective value read back."""
+
+
 @dataclass(frozen=True)
 class ExhaustiveSnapshot:
     has_meta: bool
@@ -106,8 +128,11 @@ def execute_single_field_deployment(
         }
 
     try:
-        # Step 1.5: Check Idempotency Binding (§7.1)
-        existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        # Step 1.5: Check Idempotency Binding (§7.1). A failed lookup blocks; it is never "no earlier attempt".
+        try:
+            existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        except Exception as lookup_exc:
+            return _blocked_by_lookup_failure(deployment_id, "idempotency", lookup_exc)
         if existing is not None:
             if existing.get("payload_hash") != payload_hash:
                 raise IdempotencyConflictError(
@@ -116,7 +141,11 @@ def execute_single_field_deployment(
             return existing["outcome"]
 
         # Block if target DocType already has an unresolved RECOVERY_REQUIRED deployment (§8.1)
-        if db.is_target_in_recovery_required(site_id, doctype):
+        try:
+            target_blocked = db.is_target_in_recovery_required(site_id, doctype)
+        except Exception as lookup_exc:
+            return _blocked_by_lookup_failure(deployment_id, "recovery", lookup_exc)
+        if target_blocked:
             return {
                 "deployment_id": deployment_id,
                 "status": "RECOVERY_REQUIRED",
@@ -182,6 +211,19 @@ def execute_single_field_deployment(
                 "reason": ddl_plan.rejection_reason or "Unprovable or non-additive DDL plan from updatedb().",
             }
 
+        # The session lock-wait timeout is set and read back BEFORE any intent exists: if it is not
+        # effective nothing is written and nothing runs (CE-SEC-008).
+        try:
+            db.set_lock_wait_timeout(lock_wait_seconds)
+        except Exception as timeout_exc:
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "stage": "PREPARE",
+                "reason_code": "lock_timeout_not_effective",
+                "reason": f"Fail-closed: lock_wait_timeout could not be set and verified: {timeout_exc}",
+            }
+
         # Stage 3: Prepare — Commit durable intent, payload hash, DDL plan evidence, and audit BEFORE DDL (§8, §10)
         try:
             db.persist_prepare_and_audit_intent({
@@ -195,6 +237,15 @@ def execute_single_field_deployment(
                 "ddl_plan_statements": ddl_plan.statements,
                 "status": "PREPARED",
             })
+        except DeploymentIntentConflictError as conflict:
+            # A strict insert met an older record: it is untouched and nothing runs.
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "stage": "PREPARE",
+                "reason_code": f"intent_{conflict.reason}",
+                "reason": f"Fail-closed: {conflict}",
+            }
         except Exception as prep_exc:
             # Fail closed before any schema mutation is attempted
             return {
@@ -205,7 +256,6 @@ def execute_single_field_deployment(
             }
 
         # Stage 4: Apply Native Frappe Configuration Operation (§8)
-        db.set_lock_wait_timeout(lock_wait_seconds)
         apply_error: Optional[str] = None
         try:
             db.apply_native_custom_field(deployment_id, doctype, field_def)
@@ -249,6 +299,17 @@ def execute_single_field_deployment(
         return outcome
     finally:
         db.release_advisory_lock(lock_key)
+
+
+def _blocked_by_lookup_failure(deployment_id: str, lookup: str, exc: Exception) -> Dict[str, Any]:
+    """A durable lookup that errors blocks the deployment; the error is never read as 'nothing found'."""
+    return {
+        "deployment_id": deployment_id,
+        "status": "REJECTED",
+        "stage": "INSPECT",
+        "reason_code": "engine_unavailable",
+        "reason": f"Fail-closed: the durable {lookup} lookup failed ({type(exc).__name__}); deployment blocked.",
+    }
 
 
 def reconcile_exhaustive_snapshot(

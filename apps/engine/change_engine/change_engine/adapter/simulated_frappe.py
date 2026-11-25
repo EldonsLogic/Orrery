@@ -437,6 +437,9 @@ class SimulatedFrappeDB:
             site.locks.discard(lock_key)
             return [(1,)]
 
+        if q_upper.startswith("SELECT @@SESSION.LOCK_WAIT_TIMEOUT"):
+            return [(site.lock_wait_timeout,)]
+
         if q_upper.startswith("SET SESSION LOCK_WAIT_TIMEOUT"):
             m = re.search(r"=\s*(\d+)", q)
             if m:

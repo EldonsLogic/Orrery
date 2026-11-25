@@ -540,6 +540,8 @@ class TestApiDeployment(unittest.TestCase):
             def sql(self, query, values=None):
                 sql_calls.append((query.strip(), values))
                 q_upper = query.upper()
+                if "SELECT @@SESSION.LOCK_WAIT_TIMEOUT" in q_upper:
+                    return ((3,),)
                 if "SELECT GET_LOCK" in q_upper:
                     return ((1,),)
                 if "SELECT RELEASE_LOCK" in q_upper:

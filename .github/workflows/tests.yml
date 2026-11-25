@@ -273,6 +273,12 @@ jobs:
           PYTHONPATH: apps/engine/change_engine
         run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_caller_roles.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_security.py apps/engine/change_engine/change_engine/tests/test_ce_sec_003_policy_persistence.py apps/engine/change_engine/change_engine/tests/test_api_deployment.py apps/engine/change_engine/change_engine/tests/test_ce_sec_007_live_suite_opt_in.py -q
 
+      - name: Change engine deploy-path durability (CE-SEC-008 part 1, offline)
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
+        env:
+          PYTHONPATH: apps/engine/change_engine
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_ce_sec_008_deploy_path_durability.py -q
+
       # Live-only CE-SEC-005 suites run in real-bench.yml:
       # apps/engine/change_engine/change_engine/tests/test_ce_sec_005_real_bench.py
       # apps/engine/change_engine/change_engine/tests/test_ce_sec_005_live_http.py

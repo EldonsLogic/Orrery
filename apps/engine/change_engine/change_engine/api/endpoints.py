@@ -37,8 +37,11 @@ from change_engine.guarded_apply.ddl_plan_gate import (
     new_column_matches_plan,
 )
 from change_engine.guarded_apply.schema_reconciler import (
+    DeploymentIntentConflictError,  # CE-SEC-008 (defined in schema_reconciler; re-exported here)
+    DurableEvidenceError,
     ExhaustiveSnapshot,
     IdempotencyConflictError,
+    LockTimeoutError,
     RevisionHashError,  # defined in schema_reconciler (shared with property_setter_engine); re-exported here
     Rev23DeploymentAdapter,
     compute_canonical_payload_hash,
@@ -438,6 +441,66 @@ if frappe and hasattr(frappe, "whitelist"):
 
 _LOCK_SENTINEL = object()
 
+# MariaDB's lock_wait_timeout ceiling (one year); anything outside 1..this is refused before any SQL.
+_MAX_LOCK_WAIT_SECONDS = 31536000
+
+# CE-SEC-008: durable deployment evidence lives in the existing audit table as append-only rows that
+# share the evidence key ``<deployment_id>#evidence`` (so the idempotency lookup, which needs an outcome,
+# and the recovery lookup, which needs PREPARED or RECOVERY_REQUIRED, never see them). Intent rows say
+# what is about to happen; the deployment's completion truth is only the main row's final status and
+# outcome written at Stage 6.
+_EVIDENCE_BASELINE = "EVIDENCE_BASELINE"
+_EVIDENCE_DISPATCH = "EVIDENCE_DDL_DISPATCH"
+_EVIDENCE_COMPLETED = "EVIDENCE_DDL_COMPLETED"
+_EVIDENCE_KINDS = {
+    _EVIDENCE_BASELINE: "baseline",
+    _EVIDENCE_DISPATCH: "dispatch_intent",
+    _EVIDENCE_COMPLETED: "dispatch_completed",
+}
+
+
+# The audit table's leading columns, in declared order (``_ensure_audit_table``).
+_AUDIT_ROW_COLUMNS = (
+    "name", "deployment_id", "idempotency_key", "payload_hash", "site_id", "doctype", "fieldname",
+    "base_revision_hash", "ddl_plan_statements", "status", "outcome_json",
+)
+
+
+def _evidence_key(deployment_id: str) -> str:
+    return f"{deployment_id}#evidence"
+
+
+def _encode_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON form of the whole-table fingerprint (sets and tuples become sorted lists)."""
+    return {
+        "columns": schema["columns"],
+        "order": list(schema["order"]),
+        "indexes": sorted(list(t) for t in schema["indexes"]),
+        "constraints": sorted(list(t) for t in schema["constraints"]),
+        "checks": sorted(list(t) for t in schema["checks"]),
+        "triggers": sorted(list(t) for t in schema["triggers"]),
+        "table": list(schema["table"]),
+    }
+
+
+def _decode_schema(blob: Any) -> Dict[str, Any]:
+    """Inverse of ``_encode_schema``; anything that is not a complete fingerprint raises."""
+    try:
+        schema = {
+            "columns": {str(k): {str(a): str(b) for a, b in v.items()} for k, v in blob["columns"].items()},
+            "order": [str(x) for x in blob["order"]],
+            "indexes": {tuple(str(x) for x in r) for r in blob["indexes"]},
+            "constraints": {tuple(str(x) for x in r) for r in blob["constraints"]},
+            "checks": {tuple(str(x) for x in r) for r in blob["checks"]},
+            "triggers": {tuple(str(x) for x in r) for r in blob["triggers"]},
+            "table": tuple(str(x) for x in blob["table"]),
+        }
+    except Exception as exc:
+        raise DurableEvidenceError(f"stored baseline schema is malformed ({type(exc).__name__})") from exc
+    if any(a not in d for d in schema["columns"].values() for a in SCHEMA_COLUMN_ATTRS):
+        raise DurableEvidenceError("stored baseline schema is incomplete")
+    return schema
+
 
 class FrappeDeploymentAdapter:
     """
@@ -528,8 +591,12 @@ class FrappeDeploymentAdapter:
         # ERP-027: applied state per deployment (an adapter may be reused for several).
         self._applied_deployments: Set[str] = set()
         # ERP-027: approved plan vs what Frappe actually executed (live mode only).
+        # CE-SEC-008: ``_dispatched_ddl`` is the intent (admitted and journalled durably just before it is
+        # sent); ``_executed_ddl`` is what returned successfully, appended only after it took effect.
         self._approved_ddl: Dict[str, List[str]] = {}
+        self._dispatched_ddl: Dict[str, List[str]] = {}
         self._executed_ddl: Dict[str, List[str]] = {}
+        self._intent_context: Dict[str, Dict[str, Any]] = {}
         self._before_schema: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self.cache_cleared: bool = False
         self.prepared_records: List[Dict[str, Any]] = []
@@ -618,12 +685,27 @@ class FrappeDeploymentAdapter:
             self.locks.discard(lock_key)
 
     def set_lock_wait_timeout(self, seconds: int) -> None:
-        self.lock_wait_timeout_seconds = seconds
+        """Set the session ``lock_wait_timeout`` and read the effective value back (CE-SEC-008).
+
+        Raises ``LockTimeoutError`` when the value is not a positive integer, the statement fails, the
+        read-back fails or is empty, or the effective value differs. Nothing is recorded as effective
+        until the read-back matches.
+        """
+        self.lock_wait_timeout_seconds = None
+        if isinstance(seconds, bool) or not isinstance(seconds, int) or not 1 <= seconds <= _MAX_LOCK_WAIT_SECONDS:
+            raise LockTimeoutError(f"lock_wait_timeout must be an integer from 1 to {_MAX_LOCK_WAIT_SECONDS}")
         if not self.in_memory:
             try:
-                self._frappe.db.sql(f"SET SESSION lock_wait_timeout = {int(seconds)}")
-            except Exception:
-                pass
+                self._frappe.db.sql(f"SET SESSION lock_wait_timeout = {seconds}")
+                rows = self._frappe.db.sql("SELECT @@SESSION.lock_wait_timeout")
+                effective = int(rows[0][0])
+            except Exception as exc:
+                raise LockTimeoutError(
+                    f"lock_wait_timeout could not be set or read back ({type(exc).__name__})"
+                ) from exc
+            if effective != seconds:
+                raise LockTimeoutError(f"lock_wait_timeout is {effective} after setting {seconds}")
+        self.lock_wait_timeout_seconds = seconds
 
     def mark_recovery_required(self, deployment_id: str, reason: str = "") -> None:
         """Best-effort recovery marker when Stage 6 finalization fails after DDL."""
@@ -653,16 +735,12 @@ class FrappeDeploymentAdapter:
         if self.target_in_recovery:
             return True
         if not self.in_memory:
-            try:
-                res = self._frappe.db.sql(f"""
-                    SELECT COUNT(*) FROM `{self.audit_table}`
-                    WHERE site_id = %s AND doctype = %s AND status IN ('RECOVERY_REQUIRED', 'PREPARED')
-                """, (site_id, doctype))
-                if res and res[0][0] > 0:
-                    return True
-            except Exception:
-                pass
-            return False
+            # CE-SEC-008: a database error propagates and blocks; it is never read as "not blocked".
+            res = self._frappe.db.sql(f"""
+                SELECT COUNT(*) FROM `{self.audit_table}`
+                WHERE site_id = %s AND doctype = %s AND status IN ('RECOVERY_REQUIRED', 'PREPARED')
+            """, (site_id, doctype))
+            return bool(res and res[0][0] > 0)
         for rec in self.audit_journal.values():
             if rec.get("site_id") == site_id and rec.get("doctype") == doctype:
                 if rec.get("status") in ("RECOVERY_REQUIRED", "PREPARED"):
@@ -673,17 +751,16 @@ class FrappeDeploymentAdapter:
         self, site_id: str, idempotency_key: str
     ) -> Optional[Dict[str, Any]]:
         if not self.in_memory:
-            try:
-                res = self._frappe.db.sql(f"""
-                    SELECT payload_hash, outcome_json FROM `{self.audit_table}`
-                    WHERE site_id = %s AND idempotency_key = %s AND outcome_json IS NOT NULL
-                """, (site_id, idempotency_key))
-                if res and res[0]:
-                    payload_hash, outcome_json = res[0]
-                    if outcome_json:
-                        return {"payload_hash": payload_hash, "outcome": json.loads(outcome_json)}
-            except Exception:
-                pass
+            # CE-SEC-008: a database error or an unparseable stored outcome propagates and blocks; it is
+            # never read as "no earlier attempt".
+            res = self._frappe.db.sql(f"""
+                SELECT payload_hash, outcome_json FROM `{self.audit_table}`
+                WHERE site_id = %s AND idempotency_key = %s AND outcome_json IS NOT NULL
+            """, (site_id, idempotency_key))
+            if res and res[0]:
+                payload_hash, outcome_json = res[0]
+                if outcome_json:
+                    return {"payload_hash": payload_hash, "outcome": json.loads(outcome_json)}
             return None
         return self.idempotency_store.get((site_id, idempotency_key))
 
@@ -897,21 +974,47 @@ class FrappeDeploymentAdapter:
                 indexes_unchanged = True
                 definition_matches = True
                 unapproved = False
+                restarted_dispatched: Optional[List[str]] = None
                 if self.offline_ddl_simulator:
                     pass  # explicit offline mode: no real DDL ran, nothing to compare
-                elif expected_deployment_id not in self._applied_deployments:
-                    if schema is None:
-                        raise RuntimeError("before-apply table schema unreadable")
-                    self._before_schema[(doctype, expected_deployment_id)] = schema
                 else:
+                    post_apply = expected_deployment_id in self._applied_deployments
+                    if not post_apply:
+                        # CE-SEC-008: a deployment with durable evidence is never re-baselined from the
+                        # live (possibly post-DDL) schema: after a restart the committed baseline wins.
+                        # A failed or malformed read raises and fails the snapshot closed.
+                        evidence = self.load_durable_evidence(expected_deployment_id)
+                        if evidence["main"] is not None or evidence["baseline"] is not None:
+                            if evidence["baseline"] is None or evidence["approved"] is None:
+                                raise DurableEvidenceError("durable baseline or approved plan is missing")
+                            self._before_schema.setdefault((doctype, expected_deployment_id), evidence["baseline"])
+                            self._approved_ddl.setdefault(expected_deployment_id, evidence["approved"])
+                            restarted_dispatched = evidence["dispatched"]
+                            post_apply = True
+                    if not post_apply:
+                        if schema is None:
+                            raise RuntimeError("before-apply table schema unreadable")
+                        self._before_schema[(doctype, expected_deployment_id)] = schema
+                if not self.offline_ddl_simulator and post_apply:
                     # ERP-027: what ran must match the approved plan; unknown means unapproved.
                     before_schema = self._before_schema.get((doctype, expected_deployment_id))
                     approved = self._approved_ddl.get(expected_deployment_id)
+                    dispatched = (
+                        restarted_dispatched if restarted_dispatched is not None
+                        else self._dispatched_ddl.get(expected_deployment_id)
+                    )
+                    # Assess what was dispatched (a superset of what is known to have returned): a
+                    # statement that was sent may have taken effect even if it never reported back.
+                    # Only when the live schema equals the baseline on every fingerprint key is it
+                    # proven that nothing took effect, and then nothing counts as executed.
+                    assessed = dispatched
+                    if dispatched and before_schema is not None and schema is not None and before_schema == schema:
+                        assessed = []
                     unapproved, _why = assess_applied_ddl(
                         doctype,
                         fieldname,
                         approved,
-                        self._executed_ddl.get(expected_deployment_id),
+                        assessed,
                         before_schema,
                         schema,
                     )
@@ -971,42 +1074,214 @@ class FrappeDeploymentAdapter:
             offline_simulator=bool(self.in_memory or self.offline_ddl_simulator),
         )
 
+    # -- durable evidence (CE-SEC-008) ---------------------------------------------------
+    def _commit_durable(self) -> None:
+        if hasattr(self._frappe.db, "commit"):
+            self._frappe.db.commit()
+
+    def _rollback_durable(self) -> None:
+        try:
+            if hasattr(self._frappe.db, "rollback"):
+                self._frappe.db.rollback()
+        except Exception:
+            logger.exception("rollback after a failed durable write also failed")
+
+    def _insert_audit_row(
+        self, *, name: str, deployment_id: str, idempotency_key: str, payload_hash: str, site_id: str,
+        doctype: str, fieldname: str, base_revision_hash: str, blob: str, status: str, sql: Any = None,
+    ) -> None:
+        """A strict INSERT (no upsert) into the audit table; the caller commits."""
+        (sql or self._frappe.db.sql)(f"""
+            INSERT INTO `{self.audit_table}` (
+                name, deployment_id, idempotency_key, payload_hash, site_id, doctype,
+                fieldname, base_revision_hash, ddl_plan_statements, status, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(6), NOW(6))
+        """, (name, deployment_id, idempotency_key, payload_hash, site_id, doctype, fieldname,
+              base_revision_hash, blob, status))
+
+    def _insert_evidence_row(self, deployment_id: str, suffix: str, status: str, payload: Dict[str, Any],
+                             sql: Any = None) -> None:
+        ctx = self._intent_context.get(deployment_id, {})
+        self._insert_audit_row(
+            name=f"{deployment_id}#{suffix}",
+            deployment_id=f"{deployment_id}#{suffix}",
+            idempotency_key=_evidence_key(deployment_id),
+            payload_hash=ctx.get("payload_hash", "hash_default"),
+            site_id=ctx.get("site_id", "default"),
+            doctype=ctx.get("doctype", ""),
+            fieldname=ctx.get("fieldname", ""),
+            base_revision_hash=ctx.get("base_revision_hash", "rev_default"),
+            blob=json.dumps(payload, sort_keys=True),
+            status=status,
+            sql=sql,
+        )
+
+    def _read_audit_row(self, deployment_id: str) -> Optional[Dict[str, Any]]:
+        """The main intent row, or ``None`` only when the database answered with no row. Raises on error."""
+        res = self._frappe.db.sql(
+            f"SELECT {', '.join(_AUDIT_ROW_COLUMNS)} FROM `{self.audit_table}` WHERE deployment_id = %s",
+            (deployment_id,),
+        )
+        if not res:
+            return None
+        row = res[0]
+        if isinstance(row, dict):
+            return dict(row)
+        return dict(zip(_AUDIT_ROW_COLUMNS, row))
+
+    def load_durable_evidence(self, deployment_id: str) -> Dict[str, Any]:
+        """What survives a crash for one deployment: the main row, the approved plan, the committed
+        baseline, and the dispatch journal (``dispatched`` is intent, ``completed`` is what returned).
+
+        Raises ``DurableEvidenceError`` for malformed or inconsistent evidence and lets database errors
+        propagate: a failed or partial read is never an empty result. ``baseline`` is ``None`` only when
+        no baseline row exists.
+        """
+        if self.in_memory:
+            rec = self.audit_journal.get(deployment_id)
+            return {
+                "deployment_id": deployment_id, "main": dict(rec) if rec else None,
+                "approved": list(rec.get("ddl_plan_statements", [])) if rec else None,
+                "baseline": None, "dispatched": [], "completed": [],
+            }
+        main = self._read_audit_row(deployment_id)
+        approved: Optional[List[str]] = None
+        if main is not None:
+            try:
+                approved = json.loads(main.get("ddl_plan_statements") or "null")
+            except ValueError as exc:
+                raise DurableEvidenceError("stored approved plan is not valid JSON") from exc
+            if not isinstance(approved, list) or not all(isinstance(x, str) for x in approved):
+                raise DurableEvidenceError("stored approved plan is not a list of statements")
+        rows = self._frappe.db.sql(
+            f"SELECT name, status, ddl_plan_statements FROM `{self.audit_table}` WHERE idempotency_key = %s",
+            (_evidence_key(deployment_id),),
+        )
+        baseline: Optional[Dict[str, Any]] = None
+        offline_baseline = False
+        dispatched: Dict[int, str] = {}
+        completed: Dict[int, str] = {}
+        for row in rows or ():
+            _name, status, blob = row[0], row[1], row[2]
+            kind = _EVIDENCE_KINDS.get(status)
+            try:
+                payload = json.loads(blob)
+            except (TypeError, ValueError) as exc:
+                raise DurableEvidenceError(f"evidence row '{_name}' is not valid JSON") from exc
+            if kind is None or not isinstance(payload, dict) or payload.get("kind") != kind:
+                raise DurableEvidenceError(f"evidence row '{_name}' has an unknown or inconsistent kind")
+            if kind == "baseline":
+                if baseline is not None or offline_baseline:
+                    raise DurableEvidenceError("more than one baseline row")
+                if payload.get("schema") is None:
+                    offline_baseline = True
+                else:
+                    baseline = _decode_schema(payload["schema"])
+            else:
+                seq, statement = payload.get("seq"), payload.get("statement")
+                table = dispatched if kind == "dispatch_intent" else completed
+                if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1 or not isinstance(statement, str) or seq in table:
+                    raise DurableEvidenceError(f"journal row '{_name}' is malformed or repeated")
+                table[seq] = statement
+        if sorted(dispatched) != list(range(1, len(dispatched) + 1)):
+            raise DurableEvidenceError("dispatch journal has a gap")
+        for seq, statement in completed.items():
+            if dispatched.get(seq) != statement:
+                raise DurableEvidenceError("a completion has no matching dispatch intent")
+        return {
+            "deployment_id": deployment_id, "main": main, "approved": approved, "baseline": baseline,
+            "offline_baseline": offline_baseline,
+            "dispatched": [dispatched[i] for i in sorted(dispatched)],
+            "completed": [completed[i] for i in sorted(completed)],
+        }
+
+    def _journal_dispatch_intent(self, deployment_id: str, statement: str, seq: int, sql: Any) -> None:
+        """Commit the intent to send ``statement`` BEFORE it is sent; a failure here means it is not sent."""
+        try:
+            self._insert_evidence_row(
+                deployment_id, f"d{seq:04d}", _EVIDENCE_DISPATCH,
+                {"kind": "dispatch_intent", "seq": seq, "statement": statement}, sql=sql)
+            self._commit_durable()
+        except Exception:
+            self._rollback_durable()
+            raise
+
+    def _journal_completion(self, deployment_id: str, statement: str, seq: int, sql: Any) -> None:
+        """Record that ``statement`` returned. Best effort: a missing completion row only ever reads as
+        "dispatched, outcome unknown", the conservative state, so it never aborts an apply that took effect."""
+        try:
+            self._insert_evidence_row(
+                deployment_id, f"c{seq:04d}", _EVIDENCE_COMPLETED,
+                {"kind": "dispatch_completed", "seq": seq, "statement": statement}, sql=sql)
+            self._commit_durable()
+        except Exception:
+            logger.exception("could not journal the completion of DDL statement %d of %s", seq, deployment_id)
+            self._rollback_durable()
+
+    @staticmethod
+    def _intent_binding(record: Dict[str, Any]) -> Dict[str, str]:
+        dep_id = record["deployment_id"]
+        return {
+            "idempotency_key": record.get("idempotency_key", f"idemp-{dep_id}"),
+            "payload_hash": record.get("payload_hash", "hash_default"),
+            "site_id": record.get("site_id", "default"),
+            "doctype": record.get("doctype", ""),
+            "fieldname": record.get("fieldname") or "",
+        }
+
     def persist_prepare_and_audit_intent(self, record: Dict[str, Any]) -> None:
+        """Stage 3: commit the intent, the approved plan and the baseline schema BEFORE any DDL.
+
+        A strict INSERT: an existing record for this deployment id is never overwritten. It raises
+        ``DeploymentIntentConflictError`` (``binding_mismatch`` or ``already_recorded``), and
+        ``DurableEvidenceError`` when the live baseline is missing. On any failure nothing stays committed.
+        """
         if self.simulate_prepare_error:
             raise RuntimeError("Fail-closed: Simulated audit prepare failure")
 
-        self._approved_ddl[record["deployment_id"]] = list(record.get("ddl_plan_statements", []))
+        dep_id = record["deployment_id"]
+        approved = list(record.get("ddl_plan_statements", []))
+        binding = self._intent_binding(record)
 
         if not self.in_memory:
+            baseline = self._before_schema.get((binding["doctype"], dep_id))
+            if baseline is None and not self.offline_ddl_simulator:
+                raise DurableEvidenceError("no baseline schema was captured before the intent; refusing to prepare")
             self._ensure_audit_table()
-            dep_id = record["deployment_id"]
-            ddl_stmts = json.dumps(record.get("ddl_plan_statements", []))
-            self._frappe.db.sql(f"""
-                INSERT INTO `{self.audit_table}` (
-                    name, deployment_id, idempotency_key, payload_hash, site_id, doctype,
-                    fieldname, base_revision_hash, ddl_plan_statements, status, created_at, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(6), NOW(6))
-                ON DUPLICATE KEY UPDATE
-                    idempotency_key = VALUES(idempotency_key),
-                    payload_hash = VALUES(payload_hash),
-                    status = VALUES(status),
-                    updated_at = NOW(6)
-            """, (
-                dep_id,
-                record.get("deployment_id", dep_id),
-                record.get("idempotency_key", f"idemp-{dep_id}"),
-                record.get("payload_hash", "hash_default"),
-                record.get("site_id", "default"),
-                record.get("doctype", ""),
-                record.get("fieldname") or "",
-                record.get("base_revision_hash", "rev_default"),
-                ddl_stmts,
-                record.get("status", "PREPARED"),
-            ))
-            if hasattr(self._frappe.db, "commit"):
-                self._frappe.db.commit()
+            self._intent_context[dep_id] = {**binding, "base_revision_hash": record.get("base_revision_hash", "rev_default")}
+            try:
+                self._insert_audit_row(
+                    name=dep_id, deployment_id=dep_id, blob=json.dumps(approved),
+                    base_revision_hash=record.get("base_revision_hash", "rev_default"),
+                    status=record.get("status", "PREPARED"), **binding)
+                self._insert_evidence_row(dep_id, "baseline", _EVIDENCE_BASELINE, {
+                    "kind": "baseline", "doctype": binding["doctype"],
+                    "schema": _encode_schema(baseline) if baseline is not None else None,
+                })
+                self._commit_durable()
+            except Exception as exc:
+                self._rollback_durable()
+                self._intent_context.pop(dep_id, None)
+                try:
+                    existing = self._read_audit_row(dep_id)
+                except Exception:
+                    existing = None
+                if existing is not None:
+                    same = (
+                        all(str(existing.get(k)) == str(v) for k, v in binding.items())
+                        and existing.get("ddl_plan_statements") == json.dumps(approved)
+                    )
+                    raise DeploymentIntentConflictError(
+                        dep_id, "already_recorded" if same else "binding_mismatch") from exc
+                raise
+            self._approved_ddl[dep_id] = approved
         else:
-            dep_id = record["deployment_id"]
+            if dep_id in self.audit_journal:
+                existing = self.audit_journal[dep_id]
+                same = self._intent_binding(existing) == binding and list(
+                    existing.get("ddl_plan_statements", [])) == approved
+                raise DeploymentIntentConflictError(dep_id, "already_recorded" if same else "binding_mismatch")
+            self._approved_ddl[dep_id] = approved
             self.audit_journal[dep_id] = dict(record)
             self.prepared_records.append(record)
             self.idempotency_store[(record["site_id"], record["idempotency_key"])] = {
@@ -1071,35 +1346,52 @@ class FrappeDeploymentAdapter:
         if not self.in_memory:
             # Validate before dispatch: post-apply snapshots cannot undo a narrowing DDL
             # statement whose implicit commit already truncated customer data.
+            dispatched = self._dispatched_ddl.setdefault(deployment_id, [])
             executed = self._executed_ddl.setdefault(deployment_id, [])
             db = self._frappe.db
             original_sql_ddl = getattr(db, "sql_ddl", None)
             original_sql = getattr(db, "sql", None)
             in_sql_ddl = [0]
 
-            def _record_approved_ddl(query):
-                """Check this batch prefix before admitting the next schema statement."""
+            def _admit_ddl(query):
+                """Check this batch prefix, then commit the dispatch intent, before the statement is sent.
+
+                If the intent cannot be made durable the statement is not sent (CE-SEC-008).
+                """
                 statement = str(query)
                 reason = ddl_batch_rejection(
                     doctype, fieldname, self._approved_ddl.get(deployment_id),
-                    [*executed, statement], self._before_schema.get((doctype, deployment_id)),
+                    [*dispatched, statement], self._before_schema.get((doctype, deployment_id)),
                     complete=False,
                 )
                 if reason:
                     raise ValueError("DDL rejected before execution: " + reason)
+                seq = len(dispatched) + 1
+                self._journal_dispatch_intent(deployment_id, statement, seq, original_sql)
+                dispatched.append(statement)
+                return seq, statement
+
+            def _completed_ddl(seq, statement):
+                """Only after the statement returned: it is now recorded as executed."""
                 executed.append(statement)
+                self._journal_completion(deployment_id, statement, seq, original_sql)
 
             def _recording_sql_ddl(query, *a, **kw):
-                _record_approved_ddl(query)
+                seq, statement = _admit_ddl(query)
                 in_sql_ddl[0] += 1
                 try:
-                    return original_sql_ddl(query, *a, **kw)
+                    result = original_sql_ddl(query, *a, **kw)
                 finally:
                     in_sql_ddl[0] -= 1
+                _completed_ddl(seq, statement)
+                return result
 
             def _recording_sql(query, *a, **kw):
                 if not in_sql_ddl[0] and requires_ddl_check(str(query)):
-                    _record_approved_ddl(query)
+                    seq, statement = _admit_ddl(query)
+                    result = original_sql(query, *a, **kw)
+                    _completed_ddl(seq, statement)
+                    return result
                 return original_sql(query, *a, **kw)
 
             if original_sql_ddl is not None:

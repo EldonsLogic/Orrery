@@ -283,14 +283,13 @@ class TestEarlierStepsOfTheSamePlan(unittest.TestCase):
                 field_step(2, "customer", {"id": "custom_note", "type": "string", "unique": True})]
         self.assert_refused_up_front_as_execute_does(engine, plan, "unique_or_index")
 
-    def test_a_unique_field_of_a_type_an_earlier_entity_add_creates_is_held_by_it(self) -> None:
-        """An adapter-made type is created with its fields' unique and index flags, so a later step asking for the same passes."""
+    def test_a_unique_field_in_a_type_an_earlier_entity_add_creates_is_refused(self) -> None:
+        """BPL-043: an adapter-made type never carries a constraint, so a plan that creates a unique field in a new custom
+        type is refused up front (the earlier step used to be projected as creating it unique)."""
         made = entity("vendor_ref", ("code", "string"))
         made["fields"][0]["unique"] = True
         plan = [entity_step(1, made), field_step(2, "vendor_ref", {"id": "code", "type": "string", "unique": True})]
-        eng = engine()
-        with no_writes(self, eng):
-            backend_for(eng).check_ready(TENANT, plan)  # readiness only: the simulator keeps no column for the second step to find
+        self.assert_refused_up_front_as_execute_does(engine, plan, "unique_or_index")
 
 
 class TestUnsupportedTypeAndMalformedSteps(unittest.TestCase):

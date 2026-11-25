@@ -536,3 +536,361 @@ class TestB2InvalidJsonHasAStableCode(unittest.TestCase):
                 self.assertEqual(out.get("reason_code"), "invalid_json_payload", out)
                 self.assertNotIn("SECRET", str(out))
                 self.assertNotIn("Expecting", str(out))
+
+
+# ===========================================================================================
+# Revision round 1 (Gemini 4 Argon review)
+# ===========================================================================================
+def _tx_engine():
+    """A one-site simulated engine whose ``db.transaction_writes`` counts uncommitted document writes and
+    ``set_value`` calls, reset by ``commit`` and ``rollback`` (the stock simulator hard-codes 0)."""
+    from change_engine.tests.ci_engine_fake import CaseInsensitiveEngine, _CaseInsensitiveDB
+
+    class Db(_CaseInsensitiveDB):
+        pending = 0
+
+        @property
+        def transaction_writes(self):
+            return self.pending
+
+        def commit(self):
+            self.pending = 0
+
+        def rollback(self):
+            self.pending = 0
+
+        def set_value(self, *a, **k):
+            self.pending += 1
+            return super().set_value(*a, **k)
+
+    engine = CaseInsensitiveEngine("ci.localhost")
+    engine.db = Db(engine)
+    site = engine.current_site_db()
+    inner = site.upsert_doc
+
+    def counted(data, is_insert):
+        engine.db.pending += 1
+        return inner(data, is_insert)
+
+    site.upsert_doc = counted
+    return engine
+
+
+class TestR1WorkflowActionIsCreatedInsideTheGuardedSequence(unittest.TestCase):
+    TENANT = "t_sec011"
+
+    def _backend(self, engine):
+        env = mock.patch.dict(os.environ, {"CHANGE_ENGINE_ENV": "test"})
+        env.start()
+        self.addCleanup(env.stop)
+        return FrappeRuntimeBackend(
+            site_resolver=FrappeSiteResolver(site_map={self.TENANT: "ci.localhost"}),
+            frappe_factory=lambda: engine, offline_ddl_simulator=True)
+
+    def _steps(self):
+        role = {"seq": 1, "kind": "role.upsert", "pointer": "/roles/owner", "subject": {"kind": "role", "id": "owner"},
+                "params": {"definition": {"id": "owner", "labels": {"en": "owner", "ar": "owner"},
+                                          "scope": {"type": "company"},
+                                          "permissions": [{"entity": "sales_order", "actions": ["read", "update"]}]}}}
+        wf = {"seq": 2, "kind": "workflow.upsert", "pointer": "/workflows/so_flow",
+              "subject": {"kind": "workflow", "id": "so_flow"},
+              "params": {"definition": {
+                  "id": "so_flow", "entity": "sales_order",
+                  "states": [{"id": "draft", "kind": "initial"}, {"id": "approved", "kind": "final"}],
+                  "transitions": [{"id": "approve", "from": "draft", "to": "approved", "allowedRoles": ["owner"],
+                                   "actionLabels": {"en": "Approve"}}]}}}
+        return role, wf
+
+    def test_a_new_action_does_not_leave_a_pending_write_for_the_fresh_view(self):
+        engine = _tx_engine()
+        backend = self._backend(engine)
+        role, wf = self._steps()
+        backend.execute_step(self.TENANT, role)
+        backend.execute_step(self.TENANT, wf)  # before the fix: the fresh view refused the pending Action Master
+        site = engine.current_site_db()
+        self.assertIn("Approve", site.rows.get("tabWorkflow Action Master", {}))
+        self.assertTrue([w for w in site.rows["tabWorkflow"].values() if w.get("is_active")])
+        self.assertEqual(engine.db.transaction_writes, 0)
+
+    def test_the_action_is_created_after_the_intent_and_under_the_locks(self):
+        engine = _tx_engine()
+        backend = self._backend(engine)
+        role, wf = self._steps()
+        backend.execute_step(self.TENANT, role)
+        order = []
+        real_prepare = FrappeDeploymentAdapter.persist_prepare_and_audit_intent
+        real_action = FrappeDeploymentAdapter.ensure_workflow_action
+        real_acquire = FrappeDeploymentAdapter.acquire_advisory_lock
+        with mock.patch.object(FrappeDeploymentAdapter, "persist_prepare_and_audit_intent", autospec=True,
+                               side_effect=lambda s, r: (order.append("intent"), real_prepare(s, r))[1]), \
+                mock.patch.object(FrappeDeploymentAdapter, "ensure_workflow_action", autospec=True,
+                                  side_effect=lambda s, n: (order.append("action"), real_action(s, n))[1]), \
+                mock.patch.object(FrappeDeploymentAdapter, "acquire_advisory_lock", autospec=True,
+                                  side_effect=lambda s, k, wait_seconds: (order.append("lock"), real_acquire(s, k, wait_seconds))[1]):
+            backend.execute_step(self.TENANT, wf)
+        self.assertLess(order.index("lock"), order.index("intent"))
+        self.assertLess(order.index("intent"), order.index("action"))
+
+    def test_a_deployment_that_is_refused_creates_no_action(self):
+        engine = _tx_engine()
+        backend = self._backend(engine)
+        role, wf = self._steps()
+        backend.execute_step(self.TENANT, role)
+        site = engine.current_site_db()
+        site.lock_wait_timeout = 50
+        with mock.patch.object(FrappeDeploymentAdapter, "begin_fresh_read_view", side_effect=_DbDown(SECRET)):
+            with self.assertRaises(Exception):
+                backend.execute_step(self.TENANT, wf)
+        self.assertNotIn("Approve", site.rows.get("tabWorkflow Action Master", {}))
+
+    def test_the_engine_ensures_every_distinct_action_once(self):
+        from change_engine.guarded_apply.workflow_engine import execute_workflow_deployment
+        from change_engine.tests import test_phase3_workflow
+
+        wf = test_phase3_workflow.TestPhase3WorkflowEngine(
+            "test_11_api_endpoints_and_proposal")._build_valid_2_stage_workflow("Sales Order")
+        db = FrappeDeploymentAdapter(in_memory=True, use_shared_state=False)
+        seen = []
+        real = db.ensure_workflow_action
+        db.ensure_workflow_action = lambda name: (seen.append(name), real(name))[1]
+        out = execute_workflow_deployment(db, "dep_wf", "default", "Sales Order", wf.model_dump(), user_roles=ADMIN)
+        self.assertEqual(out["status"], "APPLIED", out)
+        self.assertEqual(sorted(seen), sorted({t.action for t in wf.transitions}))
+
+
+# ===========================================================================================
+class TestR2ValidatorsNeverEchoValidatorText(unittest.TestCase):
+    def _clean(self, out):
+        text = json.dumps(out, default=str)
+        for needle in ("SECRET", "pydantic", "validation error", "Input should", "Field required"):
+            self.assertNotIn(needle, text)
+
+    def test_an_invalid_chart_is_a_fixed_validation_message(self):
+        from change_engine.guarded_apply.report_engine import validate_report_definition
+
+        base = {"report_name": "R", "ref_doctype": "Sales Order", "columns": [{"fieldname": "name", "label": "ID"}]}
+        for rd in ({**base, "chart": {"chart_type": "SECRET", "x_field": "a", "y_fields": ["b"]}},
+                   {**base, "columns": "SECRET-columns"}):
+            with self.subTest(rd=sorted(rd)):
+                res = validate_report_definition(rd, db=None)
+                self.assertFalse(res.is_valid)
+                self.assertTrue(res.errors)
+                self._clean(res.errors)
+
+    def test_an_invalid_chart_through_apply_has_a_stable_code(self):
+        bench = _Bench()
+        bench.module.make_property_setter = lambda *a, **k: None
+        adapter = bench.new_adapter()
+        out = endpoints.apply_report_change(
+            doctype="Sales Order", deployment_id="dep_rp", adapter=adapter, user_roles=["Sales Manager"],
+            report_def={"report_name": "R", "ref_doctype": "Sales Order",
+                        "columns": [{"fieldname": "name", "label": "ID"}],
+                        "chart": {"chart_type": "SECRET", "x_field": "a", "y_fields": ["b"]}})
+        self.assertEqual((out["status"], out["disposition"], out["reason_code"]),
+                         ("REJECTED", "INVALID_REPORT_DEFINITION", "invalid_report_definition"), out)
+        self._clean(out)
+        self.assertTrue(_no_row(bench))
+
+    def test_the_workflow_validator_does_not_echo_the_schema_error(self):
+        from change_engine.guarded_apply.workflow_engine import validate_workflow_state_machine
+
+        res = validate_workflow_state_machine({"workflow_name": "W", "states": "SECRET-states"})
+        self.assertFalse(res.is_valid)
+        self._clean(res.errors)
+
+    def test_propose_does_not_echo_validator_text(self):
+        for payload in ({"intent": "create_workflow", "workflow": {"workflow_name": "W", "states": "SECRET"}},
+                        {"intent": "create_report", "report": {"report_name": "R", "columns": "SECRET"}},
+                        {"intent": "create_report", "report": {
+                            "report_name": "R", "ref_doctype": "Sales Order",
+                            "columns": [{"fieldname": "name", "label": "ID"}],
+                            "chart": {"chart_type": "SECRET", "x_field": "a", "y_fields": ["b"]}}}):
+            with self.subTest(intent=payload["intent"]):
+                out = endpoints.propose_configuration_change("Sales Order", payload, user_roles=ADMIN)
+                self.assertEqual(out["status"], "REJECTED", out)
+                self._clean(out["validation"])
+
+
+# ===========================================================================================
+def _workflow_bench(*, previous=None):
+    """A live-adapter bench with an optional previously active workflow on Sales Order."""
+    from change_engine.tests import test_phase3_workflow
+
+    bench = _Bench()
+    wf = test_phase3_workflow.TestPhase3WorkflowEngine(
+        "test_11_api_endpoints_and_proposal")._build_valid_2_stage_workflow("Sales Order")
+    adapter = bench.new_adapter()
+    if previous:
+        adapter.get_active_workflow = lambda doctype: {"name": previous, "workflow_name": previous, "is_active": 1}
+    return bench, adapter, wf
+
+
+def _apply_wf(adapter, wf, dep="dep_wf"):
+    return endpoints.apply_workflow_change(
+        doctype="Sales Order", deployment_id=dep, workflow_def=wf.model_dump(), adapter=adapter, user_roles=ADMIN)
+
+
+class TestR3FailedApplyIsRolledBackAndNeverMarkedCleanOverMutatedState(unittest.TestCase):
+    def _each_engine_with_a_pending_write_then_failure(self):
+        def property_setter(bench, adapter):
+            def failing(*a, **k):
+                bench.db.meta_pending.add("custom_half")  # an uncommitted write, then the failure
+                if getattr(bench, "rollback_fails", False):
+                    bench.db.rollback_error = _DbDown(SECRET)
+                raise _DbDown(SECRET)
+            bench.module.make_property_setter = failing
+
+        def workflow(bench, adapter):
+            def failing(*a, **k):
+                bench.db.meta_pending.add("custom_half")
+                if getattr(bench, "rollback_fails", False):
+                    bench.db.rollback_error = _DbDown(SECRET)
+                raise _DbDown(SECRET)
+            adapter.apply_workflow = failing
+
+        def report(bench, adapter):
+            def failing(*a, **k):
+                bench.db.meta_pending.add("custom_half")
+                if getattr(bench, "rollback_fails", False):
+                    bench.db.rollback_error = _DbDown(SECRET)
+                raise _DbDown(SECRET)
+            adapter.apply_report = failing
+
+        return (("property_setter", property_setter), ("workflow", workflow), ("report", report))
+
+    def test_uncommitted_apply_writes_are_rolled_back_before_clean_is_recorded(self):
+        for name, setup in self._each_engine_with_a_pending_write_then_failure():
+            with self.subTest(engine=name):
+                bench = _Bench()
+                calls, adapter = _entry_points(bench)
+                setup(bench, adapter)
+                out = calls[name](dep=DEP[name])
+                self.assertEqual((out["status"], out["stage"]), ("FAILED_CLEAN", "APPLY"), out)
+                self.assertNotIn("SECRET", json.dumps(out))
+                self.assertEqual(bench.db.transaction_writes, 0)
+                self.assertNotIn("custom_half", bench.db.inserted, "the half write was not committed by Stage 6")
+                self.assertEqual(bench.db.row(DEP[name])["status"], "FAILED_CLEAN")
+                self.assertEqual(bench.db.locks, set())
+
+    def test_a_rollback_that_fails_holds_the_deployment_and_discards_the_session(self):
+        for name, setup in self._each_engine_with_a_pending_write_then_failure():
+            with self.subTest(engine=name):
+                bench = _Bench()
+                calls, adapter = _entry_points(bench)
+                setup(bench, adapter)
+                bench.rollback_fails = True  # the rollback after the failed apply fails too
+                out = calls[name](dep=DEP[name])
+                self.assertEqual((out["status"], out["reason_code"]), ("RECOVERY_REQUIRED", "session_discarded"), out)
+                self.assertNotIn("SECRET", json.dumps(out))
+                self.assertEqual(bench.db.row(DEP[name])["status"], "PREPARED", "the intent stays as the hold")
+                self.assertTrue(bench.db.closed)
+                self.assertNotIn("custom_half", bench.db.inserted)
+
+    def test_a_session_discarded_during_the_apply_is_never_finalized(self):
+        for name in ENGINES:
+            with self.subTest(engine=name):
+                bench = _Bench()
+                calls, adapter = _entry_points(bench)
+                apply_name = {"property_setter": "apply_property_setter", "workflow": "apply_workflow",
+                              "report": "apply_report"}[name]
+                real = getattr(adapter, apply_name)
+                setattr(adapter, apply_name, lambda *a, **k: (real(*a, **k), adapter.mark_session_unusable())[0])
+                out = calls[name](dep=DEP[name])
+                self.assertEqual((out["status"], out["reason_code"]), ("RECOVERY_REQUIRED", "session_discarded"), out)
+                self.assertEqual(bench.db.row(DEP[name])["status"], "PREPARED")
+
+    def test_a_failing_state_or_deactivation_step_is_a_clean_failure_not_an_escape(self):
+        for step_name in ("ensure_workflow_state", "set_workflow_active", "ensure_workflow_action"):
+            with self.subTest(step=step_name):
+                bench, adapter, wf = _workflow_bench(previous="Older Flow")
+                setattr(adapter, step_name, lambda *a, **k: (_ for _ in ()).throw(_DbDown(SECRET)))
+                out = _apply_wf(adapter, wf)
+                self.assertEqual((out["status"], out["stage"], out["reason_code"]),
+                                 ("FAILED_CLEAN", "APPLY", "apply_failed"), out)
+                self.assertNotIn("SECRET", json.dumps(out))
+                self.assertEqual(bench.db.row("dep_wf")["status"], "FAILED_CLEAN", "the intent is settled, not stranded")
+                self.assertEqual(bench.db.locks, set())
+
+    def test_a_committed_deactivation_followed_by_a_failed_apply_is_held_not_clean(self):
+        bench, adapter, wf = _workflow_bench(previous="Older Flow")
+        deactivated = []
+        adapter.set_workflow_active = lambda name, active: (deactivated.append((name, active)), adapter._commit_durable())[0]
+        adapter.apply_workflow = lambda *a, **k: (_ for _ in ()).throw(_DbDown(SECRET))
+        out = _apply_wf(adapter, wf)
+        self.assertEqual(deactivated, [("Older Flow", 0)])
+        self.assertEqual((out["status"], out["stage"]), ("RECOVERY_REQUIRED", "APPLY"), out)
+        self.assertEqual(out["reason_code"], "apply_failed")
+        self.assertNotIn("SECRET", json.dumps(out))
+        self.assertEqual(bench.db.row("dep_wf")["status"], "RECOVERY_REQUIRED", "the target is held")
+        again = _apply_wf(adapter, wf, dep="dep_wf_2")
+        self.assertEqual(again["status"], "RECOVERY_REQUIRED", again)
+
+    def test_with_no_previous_workflow_a_failed_apply_stays_clean(self):
+        bench, adapter, wf = _workflow_bench()
+        adapter.apply_workflow = lambda *a, **k: (_ for _ in ()).throw(_DbDown(SECRET))
+        out = _apply_wf(adapter, wf)
+        self.assertEqual(out["status"], "FAILED_CLEAN", out)
+
+
+# ===========================================================================================
+class TestR4SiteResolverIsValidatedAndGuarded(unittest.TestCase):
+    def _raises(self, **kw):
+        from change_engine.adapter import FrappeBackendError
+
+        with self.assertRaises(FrappeBackendError) as err:
+            FrappeSiteResolver(**kw)
+        self.assertEqual(err.exception.code, "invalid_request")
+
+    def test_a_site_map_key_must_be_a_tenant_id(self):
+        for key in ("alpha", "T_ALPHA", "t-alpha", "t_alpha_", "t_", "", "t_" + "a" * 70, 7, None):
+            with self.subTest(key=key):
+                self._raises(site_map={key: "alpha.example.test"})
+        FrappeSiteResolver(site_map={"t_alpha": "alpha.example.test"})
+
+    def test_a_site_map_value_must_be_a_site_name(self):
+        for value in ("", "  ", ".", 7, None):
+            with self.subTest(value=value):
+                self._raises(site_map={"t_alpha": value})
+
+    def test_a_site_map_value_may_not_collide_with_another_tenants_default_site(self):
+        self._raises(site_map={"t_alpha": "t-beta.localhost"})
+        self._raises(site_map={"t_alpha": "T-Beta.LOCALHOST."}, default_domain="localhost")
+        self._raises(site_map={"t_alpha": "t-beta.example.test"}, default_domain="example.test")
+        # its own default name, another domain, or a tenant that is itself mapped elsewhere: no collision
+        FrappeSiteResolver(site_map={"t_alpha": "t-alpha.localhost"})
+        FrappeSiteResolver(site_map={"t_alpha": "t-beta.other.test"})
+        FrappeSiteResolver(site_map={"t_alpha": "t-beta.localhost", "t_beta": "beta.example.test"})
+
+    def test_a_resolver_that_raises_is_a_stable_refusal_at_every_rpc(self):
+        class Broken:
+            def tenant_of(self, site):
+                raise RuntimeError(SECRET)
+
+        bench = _Bench()
+        bench.module.make_property_setter = lambda *a, **k: None
+        adapter = FrappeDeploymentAdapter(frappe_module=bench.module, in_memory=False, use_shared_state=False,
+                                          site_resolver=Broken())
+        from change_engine.tests import test_phase3_workflow, test_phase4_report
+
+        wf_def = test_phase3_workflow.TestPhase3WorkflowEngine(
+            "test_11_api_endpoints_and_proposal")._build_valid_2_stage_workflow("Sales Order").model_dump()
+        rp_def = test_phase4_report.TestPhase4ReportEngine(
+            "test_11_end_to_end_api_calls")._build_valid_report_def("Sales Order").model_dump()
+        with mock.patch.object(endpoints, "frappe", _frappe_stub(CUSTOM_SITE)):
+            calls = (
+                endpoints.apply_property_setter_change(doctype="Item", deployment_id="d1", fieldname="note",
+                                                       property_name="label", value="X", adapter=adapter,
+                                                       user_roles=ADMIN),
+                endpoints.apply_workflow_change(doctype="Sales Order", deployment_id="d2", workflow_def=wf_def,
+                                                adapter=adapter, user_roles=ADMIN),
+                endpoints.apply_report_change(doctype="Sales Order", deployment_id="d3", report_def=rp_def,
+                                              adapter=adapter, user_roles=["Sales Manager"]),
+                endpoints.apply_configuration_change(doctype="Item", deployment_id="d4",
+                                                     field_def={**FIELD, "fieldname": "custom_xyz"},
+                                                     adapter=adapter, user_roles=ADMIN),
+            )
+        for out in calls:
+            with self.subTest(dep=out.get("deployment_id")):
+                self.assertEqual((out["status"], out["reason_code"]), ("REJECTED", "site_unresolvable"), out)
+                self.assertNotIn("SECRET", json.dumps(out))
+        self.assertTrue(_no_row(bench))

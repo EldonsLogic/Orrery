@@ -127,13 +127,23 @@ class FrappeSiteResolver:
         default_domain: str = "localhost",
     ) -> None:
         self.site_map = dict(site_map or {})
+        self.default_domain = default_domain
         seen_sites: dict[str, str] = {}
+        default = str(default_domain).strip().rstrip(".").lower()
         for tid, site in self.site_map.items():
+            # Every key is a tenant id and every value a site name no other tenant resolves to (CE-SEC-011): one
+            # that equals another, unmapped tenant's default ``<slug>.<default_domain>`` would put two tenants on
+            # one site.
+            if not isinstance(tid, str) or not _SAFE_TENANT_RE.fullmatch(tid) or not isinstance(site, str):
+                raise FrappeBackendError("invalid_request", {"fields": ["/site_map"]}, stage="validate")
             norm_site = site.strip().rstrip(".").lower()
             if not norm_site or norm_site in seen_sites and seen_sites[norm_site] != tid:
                 raise FrappeBackendError("invalid_request", {"fields": ["/site_map"]}, stage="validate")
+            label, _dot, domain = norm_site.partition(".")
+            other = label.replace("-", "_")
+            if domain == default and other != tid and other not in self.site_map and _SAFE_TENANT_RE.fullmatch(other):
+                raise FrappeBackendError("invalid_request", {"fields": ["/site_map"]}, stage="validate")
             seen_sites[norm_site] = tid
-        self.default_domain = default_domain
 
     def resolve(self, tenant_id: str) -> str:
         if not isinstance(tenant_id, str) or not _SAFE_TENANT_RE.fullmatch(tenant_id):
@@ -1338,11 +1348,7 @@ class FrappeRuntimeBackend:
         for t in transitions:
             action_labels = t.get("actionLabels") if isinstance(t.get("actionLabels"), dict) else {}
             action = str(action_labels.get("en") or t.get("id") or "Proceed")
-            if hasattr(f.db, "exists") and not f.db.exists("Workflow Action Master", action):
-                try:
-                    f.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action}).insert(ignore_permissions=True)
-                except Exception:
-                    pass
+            # The Workflow Action Master is created by the engine, after the intent and under the locks.
             for r in t["allowedRoles"]:
                 wf_transitions.append(
                     {

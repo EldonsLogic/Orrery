@@ -242,6 +242,32 @@ def set_lock_wait_timeout_checked(db: Any, seconds: int) -> bool:
     return True
 
 
+def settle_apply(db: Any, failed: bool) -> bool:
+    """After the apply step: when it failed, roll back whatever it left uncommitted; then say whether the session
+    can still be relied on. ``False`` when the rollback failed or the session was discarded (the caller then holds
+    the deployment and never finalizes it); ``True`` when a final outcome may be recorded (CE-SEC-011).
+    Never raises."""
+    rollback = getattr(db, "_rollback_durable", None)
+    if failed and callable(rollback) and getattr(db, "in_memory", False) is not True:
+        try:
+            if rollback() is False:
+                return False
+        except Exception:
+            logger.exception("could not roll back the failed apply")
+            return False
+    return getattr(db, "session_unusable", False) is not True
+
+
+def session_discarded_response() -> Dict[str, Any]:
+    """The refusal for a deployment whose session was discarded: nothing is finalized, the intent stays as the hold."""
+    return {
+        "status": "RECOVERY_REQUIRED",
+        "stage": "APPLY",
+        "reason_code": "session_discarded",
+        "reason": "The database session was discarded before finalization; the deployment is held for recovery.",
+    }
+
+
 def blocked_response(lookup: str) -> Dict[str, Any]:
     """The refusal for a durable lookup that failed: it blocks, and says nothing of the error."""
     return {

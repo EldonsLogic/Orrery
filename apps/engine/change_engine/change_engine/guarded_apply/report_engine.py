@@ -32,7 +32,9 @@ from .schema_reconciler import (
     compute_canonical_payload_hash,
     engine_refusal,
     release_scoped_locks,
+    session_discarded_response,
     set_lock_wait_timeout_checked,
+    settle_apply,
 )
 
 logger = logging.getLogger(__name__)
@@ -178,10 +180,12 @@ def validate_report_definition(
     if isinstance(report_def, dict):
         try:
             rd = ReportDefinition(**report_def)
-        except Exception as exc:
+        except Exception:
+            # The validator's own text carries the caller's input and library details: fixed text only.
+            logger.exception("report definition failed schema validation")
             return ReportValidationResult(
                 is_valid=False,
-                errors=[f"Schema validation error: {exc}"],
+                errors=["The report definition did not pass schema validation."],
                 warnings=[],
             )
     else:
@@ -241,8 +245,9 @@ def validate_report_definition(
         if isinstance(chart_obj, dict):
             try:
                 chart_obj = ReportChartConfig(**chart_obj)
-            except Exception as chart_exc:
-                errors.append(f"Chart configuration error: {chart_exc}")
+            except Exception:
+                logger.exception("report chart failed schema validation")
+                errors.append("The chart configuration did not pass schema validation.")
                 chart_obj = None
 
         if chart_obj:
@@ -444,6 +449,7 @@ def execute_report_deployment(
             "success": False,
             "stage": "VALIDATE",
             "disposition": "INVALID_REPORT_DEFINITION",
+            "reason_code": "invalid_report_definition",
             "reason": "; ".join(val_result.errors),
             "errors": val_result.errors,
             "warnings": val_result.warnings,
@@ -648,6 +654,12 @@ def execute_report_deployment(
             # The raw error stays in the log.
             logger.exception("Report apply for %s raised", deployment_id)
             apply_error = "apply_failed"
+
+        # A failed apply leaves uncommitted writes: they are rolled back before any outcome is recorded, and a
+        # session that cannot be relied on is never finalized (the intent stays as the hold).
+        if not settle_apply(db, failed=bool(apply_error)):
+            return engine_refusal(session_discarded_response(), deployment_id, "SESSION_DISCARDED", start_time,
+                                  doctype=doctype, report_name=rd.report_name)
 
         # Step 8: Clear DocType cache
         try:

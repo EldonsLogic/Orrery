@@ -585,6 +585,7 @@ class FrappeDeploymentAdapter:
     _shared_revision_hashes: Dict[str, str] = {}
     _shared_workflows: Dict[str, Dict[str, Any]] = {}
     _shared_workflow_states: Dict[str, Dict[str, Any]] = {}
+    _shared_workflow_actions: Dict[str, Dict[str, Any]] = {}
     _shared_reports: Dict[str, Dict[str, Any]] = {}
     _shared_documents: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
@@ -600,6 +601,7 @@ class FrappeDeploymentAdapter:
         cls._shared_revision_hashes.clear()
         cls._shared_workflows.clear()
         cls._shared_workflow_states.clear()
+        cls._shared_workflow_actions.clear()
         cls._shared_reports.clear()
         cls._shared_documents.clear()
 
@@ -680,6 +682,7 @@ class FrappeDeploymentAdapter:
             self.revision_hashes = self._shared_revision_hashes
             self.workflows = self._shared_workflows
             self.workflow_states = self._shared_workflow_states
+            self.workflow_actions = self._shared_workflow_actions
             self.reports = self._shared_reports
             self.documents = self._shared_documents
         else:
@@ -692,6 +695,7 @@ class FrappeDeploymentAdapter:
             self.revision_hashes = {}
             self.workflows = {}
             self.workflow_states = {}
+            self.workflow_actions = {}
             self.reports = {}
             self.documents = {}
 
@@ -1958,6 +1962,19 @@ class FrappeDeploymentAdapter:
                     ws.insert(ignore_permissions=True)
                     self._commit_durable()
 
+    def ensure_workflow_action(self, action_name: str) -> None:
+        """Create the ``Workflow Action Master`` a transition names, when it does not exist. Called by the workflow
+        engine after the intent and under the locks (CE-SEC-011), and committed like ``ensure_workflow_state``."""
+        if self.in_memory:
+            self.workflow_actions[action_name] = {"name": action_name, "workflow_action_name": action_name}
+        elif hasattr(self._frappe, "db") and hasattr(self._frappe, "get_doc"):
+            if not self._frappe.db.exists("Workflow Action Master", action_name):
+                self._frappe.get_doc({
+                    "doctype": "Workflow Action Master",
+                    "workflow_action_name": action_name,
+                }).insert(ignore_permissions=True)
+                self._commit_durable()
+
     def get_workflow_state(self, state_name: str) -> Optional[Dict[str, Any]]:
         if self.in_memory:
             return self.workflow_states.get(state_name)
@@ -2186,7 +2203,12 @@ def _resolve_site_id(caller_site: Any, deployment_id: Any, start_time: float, si
     """
     resolved = getattr(getattr(frappe, "local", None), "site", None)
     if resolved:
-        site = _tenant_of_site(resolved, site_resolver) or resolved
+        try:
+            site = _tenant_of_site(resolved, site_resolver) or resolved
+        except Exception:
+            logger.exception("the site resolver could not map the resolved site for %s", deployment_id)
+            return None, _site_rejection(deployment_id, start_time, "SITE_UNRESOLVABLE", "site_unresolvable",
+                                         "The site identity could not be resolved.", **extra)
         if caller_site is not None and caller_site != site:
             return None, _site_rejection(deployment_id, start_time, "SITE_MISMATCH", "site_mismatch",
                                          "The site identity does not belong to the site this request runs on.",

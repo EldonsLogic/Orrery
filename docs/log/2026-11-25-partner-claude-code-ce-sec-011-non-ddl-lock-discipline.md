@@ -42,6 +42,15 @@ All paths are under `apps/engine/change_engine/change_engine/`.
 - `ZoneSafetyViolation` text still echoes the caller's own input. That is the caller's own data, so nothing is disclosed.
 - The field path is not folded onto the new helpers, to avoid touching merged Tier 3 code.
 
+## Review round 1 (Gemini 4 Argon at 9005fd47: changes required; 1 High, 2 Medium, 1 Low)
+- Fixed:
+  - **High (regression).** `_deploy_workflow` inserted the Workflow Action Master uncommitted before the deployment, so the fresh view refused every workflow that creates an action. The engine now creates actions with `ensure_workflow_action`, after Stage 3 PREPARED, under the locks and inside the apply's try.
+  - **Medium.** The report and workflow validators return fixed messages (`invalid_report_definition`, `invalid_workflow_state_machine`).
+  - **Medium.** Steps 6 and 7 of the workflow engine run inside the apply's try. `settle_apply` rolls back uncommitted apply writes, and a failed rollback or a discarded session holds the deployment as RECOVERY_REQUIRED. A deactivation that was already committed and is followed by a failed apply is held, not marked FAILED_CLEAN.
+  - **Low.** `FrappeSiteResolver` validates `site_map` (tenant-id keys, string values, no collision with another tenant's default site). A resolver error gives `site_unresolvable`.
+- Not changed: the property setter's second write (`reqd=0`) after a successful main property is still swallowed. It is outside this slice.
+- Red then green: 37 failed and 40 passed, then all pass. Full suite: 1827 passed, 86 skipped, 0 failed.
+
 ## Tokens or cost
 Unknown.
 

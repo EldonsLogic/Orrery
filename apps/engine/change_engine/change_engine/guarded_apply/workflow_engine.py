@@ -37,7 +37,9 @@ from .schema_reconciler import (
     compute_canonical_payload_hash,
     engine_refusal,
     release_scoped_locks,
+    session_discarded_response,
     set_lock_wait_timeout_checked,
+    settle_apply,
 )
 
 logger = logging.getLogger(__name__)
@@ -226,10 +228,12 @@ def validate_workflow_state_machine(
     if isinstance(wf, dict):
         try:
             wf_obj = WorkflowDefinition(**wf)
-        except Exception as exc:
+        except Exception:
+            # The validator's own text carries the caller's input and library details: fixed text only.
+            logger.exception("workflow definition failed schema validation")
             return WorkflowValidationResult(
                 is_valid=False,
-                errors=[f"Schema validation error in workflow definition: {exc}"],
+                errors=["The workflow definition did not pass schema validation."],
                 warnings=[],
                 mermaid_graph="",
             )
@@ -502,6 +506,7 @@ def execute_workflow_deployment(
             "success": False,
             "stage": "VALIDATE",
             "disposition": "INVALID_WORKFLOW_STATE_MACHINE",
+            "reason_code": "invalid_workflow_state_machine",
             "reason": "; ".join(val_result.errors),
             "errors": val_result.errors,
             "warnings": val_result.warnings,
@@ -653,30 +658,6 @@ def execute_workflow_deployment(
                 "execution_time_ms": execution_time_ms,
             }
 
-        # Step 6: Ensure all Workflow State records exist (idempotently)
-        for s in wf.states:
-            if hasattr(db, "ensure_workflow_state") and callable(getattr(db, "ensure_workflow_state", None)):
-                db.ensure_workflow_state(s.state, style=s.style)
-            elif frappe and hasattr(frappe, "db") and hasattr(frappe, "get_doc"):
-                if not frappe.db.exists("Workflow State", s.state):
-                    ws = frappe.get_doc({
-                        "doctype": "Workflow State",
-                        "workflow_state_name": s.state,
-                        "style": s.style or "Primary",
-                    })
-                    ws.insert(ignore_permissions=True)
-                    if hasattr(frappe.db, "commit"):
-                        frappe.db.commit()
-
-        # Step 7: Deactivate pre-existing active workflow if it differs from the new one
-        if prev_wf and prev_wf_name and prev_wf_name != wf.workflow_name:
-            if hasattr(db, "set_workflow_active") and callable(getattr(db, "set_workflow_active", None)):
-                db.set_workflow_active(prev_wf_name, 0)
-            elif frappe and hasattr(frappe, "db") and hasattr(frappe.db, "set_value"):
-                frappe.db.set_value("Workflow", prev_wf_name, "is_active", 0)
-                if hasattr(frappe.db, "commit"):
-                    frappe.db.commit()
-
         # Step 8: Create or update Workflow document
         wf_dict = {
             "doctype": "Workflow",
@@ -709,7 +690,38 @@ def execute_workflow_deployment(
         }
 
         apply_error = None
+        deactivated_prev = False  # a committed step: a later failure is a hold, never "clean"
         try:
+            # Step 6: Ensure all Workflow State records and transition Action Masters exist (idempotently),
+            # after the intent and under the locks (CE-SEC-011)
+            for s in wf.states:
+                if hasattr(db, "ensure_workflow_state") and callable(getattr(db, "ensure_workflow_state", None)):
+                    db.ensure_workflow_state(s.state, style=s.style)
+                elif frappe and hasattr(frappe, "db") and hasattr(frappe, "get_doc"):
+                    if not frappe.db.exists("Workflow State", s.state):
+                        ws = frappe.get_doc({
+                            "doctype": "Workflow State",
+                            "workflow_state_name": s.state,
+                            "style": s.style or "Primary",
+                        })
+                        ws.insert(ignore_permissions=True)
+                        if hasattr(frappe.db, "commit"):
+                            frappe.db.commit()
+
+            for action in sorted({t.action for t in wf.transitions if t.action}):
+                if hasattr(db, "ensure_workflow_action") and callable(getattr(db, "ensure_workflow_action", None)):
+                    db.ensure_workflow_action(action)
+
+            # Step 7: Deactivate pre-existing active workflow if it differs from the new one
+            if prev_wf and prev_wf_name and prev_wf_name != wf.workflow_name:
+                if hasattr(db, "set_workflow_active") and callable(getattr(db, "set_workflow_active", None)):
+                    db.set_workflow_active(prev_wf_name, 0)
+                elif frappe and hasattr(frappe, "db") and hasattr(frappe.db, "set_value"):
+                    frappe.db.set_value("Workflow", prev_wf_name, "is_active", 0)
+                    if hasattr(frappe.db, "commit"):
+                        frappe.db.commit()
+                deactivated_prev = True
+
             if hasattr(db, "apply_workflow") and callable(getattr(db, "apply_workflow", None)):
                 db.apply_workflow(doctype, wf_dict)
             elif frappe and hasattr(frappe, "get_doc"):
@@ -728,6 +740,12 @@ def execute_workflow_deployment(
             logger.exception("Workflow apply for %s raised", deployment_id)
             apply_error = "apply_failed"
 
+        # A failed apply leaves uncommitted writes: they are rolled back before any outcome is recorded, and a
+        # session that cannot be relied on is never finalized (the intent stays as the hold).
+        if not settle_apply(db, failed=bool(apply_error)):
+            return engine_refusal(session_discarded_response(), deployment_id, "SESSION_DISCARDED", start_time,
+                                  doctype=doctype, workflow_name=wf.workflow_name)
+
         # Step 9: Clear DocType cache
         try:
             if hasattr(db, "clear_doctype_cache") and callable(getattr(db, "clear_doctype_cache", None)):
@@ -740,14 +758,18 @@ def execute_workflow_deployment(
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
         if apply_error:
+            # The previous workflow's deactivation is already committed: the target is not in a known-clean state.
             outcome = {
                 "deployment_id": deployment_id,
-                "status": "FAILED_CLEAN",
+                "status": "RECOVERY_REQUIRED" if deactivated_prev else "FAILED_CLEAN",
                 "success": False,
                 "stage": "APPLY",
                 "disposition": "WORKFLOW_APPLY_FAILED",
                 "reason_code": apply_error,
-                "reason": "The workflow could not be applied; the details are in the server log.",
+                "reason": (
+                    "The workflow could not be applied after the previous workflow was deactivated; the deployment "
+                    "is held for recovery." if deactivated_prev
+                    else "The workflow could not be applied; the details are in the server log."),
                 "doctype": doctype,
                 "workflow_name": wf.workflow_name,
                 "execution_time_ms": execution_time_ms,

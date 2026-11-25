@@ -39,7 +39,9 @@ from .schema_reconciler import (
     compute_canonical_payload_hash,
     engine_refusal,
     release_scoped_locks,
+    session_discarded_response,
     set_lock_wait_timeout_checked,
+    settle_apply,
 )
 
 logger = logging.getLogger(__name__)
@@ -463,6 +465,12 @@ def execute_property_setter_deployment(
             # The raw error stays in the log.
             logger.exception("Property Setter apply for %s raised", deployment_id)
             apply_error = "apply_failed"
+
+        # A failed apply leaves uncommitted writes: they are rolled back before any outcome is recorded, and a
+        # session that cannot be relied on is never finalized (the intent stays as the hold).
+        if not settle_apply(db, failed=bool(apply_error)):
+            return engine_refusal(session_discarded_response(), deployment_id, "SESSION_DISCARDED", start_time,
+                                  doctype=doctype, fieldname=fieldname, property_name=property_name)
 
         # Step 5: Clears DocType cache frappe.clear_cache(doctype=doctype)
         try:

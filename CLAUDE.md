@@ -6,5 +6,6 @@
 - Follow [agents/working-principles.md](agents/working-principles.md) (think before coding, simplicity, surgical changes, goal-driven execution) and, when you orchestrate subagents, [agents/team-protocol.md](agents/team-protocol.md): start with three to five roles from [agents/roles.md](agents/roles.md).
 - You may commit, push your feature branch and open PRs (standing permission from both founders, see AGENTS.md Branches and PRs). Never push to `main` or force-push.
 - Follow [agents/working-principles.md](agents/working-principles.md) (think before coding, simplicity, surgical changes, goal-driven execution) and, when you orchestrate subagents, [agents/team-protocol.md](agents/team-protocol.md): start with three to five roles from [agents/roles.md](agents/roles.md). Follow the efficient review workflow in [agents/team-protocol.md](agents/team-protocol.md) section 14 when you prepare or review a PR.
+- The product is named Seshna, written in Latin letters only ([ADR-0066](docs/decisions/ADR-0066-final-name-seshna-and-nuqta-s-mark.md)); the repo keeps the name `EldonsLogic/Orrery` until GOV-002.
 - Do not run `git commit` or `git push` unless the session task says so.
 - The founder's global vault rules (decisions and logs to the Second Brain project `AI Native ERP`) apply in addition. Repo decisions still go to `docs/decisions/` as ADRs.

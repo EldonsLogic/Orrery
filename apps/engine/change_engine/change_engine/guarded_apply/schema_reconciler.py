@@ -11,8 +11,12 @@ Implements ADR-001 (Rev 2.3) Sections 6, 7, 8, and 9:
 
 import hashlib
 import json
+import logging
+import re
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class RevisionHashError(RuntimeError):
@@ -22,6 +26,75 @@ class RevisionHashError(RuntimeError):
 class IdempotencyConflictError(Exception):
     """Raised when an idempotency_key is reused with a different canonical request payload."""
     pass
+
+
+class DeploymentIntentConflictError(RuntimeError):
+    """CE-SEC-008: a Stage 3 intent for this deployment id already exists; it is never overwritten.
+
+    ``reason`` is ``binding_mismatch`` (another key, payload, site, target or plan) or
+    ``already_recorded`` (the same binding: the earlier attempt is replayed or recovered, never
+    re-run under a second intent).
+    """
+
+    def __init__(self, deployment_id: str, reason: str):
+        super().__init__(f"Deployment intent '{deployment_id}' already exists ({reason}); refusing to overwrite it")
+        self.deployment_id = deployment_id
+        self.reason = reason
+
+
+class DurableEvidenceError(RuntimeError):
+    """CE-SEC-008: durable deployment evidence (baseline, plan, dispatch journal) is missing or malformed."""
+
+
+class InvalidDeploymentIdError(ValueError):
+    """CE-SEC-008: a caller-chosen deployment id or idempotency key could reach the evidence namespace."""
+
+
+# New deployment ids and idempotency keys are canonical: a short ASCII charset, no spaces. The id limit leaves
+# room for every derived name (``idemp-<id>``, ``<id>#evidence``, ``<id>#d0001``) inside VARCHAR(140). Because the
+# charset is ASCII with no spaces, MariaDB's case-insensitive, space-padded comparison is the only equivalence
+# left, and the lock names fold exactly that (``_collation_fold``): one equality for locks, lookups and rows.
+MAX_DEPLOYMENT_ID_LENGTH = 100
+MAX_IDEMPOTENCY_KEY_LENGTH = 128
+MAX_SITE_ID_LENGTH = 140  # VARCHAR(140)
+_CANONICAL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:\-]*")
+
+
+def caller_id_problem(value: Any, max_length: int = MAX_DEPLOYMENT_ID_LENGTH) -> Optional[str]:
+    """Why a NEW caller-chosen deployment id or idempotency key is refused, or ``None``.
+
+    Evidence rows live next to the main rows as ``<deployment_id>#...``; the charset keeps every caller value
+    out of that namespace and out of the collation's equivalence classes.
+    """
+    if not isinstance(value, str) or not value or len(value) > max_length:
+        return f"must be a non-empty string of at most {max_length} characters"
+    if not _CANONICAL_ID.fullmatch(value):
+        return "may only use letters, digits and _ . : - and must start with a letter or digit"
+    return None
+
+
+def evidence_namespace_problem(value: Any) -> Optional[str]:
+    """Lookups, finalizers and rollback accept any EXISTING main row id (older ids may be longer or looser),
+    but never one inside the evidence namespace."""
+    if not isinstance(value, str) or not value:
+        return "must be a non-empty string"
+    if "#" in value or any(ord(c) < 32 or ord(c) == 127 for c in value):
+        return "must not contain '#' or control characters"
+    return None
+
+
+def _collation_fold(value: str) -> str:
+    """How the audit table's default collations compare text: ignoring case and trailing spaces."""
+    return str(value).rstrip(" ").lower()
+
+
+class SessionDiscardedError(RuntimeError):
+    """CE-SEC-008: the database session was discarded (a rollback or a lock release could not be verified);
+    nothing may commit, finalize or rely on a lock through it. The reconciler holds the deployment instead."""
+
+
+class LockTimeoutError(RuntimeError):
+    """CE-SEC-008: the session lock-wait timeout could not be set or its effective value read back."""
 
 
 @dataclass(frozen=True)
@@ -45,6 +118,7 @@ from .ddl_plan_gate import (
 class Rev23DeploymentAdapter(Protocol):
     """Protocol for Frappe v15 + MariaDB 10.11 deployment execution under ADR-001 Rev 2.3."""
 
+    def begin_fresh_read_view(self) -> None: ...
     def acquire_advisory_lock(self, lock_key: str, wait_seconds: int) -> Optional[int]: ...
     def release_advisory_lock(self, lock_key: str) -> None: ...
     def is_target_in_recovery_required(self, site_id: str, doctype: str) -> bool: ...
@@ -63,8 +137,34 @@ def make_bounded_lock_key(site_id: str, doctype: str) -> str:
     Maps (site_id, doctype) to a bounded, collision-resistant lock identifier <= 64 chars
     respecting MariaDB GET_LOCK limits and avoiding raw string concatenation (§7.2).
     """
-    digest = hashlib.sha256(f"{site_id}\x00{doctype}".encode("utf-8")).hexdigest()[:48]
+    digest = hashlib.sha256(f"{_collation_fold(site_id)}\x00{_collation_fold(doctype)}".encode("utf-8")).hexdigest()[:48]
     return f"ce:v1:{digest}"
+
+
+def make_idempotency_lock_key(site_id: str, idempotency_key: str) -> str:
+    """Site-scoped lock for one idempotency key (<= 64 chars), distinct from every target lock."""
+    digest = hashlib.sha256(
+        f"{_collation_fold(site_id)}\x00idem\x00{_collation_fold(idempotency_key)}".encode("utf-8")).hexdigest()[:40]
+    return f"ce:v1:idem:{digest}"
+
+
+def _release_checked(db: Any, lock_key: str) -> bool:
+    """Release one advisory lock; ``True`` only when it is verified released. A release that fails or raises
+    never escapes past the response, but the caller must then discard the session."""
+    try:
+        return db.release_advisory_lock(lock_key) is not False
+    except Exception:
+        logger.exception("could not release advisory lock %s", lock_key)
+        return False
+
+
+def _discard_session(db: Any) -> None:
+    mark = getattr(db, "mark_session_unusable", None)
+    if callable(mark):
+        try:
+            mark()
+        except Exception:
+            logger.exception("could not discard the database session")
 
 
 def compute_canonical_payload_hash(site_id: str, doctype: str, field_def: Dict[str, Any]) -> str:
@@ -91,32 +191,77 @@ def execute_single_field_deployment(
     Executes the 6-Stage Durable Deployment Sequence defined in ADR-001 Rev 2.3 (§8 & §9).
     """
     fieldname = field_def["fieldname"]
+    for label, value, code, limit in (
+        ("deployment id", deployment_id, "invalid_deployment_id", MAX_DEPLOYMENT_ID_LENGTH),
+        ("idempotency key", idempotency_key, "invalid_idempotency_key", MAX_IDEMPOTENCY_KEY_LENGTH),
+        ("site identity", site_id, "invalid_site_id", MAX_SITE_ID_LENGTH),
+    ):
+        problem = caller_id_problem(value, limit)
+        if problem:
+            return {
+                "deployment_id": None,
+                "status": "REJECTED",
+                "stage": "VALIDATE",
+                "reason_code": code,
+                "reason": f"The {label} {problem}.",
+            }
     payload_hash = compute_canonical_payload_hash(site_id, doctype, field_def)
     lock_key = make_bounded_lock_key(site_id, doctype)
+    idem_lock_key = make_idempotency_lock_key(site_id, idempotency_key)
 
-    # Stage 1: Acquire verified connection-scoped advisory lock (1 = acquired, 0 = timeout, None = error)
-    lock_result = db.acquire_advisory_lock(lock_key, wait_seconds=5)
-    if lock_result != 1:
-        reason = "Lock wait timeout (0)" if lock_result == 0 else "Database lock error (NULL)"
-        return {
-            "deployment_id": deployment_id,
-            "status": "REJECTED",
-            "stage": "ACQUIRE",
-            "reason": f"Could not acquire MariaDB GET_LOCK ({reason})",
-        }
-
+    # Stage 1: Acquire verified connection-scoped advisory locks (1 = acquired, 0 = timeout, None = error):
+    # the site-scoped idempotency lock first, so one key cannot reserve two targets, then the target lock.
+    # Both are acquired inside the try, so whatever is held is released whichever way this returns or raises.
+    held: List[str] = []
     try:
-        # Step 1.5: Check Idempotency Binding (§7.1)
-        existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        for key in (idem_lock_key, lock_key):
+            try:
+                lock_result = db.acquire_advisory_lock(key, wait_seconds=5)
+            except Exception:
+                logger.exception("advisory lock acquisition raised for %s", deployment_id)
+                return {
+                    "deployment_id": deployment_id,
+                    "status": "REJECTED",
+                    "stage": "ACQUIRE",
+                    "reason_code": "engine_unavailable",
+                    "reason": "Could not acquire the MariaDB advisory lock (database error).",
+                }
+            if lock_result != 1:
+                reason = "Lock wait timeout (0)" if lock_result == 0 else "Database lock error (NULL)"
+                return {
+                    "deployment_id": deployment_id,
+                    "status": "REJECTED",
+                    "stage": "ACQUIRE",
+                    "reason": f"Could not acquire MariaDB GET_LOCK ({reason})",
+                }
+            held.append(key)
+
+        # Everything below reads fresh: a read view opened before the locks could miss a row another session
+        # committed while this one waited for them. A view that cannot be refreshed blocks.
+        refresh = getattr(db, "begin_fresh_read_view", None)
+        if callable(refresh):
+            try:
+                refresh()
+            except Exception as lookup_exc:
+                return _blocked_by_lookup_failure(deployment_id, "read view", lookup_exc)
+
+        # Step 1.5: Check Idempotency Binding (§7.1). A failed lookup blocks; it is never "no earlier attempt".
+        try:
+            existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        except Exception as lookup_exc:
+            return _blocked_by_lookup_failure(deployment_id, "idempotency", lookup_exc)
         if existing is not None:
-            if existing.get("payload_hash") != payload_hash:
-                raise IdempotencyConflictError(
-                    f"IDEMPOTENCY_CONFLICT: Key '{idempotency_key}' was already used with a different payload."
-                )
-            return existing["outcome"]
+            replay = _replay_or_conflict(existing, payload_hash, idempotency_key)
+            if replay is None:
+                return _blocked_by_lookup_failure(deployment_id, "idempotency", ValueError("malformed stored outcome"))
+            return replay
 
         # Block if target DocType already has an unresolved RECOVERY_REQUIRED deployment (§8.1)
-        if db.is_target_in_recovery_required(site_id, doctype):
+        try:
+            target_blocked = db.is_target_in_recovery_required(site_id, doctype)
+        except Exception as lookup_exc:
+            return _blocked_by_lookup_failure(deployment_id, "recovery", lookup_exc)
+        if target_blocked:
             return {
                 "deployment_id": deployment_id,
                 "status": "RECOVERY_REQUIRED",
@@ -182,6 +327,20 @@ def execute_single_field_deployment(
                 "reason": ddl_plan.rejection_reason or "Unprovable or non-additive DDL plan from updatedb().",
             }
 
+        # The session lock-wait timeout is set and read back BEFORE any intent exists: if it is not
+        # effective nothing is written and nothing runs (CE-SEC-008).
+        try:
+            db.set_lock_wait_timeout(lock_wait_seconds)
+        except Exception:
+            logger.exception("lock_wait_timeout could not be set and verified for %s", deployment_id)
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "stage": "PREPARE",
+                "reason_code": "lock_timeout_not_effective",
+                "reason": "Fail-closed: lock_wait_timeout could not be set and verified.",
+            }
+
         # Stage 3: Prepare — Commit durable intent, payload hash, DDL plan evidence, and audit BEFORE DDL (§8, §10)
         try:
             db.persist_prepare_and_audit_intent({
@@ -195,23 +354,62 @@ def execute_single_field_deployment(
                 "ddl_plan_statements": ddl_plan.statements,
                 "status": "PREPARED",
             })
-        except Exception as prep_exc:
+        except DeploymentIntentConflictError as conflict:
+            # A strict insert met an older record: it is untouched and nothing runs.
+            if conflict.reason == "already_recorded":
+                # The same request is already on record: return what it produced (or its hold), never a bare refusal.
+                try:
+                    recorded = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+                except Exception as lookup_exc:
+                    return _blocked_by_lookup_failure(deployment_id, "idempotency", lookup_exc)
+                if recorded is not None and recorded.get("payload_hash") == payload_hash:
+                    replay = _replay_or_conflict(recorded, payload_hash, idempotency_key)
+                    if replay is not None:
+                        return replay
+                return {
+                    "deployment_id": deployment_id,
+                    "status": "RECOVERY_REQUIRED",
+                    "stage": "PREPARE",
+                    "reason_code": "intent_already_recorded",
+                    "reason": "Fail-closed: this deployment is already on record; it is held until it is recovered.",
+                }
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "stage": "PREPARE",
+                "reason_code": f"intent_{conflict.reason}",
+                "reason": "Fail-closed: an earlier deployment record with this id exists and was left untouched.",
+            }
+        except Exception:
             # Fail closed before any schema mutation is attempted
+            logger.exception("could not persist the deployment intent for %s", deployment_id)
             return {
                 "deployment_id": deployment_id,
                 "status": "FAILED_CLEAN",
                 "stage": "PREPARE",
-                "reason": f"Fail-closed: Could not persist deployment/audit intent: {prep_exc}",
+                "reason_code": "audit_prepare_failed",
+                "reason": "Fail-closed: Could not persist deployment/audit intent.",
             }
 
         # Stage 4: Apply Native Frappe Configuration Operation (§8)
-        db.set_lock_wait_timeout(lock_wait_seconds)
         apply_error: Optional[str] = None
         try:
             db.apply_native_custom_field(deployment_id, doctype, field_def)
-        except Exception as exc:
-            # Do NOT assume rollback on exception; proceed to Stage 5 Reconciliation
-            apply_error = str(exc)
+        except Exception:
+            # Do NOT assume rollback on exception; proceed to Stage 5 Reconciliation. The raw error stays in the log.
+            logger.exception("DDL dispatch for %s raised; reconciling from the live schema", deployment_id)
+            apply_error = "ddl_dispatch_failed"
+
+        # A session that was discarded (a rollback failed, so unknown writes may be pending on it) never reconciles
+        # or finalizes: finalization would commit them. The PREPARED row stays as the hold; the target is blocked.
+        if getattr(db, "session_unusable", False):
+            return {
+                "deployment_id": deployment_id,
+                "status": "RECOVERY_REQUIRED",
+                "stage": "APPLY",
+                "reason_code": "session_discarded",
+                "reason": "The database session was discarded before finalization; the deployment is held for recovery.",
+            }
 
         # Stage 5: Reconcile Exhaustive Snapshot (§9 — Non-Destructive by Default)
         after = db.take_snapshot(doctype, fieldname, expected_deployment_id=deployment_id)
@@ -233,22 +431,54 @@ def execute_single_field_deployment(
                 deployment_id,
                 {"payload_hash": payload_hash, "outcome": outcome},
             )
-        except Exception as fin_exc:
+        except Exception:
             # If finalization fails after DDL, preserve RECOVERY_REQUIRED on audit journal and return it
+            logger.exception("finalization of %s failed after the DDL ran", deployment_id)
             if hasattr(db, "mark_recovery_required") and callable(getattr(db, "mark_recovery_required", None)):
                 try:
-                    db.mark_recovery_required(deployment_id, str(fin_exc))
+                    db.mark_recovery_required(deployment_id, "finalization_failed")
                 except Exception:
-                    pass
+                    logger.exception("could not mark %s recovery-required", deployment_id)
             outcome = {
                 **outcome,
                 "status": "RECOVERY_REQUIRED",
-                "finalization_error": str(fin_exc),
+                "finalization_error": "finalization_failed",
             }
 
         return outcome
     finally:
-        db.release_advisory_lock(lock_key)
+        unusable = False
+        for key in reversed(held):
+            unusable = not _release_checked(db, key) or unusable
+        if unusable:
+            # A lock that may still be held keeps blocking others for as long as this connection lives: the
+            # session is declared unusable and discarded, which frees every lock it owns.
+            _discard_session(db)
+
+
+def _replay_or_conflict(existing: Dict[str, Any], payload_hash: str, idempotency_key: str) -> Optional[Dict[str, Any]]:
+    """The stored outcome for a matching earlier request, an idempotency conflict for another payload, or
+    ``None`` when the stored record is not the expected shape (the caller blocks)."""
+    if not isinstance(existing, dict) or not isinstance(existing.get("outcome"), dict):
+        return None
+    if existing.get("payload_hash") != payload_hash:
+        raise IdempotencyConflictError(
+            f"IDEMPOTENCY_CONFLICT: Key '{idempotency_key}' was already used with a different payload."
+        )
+    return existing["outcome"]
+
+
+def _blocked_by_lookup_failure(deployment_id: str, lookup: str, exc: Exception) -> Dict[str, Any]:
+    """A durable lookup that errors blocks the deployment; the error is never read as 'nothing found'.
+    The exception is logged, never returned."""
+    logger.error("durable %s lookup failed for %s: %s", lookup, deployment_id, type(exc).__name__, exc_info=exc)
+    return {
+        "deployment_id": deployment_id,
+        "status": "REJECTED",
+        "stage": "INSPECT",
+        "reason_code": "engine_unavailable",
+        "reason": f"Fail-closed: the durable {lookup} lookup failed ({type(exc).__name__}); deployment blocked.",
+    }
 
 
 def reconcile_exhaustive_snapshot(

@@ -24,6 +24,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Offline tests of the live suite's decision helpers (SEC-004)
+        run: python3 -m unittest apps/engine/change_engine/change_engine/tests/test_sec_004_live_helpers.py -v
       - name: Run live three-site cross-tenant isolation suite (SEC-004)
         env:
           CI_REQUIRE_LIVE_SEC004: "1"

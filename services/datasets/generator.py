@@ -374,7 +374,7 @@ def generate(seed: int = DEFAULT_SEED) -> dict:
         entries.append({"path": name, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(), "market": doc["meta"]["market"],
                         "counts": {k: len(doc[k]) for k in ("customers", "suppliers", "items", "warehouses", "price_lists", "opening_stock",
                                                             "sales_orders", "delivery_notes", "sales_invoices", "credit_notes", "payments")}})
-    manifest = {"dataset": "orrery-synthetic-trading-distribution", "generator_version": GENERATOR_VERSION, "seed": seed,
+    manifest = {"dataset": "seshna-synthetic-trading-distribution", "generator_version": GENERATOR_VERSION, "seed": seed,
                 "classification": CLASSIFICATION, "synthetic": True, "base_date": BASE_DATE.isoformat(),
                 "total_bytes": sum(e["bytes"] for e in entries), "files": entries}
     files["manifest.json"] = dumps(manifest).encode("utf-8")

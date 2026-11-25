@@ -17,7 +17,7 @@ def rejected(c, word, accent=None):
     assert word in " ".join(r["reasons"]), (c, word, r["reasons"])
     return r
 
-# 1. Orrery's own Cobalt passes unchanged in light; dark lands close to the v1 dark Cobalt
+# 1. Seshna's own Cobalt passes unchanged in light; dark lands close to the v1 dark Cobalt
 r = ok("#2443D0")
 assert r["light"]["primary"] == "#2443D0" and r["light"]["primaryLabel"] == "#FFFFFF"
 assert T.dE(r["dark"]["primary"], "#86A0FF") < 0.03, r["dark"]["primary"]
@@ -42,7 +42,7 @@ rejected("#1A1040", "too dark"); rejected("#0B1020", "near-black")
 # 7. near-grey
 rejected("#6B7280", "near-grey"); rejected("#808080", "near-grey")
 
-# 8. near the brand danger colour (the red family, including Orrery's own Crimson)
+# 8. near the brand danger colour (the red family, including Seshna's own Crimson)
 for c in ("#C21F3A", "#D32F2F", "#E53935", "#BE185D"):
     rejected(c, "Crimson")
 
@@ -62,6 +62,19 @@ rd = D.derive("#2443D0", "#FFF200"); assert rd["status"] == "rejected" and "too 
 # default accent falls back when the primary is close to Coral
 rd = D.derive("#9A3412")  # burnt orange-brown: dark enough, near Coral hue but not Crimson
 assert rd["status"] in ("ok", "rejected")
+
+# 11b. the Seshna mark colours are never tenant-overridable (founders, 2026-11-24)
+import pathlib
+_tokens = (pathlib.Path(__file__).resolve().parent.parent / "tokens" / "tokens.css").read_text(encoding="utf-8")
+assert "--seshna-mark: #2443D0;" in _tokens and "--seshna-mark: #86A0FF;" in _tokens
+_teal = ok("#0F766E")
+_css = D.css("teal", _teal)
+assert "--color-primary" in _css and "--seshna-" not in _css
+_bad = {**_teal, "light": {**_teal["light"], "vars": {**_teal["light"]["vars"], "--seshna-mark": "#0F766E"}}}
+try:
+    D.css("teal", _bad); raise AssertionError("tenant CSS set a Seshna mark colour")
+except ValueError:
+    pass
 
 # 12. invariant on 300 deterministic pseudo-random colours: rejected, or every pair of both themes passes
 x, accepted = 12345, 0

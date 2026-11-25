@@ -198,7 +198,8 @@ def _params(kind: str) -> dict:
     if kind.endswith("reorder"):
         return {"order": ["a"], "previousOrder": ["a"]}
     if kind.endswith(("set_property", ".configure", "settings.set")):
-        return {"property": "/x", "before": None, "after": 1}
+        # set_property kinds name only a Blueprint property of their element (ADR-0051 item 8); `/labels` is one for all.
+        return {"property": "/labels" if kind.endswith("set_property") else "/x", "before": None, "after": 1}
     return {"definition": {**_DEF, "entity": "customer"} if kind == "workflow.upsert" else dict(_DEF)}
 
 

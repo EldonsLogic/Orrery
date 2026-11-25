@@ -129,6 +129,12 @@
           "1": "Monday",
           "6": "Saturday"
         }
+      },
+      "marks": {
+        "title": "Brand state marks",
+        "status": "Status",
+        "progress": "Progress",
+        "loading": "Loading"
       }
     }
   },
@@ -392,7 +398,6 @@
     "introDept": "This is the part of the business blueprint that covers your department. You can read it but not change it on this page.",
     "toc": "On this page",
     "badge": {
-      "draft": "Draft",
       "unverified": "UNVERIFIED"
     },
     "noAccess": {
@@ -1245,8 +1250,8 @@
     }
   },
   "pwa": {
-    "name": "The platform",
-    "shortName": "Platform",
+    "name": "Seshna",
+    "shortName": "Seshna",
     "description": "Run your business from one chat.",
     "pageTitle": {
       "home": "Home",
@@ -1485,5 +1490,28 @@
         "placeholder_prices": "Prices are unverified placeholders and must not be shown to a customer"
       }
     }
+  },
+  "marks": {
+    "status": {
+      "not_started": "Not started",
+      "drafted": "Drafted by the AI",
+      "approved": "Approved by a person"
+    },
+    "progress": {
+      "title": "Build progress",
+      "stage": {
+        "discover": "Discover",
+        "blueprint": "Blueprint",
+        "build": "Build",
+        "simulate": "Simulate",
+        "live": "Live"
+      },
+      "state": {
+        "done": "completed",
+        "current": "current stage",
+        "upcoming": "not started yet"
+      }
+    },
+    "loading": "Working"
   }
 }

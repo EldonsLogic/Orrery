@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Alert, Button, Spinner } from '../../ui';
+import { Alert, Button } from '../../ui';
+import { LoadingMark } from '../marks/LoadingMark';
 import { SideNav } from './SideNav';
 import { UserMenu } from './UserMenu';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
@@ -49,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className={styles.root}>
         {skip}
         <main id="main" tabIndex={-1} className={styles.stateMain}>
-          {session.status === 'loading' ? <Spinner label={t('state.loading')} /> : null}
+          {session.status === 'loading' ? <LoadingMark label={t('state.loading')} /> : null}
           {session.status === 'signedOut' ? (
             <Alert tone="info" title={t('state.signedOut.title')}>
               <p>{t('state.signedOut.body')}</p>

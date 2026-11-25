@@ -9,7 +9,9 @@ What the Seshna brand system (ADR-0066) still leaves undone, unverified or in dr
 - **Marketing claims** in the foundation table ("Days", "a simulated month") must not be published until the product can prove them.
 
 ## Logo system gaps
-- **Status and Progress marks:** concept only (`02-logo.md`). Sizes, stroke of the outline state, spacing and RTL order of the five Progress marks are not specified; a designer draws them, then a generator adds them.
+- **Status and Progress marks:** built in web from the master and small-cut paths (`09-applications.md`, BRD-014). The outline stroke (16 u master, 22 u small cut, inside the silhouette), sizes (20 px status, 24 px progress) and spacing are INFERRED, not from the kit; designer check. Progress order follows the reading direction (Discover at the start, on the right in Arabic) while each mark stays unmirrored.
+- **Runtime tenant-variable paths need the same `--seshna-` guard.** Only `tools/derive_tenant_theme.py` refuses to emit `--seshna-*` today. Any runtime path that writes tenant CSS variables (the Blueprint `branding` apply, a server-side theme resolver, a client that sets properties on `:root`) must reject or drop `--seshna-*` the same way, with a test. Owner: whoever builds that path.
+- **Loading mark (PROPOSED, awaiting founder approval):** fill cycle outline, upper half, both halves on a 2.4 s loop; static drafted state under reduced motion (`09-applications.md`). In use in web pending approval.
 - **One-colour lockup** (black or white with the wordmark) for single-colour invoices: not generated; only the one-colour marks exist.
 - **Size set below 24 px:** `scripts/build_brand_assets.py` (outside `docs/brand`) derives `logo/assets/mark-16.svg` and `mark-24.svg` from the master; the 16 px file should use the small-size cut (`mark-small.svg`). The minimum lockup width in that script is 80 px; the new rule is 96 px. Needs a scripts change with its own plan row.
 - **App icon geometry** (tile radius 14/64, mark at 62%, maskable at 50%) is INFERRED for this repo: the kit's own app icon used a 22.5% radius and a transform. Designer check.
@@ -20,6 +22,9 @@ What the Seshna brand system (ADR-0066) still leaves undone, unverified or in dr
 - `services/studio/static/index.html` loads Alexandria from Google Fonts.
 - `apps/engine/change_engine/change_engine/print_formats/bilingual_tax_invoice.py` lists Alexandria in its font stack (and its test lists it as an allowed font).
 Each needs its owner's plan row.
+
+## Closed
+- **State marks under a tenant theme:** closed 2026-11-24. Both founders decided the marks always stay Seshna Cobalt (`--seshna-mark`, never tenant-overridable; `09-applications.md`, `12-tenant-theming.md`).
 
 ## Decisions pending
 - **Numerals.** Western (0-9) vs Arabic-Indic: confirm with pilot customers.

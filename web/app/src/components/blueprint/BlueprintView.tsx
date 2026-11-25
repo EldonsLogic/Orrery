@@ -9,6 +9,8 @@ import type { Badges, BlueprintView as View, Msg, Section } from '../../blueprin
 import { callerOf } from '../../lib/session';
 import { useSession } from '../shell/SessionProvider';
 import { FlowDiagram } from './FlowDiagram';
+import { ProgressMarks } from '../marks/ProgressMarks';
+import { StatusMark } from '../marks/StatusMark';
 import styles from './Blueprint.module.css';
 
 type Translate = (key: string, values?: Record<string, string | number>) => string;
@@ -43,7 +45,7 @@ export function BlueprintDocument({ view, locale }: { view: View; locale: string
 
   const badges = (b: Badges) => (
     <>
-      {b.draft ? <Badge tone="warning">{t('badge.draft')}</Badge> : null}
+      {b.draft ? <StatusMark status="drafted" /> : null}
       {b.unverified ? <Badge tone="warning">{t('badge.unverified')}</Badge> : null}
     </>
   );
@@ -210,8 +212,10 @@ export function BlueprintDocument({ view, locale }: { view: View; locale: string
     <div className={styles.page}>
       <header className={styles.head}>
         <h1 id="bp-title">{t('title')}</h1>
-        {badges(view.badges)}
+        <StatusMark status={view.badges.draft ? 'drafted' : 'approved'} />
+        {view.badges.unverified ? <Badge tone="warning">{t('badge.unverified')}</Badge> : null}
         <p className={styles.muted}>{t('revision', { n: view.revision })}</p>
+        <ProgressMarks buildState={view.buildState} />
       </header>
       <p>{t(view.scope === 'all' ? 'intro' : 'introDept')}</p>
       {view.scope === 'department' ? (

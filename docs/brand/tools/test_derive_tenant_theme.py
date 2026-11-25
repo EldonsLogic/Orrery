@@ -63,6 +63,19 @@ rd = D.derive("#2443D0", "#FFF200"); assert rd["status"] == "rejected" and "too 
 rd = D.derive("#9A3412")  # burnt orange-brown: dark enough, near Coral hue but not Crimson
 assert rd["status"] in ("ok", "rejected")
 
+# 11b. the Seshna mark colours are never tenant-overridable (founders, 2026-11-24)
+import pathlib
+_tokens = (pathlib.Path(__file__).resolve().parent.parent / "tokens" / "tokens.css").read_text(encoding="utf-8")
+assert "--seshna-mark: #2443D0;" in _tokens and "--seshna-mark: #86A0FF;" in _tokens
+_teal = ok("#0F766E")
+_css = D.css("teal", _teal)
+assert "--color-primary" in _css and "--seshna-" not in _css
+_bad = {**_teal, "light": {**_teal["light"], "vars": {**_teal["light"]["vars"], "--seshna-mark": "#0F766E"}}}
+try:
+    D.css("teal", _bad); raise AssertionError("tenant CSS set a Seshna mark colour")
+except ValueError:
+    pass
+
 # 12. invariant on 300 deterministic pseudo-random colours: rejected, or every pair of both themes passes
 x, accepted = 12345, 0
 for _ in range(300):

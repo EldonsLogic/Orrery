@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Alert, Button, Card, Stack } from '../../ui';
 import type { PendingApproval, PendingConfirm } from '../../chat/types';
+import { StatusMark } from '../marks/StatusMark';
 import styles from './Chat.module.css';
 
 /** Confirm-before-write in the ConfirmWrite style. It only asks; it never confirms by itself. */
@@ -39,6 +40,9 @@ export function ApprovalCard({ approval }: { approval: PendingApproval }) {
   const t = useTranslations('chat.approval');
   return (
     <Alert tone="warning" title={t('title')}>
+      <p>
+        <StatusMark status="drafted" />
+      </p>
       <p>{t('body', { tool: approval.tool, risk: approval.risk })}</p>
       <Link href="/approvals/">{t('open')}</Link>
     </Alert>

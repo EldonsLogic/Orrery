@@ -16,3 +16,23 @@ The mark alone carries the small applications; the lockups carry documents and m
 | Slides and email signature | Lockup at the start of the layout, Cairo headings, Readex Pro body text, Cobalt for links only | |
 
 The Latin lockup is used unchanged in Arabic layouts and is never mirrored.
+
+## State marks in the product (BRD-014)
+
+The mark's two halves carry product state (kit "Extending the system", guidelines p.10). Component: `web/app/src/ui/Mark.tsx` renders the halves from the master and small-cut paths (`logo/mark-primary.svg`, `logo/mark-small.svg`); each half is solid or outline, the outline drawn inside the half's own silhouette so both states have the same footprint. Colour is `--seshna-mark` (Cobalt #2443D0, #86A0FF in dark) and, for the one accent bullet, `--seshna-mark-accent` (Coral #E0552C, #FF8A63 in dark), from `tokens.json` `brandMark`. Below 24 px the small-size cut is used.
+
+**Never tenant-coloured** (both founders, 2026-11-24): the state marks are the Seshna logo, so they stay Seshna Cobalt and Coral in tenant-branded workspaces too. Tenant overrides change `--color-primary` and `--color-accent` only; the tenant theme generator refuses to set `--seshna-*` (`12-tenant-theming.md`).
+
+| Use | Rule | Component and where |
+|---|---|---|
+| Status | Both halves outline = not started; upper solid, lower outline = drafted by the AI; both solid = approved by a person. Always beside its word; status colours always pair with an icon and a word | `StatusMark`: Blueprint viewer header and the draft settings section, component factory request detail, chat approval card |
+| Progress | Five marks: Discover, Blueprint, Build, Simulate, Live. Completed stages solid, the current stage half (upper solid, lower outline), upcoming stages outline. Mapped from the build state (`contracts/build-states.md`): no state = Discover; `draft` = Blueprint; `owner_approved`, `team_reviewed` = Build; `built_in_sandbox` = Simulate; `simulated` = Live; `live` = all complete. The list follows the reading direction; each mark is never mirrored | `ProgressMarks`: Blueprint viewer header |
+| Bullets | A small solid Cobalt mark. Coral (`tone="accent"`) on at most one item per view, always with a text label | `Mark` |
+| Loading (PROPOSED) | See below | `LoadingMark`: app session loading, workspace switch, chat "working", factory list loading |
+
+Every state obeys the misuse rules: never rotated, mirrored (also in RTL), stretched, recoloured outside the palette, split apart or squared at the round ends; no gradients, glows or shadows.
+
+### Loading mark (PROPOSED, awaiting founder approval)
+The kit defines no loading animation. Proposal: when the platform is working, the fill cycles outline, then the upper half, then both halves, about 0.8 s per step on a 2.4 s loop with a 150 ms fade. Only fill opacity changes; the halves never rotate, scale or move. It always sits beside a visible text label (`role="status"`).
+Under `prefers-reduced-motion: reduce` the animation stops and the mark shows the static drafted state (upper solid, lower outline) with the same label.
+Button busy states keep the small generic spinner inside the button; content placeholders keep skeletons.

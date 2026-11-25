@@ -154,8 +154,14 @@ def derive(primary, accent=None):
         return reject("Internal check failed: a derived pair is below its minimum (this is a bug, not a colour problem).")
     return res
 
+PROTECTED_PREFIX = "--seshna-"
+
 def css(slug, res):
     """Scoped CSS: light, system dark, explicit dark. Selector keys match tokens.css (data-theme) and add data-tenant."""
+    # Founders' decision 2026-11-24: the Seshna mark colours (--seshna-*) are never tenant-overridable.
+    for m in ("light", "dark"):
+        if any(k.startswith(PROTECTED_PREFIX) for k in res[m]["vars"]):
+            raise ValueError("tenant theme must not set the Seshna mark colours")
     def block(m, ind):
         return "".join(f"{ind}{k}: {v};\n" for k, v in res[m]["vars"].items())
     s = f":root[data-tenant=\"{slug}\"] {{\n{block('light', '  ')}}}\n\n"

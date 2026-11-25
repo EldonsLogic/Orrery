@@ -8,6 +8,8 @@
   --color-success: #13795B;
   --color-warning: #9E5600;
   --color-danger: #C21F3A;
+  --seshna-mark: #2443D0;
+  --seshna-mark-accent: #E0552C;
   --font-heading: "Cairo", system-ui, sans-serif;
   --font-body: "Readex Pro", system-ui, sans-serif;
   --text-display-size: 40px;
@@ -61,6 +63,8 @@
     --color-success: #4CC79A;
     --color-warning: #F2A541;
     --color-danger: #FF6B81;
+    --seshna-mark: #86A0FF;
+    --seshna-mark-accent: #FF8A63;
   }
 }
 
@@ -73,6 +77,8 @@
   --color-success: #4CC79A;
   --color-warning: #F2A541;
   --color-danger: #FF6B81;
+  --seshna-mark: #86A0FF;
+  --seshna-mark-accent: #FF8A63;
 }
 
 /* Arabic line heights (PDF p.9: same sizes, more line height) */

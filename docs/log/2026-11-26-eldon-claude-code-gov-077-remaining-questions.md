@@ -45,3 +45,19 @@ Eldon's founder answers of 2026-11-26 (second batch), recorded as given:
 - SOQ-1 (Pilot A): the current lead fits the trading and distribution niche; they are Pilot A.
 - Q-479 (invoice accent): remove the accent rule from the v1 branded tax invoice; revisit in a brand review.
 - SOQ-2 (Pilot B): closed; Pilot A is the Odoo company, so no separate Pilot B.
+
+## Research answers added
+
+Eldon answers for both founders: the 44 trailing "Partner to confirm." notes now read "(Eldon answered for both founders.)". Four rows keep a narrower "Partner to confirm ..." clause (adapter side, gateway), left as written.
+
+Research items answered (21), with sources in each row:
+- From official sources (14): Q-267, Q-552, Q-553 (UAE Art. 59 contents), Q-615, Q-616, Q-617, Q-618, Q-619, Q-620, Q-623, Q-624, Q-626, Q-628, plus strategy item 5 (organiser page; no rubric published). Sources: ZATCA May 2026 guidelines, the Submit VAT Return user guide, the 2023 Arabic return guide, the XML Implementation Standard, the E-Invoicing Implementation Resolution Annex 2, the ZATCA E-Invoicing Detailed Guideline (PDF provided by Eldon) and the MoF consolidated Cabinet Decision 52/2017.
+- Safe defaults pending the accountant or counsel (7): Q-8, Q-11, Q-621, Q-622, Q-625; strategy items 9 and 12 pending official confirmation (item 12's UAE e-invoicing dates are confirmed from Ministerial Decision 244 of 2025).
+
+Accountant checks to add to the CPA review:
+1. KSA return: purchase-side adjustment sign and whether the portal accepts negative sales adjustments (Q-617); exactly SAR 15,000 correction boundary and the portal's stale 5,000 hint (Q-620); first and stub tax periods (Q-621); column for prior-period purchase notes and late Art. 49(8) claims (Q-622, Q-626); evidence for Box 5 exempt sales without XML (Q-628); current consolidated Arabic regulations (Q-625).
+2. KSA e-invoice: approve the import, reverse-charge and restricted-input workflows and the sandbox case list (Q-267); which XML level ERP-016 uses for the invoice discount and the Arabic label (Q-552).
+3. Chart of accounts and standard per market, full IFRS or IFRS for SMEs per tenant (Q-8).
+4. Egypt: ETA e-invoice and e-receipt obligation per tenant, VAT rate table, payroll rates, PDPL executive regulations (Q-11, with counsel).
+5. UAE: confirm the Art. 59 field list for the CMP-046 layout and the AED 10,000 simplified-invoice limit.
+6. Counsel (not the accountant): LEG-006, LEG-007, LEG-011, LEG-012 points in strategy item 9; GOSI, WPS and PDPL dates in item 12.

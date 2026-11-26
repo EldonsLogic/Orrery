@@ -128,6 +128,8 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
 
         def fake_run_compose(project, compose_file, env, *args, **kwargs):
             calls.append(("compose", args))
+            if run_real_bench_ci.BPL027_LIVE_CLASS in args:  # BPL-046: the class run needs a test count too
+                return subprocess.CompletedProcess([], 0, stdout="", stderr="Ran 99 tests in 1.0s\n\nOK\n")
             if args[:2] == ("ps", "--status"):
                 return subprocess.CompletedProcess([], 0, stdout="engine\nmariadb\nredis-cache\nredis-queue\n", stderr="")
             return subprocess.CompletedProcess([], 0, stdout="ok", stderr="")
@@ -160,6 +162,8 @@ class TestCeSec005RealBenchCI(unittest.TestCase):
 
         def fake_run_compose(project, compose_file, env, *args, **kwargs):
             compose_commands.append(args)
+            if run_real_bench_ci.BPL027_LIVE_CLASS in args:  # BPL-046: the class run needs a test count too
+                return subprocess.CompletedProcess([], 0, stdout="", stderr="Ran 99 tests in 1.0s\n\nOK\n")
             if args[0] == "up":
                 # Resolve the actual Compose file to check the engine container environment.
                 config = run_subprocess(

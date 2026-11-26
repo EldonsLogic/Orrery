@@ -28,3 +28,6 @@ Design pass on onboarding, the Business blueprint review and the staff console, 
 
 ## Next step
 WEB-027 wires the decision to the DSC-009 review view; ProgressMarks labels are tight at 375 in Arabic (shared component, follow-up).
+
+## Addendum: journey marks (Eldon decision 2026-11-26)
+- ProgressMarks now fills the Nuqta S up across the five steps (outline, upper tint, upper solid, upper solid plus lower tint, both solid), fixed per step; steps after the current one are muted; labels wrap at 375 in Arabic. Mark gained a `tint` fill (solid at 40% fill opacity). docs/brand/09-applications.md updated. lint, tsc, vitest and next build pass.

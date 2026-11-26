@@ -20,7 +20,7 @@ const render = (node: ReactElement, locale: Locale = 'en') =>
       </NextIntlClientProvider>
     </div>,
   );
-const fills = (html: string) => [...html.matchAll(/data-half="(upper|lower)" data-fill="(solid|outline)"/g)].map((m) => `${m[1]}:${m[2]}`);
+const fills = (html: string) => [...html.matchAll(/data-half="(upper|lower)" data-fill="(solid|outline|tint)"/g)].map((m) => `${m[1]}:${m[2]}`);
 // Comments are stripped so a rule may name what it forbids.
 const css = (rel: string) => readFileSync(join(__dirname, rel), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 const MOTION = /transform|rotate|scale|translate|matrix|skew/i;
@@ -118,25 +118,38 @@ describe('stageProgress', () => {
 });
 
 describe('ProgressMarks', () => {
-  it('marks done stages solid, the current one half and upcoming ones outline (guidelines p.10)', () => {
-    const out = render(<ProgressMarks buildState="owner_approved" />);
-    expect(fills(out)).toEqual([
-      'upper:solid', 'lower:solid',
-      'upper:solid', 'lower:solid',
+  it('fills the mark up across the journey, fixed per step, whatever the progress (Eldon 2026-11-26)', () => {
+    const journey = [
+      'upper:outline', 'lower:outline',
+      'upper:tint', 'lower:outline',
       'upper:solid', 'lower:outline',
-      'upper:outline', 'lower:outline',
-      'upper:outline', 'lower:outline',
-    ]);
+      'upper:solid', 'lower:tint',
+      'upper:solid', 'lower:solid',
+    ];
+    for (const state of [null, 'draft', 'owner_approved', 'built_in_sandbox', 'live']) {
+      expect(fills(render(<ProgressMarks buildState={state} />))).toEqual(journey);
+    }
+    const out = render(<ProgressMarks buildState="owner_approved" />);
     expect(out.match(/aria-current="step"/g)).toHaveLength(1);
     expect(out).toContain('<ol role="list"');
     for (const s of BUILD_STAGES) expect(out).toContain(messages.en.marks.progress.stage[s]);
     expect(out).toContain(messages.en.marks.progress.state.current);
   });
-  it('shows every stage solid once live, with no current step', () => {
+  it('draws steps after the current one muted and done or current steps at full strength', () => {
+    const out = render(<ProgressMarks buildState="owner_approved" />);
+    expect([...out.matchAll(/data-state="(done|current|upcoming)"/g)].map((m) => m[1])).toEqual(['done', 'done', 'current', 'upcoming', 'upcoming']);
+    expect(css('Marks.module.css')).toMatch(/\.stage\[data-state='upcoming'\] [^{]*\{[^}]*opacity/);
+  });
+  it('shows every step with no current step once live, in Arabic too', () => {
     const out = render(<ProgressMarks buildState="live" />, 'ar');
-    expect(fills(out).every((f) => f.endsWith('solid'))).toBe(true);
     expect(out).not.toContain('aria-current');
+    expect(out.match(/data-state="done"/g)).toHaveLength(5);
     for (const s of BUILD_STAGES) expect(out).toContain(messages.ar.marks.progress.stage[s]);
+  });
+  it('keeps labels whole and scrolls the row sideways at narrow widths instead of overflowing the page', () => {
+    const sheet = css('Marks.module.css');
+    expect(sheet).toMatch(/\.progress \{[^}]*overflow-x: auto/);
+    expect(sheet).toMatch(/\.stage \{[^}]*min-inline-size: calc\(/);
   });
   it('is not mirrored in RTL: same geometry, no transform', () => {
     const ltr = render(<ProgressMarks buildState="draft" />, 'en');

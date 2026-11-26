@@ -9,7 +9,8 @@ import styles from './Mark.module.css';
  * own silhouette (stroke clipped to the shape), so outline and solid halves have the same footprint.
  * Misuse rules: never rotated, mirrored, stretched, split or transformed; colour comes from tokens only.
  */
-export type MarkFill = 'solid' | 'outline';
+/** `tint` is the solid half at about 40% fill opacity (journey steps, brand loading-mark geometry). */
+export type MarkFill = 'solid' | 'outline' | 'tint';
 export type MarkTone = 'primary' | 'accent';
 
 const CUTS = {
@@ -56,7 +57,8 @@ export function Mark({ upper = 'solid', lower = 'solid', size = 24, tone = 'prim
           data-half={h}
           data-fill={fill}
           d={cut[h]}
-          fill={fill === 'solid' ? 'currentColor' : 'none'}
+          fill={fill === 'outline' ? 'none' : 'currentColor'}
+          fillOpacity={fill === 'tint' ? 0.4 : undefined}
           stroke="currentColor"
           strokeWidth={cut.stroke * 2}
           clipPath={`url(#${clip})`}

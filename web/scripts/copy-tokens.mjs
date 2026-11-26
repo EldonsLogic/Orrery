@@ -2,6 +2,7 @@
 import { copyFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeBrandingColours } from './gen-branding-colours.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const tokens = resolve(here, '../../docs/brand/tokens');
@@ -35,3 +36,6 @@ for (const app of ['app', 'marketing']) {
   mkdirSync(dir, { recursive: true });
   for (const [target, src] of Object.entries(ICONS)) copyFileSync(resolve(logo, src), resolve(dir, target));
 }
+
+// Branding preview colour data (WEB-007), generated from the same tokens.
+writeBrandingColours();

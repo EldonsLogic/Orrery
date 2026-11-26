@@ -25,7 +25,7 @@ ADD_KIND = {"locations": "location.upsert", "components": "component.enable", "e
             "roles": "role.upsert", "workflows": "workflow.upsert", "approvals": "approval.upsert",
             "reports": "report.upsert"}
 SETTINGS_SECTIONS = ("company", "compliance")
-I18N_SETTINGS = ("defaultLocale", "labelOverrides")  # labelOverrides: open question 3
+I18N_SETTINGS = ("defaultLocale", "labelOverrides")  # contract 9.3 (ADR-0057 Q-52)
 # Contract 9.3 "Skipped": first pointer segment -> reason.
 SKIP = {"meta": "meta", "branding": "branding", "integrations": "integration", "provenance": "provenance"}
 KEYED_COLLECTIONS = tuple(ADD_KIND) + ("integrations",)
@@ -81,8 +81,9 @@ def steps_from_ops(ops: list[dict]) -> tuple[list[dict], list[dict], list[Issue]
         else:
             issues.append(Issue("CMP-ART-001", pointer, "no compile rule covers this Blueprint operation"))
     # Contract 9.4 orders by (phase, pointer, kind); several settings.set steps share one subject pointer, so the
-    # property breaks the tie (open question 2).
-    steps.sort(key=lambda s: (s["phase"], s["pointer"], s["kind"], s["params"].get("property", "")))
+    # property breaks the tie (ADR-0057 Q-51).
+    steps.sort(key=lambda s: (s["phase"], s["pointer"], s["kind"],
+                              s["params"]["property"] if s["kind"] == "settings.set" else ""))
     for i, s in enumerate(steps, 1):
         s["seq"] = i
     skipped.sort(key=lambda s: s["pointer"])
@@ -91,11 +92,13 @@ def steps_from_ops(ops: list[dict]) -> tuple[list[dict], list[dict], list[Issue]
 
 def post_conditions(steps: list[dict], target: dict) -> list[dict]:
     """At least one check per step subject (9.7), using only ids and counts, never properties the adapter may not
-    export (15.2): `exists` per subject, `count_equals` per top-level collection, `order_equals` for entity fields
-    and workflow states (order-significant, keyed by id)."""
+    export (15.2): `exists` per subject (`quarantined` or `disabled` for a removal), `count_equals` per top-level
+    collection, `order_equals` for the fields and states of entities and workflows a step touches."""
     rows: dict[tuple, dict] = {}
     for s in steps:
-        rows[(s["pointer"], "exists")] = {"check": "exists", "pointer": s["pointer"]}
+        check = "quarantined" if s["kind"].endswith(".quarantine") else "disabled" if s["kind"].endswith(".disable") \
+            else "exists"
+        rows[(s["pointer"], check)] = {"check": check, "pointer": s["pointer"]}
     for section in ADD_KIND:
         if any(s["pointer"].startswith("/" + section + "/") for s in steps):
             rows[("/" + section, "count_equals")] = {"check": "count_equals", "pointer": "/" + section,
@@ -103,7 +106,8 @@ def post_conditions(steps: list[dict], target: dict) -> list[dict]:
     for section, child in ORDER_CHECKS:
         for node in target.get(section, []):
             keys = [c["id"] for c in node.get(child, [])]
-            if keys:
+            own = f"/{section}/{_esc(node['id'])}"
+            if keys and any(s["pointer"] == own or s["pointer"].startswith(own + "/") for s in steps):
                 pointer = f"/{section}/{_esc(node['id'])}/{child}"
                 rows[(pointer, "order_equals")] = {"check": "order_equals", "pointer": pointer, "expected": keys}
     out = []
@@ -133,3 +137,14 @@ def risk(diff_risk: dict, steps: list[dict], ledger_or_tax: bool) -> dict:
     out["requiresTeamReview"] = bool(out["touchesCompliance"]) or ledger_or_tax
     out["irreversibleSteps"] = sum(1 for s in steps if not s["reversible"])
     return out
+
+
+def duplicate_step_keys(steps: list[dict]) -> list[tuple]:
+    """Uniqueness keys used by more than one step (contract 9.4): (kind, pointer); settings.set adds params.property."""
+    seen, dup = set(), []
+    for s in steps:
+        key = (s["kind"], s["pointer"]) + ((s["params"].get("property"),) if s["kind"] == "settings.set" else ())
+        if key in seen and key not in dup:
+            dup.append(key)
+        seen.add(key)
+    return dup

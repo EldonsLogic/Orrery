@@ -199,7 +199,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-006 | Plans and entitlements model, everything unlocked at first | Platform | G2 | PLT-004 | eldon | todo |
 | PLT-007 | Usage metering for AI actions, storage, users | Platform | G2 | PLT-006,BPL-011 | eldon | todo |
 | PLT-008 | Billing and payments for our subscriptions | Platform | G3 | PLT-007,LEG-010 | eldon | todo |
-| PLT-009 | AI model gateway: routing, budgets, caching, logs | Platform | G2 | QA-003 | partner | todo |
+| PLT-009 | AI model gateway: routing, budgets, caching, logs | Platform | G2 | QA-003 | partner | doing |
 | PLT-010 | Gateway regional routing and provider fallback | Platform | G3 | PLT-009,CMP-019 | partner | todo |
 | PLT-011 | Per-tenant AI cost attribution and caps | Platform | G2 | PLT-009,PLT-025 | partner | todo |
 | PLT-012 | Internal team console | Platform | G2 | PLT-005 | eldon | done |
@@ -249,7 +249,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | WEB-004 | Chat screen with modes | Web | G2 | WEB-003,OPR-010 | eldon | done |
 | WEB-005 | Approval inbox screen | Web | G2 | WEB-003,OPR-007 | eldon | todo |
 | WEB-006 | Reports and dashboard screens | Web | G2 | WEB-003,OPR-008 | eldon | todo |
-| WEB-007 | Settings: Branding screen with live preview and contrast feedback | Web | G2 | WEB-003,BRD-006,BRD-007 | eldon | todo |
+| WEB-007 | Settings: Branding screen with live preview and contrast feedback | Web | G2 | WEB-003,BRD-006,BRD-007 | eldon | done |
 | WEB-008 | Login page with tenant branding | Web | G2 | WEB-003,BRD-007 | eldon | done |
 | WEB-009 | Settings: document templates for tenant-branded invoices | Web | G3 | WEB-007,ERP-016 | eldon | todo |
 | WEB-010 | Settings: users, roles and scopes | Web | G2 | WEB-003,ERP-008 | eldon | todo |
@@ -266,7 +266,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | QA-006 | Prompt-injection eval suite | Quality | G2 | SEC-003,QA-001 | eldon | done |
 | QA-007 | Contrast tests for tenant themes in light and dark | Quality | G2 | BRD-006 | eldon | done |
 | QA-008 | RTL visual regression tests, including tenant-branded screens and documents | Quality | G2 | BRD-010 | eldon | done |
-| QA-009 | End-to-end rehearsal: discovery to simulated Blueprint to live on synthetic data | Quality | G2 | BPL-020,DSC-009,OPR-010 | eldon | todo |
+| QA-009 | End-to-end rehearsal: discovery to simulated Blueprint to live on synthetic data | Quality | G2 | BPL-020,DSC-009,OPR-010 | eldon | doing |
 | QA-010 | Eval thresholds enforced in CI as release gate | Quality | G2 | QA-005,QA-002 | eldon | done |
 | QA-011 | Simulator accuracy test against known outcomes | Quality | G2 | BPL-018 | eldon | done |
 | QA-012 | Release checklist | Quality | G2 | QA-010 | eldon | done |
@@ -371,8 +371,8 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-032 | Fix role.upsert on the real engine: of 161 mapped action grants, 160 are missing, one matches only through a built-in role, and role.upsert wrote 0, so Blueprint permissions are not enforced; hidden and read-only field permissions are also not applied; tighten test_06 so it fails only on this gap; the test_06 expectedFailure tripwire flips when fixed; BPL-027 stays doing until this is done | Blueprint | G1 | BPL-004,BPL-007,ERP-012,BPL-046 | partner | todo |
 | BPL-033 | Real-adapter hardening follow-ups from the PR #150 cross-model reviews: state-persistence errors swallowed and journal written before a step takes effect (`adapter/engine.py`); kind-aware branch and department handling, readiness check before execute, warehouse retry and disable coverage (`adapter/frappe_backend.py`); broader live read-back and caller-permission checks on the bench; `stock_on_hand` binding and `attachment` support; re-run the live bench on the current head (the last run predates the `~` path edits); BPL-027 stays doing until this is done | Blueprint | G1 | BPL-004,BPL-007,ERP-012,BPL-046 | partner | todo |
 | BPL-036 | Record compiler, token-resolver and Studio design confirmations from open questions in one ADR (ADR-0057) | Blueprint | G1 | - | eldon | done |
-| BPL-037 | Contract patch: compiled-artifact step uniqueness exempts settings.set keyed on params.property (Q-51); engine-adapter.md 9.3 lists labelOverrides (Q-52) | Blueprint | G1 | BPL-036 | eldon | todo |
-| BPL-038 | Validator rule 10 (BP-BRAND-001/002) calls the token resolver's OKLCH derive (Q-64) | Blueprint | G1 | BPL-036 | eldon | todo |
+| BPL-037 | Contract patch: compiled-artifact step uniqueness exempts settings.set keyed on params.property (Q-51); engine-adapter.md 9.3 lists labelOverrides (Q-52) | Blueprint | G1 | BPL-036 | eldon | done |
+| BPL-038 | Validator rule 10 (BP-BRAND-001/002) calls the token resolver's OKLCH derive (Q-64) | Blueprint | G1 | BPL-036 | eldon | done |
 | BPL-035 | Golden-path engine mapping gaps: complete unmapped list, engine authority for computed fields (outstanding amount), bench checks for discount handling; closes only after the completeness and computed-authority tests run over every example and engine-mapping.md states both rules | Blueprint | G1 | BPL-029 | eldon | doing |
 | BPL-034 | Purchasing and price-list engine mapping (Supplier, Price List, Purchase Order, Purchase Receipt, Purchase Invoice) in contracts/engine-mapping, with fixtures and tests; unblocks the SEC-022 allowlist and BPL-027 test_03 | Blueprint | G1 | BPL-029 | eldon | done |
 | ERP-021 | Phase 0 engine proof suite on a pinned bench: two-tenant isolation, one reconciled transaction, denied operation on failure, interrupted guarded change with recovery, duplicate-effect prevention, one minimal real adapter integration | Runtime | G1 | ERP-001,BPL-029 | partner | done |
@@ -406,7 +406,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-058 | Gateway lane decision (Q-127): PLT-009, PLT-010, PLT-011, PLT-021 move to the partner; Eldon rows depend on the PLT-026 contract instead | Governance | G0 | - | eldon | done |
 | GOV-059 | Triage docs/open-questions.md: close questions answered by merged ADRs, contracts or code (with evidence), flag partner-owned ones, list the founder decisions per gate | Governance | G0 | - | eldon | done |
 | GOV-060 | Design-confirmation batch 2: settle open questions answered by code (ADR-0058) | Governance | G1 | - | eldon | done |
-| BPL-039 | Incremental compile: base-to-target artifact with an embedded inverse; Studio uses it to show a real rollback (Q-61, Q-76, ADR-0058); split when picked | Blueprint | G1 | BPL-004 | eldon | todo |
+| BPL-039 | Incremental compile: base-to-target artifact with an embedded inverse; Studio uses it to show a real rollback (Q-61, Q-76, ADR-0058); split when picked | Blueprint | G1 | BPL-004 | eldon | doing |
 | SEC-023 | Name contact-detail changes (email, phone, notify-to, webhook) in the R4 row of docs/security/action-policy-table.md and in prompt-injection-defence.md 5.1, matching the Tool API (Q-139, ADR-0058) | Security | G2 | GOV-060 | eldon | todo |
 | WEB-028 | Self-host Cairo and Readex Pro (subset WOFF2 with OFL text and PROVENANCE.md, @font-face, font-display swap) in web/app, and remove the Studio's runtime Google Fonts link and CSP allowance (Q-119, ADR-0058) | Web | G1 | BRD-011 | eldon | todo |
 | GOV-061 | Record founder answers given in chat (16 questions: Q-560, Q-70, Q-312, Q-23, Q-25, Q-29, Q-123, Q-43, Q-42, Q-41, Q-128, Q-294, Q-296, Q-291, Q-292, Q-293) and accept ADR-0027 with the three Q-294 checks | Governance | G1 | - | eldon | done |
@@ -427,7 +427,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | SEC-021 | Remediate SEC-004 confirmed RQ Job prefix-matching leak (job_id.startswith(site) without :: separator, R-032) via exact site:: filter override/upstream report, gateway route blocking (PLT-024), canonical hostname validation (PLT-003: lowercase, Punycode/IDN, no trailing dot, no prefix-collision rule as defence in depth only), and combined live isolation run with headless guard (ERP-020); remove expectedFailure markers once green | Security | G1 | SEC-004,ERP-020 | partner | todo |
 | ERP-034 | ERP-033 follow-up: deliver the read-only `self_approved_report` to the owner on a schedule (the periodic review Q-563 requires), and give the report indexed tenant and time columns so it stops decoding the whole journal before filtering (3.05 s for 100,000 rows in the #306 re-review) | Runtime | G2 | ERP-033 | partner | todo |
 | SEC-025 | Server-side `tenant_role_holders` resolver for the ERP-033 sole-owner exception (production refuses self-approval until it exists): ADR and a security review by a different model or founder before any build; resolves the eligible approvers per tenant from the regional role-assignment store with a per-request read and no cache (ADR-0060 items 9 and 10), takes the tenant from the verified token, counts suspended or away members and pending invitations that carry an approving role as holders, fails closed on any error | Security | G2 | ERP-033,SEC-024 | partner | todo |
-| BPL-040 | ADR and security review (Q-603, partner's answer): pass the DDL-gate approval (tenant, change, approver, expiry) through to the engine backend so the guarded field path adds a unique or index constraint on a built-in engine type on one audited code path; no build before the ADR is Accepted and reviewed, and until then such fields stay refused | Blueprint | G1 | BPL-031 | partner | todo |
+| BPL-040 | ADR and security review (Q-603, partner's answer): pass the DDL-gate approval (tenant, change, approver, expiry) through to the engine backend so the guarded field path adds a unique or index constraint on a built-in engine type on one audited code path; no build before the ADR is Accepted and reviewed, and until then such fields stay refused | Blueprint | G1 | BPL-031 | partner | doing |
 | BPL-041 | BPL-031 follow-ups: move the execute-time refusals (`subject_missing`, `protected_subject`, `unique_or_index`) into `check_ready` so a plan is refused before any step runs, and run the bench `test_05` in real-bench CI with a REQUIRE flag so it cannot skip | Blueprint | G1 | BPL-031 | partner | done |
 | BPL-042 | BPL-033 review Lows from Eldon's #301 review: pass through only backend error codes (`engine.py` execute path), fail closed when a backend has no `check_ready`, runbook note on the journal crash window, a locked-site test, no DDL on the read path (`frappe_backend.py`), and a real-bench run of the BPL-033 changes | Blueprint | G1 | BPL-033 | partner | todo |
 | CMP-040 | CMP-023 optional review follow-ups from Eldon's #283 and #303 reviews: the `hijridate` pin check also covers the other two pins, a label-sort test (N1), and one shared planted-constant test helper (N2) | Compliance | G2 | CMP-023 | partner | done |

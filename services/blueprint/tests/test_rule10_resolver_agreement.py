@@ -47,3 +47,22 @@ def test_primary_verdict_matches_resolver(primary):
 def test_accent_verdict_matches_resolver(accent):
     rule10_ok, resolver_ok = _verdicts("#2443D0", accent)
     assert rule10_ok == resolver_ok, accent
+
+
+_ODD = ["#2443D0\n", "#2443D0 ", "2443D0", "#2443D", "#2443D0FF", ""]
+
+
+@pytest.mark.parametrize("accent", _ODD)
+def test_malformed_accent_verdict_matches_resolver(accent):
+    rule10_ok, resolver_ok = _verdicts("#2443D0", accent if accent else None) if accent else (True, True)
+    if accent:
+        assert rule10_ok == resolver_ok is False, repr(accent)
+
+
+@pytest.mark.parametrize("primary", [x for x in _ODD if x.startswith("#2443D0") or x == "#2443D0\n"])
+def test_malformed_primary_never_validates_while_resolver_refuses(primary):
+    bp = load_example()
+    bp["branding"]["primaryColour"] = primary
+    bp["branding"].pop("accentColour", None)
+    assert not validate(bp, full_ctx()).ok
+    assert not resolve_tokens(_BASE, _PRODUCT, {"primaryColour": primary}, None, algo_version=1, tenant_slug="acme").ok

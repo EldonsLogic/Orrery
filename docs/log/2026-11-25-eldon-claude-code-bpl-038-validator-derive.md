@@ -25,3 +25,7 @@ Unknown or approximate, if known.
 
 ## Next step
 Removed in review fixes: `colour.auto_adjust`, `lightness`, `_with_lightness`, `MAX_LIGHTNESS_SHIFT`. `passes_all` stays (used by the contrast tests). Rule 10 only reports light-theme adjustments; the dark primary is always derived.
+
+## Partner review fixes, round 2 (Gemini 4 Argon findings)
+1. Rule 10 and the resolver disagreed on hex input: `HEX_RE` is now used with `fullmatch` only; a trailing newline is refused, and a present but invalid accent (or a string primary that is not `#RRGGBB`) emits `BP-BRAND-001`. Tests in `services/blueprint/tests/test_rule10_review_fixes.py` and the agreement grid test.
+2. `BP-BRAND-002` reported the wrong ratio (surfaces only). New `tokens.brand_tools.failing_pair` reuses the derive's own `_fails` and `contrast_pairs`; the warning and adjustment carry `pair`, `ratioBefore`, `ratioAfter`, `threshold`. `#0F766E` now reports `secondary-pressed/background` at 4.11 before. Property tests over a colour grid check `ratioBefore < threshold <= ratioAfter`.

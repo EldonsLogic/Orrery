@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 from tokens import codes as TC
-from tokens.brand_tools import BrandToolsUnavailable, derive_colours
+from tokens.brand_tools import BrandToolsUnavailable, derive_colours, failing_pair
 
-from .colour import HEX_RE, contrast
+from .colour import HEX_RE
 from .report import Report, ValidationContext, as_dict, as_list, ptr, sid
-from .theme_surfaces import SURFACES
 
 # Q-64 (ADR-0057): the token resolver's OKLCH derive is authoritative. Rule 10 calls the same pure function
 # (tokens.brand_tools.derive_colours, themeAlgo 1) so a Blueprint that validates is never refused by the resolver.
-# The thresholds (4.5:1 primary text, 3:1 accent graphics) and the shift limits live in docs/brand/tools/derive_tenant_theme.py.
-THRESHOLDS = {"primaryColour": 4.5, "accentColour": 3.0}
+# The pair list, thresholds (4.5:1 text, 3:1 graphics) and shift limits live in docs/brand/tools/derive_tenant_theme.py.
 _ADJUSTED = {TC.ADJ_LIGHT_PRIMARY: "primaryColour", TC.ADJ_LIGHT_ACCENT: "accentColour"}
 _KEY_OF_PATH = {"/branding/primaryColour": "primaryColour", "/branding/accentColour": "accentColour"}
 
@@ -21,10 +19,14 @@ def rule_contrast(bp: dict, ctx: ValidationContext | None, rep: Report) -> None:
     reach AA is a warning plus a proposal in report.adjustments (BP-BRAND-002)."""
     branding = as_dict(bp.get("branding"))
     primary, accent = branding.get("primaryColour"), branding.get("accentColour")
-    if not (isinstance(primary, str) and HEX_RE.match(primary)):
+    if not isinstance(primary, str):
         return  # the schema step reports it; without a primary the resolver emits no tenant tokens
-    if not (isinstance(accent, str) and HEX_RE.match(accent)):
-        accent = None
+    if not HEX_RE.fullmatch(primary):
+        rep.error("BP-BRAND-001", ptr("branding", "primaryColour"), "primaryColour is not a #RRGGBB hex colour")
+        return
+    if "accentColour" in branding and not (isinstance(accent, str) and HEX_RE.fullmatch(accent)):
+        rep.error("BP-BRAND-001", ptr("branding", "accentColour"), "accentColour is present but not a #RRGGBB hex colour")
+        return
     try:
         derived = derive_colours(primary, accent)
     except BrandToolsUnavailable:
@@ -39,15 +41,16 @@ def rule_contrast(bp: dict, ctx: ValidationContext | None, rep: Report) -> None:
         elif f.code in _ADJUSTED:
             key = _ADJUSTED[f.code]
             colour, fixed = f.params["from"], f.params["to"]
-            bgs = list(SURFACES["light"].values())
-            need = THRESHOLDS[key]
-            before = min(contrast(colour, b) for b in bgs)
-            after = min(contrast(fixed, b) for b in bgs)
+            pair = failing_pair(key, colour, fixed, derived.colours["light"]["primary"])
+            if pair is None:  # the derive changed the colour but no pair fails: fail closed rather than invent a ratio
+                rep.error("BP-BRAND-001", ptr("branding", key), f"{key} {colour}: the derive adjusted it but no failing pair was found")
+                continue
+            need, before, after = pair["min"], pair["before"], pair["after"]
             rep.warn("BP-BRAND-002", ptr("branding", key),
-                     f"{key} {colour} has {before:.2f}:1 in the light theme (needs {need}:1); proposed {fixed}")
+                     f"{key} {colour} fails {pair['id']} in the light theme with {before:.2f}:1 (needs {need}:1); proposed {fixed} gives {after:.2f}:1")
             rep.adjustments.append({
                 "path": ptr("branding", key), "theme": "light", "original": colour.upper(), "proposed": fixed,
-                "threshold": need, "ratioBefore": round(before, 2), "ratioAfter": round(after, 2),
+                "threshold": need, "pair": pair["id"], "ratioBefore": round(before, 2), "ratioAfter": round(after, 2),
             })
 
 

@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import re
 
-HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+# Always use HEX_RE.fullmatch (like the token resolver): "$" would let a trailing newline through.
+HEX_RE = re.compile(r"#[0-9A-Fa-f]{6}")
 
 
 def _rgb(hex_colour: str) -> tuple[int, int, int]:

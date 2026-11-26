@@ -191,6 +191,23 @@ None yet; claim PR must merge first.
     - Round 2 left one Medium (a swallowed `reqd=0` write), fixed.
     - 1831 passed, 0 failed. Tier 3.
 
+- 2026-11-26, partner said "fix N1 and the small items on #319, update #309 to his answers, and run Gemini reviews of Eldon's #323 to #326, posted as sayegh9":
+  - **#319 CMP-010:**
+    - Eldon approved at ef3d15aa and raised N1 (Low-Medium) plus Lows. The coordinator wrote revision 8 at bc33e23c: printable-ASCII strings, else R-SCHEMA; the must-be-null rules named; R-BOUND covers row count; the PR body's location line.
+    - Gemini found 1 High in that change: T17 hit R-SCHEMA before R-TREAT. Fixed at 2ee642a4 (T17 now uses L7), together with a Low on required fields.
+    - Waiting for Eldon to confirm, then the partner's Tier 3 say-so.
+  - **#309 ADR-0068:**
+    - An Opus agent rewrote it to Eldon's three answers (no new store, plain policy labels, unique on field.add only) and closed E1 to E7, E9 and E10. E8 (NULL vs empty string on the bench) is now an acceptance condition.
+    - The coordinator merged main into the branch (no rebase) and resolved the PLAN, INDEX and open-questions conflicts. Retitled.
+    - Gemini found 2 Medium (a duplicate intent "continues"; check_ready blocked the granted path, and the doctype could be auto-created). Both fixed in revision 5 at 64286522. The Gemini re-check was clean.
+    - Waiting for Eldon's re-review.
+  - **Eldon's PRs**, Gemini 4 Argon reviews posted as sayegh9 (comments, not approvals):
+    - #323: no defects.
+    - #324: 3 Lows.
+    - #326: no defects, 2 build notes.
+    - #325: changes requested. 2 Medium: a hex value with a trailing newline passes the validator but the resolver refuses it; BP-BRAND-002 measures ratioBefore on the two surfaces only.
+  - The Antigravity quota ran out twice, so failed reviews were rerun after the reset, at most two at a time.
+
 ## Tokens or cost
 Unknown.
 

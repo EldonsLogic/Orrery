@@ -55,6 +55,7 @@ Live coordinator log for the partner lane's G1 finishing sprint (RULES 51), cont
 - R9 result (#357, Gemini): APPROVE at c27e4781 (Tier 2; matches the Tool API and ADR-0058; no untracked engine change).
 - R8 result (#368 model-call 0.3.0, Gemini): CHANGES at 22a671f7, 1 High confirmed by the coordinator (`trace.cache_hit` is refused by the Contract 4 envelope, `additionalProperties: false`), 2 Medium (`token_id` not tied to `actor_kind`; overruns charge the platform layer below cap, against Q-679), 2 Low; Tier 3. PLT-033 aligns ADR-0053 after it.
 - Dispatched: R10 (#363), R11 (#359), Gemini 4 Argon high.
+- R11 (#359) failed at once: the Antigravity quota ran out again, this time for about 4 h 16 min; both ChatGPT accounts are out until 2026-11-28. The review queue is paused: R10 (#363) in flight, then #359, #361, #358, #356, #346, #348, #347 and the WEB-029 design passes (#366, #367, #373, #376, #377). Asked the partner whether Claude Fable 5.2 may review meanwhile (labelled same-family).
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-g1-sprint.md: this live log.

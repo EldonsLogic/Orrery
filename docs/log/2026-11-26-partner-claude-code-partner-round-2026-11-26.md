@@ -48,16 +48,40 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
   - left as is, for a founder call: SEC-002, INF-009, CMP-033's closing rule (does a design or decision row close on a Proposed ADR?), BPL-027 (row texts require `doing`), ERP-013 and QA-016 (Q-303 and Q-474 say they stay `doing`), SEC-004 and CMP-023 (coordination anchors; audit says SEC-004 done, CMP-023 done plus a wiring row).
   - not applied: dependency rewiring for ERP-032 and ERP-034 (cycle risk; needs a closer look).
   - noted: BPL-040 is `todo` on main while #309 is open (its claim is on that branch).
+- Results (each change written by Claude, cross-checked by Gemini 4 Argon high, at most two Gemini runs at a time):
+  - B, ERP-035 #337: Arabic fallbacks restored in the print loader, with a test (Sonnet 5.5). Gemini: APPROVE, one Low (duplicate names), fixed by the coordinator at e1c48c71. Full suite 1787 passed. Q-660 (brand lane). Re-review asked of Eldon on #337.
+  - C, ADR-0070 revision 5 #336: Mediums 1 to 4 and the Lows (Opus 5.5); CE-SEC-015 row, Q-648 and Q-649; CE-SEC-012 to CE-SEC-014 extended. Gemini: APPROVE as Proposed, two Lows, fixed by the coordinator at 435b34ab. Re-review asked of Eldon on #336 (production triggers raise the stakes on his open question).
+  - D, PLT-028 spec revision 2 #335: re-scoped to the #316 decisions, F1 to F10 (Opus 5.5); Q-644 to Q-647, Q-630, Q-631 and Q-633 amended, PLT-028 and PLT-032 text. Gemini: APPROVE, two Lows, fixed at 873f309f. Re-review asked of Eldon on #335.
+  - E, CMP-039 ADR-0071 #344 (new PR): Opus 5.5 design; build rows renumbered CMP-041 to CMP-044; Q-652 to Q-657; INDEX row. Gemini round 1: CHANGES (2 High, 2 Medium, 1 Low). Revision 2 by Opus 5.5 at 95cf124f (two stated deviations). Gemini round 2 running.
+  - A, CE-SEC-011 #338: R1 to R3 and three Lows (Opus 5.5), 20 of 20 mutants killed, full suite 1853 passed (coordinator re-ran it); CE-SEC-016 row and a slice 2 note on CE-SEC-011. Pushed at 6c1f1c46. Gemini round 1 running.
+  - E update: Gemini round 2 on ADR-0071 at 11ba398e: APPROVE as Proposed, no findings. Eldon's first read asked on #344.
+  - A update: Gemini round 1 on #338 at 6c1f1c46: APPROVE, no findings. Re-review asked of Eldon on #338; CI was running on 6c1f1c46 at hand-off.
+- Waiting on the partner: Tier 3 say-so on #309 (asked, no answer yet), then #319.
+- Advisor (second call, before done): flagged that #338's re-review went out while its CI was pending, that the #337 next step missed Eldon's PDF condition, and that the pending-decisions memory needed updating. Token cost unknown.
+- Review effort: Gemini 4 Argon high ran six reviews (B, C, D, E twice, A), never more than two at once, with no quota failures. Rounds per PR: #337 1, #336 1, #335 1, #344 2, #338 1. Token cost unknown.
+- Eldon's status message (relayed by the partner): his #335 answers (Q-644 write-through to the local volume; Q-645 sign-in and reads keep working while the store is down) applied in spool spec revision 2.1 at 98b86a93 (Opus 5.5); Gemini APPROVE, no findings; re-review asked with six inferences for him to confirm.
+- Reviews of Eldon's PRs (partner said "proceed", APPROVE allowed on clean Tier 1 or 2 PRs; Tier 3 approvals wait on the partner), posted as sayegh9:
+  - approved: #325 (Gemini), #321 (Gemini; conflicts with main), #278 (Gemini), #279 (Gemini), #324 (GPT-6.2 Sol; Tier 2 under ADR-0035; Lows open; conflicts with main).
+  - changes requested: #275 (Gemini; `check-css-vars.mjs` fails, PR's web CI red), #320 (GPT; Tier 3, Studio CI misses font-only changes), #276 (GPT; Tier 3, fenced tenant and unverified role increase), #277 (GPT; Tier 3, three High in ADR-0061), #285 (GPT; status survives a review change, item ids missing), #287 (Claude Fable 5.2, same-family; Tier 3, escaped JSON bypasses the deny lists), #286 (Fable, same-family; Tier 3, cadence edit stalls a schedule, reserved event domains change existing types).
+  - not reviewed: #232 (PLT-009, partner's lane per Q-127; take over or close is the partner's call).
+- Reviewer quota: Antigravity ran out at 12:27Z (about 3 h); the partner said to move to another provider, so reviews went to Codex GPT-6.2 Sol; both ChatGPT accounts then ran out (one until 2026-11-28); the partner said to run Claude only to finish the round, so #286 and #287 ran on Claude Fable 5.2, labelled same-family (not the RULES 42 different-model review).
+- #309 (BPL-040, ADR-0068 Proposed, Tier 3) merged on the partner's say-so ("yes, proceed and merge", 2026-11-26) after Eldon's approval at 64286522; main merged in first (row statuses only, ADR text unchanged). E8 (NULL vs '' on the bench) stays an acceptance condition.
+- #319 (CMP-010 KSA VAT return design, Tier 3) merged on the partner's say-so ("yes 319", 2026-11-26) after Eldon's approval at 2ee642a4; main merged in first (only `docs/open-questions.md`, design text unchanged). The accountant review is still required before CMP-010 code.
+- PLT-009 (model gateway design) taken over from Eldon's #232, on the partner's decision ("A. Take it over", side chat, 2026-11-26, relayed by the partner's other session) and Eldon's offer ("PLT-009 is yours now: take it over or close it", status message 2026-11-26). The partner asked for this G2 design now while the current gate is G0 (ADR-0035 item 6 allows it on a founder's ask). Claimed `doing` in this PR. Plan: carry Eldon's `docs/architecture/model-gateway.md` and ADR-0053 from #232 at 6271f62e into `plt-009-model-gateway-design`, credit Eldon as original author, apply the five points of the 2026-11-22 Gemini read so it matches `contracts/model-call.md`, re-check against ADR-0069, the #316 decisions, PLT-025 and PLT-026; Opus 5.5 writes, a different-model review, then close #232 with a pointer.
+- PLT-009: claim #354 merged; design PR #355 opened (Eldon's two files carried unchanged at 25939c0e and credited to him, partner revision at 66ba1f9e by Opus 5.5; Q-543 carried and resolved by Q-127; Q-661 to Q-664 for Eldon). Gemini 4 Argon high: APPROVE as Proposed, no findings. #232 commented with the pointer and closed on the partner's yes (2026-11-26). #355 waits on Eldon's line-by-line read and the partner's Tier 3 say-so.
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-round-2026-11-26.md: this live log.
 - docs/PLAN.md: CMP-039 claimed (#342); doing-row audit applied (coordination-14).
 
 ## Decisions
-- None yet. Pending partner Tier 3 say-so: #309, then #319.
+- None by the founders this session. Pending: partner Tier 3 say-so on #309, then #319; Eldon's answers on Q-644 to Q-649 and Q-652 to Q-657; the doing-row founder calls (does a design or decision row close on a Proposed ADR; BPL-027; SEC-002; INF-009; ERP-013; QA-016; SEC-004 and CMP-023).
 
 ## Tokens or cost
 Unknown.
 
 ## Next step
-Dispatch tasks A to F; apply task G; record each result here.
+- Eldon: re-reviews #335, #336, #337 and #338; first read of #344. #337 (Tier 2) merges after his re-review and a look at one real-bench PDF (his merge condition), or after he waives the PDF.
+- Partner: #309 and #319 merged; CMP-010 waits on the accountant. Decide #232 (PLT-009). Tier 3 approvals on Eldon's PRs once their defects are fixed.
+- After #338 merges: BPL-044 and BPL-033 (same file), CE-SEC-016, CE-SEC-011 slice 2. After #336: CE-SEC-012 to CE-SEC-015. After #335: PLT-028 code. After #344: CMP-041.
+- Worktrees on this machine: `orrery-wt/cmp-039-pack-loader-design` and the existing T3 worktrees for #335 to #338; remove after merge.

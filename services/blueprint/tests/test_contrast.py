@@ -16,16 +16,12 @@ def _with(primary=None, accent=None):
     return bp
 
 
-def test_known_good_colour_passes_in_its_theme():
-    # No colour reaches 4.5:1 on both a near-white and a near-black surface, so each theme is judged
-    # separately and the other theme gets its own derived colour (theming.md). Cobalt (light) and its
-    # dark counterpart must each pass in their own theme without any adjustment there.
-    light = validate(_with(primary="#2443D0"), full_ctx())
-    assert light.ok
-    assert not [a for a in light.adjustments if a["theme"] == "light" and a["path"].endswith("primaryColour")]
-    dark = validate(_with(primary="#86A0FF"), full_ctx())
-    assert dark.ok
-    assert not [a for a in dark.adjustments if a["theme"] == "dark" and a["path"].endswith("primaryColour")]
+def test_known_good_colour_passes_without_adjustment():
+    # Rule 10 calls the token resolver's OKLCH derive (Q-64): one primary yields both themes, so a colour
+    # that already reaches AA in the light theme (Cobalt) passes with no warning at all.
+    rep = validate(_with(primary="#2443D0"), full_ctx())
+    assert rep.ok
+    assert not [a for a in rep.adjustments if a["path"].endswith("primaryColour")]
 
 
 def test_contrast_values_are_wcag():
@@ -42,16 +38,29 @@ def test_light_yellow_is_adjusted_or_rejected_and_adjustment_passes():
         bgs = list(SURFACES["light"].values())
         assert passes_all(a["proposed"], bgs, 4.5)
         assert a["proposed"] != a["original"]
-    # yellow is fine on the dark theme
-    assert not [a for a in rep.adjustments if a["theme"] == "dark"]
+    # Rule 10 reports light-theme adjustments only; dark-theme derivations are silent (the derive is authoritative).
 
 
 def test_auto_adjust_yields_warning_not_error():
-    rep = validate(_with(primary="#1F5FAE"), full_ctx())  # fails 4.5:1 on the dark theme
+    rep = validate(_with(primary="#8F8F24", accent="#2443D0"), full_ctx())  # too light for AA on the light theme; the derive darkens it
     assert rep.ok
-    adj = [a for a in rep.adjustments if a["theme"] == "dark" and a["path"].endswith("primaryColour")]
-    assert adj and passes_all(adj[0]["proposed"], list(SURFACES["dark"].values()), 4.5)
+    adj = [a for a in rep.adjustments if a["theme"] == "light" and a["path"].endswith("primaryColour")]
+    assert adj and passes_all(adj[0]["proposed"], list(SURFACES["light"].values()), 4.5)
     assert adj[0]["ratioAfter"] >= 4.5 > adj[0]["ratioBefore"]
+
+
+def test_unavailable_derive_is_a_branding_error(monkeypatch):
+    # Rule 10 must fail closed: if the token derive cannot load, the primary colour is reported, never passed silently.
+    from tokens import brand_tools
+
+    def _unavailable():
+        raise brand_tools.BrandToolsUnavailable("test: brand tools missing")
+
+    monkeypatch.setattr(brand_tools, "load", _unavailable)
+    rep = validate(_with(primary="#2443D0"), full_ctx())
+    errs = [e for e in rep.errors if e.code == "BP-BRAND-001"]
+    assert errs and errs[0].path == "/branding/primaryColour"
+    assert not rep.ok
 
 
 def test_white_is_rejected_in_light_theme():
@@ -66,5 +75,6 @@ def test_accent_uses_the_lower_graphics_threshold():
     assert 3.0 <= contrast(colour, SURFACES["light"]["background"]) < 4.5
     rep = validate(_with(accent=colour), full_ctx())
     assert not [a for a in rep.adjustments if a["theme"] == "light" and a["path"].endswith("accentColour")]
+    # as a primary the derive refuses it (too close to Seshna Crimson), the same verdict the resolver gives
     rep = validate(_with(primary=colour), full_ctx())
-    assert [a for a in rep.adjustments if a["theme"] == "light" and a["path"].endswith("primaryColour")]
+    assert any(e.code == "BP-BRAND-001" and e.path.endswith("primaryColour") for e in rep.errors)

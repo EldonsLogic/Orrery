@@ -30,7 +30,7 @@ class StubCleanHandler(http.server.BaseHTTPRequestHandler):
         if url_path == "/":
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Server", "OrreryGateway/1.0")
+            self.send_header("Server", "SeshnaGateway/1.0")
             self.send_header("Set-Cookie", "session_token=clean_token_abc; Path=/; HttpOnly; Secure")
             self.end_headers()
             html = (
@@ -38,7 +38,7 @@ class StubCleanHandler(http.server.BaseHTTPRequestHandler):
                 '<link rel="stylesheet" href="/static/style.css">'
                 '<script src="/static/app.js"></script>'
                 "</head><body>"
-                "<h1>Welcome to Orrery</h1>"
+                "<h1>Welcome to Seshna</h1>"
                 '<a href="/about">About Us</a>'
                 '<a href="https://external.example.com/terms">External Terms</a>'
                 "</body></html>"
@@ -47,7 +47,7 @@ class StubCleanHandler(http.server.BaseHTTPRequestHandler):
         elif url_path == "/about":
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Server", "OrreryGateway/1.0")
+            self.send_header("Server", "SeshnaGateway/1.0")
             self.end_headers()
             self.wfile.write(b"<!DOCTYPE html><html><body><p>Clean about page.</p></body></html>")
         elif url_path == "/static/style.css":
@@ -65,11 +65,11 @@ class StubCleanHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/javascript; charset=utf-8")
             self.end_headers()
-            self.wfile.write(b"console.log('Orrery client bundle running cleanly.');")
+            self.wfile.write(b"console.log('Seshna client bundle running cleanly.');")
         elif url_path == "/api/v1/health":
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Server", "OrreryGateway/1.0")
+            self.send_header("Server", "SeshnaGateway/1.0")
             self.end_headers()
             self.wfile.write(json.dumps({"status": "healthy", "service": "gateway"}).encode("utf-8"))
         else:

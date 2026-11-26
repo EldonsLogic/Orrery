@@ -1,4 +1,4 @@
-"""Metric definitions (platform registry, Q-629) and their deterministic formulas.
+"""Metric definitions (platform registry, Q-669) and their deterministic formulas.
 
 Money is Decimal end to end: amounts are summed exactly and rounded once, half-up, to the currency's minor
 units at the end. A formula reads only the event types its definition lists in `sources`.
@@ -107,9 +107,9 @@ def quantize(value: Decimal, currency: str) -> str:
 def default_registry() -> dict:
     sales = frozenset({"owner", "finance", "sales_manager"})
     defs = (
-        MetricDef("sales.revenue_month", "metrics.sales.revenue_month", "money", "month",
+        MetricDef("sales.revenue", "metrics.sales.revenue", "money", "month",
                   ("document.issued",), (), sales, revenue),
-        MetricDef("sales.invoice_count_month", "metrics.sales.invoice_count_month", "count", "month",
+        MetricDef("sales.order_count", "metrics.sales.order_count", "count", "month",
                   ("document.issued",), (), sales, invoice_count),
         MetricDef("finance.receivables_outstanding", "metrics.finance.receivables_outstanding", "money",
                   "as_of", ("document.issued", "payment.created"), (), frozenset({"owner", "finance"}),

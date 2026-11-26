@@ -11,11 +11,11 @@ Design note and a minimal deterministic metrics service (3 example metrics, role
 ## Files touched
 - docs/product/semantic-layer.md: design note
 - services/operate/metrics/, services/operate/tests/metrics/: code and 12 tests
-- docs/open-questions.md: Q-629, Q-630
+- docs/open-questions.md: Q-669, Q-670
 - docs/PLAN.md, services/operate/README.md: status and README section
 
 ## Decisions
-- Default: platform registry in code (Q-629 open).
+- Default: platform registry in code (Q-669 open).
 
 ## Tokens or cost
 Unknown or approximate, if known.

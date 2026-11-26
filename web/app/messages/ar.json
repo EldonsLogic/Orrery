@@ -790,6 +790,12 @@
         "branding": "هوية بصرية",
         "assistant": "مساعد",
         "other": "عنصر"
+      },
+      "opBare": {
+        "add": "أُضيف {kind}",
+        "remove": "حُذف {kind}",
+        "replace": "عُدّل {kind}",
+        "reorder": "أُعيد ترتيب {kind}"
       }
     },
     "proposal": {

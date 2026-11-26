@@ -100,6 +100,7 @@ describe('blueprint viewer', () => {
       expect(text).not.toMatch(/\b[a-z]+_[a-z_]+\b/);
       expect(text).not.toMatch(/\b[a-z_]+\.(list|create|update|delete|transition)\b/);
       expect(text).not.toContain('UNVERIFIED');
+      for (const op of fixturePending) if (!op.labels) expect(text).not.toContain(`: ${op.subject.id}`); // an unlabelled change names its kind only
     }
   });
   it('gives a sales rep no price and no decision', () => {

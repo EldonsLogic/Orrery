@@ -790,6 +790,12 @@
         "branding": "branding",
         "assistant": "assistant",
         "other": "item"
+      },
+      "opBare": {
+        "add": "Added {kind}",
+        "remove": "Removed {kind}",
+        "replace": "Changed {kind}",
+        "reorder": "Reordered {kind}"
       }
     },
     "proposal": {

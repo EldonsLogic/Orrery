@@ -141,6 +141,27 @@ def derive_colours(primary: str, accent: Optional[str]) -> Derived:
     )
 
 
+def failing_pair(key: str, original: str, fixed: str, light_primary: str) -> Optional[Dict[str, Any]]:
+    """The light-theme contrast pair that made the derive change `original` to `fixed`, with its before and after ratios.
+
+    Uses the derive's own pair list and checks (derive._fails, themelib.contrast_pairs/ratio) and its choice of worst pair
+    (link/surface first, else the lowest ratio against its minimum). key is "primaryColour" or "accentColour";
+    light_primary is the derived light primary (the accent pairs are checked with it). Returns None if nothing fails."""
+    T, D = load()
+    if key == "primaryColour":
+        tags, kw_before, kw_after = {"primary"}, {"primary": original}, {"primary": fixed}
+    else:
+        tags = {"accent"}
+        kw_before, kw_after = {"primary": light_primary, "accent": original}, {"primary": light_primary, "accent": fixed}
+    bad = D._fails("light", tags, **kw_before)[1]
+    if not bad:
+        return None
+    pair, before = (next((x for x in bad if x[0]["id"] == "link/surface"), None) if key == "primaryColour" else None) or min(bad, key=lambda x: x[1] / x[0]["min"])
+    after_theme = T.build_theme("light", **kw_after)
+    after_pair = next(p for p in T.contrast_pairs(after_theme, "light") if p["id"] == pair["id"])
+    return {"id": pair["id"], "label": pair["label"], "min": pair["min"], "before": before, "after": T.ratio(after_pair["fg"], after_pair["bg"])}
+
+
 def locked_and_derivable_names() -> List[str]:
     """Every CSS variable name the brand tools know about (8 base colours plus all derived colours)."""
     T, _ = load()

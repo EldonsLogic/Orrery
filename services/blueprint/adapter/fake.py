@@ -19,7 +19,7 @@ from .contract import CONTRACTS, artifact_hashes, canon, response_validator, sch
 
 ADAPTER_ID = "frappe"  # internal id; the sample artifacts name it in engineTarget.adapter (contract open question 12)
 ADAPTER_VERSION = "0.1.0"
-CONTRACT_VERSIONS = ["0.1.2"]
+CONTRACT_VERSIONS = ["0.1.3"]
 ARTIFACT_SCHEMA_VERSIONS = ["0.1.0"]
 VERSION_SETS = ["set-example", "set-example-2"]
 PLAN_TOKEN_TTL = 900
@@ -142,6 +142,11 @@ def _fields_of(errors) -> list[str]:
     return sorted(f[:256] for f in fields)[:32]
 
 
+def _key(elem: dict) -> str:
+    """Key of a collection element: `id`, `value` for select options (Blueprint), `order` for approval steps."""
+    return str(elem.get("id", elem.get("value", elem.get("order"))))
+
+
 def _walk(node: Any, segs: list[str]) -> Any:
     """Resolve id-based pointer segments. Returns _MISSING when absent."""
     for seg in segs:
@@ -150,7 +155,7 @@ def _walk(node: Any, segs: list[str]) -> Any:
                 return _MISSING
             node = node[seg]
         elif isinstance(node, list):
-            hit = [x for x in node if isinstance(x, dict) and str(x.get("id", x.get("order"))) == seg]
+            hit = [x for x in node if isinstance(x, dict) and _key(x) == seg]
             if not hit:
                 return _MISSING
             node = hit[0]
@@ -678,17 +683,17 @@ class FakeAdapter:
         elif kind.endswith(".reorder"):
             node = _walk(cfg, segs)
             node = node if isinstance(node, list) else node.get("fields", node.get("options"))
-            node.sort(key=lambda e: params["order"].index(str(e["id"])))
+            node.sort(key=lambda e: params["order"].index(_key(e)))
         elif kind.endswith((".quarantine", ".disable")):
             coll = _walk(cfg, segs[:-1])
-            idx = next(i for i, e in enumerate(coll) if str(e["id"]) == segs[-1])
+            idx = next(i for i, e in enumerate(coll) if _key(e) == segs[-1])
             site.retained[pointer] = {"state": "quarantined" if kind.endswith(".quarantine") else "disabled",
                                       "definition": coll.pop(idx), "index": idx}
         else:  # add, upsert, enable
             coll = _walk(cfg, segs[:-1])
             held = site.retained.pop(pointer, None)
             defn = copy.deepcopy(params["definition"])
-            idx = next((i for i, e in enumerate(coll) if str(e["id"]) == segs[-1]), None)
+            idx = next((i for i, e in enumerate(coll) if _key(e) == segs[-1]), None)
             if held is not None:
                 coll.insert(min(held["index"], len(coll)), held["definition"])
             elif idx is not None:
@@ -711,7 +716,7 @@ class FakeAdapter:
         if check == "count_equals":
             return isinstance(node, list) and len(node) == pc["expected"]
         if check == "order_equals":
-            return isinstance(node, list) and [str(e.get("id", e.get("order"))) for e in node] == pc["expected"]
+            return isinstance(node, list) and [_key(e) for e in node] == pc["expected"]
         return False
 
     # ---------------------------------------------------------------- apply and rollback

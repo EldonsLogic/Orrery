@@ -44,10 +44,12 @@ def seal(artifact: dict) -> dict:
 
 
 def assemble(*, blueprint_ref: dict, engine_target: dict, components: list[dict], steps: list[dict],
-             skipped: list[dict], post_conditions: list[dict], risk: dict) -> dict:
-    art = {"artifactSchema": ARTIFACT_SCHEMA, "artifactId": "", "kind": "forward", "compiler": dict(COMPILER),
+             skipped: list[dict], post_conditions: list[dict], risk: dict, kind: str = "forward",
+             inverse: dict | None = None) -> dict:
+    """The sealed artifact. An embedded `inverse` must already be sealed: it is hashed as it stands (9.1)."""
+    art = {"artifactSchema": ARTIFACT_SCHEMA, "artifactId": "", "kind": kind, "compiler": dict(COMPILER),
            "blueprint": blueprint_ref, "engineTarget": engine_target, "components": components, "steps": steps,
-           "skippedOps": skipped, "postConditions": post_conditions, "risk": risk, "inverse": None, "integrity": {}}
+           "skippedOps": skipped, "postConditions": post_conditions, "risk": risk, "inverse": inverse, "integrity": {}}
     return seal(art)
 
 
@@ -87,6 +89,10 @@ def check(artifact: dict) -> list[Issue]:
         where = ptr("steps", s["seq"] - 1, "params")
         for hit in _secret_keys(s["params"], where):
             issues.append(Issue("CMP-ART-002", hit, "secret-like key in step params"))
+        prop = s["params"].get("property")  # a property pointer names keys too: /default/api_key
+        if isinstance(prop, str) and any(SECRET_KEY.search(seg.replace("~1", "/").replace("~0", "~"))
+                                         for seg in prop.split("/")[1:]):
+            issues.append(Issue("CMP-ART-002", where + "/property", "secret-like key in a step property pointer"))
         if _depth(s["params"]) > MAX_PARAMS_DEPTH:
             issues.append(Issue("CMP-ART-003", where, f"params nesting deeper than {MAX_PARAMS_DEPTH}"))
     neutral = canonical({"steps": artifact["steps"], "postConditions": artifact["postConditions"]}).decode("utf-8")

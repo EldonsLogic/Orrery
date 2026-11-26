@@ -11,7 +11,7 @@ Delegate when the task is independent, well specified and checkable. Do the work
 ## 2. Pick the model by task
 | Task | Tier | Claude models (as used by the founders) |
 |---|---|---|
-| Architecture, ADRs, contracts, security review, accounting or tax logic, hard planning, deciding what fits | Strongest | Fable 5.1 or Opus 5.5 |
+| Architecture, ADRs, contracts, security review, accounting or tax logic, hard planning, deciding what fits | Strongest | Fable 5.2 or Opus 5.5 |
 | Long-form writing that must be accurate and persuasive (partner brief, strategy) | Strongest | Opus 5.5 |
 | Implementing a scoped task from a spec; writing specs, schemas, docs, design-system files; fan-out of many documents | Mid | Sonnet 5.5 |
 | Boilerplate, formatting, link fixes, summaries, simple lookups | Small | Haiku 5.5 |

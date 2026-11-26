@@ -144,6 +144,29 @@
           "maxLength": 256
         }
       }
+    },
+    "agent_run_refused": {
+      "type": "object",
+      "properties": {
+        "schedule_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "code"
+      ]
     }
   }
 }

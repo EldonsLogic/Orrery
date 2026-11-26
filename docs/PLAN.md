@@ -188,7 +188,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-010 | Chat service: sessions, streaming, Arabic and English | Operate | G2 | OPR-001 | eldon | done |
 | OPR-011 | Role-based view generation (screens and tools per role) | Operate | G2 | OPR-003,WEB-011 | eldon | todo |
 | OPR-012 | Chat transcript audit and retention | Operate | G2 | SEC-008,DAT-001 | eldon | todo |
-| OPR-013 | Scheduled agents with budgets | Operate | G3 | OPR-001,PLT-026 | eldon | todo |
+| OPR-013 | Scheduled agents with budgets | Operate | G3 | OPR-001,PLT-026 | eldon | doing |
 | OPR-014 | Per-tenant memory | Operate | G3 | OPR-001,DAT-001 | eldon | done |
 | OPR-015 | WhatsApp or push channel for the chat | Operate | G4 | OPR-010,DSC-015 | eldon | doing |
 | PLT-001 | Tenancy ADR-0006: site per tenant on shared in-country infrastructure | Platform | G0 | GOV-015 | eldon | done |

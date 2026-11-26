@@ -1,10 +1,12 @@
 # Event stream
 
-Version: 0.1.0
+Version: 0.2.0
 Status: draft
 Owner: eldon
 
 Contract 4. What happened in a tenant, in a form that agents, the audit trail and metering can all consume. Events are facts, append-only, ordered per tenant. Business records live in the engine; events describe changes to them and everything the platform did.
+
+0.2.0 changes (additive, [ADR-0064](../docs/decisions/ADR-0064-scheduled-agent-authority-and-budgets.md), Q-597): scheduled-agent audit types `agent_schedule.*`, `agent.run_refused`, and the platform clock types `platform_scheduler.*`. The new domains `agent_schedule` and `platform_scheduler` are reserved so no `<entity>.*` pattern covers them; no existing type or field changed (an earlier draft reserved `schedule` and `scheduler`, which are valid entity names, and was withdrawn after review of PR #286).
 
 ## 1. Envelope
 Every event is one JSON object:
@@ -64,9 +66,10 @@ Naming `<domain>.<past_tense_verb>`.
 | `build.state_changed` (+ `build.review_passed`, `build.review_rejected`, `build.live`, see [build-states.md](build-states.md)) | Build lifecycle |
 | `support.access_requested`, `support.access_granted`, `support.access_ended`, `support.action_taken` | Just-in-time support access, always with reason and expiry |
 | `data.exported`, `data.deleted`, `tenant.state_changed` | Tenant lifecycle |
+| `agent_schedule.created`, `agent_schedule.updated` (data: changed field names), `agent_schedule.disabled`, `agent_schedule.suspended` (data: reason `owner_permission_lost`, `budget_exhausted` or `repeated_failures`), `agent_schedule.resumed`, `agent_schedule.change_refused` (data: code) | Scheduled agents (OPR-013, ADR-0064): every schedule change and refused change, with actor, owner, on-behalf-of user, version, role, tools and caps; never tool args or model text |
 
 ### Agent events
-`agent.run_started`, `agent.tool_proposed`, `agent.run_completed`, `agent.run_failed`, `agent.budget_exceeded`, `agent.output_flagged` (injection or policy filter hit), `chat.turn_completed` (data: mode discover/ask/act/change, latency, token counts, no content), `memory.written`, `memory.expired`, `eval.regression_detected` (platform-level, not tenant).
+`agent.run_started`, `agent.tool_proposed`, `agent.run_completed`, `agent.run_failed`, `agent.run_refused` (a due scheduled run not started: data code such as `overlap`, `roles_unavailable`, `owner_permission_lost`), `agent.budget_exceeded`, `agent.output_flagged` (injection or policy filter hit), `chat.turn_completed` (data: mode discover/ask/act/change, latency, token counts, no content), `memory.written`, `memory.expired`, `eval.regression_detected` (platform-level, not tenant).
 
 ### Metering events
 Cheap, high-volume, aggregated by Part 5 into usage records.
@@ -80,7 +83,7 @@ Cheap, high-volume, aggregated by Part 5 into usage records.
 | `meter.simulation_run` | records replayed, duration |
 
 ### Platform events (no tenant data)
-`component.published`, `component.deprecated`, `component.request_created`, `component.request_reviewed`, `engine.upgrade_canary_started`, `engine.upgrade_promoted`, `engine.upgrade_rolled_back`. These carry `tenant_id: "platform"`.
+`component.published`, `component.deprecated`, `component.request_created`, `component.request_reviewed`, `engine.upgrade_canary_started`, `engine.upgrade_promoted`, `engine.upgrade_rolled_back`, and the scheduler's clock events `platform_scheduler.clock_fault` (a reading refused), `platform_scheduler.clock_gap` (a forward gap over 31 days, treated as a fresh start, or any forward step past an owner's spend window, where spend ages out), `platform_scheduler.clock_rebase` (the scheduler followed a consistently earlier clock) (data: `last_accepted`, the last accepted reading as a UTC timestamp, omitted before the first). These carry `tenant_id: "platform"`.
 
 ## 4. Consumers
 | Consumer | Needs |

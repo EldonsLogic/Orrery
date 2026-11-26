@@ -25,8 +25,9 @@ def _loc(labels) -> dict:
 
 
 class _Gen:
-    def __init__(self, bp: dict, registry: dict | None, manifests: list | None = None):
+    def __init__(self, bp: dict, registry: dict | None, manifests: list | None = None, metrics: dict | None = None):
         self.bp = bp
+        self.metric_defs = metrics or {}
         self.manifests = manifests
         self.errors: list[Issue] = []
         self.tools: list[dict] = []
@@ -269,6 +270,26 @@ class _Gen:
         t.update(extra or {})
         self.tools.append(t)
 
+    def registry_metric_tool(self, none, no_appr) -> None:
+        """`metric.query` from the platform metric registry (OPR-006, semantic-layer.md). Roles are the registry's
+        roles intersected with the Blueprint's chat roles; the caller's own roles are applied again at run time."""
+        roles = {m.id: sorted(set(m.roles) & self.chat_roles) for m in self.metric_defs.values()}
+        roles = {k: v for k, v in sorted(roles.items()) if v}
+        if not roles:
+            return
+        value = {"anyOf": [{"type": "string"}, {"type": "integer"}]}
+        self.add("metric.query", "read", None, sorted({x for v in roles.values() for x in v}),
+                 {"entity": None, "action": "metric.query"}, P.PLATFORM_RISK["metric.query"], dict(none), dict(no_appr),
+                 object_schema({"metric": {"type": "string", "enum": sorted(roles)},
+                                "period": {"type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$"},
+                                "as_of": {"type": "string", "format": "date"},
+                                "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}}, ["metric"]),
+                 object_schema({"metric": {"type": "string"}, "label_key": {"type": "string"}, "unit": {"type": "string"},
+                                "value": value, "currency": {"type": ["string", "null"]}, "params": {"type": "object"}},
+                                ["metric", "value"]),
+                 {"ar": "استعلام مقياس", "en": "Query a metric"}, "Query a governed metric by id. The value is computed by code.",
+                 "metric.query", {"requires_by_value": {"argument": "metric", "roles": roles}})
+
     # ---- entities --------------------------------------------------------------------------------------------------
     def entity_tools(self, eid: str) -> None:
         e = self.entities[eid]
@@ -484,7 +505,7 @@ class _Gen:
                                 group_fields.add(g)
             group_by = ({"group_by": {"type": "array", "maxItems": 5, "uniqueItems": True,
                                       "items": {"type": "string", "enum": sorted(group_fields)}}} if group_fields else {})
-            if metrics:
+            if metrics and not self.metric_defs:
                 self.add("metric.query", "read", None, sorted({x for v in metrics.values() for x in v}),
                          {"entity": None, "action": "metric.query"}, P.PLATFORM_RISK["metric.query"], dict(none), dict(no_appr),
                          object_schema({"metric": {"type": "string", "enum": sorted(metrics)},
@@ -494,6 +515,7 @@ class _Gen:
                          object_schema({"metric": {"type": "string"}, "rows": {"type": "array", "items": {"type": "object"}}}, ["metric", "rows"]),
                          {"ar": "استعلام مقياس", "en": "Query a metric"}, "Query a semantic-layer metric by id.", "metric.query",
                          {"requires_by_value": {"argument": "metric", "roles": {k: sorted(metrics[k]) for k in sorted(metrics)}}})
+        self.registry_metric_tool(none, no_appr)
         if self.approvals:
             approvers = {s["approverRole"] for a in self.approvals.values() for s in a.get("steps") or []}
             approvers |= {r for (e, a), rs in self.perms.items() if a == "approve" for r in rs}
@@ -527,16 +549,17 @@ class _Gen:
                  "Produces a diff for human review. Never applies a change.", "blueprint.propose_change")
 
 
-def generate_tool_api(blueprint, registry=None, manifests=None) -> ToolApiResult:
+def generate_tool_api(blueprint, registry=None, manifests=None, metrics=None) -> ToolApiResult:
     """Return the tool set for a validated Blueprint, or a refusal (`ok` False, `errors` set, no tools).
 
     `registry` is optional L0 configuration: {"source": "<where it came from>", "entity_classes": {entity_id:
     plain|stock|ledger}, "entity_effects": {entity_id: {ledger|tax|external_send: bool}}}. It may only raise a class and
     add effects; an attempt to lower one is refused (TAPI-REGISTRY-002). Its source and hash are recorded in the set.
     `manifests` is an optional list of resolved component manifests whose entity artifacts may declare `riskClass`
-    (ADR-0037); same raise-only rule (TAPI-MANIFEST-002), recorded as `manifests`. The input is never mutated.
+    (ADR-0037); same raise-only rule (TAPI-MANIFEST-002), recorded as `manifests`. `metrics` is an optional metric
+    registry ({id: definition with .roles}); when given it, not the Blueprint reports, defines `metric.query`. The input is never mutated.
     """
-    g = _Gen(blueprint, registry, manifests)
+    g = _Gen(blueprint, registry, manifests, metrics)
     if g.setup():
         for eid in sorted(g.entities):
             g.entity_tools(eid)

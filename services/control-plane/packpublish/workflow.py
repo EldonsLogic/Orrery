@@ -15,6 +15,7 @@ from typing import Callable
 
 from . import canon
 from .canon import DIGEST_RE, REF_RE, SUBJECT_RE, canonical, digest
+from .changerecord import validate_change_record
 from .errors import PublishError
 
 STEP_UP_SECONDS = 300
@@ -420,6 +421,7 @@ class PackPublisher:
         index = {**new, "indexSeq": idx["indexSeq"] + 1, "predecessorDigest": change.base_index_digest,
                  "issuedAt": _stamp(now), "kid": self.kid, "keyEnv": self.key_env,
                  "changeRecords": [{"id": change_id, "kind": change.kind, "sha256": digest(canonical(rec))}]}
+        validate_change_record(rec)  # fail closed before audit or store change
         _port("PP-030", self.audit.write, audit_id, {
             "action": f"country_pack.change.{change.kind}", "at": rec["recordedAt"], "countryCode": change.country,
             "changeId": change_id, "target": dict(change.target), "indexSeq": index["indexSeq"],

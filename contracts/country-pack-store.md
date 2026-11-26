@@ -1,6 +1,6 @@
 # Country pack store: publish record, index and pin
 
-Version: 0.1.0
+Version: 0.2.0
 Status: draft (ADR-0071 Proposed, PR #344 under review)
 Owner: eldon (publisher, CMP-038); consumer: partner (loader, CMP-039)
 
@@ -10,6 +10,7 @@ The shared formats between the staff pack publishing workflow (CMP-038) and the 
 |---|---|---|---|
 | Publish record (payload of a `cpr1.` envelope, `typ: country_pack_version`) | [country-pack-record.schema.json](country-pack-record.schema.json) | CMP-038 publish service | loader |
 | Country index (payload of a `cpi1.` envelope, `typ: country_pack_index`) | [country-pack-index.schema.json](country-pack-index.schema.json) | CMP-038 | loader |
+| Change record (withdrawal, floor raise, follow-up closure; listed in the index by id, kind and sha256) | [country-pack-change-record.schema.json](country-pack-change-record.schema.json) | CMP-038 | loader (CMP-039 must read it) |
 | Tenant pin (`typ: country_pack_pin`) | [country-pack-pin.schema.json](country-pack-pin.schema.json) | tenant registry (control plane) | loader, through `PinSource` |
 | Shared field formats | [country-pack-common.schema.json](country-pack-common.schema.json) | - | - |
 
@@ -30,7 +31,7 @@ Examples: `examples/country-pack-{record,index,pin}-*.json` must validate; `exam
 2. The schemas describe the decoded JSON payloads only. The envelopes (`cpr1.`/`cpi1.`, base64url, ed25519 over a domain string plus the payload bytes, 64 KiB limit, strict parse) stay as ADR-0071 1.5 defines them.
 3. The publisher key envelope stays in production alongside the per-signer signatures; per-signer signatures add to it, they do not replace it.
 4. `signerSignature` format `webauthn.get.v1`: the WebAuthn challenge is the base64url of the 32 `statementDigest` bytes. Verifying it needs each signer's public credential in the reviewed `trusted_signers.json`; that file's format belongs to the loader (CMP-042) and is not in this contract.
-5. Per-signer signatures on change records (withdrawal, floor raise, follow-up closure) are not specified here: the index lists change records by digest, and their body is CMP-038's next slice. A tenant-member actor (`memberRef`) is out of scope for pin approvals.
+5. Change records (withdrawal, floor raise, follow-up closure) are defined by [country-pack-change-record.schema.json](country-pack-change-record.schema.json): `id`, `kind`, `countryCode`, `target` (`{version}` or, for a closure, `{publishId}`), `reasonRef`, `baseIndexSeq`, `baseIndexDigest`, `statementDigest`, `requestedBy`, `recordedAt` and the same two `signOffs` as a publish (one `market_accountant`, one `founder`, different people, different step-ups, each signed over `statementDigest`, per-signer signatures in production). The statement is the digest of the canonical JSON of `{op: "pack_change", countryCode, kind, target, reasonRef, baseIndexDigest}`, so a change is bound to the exact index it was proposed against. The index's `changeRecords[].sha256` is the digest of the record's canonical JSON; the next index has `indexSeq` equal to `baseIndexSeq` plus 1. Per market only, no tenant fields. **CMP-039 (the pack loader, PR #344) must read this record**, check its two sign-offs like a publish's, and check that the index change it lists (withdrawal moved, floor raised, follow-up closed) matches `kind` and `target`. A tenant-member actor (`memberRef`) is out of scope for pin approvals. The publisher validates each record against the schema and the rules in `x-validator-rules` before it commits (refusal PP-062).
 6. The index carries a new field, `predecessorDigest`, which ADR-0071 revision 2 does not have: it answers the review finding that two indexes with the same `indexSeq` must be refused, and matches the brief for this slice.
 7. The pin adds `v`, `typ`, `auditId` and a structured `approval` (ADR-0071 3.1 has a flat `approvalRef`); `approval.ref` is that reference. `changedBy` is `{actorKind, subject, tokenId}`: the actor is staff or a service, never a tenant member, so `memberRef` does not apply; staff subjects go only to the platform security stream, never a tenant audit (#316 decision 2).
 8. A repo pin uses approval `repo_draft` and cannot be a `republish`.
@@ -40,3 +41,4 @@ Examples: `examples/country-pack-{record,index,pin}-*.json` must validate; `exam
 
 ## Changelog
 - 0.1.0 (CMP-038 slice 1): first draft of the record, index, pin and common schemas, with examples and negative examples.
+- 0.2.0 (CMP-038 slice 4): change record body and schema (assumption 5 replaced); minor, backward compatible for existing records, indexes and pins.

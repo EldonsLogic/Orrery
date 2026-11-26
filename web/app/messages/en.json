@@ -340,7 +340,8 @@
       },
       "blueprint": "Business blueprint",
       "chat": "Chat",
-      "branding": "Branding"
+      "branding": "Branding",
+      "documents": "Document templates"
     },
     "workspace": {
       "label": "Workspace",
@@ -480,6 +481,78 @@
     "loading": "Loading your saved branding.",
     "loadFailed": "Your saved branding could not be loaded, so saving is turned off to protect it. Reload the page to try again.",
     "settings": "Colour and logo"
+  },
+  "documents": {
+    "title": "Document templates",
+    "intro": "Choose how your invoices, quotes and purchase orders look. You can change the logo position, the accent colour and the footer text. The legally required parts of each document are fixed.",
+    "list": "Templates",
+    "settings": "Template settings",
+    "kinds": {
+      "tax_invoice": "Tax invoice",
+      "quote": "Quote",
+      "purchase_order": "Purchase order"
+    },
+    "logo": {
+      "label": "Logo position",
+      "start": "Start of the header",
+      "center": "Centre of the header",
+      "end": "End of the header"
+    },
+    "accent": {
+      "label": "Accent colour",
+      "hint": "Taken from your brand colours. It is used for rules and headings.",
+      "primary": "Primary colour",
+      "accent": "Accent colour"
+    },
+    "footer": {
+      "label": "Footer text",
+      "hint": "Plain text, up to {max} characters.",
+      "invalid": "Remove special characters or shorten the text."
+    },
+    "locked": {
+      "title": "Locked parts",
+      "note": "These parts follow tax and legal rules. They cannot be moved, hidden or changed here.",
+      "badge": "Locked"
+    },
+    "regions": {
+      "header": "Header and document details",
+      "seller": "Seller",
+      "buyer": "Buyer",
+      "lines": "Line items",
+      "totals": "Totals",
+      "qr": "QR code",
+      "terms": "Terms",
+      "supplier": "Supplier",
+      "delivery": "Delivery"
+    },
+    "preview": {
+      "title": "Preview",
+      "note": "A sample document with made-up data. The logo is shown as a placeholder.",
+      "logo": "Your logo",
+      "sample": {
+        "header": "Number, date, currency",
+        "seller": "Seller name and tax number",
+        "buyer": "Buyer name",
+        "lines": "Item, quantity, price, tax",
+        "totals": "Subtotal, tax, total",
+        "qr": "QR code",
+        "terms": "Payment and delivery terms",
+        "supplier": "Supplier name",
+        "delivery": "Delivery address"
+      }
+    },
+    "noAccess": {
+      "title": "Not available",
+      "body": "Only workspace administrators can change document templates."
+    },
+    "save": "Save templates",
+    "saving": "Saving",
+    "saved": "Document templates saved.",
+    "errForbidden": "You do not have permission to change document templates.",
+    "errInvalid": "The settings were refused. Check the footer text.",
+    "errFailed": "Saving failed. Try again.",
+    "loading": "Loading your saved templates.",
+    "loadFailed": "Your saved templates could not be loaded, so saving is turned off to protect them. Reload the page to try again."
   },
   "blueprint": {
     "title": "Business blueprint",

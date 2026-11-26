@@ -1,0 +1,19 @@
+.page { display: grid; gap: calc(var(--space-unit) * 3); max-inline-size: 72rem; }
+.layout { display: grid; gap: calc(var(--space-unit) * 3); grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); align-items: start; }
+.kinds { display: flex; flex-wrap: wrap; gap: var(--space-unit); margin: 0; padding: 0; list-style: none; }
+.kind { padding: var(--space-unit) calc(var(--space-unit) * 2); border: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent); border-radius: var(--radius-control); background: var(--color-surface); color: var(--color-text); font: inherit; cursor: pointer; }
+.kind[aria-current='true'] { border-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); font-weight: 600; }
+.kind:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.locked { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-unit); }
+.locked li { display: flex; justify-content: space-between; gap: var(--space-unit); padding: var(--space-unit) calc(var(--space-unit) * 2); background: var(--color-background); border: 1px dashed color-mix(in srgb, var(--color-text) 45%, transparent); border-radius: var(--radius-control); }
+.lock { font-size: 0.875em; }
+.paper { display: grid; gap: var(--space-unit); padding: calc(var(--space-unit) * 3); background: var(--color-surface); color: var(--color-text); border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent); border-block-start: 4px solid var(--doc-accent); border-radius: var(--radius-control); }
+.header, .region { display: grid; gap: var(--space-unit); padding: var(--space-unit); border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent); }
+.regionName { color: var(--doc-accent); }
+.logoRow { display: flex; }
+.logoRow[data-placement='start'] { justify-content: flex-start; }
+.logoRow[data-placement='center'] { justify-content: center; }
+.logoRow[data-placement='end'] { justify-content: flex-end; }
+.logo { padding: var(--space-unit) calc(var(--space-unit) * 3); border: 1px dashed var(--doc-accent); border-radius: var(--radius-control); }
+.footer { margin: 0; padding-block-start: var(--space-unit); border-block-start: 2px solid var(--doc-accent); overflow-wrap: anywhere; }
+.actions { display: flex; gap: calc(var(--space-unit) * 2); align-items: center; flex-wrap: wrap; }

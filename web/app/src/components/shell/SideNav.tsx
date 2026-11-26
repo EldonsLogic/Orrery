@@ -7,6 +7,7 @@ import { buildNav } from '../../lib/navigation';
 import { callerOf, type SessionClaims } from '../../lib/session';
 import { canViewBlueprint } from '../../blueprint/access';
 import { canEditBranding } from '../../settings/branding/access';
+import { canEditDocumentTemplates } from '../../settings/documents/access';
 import { fixtureBlueprint } from '../../blueprint/fixture';
 import { fixtureData } from '../../records/fixture/rows';
 import styles from './Shell.module.css';
@@ -21,6 +22,7 @@ export function SideNav({ claims, onNavigate }: { claims: SessionClaims; onNavig
     const extra = [{ id: 'chat', label: t('chat'), href: '/chat/' }];
     if (canViewBlueprint(fixtureBlueprint, caller)) extra.push({ id: 'blueprint', label: t('blueprint'), href: '/blueprint/' });
     if (canEditBranding(fixtureBlueprint, caller)) extra.push({ id: 'branding', label: t('branding'), href: '/settings/branding/' });
+    if (canEditDocumentTemplates(fixtureBlueprint, caller)) extra.push({ id: 'documents', label: t('documents'), href: '/settings/documents/' });
     return { ...s, items: [...s.items, ...extra] };
   });
   const hasRecords = sections.some((s) => s.id === 'records');

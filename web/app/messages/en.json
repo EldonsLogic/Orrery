@@ -390,6 +390,10 @@
         "title": "No active workspace",
         "body": "You do not belong to an active workspace. Ask the workspace owner to invite you."
       }
+    },
+    "dock": {
+      "label": "Ask Seshna",
+      "ask": "Ask <brand>Seshna</brand>"
     }
   },
   "branding": {

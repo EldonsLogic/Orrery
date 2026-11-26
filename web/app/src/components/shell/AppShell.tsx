@@ -9,11 +9,17 @@ import { UserMenu } from './UserMenu';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useSession } from './SessionProvider';
 import { usesDrawer } from '../../lib/viewport';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import styles from './Shell.module.css';
 
-/** Top bar, side navigation (a drawer on narrow screens), skip link and the single main landmark. Pages inside render no <main>. */
-export function AppShell({ children }: { children: ReactNode }) {
+/**
+ * Top bar, side navigation (a drawer on narrow screens), skip link and the single main landmark. Pages inside render no <main>.
+ * The top bar, navigation and the phone "Ask Seshna" dock are glass chrome (styles/foundation.css); content stays solid.
+ */
+export function AppShell({ children, brand }: { children: ReactNode; brand?: ReactNode }) {
   const t = useTranslations('shell');
+  const pathname = usePathname() ?? '';
   const { session, switchFailed, dismissError, retry } = useSession();
   const [drawer, setDrawer] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
@@ -86,6 +92,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           {t('nav.toggle')}
         </button>
+        {brand ? (
+          <Link href="/home/" className={styles.brand} aria-label={t('nav.home')}>
+            {brand}
+          </Link>
+        ) : null}
         <WorkspaceSwitcher claims={claims} memberships={memberships} />
         <UserMenu displayName={displayName} claims={claims} />
       </header>
@@ -107,10 +118,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               {t('state.noWorkspace.body')}
             </Alert>
           ) : (
-            children
+            <div className={styles.content}>{children}</div>
           )}
         </main>
       </div>
+      {pathname.startsWith('/chat/') ? null : (
+        <nav aria-label={t('dock.label')} className={styles.dock} inert={drawer}>
+          <Link href="/chat/" className={styles.dockLink}>
+            <span>{t.rich('dock.ask', { brand: (c) => <bdi>{c}</bdi> })}</span>
+          </Link>
+        </nav>
+      )}
     </div>
   );
 }

@@ -1,0 +1,31 @@
+# Session log: web-029-design-foundation
+
+Date: 2026-11-26
+Author: eldon
+Tool and model: claude-code (Claude Opus 5.5)
+Plan IDs: WEB-029
+
+## Summary
+First design pass, part 1 of 2: a shared design foundation for every app screen (type roles, spacing, radius, control sizes, breakpoints, page frame and a glass material for chrome), applied to the shared controls and the app shell. The owner home is part 2, stacked on this branch.
+
+## Files touched
+- docs/PLAN.md: new row WEB-029 (doing, eldon).
+- docs/brand/tokens/tokens.json, tokens.css: card radius 12 to 14 px, as the Seshna design system states (regenerated with build_tokens_css.py).
+- web/app/src/styles/foundation.css (+ test): roles defined once (label, body-strong, KPI numeral 32/40 with Arabic 48, fluid display and h1 only, measure), radius per role, control sizes 32/40/48 and icon sizes, breakpoints 375/768/1024/1440, page max 1280 with fluid padding 16/24/32/48, glass variables (solid by default, translucent only under @supports backdrop-filter, solid again for reduced transparency or more contrast), html base size.
+- web/app/src/ui/Button, control, Card, Badge CSS: sizes sm 32, md 40, lg 48 with a padded 44 px hit area on coarse pointers, icon size per size, inputs at the md height, cards 24 px padding from tablet up, badges pill.
+- web/app/src/components/shell: glass sticky top bar and side navigation, the Seshna lockup built at build time from docs/brand/logo/lockup-primary.svg with token colours (BrandLockup.tsx), a phone dock with "Ask Seshna" always one tap away (safe-area aware), page frame, solid drawer, account name isolated in mixed-direction text.
+- web/package.json: lint copies the tokens first, so check-css-vars sees the accepted v1.1 tokens in CI as it does locally.
+
+## Decisions
+- Glass departs from the design system's "flat, no shadows" rule at Eldon's request (chrome and overlays only, never content). The brand docs need an update; Eldon will handle it.
+- Breakpoint and rem tokens: media queries cannot read variables, so the breakpoints are reference values in foundation.css; token sizes stay px because the token generator emits px (rem output is a generator change, not done here).
+- Icon-rail sidebar at about 1024 is not built: the brand has no general icon set yet. Between 769 and 1023 the sidebar narrows instead.
+
+## Checks
+pnpm lint, typecheck, test (357 vitest + 135 node), next build, theme engine tests, check_docs, check_repo_hygiene, check_proposed: all pass. Screenshots at 375/768/1024/1440, EN and AR, light and dark, kept outside the repo.
+
+## Tokens or cost
+Not measured.
+
+## Next step
+WEB-029 part 2 (owner home, stacked PR), then one PR per screen on this foundation.

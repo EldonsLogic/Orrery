@@ -1,0 +1,122 @@
+/*
+ * Design foundation (WEB-029). Loaded after the brand tokens. It names the roles every screen uses and defines
+ * each one once; components read these names and never raw sizes. Colours stay in the token files.
+ *
+ * Spacing: the steps come from tokens.proposed (Q-70): --space-0_5 (4), --space-1 (8), --space-1_5 (12),
+ *   --space-2 (16), --space-3 (24), --space-4 (32), --space-6 (48), --space-8 (64). Core steps are 8/12/16/24/48;
+ *   4, 32 and 64 only where a layout needs them.
+ * Breakpoints (media queries cannot read variables, so these are the reference values; mobile-first, min-width):
+ *   phone 375, tablet 48rem (768), laptop 64rem (1024), desktop 90rem (1440).
+ * Radius: one per role. Cards and panels --radius-md, controls --radius-sm, badges --radius-pill. Border: 1px.
+ * Glass: a material for chrome and overlays only (top bar, side navigation, the Ask Seshna dock, popovers), never for
+ *   content cards, numbers, tables or forms, and never glass on glass. Solid surface unless backdrop-filter works,
+ *   and solid again for reduced transparency or more contrast.
+ */
+:root {
+  --bp-phone: 375px;
+  --bp-tablet: 768px;
+  --bp-laptop: 1024px;
+  --bp-desktop: 1440px;
+
+  --radius-md: var(--radius-card);
+  --radius-sm: var(--radius-control);
+  --radius-pill: 999px;
+  --hairline: var(--border-width) solid var(--color-border);
+
+  /* Type roles not in the token files. Weights used anywhere: 400, 500, 600, 700. */
+  --text-strong-weight: 500;
+  --text-label-size: var(--text-small-size);
+  --text-label-line: var(--text-small-line);
+  --text-label-weight: 500;
+  --text-kpi-size: 32px;
+  --text-kpi-line: 40px;
+  --text-kpi-weight: 600;
+  /* Fluid only for display and h1; body stays 16. */
+  --text-display-fluid: clamp(2rem, 1.6rem + 1.2vw, 2.5rem);
+  --text-h1-fluid: clamp(1.625rem, 1.4rem + 0.8vw, 2rem);
+  --measure: 68ch;
+
+  /* Control sizes: sm 32, md 40, lg 48; the hit area is at least --touch-target on coarse pointers. */
+  --control-sm: var(--control-height-compact);
+  --control-md: var(--control-height);
+  --control-lg: var(--control-height-touch);
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 20px;
+  --control-gap: var(--space-1);
+
+  /* Page frame: content max width and fluid padding (16 phone, 24 tablet, 32 laptop, 48 desktop). */
+  --page-max: 1280px;
+  --page-pad: var(--space-2);
+
+  /* Glass, solid by default. */
+  --glass-alpha: 100%;
+  --glass-fill: color-mix(in srgb, var(--color-surface) var(--glass-alpha), transparent);
+  --glass-filter: none;
+  --glass-edge: var(--color-border);
+  --glass-highlight: inset 0 1px 0 transparent;
+}
+
+[dir='rtl'] {
+  --text-kpi-line: 48px;
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --page-pad: var(--space-3);
+  }
+}
+
+@media (min-width: 64rem) {
+  :root {
+    --page-pad: var(--space-4);
+  }
+}
+
+@media (min-width: 90rem) {
+  :root {
+    --page-pad: var(--space-6);
+  }
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass-alpha: 72%;
+    --glass-filter: blur(20px) saturate(160%);
+    --glass-edge: color-mix(in srgb, var(--color-text) 10%, transparent);
+    --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-surface) 80%, transparent);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --glass-alpha: 64%;
+      --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --glass-alpha: 64%;
+    --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
+  }
+}
+
+/* Accessibility wins over the theme blocks above, hence !important. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root {
+    --glass-alpha: 100% !important;
+    --glass-filter: none !important;
+    --glass-edge: var(--color-border) !important;
+  }
+}
+
+html {
+  font-size: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  font-weight: var(--text-body-weight);
+  font-synthesis: none;
+}

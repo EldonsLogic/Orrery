@@ -1,3 +1,4 @@
+/* App shell (WEB-003, design pass WEB-029). Glass is chrome only: top bar, side navigation, phone dock, account panel. */
 .root {
   display: flex;
   flex-direction: column;
@@ -16,41 +17,67 @@
 
 .skip {
   position: absolute;
-  inset-inline-start: calc(var(--space-unit) * 2);
-  inset-block-start: calc(var(--space-unit) * -8);
+  inset-inline-start: var(--space-2);
+  inset-block-start: calc(var(--space-8) * -1);
   z-index: 30;
-  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  padding: var(--space-1) var(--space-2);
   background: var(--color-primary);
   color: var(--color-background);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-sm);
 }
 
 .skip:focus {
-  inset-block-start: var(--space-unit);
+  inset-block-start: var(--space-1);
 }
 
 .topBar {
-  position: relative;
+  position: sticky;
+  inset-block-start: 0;
   z-index: 11;
   display: flex;
   align-items: center;
-  gap: calc(var(--space-unit) * 2);
-  padding: var(--space-unit) calc(var(--space-unit) * 2);
-  padding-inline: max(calc(var(--space-unit) * 2), var(--safe-inline));
-  padding-block-start: max(var(--space-unit), var(--safe-block-start));
-  background: var(--color-surface);
-  border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  gap: var(--space-2);
+  box-sizing: border-box;
+  min-block-size: var(--topbar-height);
+  padding-block: var(--space-1);
+  padding-inline: max(var(--page-pad), var(--safe-inline));
+  padding-block-start: max(var(--space-1), var(--safe-block-start));
+  background: var(--glass-fill);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  border-block-end: var(--border-width) solid var(--glass-edge);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-block-size: var(--touch-target);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+.brand svg {
+  display: block;
+  inline-size: auto;
+  block-size: var(--space-3);
+}
+
+.brand [data-part='mark'] {
+  color: var(--seshna-mark);
 }
 
 .menuButton,
 .userButton {
-  min-block-size: max(var(--button-height), var(--touch-target));
-  padding-inline: calc(var(--space-unit) * 2);
-  border: 1px solid color-mix(in srgb, var(--color-text) 25%, transparent);
-  border-radius: var(--radius-control);
+  min-block-size: var(--control-md);
+  padding-inline: var(--space-1_5);
+  border: var(--border-width) solid color-mix(in srgb, var(--color-text) 25%, transparent);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
+  font-size: var(--text-label-size);
+  font-weight: var(--text-label-weight);
   cursor: pointer;
 }
 
@@ -62,6 +89,8 @@
 .userButton:focus-visible,
 .select:focus-visible,
 .navLink:focus-visible,
+.brand:focus-visible,
+.dockLink:focus-visible,
 .link:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-primary);
   outline-offset: var(--focus-ring-offset);
@@ -70,24 +99,33 @@
 .switcher {
   display: flex;
   align-items: center;
-  gap: var(--space-unit);
+  gap: var(--space-1);
   flex: 1 1 auto;
   min-inline-size: 0;
 }
 
+/* The workspace select keeps its label for assistive tech; the lockup and the select say enough visually. */
 .switcherLabel {
-  font-size: var(--text-small-size);
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .select {
-  min-block-size: max(var(--button-height), var(--touch-target));
+  min-block-size: var(--control-md);
+  min-inline-size: 0;
   max-inline-size: 100%;
-  padding-inline: var(--space-unit);
-  border: 1px solid color-mix(in srgb, var(--color-text) 25%, transparent);
-  border-radius: var(--radius-control);
-  background: var(--color-background);
+  text-overflow: ellipsis;
+  padding-inline: var(--space-1);
+  border: var(--border-width) solid color-mix(in srgb, var(--color-text) 25%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
+  font-size: var(--text-label-size);
 }
 
 .userMenu {
@@ -102,26 +140,29 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: calc(var(--space-unit) * 1.5);
-  min-inline-size: min(16rem, calc(100vw - var(--space-unit) * 4));
-  max-inline-size: calc(100vw - var(--space-unit) * 4);
+  gap: var(--space-1_5);
+  min-inline-size: min(16rem, calc(100vw - var(--space-4)));
+  max-inline-size: calc(100vw - var(--space-4));
   box-sizing: border-box;
-  margin-block-start: var(--space-unit);
-  padding: calc(var(--space-unit) * 2);
-  background: var(--color-surface);
-  border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
-  border-radius: var(--radius-card);
+  margin-block-start: var(--space-1);
+  padding: var(--space-2);
+  background: var(--glass-fill);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  border: var(--border-width) solid var(--glass-edge);
+  border-radius: var(--radius-md);
+  box-shadow: var(--glass-highlight), var(--shadow-overlay);
 }
 
 .panelName {
   margin: 0;
-  font-weight: var(--text-h3-weight);
+  font-weight: var(--text-strong-weight);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--space-unit) * 0.5);
+  gap: var(--space-0_5);
   inline-size: 100%;
   font-size: var(--text-small-size);
 }
@@ -133,35 +174,44 @@
 }
 
 .navWrap {
-  flex: 0 0 15rem;
-  padding: calc(var(--space-unit) * 2);
-  background: var(--color-surface);
-  border-inline-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  position: sticky;
+  inset-block-start: var(--topbar-height);
+  flex: 0 0 var(--sidebar-width);
+  box-sizing: border-box;
+  block-size: calc(100dvh - var(--topbar-height));
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-2);
+  background: var(--glass-fill);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  border-inline-end: var(--border-width) solid var(--glass-edge);
 }
 
 .nav {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--space-unit) * 2);
+  gap: var(--space-3);
 }
 
 .navSection {
   display: flex;
   flex-direction: column;
-  gap: var(--space-unit);
+  gap: var(--space-1);
 }
 
 .navHeading {
   margin: 0;
+  padding-inline: var(--space-1_5);
   font-size: var(--text-caption-size);
-  font-weight: var(--text-caption-weight);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-label-weight);
   opacity: 0.75;
 }
 
 .navList {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--space-unit) * 0.5);
+  gap: var(--space-0_5);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -170,21 +220,24 @@
 .navLink {
   display: flex;
   align-items: center;
-  min-block-size: var(--touch-target);
+  min-block-size: var(--control-md);
   box-sizing: border-box;
-  padding: var(--space-unit) calc(var(--space-unit) * 1.5);
-  border-radius: var(--radius-control);
+  padding: var(--space-1) var(--space-1_5);
+  border-radius: var(--radius-sm);
   color: var(--color-text);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
   text-decoration: none;
+  transition: background-color var(--motion-fast) var(--motion-ease);
 }
 
-.navLink:hover,
+.navLink:hover {
+  background: var(--state-hover);
+}
+
 .navLink[aria-current='page'] {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent);
-}
-
-.navLink[aria-current='page'] {
-  font-weight: var(--text-h3-weight);
+  font-weight: var(--text-label-weight);
 }
 
 .navEmpty {
@@ -195,43 +248,92 @@
 .main {
   flex: 1 1 auto;
   min-inline-size: 0;
-  padding: calc(var(--space-unit) * 3);
-  padding-inline: max(calc(var(--space-unit) * 3), var(--safe-inline));
-  padding-block-end: max(calc(var(--space-unit) * 3), var(--safe-block-end));
+  padding-block: var(--space-4) var(--space-6);
+  padding-inline: max(var(--page-pad), var(--safe-inline));
 }
 
 .main:focus {
   outline: none;
 }
 
+.content {
+  max-inline-size: var(--page-max);
+  margin-inline: auto;
+}
+
 .stateMain {
   display: grid;
   place-items: center;
   flex: 1 1 auto;
-  padding: calc(var(--space-unit) * 3);
+  padding: var(--space-3);
 }
 
 .link {
   color: var(--color-primary);
 }
 
+/* The phone dock: "Ask Seshna" stays one tap away. Hidden from tablet up, where the side navigation has Chat. */
+.dock {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 9;
+  display: flex;
+  padding: var(--space-1) max(var(--page-pad), var(--safe-inline));
+  padding-block-end: max(var(--space-1), var(--safe-block-end));
+  background: var(--glass-fill);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  border-block-start: var(--border-width) solid var(--glass-edge);
+}
+
+.dockLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-block-size: var(--control-lg);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-background);
+  font-size: var(--text-body-size);
+  font-weight: var(--text-label-weight);
+  text-decoration: none;
+}
+
+@media (pointer: coarse) {
+  .menuButton,
+  .userButton,
+  .select,
+  .navLink {
+    min-block-size: var(--touch-target);
+  }
+}
+
 @media (max-width: 48rem) {
   .main {
-    padding: calc(var(--space-unit) * 2);
-    padding-inline: max(calc(var(--space-unit) * 2), var(--safe-inline));
-    padding-block-end: max(calc(var(--space-unit) * 2), var(--safe-block-end));
+    padding-block: var(--space-3);
+    /* clear the dock: control-lg plus its padding and the safe area */
+    padding-block-end: calc(var(--control-lg) + var(--space-4) + var(--safe-block-end));
   }
 
   .menuButton {
     display: inline-block;
   }
 
-  .switcherLabel {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
+  /* Phones: menu, workspace and account fit one row; the lockup returns from tablet up. */
+  .brand {
+    display: none;
+  }
+
+  .select {
+    flex: 1 1 auto;
+  }
+
+  .userButton {
+    max-inline-size: 40vw;
     overflow: hidden;
-    clip-path: inset(50%);
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
@@ -246,17 +348,30 @@
     inset-inline-start: 0;
     z-index: 10;
     inline-size: min(18rem, 85vw);
-    padding-block-start: calc(var(--space-unit) * 9 + var(--safe-block-start));
+    block-size: auto;
+    padding-block-start: calc(var(--topbar-height) + var(--space-2) + var(--safe-block-start));
     padding-block-end: var(--safe-block-end);
-    overflow-y: auto;
     overscroll-behavior: contain;
+    background: var(--color-surface);
+  }
+}
+
+@media (min-width: 48.0625rem) {
+  .dock {
+    display: none;
+  }
+}
+
+@media (min-width: 48.0625rem) and (max-width: 63.99rem) {
+  .navWrap {
+    flex-basis: calc(var(--sidebar-width) - var(--space-6));
   }
 }
 
 .homeList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-unit);
+  gap: var(--space-1);
   margin: 0;
-  padding-inline-start: calc(var(--space-unit) * 3);
+  padding-inline-start: var(--space-3);
 }

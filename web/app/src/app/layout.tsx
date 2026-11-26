@@ -8,6 +8,7 @@ import { themeColorsFromTokens } from '../pwa/manifest';
 import '../styles/tokens.generated.css';
 import '../styles/tokens.proposed.generated.css';
 import '../styles/mobile.css';
+import '../styles/foundation.css';
 
 export const metadata: Metadata = {
   title: messages[defaultLocale].pwa.name,

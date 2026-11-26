@@ -57,7 +57,7 @@ export function UserMenu({ displayName, claims }: { displayName: string; claims:
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
       >
-        {t('open', { name: displayName })}
+        {t('open', { name: `\u2068${displayName}\u2069` })}
       </button>
       {open ? (
         <div id={panelId} role="group" aria-label={t('panel')} className={styles.panel}>

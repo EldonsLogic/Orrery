@@ -2,16 +2,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-unit);
+  position: relative;
+  gap: var(--control-gap);
   box-sizing: border-box;
-  min-block-size: max(var(--button-height), var(--touch-target));
-  padding-inline: calc(var(--space-unit) * 2);
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
+  --button-size: var(--control-md);
+  min-block-size: var(--button-size);
+  padding-inline: var(--space-2);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-sm);
   font-family: var(--font-body);
-  font-size: var(--text-body-size);
-  line-height: var(--text-body-line);
-  font-weight: var(--text-h3-weight);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--motion-ease),
@@ -19,7 +22,24 @@
 }
 
 :lang(ar) .root {
-  line-height: var(--text-body-line-ar);
+  line-height: var(--text-small-line-ar);
+}
+
+/* Icons take the size of their control size. */
+.root > svg {
+  flex: none;
+  inline-size: var(--button-icon, var(--icon-md));
+  block-size: var(--button-icon, var(--icon-md));
+}
+
+/* On touch, pad the hit area to the touch target without changing the visual size. */
+@media (pointer: coarse) {
+  .root::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    inset-block: min(0px, calc((var(--button-size) - var(--touch-target)) / 2));
+  }
 }
 
 .root:focus-visible {
@@ -37,19 +57,21 @@
 }
 
 .sm {
-  min-block-size: var(--touch-target);
-  padding-inline: calc(var(--space-unit) * 1.5);
-  font-size: var(--text-small-size);
-  line-height: var(--text-small-line);
-}
-
-:lang(ar) .sm {
-  line-height: var(--text-small-line-ar);
+  --button-size: var(--control-sm);
+  --button-icon: var(--icon-sm);
+  padding-inline: var(--space-1_5);
 }
 
 .lg {
-  min-block-size: calc(var(--button-height) * 1.2);
-  padding-inline: calc(var(--space-unit) * 3);
+  --button-size: var(--control-lg);
+  --button-icon: var(--icon-lg);
+  padding-inline: var(--space-3);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+}
+
+:lang(ar) .lg {
+  line-height: var(--text-body-line-ar);
 }
 
 .primary {

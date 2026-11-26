@@ -5,7 +5,7 @@
   "engines": { "node": ">=20.9.0" },
   "scripts": {
     "tokens": "node scripts/copy-tokens.mjs",
-    "lint": "eslint . && node scripts/check-tokens-only.mjs && node scripts/check-rtl-css.mjs && node scripts/check-css-vars.mjs && node scripts/check-contrast.mjs",
+    "lint": "node scripts/copy-tokens.mjs && eslint . && node scripts/check-tokens-only.mjs && node scripts/check-rtl-css.mjs && node scripts/check-css-vars.mjs && node scripts/check-contrast.mjs",
     "check:tokens": "node scripts/check-tokens-only.mjs",
     "check:rtl": "node scripts/check-rtl-css.mjs",
     "typecheck": "pnpm tokens && pnpm -r typecheck",

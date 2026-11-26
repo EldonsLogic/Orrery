@@ -59,6 +59,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |
 | [ADR-0051-adapter-role-and-state-namespacing.md](ADR-0051-adapter-role-and-state-namespacing.md) | Adapter-owned engine roles and workflow states carry a reserved prefix, collisions are refused, role.upsert writes the mapped grants | Proposed |
 | [ADR-0052-isolated-browser-runner-placement.md](ADR-0052-isolated-browser-runner-placement.md) | Isolated browser runner placement (Tier 5 connector) | Proposed |
+| [ADR-0053-model-gateway.md](ADR-0053-model-gateway.md) | Model gateway home, routing, budgets, caching and residency (PLT-009); original author Eldon (#232) | Proposed |
 | [ADR-0057-compiler-and-studio-design-confirmations.md](ADR-0057-compiler-and-studio-design-confirmations.md) | Compiler, token-resolver and Studio design confirmations from open questions | Accepted |
 | [ADR-0056-golden-path-mapping-gaps.md](ADR-0056-golden-path-mapping-gaps.md) | Golden-path engine mapping: complete unmapped list, computed fields engine-authoritative | Proposed |
 | [ADR-0054-model-call-contract.md](ADR-0054-model-call-contract.md) | Model-call interface contract | Proposed |

@@ -201,7 +201,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-008 | Billing and payments for our subscriptions | Platform | G3 | PLT-007,LEG-010 | eldon | todo |
 | PLT-009 | AI model gateway: routing, budgets, caching, logs | Platform | G2 | QA-003 | partner | doing |
 | PLT-010 | Gateway regional routing and provider fallback | Platform | G3 | PLT-009,CMP-019 | partner | todo |
-| PLT-011 | Per-tenant AI cost attribution and caps | Platform | G2 | PLT-009,PLT-025 | partner | todo |
+| PLT-011 | Per-tenant AI cost attribution and caps: regional durable BudgetStore behind the PLT-009 port, per agent and per grant attribution | Platform | G2 | PLT-009,PLT-025 | partner | todo |
 | PLT-012 | Internal team console | Platform | G2 | PLT-005 | eldon | done |
 | PLT-013 | Human review queue (team_reviewed gate) | Platform | G2 | PLT-012 | eldon | done |
 | PLT-014 | Component factory review screens | Platform | G2 | PLT-012,BPL-016 | eldon | done |
@@ -211,7 +211,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | PLT-018 | Entitlement to remove the Powered-by mark | Platform | G2 | PLT-006,BRD-007 | eldon | todo |
 | PLT-019 | Audited just-in-time support access | Platform | G3 | PLT-012,SEC-008 | eldon | todo |
 | PLT-020 | Status page and tenant notifications | Platform | G3 | PLT-015 | eldon | todo |
-| PLT-021 | Per-tenant AI budget and quota enforcement | Platform | G2 | PLT-011 | partner | todo |
+| PLT-021 | Per-tenant AI budget and quota enforcement from plan entitlements into the PLT-009 budget layers | Platform | G2 | PLT-011 | partner | todo |
 | PLT-022 | Custom domains per tenant | Platform | G5 | PLT-017,INF-010 | partner | todo |
 | PLT-023 | Self-serve signup and plan gating switched on | Platform | G5 | PLT-008,GTM-008 | eldon | todo |
 | PLT-024 | Gateway: own API paths, block or rewrite engine paths, strip engine headers, rename cookies, map engine errors to our error model (ADR-0016); review fixes on PR #123, live binding awaits durable audit spool and identity-bound audit records | Platform | G1 | PLT-001 | partner | todo |

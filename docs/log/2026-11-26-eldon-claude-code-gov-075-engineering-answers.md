@@ -13,6 +13,8 @@ Eldon delegated his engineering open questions (GOV-074 triage, section B, 252 r
 
 - Batch 2: 50 rows answered, left open as founder decisions: Q-214 .
 
+- Batch 3: 50 rows answered, left open as founder decisions: Q-287 .
+
 ## Files touched
 - `docs/open-questions.md`: ANSWERED prefixes on the B rows.
 - `docs/PLAN.md`: GOV-075 row.

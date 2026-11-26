@@ -105,14 +105,14 @@ def quantize(value: Decimal, currency: str) -> str:
 
 
 def default_registry() -> dict:
-    sales = frozenset({"owner", "finance", "sales_manager"})
+    sales = frozenset({"owner", "accountant", "sales_rep"})  # ids from the example Blueprint's roles
     defs = (
         MetricDef("sales.revenue", "metrics.sales.revenue", "money", "month",
                   ("document.issued",), (), sales, revenue),
         MetricDef("sales.order_count", "metrics.sales.order_count", "count", "month",
                   ("document.issued",), (), sales, invoice_count),
         MetricDef("finance.receivables_outstanding", "metrics.finance.receivables_outstanding", "money",
-                  "as_of", ("document.issued", "payment.created"), (), frozenset({"owner", "finance"}),
+                  "as_of", ("document.issued", "payment.created"), (), frozenset({"owner", "accountant"}),
                   receivables),
     )
     return {d.id: d for d in defs}

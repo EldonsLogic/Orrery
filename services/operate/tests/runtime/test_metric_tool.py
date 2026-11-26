@@ -45,9 +45,11 @@ def test_generator_uses_registry_with_role_filtering():
     t = next(x for x in res.tools if x["name"] == "metric.query")
     assert t["kind"] == "read" and t["risk_class"] == "R0"
     assert t["input_schema"]["properties"]["metric"]["enum"] == sorted(default_registry())
-    assert t["requires"]["roles"] == ["owner"]  # registry roles intersected with this Blueprint's chat roles
+    assert t["requires"]["roles"] == ["accountant", "owner", "sales_rep"]  # Blueprint role ids, no extras
     rbv = t["requires_by_value"]
-    assert rbv["argument"] == "metric" and all(v == ["owner"] for v in rbv["roles"].values())
+    assert rbv["argument"] == "metric"
+    assert rbv["roles"]["sales.revenue"] == ["accountant", "owner", "sales_rep"]
+    assert rbv["roles"]["finance.receivables_outstanding"] == ["accountant", "owner"]
     assert "roles" not in t["input_schema"]["properties"] and "tenant_id" not in t["input_schema"]["properties"]
     plain = generate_tool_api(bp)  # default behaviour unchanged
     assert next(x for x in plain.tools if x["name"] == "metric.query")["input_schema"] != t["input_schema"]

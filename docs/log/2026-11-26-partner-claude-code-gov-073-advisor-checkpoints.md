@@ -24,3 +24,7 @@ Unknown.
 
 ## Next step
 Eldon reviews the shared `agents/` changes (Tier 2). Record advisor calls and catches in later session logs, then compare against a baseline under GOV-038 before making the checkpoints a rule. Optional follow-up: an ADR for a `.claude/agents/` folder if the founders want tier choices enforced through tool configuration.
+
+## Review follow-up (Eldon's two notes on 634eb294)
+- Cost: the advisor is now the orchestrator's tier one effort level up (Opus to an Opus orchestrator), Fable only where Eldon's cost rule allows it, no advisor on Tier 1 work, and each call's token cost is recorded for GOV-038 (`agents/routing.md`).
+- Version: the Claude Code Strongest row now says Claude Fable 5.2 (`claude-fable-5-2`) in `agents/model-registry.md`; the same stale "Fable 5.1" in `agents/delegation-playbook.md` line 14 is fixed too.

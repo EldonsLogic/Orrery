@@ -27,12 +27,12 @@ The orchestrator runs at Strongest and owns the plan row, the briefs, git, the s
 | Worker | Edits the allowed paths in its brief and runs their checks | Mid |
 
 ## Advisor checkpoints (trial, GOV-073)
-An advisor is a Strongest model, other than the orchestrator's, that reads and comments but never edits files or runs git. The orchestrator asks it at three moments only:
+An advisor is a model of the orchestrator's tier run one effort level higher (for example Opus as advisor to an Opus orchestrator). It reads and comments but never edits files or runs git. Use Fable as advisor only where Eldon's cost rule allows Fable (the first review of a Tier 3 tax, ledger or security PR). Skip the advisor on Tier 1 work. The orchestrator asks it at three moments only:
 1. **Before a plan**: before claiming a plan row or drafting an ADR, is the approach right and is anything already decided elsewhere?
 2. **On a repeated error**: when the same task fails twice (the escalation rule above), is the work in the wrong place, and should it stop rather than retry?
 3. **Before done**: before `scripts/finish_session.py` and the PR, what is missing (a test, a log entry, a rule)?
 
-Give the advisor the brief, the diff and the error, not the whole transcript. The advisor does not replace the cross-model PR review: a same-vendor advisor is a self-check, and the PR is still reviewed with a different model (AGENTS.md). Record each advisor call and what it caught in the session log; the trial becomes a rule only after a comparison with a baseline (GOV-038, [team-protocol.md](team-protocol.md) section 9).
+Give the advisor the brief, the diff and the error, not the whole transcript. The advisor does not replace the cross-model PR review: a same-vendor advisor is a self-check, and the PR is still reviewed with a different model (AGENTS.md). Record each advisor call, what it caught and its token cost (or "unknown") in the session log; the trial becomes a rule only after a comparison with a baseline (GOV-038, [team-protocol.md](team-protocol.md) section 9).
 
 ## Orchestrator rules
 1. Break work into small scoped tasks, each with a plan ID, goal, files in scope and acceptance criteria. Never hand out "build X".

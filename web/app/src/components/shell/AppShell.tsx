@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Menu as MenuIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Alert, Button } from '../../ui';
 import { LoadingMark } from '../marks/LoadingMark';
@@ -91,7 +92,8 @@ export function AppShell({ children, brand }: { children: ReactNode; brand?: Rea
           aria-controls="app-nav"
           onClick={() => setDrawer((v) => !v)}
         >
-          {t('nav.toggle')}
+          <MenuIcon aria-hidden="true" className={styles.menuIcon} strokeWidth={1.75} />
+          <span className={styles.switcherLabel}>{t('nav.toggle')}</span>
         </button>
         {brand ? (
           <Link href="/home/" className={styles.brand} aria-label={t('nav.home')}>

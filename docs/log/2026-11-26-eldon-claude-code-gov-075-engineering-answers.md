@@ -17,9 +17,11 @@ Eldon delegated his engineering open questions (GOV-074 triage, section B, 252 r
 
 - Batch 4: 50 rows answered, left open as founder decisions: Q-404 .
 
+- Batch 5: 47 rows answered, left open as founder decisions: Q-540 .
+
 ## Files touched
 - `docs/open-questions.md`: ANSWERED prefixes on the B rows.
-- `docs/PLAN.md`: GOV-075 row.
+- `docs/PLAN.md`: GOV-075 row; ten follow-up rows (BPL-047, OPR-021, OPR-022, PLT-033, PLT-034, SEC-026, SEC-027, DSC-020, QA-021, WEB-030), all eldon, todo.
 
 ## Decisions
 - Answers recorded in `docs/open-questions.md`; no ADR edited. Answers that need an ADR change say so.
@@ -28,4 +30,7 @@ Eldon delegated his engineering open questions (GOV-074 triage, section B, 252 r
 Unknown.
 
 ## Next step
-Batches 2 to 5, follow-up plan rows, then partner review (sayegh9).
+Partner review of PR #371 (sayegh9), especially answers ending "Partner to confirm". Founders decide Q-214, Q-287, Q-404 and Q-540. GOV-075 goes done when #371 merges.
+
+## Totals
+248 of 252 answered; 4 left open as founder decisions (Q-214, Q-287, Q-404, Q-540).

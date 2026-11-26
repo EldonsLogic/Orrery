@@ -5,7 +5,8 @@ The model only drafts; this module decides. Deterministic around one model call 
 instructions are a platform block by reference. The draft is never trusted either: `provides` must be exactly the
 requested need (proven plain by `policy.classify`, never by the model), fixed fields are set here, word lists are a
 secondary deny, the manifest must pass admission, files go to a temp folder under the caller's sandbox root (never
-components/ or the library) and are renamed into place only after the static check and the audit record succeed.
+components/ or the library). Order at the end: a `pending` audit record first, then the rename, then the final
+`drafted` record; a crash never leaves a draft without an audit record.
 Candidate code is never run in this slice (no OS sandbox before INF-014). Nothing is promoted: promotion needs a
 named reviewer who is not the requester (ADR-0034). Every outcome, including an internal error, is one audit record.
 """
@@ -16,6 +17,7 @@ import hashlib
 import json
 import os
 import posixpath
+import re
 import secrets
 import shutil
 import stat
@@ -47,9 +49,19 @@ SCRIPT_KEYS = {"formula", "expression", "script", "server_script", "python", "co
                "query", "sql", "calc", "template", "default"}
 TYPE_KEYS = ("fieldtype", "type", "kind")          # any object with one of these is a field
 NAME_KEYS = ("fieldname", "name", "id", "label")
+# Closed schema for JSON artifacts (L1): any other key is refused, so `field_type`, `datatype`, a name-to-type map,
+# `compute`, `on_change` and `value` cannot carry a field the type check never sees. Values are strings, numbers,
+# booleans, null, lists or objects of these keys. Python files stay free-form (human review at promotion).
+JSON_KEYS = {"fields", "fieldname", "name", "id", "label", "title", "description", "type", "fieldtype", "kind", "options",
+             "target", "required", "columns", "sections", "items", "ar", "en", "text", "version", "layout", "order",
+             "hidden", "read_only", "width", "help"}
 FILE_TYPES = {".py", ".json"}
 TEMPLATE_MARKS = ("eval:", "{{", "{%")
 STALE_TMP_SECONDS = 3600
+# Common words the shared lists catch but that are not rigid-zone words on their own (L4): "due date", "total",
+# "session". Compounds (overdue, unpaid, session token, total amount) still hit through the other word.
+_COMMON = re.compile(r"(?i)(?<![a-z0-9])(totals?|due|sessions?)(?![a-z0-9])")
+_FORMAT_CHARS = re.compile(r"[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]")
 PARAM_TYPES = {"string": "text", "enum": "select"}       # other manifest parameter types are never plain here
 # Secondary deny lists (a hit refuses, a miss proves nothing): auth and tenancy words, plus money words the shared
 # BPL-016 scope list leaves out on purpose (it allows a link to a sales invoice).
@@ -63,8 +75,10 @@ MONEY_TOKENS = policy.RESTRICTED_TOKENS | policy.FINANCIAL_TOKENS | {
 # Arabic stems, matched per word (and adjacent word pair) after prefix removal, never across word boundaries.
 AUTH_AR = tuple(fold(x) for x in ("صلاحي", "مستاجر", "دخول", "كلمهالمرور", "كلمهالسر", "اذون", "اذن", "مصادق",
                                   "مستخدم", "ادوار", "جلسه", "جلسات", "تفويض", "تسجيلالدخول"))
-MONEY_AR = tuple(fold(x) for x in ("رصيد", "خصم", "سعر", "اسعار", "مبلغ", "عموله", "دائن", "مدين", "قبض", "ارباح", "ربح",
-                                   "ميزانيه", "بدل", "رسوم", "بنك", "نقد", "مصروف", "ايراد", "دفع", "سداد", "تسويه"))
+MONEY_AR = tuple(fold(x) for x in ("رصيد", "خصم", "سعر", "اسعار", "مبلغ", "عموله", "دائن", "قبض", "ارباح", "ربح",
+                                   "ميزانيه", "بدل", "رسوم", "بنك", "مصروف", "ايراد", "دفع", "سداد", "تسويه"))
+# Short stems that are also ordinary words (مدينة city, نقدم we offer) match as whole words only (L4).
+MONEY_AR_EXACT = {fold(x) for x in ("مدين", "مدينون", "مدينين", "مدينا", "نقد", "نقدي", "نقديه", "نقدا", "نقود")}
 
 (INVALID, INJECTION, RIGID, UNPROVEN, MODEL_REFUSED, MALFORMED, OUTSIDE, MANIFEST, SANDBOX, INTERNAL, PER_CLIENT,
  PERSONAL, CHECK_FAILED, RESERVED_ID, NOT_STAFF) = (f"FDR-{i:03d}" for i in range(1, 16))
@@ -84,6 +98,14 @@ class Outcome:
     reason: str | None
     record: dict
     draft_dir: Path | None = None
+
+
+ID_RE, CID_RE = re.compile(r"crq_[a-z0-9_]{1,40}"), re.compile(r"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,3}")
+
+
+def _safe(v, pattern):
+    """An unvalidated request field reaches the audit record only if it already matches the schema pattern (L7)."""
+    return v if isinstance(v, str) and pattern.fullmatch(v) else None
 
 
 def _sha(doc) -> str:
@@ -106,11 +128,13 @@ def rigid_hits(*texts: str) -> list[str]:
     """Ledger, tax, e-invoicing, payroll, audit, money, auth or tenancy words (with "ta x" and "log in" pairs)."""
     hits = set(scope_hits(*texts))
     for t in texts:
+        t = _COMMON.sub(" ", t)
         toks = tokens(t)
         words = {s for w in toks + [a + b for a, b in zip(toks, toks[1:])] for s in stems(w)}
         hits.update(words & (AUTH_TOKENS | MONEY_TOKENS))
         forms = {f for w in toks + [a + b for a, b in zip(toks, toks[1:])] for f in ar_forms(w)}
         hits.update(a for a in AUTH_AR + MONEY_AR if any(f.startswith(a) for f in forms))
+        hits.update(f for f in forms if f in MONEY_AR_EXACT)
         if policy.financial_hit(t):
             hits.add("financial")
         hits.update(m for m in TEMPLATE_MARKS if m in t)
@@ -177,29 +201,40 @@ def _layout(files: list) -> None:
         raise Refused(MALFORMED, "file_folder_clash")
 
 
+def _no_duplicates(pairs):
+    keys = [str(k).casefold() for k, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+
+
 def _json_fields(rel: str, content: str) -> None:
-    """Declared fields in a JSON artifact must be plain (policy.field_verdict); script-like keys are refused."""
+    """A JSON artifact is closed (JSON_KEYS), has no duplicate keys, every string passes the word lists once decoded,
+    and every declared field must be plain (policy.field_verdict), whichever type key it carries."""
     try:
-        doc = json.loads(content)
-    except ValueError:
+        doc = json.loads(content, object_pairs_hook=_no_duplicates)
+    except (ValueError, RecursionError):
         raise Refused(MALFORMED, "json_file")
+    _deny(RIGID, *_strings(doc))        # decoded: escapes (\\u007b, Arabic as \\u0636...) cannot hide a word or a mark
     stack = [doc]
     while stack:
         node = stack.pop()
         if isinstance(node, list):
             stack.extend(node)
         elif isinstance(node, dict):
-            keys = {str(k).casefold() for k in node}
-            if SCRIPT_KEYS & keys:
-                raise Refused(RIGID, "route_to_human", hits=[f"{rel}:script"])
             low = {str(k).casefold(): v for k, v in node.items()}
-            typ = next((low[k] for k in TYPE_KEYS if k in low), None)
+            if SCRIPT_KEYS & set(low):
+                raise Refused(RIGID, "route_to_human", hits=[f"{rel}:script"])
+            if set(low) - JSON_KEYS:
+                raise Refused(RIGID, "route_to_human", hits=[f"{rel}:key"])
             if any(k in low for k in TYPE_KEYS):
                 name = next((low[k] for k in NAME_KEYS if isinstance(low.get(k), str)), "")
-                f = {"name": name, "type": typ.casefold() if isinstance(typ, str) else "?", "options": low.get("options"),
-                     "target": low.get("target")}
-                if policy.field_verdict(set(), f)[0] != "plain":
-                    raise Refused(RIGID, "route_to_human", hits=[f"{rel}:{name}"])
+                for k in (k for k in TYPE_KEYS if k in low):         # every type key, not only the first
+                    typ = low[k]
+                    f = {"name": name, "type": typ.casefold() if isinstance(typ, str) else "?",
+                         "options": low.get("options"), "target": low.get("target")}
+                    if policy.field_verdict(set(), f)[0] != "plain":
+                        raise Refused(RIGID, "route_to_human", hits=[f"{rel}:{name}"])
             stack.extend(node.values())
 
 
@@ -253,6 +288,8 @@ def check_draft(req: dict, text: str, owner: str) -> tuple[dict, list]:
     for rel, content in out:
         if rel.casefold().endswith(".json"):
             _json_fields(rel, content)
+        elif _FORMAT_CHARS.search(content) or any(unicodedata.category(c) == "Cf" for c in content):
+            raise Refused(MALFORMED, "format_characters")       # bidi and other invisible characters (L3)
     _deny(RIGID, *_strings(m), *(c for _, c in out), *paths)
     manifest = dict(m, id=req["component_id"], kind="configurable", requires=[], owner={"github": owner},
                     tests=[dict(t, blocking=True) for t in tests],
@@ -285,7 +322,7 @@ class Drafter:
         rec = {"type": "factory.draft", "at": now, "request_sha256": None, "request_id": None, "component_id": None,
                "tenant_id": None, "requester": None, "owner": self.owner, "call_id": None, "model": None,
                "manifest_sha256": None, "files_sha256": None, "sandbox": None, "hits": [], "draft_dir": None,
-               "reviewed": False, "promotable": False,
+               "replayed": False, "reviewed": False, "promotable": False,
                "promotion": "manual only: a named reviewer who is not the requester (ADR-0034)"}
         tmp = placed = None
         try:
@@ -295,7 +332,7 @@ class Drafter:
                 raise Refused(NOT_STAFF, "platform_staff_only")
             rec["request_sha256"] = _sha(req)
             if isinstance(req, dict):
-                rec.update(request_id=req.get("request_id"), component_id=req.get("component_id"))
+                rec.update(request_id=_safe(req.get("request_id"), ID_RE), component_id=_safe(req.get("component_id"), CID_RE))
             check_request(req)
             root = self._root()
             final = root / f"{req['request_id']}-{rec['request_sha256'][:8]}"
@@ -313,6 +350,7 @@ class Drafter:
             if rep.level_reached != "draft" or errors != ["FAC-012"]:
                 raise Refused(CHECK_FAILED, "sandbox_check:" + ",".join(errors))
             rec.update(outcome="drafted", status="draft", code=None, reason=None, draft_dir=str(final))
+            self.audit(copy.deepcopy(dict(rec, outcome="pending", status="pending")))   # before anything is in place
             (tmp / "draft.json").write_text(json.dumps(rec, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
                                             encoding="utf-8")
             try:
@@ -324,7 +362,7 @@ class Drafter:
             os.rename(tmp / "draft.json", final / "draft.json")
             os.rmdir(tmp)
             tmp = None
-            self.audit(copy.deepcopy(rec))             # `drafted` only after the rename; a failing sink removes it
+            self.audit(copy.deepcopy(rec))             # final `drafted` record after the rename; a failing sink removes it
             placed = None
             return Outcome("drafted", None, None, rec, final)
         except Refused as exc:
@@ -362,7 +400,7 @@ class Drafter:
                 "tier": TIER, "purpose": PURPOSE, "prompt_version": PROMPT_VERSION,
                 "blocks": [{"content_id": PROMPT_BLOCK, "trust": "platform", "data_class": "C0"},
                            {"content_id": "request", "trust": "untrusted", "role": "user", "turn": 0, "data_class": "C1",
-                            "source": f"factory_request:{req['request_id']}", "text": json.dumps(req, ensure_ascii=False)}],
+                            "source": f"factory_request:{req['request_id']}", "text": json.dumps(req, sort_keys=True, ensure_ascii=False)}],
                 "max_output_tokens": MAX_OUT, "min_output_tokens": MIN_OUT, "accepts_untrusted": True,
                 "thread_tainted": True, "locale": req["locale"], "metadata": {"feature": "factory.draft"}}
         try:
@@ -372,6 +410,7 @@ class Drafter:
                           "model_refused")
         if not isinstance(reply, dict):
             raise Refused(MALFORMED, "incomplete_reply")
+        rec["replayed"] = reply.get("replayed") is True    # a stored reply (24 h) is replayed, not a new call (L2)
         rec["model"] = {"tier": reply.get("tier"), "prompt_version": PROMPT_VERSION, "call_id": key,
                         "meter_event_id": reply.get("meter_event_id")}   # model id: in the meter event, by design
         if reply.get("kind") != "reply" or reply.get("stop_reason") != "end" or not isinstance(reply.get("text"), str):

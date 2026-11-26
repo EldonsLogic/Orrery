@@ -42,3 +42,9 @@ A cross-model re-review of #287. After that, the next BPL-017 slices are a promo
 
 ## MFA on the staff gate
 - The drafter gate now also requires `mfa_satisfied` true on the principal, matching the feature-flag and review-queue staff gates; missing, false or non-boolean is refused with `FDR-015` (3 new tests, written first). No control-plane import: the host copies the value from the verified claims (UNVERIFIED until the host adapter exists; ADR-0065 note).
+
+## Round 3: partner review of PR #287 at a462b65 (M1, L1 to L7)
+- Merged main. Each fix has a test written first (`test_drafting.py`, 192 passed).
+- M1: JSON artifacts are parsed with duplicate keys refused; the word lists and marks run over the decoded strings; every type key is checked.
+- L1: closed key allow list for JSON artifacts (ADR-0065 item 3). L2: sorted-key block text; `replayed` in the audit record. L3: Cf characters refused in Python. L4: "due", "total", "session" as words and the Arabic `مدين`/`نقد` as whole words no longer refuse. L5: stale ADR-0060 Proposed row removed. L6: `pending` audit, rename, final audit (ADR item 7, README, code agree). L7: request id and component id are copied into the audit only if they match the schema pattern.
+- Not done here: the PR body (still says 24 tests and `run_candidate_tests`) and the PR size need the PR author.

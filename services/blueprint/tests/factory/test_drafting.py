@@ -90,7 +90,7 @@ def test_drafts_into_sandbox_marked_draft_and_unreviewed(env, tmp_path):
     assert rec["manifest_sha256"] and rec["files_sha256"] and rec["call_id"]                              # M2
     assert rec["sandbox"]["levelReached"] == "draft" and rec["sandbox"]["testsRun"] is False             # H4
     assert "FAC-012" in rec["sandbox"]["findings"]
-    assert audit == [rec]
+    assert [r["status"] for r in audit] == ["pending", "draft"] and audit[-1] == rec         # L6
     blocks = sent[0]["blocks"]   # instructions by reference, the request only as untrusted data
     assert blocks[0] == {"content_id": D.PROMPT_BLOCK, "trust": "platform", "data_class": "C0"}
     assert blocks[1]["trust"] == "untrusted" and sent[0]["tier"] == "mid" and sent[0]["purpose"] == "build"
@@ -324,7 +324,7 @@ def test_audit_gets_a_copy_and_drafted_only_after_the_rename(env, tmp_path):
             raise OSError("audit store down")
     out = env(sink=sink)[0].draft(req(), NOW)
     assert (out.code, out.reason) == (D.INTERNAL, "OSError") and empty(tmp_path)
-    assert [r["outcome"] for r in seen] == ["drafted", "refused"] and seen[-1] is not out.record
+    assert [r["outcome"] for r in seen] == ["pending", "drafted", "refused"] and seen[-1] is not out.record
 
 
 def test_target_created_during_the_call_is_not_overwritten(env, tmp_path):
@@ -369,3 +369,97 @@ def test_non_staff_principal_is_refused_before_any_model_call(env, tmp_path, cha
     assert (out.code, out.reason) == (D.NOT_STAFF, "platform_staff_only")
     assert sent == [] and port.reservations == [] and empty(tmp_path)
     assert len(audit) == 1 and audit[0]["code"] == D.NOT_STAFF and audit[0]["status"] == "refused"
+
+
+# ---- PR 287 review at a462b65: M1 and L1 to L7 (every probe written before its fix) ---------------------------------
+def _fields(**kw):
+    return {"fields": [dict({"name": "x", "type": "text"}, **kw)]}
+
+
+@pytest.mark.parametrize("reply", [
+    _jf("screen.json", _fields(label="{{ doc.net*0.15 }}")),                                           # M1
+    _jf("screen.json", '{"fields":[{"name":"x","type":"text","label":"\\u007b\\u007b doc.net*0.15 \\u007d\\u007d"}]}'),
+    _jf("screen.json", '{"fields":[{"name":"x","type":"text","label":"\\u007b% if x %\\u007d"}]}'),
+    _jf("screen.json", '{"fields":[{"name":"x","type":"text","label":"\\u0065val:doc.net"}]}'),
+    _jf("screen.json", json.dumps(_fields(label="ضريبة القيمة المضافة"))),                              # ascii-escaped
+    _jf("screen.json", '{"fields":[{"name":"x","fieldtype":"text","type":"percent"}]}'),               # second type key
+    _jf("screen.json", '{"fields":[{"name":"x","type":"percent","type":"text"}]}'),                    # duplicate keys
+    _jf("screen.json", '{"fields":[{"name":"x","type":"text","type":"text"}]}'),
+    _jf("screen.json", '{"fields":[{"name":"x","Type":"text","type":"percent"}]}'),                    # case twin
+    # L1: keys outside the closed schema
+    _jf("screen.json", {"fields": [{"name": "x", "field_type": "percent"}]}),
+    _jf("screen.json", _fields(datatype="percent")),
+    _jf("screen.json", {"markup": "percent"}),
+    _jf("screen.json", _fields(compute="net*0.15")),
+    _jf("screen.json", _fields(on_change="recalc")),
+    _jf("screen.json", _fields(value="0.15")),
+])
+def test_escaped_duplicate_and_unlisted_json_is_refused(env, tmp_path, reply):
+    out = env(reply=reply)[0].draft(req(), NOW)
+    assert out.status == "refused" and out.code in (D.RIGID, D.MALFORMED), (out.code, out.reason)
+    assert empty(tmp_path)
+
+
+def test_plain_json_artifact_is_still_drafted(env):
+    out = env(reply=_jf("screen.json", {"fields": [{"name": "notes", "type": "text", "label": "Notes"}]}))[0].draft(req(), NOW)
+    assert out.status == "drafted", (out.code, out.reason)
+
+
+def test_block_text_is_canonical_for_a_reordered_request(env, tmp_path):                           # L2
+    (tmp_path / "sbx2").mkdir()
+    da, _, sent_a, _ = env()
+    db, _, sent_b, _ = env(root=tmp_path / "sbx2")
+    da.draft(req(), NOW)
+    db.draft(dict(reversed(list(req().items()))), NOW)
+    assert sent_a[0]["blocks"][1]["text"] == sent_b[0]["blocks"][1]["text"]
+    assert sent_a[0]["idempotency_key"] == sent_b[0]["idempotency_key"]
+
+
+def test_replayed_reply_is_marked_in_the_audit_record(env):                                         # L2
+    out = env(wrap=lambda r: dict(r, replayed=True))[0].draft(req(), NOW)
+    assert out.status == "drafted" and out.record["replayed"] is True
+    assert env(root=None)[0].draft(req(request_id="crq_other"), NOW).record["replayed"] is False
+
+
+@pytest.mark.parametrize("ch", ["\u202e", "\u2066", "\u200b", "\u200f", "\ufeff", "\u00ad"])
+def test_format_characters_in_python_are_refused(env, tmp_path, ch):                                # L3
+    code = f"def done_count(items):\n    # check{ch}\n    return 1\n"
+    out = env(reply=draft_doc(files=[{"path": "visit.py", "content": code}, FILES[1]]))[0].draft(req(), NOW)
+    assert (out.status, out.code, out.reason) == ("refused", D.MALFORMED, "format_characters") and empty(tmp_path)
+
+
+@pytest.mark.parametrize("words", ["due date", "total", "session", "مدينة", "نقدم", "a training session",
+                                   "totals per week"])
+def test_common_words_are_not_over_refused(env, words):                                             # L4
+    out = env()[0].draft(req(description=f"Visit checklist with {words}"), NOW)
+    assert out.status == "drafted", (out.code, out.record["hits"])
+
+
+def test_drafted_python_using_total_is_not_refused(env):                                            # L4
+    code = "def done_count(items):\n    total = len(items)\n    session_count = 1\n    return total - session_count\n"
+    assert env(reply=draft_doc(files=[{"path": "visit.py", "content": code}, FILES[1]]))[0].draft(req(), NOW).status == "drafted"
+
+
+@pytest.mark.parametrize("words", ["overdue", "unpaid", "مدين", "المدينون", "نقد", "نقدا", "session token", "total amount",
+                                   "due payment"])
+def test_true_positives_survive_the_l4_narrowing(env, words):                                       # L4
+    assert env()[0].draft(req(description=f"Visit checklist {words}"), NOW).code == D.RIGID
+
+
+def test_audit_is_written_before_the_rename_and_a_crash_leaves_a_record(env, tmp_path, monkeypatch):   # L6
+    seen = []
+
+    def sink(rec):
+        seen.append((rec["status"], os.path.lexists(tmp_path / "sbx" / Path(rec["draft_dir"] or "x").name)))
+    monkeypatch.setattr(D.os, "rename", lambda *a, **k: (_ for _ in ()).throw(OSError("killed")))
+    out = env(sink=sink)[0].draft(req(), NOW)
+    assert out.code == D.INTERNAL and empty(tmp_path)
+    assert seen[0] == ("pending", False) and seen[-1][0] == "refused"      # recorded before anything is in place
+
+
+def test_request_id_in_audit_is_only_copied_when_valid(env):                                        # L7
+    drafter, _, _, audit = env()
+    out = drafter.draft(req(request_id="crq_x\nINJECTED fake audit line"), NOW)
+    assert out.code == D.INVALID and audit[0]["request_id"] is None and audit[0]["component_id"] == "field.visit_checklist"
+    out = env()[0].draft(req(component_id="<b>x</b>"), NOW)
+    assert out.record["component_id"] is None

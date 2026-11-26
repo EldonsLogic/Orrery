@@ -143,7 +143,6 @@ jobs:
           echo "engine=$(check_path '^(apps/engine/|services/blueprint/|services/discovery/(prevalidate|connectors)/|components/|infra/dev/docker/|docs/brand/tokens/tokens\.json$)')" >> "$GITHUB_OUTPUT"
           echo "evals=$(check_path '^(evals/|services/(blueprint|discovery|operate)/)')" >> "$GITHUB_OUTPUT"
           echo "scripts=$(check_path '^scripts/')" >> "$GITHUB_OUTPUT"
-          echo "contracts=$(check_path '^contracts/')" >> "$GITHUB_OUTPUT"
           echo "infra=$(check_path '^(infra/|apps/engine/)')" >> "$GITHUB_OUTPUT"
           echo "components=$(check_path '^(components/|apps/engine/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
 
@@ -472,7 +471,8 @@ jobs:
 
       # --- contracts ---
       - name: Country pack store contract tests (CMP-038)
-        if: steps.filter.outputs.contracts == 'true' && !cancelled()
+        # Any contracts/ change selects every suite, so the scripts flag is true here.
+        if: steps.filter.outputs.scripts == 'true' && !cancelled()
         run: |
           pip install jsonschema referencing pytest
           python3 -m pytest contracts/tests -q

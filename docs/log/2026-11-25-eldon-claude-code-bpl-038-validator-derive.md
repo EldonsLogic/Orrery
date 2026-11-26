@@ -29,3 +29,7 @@ Removed in review fixes: `colour.auto_adjust`, `lightness`, `_with_lightness`, `
 ## Partner review fixes, round 2 (Gemini 4 Argon findings)
 1. Rule 10 and the resolver disagreed on hex input: `HEX_RE` is now used with `fullmatch` only; a trailing newline is refused, and a present but invalid accent (or a string primary that is not `#RRGGBB`) emits `BP-BRAND-001`. Tests in `services/blueprint/tests/test_rule10_review_fixes.py` and the agreement grid test.
 2. `BP-BRAND-002` reported the wrong ratio (surfaces only). New `tokens.brand_tools.failing_pair` reuses the derive's own `_fails` and `contrast_pairs`; the warning and adjustment carry `pair`, `ratioBefore`, `ratioAfter`, `threshold`. `#0F766E` now reports `secondary-pressed/background` at 4.11 before. Property tests over a colour grid check `ratioBefore < threshold <= ratioAfter`.
+
+## CI fix (python-tests on PR #325)
+1. `test_low_risk_allow_list_still_applies[branding_colour]` used accent `#112233`, which the token resolver itself refuses (`TKN-ACCENT-GREY`), so rule 10 correctly returned `BP-BRAND-001`. Fixture was wrong, not rule 10: changed to `#1A5FB4` (validates, resolver accepts). Intent kept: a low-risk branding colour change is allowed.
+2. No `tests.yml` mapping change was needed: `services/blueprint/tests/*` is already mapped, and the "Unmapped test" text in the CI log is the script source, not an emitted error. The engine pymysql and werkzeug errors were a cascade: the engine install step is skipped after the operate step fails.

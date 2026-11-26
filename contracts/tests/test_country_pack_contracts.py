@@ -164,3 +164,13 @@ def test_both_roles_required_in_either_order():
     two_acc = copy.deepcopy(rec)
     two_acc["signOffs"] = [copy.deepcopy(rec["signOffs"][1]) for _ in range(2)]
     assert not validator("record").is_valid(two_acc)
+
+
+def test_trailing_newline_refused_for_digest_and_id():
+    # Python re.search lets `$` match before a final "\n"; the schemas use (?![\s\S]) so ECMA-262 agrees.
+    rec = _dev_record()
+    rec["contentDigest"] = rec["contentDigest"] + "\n"
+    assert not validator("record").is_valid(rec)
+    rec = _dev_record()
+    rec["packId"] = rec["packId"] + "\n"
+    assert not validator("record").is_valid(rec)

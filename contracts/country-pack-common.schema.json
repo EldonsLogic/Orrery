@@ -7,37 +7,37 @@
   "$defs": {
     "digest": {
       "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$",
+      "pattern": "^sha256:[0-9a-f]{64}(?![\\s\\S])",
       "description": "sha256: followed by 64 lowercase hex characters (ADR-0071 item 0). Anything else is malformed."
     },
     "semver": {
       "type": "string",
-      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?(?![\\s\\S])",
       "description": "Same pattern as the version in the country pack schema."
     },
     "countryCode": { "enum": ["SA", "AE", "EG", "QA"] },
-    "packId": { "type": "string", "pattern": "^[a-z]{2}(_[a-z0-9]+)?$" },
-    "componentId": { "type": "string", "pattern": "^country\\.[a-z]{2}(_[a-z0-9]+)?$" },
+    "packId": { "type": "string", "pattern": "^[a-z]{2}(_[a-z0-9]+)?(?![\\s\\S])" },
+    "componentId": { "type": "string", "pattern": "^country\\.[a-z]{2}(_[a-z0-9]+)?(?![\\s\\S])" },
     "publishId": {
       "type": "string",
-      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}(?![\\s\\S])",
       "description": "ULID in Crockford base32, upper case."
     },
-    "kid": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$" },
+    "kid": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}(?![\\s\\S])" },
     "keyEnv": { "enum": ["production", "staging", "dev"] },
     "utcTime": {
       "type": "string",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z(?![\\s\\S])",
       "description": "RFC 3339 time in UTC with a Z suffix."
     },
     "ref": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}$",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}(?![\\s\\S])",
       "description": "Opaque non-blank reference to a record held elsewhere (evidence item, review, audit entry, step-up event)."
     },
     "staffSubject": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}(?![\\s\\S])",
       "description": "Stable staff-realm identity subject (ADR-0047). Never an email or phone number; never written to a tenant audit."
     },
     "nonNegInt": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },

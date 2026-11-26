@@ -29,3 +29,9 @@ Unknown.
 ## Next step
 - Partner confirms CMP-039 (CMP-042 to CMP-044) can consume these schemas; fold any change into ADR-0071 revision 3.
 - CMP-038 next slice: change record body for withdrawals, floor raises and follow-up closures; the publish service and staff screen.
+
+## Review fix (round 2)
+- Patterns in `country-pack-common`, `-record`, `-pin` schemas now end with `(?![\s\S])` instead of `$`: Python `re` let `$` match before a trailing newline. Same pattern works in ECMA-262.
+- `contracts/tests/test_country_pack_contracts.py`: test that a trailing `\n` is refused for `contentDigest` and `packId`.
+- `contracts/country-pack-store.md` assumption 5: `memberRef` is out of scope for pin approvals.
+- Checks: check_contracts OK (21 schemas); contracts/tests 56 passed; check_docs and check_repo_hygiene OK.

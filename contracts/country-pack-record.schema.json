@@ -171,10 +171,10 @@
       "additionalProperties": false,
       "properties": {
         "format": { "const": "webauthn.get.v1" },
-        "credentialId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,1366}$" },
-        "authenticatorData": { "type": "string", "pattern": "^[A-Za-z0-9_-]{49,4096}$" },
-        "clientDataJSON": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,4096}$" },
-        "signature": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,2048}$" }
+        "credentialId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,1366}(?![\\s\\S])" },
+        "authenticatorData": { "type": "string", "pattern": "^[A-Za-z0-9_-]{49,4096}(?![\\s\\S])" },
+        "clientDataJSON": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,4096}(?![\\s\\S])" },
+        "signature": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,2048}(?![\\s\\S])" }
       }
     },
     "signOffBase": {
@@ -205,7 +205,7 @@
       "unevaluatedProperties": false,
       "properties": {
         "role": { "const": "founder" },
-        "founderLogin": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$" }
+        "founderLogin": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?![\\s\\S])" }
       }
     }
   }

@@ -1,0 +1,15 @@
+.page { display: grid; gap: calc(var(--space-unit) * 3); max-inline-size: 72rem; }
+.layout { display: grid; gap: calc(var(--space-unit) * 3); grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); align-items: start; }
+.row { display: flex; flex-wrap: wrap; gap: calc(var(--space-unit) * 2); align-items: end; }
+.picker { inline-size: calc(var(--space-unit) * 8); block-size: calc(var(--space-unit) * 6); padding: 0; border: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent); border-radius: var(--radius-control); background: var(--color-surface); cursor: pointer; }
+.picker:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.swatch { display: inline-block; inline-size: calc(var(--space-unit) * 3); block-size: calc(var(--space-unit) * 3); border: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent); border-radius: var(--radius-control); vertical-align: middle; }
+.panel { display: grid; gap: calc(var(--space-unit) * 2); padding: calc(var(--space-unit) * 3); background: var(--color-background); color: var(--color-text); border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent); border-radius: var(--radius-control); }
+.panelCard { padding: calc(var(--space-unit) * 2); background: var(--color-surface); border-radius: var(--radius-control); display: grid; gap: var(--space-unit); }
+.pBtn { justify-self: start; padding: var(--space-unit) calc(var(--space-unit) * 2); border: 0; border-radius: var(--radius-control); background: var(--color-primary); color: var(--color-primary-label); font: inherit; }
+.pLink { color: var(--color-primary); text-decoration: underline; }
+.pairs { inline-size: 100%; border-collapse: collapse; }
+.pairs th, .pairs td { padding: var(--space-unit); text-align: start; border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent); }
+.num { font-variant-numeric: tabular-nums; }
+.actions { display: flex; gap: calc(var(--space-unit) * 2); align-items: center; flex-wrap: wrap; }
+.failed { margin-block: var(--space-unit); padding-inline-start: calc(var(--space-unit) * 3); }

@@ -536,11 +536,25 @@ class TestApiDeployment(unittest.TestCase):
                 )
                 doc_inserts.append(self.data)
 
+        session = {"lock_wait_timeout": 50}  # the server default until the engine sets it
+
         class MockFrappeDB:
+            transaction_writes = 0  # nothing pending: the engine may open a fresh read view
+
+            def rollback(self):
+                sql_calls.append(("ROLLBACK", None))
+
             def sql(self, query, values=None):
                 sql_calls.append((query.strip(), values))
                 q_upper = query.upper()
+                if q_upper.startswith("SET SESSION LOCK_WAIT_TIMEOUT"):
+                    session["lock_wait_timeout"] = int(query.split("=")[1])  # stateful: the read-back echoes this
+                    return ()
+                if "SELECT @@SESSION.LOCK_WAIT_TIMEOUT" in q_upper:
+                    return ((session["lock_wait_timeout"],),)
                 if "SELECT GET_LOCK" in q_upper:
+                    return ((1,),)
+                if "SELECT IS_USED_LOCK" in q_upper:
                     return ((1,),)
                 if "SELECT RELEASE_LOCK" in q_upper:
                     return ((1,),)
@@ -626,7 +640,12 @@ class TestApiDeployment(unittest.TestCase):
         self.assertTrue(any("SELECT RELEASE_LOCK" in q for q in query_texts))
         self.assertTrue(any("CLEAR_CACHE:Sales Order" in q for q in query_texts))
 
-        # Verify GET_LOCK key length <= 64 chars
+        # The timeout was applied on the session and read back from it (not echoed from a constant)
+        self.assertTrue(any("lock_wait_timeout = 3" in q for q in query_texts), "it was set to 3 on the session ...")
+        self.assertEqual(session["lock_wait_timeout"], 50, "... and the caller's value was restored afterwards")
+        self.assertIsNone(adapter.lock_wait_timeout_seconds)
+
+        # Verify GET_LOCK key length <= 64 chars (the first lock is the site-scoped idempotency lock)
         get_lock_call = next(c for c in sql_calls if "SELECT GET_LOCK" in c[0])
         lock_key_used = get_lock_call[1][0]
         self.assertLessEqual(len(lock_key_used), 64)

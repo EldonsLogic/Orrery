@@ -1,6 +1,6 @@
 [project]
 name = "change_engine"
-description = "Guarded configuration apply layer for the Orrery engine"
+description = "Guarded configuration apply layer for the Seshna engine"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]

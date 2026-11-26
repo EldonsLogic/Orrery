@@ -68,12 +68,12 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
                           "artifacts": [{"type": "function", "ref": "synthetic_loader"}]}],
             "requires": [], "parameters": [],
             "tests": [{"id": "synthetic_test", "kind": "unit", "path": "synthetic_test.py", "blocking": True}],
-            "certification": {"level": status, "reviewedBy": ["synthetic-reviewer"],
+            "certification": {"level": status, "reviewedBy": ["EldonsLogic"],
                               "certifiedAt": "2026-01-01T00:00:00Z",
                               "evidence": [{"kind": "review", "ref": "synthetic-review"}],
                               "touchesLedgerOrTax": status != "draft"},
             "engineCompatibility": {"adapter": "change_engine", "engineRange": ">=0.1.0 <1.0.0"},
-            "licence": {"spdx": "LicenseRef-Proprietary"}, "owner": {"github": "synthetic-owner"},
+            "licence": {"spdx": "LicenseRef-Proprietary"}, "owner": {"github": "sayegh9"},
         })
         self._save(version, "evidence.json", {
             "packId": pack["packId"], "version": version,
@@ -114,7 +114,7 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
     def test_production_refuses_self_review_case_insensitively(self) -> None:
         v = self._write("certified", "secondary")
         manifest = self._record(v, "manifest.json")
-        manifest["certification"]["reviewedBy"].append("SYNTHETIC-OWNER")
+        manifest["certification"]["reviewedBy"].append("SAYEGH9")
         self._save(v, "manifest.json", manifest)
         self._assert_refused(v)
 
@@ -371,6 +371,12 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
                         record = json.loads(path.read_text())
                         record["certification"]["founder"] = founder
                         self._save(v, "evidence.json", record)
+                        # The approving founder owns the pack; the other founder reviews (CMP-036).
+                        owner, reviewer = ("sayegh9", "EldonsLogic") if founder == "partner" else ("EldonsLogic", "sayegh9")
+                        manifest = self._record(v, "manifest.json")
+                        manifest["owner"]["github"] = owner
+                        manifest["certification"]["reviewedBy"] = [reviewer]
+                        self._save(v, "manifest.json", manifest)
                         self._assert_loads(v)  # both public entry points, production by default
                         self._assert_loads(v, environment="production")
 
@@ -405,7 +411,7 @@ class TestCountryPackGoLiveGate(unittest.TestCase):
 
     def test_production_checks_manifest_level_and_named_reviewer(self) -> None:
         for status in GO_LIVE_STATUSES:
-            for certification in (None, [], {}, {"level": "tested", "reviewedBy": ["synthetic-reviewer"]},
+            for certification in (None, [], {}, {"level": "tested", "reviewedBy": ["EldonsLogic"]},
                                   *({"level": status, "reviewedBy": r} for r in
                                     (None, [], "synthetic-reviewer", [" "], [7], ["invalid_login"]))):
                 with self.subTest(status=status, certification=certification):

@@ -34,6 +34,8 @@ class ActionAudit:
     decision: str
     reason: str
     break_glass: bool = False
+    # Q-41, Q-563: the sole owner approved their own request or their own agent's draft (review report input).
+    self_approved: bool = False
 
 
 @dataclass(frozen=True)
@@ -148,9 +150,11 @@ class ActionPolicyStore:
                             raise ValueError("Untrusted clock")
                         audit = replace(audit, timestamp=now)
                         if expires_at is not None and now >= expires_at:
-                            audit = replace(audit, decision="deny", reason="expired", break_glass=False)
+                            audit = replace(audit, decision="deny", reason="expired", break_glass=False,
+                                            self_approved=False)
                     except Exception:
-                        audit = replace(audit, decision="deny", reason="clock_unavailable", break_glass=False)
+                        audit = replace(audit, decision="deny", reason="clock_unavailable", break_glass=False,
+                                        self_approved=False)
                 if audit.decision != "deny":
                     assert audit.submitter is not None
                     keys = [("request", audit.request_id), ("idempotency", json.dumps(
@@ -165,7 +169,8 @@ class ActionPolicyStore:
                         ).rowcount
                         if not inserted:
                             db.execute("ROLLBACK TO claims")
-                            audit = replace(audit, decision="deny", reason="replay", break_glass=False)
+                            audit = replace(audit, decision="deny", reason="replay", break_glass=False,
+                                            self_approved=False)
                             break
                     db.execute("RELEASE claims")
                 if audit.decision != "deny":
@@ -196,6 +201,24 @@ class ActionPolicyStore:
             return tuple(records)
         finally:
             db.close()
+
+    def self_approved_report(self, tenant_id: str, since: datetime, until: datetime) -> tuple[ActionAudit, ...]:
+        """Q-41, Q-563 review report input: one tenant's self-approved allows with since <= time < until.
+
+        Read-only, from the persisted journal, ordered by decision time (append order breaks ties).
+        Records are the stored audit snapshots, so no payload fields beyond the audit's own. Fails closed:
+        a blank or non-text tenant, a non-aware instant or a window with since >= until raises ValueError,
+        and an unreadable journal row raises instead of being skipped.
+        """
+        if not (type(tenant_id) is str and tenant_id.strip() and valid_instant(since) and valid_instant(until)
+                and since < until):
+            raise ValueError("Report needs a tenant and a non-empty window of aware instants")
+        selected = [
+            record for record in self.audit_log()
+            if record.tenant_id == tenant_id and record.decision == "allow" and record.self_approved is True
+            and since <= record.timestamp < until
+        ]
+        return tuple(sorted(selected, key=lambda record: record.timestamp))
 
     def admission_key(self, tenant_id: str, request_id: str) -> tuple[str, str] | None:
         """Return (submitter_id, idempotency_key) only while both admission claims exist."""

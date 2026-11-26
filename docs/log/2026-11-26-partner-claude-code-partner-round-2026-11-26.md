@@ -75,13 +75,22 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
   - #344 CMP-039 ADR-0071 revision 3 at 3f6b87e0: Eldon's five fixes and Lows; his answers to Q-652 to Q-657 applied and resolved; Q-677, Q-678; CMP-042 to CMP-044 updated, CMP-045 (per-signer sign-offs) added. Gemini round 3 APPROVE. Asked Eldon: provisional sign-off format, or wait for his contracts/ schema and move CMP-045 to G4.
   - #335 PLT-028 spool spec revision 2.2 at 5c271076: N1 write-through reserve, N2 read-only upstream for ordinary, N3a exit, N4 sign-in marker, Lows; his founder answers applied; Q-647 resolved, Q-675, Q-676. Gemini round 3 APPROVE.
   - Each PR has a re-review request to Eldon with the old and new commit.
+- Eldon's re-reviews (status message 2026-11-26 evening): APPROVED #336 at 1d34590c, #337 at c53c166d, #338 at 6c1f1c46, #355 at 2129b6f2; CHANGES on #335 (N5 Medium from his Q-673 answer, N6 to N9 Low) and #344 (M1 and M2: align ADR-0071 to his contract in #362 and to #360; Lows). He also answered Q-648, Q-649, Q-671 to Q-680 (Q-680 for both founders).
+- Merged on the partner's say-so ("Merge all three", 2026-11-26): #336 (ADR-0070 Proposed), #338 (CE-SEC-011 slice 1), then #355 (ADR-0053 Proposed) after a merge-only update 2129b6f2 to bc58fd63 (`docs/open-questions.md` rows from both sides kept by number; design files unchanged; approval kept, CI green).
+- #337 not merged: Eldon's own merge condition (one real-bench PDF look, or his waiver) is still open; asked him on the PR.
+- Third fix round started (Claude Opus 5.5 high writers in the PR worktrees): D4 for #335 (N5 to N9, Q-675 and Q-676 answers) and E4 for #344 (contract 0.3.0 at #362 head 7f34f6e8, chain walk, withdrawal clears follow-up, Q-677 and Q-678 answers). Both PRs have used three Gemini rounds; a fourth needs the partner's say-so.
+- Coordination (this branch): Q-648, Q-649, Q-671 to Q-674, Q-679 RESOLVED with Eldon's answers; Q-680 RESOLVED by both founders; PLT-009, CE-SEC-009, CE-SEC-010, SEC-002, INF-009 and CMP-033 set done (partner decision below); CE-SEC-012, CE-SEC-013 and CE-SEC-015 take Q-648, Q-649, the trigger pre-flight check and the #336 re-review Lows; PLT-033 added for the model gateway follow-up (consent setting, durable refusals, overrun scope, redaction).
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-round-2026-11-26.md: this live log.
-- docs/PLAN.md: CMP-039 claimed (#342); doing-row audit applied (coordination-14).
+- docs/PLAN.md: CMP-039 claimed (#342); doing-row audit applied (coordination-14); six design rows done, CE-SEC-012/013/015 amended, PLT-033 added (coordination-20).
+- docs/open-questions.md: Q-648, Q-649, Q-671 to Q-674, Q-679, Q-680 resolved (coordination-20).
 
 ## Decisions
-- None by the founders this session. Pending: partner Tier 3 say-so on #309, then #319; Eldon's answers on Q-644 to Q-649 and Q-652 to Q-657; the doing-row founder calls (does a design or decision row close on a Proposed ADR; BPL-027; SEC-002; INF-009; ERP-013; QA-016; SEC-004 and CMP-023).
+- Partner, 2026-11-26: merge #336, #338 and #355 (Tier 3, each approved by Eldon).
+- Both founders, Q-680: model calls on a pilot customer's own data are allowed once it has given written consent, recorded as an auditable tenant setting the gateway checks (fail closed); otherwise the per-market hold stands. Legal sufficiency is UNVERIFIED and goes to counsel (LEG-012). Eldon answered on #355; the partner agreed in session.
+- Partner, 2026-11-26: a design or decision row is done when its Proposed ADR merges; build rows still wait for the ADR to be Accepted. Applied to PLT-009, CE-SEC-009, CE-SEC-010, SEC-002 (ADR-0038), INF-009 (ADR-0052) and CMP-033 (ADR-0042).
+- Earlier: None by the founders this session. Pending: partner Tier 3 say-so on #309, then #319; Eldon's answers on Q-644 to Q-649 and Q-652 to Q-657; the doing-row founder calls (does a design or decision row close on a Proposed ADR; BPL-027; SEC-002; INF-009; ERP-013; QA-016; SEC-004 and CMP-023).
 
 ## Tokens or cost
 Unknown.

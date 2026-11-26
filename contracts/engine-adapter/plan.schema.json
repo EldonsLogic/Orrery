@@ -11,7 +11,7 @@
       "properties": {
         "input": {
           "type": "object", "required": ["artifact"], "additionalProperties": false,
-          "properties": { "artifact": { "$ref": "urn:platform:contract:compiled-artifact:0.1.0" } }
+          "properties": { "artifact": { "$ref": "urn:platform:contract:compiled-artifact:0.2.0" } }
         }
       }
     },

@@ -13,8 +13,10 @@ Rules beyond the initial build (open points, conservative reading; see the BPL-0
 - Field and option order (9.4): quarantine runs in phase 15, after the reorder in phase 6, so a reorder `order` lists
   exactly the keys active when it runs (target order, then the removed keys). An added or restored element carries no
   position in the step schema; with no reorder op in the diff, the compiler predicts the adapter's order (a new
-  element is appended, a single restored one returns to its former index) and refuses with CMP-ART-001 when that
-  misses the target, in either direction (prepend, rename, several removals whose rollback cannot restore order).
+  element is appended, a single restored one returns to its former index). When that misses the target in either
+  direction (prepend, rename in the middle, several removals whose rollback cannot restore order), both the forward
+  and the inverse carry a derived reorder (ADR-0072, BPL-045): `sourceOps` empty, `derivedFrom` the add and remove ops
+  of that collection, `impact` the highest of theirs. A position change with no membership op is still refused.
 - A precision change is refused (CMP-ART-001) until the engine adapter supports it (BPL-039 review, partner).
 - Only the declared Blueprint provenance paths are skipped (`provenance` of a component, entity, workflow, role,
   approval, report, integration or assistant); a `provenance` key inside ordinary data (a JSON default) is compiled.
@@ -174,8 +176,24 @@ def _collections(frm: dict, to: dict):
                 yield path, "option.reorder"
 
 
-def _reconcile_order(by_key: dict, frm: dict, to: dict, restores: bool) -> list[Issue]:
-    """Finish reorder steps and refuse membership changes whose order the adapter cannot reach (module notes)."""
+def _reaches(before: list, after: list, restores: bool) -> bool:
+    """True when the adapter reaches `after` from `before` with no reorder step: an added key is appended, a single
+    restored key returns to its former index; several restores each return to an index taken after the others left,
+    so that order is not predicted (False)."""
+    added = sorted((k for k in after if k not in before), key=_esc)  # phase 5 runs them in pointer order
+    if restores and len(added) > 1:
+        return False
+    active = list(before)
+    for k in added:
+        if restores:
+            active.insert(min(after.index(k), len(active)), k)
+        else:
+            active.append(k)
+    return [k for k in active if k in after] == after
+
+
+def _reconcile_order(by_key: dict, ops: list, frm: dict, to: dict, restores: bool) -> list[Issue]:
+    """Finish reorder steps and add a derived reorder (ADR-0072) where the adapter cannot reach the order alone."""
     issues = []
     for path, kind in _collections(frm, to):
         before, after = _keys(frm, path), _keys(to, path)
@@ -183,23 +201,27 @@ def _reconcile_order(by_key: dict, frm: dict, to: dict, restores: bool) -> list[
             continue
         pointer = bpdiff.model.pointer(path)
         removed = [k for k in before if k not in after]
-        added = sorted((k for k in after if k not in before), key=_esc)  # phase 5 runs them in pointer order
+        added = sorted((k for k in after if k not in before), key=_esc)
+        params = {"order": after + removed, "previousOrder": before + added}  # the keys active in phase 6
         step = by_key.get((kind, pointer))
         if step is not None:
-            step["params"] = {"order": after + removed, "previousOrder": before + added}
+            step["params"] = params
             continue
-        active = list(before)
-        if restores and len(added) > 1:
-            active = None  # several restores: each returns to an index taken after the others left
-        for k in added if active is not None else ():
-            if restores:
-                active.insert(min(after.index(k), len(active)), k)
-            else:
-                active.append(k)
-        if active is None or [k for k in active if k not in removed] != after:
+        # Derived in both directions or neither, so compensation finds the inverse step at the same pointer.
+        if _reaches(before, after, restores) and _reaches(after, before, not restores):
+            continue
+        members = [op for op in ops if op["op"] in ("add", "remove") and op["path"][:-1] == path]
+        if not members:  # a position change with no membership change and no reorder op: nothing to derive from
             noun = "field" if kind == "field.reorder" else "option"
-            issues.append(Issue("CMP-ART-001", pointer, f"{noun} position change: an added or restored {noun} has "
-                                "no position in the step schema and no reorder follows it"))
+            issues.append(Issue("CMP-ART-001", pointer, f"{noun} order change with no reorder or membership op"))
+            continue
+        subject = _subject("entity", path[1], []) if kind == "field.reorder" else \
+            _subject("field", path[3], [("entity", path[1])])
+        by_key[(kind, pointer)] = {
+            "seq": 0, "phase": PHASE[kind], "kind": kind, "subject": subject, "pointer": pointer,
+            "impact": max((op["impact"] for op in members), key=_SEVERITY.index), "ddlImpact": "none",
+            "reversible": True, "params": params, "sourceOps": [],
+            "derivedFrom": sorted(op["pointer"] for op in members)}
     return issues
 
 
@@ -253,7 +275,7 @@ def steps_from_diff(d: dict, base: dict, target: dict, *, restores: bool = False
         by_key[key] = {"seq": 0, "phase": PHASE[kind], "kind": kind, "subject": copy.deepcopy(subject),
                        "pointer": pointer, "impact": op["impact"], "ddlImpact": "none", "reversible": True,
                        "params": params, "sourceOps": [op["pointer"]]}
-    issues += _reconcile_order(by_key, base, target, restores)
+    issues += _reconcile_order(by_key, d["ops"], base, target, restores)
     for s in by_key.values():
         kind, prop = s["kind"], s["params"].get("property")
         if kind == "field.set_property" and prop == "/precision":

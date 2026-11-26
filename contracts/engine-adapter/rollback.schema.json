@@ -13,7 +13,7 @@
           "type": "object", "required": ["idempotencyKey", "forwardArtifact", "reason", "approvals"], "additionalProperties": false,
           "properties": {
             "idempotencyKey": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/idempotencyKey" },
-            "forwardArtifact": { "$ref": "urn:platform:contract:compiled-artifact:0.1.0" },
+            "forwardArtifact": { "$ref": "urn:platform:contract:compiled-artifact:0.2.0" },
             "reason": { "enum": ["owner_request", "apply_failed", "simulation_failed", "support_action"] },
             "approvals": {
               "type": "object", "required": ["rollbackApproved"], "additionalProperties": false,

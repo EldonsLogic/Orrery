@@ -13,7 +13,7 @@
           "type": "object", "required": ["idempotencyKey", "artifact", "planToken", "approvals"], "additionalProperties": false,
           "properties": {
             "idempotencyKey": { "$ref": "urn:platform:contract:engine-adapter:common:0.1.0#/$defs/idempotencyKey" },
-            "artifact": { "$ref": "urn:platform:contract:compiled-artifact:0.1.0" },
+            "artifact": { "$ref": "urn:platform:contract:compiled-artifact:0.2.0" },
             "planToken": { "type": "string", "pattern": "^pln_[A-Za-z0-9_-]{16,128}$" },
             "approvals": { "$ref": "#/$defs/approvals" }
           }

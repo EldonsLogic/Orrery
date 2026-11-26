@@ -20,7 +20,7 @@ from .contract import CONTRACTS, artifact_hashes, canon, response_validator, sch
 ADAPTER_ID = "frappe"  # internal id; the sample artifacts name it in engineTarget.adapter (contract open question 12)
 ADAPTER_VERSION = "0.1.0"
 CONTRACT_VERSIONS = ["0.1.2"]
-ARTIFACT_SCHEMA_VERSIONS = ["0.1.0"]
+ARTIFACT_SCHEMA_VERSIONS = ["0.1.0", "0.2.0"]  # 0.2.0: derived reorder steps (ADR-0072)
 VERSION_SETS = ["set-example", "set-example-2"]
 PLAN_TOKEN_TTL = 900
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
@@ -529,8 +529,17 @@ class FakeAdapter:
 
     def _evaluate(self, site: _Site, artifact: dict) -> dict:
         steps, additive, semantic = [], 0, 0
+        trial: _Site | None = copy.deepcopy(site)  # the site as each step will find it, for the reorder key check
         for step in artifact["steps"]:
             disp, reason, ddl = self._judge(site, step)
+            if trial is not None and step["kind"].endswith(".reorder") and disp in ("ok", "gated") \
+                    and not self._order_matches(trial, step):
+                disp, reason = "blocked", "definition_conflict"  # order must list exactly the active keys (ADR-0072)
+            if trial is not None:
+                try:
+                    self._exec(trial, step)
+                except Exception:  # noqa: BLE001 (a step the plan blocks anyway): stop predicting later steps
+                    trial = None
             if ddl == "additive":
                 additive += 1
             elif ddl == "semantic":
@@ -587,6 +596,13 @@ class FakeAdapter:
         if support == "gated":
             return "gated", "protected_subject", ddl
         return "ok", None, ddl
+
+    @staticmethod
+    def _order_matches(trial: "_Site", step: dict) -> bool:
+        node = _walk(trial.config, _segs(step["pointer"]))
+        node = node if isinstance(node, list) else node.get("fields", node.get("options")) if isinstance(node, dict) else None
+        order = step["params"]["order"]
+        return isinstance(node, list) and len(order) == len(set(order)) and sorted(order) == sorted(_key(e) for e in node)
 
     @staticmethod
     def _storage_reason(defn: Any) -> tuple[str, str] | None:

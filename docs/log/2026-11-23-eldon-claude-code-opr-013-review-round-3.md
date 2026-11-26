@@ -34,3 +34,8 @@ Unknown.
 ## Registry fix (event types, test_registry_covers_every_contract_type)
 - Registered `schedule.created/updated/disabled/suspended/resumed/change_refused`, `agent.run_refused` and `scheduler.clock_fault/clock_gap/clock_rebase` (platform scope) in `services/blueprint/events/schemas/types.json`, with data schemas and samples; `schedule` and `scheduler` added to `reserved_domains`. Field names not stated by the contract are marked `assumed` (UNVERIFIED).
 - Tests: blueprint+studio 2184 passed, operate 885 passed 1 skipped; contracts, docs and hygiene checks OK.
+
+## Review round 4 (partner review of 760f5288, fixes)
+- Mediums: slot mark re-keyed on a `cadence_s` or `start_at` edit and the schedule version is in run ids (`srun_<id>_v<n>_<slot>`); the scheduled-agent event types moved to `agent_schedule.*` and `platform_scheduler.*` (reserved), `schedule` and `scheduler` are no longer reserved, so existing `schedule.*` entity events are unchanged. events.md 0.2.0 note and ADR-0064 corrected.
+- Lows: `platform_scheduler.clock_gap` also past an owner's window; spend rows stamped with the slot time; producer fields now `changed_fields` and `last_accepted` (timestamp string); `agent.run_*` records carry a `trace`; a refused `disable` is audited; rigid words checked on every dotted segment. The contract test now validates producer values against the registry schemas.
+- Open: Q-664 (operator reset of a long window). Left for the PR author: duplicate ADR-0060 row in `docs/decisions/INDEX.md` (outside this task's allowed paths), PR body refresh, file sizes (`schedule.py` and its test over 500 lines).

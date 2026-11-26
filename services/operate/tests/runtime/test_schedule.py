@@ -3,6 +3,7 @@ import copy
 import json
 import math
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -109,7 +110,7 @@ def test_run_drafts_only_reserves_and_settles_through_the_port():
     assert 0 < rec.cost == sum(e["data"]["cost_micro_usd"] for e in p.events) <= 2_000
     assert s.period_spent(OWNER, sch.id) == rec.cost and s.period_held(OWNER, sch.id) == 0
     types = [e["type"] for e in events]
-    assert types == ["schedule.created", "agent.run_started", "agent.tool_proposed", "agent.run_completed"]
+    assert types == ["agent_schedule.created", "agent.run_started", "agent.tool_proposed", "agent.run_completed"]
     assert all(e["tenant_id"] == "t_acme" and e["data"]["owner_id"] == "u_1" and e["data"]["on_behalf_of"] == "u_1"
                for e in events)
     assert all(e["data"]["slot"] == 0 and e["data"]["at"] == 1000 for e in events[1:])
@@ -125,7 +126,7 @@ def test_budget_exhaustion_pauses_until_the_owner_resumes():
         outcomes += [r.code or r.outcome for r in s.tick(digest_agent)]
     assert outcomes == ["completed", "completed", "budget_exhausted"]  # then paused: no further run (Q-598)
     assert [e for e in events if e["type"] == "agent.budget_exceeded"][0]["data"]["scope"] == "period"
-    paused = [e for e in events if e["type"] == "schedule.suspended"]
+    paused = [e for e in events if e["type"] == "agent_schedule.suspended"]
     assert [e["data"]["reason"] for e in paused] == ["budget_exhausted"] and not s.get(OWNER, sch.id).active
     refused("budget_exhausted", s.resume, OWNER, sch.id)               # still exhausted: stays paused
     assert not s.get(OWNER, sch.id).active
@@ -296,7 +297,7 @@ def test_owner_losing_the_role_suspends_the_schedule_with_an_audit():
     roles["now"] = ("viewer",)
     assert first_run(s, clock).code == "owner_permission_lost"
     assert not s.get(OWNER, sch.id).active
-    assert [e["type"] for e in events[-2:]] == ["schedule.suspended", "agent.run_refused"]
+    assert [e["type"] for e in events[-2:]] == ["agent_schedule.suspended", "agent.run_refused"]
     clock.t = 1000 + DAY
     assert s.tick(digest_agent) == []
 
@@ -357,7 +358,7 @@ def test_two_threads_run_a_slot_once_and_a_late_disable_holds():
     ts = [threading.Thread(target=worker) for _ in range(2)]
     [t.start() for t in ts]
     [t.join() for t in ts]
-    assert runs == [f"srun_{sch.id}_0"] and len(results) == 1
+    assert runs == [f"srun_{sch.id}_v1_0"] and len(results) == 1
     s.disable(OWNER, sch.id)
     clock.t = 1000 + DAY
     assert s.tick(digest_agent) == []
@@ -378,7 +379,7 @@ def test_clock_edges():
     for bad in (1000 + DAY, math.nan, math.inf, None, True, S.MAX_EPOCH_S + 1):
         clock.t = bad
         refused("clock_fault", s.tick, digest_agent)
-    assert events[-1]["type"] == "scheduler.clock_fault"
+    assert events[-1]["type"] == "platform_scheduler.clock_fault"
     clock.t = 1000 + 6 * DAY                                       # rejected readings were not stored
     assert len(s.tick(digest_agent)) == 1
     s2, clock2, _, _ = make()
@@ -412,7 +413,7 @@ def test_agent_errors_keep_spend_and_repeated_failures_suspend():
         codes.append(rec.code)
         assert rec.cost > 0 and rec.drafts == ()
     assert codes == ["run_failed"] * S.MAX_FAILURES and not s.get(OWNER, sch.id).active
-    assert events[-1]["type"] == "schedule.suspended" and events[-1]["data"]["reason"] == "repeated_failures"
+    assert events[-1]["type"] == "agent_schedule.suspended" and events[-1]["data"]["reason"] == "repeated_failures"
 
 
 def test_keyboard_interrupt_still_settles_spend():
@@ -472,14 +473,14 @@ def test_every_schedule_change_is_logged_and_invalid_specs_refuse():
     sch2 = s.update(OWNER, sch.id, cadence_s=2 * DAY)
     s.disable(OWNER, sch.id)
     assert sch2.version == 2 and not s.get(OWNER, sch.id).active
-    log = [(e["type"], e["data"].get("changed")) for e in events]
-    assert log == [("schedule.created", None), ("schedule.updated", ["cadence_s"]), ("schedule.disabled", None)]
+    log = [(e["type"], e["data"].get("changed_fields")) for e in events]
+    assert log == [("agent_schedule.created", None), ("agent_schedule.updated", ["cadence_s"]), ("agent_schedule.disabled", None)]
     assert all(e["data"]["actor_id"] == "u_1" for e in events)
     for bad in ({"cadence_s": 60}, {"run_cap": 0}, {"run_cap": 6_000}, {"period_s": 3600}, {"tools": ()},
                 {"cadence_s": True}, {"tools": ("sales_order.list", "sales_order.list")},
                 {"cadence_s": 300, "period_s": 3600}):                    # window at least a day
         refused("invalid_schedule", s.create, OWNER, **(SPEC | bad))
-    assert events[-1]["type"] == "schedule.change_refused"
+    assert events[-1]["type"] == "agent_schedule.change_refused"
 
 
 def test_deadline_counts_from_the_claim_not_the_tick():
@@ -559,7 +560,7 @@ def test_owner_resume_keeps_the_ledger_and_is_audited():
     refused("owner_mismatch", s.resume, Principal("t_acme", "u_2", ("sales",)), sch.id)
     refused("role_escalation", s.resume, Principal("t_acme", "u_1", ("viewer",)), sch.id)
     resumed = s.resume(OWNER, sch.id)
-    assert resumed.active and events[-1]["type"] == "schedule.resumed"
+    assert resumed.active and events[-1]["type"] == "agent_schedule.resumed"
     assert s.period_spent(OWNER, sch.id) == spent
     clock.t = 1000 + S.MAX_FAILURES * DAY
     assert s.tick(boom)[0].code == "run_failed" and s.get(OWNER, sch.id).active   # resume resets the count
@@ -618,7 +619,7 @@ def test_long_gap_is_a_fresh_start_that_keeps_the_ledger():
     first_run(s, clock)
     spent = s.period_spent(OWNER, sch.id)
     clock.t = 1000 + S.MAX_STEP_S + 2 * DAY
-    assert len(s.tick(digest_agent)) == 1 and any(e["type"] == "scheduler.clock_gap" for e in events)
+    assert len(s.tick(digest_agent)) == 1 and any(e["type"] == "platform_scheduler.clock_gap" for e in events)
     assert s.period_spent(OWNER, sch.id) > spent                    # the earlier run still counts after the gap
 
 
@@ -635,7 +636,7 @@ def test_far_future_first_reading_recovers_ticking_without_replay():
         except ScheduleRefused as exc:
             outs.append(exc.code)
     assert outs[:-1] == ["clock_fault"] * (S.REBASE_AFTER - 1) and outs[-1] == 0
-    assert any(e["type"] == "scheduler.clock_rebase" for e in events)
+    assert any(e["type"] == "platform_scheduler.clock_rebase" for e in events)
     clock.t = 1000 + DAY
     assert s.tick(digest_agent) == []                                # ticks again; no slot below the mark runs
     assert s.period_spent(OWNER, sch.id) > 0                         # the later row keeps counting (fail closed)
@@ -658,7 +659,7 @@ def test_rebase_keeps_the_cap_and_never_replays_a_slot():
             recs += s.tick(digest_agent)
         except ScheduleRefused:
             pass
-    assert any(e["type"] == "scheduler.clock_rebase" for e in events)
+    assert any(e["type"] == "platform_scheduler.clock_rebase" for e in events)
     clock.t = t0 - 2 * DAY + 2.1 * DAY                               # forward again, under the gap rule
     recs += s.tick(digest_agent)
     assert [r.outcome for r in recs if r.outcome == "completed"] == ["completed"]   # the cap still binds
@@ -756,8 +757,8 @@ def test_emitted_types_are_in_the_event_contract():
     contract = (Path(__file__).resolve().parents[4] / "contracts/events.md").read_text(encoding="utf-8")
     import re
     src = Path(S.__file__).read_text(encoding="utf-8")
-    emitted = set(re.findall(r'"((?:schedule|scheduler|agent)\.[a-z_]+)"', src))
-    assert {"schedule.created", "schedule.resumed", "scheduler.clock_rebase", "agent.run_refused"} <= emitted
+    emitted = set(re.findall(r'"((?:agent_schedule|platform_scheduler|agent)\.[a-z_]+)"', src))
+    assert {"agent_schedule.created", "agent_schedule.resumed", "platform_scheduler.clock_rebase", "agent.run_refused"} <= emitted
     missing = sorted(t for t in emitted if f"`{t}`" not in contract)
     assert not missing, missing
 
@@ -766,4 +767,154 @@ def test_clock_events_are_platform_events():
     s, clock, events, _ = make()
     clock.t = math.nan
     refused("clock_fault", s.tick, digest_agent)
-    assert events[-1]["type"] == "scheduler.clock_fault" and events[-1]["tenant_id"] == "platform"
+    assert events[-1]["type"] == "platform_scheduler.clock_fault" and events[-1]["tenant_id"] == "platform"
+
+
+# -- PR #286 review round (partner, Fable 5.2): fixes, each written as a failing test first ---------------------------
+def iso(t):
+    return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+BIG = dict(period_cap=50_000, run_cap=2_000)
+
+
+def test_cadence_edit_after_a_run_rekeys_the_slot_mark():
+    s, clock, _, _ = make()
+    sch = s.create(OWNER, **(SPEC | BIG | {"cadence_s": 300}))
+    clock.t = 1000 + 30 * DAY
+    assert len(s.tick(digest_agent)) == 1
+    s.update(OWNER, sch.id, cadence_s=DAY)
+    assert s.tick(digest_agent) == []                              # same instant: the run is not repeated
+    clock.t += DAY
+    recs = s.tick(digest_agent)
+    assert [r.outcome for r in recs] == ["completed"] and recs[0].run_id.startswith(f"srun_{sch.id}_v2_")
+
+
+def test_start_at_edit_after_a_run_rekeys_the_slot_mark():
+    s, clock, _, _ = make()
+    sch = s.create(OWNER, **(SPEC | BIG | {"cadence_s": 300}))
+    clock.t = 1000 + 30 * DAY
+    assert len(s.tick(digest_agent)) == 1
+    s.update(OWNER, sch.id, start_at=int(clock.t) + 2 * DAY)       # later: slot 0 of the new start must run
+    clock.t += 2 * DAY
+    assert [r.outcome for r in s.tick(digest_agent)] == ["completed"]
+    s.update(OWNER, sch.id, start_at=1000)                         # earlier: no immediate repeat of the same moment
+    assert s.tick(digest_agent) == []
+    clock.t += 300
+    assert len(s.tick(digest_agent)) == 1
+
+
+def test_run_ids_carry_the_schedule_version():
+    s, clock, _, _ = make()
+    sch = s.create(OWNER, **(SPEC | BIG))
+    assert first_run(s, clock).run_id == f"srun_{sch.id}_v1_0"
+
+
+def test_forward_step_past_the_owner_window_is_a_clock_gap_event():
+    s, clock, events, _ = make()
+    s.create(OWNER, **(SPEC | BIG))                                # period_s is 7 days
+    first_run(s, clock)
+    clock.t = 1000 + 6 * DAY
+    s.tick(digest_agent)
+    assert not [e for e in events if e["type"] == "platform_scheduler.clock_gap"]
+    clock.t += 8 * DAY                                             # more than the window, less than MAX_STEP_S
+    s.tick(digest_agent)
+    gaps = [e for e in events if e["type"] == "platform_scheduler.clock_gap"]
+    assert len(gaps) == 1 and gaps[0]["tenant_id"] == "platform" and gaps[0]["data"]["last_accepted"] == iso(1000 + 6 * DAY)
+
+
+def test_spend_rows_carry_the_slot_time_not_the_tick_time():
+    s, clock, _, _ = make()
+    sch = s.create(OWNER, **(SPEC | {"period_s": DAY, "period_cap": 2_000, "run_cap": 2_000}))
+    clock.t = 1025                                                 # 25 s of jitter after the slot
+    assert s.tick(digest_agent)[0].outcome == "completed"
+    clock.t = 1000 + DAY                                           # the next slot, on time
+    assert [r.outcome for r in s.tick(digest_agent)] == ["completed"], s.get(OWNER, sch.id)
+
+
+def test_a_refused_disable_is_audited():
+    s, _, events, _ = make()
+    sch = s.create(OWNER, **SPEC)
+    other = Principal("t_acme", "u_2", ("sales",))
+    refused("owner_mismatch", s.disable, other, sch.id)
+    refused("not_found", s.disable, Principal("t_beta", "u_1", ("sales",)), sch.id)
+    refused("not_found", s.disable, OWNER, "sch_99")
+    refused_ev = [e for e in events if e["type"] == "agent_schedule.change_refused"]
+    assert [e["data"]["code"] for e in refused_ev] == ["owner_mismatch", "not_found", "not_found"]
+    assert s.get(OWNER, sch.id).active
+
+
+def test_rigid_words_are_checked_in_every_dotted_segment():
+    names = ("sales.invoice.create", "crm.gl.create", "hr.payroll_run.update", "a.b.wps_file.create")
+    defs = DEFS + [tool(n, "R1", **W) for n in names]
+    s, _, _, _ = make(defs=defs)
+    for n in names:
+        refused("draft_only", s.create, OWNER, **(SPEC | {"tools": (n,)}))
+    defs2 = DEFS + [tool("crm.visit.create", "R1", **W)]
+    s2, _, _, _ = make(defs=defs2)
+    assert s2.create(OWNER, **(SPEC | {"tools": ("crm.visit.create",)}))
+
+
+def _all_events():
+    """Drive every producer path once and return the audit records."""
+    sink, roles = [], {"r": ("sales",)}
+    s, clock, _, _ = make(emit=sink.append, roles=lambda t, u: roles["r"])
+    a = s.create(OWNER, **(SPEC | BIG))
+    s.update(OWNER, a.id, cadence_s=2 * DAY)
+    first_run(s, clock)
+    s.disable(OWNER, a.id)
+    s.resume(OWNER, a.id)
+    refused("invalid_schedule", s.update, OWNER, a.id, run_cap=0)
+    s.update(OWNER, a.id, cadence_s=DAY)
+    clock.t = 1000 + 2 * DAY
+    s.tick(lambda ctx: (_ for _ in ()).throw(RuntimeError("boom")))        # run_failed
+    roles["r"] = ()
+    clock.t += 2 * DAY
+    s.tick(digest_agent)                                                   # run_refused + schedule.suspended
+    clock.t = math.nan
+    refused("clock_fault", s.tick, digest_agent)
+    clock.t = 1000 + 3 * DAY
+    clock.t = 1000 + 3 * DAY + S.MAX_STEP_S + 1
+    s.tick(digest_agent)                                                   # clock_gap
+    clock.t -= 10
+    for i in range(3):                                                     # clock_rebase
+        clock.t -= 1 if i == 0 else 0
+        try:
+            s.tick(digest_agent)
+        except ScheduleRefused:
+            pass
+    s2, c2, _, _ = make(emit=sink.append)
+    s2.create(OWNER, **(SPEC | {"period_cap": 2_000, "run_cap": 2_000}))
+    first_run(s2, c2)
+    c2.t = 1000 + DAY
+    s2.tick(digest_agent)                                                  # budget_exceeded + suspended
+    return sink
+
+
+def test_producer_records_match_the_event_registry_values():
+    import jsonschema
+    root = Path(__file__).resolve().parents[4] / "services/blueprint/events/schemas"
+    reg = json.loads((root / "types.json").read_text(encoding="utf-8"))["types"]
+    events = _all_events()
+    seen = {e["type"] for e in events}
+    assert {"agent_schedule.created", "agent_schedule.updated", "agent_schedule.disabled", "agent_schedule.resumed",
+            "agent_schedule.suspended", "agent_schedule.change_refused", "agent.run_started", "agent.run_failed",
+            "agent.run_refused", "agent.run_completed", "agent.tool_proposed", "agent.budget_exceeded",
+            "platform_scheduler.clock_fault", "platform_scheduler.clock_gap", "platform_scheduler.clock_rebase"} <= seen
+    for e in events:
+        info = reg[e["type"]]                                              # an unregistered type is a KeyError
+        file, ref = info["data_schema"].split("#")
+        doc = json.loads((root / file).read_text(encoding="utf-8"))
+        schema = {**doc["$defs"][ref.rsplit("/", 1)[1]], "$defs": doc["$defs"]}
+        jsonschema.Draft202012Validator(schema).validate(e["data"])
+        assert (e["tenant_id"] == "platform") == (info["scope"] == "platform"), e["type"]
+        if info["requires_trace"]:
+            assert e.get("trace"), e["type"]                               # an AI took part: trace is required
+    upd = [e for e in events if e["type"] == "agent_schedule.updated"]
+    assert upd[0]["data"]["changed_fields"] == ["cadence_s"] and "changed" not in upd[0]["data"]
+    clocks = [e for e in events if e["type"].startswith("platform_scheduler.")]
+    assert all("last" not in e["data"] for e in clocks)
+    assert next(e for e in clocks if e["type"].endswith("clock_gap"))["data"]["last_accepted"] == iso(1000 + 4 * DAY)
+    for e in events:
+        if e["type"] == "agent_schedule.suspended":
+            assert e["data"]["reason"] in ("owner_permission_lost", "budget_exhausted", "repeated_failures")

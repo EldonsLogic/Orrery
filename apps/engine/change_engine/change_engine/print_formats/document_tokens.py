@@ -1,9 +1,11 @@
 """Light-theme brand token loader for printed documents (ERP-016, ADR-0014).
 
 Printed documents take every colour and the font from ``docs/brand/tokens/tokens.json`` (the
-generated token source, read-only here); nothing in the layout module is a literal. The file is
-read on first use, not at import, and a missing or malformed file raises ``DocumentTokenError``,
-so a branded document is never rendered with invented values.
+generated token source, read-only here); nothing in the layout module is a literal. The one
+addition made here is the Arabic print fallback in every font stack
+(``_ARABIC_PRINT_FALLBACKS``). The file is read on first use, not at import, and a missing or
+malformed file raises ``DocumentTokenError``, so a branded document is never rendered with
+invented values.
 
 Where the tokens come from, first match wins:
 
@@ -48,6 +50,9 @@ _GENERIC_FONT_NAMES = frozenset({"serif", "sans-serif", "system-ui", "monospace"
                                  "ui-rounded", "math", "emoji", "fangsong"})
 _MAX_FONT_NAME = 64
 _MAX_FALLBACKS = 6
+# Placed right after the token family, ahead of any generic: a PDF renderer without the brand
+# families must not fall to a generic that may have no Arabic glyphs on a legal document.
+_ARABIC_PRINT_FALLBACKS = ("Noto Sans Arabic", "DejaVu Sans")
 _COLOUR_KEYS = ("surface", "background", "text", "primary", "success", "warning", "danger")
 
 
@@ -88,8 +93,9 @@ def load_document_tokens(path: Path) -> DocumentTokens:
 
 
 def _font_stack(family: object, fallback: object, role: str) -> str:
-    names = _font_names(family, fallback, role)
-    return f"'{names[0]}', {', '.join(names[1:])}"
+    primary, *fallbacks = _font_names(family, fallback, role)
+    quoted = [f"'{name}'" for name in (primary, *_ARABIC_PRINT_FALLBACKS)]
+    return ", ".join(quoted + fallbacks)
 
 
 def _font_names(family: object, fallback: object, role: str = "body") -> list[str]:

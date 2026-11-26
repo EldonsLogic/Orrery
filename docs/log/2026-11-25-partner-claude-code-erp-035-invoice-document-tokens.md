@@ -40,6 +40,13 @@ All paths are under `apps/engine/change_engine/change_engine/`.
 - Full suite: 1785 passed, 86 skipped, 0 failed.
 - Q-643 asks Eldon, as the brand-lane owner, to add proper `muted` and `border` colour tokens.
 
+## Eldon's review at f5932658 (2026-11-26): Arabic font fallback fixed
+- Must fix: the font stacks had dropped `'Noto Sans Arabic', 'DejaVu Sans'`. The print loader now puts both right after the token family and before any generic family: `'Readex Pro', 'Noto Sans Arabic', 'DejaVu Sans', system-ui, sans-serif` (Cairo first for headings). The invoice keeps no font literal; the literal guard still passes. Quote, purchase order and invoice share the loader.
+- New test: every document stack has both fallbacks before any generic, and the token family first. It fails before the fix; three mutants (drop either fallback, move them after the generics) are caught.
+- Full suite: 1786 passed, 86 skipped. Written by Claude Sonnet 5.5 (sub-agent, no git); coordinator checked the diff.
+- Q-660 asks whether the fallbacks should move into the brand tokens (brand lane).
+- Still UNVERIFIED: the real-bench PDF (greys at opacity, #F3F4F6 panels, 0.5pt borders) and whether the renderer host has either fallback font installed.
+
 ## Tokens or cost
 Unknown.
 

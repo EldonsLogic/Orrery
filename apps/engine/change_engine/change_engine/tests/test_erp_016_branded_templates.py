@@ -985,6 +985,7 @@ class TestBrandedPurchaseOrder(unittest.TestCase):
 _REPO_ROOT = Path(__file__).resolve().parents[5]
 _TOKENS_JSON = _REPO_ROOT / "docs" / "brand" / "tokens" / "tokens.json"
 _PRINT_FORMATS = Path(__file__).resolve().parents[1] / "print_formats"
+_ARABIC_STACK = "'Noto Sans Arabic', 'DejaVu Sans'"  # added by the loader after the family
 
 # Each print variable and the light-theme token it must equal. Print-only neutrals that are not
 # brand tokens map to the closest existing token (ERP-016 review fix, ADR-0014).
@@ -1025,7 +1026,7 @@ class TestLayoutReadsTokenSource(unittest.TestCase):
                     self.assertEqual(root_vars[var].lower(), light[token]["hex"].lower(), var)
         body = tokens["typography"]["families"]["body"]
         font = _locked_root_vars(LOCKED_DOCUMENT_CSS)["--font-doc"]
-        self.assertEqual(font, f"'{body['family']}', {body['fallback']}")
+        self.assertEqual(font, f"'{body['family']}', {_ARABIC_STACK}, {body['fallback']}")
 
     def test_layout_constants_follow_tokens_json(self):
         from change_engine.print_formats import document_layout
@@ -1109,7 +1110,7 @@ class TestLayoutReadsTokenSource(unittest.TestCase):
         good = _light_tokens()
         heading = good["typography"]["families"]["heading"]
         self.assertEqual(load_document_tokens(_TOKENS_JSON).heading_font_stack,
-                         f"'{heading['family']}', {heading['fallback']}")
+                         f"'{heading['family']}', {_ARABIC_STACK}, {heading['fallback']}")
 
         def written(tmp, data) -> Path:
             path = Path(tmp) / "tokens.json"
@@ -1144,7 +1145,8 @@ class TestLayoutReadsTokenSource(unittest.TestCase):
             path = Path(tmp) / "tokens.json"
             path.write_text(json.dumps(good), encoding="utf-8")
             stack = load_document_tokens(path).font_stack
-        self.assertEqual(stack, "'Readex Pro', system-ui, Helvetica Neue, sans-serif")
+        self.assertEqual(stack,
+                         f"'Readex Pro', {_ARABIC_STACK}, system-ui, Helvetica Neue, sans-serif")
 
     def test_missing_token_file_fails_render_closed_not_import(self):
         # Importing the package must keep working without the token file (the engine app is
@@ -1786,7 +1788,7 @@ class TestFontFallbackKeywords(unittest.TestCase):
         from change_engine.print_formats.document_tokens import DocumentTokenError
 
         self.assertEqual(self._stack(fallback="serif, sans-serif, system-ui, monospace"),
-                         "'Readex Pro', serif, sans-serif, system-ui, monospace")
+                         f"'Readex Pro', {_ARABIC_STACK}, serif, sans-serif, system-ui, monospace")
         for generic in ("serif", "sans-serif", "system-ui", "monospace"):
             # a quoted primary family named like a generic would be a different font, not the generic
             with self.subTest(family=generic), self.assertRaises(DocumentTokenError):
@@ -1794,7 +1796,28 @@ class TestFontFallbackKeywords(unittest.TestCase):
 
     def test_keyword_like_prefixes_in_real_names_stay_valid(self):
         self.assertEqual(self._stack(fallback="Initial Sans, Defaulter, sans-serif"),
-                         "'Readex Pro', Initial Sans, Defaulter, sans-serif")
+                         f"'Readex Pro', {_ARABIC_STACK}, Initial Sans, Defaulter, sans-serif")
+
+
+class TestArabicPrintFontFallbacks(unittest.TestCase):
+    """ERP-035 review: a renderer without the brand families must still have Arabic glyphs."""
+
+    def test_every_document_stack_has_the_arabic_fallbacks_before_any_generic(self):
+        from change_engine.print_formats import document_tokens as dt
+
+        families = _light_tokens()["typography"]["families"]
+        for source in (_TOKENS_JSON, dt.SNAPSHOT_PATH):  # the engine bench reads the snapshot
+            tokens = dt.load_document_tokens(source)
+            for role, stack in (("body", tokens.font_stack),
+                                ("heading", tokens.heading_font_stack)):
+                with self.subTest(source=source.name, role=role):
+                    names = [name.strip().strip("'") for name in stack.split(",")]
+                    self.assertEqual(names[0], families[role]["family"])
+                    generic = next(i for i, name in enumerate(names)
+                                   if name.lower() in dt._GENERIC_FONT_NAMES)
+                    for fallback in ("Noto Sans Arabic", "DejaVu Sans"):
+                        self.assertIn(fallback, names)
+                        self.assertLess(names.index(fallback), generic, stack)
 
 
 _ZERO_TOTALS = {"total_taxable_amount": "0.00", "total_vat_amount": "0.00", "grand_total": "0.00"}

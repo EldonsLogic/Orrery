@@ -43,3 +43,9 @@ Unknown.
 
 ## Wording fixes after the round 2 diff check (D-1 to D-6)
 - D-1 removal in identity always works with the store down (ADR-0060 item 9); last-Owner check only when the store answers; RAS-T17 and section 10 aligned; 6.5 reference corrected to 6.6. D-2 read-only head credential for the read path. D-3 `stateCounter` in `stateSig`, the read mark and anchor fence markers. D-4 fence-notice reasons mapped to statuses, lifted only by an anchored `status` entry naming the notice. D-5 read mark raised from the anchor only past a grace period. D-6 staff-realm assertions limited to catalog refresh and the second `tenant_delete` approval; first-refresh Owner is the bootstrap signup identity. Status stays Proposed, blocked on Q-581 and Q-582.
+
+## Revision after round 3 cross-model review (GPT-6.2 Sol, for the partner, changes requested) (2026-11-26)
+- Merged `origin/main` (INDEX.md conflict on the ADR-0063 row resolved by taking main's row).
+- P-H1 catalog bound by `catalogDigest` (signed state, anchored refresh), checked before authorisation, re-derived by the verifier. P-H2 `memberRoot` commitment in `stateSig`, history and anchor head; read path recomputes it. P-H3 replay re-validates each entry's evidence against its canonical payload; any failure keeps the fence.
+- P-M1 interim and final apply receipts plus `catalog_revert` on compensation. P-M2 identity view pinned per version, `snapshot_issue` first writer wins, receipts match generation and payload hash. P-M3 `tenant_delete` anchored before any delete; restore and bootstrap honour it. P-M4 every refusal recorded with the item 12 fields and one audit id through the SEC-008 `AuditStore`; untenanted refusals to the platform security stream.
+- Tests RAS-T11 extended, RAS-T27 to RAS-T32 added; section 12 maps findings to fixes. New questions Q-661, Q-662 (blocks acceptance), Q-663. Status stays Proposed.

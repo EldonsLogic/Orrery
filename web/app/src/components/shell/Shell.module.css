@@ -70,17 +70,27 @@
 }
 
 .menuButton {
+  position: relative;
   display: none;
-  min-block-size: var(--control-md);
-  padding-inline: var(--space-1_5);
-  border: var(--border-width) solid color-mix(in srgb, var(--color-text) 25%, transparent);
+  place-items: center;
+  flex: none;
+  inline-size: var(--control-md);
+  block-size: var(--control-md);
+  padding: 0;
+  border: var(--border-width) solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-text);
-  font: inherit;
-  font-size: var(--text-label-size);
-  font-weight: var(--text-label-weight);
   cursor: pointer;
+}
+
+.menuButton:hover {
+  background: var(--state-hover);
+}
+
+.menuIcon {
+  inline-size: var(--icon-md);
+  block-size: var(--icon-md);
 }
 
 .menuButton:focus-visible,
@@ -526,7 +536,8 @@
     min-block-size: var(--touch-target);
   }
 
-  .userButton {
+  .userButton,
+  .menuButton {
     inline-size: var(--touch-target);
     block-size: var(--touch-target);
   }
@@ -543,7 +554,7 @@
   }
 
   .menuButton {
-    display: inline-block;
+    display: inline-grid;
   }
 
   /* Phones: menu, company, language and account fit one row; the lockup returns from tablet up. */

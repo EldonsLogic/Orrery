@@ -15,6 +15,7 @@ from typing import Any, Optional
 from . import _paths as P
 from .engine import Engine
 from compiler import compile_blueprint  # type: ignore  # noqa: E402
+from compiler.incremental import irreversible_reason  # type: ignore  # noqa: E402
 from registry import Registry  # type: ignore  # noqa: E402
 from tokens import layer_from_css, merge, resolve_tokens  # type: ignore  # noqa: E402
 from adapter import testkit as tk  # type: ignore  # noqa: E402
@@ -109,7 +110,18 @@ class Session:
             self.harness = self.engine.new_harness()
             self.provisioned = False
             self.last_applied: Optional[dict] = None
+            self.last_applied_bp: Optional[dict] = None   # the Blueprint revision behind last_applied (BPL-039)
+            self.history: list = []                       # applied (artifact, Blueprint) pairs, newest last
             return self.state()
+
+    def _base_bp(self) -> Optional[dict]:
+        """The base for an incremental compile: the last applied revision, once an edit made a newer one."""
+        b = self.last_applied_bp
+        return b if b is not None and self.blueprint["meta"]["revision"] > b["meta"]["revision"] else None
+
+    def _touch(self) -> None:
+        """Every accepted edit is a new Blueprint revision, so an incremental compile can name its base."""
+        self.blueprint["meta"]["revision"] += 1
 
     def state(self) -> dict:
         with self._lock:
@@ -169,6 +181,7 @@ class Session:
         values = {k: check_localized(v, "/" + k) for k, v in body.items()}
         with self._lock:
             self.blueprint["company"].update(values)
+            self._touch()
             return self.state()
 
     def set_component(self, body: dict) -> dict:
@@ -182,6 +195,7 @@ class Session:
             on = {c["id"] for c in self.blueprint["components"]}
             on = on | {body["id"]} if body["enabled"] else on - {body["id"]}
             self.blueprint["components"] = [copy.deepcopy(c) for c in self._all_components if c["id"] in on]
+            self._touch()
             return self.state()
 
     def set_entity_labels(self, entity_id: str, body: dict) -> dict:
@@ -193,6 +207,7 @@ class Session:
             if entity is None:
                 raise StudioError(404, "STUDIO-ENTITY-UNKNOWN", "/entities")
             entity["labels"] = labels
+            self._touch()
             return self.state()
 
     def set_branding(self, body: dict) -> dict:
@@ -202,27 +217,31 @@ class Session:
             raise StudioError(400, "STUDIO-HEX-INVALID", "/primaryColour")
         with self._lock:
             self.blueprint["branding"]["primaryColour"] = value.upper()
+            self._touch()
             return self.state()
 
     # ------------------------------------------------------------------ compile
-    def _compile(self, bp: dict, registry=None, mapping=None):
+    def _compile(self, bp: dict, registry=None, mapping=None, base: Optional[dict] = None):
         return compile_blueprint(copy.deepcopy(bp), registry or self.registry, copy.deepcopy(mapping or self.mapping),
-                                 environment=ENVIRONMENT)
+                                 environment=ENVIRONMENT, base=copy.deepcopy(base) if base is not None else None)
 
     def compile(self) -> dict:
         with self._lock:
-            r = self._compile(self.blueprint)
+            r = self._compile(self.blueprint, base=self._base_bp())
         if not r.ok:
             return {"ok": False, "refusals": _issues(r)}
         a = r.artifact
         steps = [{"seq": s["seq"], "phase": s["phase"], "kind": s["kind"], "pointer": s["pointer"],
                   "subject": {"kind": s["subject"]["kind"], "id": s["subject"]["id"]},
-                  "property": s["params"].get("property"), "impact": s["impact"], "ddlImpact": s["ddlImpact"]}
+                  "property": s["params"].get("property"), "impact": s["impact"], "ddlImpact": s["ddlImpact"],
+                  "irreversibleReason": irreversible_reason(s)}
                  for s in a["steps"]]
         return {"ok": True, "artifactId": a["artifactId"], "stepCount": len(steps), "steps": steps,
                 "kinds": dict(sorted(Counter(s["kind"] for s in steps).items())),
                 "postConditionCount": len(a["postConditions"]), "skippedOpCount": len(a["skippedOps"]),
-                "risk": {k: a["risk"].get(k) for k in RISK_KEYS}, "environment": ENVIRONMENT}
+                "risk": {k: a["risk"].get(k) for k in RISK_KEYS}, "environment": ENVIRONMENT,
+                "incremental": self._base_bp() is not None,
+                "irreversibleCount": sum(1 for s in steps if s["irreversibleReason"])}
 
     # ------------------------------------------------------------------ engine
     def _call(self, operation: str, payload: dict, where: str) -> dict:
@@ -234,21 +253,32 @@ class Session:
         return resp["result"]
 
     def _engine_artifact(self, extra_unsupported: tuple = ()) -> tuple:
-        """Re-target a copy for the engine (compiler open question 4) and drop field types it cannot store."""
+        """Re-target a copy for the engine (compiler open question 4) and drop field types it cannot store. After the
+        first apply the same re-targeting is applied to the base revision and the compile is incremental (BPL-039)."""
         adapter_id = self._call("capabilities", {}, "/engine")["adapterId"]
-        bp, mp, mans = copy.deepcopy(self.blueprint), copy.deepcopy(self.mapping), copy.deepcopy(self._manifests)
-        bp["meta"]["engineTarget"]["adapter"] = mp["engine"]["adapter"] = adapter_id
+        mp, mans = copy.deepcopy(self.mapping), copy.deepcopy(self._manifests)
+        mp["engine"]["adapter"] = adapter_id
         for m in mans:
             m["engineCompatibility"]["adapter"] = adapter_id
-        dropped = 0
-        for e in bp["entities"]:
-            skip = tuple(self.engine.unsupported_field_types) + tuple(extra_unsupported)
-            keep = [f for f in e["fields"] if f.get("type") not in skip]
-            dropped, e["fields"] = dropped + len(e["fields"]) - len(keep), keep
-        r = self._compile(bp, Registry.from_manifests(mans), mp)
+        skip = tuple(self.engine.unsupported_field_types) + tuple(extra_unsupported)
+        counts = []
+
+        def retarget(src: dict) -> dict:
+            bp = copy.deepcopy(src)
+            bp["meta"]["engineTarget"]["adapter"] = adapter_id
+            n = 0
+            for e in bp["entities"]:
+                keep = [f for f in e["fields"] if f.get("type") not in skip]
+                n, e["fields"] = n + len(e["fields"]) - len(keep), keep
+            counts.append(n)
+            return bp
+
+        bp = retarget(self.blueprint)
+        base = retarget(self._base_bp()) if self._base_bp() is not None else None
+        r = self._compile(bp, Registry.from_manifests(mans), mp, base=base)
         if not r.ok:
             raise StudioError(409, r.errors[0].code, r.errors[0].path or "/", stage="retarget")
-        return r.artifact, dropped
+        return r.artifact, counts[0]
 
     def _export(self) -> dict:
         return self._call("export_config", {}, "/site")
@@ -259,7 +289,8 @@ class Session:
         s = self._call("site_status", {}, "/site")
         applied = s.get("applied") or {}
         return {"provisioned": True, "state": s.get("state"), "appliedArtifactId": applied.get("artifactId"),
-                "revision": (applied.get("revision") or {}).get("revision")}
+                "revision": (applied.get("revision") or {}).get("revision"), "historyDepth": len(self.history),
+                "canRollback": self.last_applied is not None and self.last_applied.get("inverse") is not None}
 
     @staticmethod
     def _outcome(res: dict) -> dict:
@@ -285,7 +316,7 @@ class Session:
         if fail_at is not None and (isinstance(fail_at, bool) or not isinstance(fail_at, int) or fail_at < 1):
             raise StudioError(400, "STUDIO-FIELD-TYPE", "/failAtStep")
         with self._lock:
-            r = self._compile(self.blueprint)
+            r = self._compile(self.blueprint, base=self._base_bp())
             if not r.ok:
                 return {"ok": False, "stage": "compile", "refusals": _issues(r), "site": self._site_view()}
             art, dropped = self._engine_artifact()
@@ -312,11 +343,13 @@ class Session:
             res = self._call("apply", {"idempotencyKey": tk.key(), "artifact": art, "planToken": plan["planToken"],
                                        "approvals": approvals}, "/artifact")
             if res.get("status") in ("applied", "already_applied"):
-                self.last_applied = art
+                self.last_applied, self.last_applied_bp = art, copy.deepcopy(self.blueprint)
+                self.history.append((art, self.last_applied_bp))
             after = self._export()["exportHash"]
             out = self._outcome(res)
             out.update(ok=res.get("status") in ("applied", "already_applied"), stage="apply",
                        compiledArtifactId=r.artifact["artifactId"], droppedFields=dropped,
+                       incremental=art["blueprint"].get("base") is not None,
                        verdict=preview["verdict"], approvalsGranted=sorted(approvals),
                        predictedExportHash=preview["predictedExportHash"], exportHashBefore=before, exportHashAfter=after,
                        exportHashMatches=after == preview["predictedExportHash"], site=self._site_view())
@@ -327,14 +360,20 @@ class Session:
             if self.last_applied is None:
                 raise StudioError(409, "STUDIO-ROLLBACK-NOTHING-APPLIED", "/")
             before = self._export()["exportHash"]
+            approvals = {"rollbackApproved": tk.ulid()}
+            inverse = self.last_applied.get("inverse")
+            if inverse is not None and not self.last_applied["risk"]["irreversibleSteps"]:
+                # The inverse of a widening is a narrowing, which the storage gate must approve (contract 5.7).
+                if self._call("plan", {"artifact": inverse}, "/inverse")["verdict"] == "needs_gate_approval":
+                    approvals["gateApproved"] = tk.ulid()
             res = self._call("rollback", {"idempotencyKey": tk.key(), "forwardArtifact": self.last_applied,
-                                          "reason": "owner_request", "approvals": {"rollbackApproved": tk.ulid()}},
-                             "/forwardArtifact")
+                                          "reason": "owner_request", "approvals": approvals}, "/forwardArtifact")
             after = self._export()["exportHash"]
             if res.get("status") == "applied":
-                self.last_applied = None
+                self.history.pop()
+                self.last_applied, self.last_applied_bp = self.history[-1] if self.history else (None, None)
             out = self._outcome(res)
-            out.update(ok=res.get("status") == "applied", stage="rollback", exportHashBefore=before,
+            out.update(ok=res.get("status") == "applied", stage="rollback", approvalsGranted=sorted(approvals), exportHashBefore=before,
                        exportHashAfter=after, siteChanged=before != after, site=self._site_view())
             return out
 

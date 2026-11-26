@@ -123,7 +123,7 @@ CASES = [
     ("BP-FN-001", set_(["entities", 2, "fields", 3, "computed", "function"], "core.sales.unknown"), {}, "errors"),
     ("BP-FN-002", lambda bp: None, {"registry": None}, "warnings"),
     ("BP-BRAND-001", set_(["branding", "primaryColour"], "#FFFFFF"), {}, "errors"),
-    ("BP-BRAND-002", set_(["branding", "primaryColour"], "#FFFF00"), {}, "warnings"),
+    ("BP-BRAND-002", lambda bp: bp["branding"].update(primaryColour="#8F8F24", accentColour="#2443D0"), {}, "warnings"),
     ("BP-ASSET-001", set_(["branding", "logo", "onLight", "bytes"], 999), {}, "errors"),
     ("BP-ASSET-002", lambda bp: None, {"assets": {}}, "errors"),
     ("BP-ASSET-003", lambda bp: None, {"assets": None}, "warnings"),

@@ -1,25 +1,44 @@
 # Gateway local audit spool: specification before code (PLT-028)
 
-Status: draft, revision 1 (Tier 3, security review by a different model before code)
+Status: draft, revision 2 (Tier 3, security review by a different model before code)
 Owner: partner
 Plan ID: PLT-028 (G2)
-Related: [ADR-0069](../decisions/ADR-0069-gateway-live-binding-audit-spool.md) sections 2.1 to 2.5, 2.10, 2.11, 5.5, 7; [ADR-0038](../decisions/ADR-0038-secrets-management.md); [ADR-0041](../decisions/ADR-0041-durable-adapter-state-on-tenant-database.md); [ADR-0006](../decisions/ADR-0006-tenancy-site-per-tenant.md); [data-retention.md](../security/data-retention.md) section 8; Q-614
+Related: [ADR-0069](../decisions/ADR-0069-gateway-live-binding-audit-spool.md) sections 2.1 to 2.5, 2.10, 2.11, 5.5, 7; founder decisions on PR #316 (2026-11-25); [ADR-0038](../decisions/ADR-0038-secrets-management.md); [ADR-0041](../decisions/ADR-0041-durable-adapter-state-on-tenant-database.md); [ADR-0006](../decisions/ADR-0006-tenancy-site-per-tenant.md); [data-retention.md](../security/data-retention.md) section 8; Q-614
 
-This is the local side of the ADR-0069 spool: files, tables, transactions, admission, recovery and key rotation in one gateway instance, built against a fake `AuditStore`. Forwarding, checkpoint and receipt protocols are PLT-032's; this spec fixes only the local interface they call (section 6) and the local comparison rules they must apply (4.7). Every choice marked **(P)** is proposed and may change in review without changing the structure. It closes or hands off ADR-0069's open items R3-1, R3-4, R3-5, M6 and the local parts of R3-2 and R3-3 (section 9). Revision 1 answers a Gemini 4 Argon security review (findings 1 to 7, section 9).
+This is the local side of the ADR-0069 spool, built against a fake `AuditStore`: files, tables, transactions, admission, recovery and key rotation in one gateway instance. Forwarding is PLT-032's; this spec fixes only the local interface PLT-032 calls (section 6) and the local comparison rules it applies (4.7). Every choice marked **(P)** is proposed and may change in review without changing the structure.
+
+**Precedence.** The founder decisions on PR #316 (2026-11-25, Eldon for both founders) override ADR-0069 where they differ, because ADR-0069 was merged as Proposed before that re-scope. This spec applies five of them: (D1) SEC-008 owns the record format and the `AuditStore` port; (D2) identity is the per-tenant `memberRef` plus `token_id`, with no global user id; (D3) platform security events go to SEC-008's platform security stream; (D4) ordinary routes are buffered and crash loss is accepted; admin and money routes are write-through; (D5) idempotency lives in the adapter only; the gateway does no dedupe.
+
+Departures from ADR-0069, for its next revision to follow:
+| ADR-0069 | It says | Here |
+|---|---|---|
+| 2.4, 7 | every write intent and every read outcome commits before the handler or response | two route classes (3); only `write_through` routes commit per request; `ordinary` records are buffered (D4) |
+| 2.7, 2.10 | the 30 s unconfirmed rule refuses all writes | it refuses `write_through` admissions only (5.1 W) |
+| 2.8, 2.9 | per-record receipts, local quarantine and its protocol | an acknowledgement deletes the acknowledged rows whatever their receipt; the store keeps rejected or conflicting bytes (6.3); no quarantine |
+| 2.10 | tenant share on writes only; reads up to 100% | share on every class, including the in-memory buffer (5) |
+| 2.11, 7 | store unreachable at start: serve reads, refuse writes | not ready, **pending Q-645** (4.4 step 5a) |
+| 2.13 | loss bounded by capacity | adds the buffer: at most 1,024 ordinary records per crash (4.1) |
+| 2.14 | subject-bound dedupe key forwarded by the gateway | removed (D5); nothing here deduplicates requests |
+| 3.3 | a `Route` declares methods and effect | it also declares `audit_class` (3) |
+| 5.1 | the token subject as the user field | `memberRef` and `token_id`; no subject and no global user id (1, D2) |
+| 5.4 | platform security stream with no owner | SEC-008's stream (D3); rows listed in 6.8 |
+| threats | GLB-T07 (quarantine), T44 and T45 name quarantine | T07 (PLT-032) keeps verbatim store evidence and deletes locally with a page; T44 and T45 renamed (8) |
+| 5.5 | five places to probe, including quarantine | `records`, `open_intents`, `preauth`, the late file, preserved failed or corrupt files (7.4) |
 
 ## 1. Files, settings, units and MACs
-- **(P)** Two files per instance on the encrypted in-country volume (ADR-0069 2.1): `spool-tenant.db` and `spool-preauth.db`, each with its own `-wal` file and an advisory lock file `<name>.lock`. Never on a network file system.
-- **(P)** Standard library `sqlite3` only. Start refuses if `sqlite3.sqlite_version_info < (3, 37, 0)` (STRICT tables). One writer connection per file, opened with `isolation_level=None` (explicit transactions only) and guarded by a process writer lock; one read connection for PLT-032's batch reads.
-- **(P)** Pragmas on every open: `journal_mode=WAL` (read back as `wal`), `synchronous=FULL`, `foreign_keys=ON`, `secure_delete=ON` (M6), `cell_size_check=ON`, `trusted_schema=OFF`, `busy_timeout=5000`, `journal_size_limit=67108864`, `wal_autocheckpoint=1000`.
-- **(P) Units.** Capacity is counted in integer units, never in measured bytes: 1 unit = one row of `records` or `quarantine`; an `open_intents` row costs 2 units (its copy of the intent plus the reserved outcome). 1 unit stands for the 4 KiB ceiling times the overhead factor 2 = 8 KiB, so the ADR's "100,000 records or 512 MiB" becomes `U = 512 MiB / 8 KiB = 65,536` units for `tenant` and `U_p = 8,192` units (64 MiB) for `preauth`. A physical guard (5.3) backs the logical count.
-- **(P) Record bytes.** `body` is the canonical record of ADR-0069 5.1 without `chain`: JSON with sorted keys, separators `,` and `:`, UTF-8, no NaN. At most 4,096 bytes; a larger body is a write failure (503 `audit_unavailable`), never truncated. PLT-032's wire envelope adds `chain` and framing outside this ceiling. `instance_id`, `stream`, `seq`, `key_id`, `phase`, `audit_id` and `tenant_id` are inside `body`.
-- **(P) Keys.** Per key version `K` from the secret store (ADR-0038), two derived keys: `K_chain = HMAC(K, "seshna.spool.chain.v1")` and `K_mac = HMAC(K, "seshna.spool.rowmac.v1")`. `lp(x) = be32(len(x)) || x`.
-- **(P) Chain.** `chain(seq) = HMAC-SHA256(K_chain[key_id], chain(seq-1) || body)`; `chain(0)` is 32 zero bytes.
-- **(P) Open-row MAC** (finding 3): `HMAC-SHA256(K_mac[key_id], lp("open") || lp(instance_id) || lp(stream) || lp(audit_id) || lp(tenant_id) || be64(seq) || lp(key_id) || be64(reserved_units) || chain || lp(intent_body))`.
-- **(P) Quarantine-row MAC** (finding 1), computed in TX5 under the record's own `key_id`: `HMAC-SHA256(K_mac[key_id], lp("quarantine") || lp(instance_id) || lp(stream) || be64(seq) || lp(phase) || lp(audit_id or "") || lp(tenant_id) || lp(key_id) || lp(receipt) || be64(receipt_version) || chain || lp(body))`. A quarantined row's predecessors are deleted, so its chain cannot be re-verified locally; the MAC replaces that check.
-- **Column binding.** Every indexed column (`seq`, `phase`, `audit_id`, `tenant_id`, `key_id`) must equal the same field in its `body` or `intent_body`. TX2 checks this for the row it closes; recovery step 4 checks it for every row.
+- **(P) Files.** Three per instance on the encrypted in-country volume (ADR-0069 2.1): `spool-tenant.db`, `spool-preauth.db` and `spool-late.db`. The late file is empty unless the tenant file fails closed (4.2, 7.4). Each file has its own WAL, an advisory lock file `<name>.lock` and, once it fails closed, a marker file `<name>.failed` (created exclusively, file and directory fsynced, holding reason and time). None is ever on a network file system.
+- **(P) Library and connections.** Standard library `sqlite3` only. Start refuses if `sqlite3.sqlite_version_info < (3, 37, 0)`, which STRICT tables need. One writer connection per file opened with `isolation_level=None`, and one read connection for PLT-032's batch reads.
+- **(P) Pragmas on every open,** each read back: `journal_mode=WAL`, `synchronous=FULL`; `fullfsync=ON`, `checkpoint_fullfsync=ON` (no-ops on Linux, they make a macOS developer run durable; production is Linux only); `foreign_keys=ON`, `secure_delete=ON` (M6), `cell_size_check=ON`, `trusted_schema=OFF`; `busy_timeout=5000`, `journal_size_limit=67108864`, `wal_autocheckpoint=1000`.
+- **(P) Units.** Capacity is counted in integer units, never in measured bytes: a `records` row costs 1 unit; an `open_intents` row costs 2 units: the intent copy plus the reserved outcome; 1 unit = 4 KiB ceiling × overhead factor 2 = 8 KiB. So `U = 512 MiB / 8 KiB = 65,536` for `tenant` and `U_p = 8,192` (64 MiB) for `preauth`. A physical guard (5.3) backs the logical count.
+- **(P) Record bytes.** `body` is the canonical record without `chain`: JSON with sorted keys, separators `,` and `:`, UTF-8, no NaN, at most 4,096 bytes. A larger body is a write failure (503 `audit_unavailable`), never truncated. **Inside `body`:** `instance_id`, `stream`, `seq`, `key_id`, `phase`, `audit_id`, `tenant_id` and `audit_class`. **Identity, when verified (F3, D2):** `tenant_id`, `memberRef` (the per-tenant member reference from the membership check), `token_id`, `realm`, `session_version`, `mfa_satisfied`, `auth_time`. The token subject and any global user id are never written. **Provisional:** the field set is ADR-0069 5.1 with that change, and SEC-008 may change the record shapes (D1, D3). Only the indexed columns of section 2 are fixed here, so a shape change touches the record builder, not the schema.
+- **(P) Keys.** Each key version `K` from the secret store (ADR-0038) gives two derived keys: `K_chain = HMAC(K, "seshna.spool.chain.v1")` and `K_mac = HMAC(K, "seshna.spool.rowmac.v1")`. Notation: `lp(x) = be32(len(x)) || x`.
+- **(P) Chain.** `chain(seq) = HMAC-SHA256(K_chain[key_id], chain(seq-1) || body)`, with `chain(0)` = 32 zero bytes.
+- **(P) First key of a fresh file (F9).** Creation is one transaction. It writes `owner` (epoch 1, new `boot_id`) and `checkpoint` (head 0, zero chain, `active_key_id` = the secret store's current version, which must load). Creation is refused if the store already has a checkpoint for this `(instance_id, stream)`: a fresh file under a used `instance_id` is a rollback (4.7, first row).
+- **(P) Open-row MAC.** `HMAC-SHA256(K_mac[key_id], lp("open") || lp(instance_id) || lp(stream) || lp(audit_id) || lp(tenant_id) || be64(seq) || lp(key_id) || be64(reserved_units) || chain || lp(intent_body))`.
+- **(P) Late-row MAC.** `HMAC-SHA256(K_mac[key_id], lp("late") || lp(instance_id) || lp(audit_id) || lp(phase) || lp(tenant_id) || lp(key_id) || lp(body))`.
+- **Column binding.** Every indexed column (`seq`, `phase`, `audit_id`, `tenant_id`, `key_id`) must equal the same field in its `body` or `intent_body`. TX2 checks the row it closes; recovery step 4 checks every row.
 
-## 2. Schema (both files; `preauth` never has `open_intents` rows)
+## 2. Schema (`tenant` and `preauth`; `preauth` never has `open_intents` rows)
 ```sql
 CREATE TABLE owner (one INTEGER PRIMARY KEY CHECK (one = 1), instance_id TEXT NOT NULL,
   stream TEXT NOT NULL CHECK (stream IN ('tenant','preauth')), epoch INTEGER NOT NULL CHECK (epoch >= 1),
@@ -47,110 +66,114 @@ CREATE TABLE open_intents (audit_id TEXT PRIMARY KEY, seq INTEGER NOT NULL UNIQU
   reserved_units INTEGER NOT NULL CHECK (reserved_units = 1),
   row_mac BLOB NOT NULL CHECK (length(row_mac) = 32)) STRICT;
 CREATE INDEX open_intents_key ON open_intents(key_id);
-CREATE TABLE quarantine (seq INTEGER PRIMARY KEY, phase TEXT NOT NULL,
-  audit_id TEXT CHECK (phase NOT IN ('intent','outcome','reconcile') OR audit_id IS NOT NULL),
-  tenant_id TEXT NOT NULL, key_id TEXT NOT NULL, chain BLOB NOT NULL, body BLOB NOT NULL,
-  receipt TEXT NOT NULL CHECK (receipt IN ('rejected','conflict')),
-  receipt_version INTEGER NOT NULL, row_mac BLOB NOT NULL CHECK (length(row_mac) = 32)) STRICT;
-CREATE INDEX quarantine_key ON quarantine(key_id);
-CREATE INDEX quarantine_audit ON quarantine(audit_id, phase);
-CREATE TABLE usage (tenant_id TEXT PRIMARY KEY, units INTEGER NOT NULL CHECK (units >= 0)) STRICT;
+CREATE TABLE usage (tenant_id TEXT PRIMARY KEY, units INTEGER NOT NULL CHECK (units > 0)) STRICT;
+-- spool-late.db only:
+CREATE TABLE late (audit_id TEXT NOT NULL, phase TEXT NOT NULL CHECK (phase IN ('intent','outcome')),
+  tenant_id TEXT NOT NULL, key_id TEXT NOT NULL, body BLOB NOT NULL CHECK (length(body) BETWEEN 2 AND 4096),
+  row_mac BLOB NOT NULL CHECK (length(row_mac) = 32), PRIMARY KEY (audit_id, phase)) STRICT;
 ```
-- `tenant_id` is the verified tenant (`tenant` file), the unverified host tenant or `''` (`preauth`), or `''` for platform rows (`key_rotation`, platform aggregates).
-- `usage` holds one row per tenant plus `'*'` for the file total: a persisted cache of `count(records) + count(quarantine) + 2 * count(open_intents)` per tenant, recomputed and compared at start (4.4 step 4).
+- **`tenant_id` values.** `tenant` file: the verified tenant. `preauth` file: the unverified host tenant, **only if the validated host names a provisioned tenant**; otherwise `''` (F9). Platform rows (`key_rotation`, platform aggregates): `''`.
+- **`usage`** caches `count(records) + 2 * count(open_intents)` per tenant, plus a `'*'` row for the file total. A row that reaches 0 is deleted in the same transaction, so `preauth` holds at most (provisioned tenants + 2) rows. Start recomputes and compares it (4.4 step 4).
 - No foreign key from `open_intents` to `records`: the intent row is pruned after delivery while the open row stays (ADR-0069 2.4).
 
-## 3. Transactions
-Every write runs under the process writer lock as `BEGIN IMMEDIATE` ... `COMMIT`. Its first statement reads `owner.epoch`; a mismatch stops the writer. **Any exception before `COMMIT` is followed by an explicit `ROLLBACK`** (with `isolation_level=None` a failed statement leaves the transaction open; finding 6). An I/O error raised by `COMMIT` itself leaves the outcome unknown: the writer closes the connection, reopens (SQLite recovers the WAL) and reads the column in the last column below before answering (UNVERIFIED that the reopen always gives a definite answer; 10).
-| Id | Name | Statements inside one `BEGIN IMMEDIATE` | DP | Ambiguous `COMMIT`: read |
-|---|---|---|---|---|
-| TX0 | start | `UPDATE owner SET epoch = epoch + 1, boot_id = ?` | DP0 | `owner.epoch`, `boot_id` |
-| TX1 | admit write | admission (5.2) cost 3; `INSERT records` (intent); `INSERT open_intents`; `UPDATE checkpoint` head; `usage` tenant and `'*'` +3 | DP1 | `head_seq`; open row by `audit_id` |
-| TX2 | close write | `SELECT open_intents` by `audit_id`: **absent: `ROLLBACK`, `failed_closed`, page** (finding 3); verify `row_mac` and column binding; refuse an outcome with `status` null or `reason` `unknown_after_restart` (finding 7); `INSERT records` (outcome); `DELETE open_intents`; head; usage -1 | DP2 | `head_seq`; open row absent |
-| TX3 | read or denial outcome | admission cost 1; `INSERT records`; head; usage +1 | DP3 | `head_seq` |
-| TX4 | aggregate | admission G (5.1); `INSERT records` (`aggregate`); head; usage +1 | DP4 | `head_seq` |
-| TX5 | apply receipts (PLT-032) | checks of 6.3; `DELETE records` committed; for rejected or conflict `INSERT quarantine` with `row_mac`, `DELETE records`; `UPDATE checkpoint` pruned fields; usage per tenant | DP5 | `pruned_through`, `prune_receipt_version` |
-| TX6 | recovery close | open row as in TX2; `INSERT records` with `phase = 'outcome'`, `seq = head_seq + 1`, `key_id = active_key_id`, `ts` = wall clock now, identity and route fields copied from `intent_body`, `status`, `error_code`, `latency_ms` and `upstream_correlation` null, `reason = "unknown_after_restart"`; `DELETE open_intents`; head; usage -1 | DP6 | `head_seq`; open row absent |
-| TX7 | key rotation (each file) | admission K (5.1); `INSERT records` (`key_rotation`, `tenant_id = ''`, under the old key, naming the new `key_id`); `UPDATE checkpoint SET active_key_id = new`; head; usage `''` and `'*'` +1 | DP7 | `head_seq`, `active_key_id` |
-| TX8 | destroy quarantine (deprovisioning, operator, audited) | `DELETE quarantine WHERE tenant_id = ?`; usage | DP8 | `count(quarantine WHERE tenant_id = ?)` |
-**WAL truncation after a drain or TX8 (M6, finding 6):** hold `stream_guard` (6.1) so PLT-032 is paused, close the read connection, run `PRAGMA wal_checkpoint(TRUNCATE)` and require the result `(busy = 0, log = 0)`; otherwise retry up to 10 times at 1 s, then page. Deprovisioning certification refuses without this result (UNVERIFIED: 10).
+## 3. Route classes and transactions
+**Route class (F1).** Each `Route` declares `audit_class` in the route table: `ordinary` or `write_through`. An unclassified route is `write_through` (fail closed). Registration refuses `ordinary` for three kinds of route: a route whose permission is admin-kind (ADR-0069 3.6); a route whose permission the catalogue marks as money (Q-647); until Q-647 is answered, every `write` route (P). So for now only `read` routes can be `ordinary`.
+
+**`ordinary` routes (D4).** Records go to an in-memory buffer: the intent before an ordinary write's handler, and the outcome after every request. A flusher commits the buffer in batches (TX9). The response does not wait for the flush, and a crash loses whatever was not flushed.
+
+**`write_through` routes (P; provisional definition).** The intent record is durably committed before the action's effect (TX1, before the handler). The outcome record is committed before the response (TX2 for writes, TX3 for reads). **Where it must be committed is PENDING Eldon's confirmation (Q-644):** (a) this file under `synchronous=FULL`, which is what this spec specifies; (b) a SEC-008 acknowledgement, which replaces the local commit point with a store round trip and keeps `open_intents` for crash recovery.
+
+**Denials and validation failures** before any handler have no effect, so they are buffered on every route (P).
+
+**Transaction rules.** Every write runs under the writer lock (5.4) as `BEGIN IMMEDIATE` ... `COMMIT`. Its first statement reads `owner.epoch`, and a mismatch stops the writer. Any exception before `COMMIT` is followed by an explicit `ROLLBACK`.
+
+**An I/O error raised by `COMMIT` itself (F7)** fails the file closed at once: the connection is closed and no further transaction runs on it. Then TX1 never calls the handler and the client gets 503; TX3 answers 503 with no data (a read has no effect; the same holds when TX3 meets a `failed_closed` file or a full disk); TX2 takes the 4.2 late path; TX9 sends its batch to the late file; any other transaction is named in the page. The earlier rule (reopen, then read the durability point) is deferred and UNVERIFIED (10). A later revision may enable it only after its own test passes on the production volume type (GLB-T76).
+
+| Id | Name | Statements inside one `BEGIN IMMEDIATE` | DP |
+|---|---|---|---|
+| TX0 | start | `UPDATE owner SET epoch = epoch + 1, boot_id = ?` | DP0 |
+| TX1 | write-through intent | admission W (5.1); `INSERT records` (intent); `INSERT open_intents`; `UPDATE checkpoint` head; `usage` tenant and `'*'` +3 | DP1 |
+| TX2 | write-through write outcome | `SELECT open_intents` by `audit_id` (absent: 4.2); verify `row_mac` and binding; refuse an outcome with `status` null or `reason` `unknown_after_restart`; `INSERT records`; `DELETE open_intents`; head; usage -1 | DP2 |
+| TX3 | write-through read outcome | admission R; `INSERT records`; head; usage +1 | DP3 |
+| TX4 | aggregate | admission G; `INSERT records` (`aggregate`); head; usage +1 | DP4 |
+| TX5 | apply acknowledgement (PLT-032) | checks of 6.3; `DELETE records` through `through_seq`; `UPDATE checkpoint` pruned fields; usage per tenant | DP5 |
+| TX6 | recovery close | open row as in TX2; `INSERT records`: `phase = 'outcome'`, `key_id = active_key_id`, `ts` = now, identity (1) and route fields copied from `intent_body`, `status`, `error_code`, `latency_ms`, `upstream_correlation` null, `reason = "unknown_after_restart"`; `DELETE open_intents`; head; usage -1 | DP6 |
+| TX7 | key rotation (each file) | admission K; `INSERT records` (`key_rotation`, `tenant_id = ''`, under the old key, naming the new `key_id`); `UPDATE checkpoint SET active_key_id = new`; head; usage `''` and `'*'` +1 | DP7 |
+| TX8 | removed in revision 2 (quarantine destroy; no quarantine exists) | | |
+| TX9 | buffer flush | at most 256 buffered records in arrival order; `INSERT records` each; head; usage per tenant (units move from buffered to usage) | DP9 |
+| TX10 | late append (`spool-late.db`) | `INSERT late` with `row_mac` under the tenant file's `active_key_id` | DP10 |
+
+**WAL truncation after a drain (M6).** Hold `stream_guard` (6.1), which pauses PLT-032, close the read connection, and run `PRAGMA wal_checkpoint(TRUNCATE)`. The result must be `(busy = 0, log = 0)`; otherwise retry up to 10 times at 1 s, then page. Deprovisioning certification refuses without this result (UNVERIFIED: 10).
 
 ## 4. State machines
-### 4.1 A record in a spool file
-| State | Event | Guard | Action | Next | DP |
-|---|---|---|---|---|---|
-| none | TX1, TX2, TX3, TX4, TX6 or TX7 | file `serving` (4.4) for TX1 to TX4 and TX7, file in `close` (4.4 step 6) for TX6; body ≤ 4,096; admission for TX1, TX3, TX4, TX7 | append with `seq = head_seq + 1`, chain under `active_key_id` | unforwarded | DP1 to DP4, DP6, DP7 |
-| none | same | not in the required state, body > 4,096 or admission refused | `ROLLBACK`; 503 `audit_unavailable` (TX2 and TX6 never refused by admission: 5.1) | none | none |
-| unforwarded | PLT-032 reads a batch | none | nothing local changes | unforwarded | none |
-| unforwarded | TX5 with receipt `committed` | 6.3 | delete row | pruned | DP5 |
-| unforwarded | TX5 with `rejected` or `conflict` | 6.3 | move to `quarantine` with receipt and `row_mac` | quarantined | DP5 |
-| unforwarded | tenant deprovisioned | none | never deleted out of order (it would break the chain); deprovisioning waits for drain (ADR-0069 5.5) | unforwarded | none |
-| quarantined | start (4.4 step 4) | `row_mac` and column binding verify | none | quarantined | none |
-| quarantined | same | either fails | `failed_closed`, page | quarantined | none |
-| quarantined | correction committed by the store (PLT-032 resolution) | audited operator action | delete quarantine row | gone | PLT-032 |
-| quarantined | TX8 | deprovisioning approvals | delete; then WAL truncation (3) | gone | DP8 |
+### 4.1 A record
+| State | Event | Guard | Action | Next |
+|---|---|---|---|---|
+| none | ordinary record | file `serving`, not `failed_closed`; admission R at enqueue (5.2); buffer < 1,024 records | append to the in-memory buffer | buffered |
+| none | same | any guard fails | 503 `audit_unavailable` (429 on `preauth`); counter (5.2 step 5) | none |
+| buffered | flusher: every 200 ms, or 256 records waiting | none | TX9 | unforwarded |
+| buffered | TX9 fails without an I/O error on `COMMIT` (full, busy) | none | keep in arrival order; retry with backoff 0.1 s to 5 s; a full buffer refuses new records; never dropped | buffered |
+| buffered | I/O error on `COMMIT`, or the file goes `failed_closed` | none | `tenant`: TX10 for every buffered record; `preauth`: fold the buffered rows into the per-reason counters of 4.6 (`preauth_unrecorded`), no action ran; page | late or counted |
+| buffered | graceful shutdown | none | flush for at most 30 s (P), then TX10 for the rest | unforwarded or late |
+| buffered | crash | none | lost (D4); bound: the buffer, at most 1,024 records, normally under 200 ms of traffic | lost |
+| none | TX1, TX2, TX3, TX4, TX6, TX7 | file `serving` (TX6: recovery step 6); body ≤ 4,096; admission | append, `seq = head_seq + 1`, chained under `active_key_id` | unforwarded |
+| unforwarded | TX5 | 6.3 | delete whatever the receipt; `rejected` or `conflict` is counted and pages; the store keeps the verbatim bytes (ADR-0069 2.8; semantics are SEC-008's) | pruned |
+| unforwarded | tenant deprovisioned | none | never deleted out of order; deprovisioning waits for drain (ADR-0069 5.5) | unforwarded |
+| late | drain (7.4) | `row_mac` verifies | forwarded, then deleted after acknowledgement | gone |
 
-### 4.2 An `open_intents` row
-| State | Event | Guard | Action | Next | DP |
-|---|---|---|---|---|---|
-| none | write request | route effect `write`; checks of 5.2 inside the transaction | TX1; then the handler is called | open | DP1 |
-| none | same | any guard fails or TX1 fails | 503 `audit_unavailable`; handler never called | none | none |
-| open | handler returns or raises | row present; `row_mac` and binding valid; outcome is not a recovery outcome | TX2 | closed (row deleted) | DP2 |
-| open | TX2 fails (disk full, I/O) | effect possible | real result returned; in-memory retry, backoff 0.1 s to 5 s; row and reservation stay | open (retrying) | none |
-| open (retrying) | retry succeeds | as TX2 | TX2 | closed | DP2 |
-| open | TX2 finds `row_mac` or binding invalid, or key missing | none | `ROLLBACK`; real result returned; `failed_closed`; page | open | none |
-| absent | TX2 finds no row for its `audit_id` | none | `ROLLBACK`; real result returned; `failed_closed`; page (deleted or swapped row) | absent | none |
-| open | process dies | none | none | open, found by recovery | none |
-| open | recovery (4.4 step 6) | `row_mac` and binding valid, key present, no local outcome for `audit_id` | TX6 | closed | DP6 |
-| open | recovery (4.4 step 4) | `row_mac` or binding invalid, key missing, or an outcome already exists | leave the row; `failed_closed`; page (GLB-T46) | open (unverifiable) | none |
-| open | forwarder, TX5, key retirement | any | never touched: TX5 has no statement on this table; retirement waits (4.5) | open | none |
+### 4.2 An `open_intents` row (`write_through` writes only)
+| State | Event | Guard | Action | Next |
+|---|---|---|---|---|
+| none | write request | class `write_through`; 5.2 checks inside the transaction | TX1, then call the handler | open |
+| none | same | any guard fails, or TX1 fails | 503 `audit_unavailable`; handler never called | none |
+| open | handler returns or raises | row present; `row_mac` and binding valid | TX2 | closed |
+| open | TX2 fails without an I/O error on `COMMIT` (full, busy) | effect possible | return the real result; retry in memory, 0.1 s to 5 s; row and reservation stay | open (retrying) |
+| open | **F4:** the file is or becomes `failed_closed` before or during TX2; TX2 gets an I/O error on `COMMIT`; the row is absent; or its `row_mac` or binding fails | none | the file goes `failed_closed` if it is not already; return the real result to the client; TX10 writes the real outcome (`status`, `reason`, `latency_ms`) to the late file; page | open, with a late outcome |
+| open, with a late outcome | TX10 also fails | none | the outcome stays in memory, TX10 is retried every 5 s, and the outcome is sent directly if Q-646 allows. If the process exits first, only the result fields are lost: the open row survives in the preserved file and the drain reports it as unknown (residual, 9) | open |
+| open | process dies | none | none | open, found by recovery |
+| open | recovery step 6 | `row_mac` and binding valid, key present, no local outcome | TX6 | closed |
+| open | recovery step 4 | `row_mac` or binding invalid, key missing, or an outcome already exists | leave the row; `failed_closed`; page (GLB-T46) | open (unverifiable) |
+| open | forwarder, TX5, key retirement | any | never touched; retirement waits (4.5) | open |
 
-### 4.3 A reservation (outcome units)
-| State | Event | Guard | Action | Next | DP |
-|---|---|---|---|---|---|
-| none | TX1 | 5.1 W | `reserved_units = 1` in the open row; usage +2 for the row | held | DP1 |
-| held | TX2 or TX6 | none (net -1 unit) | outcome +1, open row -2 | released | DP2, DP6 |
-| held | restart | none | survives in the row; usage recomputed at start | held | (DP1) |
-| held | any admission of W, R, G or K | none | cannot consume it: every limit counts held units in `'*'`, and every physical floor (5.3) keeps `8 KiB × held` free | held | none |
+### 4.3 Reservations
+| Holder | Taken | Released | Rule |
+|---|---|---|---|
+| open row | TX1: +2 units in `usage` | TX2 or TX6: net -1 | survives restart; every limit counts it in `'*'`; every floor keeps `8 KiB × held` free (5.3) |
+| ordinary write's outcome | enqueue of its intent: +1 in `buffered[tenant]` | when its outcome is enqueued | in memory only; a crash loses both (D4); the outcome is never refused (5.1 O) |
 
 ### 4.4 Restart recovery (R3-1), per file
 | Step | State | Check | On success | On failure |
 |---|---|---|---|---|
-| 1 | starting | `flock` (exclusive, non-blocking) on `<name>.lock` | 2 | refuse to serve, exit non-zero (GLB-T08) |
-| 2 | locked | open; pragmas read back; `PRAGMA quick_check`; schema version | 3 | `corrupt` (7.3) |
+| 1 | starting | `flock` (exclusive, non-blocking) on `<name>.lock` | 2 | refuse to serve; exit non-zero (GLB-T08) |
+| 2 | locked | no `<name>.failed` marker; open; read pragmas back; `PRAGMA quick_check`; schema version; `spool-late.db` empty | 3 | `corrupt` (7.3); a marker or a non-empty late file means the last run failed closed: `failed_closed` (7.4) |
 | 3 | open | TX0 | 4 | `corrupt` |
-| 4 | fenced | every `key_id` in any table and `checkpoint.active_key_id` loads; chain verifies from `(pruned_through, pruned_chain)` to `(head_seq, head_chain)`; column binding of every row; every open-row and quarantine-row `row_mac` verifies; `usage` equals the recomputation | 5 | `failed_closed`, not ready for any traffic on this file (no append onto unverified state), page; a `usage` mismatch alone: rewrite it and page |
-| 5 | verified locally | store snapshot compared under 4.7, **before any append** | 6 | mismatch: `failed_closed`, not ready, page; store unreachable: `waiting_store` |
-| 5a | `waiting_store` | not ready: no transaction on this file. `tenant`: health reports not ready, so no audited traffic reaches the instance. `preauth`: unverified requests get 429 and are counted in memory only. Retry the step that found the store unreachable (5 or 7) every 5 s | 6 (from 5) or 7 (from 7) | stays, alert after 60 s |
-| 6 | close | for each open row in `seq` order: TX6, one transaction per row | 7 | TX6 fails: stop at that row, `failed_closed` |
-| 7 | reconcile | `O = list_open_intents(instance)` from the store, read under the lock while the forwarder is stopped, so it cannot shrink. Required set `Q = O ∪ {audit_id of every intent in records}`. Each `audit_id` in `Q` is **satisfied** by an `outcome` in `records` (chain verified in step 4) or in `quarantine` (`row_mac` verified in step 4); else **missing**. A quarantined intent that is not in `O` is not required (finding 1: no wedge when its outcome was committed and pruned) | `serving`: reads ready; `writes_ready` after the first confirmed report; start the forwarder | any missing: `serving` with writes refused, page with the list; operator resolution is PLT-032's. Store unreachable: `waiting_store` (5a), then retry step 7 (open rows are already closed) |
-Why this closes R3-1: step 6 turns every surviving open row into a local outcome first, so step 7 has one rule: a required intent is satisfied by a verified local outcome, either the original (committed locally, not yet forwarded) or the rebuilt one. A required intent with neither has truly lost its row, and a forged quarantine outcome cannot satisfy it without `K_mac`. Invariant (tested): after step 6, `open_intents` is empty or the file is `failed_closed`. Step 5a is stricter than ADR-0069 2.11 and 7 (which serve reads with the store unreachable at start); the ADR text must follow.
+| 4 | fenced | every `key_id` and `checkpoint.active_key_id` loads; chain verifies from `(pruned_through, pruned_chain)` to `(head_seq, head_chain)`; column binding of every row; every `row_mac`; `usage` equals its recomputation | 5 | `failed_closed`, not ready, page; a `usage` mismatch alone: rewrite it and page |
+| 5 | verified locally | compare the store snapshot under 4.7, **before any append** | 6 | mismatch: `failed_closed`, not ready, page; store unreachable: `waiting_store` |
+| 5a | `waiting_store` (**PENDING Q-645**) | **Current behaviour:** no transaction runs on this file. On `tenant`, health reports not ready, so the instance serves no audited traffic. On `preauth`, unverified requests, sign-in included, get 429 and are counted in memory only. Retry every 5 s. **Alternatives, held for Eldon:** (b) after step 4 passes, serve `ordinary` routes and sign-in with local buffering, refuse `write_through` routes until step 5 passes, and append nothing before the comparison; (c) ADR-0069 2.11: serve reads, refuse writes | 6 (from 5) or 7 (from 7) | stays; alert after 60 s |
+| 6 | close | for each open row in `seq` order: TX6, one transaction per row | 7 | TX6 fails: stop at that row, `failed_closed`, page (GLB-T83) |
+| 7 | reconcile | `O = list_open_intents(instance)` filtered to `audit_class = write_through`, read under the lock while the forwarder is stopped. Required set `Q = O ∪ {audit_id of every write_through intent in records}`. Each member is satisfied by an `outcome` in `records` (chain verified in step 4), else it is missing. An `ordinary` intent without an outcome is expected after a crash (D4) and is not required | `serving`: ready; `writes_ready` after the first confirmed report; start the forwarder | any missing: `serving` with `write_through` refused, page with the list; store unreachable: 5a, then retry step 7 |
+
+Why this closes R3-1: step 6 first turns every surviving open row into a local outcome. Step 7 then needs one rule: a required intent is satisfied by a verified local outcome, either the original (committed locally, not yet forwarded) or the rebuilt one. Invariant (tested): after step 6, `open_intents` is empty or the file is `failed_closed`.
 
 ### 4.5 MAC and chain key rotation (R3-4)
-`deps(k)` = rows with `key_id = k` in `records`, `open_intents` and `quarantine`, plus 1 if `checkpoint.active_key_id = k`, summed over both files of a spool directory (finding 5).
-| Key state | Event | Guard | Action | Next | DP |
-|---|---|---|---|---|---|
-| active | rotation with a new `key_id` | new key loads; both files `serving` | TX7 on `tenant`, then TX7 on `preauth` | verify_only | DP7 |
-| active | TX7 fails on a file | none | `ROLLBACK`; that file keeps the old key; alert; retry | active on that file | none |
-| verify_only | rows depend on it | `deps(k) > 0` | keep it loaded; export `spool_rows_by_key{key_id}` | verify_only | none |
-| verify_only | `deps(k) = 0` on this instance | none | report `retirable` | retirable | none |
-| retirable | retirement requested (key administrator, ADR-0038 item 5) | **active inventory probe**: every spool directory on every attached and detached volume in the volume inventory (INF-001), and every preserved corrupt file, returns `deps(k) = 0`. Attached: asked live through the instance's internal `key_dependents(k)`. Detached or preserved: a probe process takes the `flock`, opens and counts | retire the version in the secret store; instances unload it | retired | secret store |
-| retirable | same | any listed volume unreachable, any file fails `quick_check`, any instance does not answer, or any `deps > 0` | refuse retirement; alert | retirable | none |
-| any | start finds a row or checkpoint whose `key_id` cannot load | none | `failed_closed`; the row is never deleted or re-MACed | failed_closed | none |
-(P) Keep-the-key, not re-authentication: unforwarded `records` under the old key need it anyway until pruned, so open and quarantine rows add no new retention rule; re-MACing would add a second code path that writes MAC material and would not help `records`. Rotation never waits on deps; only retirement does. A preserved corrupt file keeps its keys until the file is destroyed under the deprovisioning or forensic approvals.
+`deps(k)` = the rows with `key_id = k` in `records`, `open_intents` and `late`, plus 1 if `checkpoint.active_key_id = k`, summed over every file of a spool directory.
+| Key state | Event | Guard | Action | Next |
+|---|---|---|---|---|
+| active | rotation with a new `key_id` | new key loads; both files `serving` | TX7 on `tenant`, then TX7 on `preauth` | verify_only |
+| active | TX7 fails on one file (partial rotation) | none | `ROLLBACK`; that file keeps the old key; alert; retry. Each file chains under its own `active_key_id` | active on that file |
+| verify_only | rows depend on it | `deps(k) > 0` | keep it loaded; export `spool_rows_by_key{key_id}` | verify_only |
+| verify_only | `deps(k) = 0` on this instance | none | report `retirable` | retirable |
+| retirable | key administrator requests retirement (ADR-0038 item 5) | **active inventory probe** returns `deps(k) = 0` for every spool directory on every attached and detached volume (INF-001 inventory) and every preserved failed or corrupt file. Attached: live `key_dependents(k)`. Detached or preserved: the probe takes the `flock`, opens and counts | retire the version; instances unload it | retired |
+| retirable | same | a volume unreachable, a file failing `quick_check`, an instance not answering, or any `deps > 0` | refuse; alert | retirable |
+| any | start finds a row or checkpoint whose `key_id` cannot load | none | `failed_closed`; the row is never deleted or re-MACed | failed_closed |
+
+(P) Keep the key rather than re-authenticate the rows: unforwarded `records` under the old key need it until they are pruned anyway. Rotation never waits on `deps`; only retirement does.
 
 ### 4.6 The `preauth` spool
-| State | Event | Guard (5.1 `preauth`) | Action | Next | DP |
-|---|---|---|---|---|---|
-| none | unverified denial or listener event (ADR-0069 1.5, 3.2) | R limit and floor | TX3 | unforwarded | DP3 |
-| none | same | over a limit, or the file is not `serving` | 429 `rate_limited`; in-memory counter per reason | counted | none |
-| counted | each 60 s | G limit and floor | TX4: one record with all reasons' counts and the window | unforwarded | DP4 |
-| counted | G refused | none | keep counting; the window grows; `preauth_unrecorded` metric | counted | none |
-| unforwarded | TX5 | 6.3 | as 4.1 | pruned or quarantined | DP5 |
-Verified requests never call `preauth` admission (ADR-0069 3.2). No `open_intents`, no tenant share; `tenant_id` holds the unverified host tenant only for the deprovisioning probe.
+Every `preauth` record is `ordinary`, buffered and flushed by TX9. That covers unverified denials, tokens for another tenant, and listener events (ADR-0069 1.5, 3.2). They follow 4.1 under the `preauth` limits of 5.1. Over a limit, or with the file not `serving`, the request gets 429 `rate_limited` and an in-memory counter per reason goes up. Every 60 s, TX4 writes one aggregate of every reason's counts and the window. If that aggregate is refused, or the `preauth` file fails closed (its buffer is folded into the counters, 4.1), counting continues (`preauth_unrecorded` metric) and the counts go to the platform stream as a state event; the late file holds `tenant` rows only. Verified requests never call `preauth` admission. There are no `open_intents` and no tenant share.
 
-### 4.7 Snapshot comparison (local half of ADR-0069 2.7; step 5 here, every 5 s in PLT-032; finding 2)
-`L` = `local_snapshot` (6.2), `S` = the store checkpoint for `(instance, stream)`. Step 4 has already verified the local chain between L's anchor and head, so equality at single points suffices. Every row is checked; any failure is a mismatch.
+### 4.7 Snapshot comparison (local half of ADR-0069 2.7; used in step 5 here and by PLT-032 before each acknowledgement)
+`L` = `local_snapshot` (6.2), `S` = the store checkpoint for `(instance, stream)`. Step 4 has already verified the local chain between L's anchor and head, so equality at single points is enough. Every row is a test (GLB-T70); any failure is a mismatch.
 | Case | Check |
 |---|---|
 | `S` absent (never confirmed) | `L.pruned_through = 0` and `L.pruned_chain` = zero bytes |
@@ -163,125 +186,135 @@ Verified requests never call `preauth` admission (ADR-0069 3.2). No `open_intent
 
 ## 5. Admission (R3-5)
 ### 5.1 Limits (P)
-`tenant`: `U = 65,536`, share `S = 0.20 U = 13,107`, band `B = 0.01 U = 655`, platform slot `P = 16`, per-tenant aggregate cap `A = 8` unforwarded aggregate rows (`records_agg`). `preauth`: `U_p = 8,192`, band 256, `P = 16`, aggregate cap 64.
+- **`tenant`:** `U = 65,536`; share `S = 0.20 U = 13,107`; band `B = 0.01 U = 655`; platform slot `P = 16`; per-tenant aggregate cap `A = 8`. **`preauth`:** `U_p = 8,192`; band 256; `P = 16`; aggregate cap 64. **`buffered[t]`** = tenant t's unflushed records plus its reserved ordinary outcomes, in memory.
+
 | Path | Cost | File-total limit | Per-tenant limit | Other guards |
 |---|---|---|---|---|
-| W: write intent (TX1) | 3 | total + 3 ≤ `0.90 U` = 58,982 | tenant + 3 ≤ S | `writes_ready`; confirmed report within 30 s; floor `M_hi` |
-| R: read, denial or validation outcome (TX3) | 1 | total + 1 ≤ `U - B` = 64,881 (`preauth`: 7,936) | tenant + 1 ≤ S (`preauth`: none) | floor `M_hi` |
-| G: tenant or platform aggregate (TX4) | 1 | total + 1 ≤ `U - P` = 65,520 (`preauth`: 8,176) | that tenant's (or the platform's, `tenant_id = ''`) unforwarded aggregates < `A` (`preauth`: < 64) | floor `M_lo` |
-| K: key rotation (TX7) | 1 | total + 1 ≤ U (`preauth`: 8,192) | none (no `records_agg` limit) | floor `M_lo` |
-| O: late outcome (TX2), recovery close (TX6) | -1 net | none | none | never refused by admission |
-The band holds `B - P = 639` units for tenant aggregates: at `A = 8` each, 79 tenants with full backlogs; beyond that, counters keep accumulating in memory. The last `P` units serve only key rotation (row K), so no aggregate, tenant or platform, can block TX7 (finding 4b; round 2 F1).
-### 5.2 Algorithm (finding 4c)
-1. Take the writer lock, `BEGIN IMMEDIATE`, check the epoch. The in-memory flags (`serving`, `failed_closed`, `writes_ready`, `last_confirmed`) and the cached physical reading (5.3) are changed only under the same writer lock, so reading them here is atomic with the insert.
-2. Inside the transaction: refuse if the file is not `serving` or is `failed_closed`; for W, also if not `writes_ready` or `now_monotonic - last_confirmed > 30 s`; then the floor of 5.3 for the path.
-3. Read `usage` for `'*'` and the tenant (and `count(records_agg)` for G). Apply the 5.1 row. On any refusal: `ROLLBACK`, 503 `audit_unavailable` (429 on `preauth`), handler not called, in-memory counter `(tenant, path, reason)` +1.
-4. Otherwise insert, update `usage` for the tenant and `'*'`, `COMMIT`.
-5. Every 60 s, per tenant with a non-zero counter: TX4 writes one `aggregate` record (counts per path and reason, window start and end, ≤ 4,096 bytes). If refused, counting continues and the window grows.
-Refused requests never ran a handler; they are not admitted records, so `audit_drop_count` stays a count of admitted records lost. A crash loses unwritten counts (residual, 9).
-### 5.3 Physical guard (P; findings 4a, 4d)
-Refreshed at most once per second under the writer lock. `H` = held reservations in the `tenant` file. Per file: `size(db) + size(wal) + 8 KiB × H_file ≤ cap` (512 MiB `tenant`, 64 MiB `preauth`, `H_preauth = 0`). Volume, shared by both files: `statvfs` free bytes ≥ `8 KiB × H + M`, with `M_hi = 64 MiB` for W and R, `M_lo = 16 MiB` for G and K, and no floor for O. So no path except O can write into the space kept for reserved outcomes. The unit count stays the admission authority; the guard catches a wrong overhead factor.
-### 5.4 Worked example
-The store confirms reports but ingests slower than arrivals. `tenant` state: A 13,100 units (a read-heavy dashboard), B 4,000 (10 open writes = 20 units of open rows), C 2,000, platform 36; total 19,136.
-- A's next 7 reads pass (tenant 13,107 = S). The 8th: 13,108 > 13,107, refused 503; counter `(A, R, tenant_share)`. A's writes: 13,107 + 3 > S, refused.
-- B write (after A's 7 reads, total 19,143): 19,143 + 3 ≤ 58,982 and B 4,003 ≤ 13,107: admitted. B's late outcome: B 4,002, total 19,145, no check.
-- A's aggregate after 60 s: total 19,146 ≤ 65,520 and A has 0 < 8 unforwarded aggregates: written. While ingest lags, A can hold at most 8 aggregate rows; its ninth minute stays in memory.
-- Under ADR-0069 2.10 as written (share on writes only, reads up to 100%), A's reads alone could add 65,536 - 19,136 = 46,400 units, past 58,982, refusing B's and C's writes. Now one tenant reaches at most 13,107 units (+ 8 aggregates), and refusing other tenants' writes takes at least `58,982 / 13,107 = 4.5` tenants at full share. Held reservations sit inside `'*'` and inside every floor, so no read or aggregate can take a unit an open write's outcome needs.
+| W: write-through intent (TX1) | 3 | total + buffered + 3 ≤ `0.90 U` = 58,982 | tenant + `buffered[t]` + 3 ≤ S | `writes_ready`; a confirmed report within 30 s (the 30 s rule, `write_through` only); at most 8 write-through requests in flight for the tenant (5.4); floor `M_hi` |
+| R: ordinary record at enqueue (an ordinary write's intent costs 2, its outcome included; a read or denial outcome costs 1); write-through read outcome (TX3) | 1 or 2 | total + buffered + cost ≤ `U - B` = 64,881 (`preauth`: 7,936) | tenant + `buffered[t]` + cost ≤ S (`preauth`: none) | buffer < 1,024 records; for TX3, the in-flight cap (5.4); floor `M_hi` at TX9 or TX3 |
+| G: tenant or platform aggregate (TX4) | 1 | total + 1 ≤ `U - P` = 65,520 (`preauth`: 8,176) | that tenant's (or the platform's) unforwarded aggregates < `A` (`preauth`: < 64) | floor `M_lo` |
+| K: key rotation (TX7) | 1 | total + 1 ≤ U | none | floor `M_lo` |
+| O: write-through outcome (TX2), recovery close (TX6), ordinary write outcome | -1 net, or already reserved | none | none | never refused by admission |
+
+The band holds `B - P = 639` units for tenant aggregates: at `A = 8` each, that is 79 tenants with full backlogs, and beyond that counters accumulate in memory. The last `P` units serve key rotation only, so no aggregate can block TX7. **Worked example:** tenant A holds 13,100 units of read outcomes, buffered or unforwarded. A's eighth further read is refused at enqueue (13,108 > S), and so are A's writes. Tenant B's write-through intent passes while total + buffered + 3 ≤ 58,982. Refusing every other tenant's writes takes at least 4.5 tenants at full share.
+
+### 5.2 Algorithm
+1. **Lock.** A write-through path takes the writer lock, runs `BEGIN IMMEDIATE` and checks the epoch. An ordinary enqueue takes the buffer mutex instead. Either path then reads the in-memory flags (`serving`, `failed_closed`, `writes_ready`, `last_confirmed`), `buffered` and the cached physical reading (5.3). The flags change only while both the writer lock and the buffer mutex are held; `buffered` changes only under the buffer mutex; W takes the buffer mutex inside the writer lock for steps 2 to 4, so every path reads a consistent state.
+2. **State checks.** Refuse if the file is not `serving` or is `failed_closed`. For W, also refuse if not `writes_ready`, or if `now_monotonic - last_confirmed > 30 s`. Then apply the path's floor (5.3).
+3. **Limits.** Read `usage` (and `count(records_agg)` for G) and apply the path's 5.1 row. On any refusal: `ROLLBACK` (W); answer 503 `audit_unavailable` (429 on `preauth`), and call no handler; add 1 to the in-memory counter `(tenant, path, reason)`.
+4. **Admit.** Otherwise insert and `COMMIT` (W), or enqueue and add to `buffered` (R).
+5. **Aggregates.** Every 60 s, for each tenant with a non-zero counter, TX4 writes one `aggregate` record: counts per path and reason, window start and end, at most 4,096 bytes. If it is refused, counting continues and the window grows.
+
+A refused request ran no handler and is not an admitted record. So `audit_drop_count`, which must stay 0, counts only admitted records lost outside a crash. A crash loses unwritten counts (residual, 9).
+
+### 5.3 Physical guard (P)
+Refreshed at most once per second under the writer lock. `H` = held open-row reservations. **Per file:** `size(db) + size(wal) + 8 KiB × H_file ≤ cap`, with a cap of 512 MiB for `tenant` and 64 MiB for `preauth`, and `H_preauth = 0`. The late file is bounded by 7.4. **Per volume:** `statvfs` free bytes ≥ `8 KiB × H + M`: `M_hi = 64 MiB` for W and R; `M_lo = 16 MiB` for G and K; no floor for O or TX10. The unit count stays the admission authority; this guard only catches a wrong overhead factor.
+
+### 5.4 Writer lock and fsync queue (F8)
+One tenant's reads never take the fsync queue per request: they join the shared TX9 batches (one fsync per batch), and the share S bounds them in units. (P) The writer lock is one FIFO queue for TX9 batches, TX1 to TX4, TX6, TX7 and PLT-032's TX5: **Batch hold.** TX9 holds the lock for one batch of at most 256 records, so a write-through commit waits at most one batch. **Per-tenant cap.** A tenant may have at most 8 write-through requests in flight, counted from admission (TX1 for a write, request start for a read) until the outcome commits (TX2, TX3 or TX10). A ninth is refused at admission with 503 `audit_unavailable` for that tenant only, recorded by 5.2 step 5; an outcome is never refused, so the cap bounds that tenant's per-request fsyncs to 8 at a time. **Reads off the lock.** PLT-032's batch reads and the read-only accessors use the read connection, never the writer lock.
 
 ## 6. Interface for PLT-032 (local side only; PLT-032 owns the protocol)
-6.1 `stream_guard(stream)`: a per-stream in-process mutex. PLT-032 holds it across one store checkpoint read, `local_snapshot` and the 4.7 comparison; `apply_receipts` and WAL truncation take it too. This serialises verification and pruning (local half of R3-2).
-6.2 `local_snapshot(stream)` in one read transaction: `pruned_through`, `pruned_chain`, `prune_receipt_version`, `head_seq`, `head_chain`, and `chain_at(seq)` for `seq` in `(pruned_through, head_seq]`. Callers compare under 4.7 and never treat `L.head_seq` and `S.head_seq` as the same value.
-6.3 `apply_receipts(stream, through_seq, wm_seq, receipt_version, receipts)`: TX5. Refused, nothing written, unless `through_seq ≤ wm_seq`; `receipt_version ≥ prune_receipt_version`; every `seq` in `(pruned_through, through_seq]` exists in `records` and has exactly one receipt in `{committed, rejected, conflict}`; no receipt names a seq above `through_seq`. Receipts with `seq ≤ pruned_through` are ignored, never applied or counted, so `usage` is never decremented twice (finding 7). A call with `through_seq ≤ pruned_through` is a successful no-op, so replaying original receipts of an already-committed prefix after a lost reply (R3-3) is safe locally; the store-side rule that returns them is PLT-032's and SEC-008's.
-6.4 `read_batch(stream, after_seq, max_records = 500, max_bytes = 1 MiB)`: one short read transaction on the read connection; rows in `seq` order with `key_id`, `chain`, `body`. A batch never spans more than one transaction (long reads block WAL checkpoints).
-6.5 `report_confirmed(stream, monotonic_time)` and `fail_closed(stream, reason)`: set under the writer lock (5.2); in memory; after a restart nothing is confirmed until PLT-032 reports.
-6.6 Read-only accessors: units per tenant, held reservations, `key_dependents(key_id)`, quarantine count, oldest unforwarded `ts`, refusal counters.
-6.7 The fake `AuditStore` here implements only `checkpoint(instance, stream)` and `list_open_intents(instance)`; PLT-032's conformance suite owns the rest of Q-614.
+6.1 `stream_guard(stream)`: a mutex per stream. PLT-032 holds it across one store checkpoint read, `local_snapshot` and the 4.7 comparison. `apply_ack` and WAL truncation take it too (local half of R3-2).
+6.2 `local_snapshot(stream)`, in one read transaction: `pruned_through`, `pruned_chain`, `prune_receipt_version`, `head_seq`, `head_chain`, and `chain_at(seq)` for `seq` in `(pruned_through, head_seq]`.
+6.3 `apply_ack(stream, through_seq, wm_seq, receipt_version, receipts)` runs TX5. It is refused, with nothing written, unless: `through_seq ≤ wm_seq`; `receipt_version ≥ prune_receipt_version`; every `seq` in `(pruned_through, through_seq]` exists and has exactly one receipt. Receipts at or below `pruned_through` are ignored, so a replay after a lost reply is a local no-op (R3-3 local half). `rejected` and `conflict` delete the row as `committed` does, increment `receipt_rejected_total` and page. What the store keeps is SEC-008's choice.
+6.4 `read_batch(stream, after_seq, max_records = 500, max_bytes = 1 MiB)`: one short read transaction; rows in `seq` order.
+6.5 `report_confirmed(stream, monotonic_time)` and `fail_closed(stream, reason)` are set under the writer lock and the buffer mutex. Confirmation is in memory only: after a restart nothing counts as confirmed until PLT-032 reports. `fail_closed` also writes the `<name>.failed` marker (1) before it returns; if the marker cannot be written, the instance stays not ready, retries every 5 s and pages, and a restart before it succeeds re-verifies the file under 4.4 step 4 (residual, 9).
+6.6 Read-only accessors: units and `buffered` per tenant, held reservations, `key_dependents(key_id)`, the oldest unforwarded `ts`, refusal counters, late rows.
+6.7 The fake `AuditStore` implements `checkpoint(instance, stream)` and `list_open_intents(instance)`, filterable by `audit_class`. A direct late outcome exists only if Q-646 allows it.
+6.8 **Stream routing (D3).** These go to SEC-008's platform security stream and never to a tenant's audit: every `preauth` row; `tenant` rows with `tenant_id = ''`: `key_rotation` and platform aggregates; the state events `failed_closed`, `corrupt` and `waiting_store`, rejected receipts, the missing intents of 4.4 step 7, and the fact (not the content) that a file has late rows. Only rows with a verified `tenant_id` go to the tenant audit, late rows included, flagged as late. SEC-008 may change these shapes and this routing (D1, D3).
 
 ## 7. Failure semantics
 ### 7.1 Crash (SIGKILL) at each durability point
 | Point | Crash before `COMMIT` returns | Crash after `COMMIT`, before the next step |
 |---|---|---|
-| DP0 | lock released by the kernel; next start repeats | same |
-| DP1 | no intent, no open row; handler not called; client sees a dropped connection | open row survives; recovery closes it `unknown_after_restart` (GLB-T01) |
-| DP2 | open row survives; recovery closes it as unknown (GLB-T02) | outcome unforwarded; store may list the intent as open; step 7 finds the local outcome (R3-1) |
-| DP3 | no record; dropped connection; no effect | record kept; response may be lost |
+| DP0 | the kernel releases the lock; next start repeats | same |
+| DP1 | no intent, no open row; handler not called; dropped connection | open row survives; recovery closes it `unknown_after_restart` (GLB-T01) |
+| DP2 | open row survives; recovery closes it (GLB-T02) | outcome unforwarded; step 7 finds it (R3-1) |
+| DP3 | no record; dropped connection; no effect | record kept; the response may be lost |
 | DP4 | counts lost (residual) | record kept |
-| DP5 | nothing pruned; the store returns the original receipts on retry (ADR-0069 2.9) | pruned and quarantined with MACs; open rows untouched (GLB-T30) |
-| DP6 | that row stays open; the next start closes it, never twice (GLB-T31) | closed; next row next |
-| DP7 | old key stays active on that file | new key active; old key `verify_only` |
-| DP8 | rows remain; operator repeats | rows gone; certification still needs the WAL truncation result (3) |
-### 7.2 Disk full (`SQLITE_FULL`, or the 5.3 guard)
-TX1 and TX3: `ROLLBACK`, 503, handler not called. TX2: real result returned, retry in memory, row and reservation kept; W and R refused until 5.3 passes. TX5 frees space and is retried by PLT-032. TX6 at start: stop at the failing row, `failed_closed`. Graceful shutdown retries queued TX2s for at most 30 s (P) and leaves the rest to recovery. INF-001 sizes the volume so `(U + U_p) × 8 KiB + 64 MiB` fits.
-### 7.3 Corrupt or tampered file
-- SQLite reports corruption (`SQLITE_CORRUPT`, `SQLITE_NOTADB`, `quick_check` not `ok`): state `corrupt`, not ready, page. The file is never repaired, rebuilt or deleted in place; it is kept on the volume for forensic reading, the deprovisioning probe and the key probe (4.5). (P) The instance is replaced with a **new `instance_id`** and a fresh spool, so no `seq` stream ever restarts (question 5).
-- Chain, column binding, `row_mac` or `usage` check fails, an open row is missing, or 4.7 finds a mismatch: `failed_closed` (4.4).
-- A live edit by another process: the epoch check stops a writer that lost its fencing; TX2 checks its row's MAC and binding; everything is re-checked at every start.
+| DP5 | nothing pruned; the store returns the original receipts | pruned; open rows untouched (GLB-T30) |
+| DP6 | that row stays open; the next start closes it, never twice (GLB-T31) | closed; recovery moves to the next row |
+| DP7 | the old key stays active on that file | new key active; old key `verify_only` |
+| DP9 | the batch and the rest of the buffer are lost (D4; at most 1,024 records) | batch kept; the rest of the buffer is lost |
+| DP10 | the late outcome is lost; the open row survives and the drain reports it as unknown | late row kept; the drain forwards it |
 
-## 8. Tests (stdlib `unittest`; crash tests kill a subprocess with SIGKILL at a named hook; hooks are refused in production, as in ADR-0041; disk full is simulated with `PRAGMA max_page_count`)
+### 7.2 Disk full (`SQLITE_FULL`, or the 5.3 guard)
+TX1 and TX3: `ROLLBACK`, 503, handler not called. TX2: real result returned, outcome retried, row and reservation kept. TX9: the batch stays buffered and enqueue is refused once the buffer is full; nothing is dropped. TX5 frees space. TX6 at start: stop at the failing row, `failed_closed`. Graceful shutdown flushes the buffer and retries queued TX2s for at most 30 s (P), then leaves the rest to TX10 or recovery. INF-001 sizes the volume so that `(U + U_p) × 8 KiB + 64 MiB` fits.
+
+### 7.3 Corrupt file
+A file is `corrupt` when SQLite reports `SQLITE_CORRUPT` or `SQLITE_NOTADB`, or when `quick_check` is not `ok`. It is then not ready, and a page goes out. It is never repaired, rebuilt or deleted in place; it is preserved for forensic reading, the deprovisioning probe and the key probe (4.5). (P) The instance is replaced with a **new `instance_id`** and a fresh spool, so no `seq` stream ever restarts (Q-633).
+
+### 7.4 Leaving `failed_closed` (F5)
+A file becomes `failed_closed` on any of these: a `<name>.failed` marker at start; a failed chain, binding, `row_mac` or key check; a 4.7 mismatch; a missing open row; an I/O error on `COMMIT`; a non-empty late file at start. The state is terminal for the file's instance. The instance reports not ready, still returns real results for requests already past their handler (4.2), and is replaced with a new `instance_id` (as in 7.3). (P) The exit has four steps:
+1. **Preserve.** The file and `spool-late.db` stay read-only on the volume, which stays in the INF-001 inventory.
+2. **Drain.** An audited, forwarder-only process takes the `flock` and appends nothing. It verifies the chain from the anchor; delivers `records` up to the last verifiable `seq`; delivers the late rows whose `row_mac` verifies; reports each open row with no late outcome as unknown (`unknown_after_failed_closed`; Q-633 decides how the store marks it); hands unverifiable rows to SEC-008 as flagged evidence, or keeps them for forensics.
+3. **Destroy.** After the drain and any forensic hold, destroy the files under the deprovisioning or forensic approvals; the deprovisioning probe (ADR-0069 5.5) must then find none of them.
+4. **Release keys.** The files count in `deps(k)` until they are destroyed; their key versions then retire through the 4.5 probe. The late file holds at most 1,024 + 256 rows per failure: the whole buffer plus one outcome per in-flight request (256 per instance, ADR-0069 4).
+
+## 8. Tests
+Stdlib `unittest`. Crash tests kill a subprocess with SIGKILL at a named hook; the hooks are refused in production, as in ADR-0041. A full disk is simulated with `PRAGMA max_page_count`.
 | Test id | Test | Covers |
 |---|---|---|
-| GLB-T01 | `test_spool_intent_survives_sigkill_before_handler` | 4.2 none to open; DP1 |
-| GLB-T02 | `test_restart_closes_open_intent_as_unknown` | 4.2 recovery close; DP2 before |
-| GLB-T03 | `test_high_water_refuses_write_without_handler_call` | 5.1 W |
-| GLB-T08 | `test_second_spool_writer_refused` (adds: epoch mismatch stops the old writer) | 4.4 step 1; TX0 |
-| GLB-T09 | `test_clock_backwards_keeps_seq_order` | 4.1 append |
-| GLB-T30 | `test_pruned_intent_recovered_with_identity_fields_from_open_row` | 4.2 recovery; DP5 after |
-| GLB-T31 | `test_crash_during_recovery_resumes_without_double_close` | 4.4 step 6; DP6 |
+| GLB-T01, T02 | `test_spool_intent_survives_sigkill_before_handler`; `test_restart_closes_open_intent_as_unknown` | 4.2; DP1, DP2 |
+| GLB-T03, T08 | `test_high_water_refuses_write_without_handler_call`; `test_second_spool_writer_refused` (an epoch mismatch stops the old writer) | 5.1 W; 4.4 step 1; TX0 |
+| GLB-T09, T50 | `test_clock_backwards_keeps_seq_order`; `test_record_over_ceiling_is_write_failure_not_truncated` | 4.1; 1 |
+| GLB-T30, T31 | `test_pruned_intent_recovered_with_identity_fields_from_open_row`; `test_crash_during_recovery_resumes_without_double_close` | 4.2; DP5; 4.4 step 6; DP6 |
 | GLB-T35 | `test_verified_requests_complete_during_sustained_preauth_saturation` | 4.6 |
-| GLB-T44 | `test_deprovision_probe_covers_open_rows_quarantine_and_detached_volumes` | 4.1 deprovisioning; TX8 |
-| GLB-T45 | `test_tenant_over_share_or_quarantined_does_not_block_other_tenant` | 5.1 share |
-| GLB-T46 | `test_missing_or_bad_mac_open_row_detected_at_recovery` | 4.2 unverifiable; 4.4 step 7 |
-| GLB-T50 (P) | `test_record_over_ceiling_is_write_failure_not_truncated` | 1 record bytes |
-| GLB-T51 (P) | `test_apply_receipts_contiguity_quarantine_move_and_idempotent_replay` (incl. receipts below `pruned_through` ignored) | 6.3; 4.1 |
-| GLB-T52 (P) | `test_prune_never_exceeds_watermark_or_touches_open_intents` | 6.3; 4.2 |
-| GLB-T53 (P) | `test_outcome_commit_failure_returns_real_result_and_keeps_row` | 4.2 retrying; 7.2 |
-| GLB-T54 (P) | `test_tenant_share_applies_to_reads_and_denials` (R3-5) | 5.1 R |
-| GLB-T55 (P) | `test_late_outcome_and_recovery_close_never_refused_at_full_capacity` (R3-5) | 4.3; 5.1 O |
-| GLB-T56 (P) | `test_refusals_become_bounded_aggregates_per_tenant_in_band` | 5.1 G; 5.2 step 5 |
-| GLB-T57 (P) | `test_store_open_intent_satisfied_by_unforwarded_local_outcome` (R3-1) | 4.4 step 7; DP2 after |
-| GLB-T58 (P) | `test_usage_counters_recomputed_and_checked_at_start` | 4.3; 4.4 step 4 |
-| GLB-T59 (P) | `test_rotation_record_under_old_key_and_chain_continues` | 4.5 TX7; DP7 |
-| GLB-T60 (P) | `test_key_not_retirable_while_any_row_or_active_checkpoint_depends_on_it` (R3-4) | 4.5 deps |
-| GLB-T61 (P) | `test_missing_referenced_key_fails_closed_without_deleting_rows` (R3-4) | 4.5; 4.4 step 4 |
-| GLB-T62 (P) | `test_preauth_full_returns_429_and_writes_aggregate_in_band` | 4.6 |
-| GLB-T63 (P) | `test_disk_full_refuses_intent_and_retries_outcome` | 7.2 |
-| GLB-T64 (P) | `test_corrupt_file_not_ready_and_preserved` | 7.3 |
-| GLB-T65 (P) | `test_local_chain_or_column_binding_tamper_detected_at_start` | 4.4 step 4 |
-| GLB-T66 (P) | `test_sigkill_at_each_durability_point` (DP0 to DP8, both sides of `COMMIT`) | 7.1 |
-| GLB-T67 (P) | `test_snapshot_and_prune_serialised_per_stream` (R3-2 local half) | 6.1 |
-| GLB-T68 (P) | `test_secure_delete_and_wal_truncate_leave_no_closed_tenant_bytes_in_files` (M6) | 3; 9 M6 |
-| GLB-T69 (P) | `test_forged_or_deleted_quarantine_row_detected_and_quarantined_intent_does_not_wedge` | 1; 4.1; 4.4 step 7 |
-| GLB-T70 (P) | `test_caught_up_spool_anchor_compared_with_store_watermark` | 4.7 |
-| GLB-T71 (P) | `test_store_unreachable_at_start_no_append_and_not_ready` | 4.4 step 5a |
-| GLB-T72 (P) | `test_open_row_audit_id_or_tenant_swap_detected_and_missing_row_fails_closed` | 1 MAC; 4.2 absent |
-| GLB-T73 (P) | `test_aggregate_band_per_tenant_cap_rotation_slot_and_floors` (both files; 8 platform aggregates do not block TX7) | 5.1 G, K; 5.3 |
-| GLB-T74 (P) | `test_fail_closed_flag_set_concurrently_blocks_next_admission` | 5.2 steps 1 and 2 |
-| GLB-T75 (P) | `test_key_retirement_probe_fails_closed_on_unreachable_or_corrupt_volume` | 4.5 retirable |
-| GLB-T76 (P) | `test_ambiguous_commit_resolved_per_transaction_and_rollback_after_error` | 3 |
-| GLB-T77 (P) | `test_close_write_refuses_recovery_outcome_and_recovery_outcome_fields` | TX2; TX6 |
-Plus a measurement, not a pass or fail test: `bench_commit_rate_synchronous_full` (commits per second, one fsync each; on the test machine, later on the production volume; Eldon's low "measure sync throughput").
+| GLB-T44 | `test_deprovision_probe_covers_open_rows_late_file_and_preserved_volumes` | ADR-0069 5.5; 7.4 |
+| GLB-T45 | `test_tenant_over_share_does_not_block_other_tenant` (buffer included) | 5.1 |
+| GLB-T46 | `test_missing_or_bad_mac_open_row_detected_at_recovery` | 4.2; 4.4 step 7 |
+| GLB-T51, T52 | `test_apply_ack_contiguity_rejected_receipt_deletes_pages_and_replay_no_op`; `test_prune_never_exceeds_watermark_or_touches_open_intents` | 6.3; 4.2 |
+| GLB-T53 | `test_outcome_commit_failure_returns_real_result_and_keeps_row` | 4.2; 7.2 |
+| GLB-T54 to T56 | the tenant share applies to buffered reads and denials (R3-5); late and recovery outcomes are never refused at full capacity; refusals become bounded aggregates per tenant | 5.1; 4.3; 5.2 step 5 |
+| GLB-T57, T58 | `test_store_open_intent_satisfied_by_unforwarded_local_outcome` (R3-1); `test_usage_counters_recomputed_and_checked_at_start` | 4.4 step 7; 4.4 step 4 |
+| GLB-T59 to T61 | the rotation record is under the old key; a key is not retirable while deps > 0; a missing key fails closed without deleting rows (R3-4) | 4.5 |
+| GLB-T62, T63 | `test_preauth_full_returns_429_and_writes_aggregate_in_band`; `test_disk_full_refuses_intent_retries_outcome_and_keeps_buffer` | 4.6; 7.2 |
+| GLB-T64, T65 | a corrupt file is not ready and is preserved; local chain or column binding tampering is detected at start | 7.3; 4.4 step 4 |
+| GLB-T66 | `test_sigkill_at_each_durability_point` (DP0 to DP10 except DP8, both sides of `COMMIT`) | 7.1 |
+| GLB-T67, T68 | `test_snapshot_and_ack_serialised_per_stream` (R3-2 local half); `test_secure_delete_and_wal_truncate_leave_no_closed_tenant_bytes_in_files` (M6) | 6.1; 3; 9 |
+| GLB-T69 | removed in revision 2 (it tested quarantine) | |
+| GLB-T70 | `test_snapshot_comparison_each_case` (all seven 4.7 rows, each passing and failing) | 4.7 |
+| GLB-T71 | `test_store_unreachable_at_start_no_append_and_not_ready` (rewritten after Q-645) | 4.4 step 5a |
+| GLB-T72 to T75 | open-row `audit_id` or tenant swap detected; aggregate band, per-tenant cap, rotation slot and floors; a fail-closed flag set concurrently blocks the next admission; the retirement probe fails closed on an unreachable or corrupt volume | 1; 5.1 to 5.3; 4.5 |
+| GLB-T76, T77 | `test_commit_io_error_fails_closed_writes_marker_handler_not_called` (F7; the deferred reopen rule gets its own test before it is enabled); `test_close_write_refuses_recovery_outcome_and_recovery_outcome_fields` | 3; 6.5; TX2; TX6 |
+| GLB-T78 | **Power-loss gate (F6):** `test_power_cut_keeps_every_acknowledged_write_through_commit`. A VM on the production volume type is hard-reset by the hypervisor during sustained TX1 and TX2; after reboot, every acknowledged commit must be present. A negative control run with `synchronous=OFF` must lose commits, or the harness is invalid. No `write_through` route goes live until this passes on the production volume type. The SIGKILL tests cannot stand in for it: they also pass with `synchronous=OFF` | 1; 3 |
+| GLB-T79, T80 | pragmas read back (including `synchronous=FULL` and `fullfsync`); a fresh file's first key, and creation refused when the store has a checkpoint (F9) | 1 |
+| GLB-T81, T82 | `test_thirty_second_unconfirmed_rule_refuses_write_through_only` (F10); `test_route_class_declared_default_write_through_and_ordinary_refused_for_admin_money_write` (F1) | 5.1 W; 5.2; 3 |
+| GLB-T83, T84 | a recovery close failure stops at its row and fails closed; a partial rotation leaves each file chaining under its own key while retirement waits (F10) | 4.4 step 6; 4.5 |
+| GLB-T85, T88 | `test_buffer_flush_failure_retries_never_drops_and_shutdown_flushes`; `test_one_tenant_write_through_cap_and_flush_batch_bound_lock_wait` (F8) | 4.1; 5.4 |
+| GLB-T86, T87 | failed closed mid-request returns the real result and writes a late outcome (F4); the failed-closed drain delivers verified rows, reports unknowns and releases keys (F5) | 4.2; TX10; 7.4 |
+| GLB-T89, T90 | `preauth` usage rows bounded by provisioned tenants (F9); record identity carries `memberRef` and `token_id` and no subject (F3) | 2; 1 |
 
-## 9. Open items and review findings: how each is closed or handed off
-- **R3-1 (closed):** 4.4 steps 6 and 7; GLB-T57, T31, T46, T69.
-- **R3-4 (closed):** keep each verification key while `deps > 0`, including the active checkpoint, and retire only after an active probe of every attached, detached and preserved file (4.5). GLB-T59 to T61, T75.
-- **R3-5 (closed):** the 20% share applies to W and R; aggregates are capped per tenant inside a band, with a platform slot; held reservations count in every limit and floor; late outcomes are never refused (5). GLB-T54 to T56, T45, T73. This changes ADR-0069 2.10 ("only that tenant's writes are refused") and section 7; the ADR text must follow before Accepted.
-- **R3-2, R3-3 (local half here; protocol to PLT-032 and SEC-008):** 6.1 serialises snapshot and prune; 4.7 fixes the comparison; 6.3 makes receipt replay a no-op locally and enforces contiguity only on the range being pruned.
-- **M6 (P): a stated exception with conditions, pending Eldon (question 1).** The per-tenant envelope rule ([data.md](../architecture/data.md) item 3; data-retention section 8, "no tenant data is ever written under a shared key") exists so destroying one tenant's keys erases every copy. The spool is excepted because: (a) the volume key is **per instance volume**, a data key wrapped by the regional `S10a` in the KMS, never shared between volumes, and destroyed when the volume is decommissioned after a drain to zero, so the shredding unit is the volume; (b) the volume is never backed up, snapshotted or restored (ADR-0069 2.1); in-country replication, if INF-001 provides it, shares that key and lifecycle; (c) records hold identifiers and keyed digests only (ADR-0069 5.2); (d) rows live only until forwarded; a closed tenant's rows are drained, `secure_delete=ON` overwrites deleted cells, and the checked WAL truncation of section 3 runs before the deprovisioning probe certifies (GLB-T68). Residual: freed file-system blocks may still hold old frames, readable only with the volume key. Rejected fix (P): per-tenant data keys for `body` would put a KMS unwrap and a cache of every tenant's key in the request path (a KMS outage would refuse every request), and `preauth` has no verified tenant to key by.
-- **Review findings, revision 1:** 1 fixed (1 quarantine MAC, 2 schema, 4.4 step 7); 2 fixed (4.7, 4.4 steps 5 and 5a); 3 fixed (1 open-row MAC and binding, TX2, 4.2 `absent`); 4 fixed (5.1, 5.2, 5.3); 5 fixed (4.5); 6 fixed (3, with UNVERIFIED in 10); 7 fixed (2 checks, TX2, TX6, 6.3, question 6).
+Also a measurement, not a pass or fail test: `bench_commit_rate_synchronous_full`, which measures TX1 and TX9 rates on the test machine and later on the production volume.
+
+## 9. Open items, residuals and review findings
+- **R3-1 (closed, subject to Q-630).** Closed by 4.4 steps 6 and 7 (GLB-T57, T31, T46). It needs `list_open_intents` to be complete at one checkpoint version and filterable by `audit_class`.
+- **R3-4 (closed).** A key is kept while `deps > 0` and retired only after an active probe (4.5; GLB-T59 to T61, T75, T84).
+- **R3-5 (closed).** The tenant share applies to W, R and the buffer; aggregates are capped inside a band; held reservations count in every limit (5; GLB-T54 to T56, T45, T73).
+- **R3-2 and R3-3 (local half here).** 6.1 serialises snapshot and acknowledgement, and 6.3 makes a replay a no-op. The protocol itself is PLT-032's and SEC-008's.
+- **M6 (P): a stated exception with conditions, pending Eldon (Q-629).** The per-tenant envelope rule ([data.md](../architecture/data.md) item 3; data-retention section 8) exists so that destroying one tenant's keys erases every copy. The spool is excepted because: (a) its volume key is per instance volume, wrapped by the regional `S10a`, never shared, and destroyed after a drain to zero; (b) the volume is never backed up, snapshotted or restored; (c) records hold only identifiers and keyed digests; (d) rows live only until they are forwarded, and `secure_delete=ON` plus the checked WAL truncation run before the deprovisioning probe certifies (GLB-T68). Residual: freed blocks may still hold old frames, readable only with the volume key. Rejected: per-tenant data keys for `body`, which would put a KMS unwrap in the request path.
+- **Residuals.** A crash loses up to 1,024 buffered ordinary records (D4). Until the store acknowledges them, unforwarded rows can be removed undetected by someone with volume write access. Under Q-644 (a), that includes write-through intents. Open-row replay (F9): someone with volume write access and an old copy of the file can restore a closed open row whose MAC is still valid. Recovery then appends a second `unknown_after_restart` outcome. Only the store detects it, as a `conflict` on that `audit_id`, which pages. A late outcome is lost if TX10 fails and the process then exits; its intent survives. Refusal counts are lost on a crash. If the `<name>.failed` marker cannot be written and the process restarts first, the file is re-verified instead of staying failed (6.5).
+- **Review findings, revision 1 (Gemini 4 Argon):** 1 to 7 fixed. The quarantine parts of the fixes for 1 and 7 are superseded by revision 2.
+- **Revision 2 (founder decisions on PR #316; Fable 5.2 security review at `befd6de`).** Removed: the quarantine table and its MAC, TX8, per-request commits for ordinary routes, and the reopen rule after an ambiguous `COMMIT` (deferred). F1: 3, 4.1, 5.1, GLB-T82. F2: 4.4 step 5a, Q-645. F3: 1 (record bytes), TX6, GLB-T90. F4: 4.2, TX10, Q-646, GLB-T86. F5: 7.4, GLB-T87. F6: GLB-T78. F7: 3, GLB-T76. F8: 5.4, GLB-T88. F9: 1 (fresh file, fullfsync), 2 (`preauth` usage), the residuals above, GLB-T79, T80, T89. F10: GLB-T70, T81, T83, T84. Route class: Q-644 and Q-647. SEC-008 record shapes and the platform stream: 1 and 6.8.
 
 ## 10. UNVERIFIED
-- Crash durability of WAL with `synchronous=FULL` on the production volume type, and `flock` semantics there.
-- The production image's SQLite version (≥ 3.37 required; 3.45.1 on the dev machine, 2026-11-25).
-- Commit throughput with one fsync per request; the 8 KiB unit (4 KiB × factor 2); `secure_delete` cost.
-- That reopening after an I/O error on `COMMIT` always yields a definite committed-or-not state (section 3).
-- That `wal_checkpoint(TRUNCATE)` returning `(0, 0)` with readers quiesced removes every frame from the file; that truncated frames are unreadable in freed blocks.
-- That `PRAGMA max_page_count` reproduces a real full disk; `statvfs` accuracy on the volume.
+- Crash and power-loss durability of WAL with `synchronous=FULL` on the production volume type, and `flock` semantics there (gate GLB-T78).
+- The production image's SQLite version (3.37 or later required; the dev machine has 3.45.1, 2026-11-25).
+- Commit throughput of TX1 and TX9; the 8 KiB unit; the cost of `secure_delete`; the 200 ms and 256-record flush values.
+- That reopening after an I/O error on `COMMIT` always yields a definite committed-or-not state (deferred, see 3).
+- That `wal_checkpoint(TRUNCATE)` returning `(0, 0)` with readers quiesced removes every frame, and that truncated frames are unreadable in freed blocks.
+- That `PRAGMA max_page_count` reproduces a real full disk, and that `statvfs` is accurate on the volume.
 - Whether audit metadata counts as tenant data under data-retention section 8.
+- That the membership check can return `memberRef`: today's `AccessClaims` carry `subject` and `token_id` (ADR-0069 Context), so PLT-030 must add `memberRef` with identity's owner.
 
 ## 11. Questions for Eldon
 1. **Q-629**: M6: accept the per-volume key exception of section 9, or require per-tenant data keys for the spool?
-2. **Q-630**: Q-614: may the fake and SEC-008 expose `list_open_intents(instance)` as a complete list taken at one checkpoint `version`? Does an intent whose outcome the store `rejected` stay on that list?
-3. **Q-631**: R3-5: agree the unit model (65,536 units replacing "100,000 records or 512 MiB"), the share on reads and denials, and refusals recorded only as capped per-minute aggregates that a crash can lose?
+2. **Q-630**: Q-614: may the fake and SEC-008 expose `list_open_intents(instance)` as a complete list taken at one checkpoint `version`? Does an intent whose outcome the store `rejected` stay on that list? (Revision 2 also needs the list to be filterable by `audit_class`, 4.4 step 7.)
+3. **Q-631**: R3-5: agree the unit model (65,536 units replacing "100,000 records or 512 MiB"), the share on reads and denials, and refusals recorded only as capped per-minute aggregates that a crash can lose? (Revision 2: the share also covers the buffer.)
 4. **Q-632**: Secret inventory ids for the spool's HMAC key versions and the per-volume data key: to be allocated in the ADR-0038 inventory by its owner when code lands; does SEC-008 need the same chain key versions, and for how long?
-5. **Q-633**: A corrupt spool retires its `instance_id`: should SEC-008 mark that instance's store-open intents as unknown outcomes for operators, or keep them open?
+5. **Q-633**: A corrupt spool retires its `instance_id`: should SEC-008 mark that instance's store-open intents as unknown outcomes for operators, or keep them open? (Revision 2: the same applies to a `failed_closed` spool, 7.4.)
 6. **Q-634**: SEC-008 and Q-614 (record schema, provisional here per ADR-0069 lane note): ratify the `K_chain` derivation label `seshna.spool.chain.v1`, the exclusion of `chain` from `body`, and the schemas of the `aggregate` and `key_rotation` records (5.2 step 5, TX7)?
+7. **Q-644**: Write-through for admin and money routes (3): must "durably committed" reach (a) this instance's spool under `synchronous=FULL`, or (b) a SEC-008 acknowledgement?
+8. **Q-645**: Store unreachable at start (4.4 step 5a): keep "serve nothing", or adopt alternative (b) or (c)?
+9. **Q-646**: May the `AuditStore` port accept one late outcome directly, outside the instance's `seq` chain, when the late file cannot be written (4.2)?
+10. **Q-647**: Which permission catalogue kinds count as money for write-through (3)?

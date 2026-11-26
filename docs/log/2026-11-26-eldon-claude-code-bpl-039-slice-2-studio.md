@@ -21,3 +21,8 @@ Unknown or approximate, if known.
 
 ## Next step
 Merge #321 then the slice 2 PR; no compiler change was needed.
+
+## Review fix: rollback approvals test gap
+- Added `approvalsGranted == ["rollbackApproved"]` assertions to the label-only rollback test and the refused irreversible rollback test (services/studio/tests/test_studio_incremental.py).
+- Mutation check: forcing rollback to always add `gateApproved` fails both new assertions; code reverted, suite passes.
+- Q-79 row now notes Studio also supplies `gateApproved` on the owner's rollback click (#346).

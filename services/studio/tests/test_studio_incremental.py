@@ -35,6 +35,7 @@ def test_first_apply_edit_incremental_apply_then_rollback_restores_the_base(clie
     assert second["exportHashMatches"] and second["exportHashAfter"] != base_hash
     status, back, _ = client.post("/api/rollback")
     assert status == 200 and back["ok"] and back["siteChanged"] is True
+    assert back["approvalsGranted"] == ["rollbackApproved"]  # label-only: no storage gate
     assert client.get("/api/export")[1]["exportHash"] == base_hash
 
 
@@ -71,6 +72,7 @@ def test_an_irreversible_change_is_flagged_and_its_rollback_is_refused_with_the_
     hash_before = client.get("/api/export")[1]["exportHash"]
     status, back, _ = client.post("/api/rollback")
     assert status == 409 and back["status"] == "rejected"
+    assert back["approvalsGranted"] == ["rollbackApproved"]  # refused before any storage gate is asked
     assert back["error"]["code"] == "rollback_not_possible" and back["error"]["reasonCode"] == "irreversible_step"
     assert back["siteChanged"] is False and client.get("/api/export")[1]["exportHash"] == hash_before
     assert len(s.history) == 2

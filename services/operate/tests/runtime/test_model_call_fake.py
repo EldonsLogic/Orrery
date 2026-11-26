@@ -1,4 +1,4 @@
-"""PLT-026: the fake model-call port follows contracts/model-call.md 0.2.0 (trust by reference, refusal codes,
+"""PLT-026: the fake model-call port follows contracts/model-call.md 0.3.0 (trust by reference, refusal codes,
 reservation lifecycle with post-dispatch metering, identity from the principal, idempotency, fallback, metering)."""
 import copy
 import json
@@ -72,7 +72,7 @@ def conv(trust="user", role="user", turn=2, text="hi", **kw):
 def test_examples_validate_and_fake_reply_matches_schema():
     for f in sorted((CONTRACTS / "examples").glob("model-call-*.json")):
         valid(json.loads(f.read_text(encoding="utf-8")))
-    assert REQ["contract_version"] == SCHEMA["version"] == "0.2.1"
+    assert REQ["contract_version"] == SCHEMA["version"] == "0.3.0"
     assert REQ["blocks"][0]["content_hash"] == content_hash(P_TEXT)
     assert REQ["blocks"][1]["content_hash"] == content_hash(T_TEXT)
     p = port()
@@ -492,3 +492,167 @@ def test_low6_idempotency_is_scoped_to_the_actor():
     caller = dict(REQ["caller"], actor_id="ag_sales_2", agent_id="ag_sales_2")
     out = port(other, idem_store=store, reply_text="actor b").complete(req(caller=caller))
     assert out["text"] == "actor b" and not out["replayed"]
+
+
+# -- 0.3.0: PD flag, grant ceiling, output_schema (Q-671) ---------------------------------------------------------------
+def with_blocks(*extra):
+    r = req()
+    r["blocks"] = [b for b in r["blocks"] if b["trust"] not in ("untrusted", "user")] + list(extra)
+    return r
+
+
+def test_030_new_reasons_and_fields_are_in_the_schema():
+    for code, reason in [("region_policy_refused", "pd_not_allowed"), ("invalid_request", "data_class_above_grant"),
+                         ("filter_blocked", "output_schema_mismatch")]:
+        valid({"kind": "refusal", "call_id": None, "code": code, "reason": reason, "retryable": False,
+               "reservation_released": code != "filter_blocked"})
+    r = req(output_schema={"name": "order_summary"})
+    r["blocks"][2]["flags"] = ["pd"]
+    valid(r)
+    assert list(VALIDATOR.iter_errors(req(output_schema={"schema": {"type": "object"}}))), "no inline schema"
+
+
+def test_pd_flag_unreadable_is_pd_and_pd_cannot_leave_where_policy_says_so():
+    # the example request has a user item with no pd flag: unreadable counts as PD
+    assert refused(port(pd_may_leave=False), req()) == ("region_policy_refused", "pd_not_allowed")
+    flagged = with_blocks(conv(flags=["pd"]))
+    assert refused(port(pd_may_leave=False), flagged) == ("region_policy_refused", "pd_not_allowed")
+
+
+def test_pd_none_item_with_readable_l1_passes_and_unreadable_l1_is_pd():
+    clean = with_blocks(conv(flags=["pd_none"]))
+    reg = registry()
+    reg["tenant_config"][("t_acme", "rev_7", "t_glossary")]["pd"] = False
+    assert port(registry=reg, pd_may_leave=False).complete(clean)["kind"] == "reply"
+    assert refused(port(pd_may_leave=False), clean) == ("region_policy_refused", "pd_not_allowed")   # L1 unreadable
+    reg["tenant_config"][("t_acme", "rev_7", "t_glossary")]["pd"] = True
+    assert refused(port(registry=reg, pd_may_leave=False), clean) == ("region_policy_refused", "pd_not_allowed")
+
+
+def test_platform_only_call_is_never_pd():
+    r = req()
+    r["blocks"], r["tools"] = r["blocks"][:1], []
+    assert port(pd_may_leave=False).complete(r)["kind"] == "reply"
+
+
+def test_block_above_the_run_grant_data_class_is_refused():
+    pr = dict(PRINCIPAL, grant_max_data_class="C1")
+    assert refused(port(pr), req()) == ("invalid_request", "data_class_above_grant")     # the C2 user item
+    assert port(dict(PRINCIPAL, grant_max_data_class="C2")).complete(req())["kind"] == "reply"
+
+
+def test_output_schema_by_reference_and_conformance():
+    schema = {"type": "object", "required": ["total"], "properties": {"total": {"type": "string"}}}
+    reg = registry()
+    reg["output_schemas"] = {(PV, "order_summary"): schema}
+    ok = req(output_schema={"name": "order_summary"})
+    assert json.loads(port(registry=reg, reply_text='{"total": "10.00"}').complete(ok)["text"]) == {"total": "10.00"}
+    assert refused(port(registry=reg), req(output_schema={"name": "nope"})) == ("invalid_request", "unknown_ref")
+    bad_hash = req(output_schema={"name": "order_summary", "content_hash": "sha256:" + "0" * 64})
+    assert refused(port(registry=reg), bad_hash) == ("invalid_request", "ref_mismatch")
+    assert refused(port(registry=reg, reply_text='{"total": 5}'), ok, dispatched=True) == (
+        "filter_blocked", "output_schema_mismatch")
+    assert refused(port(registry=reg, reply_text="not json"), ok, dispatched=True) == (
+        "filter_blocked", "output_schema_mismatch")
+
+
+# -- 0.3.0: identity and cache hits (Q-672) -----------------------------------------------------------------------------
+USER_PRINCIPAL = {"service": "operate", "tenant_id": "t_acme", "actor_kind": "user", "actor_id": "mem_42",
+                  "token_id": "tok_9", "role_ids": ["sales"], "session_id": "s1"}
+
+
+def user_req(**caller):
+    r = req()
+    r["blocks"] = [r["blocks"][0], conv(flags=["pd_none"], turn=0)]
+    r["caller"] = {"tenant_id": "t_acme", "actor_kind": "user", "actor_id": "mem_42", "token_id": "tok_9",
+                   "correlation_id": "aud_1", "role_ids": ["sales"], "session_id": "s1", **caller}
+    r["tools"] = []
+    return r
+
+
+def test_human_actor_is_member_ref_plus_token_id_from_the_principal():
+    p = port(USER_PRINCIPAL, layers=("tenant", "session"))
+    assert p.complete(user_req())["kind"] == "reply"
+    ev = p.events[0]
+    assert ev["actor"]["kind"] == "user" and ev["actor"]["id"] == "mem_42" and ev["correlation_id"] == "aud_1"
+    assert refused(port(USER_PRINCIPAL, layers=("tenant", "session")), user_req(token_id="tok_other")) == ("invalid_request", "caller_mismatch")
+    r = user_req()
+    del r["caller"]["token_id"]
+    assert refused(port(USER_PRINCIPAL, layers=("tenant", "session")), r) == ("invalid_request", "caller_mismatch")    # present on one side only
+    assert refused(port(USER_PRINCIPAL, layers=("tenant", "session")), user_req(actor_kind="system")) == ("invalid_request", "caller_mismatch")
+
+
+def l0_only(**over):
+    r = req(**over)
+    r["blocks"], r["tools"] = r["blocks"][:1], []
+    r["thread_tainted"] = False
+    return r
+
+
+def test_response_cache_hit_is_metered_with_zero_usage_and_its_own_event():
+    p = port(response_cache=True)
+    first = p.complete(l0_only(call_id="c_first", idempotency_key="idem_cache_1"))
+    hit = valid(p.complete(l0_only(call_id="c_second", idempotency_key="idem_cache_2")))
+    assert first["cache_hit"] is False and hit["cache_hit"] is True and hit["replayed"] is False
+    assert hit["usage"] == {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0, "cost_micro_usd": 0}
+    assert hit["text"] == first["text"] and hit["meter_event_id"] != first["meter_event_id"]
+    assert len(p.events) == 2 and p.events[1]["data"]["cost_micro_usd"] == 0
+    assert p.events[1]["trace"]["cache_hit"] is True and len(p.attempt_log) == 1      # one dispatch only
+
+
+def test_cache_is_bypassed_for_non_l0_calls():
+    p = port(response_cache=True)
+    p.complete(req(call_id="c_a", idempotency_key="idem_cache_a"))
+    again = p.complete(req(call_id="c_b", idempotency_key="idem_cache_b"))
+    assert again["cache_hit"] is False and len(p.attempt_log) == 2
+
+
+# -- 0.3.0: TTL floor, late replies, layered overruns (Q-679) -----------------------------------------------------------
+def test_ttl_floor_is_three_attempt_timeouts_plus_margin():
+    with pytest.raises(ValueError):
+        port(attempt_timeout=30, reservation_ttl=99, ttl_margin=10)
+    assert port(attempt_timeout=30, reservation_ttl=100, ttl_margin=10).reservation_ttl == 100
+
+
+def test_late_reply_is_an_overrun_with_one_event_alert_and_discarded_content():
+    p = port(late={"mid-primary"}, reply_text="late words")
+    out = p.complete(req())
+    assert out["attempts"] == 2 and out["fallback_used"] is True
+    late_events = [e for e in p.events if e["trace"]["model_id"] == "mid-primary"]
+    assert len(late_events) == 1 and p.overruns and any(a["kind"] == "late_reply_overrun" for a in p.alerts)
+    assert p.reservations[0].state == "released" and "late words" not in json.dumps(p.events)
+    assert p.spent["tenant"] > 0 and p.events[0]["data"]["cost_micro_usd"] > 0
+
+
+def test_overrun_refuses_only_layers_over_their_cap():
+    p = port(budgets={"tenant": 1_000_000, "session": 1_000_000, "run": 100})
+    p.spent["run"] = 500                                    # run layer over its cap, tenant and session free
+    assert refused(p, req())[0] == "budget_refused"
+    p.spent["run"] = 0
+    p.budgets["run"] = 1_000_000
+    assert p.complete(req())["kind"] == "reply"
+
+
+def tenant_port(tenant, shared, platform_cap, tenant_cap, **kw):
+    reg = registry()
+    reg["tenant_config"][(tenant, "rev_7", "t_glossary")] = reg["tenant_config"].pop(("t_acme", "rev_7", "t_glossary"))
+    reg["applied_revision"] = {tenant: "rev_7"}
+    return port(dict(PRINCIPAL, tenant_id=tenant), registry=reg, layers=("platform", "tenant"),
+                platform_ledger=shared, budgets={"platform": platform_cap, "tenant": tenant_cap}, **kw)
+
+
+def tenant_req(tenant):
+    r = req(max_output_tokens=1, min_output_tokens=1)
+    r["caller"]["tenant_id"] = tenant
+    return r
+
+
+def test_one_tenant_overrun_never_blocks_the_platform_layer_for_others():
+    shared = {"spent": 0, "overrun": 0}
+    a = tenant_port("t_a", shared, 5_000, 5_000, actual_input=lambda e: 20_000)
+    a.complete(tenant_req("t_a"))                           # actual cost far above both caps
+    assert shared["spent"] > 5_000 and any(x["kind"] == "platform_over_cap" for x in a.alerts)
+    again = dict(tenant_req("t_a"), call_id="c_again", idempotency_key="idem_again_1")
+    assert refused(a, again)[0] == "budget_refused"         # tenant A's own cap still holds for A
+    b = tenant_port("t_b", shared, 5_000, 1_000_000)
+    assert b.complete(tenant_req("t_b"))["kind"] == "reply"

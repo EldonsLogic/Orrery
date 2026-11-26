@@ -1,6 +1,6 @@
 {
   "kind": "request",
-  "contract_version": "0.2.1",
+  "contract_version": "0.3.0",
   "call_id": "call_run_1_step_1",
   "idempotency_key": "run_1:step_1:attempt_1",
   "caller": {

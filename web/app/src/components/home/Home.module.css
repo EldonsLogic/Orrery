@@ -25,9 +25,15 @@
   position: absolute;
   z-index: -1;
   inset-inline: calc((100cqw - 100%) / -2 - var(--page-pad));
-  inset-block: calc(var(--main-pad-block) * -1) calc(var(--space-4) * -1);
+  inset-block: calc(var(--main-pad-block) * -1) calc(var(--space-2) * -1);
   background: var(--page-band);
   border-block-end: var(--hairline);
+}
+
+@media (min-width: 48.0625rem) {
+  .hero::before {
+    inset-block-end: calc(var(--space-4) * -1);
+  }
 }
 
 .header {
@@ -355,6 +361,7 @@
   display: grid;
   margin: 0;
   margin-inline: calc(var(--space-1_5) * -1);
+  margin-block-end: calc(var(--space-1_5) * -1);
   padding: 0;
   list-style: none;
 }
@@ -520,5 +527,16 @@
 @media (pointer: coarse) {
   .chip {
     min-block-size: var(--touch-target);
+  }
+}
+
+/* Phones: no fixed tiny text; captions step up to the small size. */
+@media (max-width: 48rem) {
+  .caption,
+  .rowStatus,
+  .dayHeading,
+  .factNote {
+    font-size: var(--text-small-size);
+    line-height: var(--text-small-line);
   }
 }

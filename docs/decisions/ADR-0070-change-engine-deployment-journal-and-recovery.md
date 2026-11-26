@@ -154,7 +154,9 @@ Long holds in other rows (R10, R15, R17, R19) do not block rotation once atteste
 - A plain-list (pre-digest) plan cannot be verified. An open one imports as `legacy` and holds (R10), as today (`:1275-1278`). A final one imports as final, and its status is unchecked (residual below).
 - **Status check (P).** Status and `outcome_json` were never inside the digest. Each final status of a field deployment with a verified digest-format plan is therefore checked against its evidence. It is a mismatch when:
   - any `dispatch_intent` lacks a completion, whatever the final status. `_journal_completion` is best effort, so a genuine final row can fail this too, and it is held anyway; or
-  - the status is `APPLIED`, `ROLLED_BACK` or `QUARANTINED` (reverts of an applied field, `rollback_engine.py:8`, `:46`) with no `dispatch_intent` (U11).
+  - the status is `APPLIED`, `ROLLED_BACK` or `QUARANTINED` (reverts of an applied field, `rollback_engine.py:8`, `:46`) with no `dispatch_intent` (U11); or
+  - a non-NULL `outcome_json` carries a `status` other than the row's `status` column (`_parse_outcome` checks only that it is a non-empty string); or
+  - the status is `FAILED_CLEAN`, `REJECTED` or `ALREADY_APPLIED` while a completed `dispatch_intent` exists (DDL ran, so none of these can be true; `ROLLED_BACK` is excluded because a revert of an applied field has one), or the status is `APPLIED` or `QUARANTINED` while the completed intents fail `ddl_batch_rejection(..., complete=True)` against the approved plan.
 
   A mismatch holds that deployment (2.2) and is listed by the dry run. It does not block the site, because the digest-covered evidence is intact and only the unprotected status disagrees.
 - Any other failure blocks the site (item 2.4).
@@ -370,7 +372,7 @@ Revision 5 proposes these additions to the rows. The coordinator edits PLAN:
   - the `SecurityEventSink` with its interim logger (1.11);
   - refusal of the dev and test key providers under the production guard, and `kid` loading (3.1);
   - the #331 Lows: `verified` defaults to false where evidence is read (today `evidence.get("verified", True)`, `CE/api/endpoints.py:1236`), and tests that kill the four mutants that survived the #331 review.
-- **CE-SEC-013** also gets the old-table freeze triggers with their `blocked` state, the revert release step (2.5), and the status check (2.3).
+- **CE-SEC-013** also gets the old-table freeze triggers with their `blocked` state, the old-code revert residual stated (2.5), and the status check (2.3).
 - **CE-SEC-014** also gets the security events of R1, R4, R6a, R7 and R9.
 - **New row CE-SEC-015**: `| CE-SEC-015 | Change engine: reviewed re-attestation runbook for a denied journal kid per ADR-0070 item 3.3 (verify each row under the denied kid against independent evidence, never rewrite a row; any new event kind or site-check rule it needs is designed and reviewed in that row), with tests | Security | G1 | CE-SEC-012 | partner | todo |`
 
@@ -442,3 +444,4 @@ Revision 5 answers Claude Opus 5.5's review for Eldon at 78201f7 (CHANGES). It d
 - **M3 #316 decision 6:** `audit_id` and `correlation_id` on the deployment row and on events, required on `outcome` and `recovery_attempt`, inside the MAC; they are checked before any effect; recovery and the probe mint their own, and recovery refuses them as parameters (1.2, 1.3, 1.10, 4.2, 4.7; question 10). The review cited ADR-0041 line 19, but the `correlationId` text is ADR-0069 line 19.
 - **M4 #316 decision 3:** R1, R4, R6a, R7, R9 and every detected tampering go to SEC-008's platform security stream through `SecurityEventSink`. The interim sink is the `change_engine.security` logger, swapped out when SEC-008 lands (1.11, 4.5).
 - **Lows:** kid retirement and the whole-site effect of a denied kid, with a re-attestation row (3.3, section 6); dev and test providers refused in production, and `kid` loading (3.1); `S24` is #309's grant key (3.1); the internal idempotency key (1.10); the probe runs in an engine worker (1.9); the #331 Lows go to CE-SEC-012 (section 6).
+- **Gemini 4 Argon re-check of revision 5 (APPROVE as Proposed, two Lows, fixed by the coordinator):** the status check also compares `outcome_json.status` with the row's `status`, and checks completed intents against the final status and the approved plan (2.3); the CE-SEC-013 wording now names the old-code revert residual instead of a revert release step (section 6).

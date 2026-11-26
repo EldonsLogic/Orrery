@@ -1754,6 +1754,10 @@ class FrappeDeploymentAdapter:
             "fieldname": fieldname,
             "label": field_def.get("label", fieldname),
             "fieldtype": field_def.get("fieldtype", "Data"),
+            # The approved DDL plan was built from these two (BPL-046): without them Frappe emits its
+            # default column type (varchar(140), decimal(21,9)) and the dispatch gate refuses the apply.
+            "length": field_def.get("length"),
+            "precision": field_def.get("precision"),
             "options": field_def.get("options"),
             "reqd": field_def.get("reqd", 0),
             "read_only": field_def.get("read_only", 0),

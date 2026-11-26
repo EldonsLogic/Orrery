@@ -32,3 +32,10 @@ Unknown.
 ## Next step
 - Partner follow-up (apps/engine): add `0.2.0` to `ARTIFACT_SCHEMA_VERSIONS`, add the active-key check for reorder (ADR-0072 point 8), and run the conformance suite.
 - Merge order: #321, then this PR. #324 (engine-adapter 0.1.3) touches the same 9.3, 9.4 and changelog lines, so whichever merges second resolves them. The BPL-045 PLAN row conflicts with main's `todo` row when #321 merges main; keep `doing`.
+
+## Review follow-up (BPL-045)
+- Merged origin/main (#321 base, #324 BPL-037) into the branch. Conflicts resolved: engine-adapter 0.1.4 (changelog kept in order after 0.1.3; the 9.4 paragraph keeps the 0.1.3 uniqueness key and the derived-reorder phase text); fake.py advertises contract 0.1.4 and artifact schema 0.1.0 and 0.2.0; PLAN.md takes main's rows, BPL-045 stays `doing`.
+- compiled-artifact schema: `derivedFrom` is `uniqueItems`. New schema test rejects a duplicate pointer.
+- New compiler test: an inverse with two restores in one list (remove supplier_code and vat_number) carries a derived reorder whose `order` is the base order. The same edit joins the parametrized compile and fake apply/rollback tests.
+- Mutation check: the multi-restore branch of `_reaches` removed, 3 tests fail (the new inverse test, the new fake round-trip and the position-change test). Reverted.
+- Checks: check_contracts OK; blueprint 2447 passed; studio 70 passed; check_docs, check_repo_hygiene, check_plan_independence OK.

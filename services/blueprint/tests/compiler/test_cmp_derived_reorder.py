@@ -35,7 +35,14 @@ def _option_two_removals(t):
     f["options"] = [o for o in f["options"] if o["value"] == "manufacturer"]
 
 
-EDITS = [_prepend, _rename_middle, _two_removals, _option_prepend, _option_two_removals]
+def _remove_first_and_third(t):
+    # The inverse restores supplier_code at index 0 and vat_number at index 2 in one list; the adapter puts each back
+    # at its index when it was removed, so applied in pointer order the restores land out of order.
+    e = _entity(t, "supplier")
+    e["fields"] = [f for f in e["fields"] if f["id"] not in ("supplier_code", "vat_number")]
+
+
+EDITS = [_prepend, _rename_middle, _two_removals, _option_prepend, _option_two_removals, _remove_first_and_third]
 
 
 def _derived(a):
@@ -61,6 +68,22 @@ def test_a_position_change_with_no_reorder_op_compiles_to_a_derived_reorder_in_b
         covered = sorted([p for s in a["steps"] for p in s["sourceOps"]] + [s["pointer"] for s in a["skippedOps"]])
         assert covered == sorted(ops)  # exactly once still holds for sourceOps; derivedFrom does not count
     assert [s["pointer"] for s in _derived(fwd)] == [s["pointer"] for s in _derived(fwd["inverse"])]
+
+
+def test_several_restores_in_one_inverse_carry_a_derived_reorder():
+    base, reg, mp = _inputs()
+    t = _rev2(base, _remove_first_and_third)
+    fwd = _compile(t, base, reg, mp)
+    inv = fwd["inverse"]
+    (step,) = _derived(inv)
+    ops = {op["pointer"]: op for op in invert(diff(base, t))["ops"]}
+    restores = [p for p in step["derivedFrom"] if ops[p]["op"] == "add"]
+    assert len(restores) == 2 and step["derivedFrom"] == sorted(step["derivedFrom"])
+    assert [p.rsplit("/", 1)[1] for p in restores] == ["supplier_code", "vat_number"]
+    assert step["kind"] == "field.reorder" and not step["sourceOps"]
+    # the reorder lists the base order exactly: the restored keys in their base places
+    ids = [f["id"] for f in _entity(base, "supplier")["fields"]]
+    assert step["params"]["order"] == ids
 
 
 def test_an_artifact_without_a_derived_step_keeps_schema_0_1_0():
@@ -136,6 +159,14 @@ def test_empty_source_ops_are_valid_only_on_a_derived_reorder():
     a = _sample()
     a["artifactSchema"] = "0.1.0"
     assert _errors(a)  # a derived step needs artifact schema 0.2.0
+
+
+def test_derived_from_lists_each_op_once():
+    a = _sample()
+    assert not _errors(a)
+    (step,) = _derived(a)
+    step["derivedFrom"] = step["derivedFrom"] + step["derivedFrom"][:1]  # the same op named twice
+    assert any(e.validator == "uniqueItems" for e in _errors(a))
 
 
 def test_derived_from_must_name_add_or_remove_ops_another_step_implements():

@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from jsonschema import Draft202012Validator, FormatChecker
 
 from .certification import certification_refusals
+from .strict_json import loads_strict
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "pack.schema.json"
 COUNTRY_CODE_RE = re.compile(r"^[A-Za-z]{2}$")
@@ -200,7 +201,7 @@ def validate_pack(pack: Any, schema_path: Path | None = None) -> list[str]:
     for pat_key in ("vatNumberPattern", "crNumberPattern"):
         try:
             re.compile(pack["tax"][pat_key])
-        except re.error as exc:
+        except (re.error, OverflowError, RecursionError) as exc:  # e.g. a{4294967295} overflows, not re.error
             errors.append(f"tax.{pat_key}: invalid regex ({exc})")
 
     einv = pack["eInvoicing"]
@@ -231,7 +232,10 @@ def _check_go_live(pack: dict[str, Any], directory: Path, label: str, environmen
     """Refuse production packs lacking certification records, accepted evidence or a matching manifest."""
     if environment != "production":
         return
-    reasons = certification_refusals(pack, directory)
+    try:
+        reasons = certification_refusals(pack, directory)
+    except RecursionError:  # deep companion data must refuse, never crash the gate
+        reasons = ["certification records are nested too deeply"]
     if pack["status"] not in PRODUCTION_STATUSES:
         reasons.append(f"status '{pack['status']}' is below certified")
     if pack["evidenceStatus"] not in PRODUCTION_EVIDENCE:
@@ -246,7 +250,10 @@ def _semver_key(version: str) -> tuple[int, int, int, int, str] | None:
     m = SEMVER_RE.match(version)
     if not m:
         return None
-    major, minor, patch, pre = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+    try:
+        major, minor, patch, pre = int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)
+    except ValueError:  # beyond int()'s digit limit: not a usable version
+        return None
     return (major, minor, patch, 1 if pre is None else 0, pre or "")
 
 
@@ -291,22 +298,25 @@ def load_country_pack(
                     pack_path = entry / "pack.json"
                     if not allow_test_packs:
                         try:
-                            raw_meta = json.loads(pack_path.read_text(encoding="utf-8"))
+                            raw_meta = loads_strict(pack_path.read_text(encoding="utf-8"))
                             if isinstance(raw_meta, dict) and raw_meta.get("testOnly") is True:
                                 continue
-                        except json.JSONDecodeError:
-                            pass
+                        except ValueError:
+                            pass  # kept as a candidate; the selected file is parsed (and refused) below
                     candidates.append((key, entry.name, pack_path))
         if not candidates:
             raise PackNotFoundError(f"No valid non-test versioned pack found for country '{code_upper}'")
         _, chosen_version, pack_file = max(candidates, key=lambda c: c[0])
 
     try:
-        pack = json.loads(pack_file.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
+        pack = loads_strict(pack_file.read_text(encoding="utf-8"))
+    except ValueError as exc:  # malformed JSON, duplicate keys or too-deep nesting
         raise PackValidationError(f"Malformed JSON in {pack_file}: {exc}") from exc
 
-    validate_pack_or_raise(pack)
+    try:
+        validate_pack_or_raise(pack)
+    except RecursionError as exc:
+        raise PackValidationError(f"Country pack {code_upper}@{chosen_version} is nested too deeply") from exc
     if pack.get("testOnly") is True and not allow_test_packs:
         raise PackValidationError(
             f"Country pack {code_upper}@{chosen_version} is marked testOnly=true and cannot be used in production"
@@ -316,7 +326,10 @@ def load_country_pack(
     if pack["version"] != chosen_version:
         raise PackValidationError(f"Pack version '{pack['version']}' does not match directory '{chosen_version}'")
     _check_go_live(pack, pack_file.parent, f"{code_upper}@{chosen_version}", environment)
-    return copy.deepcopy(pack)
+    try:
+        return copy.deepcopy(pack)
+    except RecursionError as exc:  # schema-valid free-form objects can still nest too deeply to copy
+        raise PackValidationError(f"Country pack {code_upper}@{chosen_version} is nested too deeply") from exc
 
 
 def _flatten_override_paths(obj: dict[str, Any], prefix: str = "") -> list[str]:

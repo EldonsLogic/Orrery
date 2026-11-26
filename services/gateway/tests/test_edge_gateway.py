@@ -300,7 +300,7 @@ class FalsePositiveTests(unittest.TestCase):
         for text in ("Frappe", "ERPNext", "go to Desk now", "/api/method/x", "X-Page-Name", "Traceback (most recent call last)",
                      "/app/customer", "werkzeug"):
             self.assertTrue(contains_engine_marker(text), text)  # bare words: engine-controlled channels only
-        for text in ("desktop", "Orrery", "describe", '{"excluded": 1}'):
+        for text in ("desktop", "Orrery", "Seshna", "describe", '{"excluded": 1}'):
             self.assertFalse(contains_engine_marker(text), text)
         for text in ("Caramel Frappe", "Front desk", "frappe latte", "desktop", "example.com/app/x", "/apple"):
             self.assertFalse(contains_engine_structure(text), text)

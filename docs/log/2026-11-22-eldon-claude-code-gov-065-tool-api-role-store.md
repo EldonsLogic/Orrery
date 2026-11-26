@@ -25,3 +25,7 @@ Unknown.
 
 ## Next step
 Partner review of PR #276; SEC-024 store design ADR; Q-584. No code reads roles from the store until the SEC-024 design ADR is Accepted (ADR-0060 item 15).
+
+## Review fixes (partner review of PR #276)
+- Tool API section 4 step 2 and threat model section 3: a role set is refused while the tenant is fenced (ADR-0060 items 8, 11); a permission increase is honoured only after verified sync; a decrease applies at once. Error code stays the existing `permission_denied`; a dedicated code remains Q-584. Version stays 0.3.2 (unreleased draft).
+- GOV-065 set back to `doing` in PLAN (done when the PR merges). Merged origin/main; kept main's GOV-071 `done` and ADR-0063 wording.

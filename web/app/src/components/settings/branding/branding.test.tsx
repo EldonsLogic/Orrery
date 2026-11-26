@@ -75,6 +75,21 @@ describe('branding review fixes', () => {
   });
 });
 
+describe('branding design fixes (WEB-029)', () => {
+  it.each(['ar', 'en'] as const)('the logo control is a styled, translated file button with no native button text (%s)', (l) => {
+    const out = view(l, S.teal);
+    const t = messages[l].branding.logo;
+    expect(out).toContain(t.choose);
+    expect(out).toContain(t.none);
+    expect(out).toMatch(/<label[^>]*data-file-button="true"/);
+    expect(out).toMatch(/<input[^>]*type="file"[^>]*accept="image\/png,image\/jpeg"/);
+  });
+  it('the primary colour label shows once: the field label is for assistive technology only', () => {
+    const out = view('en', S.teal);
+    expect(out).toContain('data-label-hidden="true"');
+  });
+});
+
 describe('branding access and port', () => {
   const withRoles = (patch: Record<string, { isAdmin?: boolean }>): Blueprint => ({
     ...fixtureBlueprint,

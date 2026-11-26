@@ -9,6 +9,8 @@ import { createBrandingController } from '../../../settings/branding/controller'
 import { createFakeBrandingPort, type BrandingPort, type BrandingSettings } from '../../../settings/branding/port';
 import { fixtureBlueprint } from '../../../blueprint/fixture';
 import { plainText } from '../../../factory/text';
+import { cx } from '../../../ui/cx';
+import button from '../../../ui/Button.module.css';
 import { callerOf } from '../../../lib/session';
 import { useSession } from '../../shell/SessionProvider';
 import styles from './BrandingScreen.module.css';
@@ -169,6 +171,7 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
                 <TextField
                   className={styles.hex}
                   label={t('colour.label')}
+                  labelHidden
                   hint={t('colour.hint')}
                   value={text}
                   onChange={(e) => ctrl.setText(e.target.value)}
@@ -187,16 +190,27 @@ export function BrandingEditor({ port, initial }: { port: BrandingPort; initial:
                 <p className={styles.settingBody}>{t('logo.body')}</p>
               </div>
               <div className={styles.control}>
-                <TextField
-                  id={logoId}
-                  type="file"
-                  accept="image/png,image/jpeg"
-                  label={t('logo.label')}
-                  hint={t('logo.hint')}
-                  error={logoError ? t(`logo.${logoError}`) : undefined}
-                  onChange={(e) => onLogo(e.target.files?.[0])}
-                  disabled={!editable}
-                />
+                {/* A styled, translated file button: the real input covers it, so clicks and keys reach the browser picker,
+                    and no browser-language "Choose file" text shows. */}
+                <div className={styles.fileRow}>
+                  <label className={cx(button.root, button.secondary, button.md, styles.fileButton)} data-file-button="true" data-disabled={editable ? undefined : 'true'}>
+                    <Icon name="upload" />
+                    {t('logo.choose')}
+                    <input
+                      id={logoId}
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      className={styles.fileInput}
+                      aria-describedby={logoError ? `${logoId}-hint ${logoId}-error` : `${logoId}-hint`}
+                      aria-invalid={logoError ? true : undefined}
+                      onChange={(e) => onLogo(e.target.files?.[0])}
+                      disabled={!editable}
+                    />
+                  </label>
+                  <span className={styles.fileName}>{logo ? <bdi>{plainText(logo.fileName, 80)}</bdi> : t('logo.none')}</span>
+                </div>
+                <p id={`${logoId}-hint`} className={styles.settingBody}>{t('logo.hint')}</p>
+                {logoError ? <p id={`${logoId}-error`} role="alert" className={styles.fileError}>{t(`logo.${logoError}`)}</p> : null}
                 {logo ? <Alert tone="info">{t('logo.pending', { name: plainText(logo.fileName, 80) })}</Alert> : null}
               </div>
             </div>

@@ -19,6 +19,7 @@ export function TextField({
   error,
   requiredMark,
   id,
+  labelHidden,
   numeric = false,
   required,
   dir,
@@ -27,7 +28,7 @@ export function TextField({
   ...rest
 }: TextFieldProps) {
   return (
-    <Field label={label} hint={hint} error={error} requiredMark={requiredMark} id={id} className={className}>
+    <Field label={label} hint={hint} error={error} requiredMark={requiredMark} id={id} labelHidden={labelHidden} className={className}>
       {(wiring) => (
         <input
           {...rest}

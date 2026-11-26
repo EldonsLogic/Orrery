@@ -18,6 +18,8 @@ import { MAX_REASON_LEN, MAX_SUPPORT_SECONDS } from '../../console/types';
 import { useConsole } from './ConsoleProvider';
 import { AuditGate } from './AuditGate';
 import { useViewAudit } from './useViewAudit';
+import { cx } from '../../ui/cx';
+import cardStyles from '../../ui/Card.module.css';
 import styles from './Console.module.css';
 
 type Notice = { tone: 'info' | 'danger'; text: string } | null;
@@ -72,16 +74,18 @@ export function GrantsScreen() {
   );
 
   return (
-    <div className={styles.section}>
-      <h1>{t('title')}</h1>
-      <p>{t('intro')}</p>
+    <div className={styles.page}>
+      <header className={styles.head}>
+        <h1>{t('title')}</h1>
+        <p className={styles.intro}>{t('intro')}</p>
+      </header>
       {notice ? (
         <Alert tone={notice.tone} title={t('notSentTitle')}>
           {notice.text}
         </Alert>
       ) : null}
       {can(roles, 'grants.request') ? (
-        <form className={styles.section} aria-labelledby="g-new" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <form className={cx(cardStyles.root, styles.form)} aria-labelledby="g-new" onSubmit={(e) => { e.preventDefault(); submit(); }}>
           <h2 id="g-new">{t('newTitle')}</h2>
           <Select label={t('form.tenant')} value={tenantId} onChange={(e) => setTenantId(e.target.value)} error={errors.includes('tenant') ? t('error.tenant') : undefined}>
             <option value="">{t('form.choose')}</option>

@@ -117,18 +117,22 @@
   min-inline-size: 0;
 }
 
-/* The picker lines up with the text field below its label. */
+/* The picker lines up with the text field below its hint (the field's label is for assistive technology only). */
 .picker {
   flex: none;
+  margin-block-start: calc(var(--text-small-line) + var(--space-0_5));
   box-sizing: border-box;
   inline-size: var(--control-lg);
   block-size: var(--control-md);
-  margin-block-start: calc(var(--text-label-line) + var(--space-0_5));
   padding: var(--space-0_5);
   border: var(--border-width) solid var(--color-border-control);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   cursor: pointer;
+}
+
+:lang(ar) .picker {
+  margin-block-start: calc(var(--text-small-line-ar) + var(--space-0_5));
 }
 
 .picker:focus-visible {
@@ -350,4 +354,57 @@
 
 .fold[open] .foldIcon {
   transform: rotate(180deg);
+}
+
+/* Logo: a secondary button that draws the file input, then the chosen file name (or "No file chosen") in muted text. */
+.fileRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5);
+  min-inline-size: 0;
+}
+
+.fileButton {
+  position: relative;
+}
+
+.fileButton:focus-within {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.fileButton[data-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The real file input covers its button: clicks and keyboard reach it, the button draws it. */
+.fileInput {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.fileInput:disabled {
+  cursor: not-allowed;
+}
+
+.fileName {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+.fileError {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
 }

@@ -15,6 +15,7 @@
   line-height: var(--text-label-line);
   font-weight: var(--text-label-weight);
   white-space: nowrap;
+  text-decoration: none;
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--motion-ease),

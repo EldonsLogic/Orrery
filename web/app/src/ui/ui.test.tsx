@@ -34,6 +34,12 @@ describe('TextField', () => {
     expect(out).not.toContain('aria-invalid');
     expect(out).not.toContain('aria-describedby');
   });
+  it('labelHidden keeps the label for assistive technology only', () => {
+    const out = html(<TextField id="h" label="Primary colour" labelHidden />);
+    expect(out).toContain('<label for="h"');
+    expect(out).toContain('data-label-hidden="true"');
+    expect(out).toContain('Primary colour');
+  });
   it('numeric fields keep LTR digits and a decimal keyboard', () => {
     const out = html(<TextField id="n" label="Amount" numeric />);
     expect(out).toContain('dir="ltr"');

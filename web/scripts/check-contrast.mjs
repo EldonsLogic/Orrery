@@ -53,7 +53,7 @@ for (const [bn, base] of [['surface', S], ['background', B]]) {
   add(`border50/${bn}`, `control border (text 50%) on ${bn}`, 'ui/control.module.css', 'var(--color-text) 50%', dimOn(0.5, base), base, UI);
 }
 add('navHeading/surface', 'nav heading (opacity .75) on surface', 'components/shell/Shell.module.css', 'opacity: 0.75', dimOn(0.75, S), S, N);
-add('onboarding-progress/background', 'onboarding progress (opacity .75) on background', 'components/onboarding/Onboarding.module.css', 'opacity: 0.75', dimOn(0.75, B), B, N);
+add('console-realm', 'staff realm strip: background on text, and its note at opacity .8', 'components/console/Console.module.css', 'opacity: 0.8', (c) => mix(c.background, 0.8, c.text), (c) => c.text, N);
 add('on-primary', 'background on primary (button, user bubble, skip link, badge)', 'ui/Button.module.css', 'color: var(--color-background)', (c) => c.background, (c) => c.primary, N);
 add('on-danger', 'background on danger button', 'ui/Button.module.css', 'color: var(--color-background)', (c) => c.background, (c) => c.danger, N);
 add('on-primary-hover', 'background on primary hover (88% primary, 12% text)', 'ui/Button.module.css', 'var(--color-primary) 88%', (c) => c.background, (c) => mix(c.primary, 0.88, c.text), N);

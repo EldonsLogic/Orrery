@@ -1,93 +1,273 @@
+/* Staff console (WEB-029). Foundation roles only. Internal and dense: label-size type, compact controls, tables first.
+   A solid inverted strip marks the staff realm on every page; tenant screens never have it. No glass here: the console is
+   a work tool, and its chrome stays solid so the realm marker always reads. */
 .root {
   min-block-size: 100vh;
   min-block-size: 100dvh;
   background: var(--color-background);
   color: var(--color-text);
   font-family: var(--font-body);
-  font-size: var(--text-body-size);
-  line-height: var(--text-body-line);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
 }
 
 :lang(ar) .root {
-  line-height: var(--text-body-line-ar);
+  line-height: var(--text-small-line-ar);
 }
 
+/* ---- Staff realm strip ---- */
+.realm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-0_5) var(--space-1);
+  padding-block: var(--space-0_5);
+  padding-block-start: max(var(--space-0_5), var(--safe-block-start));
+  padding-inline: max(var(--page-pad), var(--safe-inline));
+  background: var(--color-text);
+  color: var(--color-background);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+:lang(ar) .realm {
+  line-height: var(--text-caption-line-ar);
+}
+
+.realm > svg {
+  flex: none;
+}
+
+.realmLabel {
+  font-weight: var(--text-label-weight);
+}
+
+.realmNote {
+  opacity: 0.8;
+}
+
+/* ---- Top bar ---- */
 .topBar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: calc(var(--space-unit) * 2);
-  padding: var(--space-unit) calc(var(--space-unit) * 2);
-  padding-inline: max(calc(var(--space-unit) * 2), var(--safe-inline));
-  padding-block-start: max(var(--space-unit), var(--safe-block-start));
+  gap: var(--space-1) var(--space-2);
+  min-block-size: var(--topbar-height);
+  box-sizing: border-box;
+  padding-block: var(--space-1);
+  padding-inline: max(var(--page-pad), var(--safe-inline));
   background: var(--color-surface);
-  border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  border-block-end: var(--hairline);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-heading);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+}
+
+.brand > svg {
+  color: var(--color-primary);
+}
+
+.sessionMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-0_5) var(--space-2);
 }
 
 .meta {
-  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+  color: var(--color-text-muted);
 }
 
 .lang {
   display: flex;
   align-items: center;
-  gap: var(--space-unit);
+  gap: var(--space-1);
   margin-inline-start: auto;
 }
 
-.lang select {
-  min-block-size: max(var(--button-height), var(--touch-target));
+.langLabel {
+  color: var(--color-text-muted);
+}
+
+.langSelect {
+  min-block-size: var(--control-sm);
+  padding-inline: var(--space-1);
+  border: var(--border-width) solid var(--color-border-control);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
-  border: 1px solid color-mix(in srgb, var(--color-text) 25%, transparent);
-  border-radius: var(--radius-control);
   font: inherit;
+}
+
+.langSelect:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (pointer: coarse) {
+  .langSelect {
+    min-block-size: var(--touch-target);
+  }
+}
+
+/* ---- Frame: navigation and main ---- */
+.frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .nav {
   display: flex;
-  flex-wrap: wrap;
-  gap: calc(var(--space-unit) * 2);
-  padding: var(--space-unit) calc(var(--space-unit) * 2);
-  border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  gap: var(--space-0_5);
+  padding-block: var(--space-1);
+  padding-inline: max(var(--page-pad), var(--safe-inline));
+  overflow-x: auto;
+  border-block-end: var(--hairline);
+  scrollbar-width: none;
 }
 
-.nav a {
+.navLink {
   display: inline-flex;
+  flex: none;
   align-items: center;
+  gap: var(--space-1);
   min-block-size: var(--touch-target);
+  padding-inline: var(--space-1_5);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--text-label-weight);
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.navLink:hover {
+  background: var(--state-hover);
+  color: var(--color-text);
+}
+
+.navLink[aria-current='page'] {
+  background: var(--state-selected);
+  color: var(--color-text);
+}
+
+.navLink[aria-current='page'] > svg {
   color: var(--color-primary);
+}
+
+.navLink:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: calc(var(--focus-ring-offset) * -1);
+}
+
+@media (min-width: 64rem) {
+  .frame {
+    grid-template-columns: 14rem minmax(0, 1fr);
+    min-block-size: calc(100dvh - var(--topbar-height));
+  }
+
+  .nav {
+    flex-direction: column;
+    padding: var(--space-2) var(--space-1_5);
+    overflow: visible;
+    border-block-end: 0;
+    border-inline-end: var(--hairline);
+    background: var(--color-surface);
+  }
+
+  .navLink {
+    min-block-size: var(--control-md);
+  }
 }
 
 .main {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--space-unit) * 3);
-  padding: calc(var(--space-unit) * 3);
-  padding-inline: max(calc(var(--space-unit) * 3), var(--safe-inline));
-  max-inline-size: 72rem;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  max-inline-size: 90rem;
+  box-sizing: border-box;
+  padding-block: var(--space-3);
+  padding-inline: max(var(--page-pad), var(--safe-inline));
 }
 
 .main:focus {
   outline: none;
 }
 
+/* ---- Page content ---- */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+  min-inline-size: 0;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.head {
+  display: grid;
+  gap: var(--space-0_5);
+}
+
+.main h1 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h2-size);
+  line-height: var(--text-h2-line);
+  font-weight: var(--text-h2-weight);
+}
+
+:lang(ar) .main h1 {
+  line-height: var(--text-h2-line-ar);
+}
+
+.section h2,
+.form h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h3-weight);
+}
+
+.intro {
+  margin: 0;
+  max-inline-size: var(--measure);
+  color: var(--color-text-muted);
+}
+
+/* Filters: one compact toolbar row on a surface, labels above each control. */
 .filters {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: calc(var(--space-unit) * 2);
+  gap: var(--space-1_5);
+  padding: var(--space-1_5);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-unit);
+.filters > * {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
 }
 
-.section h2,
-.main h1 {
-  margin: 0;
+@media (min-width: 64rem) {
+  .filters > * {
+    flex: 0 1 14rem;
+  }
 }
 
 .countdown {
@@ -97,18 +277,35 @@
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-unit);
+  gap: var(--space-1);
 }
 
 .tableWrap {
-  overflow-x: auto;
+  min-inline-size: 0;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-2);
+  max-inline-size: 40rem;
 }
 
 .checks {
   display: flex;
   flex-wrap: wrap;
-  gap: calc(var(--space-unit) * 2);
+  gap: var(--space-1) var(--space-2);
   border: 0;
   padding: 0;
   margin: 0;
+}
+
+.checks legend {
+  padding: 0;
+  margin-block-end: var(--space-1);
+  font-weight: var(--text-label-weight);
 }

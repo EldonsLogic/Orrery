@@ -96,10 +96,11 @@ class TestCertificationEvidence(unittest.TestCase):
                 record["facts"][0]["ref"] = bad_ref
                 f._save(v, "evidence.json", record)
                 self._refuse(v, "PLATFORM-DEFAULT needs a ref")
-        # Keep current eligibility with a ref; statutory eligibility awaits a founder decision.
+        # A valid ref is necessary but no longer sufficient: ADR-0067 (CMP-036) also needs a listed
+        # product-choice path, so whole locked areas backed by a default are refused.
         record["facts"][0]["ref"] = "synthetic-platform-choice"
         f._save(v, "evidence.json", record)
-        f._assert_loads(v)
+        self._refuse(v, "not on the SA product-choice list")
 
     def test_production_refuses_unresolved_policy_lock(self) -> None:
         f = self.fixture

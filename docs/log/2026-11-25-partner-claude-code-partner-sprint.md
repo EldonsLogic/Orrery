@@ -65,6 +65,149 @@ None yet; claim PR must merge first.
 - CMP-010 re-review round 2 (GPT-6.2 Sol, head 5baf921e): changes required, converging. Resolved: 1, 4, 6, 8, 9, 10 and 12; the rest partly resolved. All FETCHED sources were confirmed. New: 3 High (mixed document kinds reconciling to one subtotal, `claim_date` not bound to the period, non-XML source bypassing BR-CO-17) and 2 Medium, plus vector fixes. Sent to the author as revision round 2.
 - CE-SEC-008 review (GPT-6.2 Sol, head 56b00a23): changes required. The suite counts were confirmed (1555 passed, 86 skipped). Findings: 4 High (a regression where live workflow, report and property-setter deployments fail at prepare; the evidence namespace collides with caller keys and rollback accepts evidence rows; a pre-lock read view; no recovery entry point consumes the journal), 4 Medium, 1 Low. Sent to the implementation child as revision round 1, with the write paths widened to the two test doubles and a schema change or new API reported as follow-up. PR #322 must not merge before this is fixed.
 
+- Later in the sprint (after the ADR-0069 park entry above; the earlier review entries were on #316 and are merged):
+  - CMP-010: GPT re-review round 3 found 1 High and 3 Medium. Fixed in round 3 (68ba9b17). Round 4 (d184b227) applied Eldon's #319 review, including the founder decision recorded by Eldon for both founders that BR-CO-17 becomes a warning, not a refusal. The April 2025 amendments: Art. 54 and Art. 40(10) FETCHED, Art. 63 routes UNVERIFIED. Q-616, Q-620 and Q-624 updated. A final narrow GPT re-check is dispatched.
+  - CE-SEC-008 (#322): round 1 fixes committed (500134f6). Full suite 1591 passed, 0 failed. Follow-ups CE-SEC-009 (recovery entry point) and CE-SEC-010 (journal table) added on the PR. GPT round 2: changes required (2 High: the fresh read view commits caller writes, and lock and lookup equality differ; 3 Medium). Sent back as round 2.
+- Partner instructions relayed from the side thread "Count Completed Rows" at about 16:26Z. Verified against the partner's own words before acting.
+  - #318 PLT-024: merged (Tier 2, Eldon approved at ad99d276).
+  - #316 PLT-027: merged as Proposed on the partner's Tier 3 say-so. Eldon's H1 and H2 checked as met at dc41fb05, with a findings table posted. The GPT round 3 items (R3-1 to R3-7) and Eldon's M3 to M6 and Lows are recorded in the ADR section "Open items before Accepted". Main merged in; the INDEX conflict was resolved by keeping ADR-0066 and ADR-0069.
+  - #311 CMP-040: main merged in (PLAN conflict resolved: main's rows kept, CMP-040 marked done, a stray blank table line removed), then merged (Tier 2, Eldon approved at c9249ae8; the only change since was the merge of main).
+  - #312 BPL-043: P1 fixed. Main was merged into the #310 base (1b44f015), and the base was merged into #312 (fd81304f), taking the base PLAN.md, so #312 no longer touches PLAN.md. The first attempt (dropping the hunk alone) failed the pre-push task trail, because the base lacked the BPL-043 row. An unpushed local merge from the previous coordinator, in the old bpl-043 worktree, was left untouched and not pushed. Full suite 1549 passed. Waiting for Eldon's re-review (Tier 2).
+  - #306 ERP-033: Medium fixed test-first (8d043225; new case `approver-not-the-owner-holder`, red then green), main merged (e28ec6e8). Full suite 1571 passed. Findings table posted. Waiting for the partner's Tier 3 say-so.
+  - #310 BPL-041: M1, L1 and L2 dispatched to a Claude Sonnet 5.5 child, test-first, in a fresh worktree at 1b44f015.
+  - Cross-model reviews (GPT-6.2 Sol) of Eldon's Claude-authored PRs, posted as sayegh9 request-changes reviews; none were merged:
+    - #321 BPL-039: 3 High (field order breaks apply and rollback, an unapplied precision change reported as applied, the secret-key check bypassed) and 3 Medium.
+    - #279 QA-009: 1 High (fails against current main with CMP-MAP-002 then BS-015) and 2 Medium.
+    - #278 WEB-007: 1 High (branding saved with the wrong permission) and 3 Medium.
+    - #275 WEB-008: 1 High (credentials can reach the URL through a native GET) and 2 Medium.
+  - #300 CMP-036: waiting for a partner decision on Q-601 (mark answered: ZATCA mandates half-up; negative-amount question kept open). Not acted on.
+  - GOV-071: unblocked by #296; not started yet.
+
+- After #327:
+  - CMP-010 (#319):
+    - Round 5 (ea847a20) made the UUID to source-document binding one-to-one (T43).
+    - Partner decisions on 2026-11-25 recorded at 84732556: the code goes in `components/compliance/zatca_sa/vat_return.py`, and Q-601 is answered.
+    - Ready for Eldon's re-review and the founders' Tier 3 read; status posted.
+  - #310 BPL-041:
+    - M1, L1 and L2 fixed test-first (c095a415), by a Sonnet child. Full suite 1543 passed.
+    - Merged into #312 (29faa4d3), which gives 1556 passed. Findings table posted.
+    - Waiting for Eldon.
+  - GOV-071 (#328): rename to Seshna in partner-lane prose and visible text, by a Sonnet child.
+    - Environment variables and package names are kept for GOV-002 (ADR-0066 item 7).
+    - Tests pass. Waiting for Eldon (Tier 2).
+  - CE-SEC-008 (#322):
+    - Review rounds 2 to 7 (GPT-6.2 Sol). The child fixed rounds 2 to 4.
+    - The coordinator fixed rounds 5 to 7 directly:
+      - one authoritative site identity per site;
+      - a read-only alias for legacy host-name rows;
+      - the alias taken from the injected runtime;
+      - the simulator's `IN` lookup.
+    - Follow-up rows CE-SEC-009, CE-SEC-010 and CE-SEC-011 carry the deferred parts.
+    - Review loop stopped after round 7. Full suite 1698 passed, 0 failed. Ready for Tier 3; status posted.
+  - The partner said "approve", read as approving all three pending decisions:
+    - #306 ERP-033: merged. Eldon approved at e28ec6e8, and the partner gave the Tier 3 say-so.
+    - Q-601: marked answered on #300 (f6b22274), with the negative-amount question kept open. Main merged in; 205 country-pack tests pass. Waiting for Eldon's re-review and a Tier 3 say-so.
+    - CMP-010 code location: `zatca_sa/vat_return.py`.
+
+- After #329 (partner: "proceed"):
+  - Merged:
+    - #329 (Tier 1 log).
+    - #310 BPL-041 (Tier 2, Eldon approved at c095a415).
+    - #312 BPL-043 (Tier 2, Eldon approved at 29faa4d3). It was retargeted from the #310 branch to main through the REST API, because `gh pr edit` fails on the deprecated Projects-classic field.
+  - #328 GOV-071: Eldon's blocker fixed at 5c051142.
+    - The tax invoice's font stack is now Readex Pro for body text and Cairo for titles and number columns, with `tabular-nums`. Alexandria and Arial are removed.
+    - Added a fonts-and-footer test. GOV-071 marked done.
+    - ERP-035 (todo) carries moving the invoice's 36 hard-coded colours to tokens and adding it to the literal guard.
+    - Waiting for Eldon's re-review.
+  - #322 CE-SEC-008: Eldon's security review (at 56b00a23) sent to the child as round 5.
+    - F1 and F5 are already fixed.
+    - F2, F3, F4 and F6 to F10 are in progress.
+    - `frappe_backend.py` is now allowed, since #310 and #312 have merged.
+    - real-bench-tests passes on the PR.
+  - #319 CMP-010: main merged (07a191f5; open-questions kept both the Q-609 to Q-614 and the Q-615 to Q-626 blocks). Eldon's narrow re-review (N1 to N4, M3, M5, Lows) sent to the author as round 6.
+  - #300 CMP-036: Eldon approved at f6b22274 after a line-by-line read. Waiting for the partner's Tier 3 say-so.
+
+- After #330:
+  - Reviewer switch (partner instruction): GPT models hit their usage limits, so cross-model reviews now use Antigravity (Gemini 4 Argon, high) and Claude.
+  - CMP-010 (#319):
+    - Round 6 (8c341e0b) answers Eldon's N1 to N4, M3, M5 and the Lows.
+    - Q-628 added. Q-627 was skipped because Eldon's #326 uses it.
+    - The PR body counts are corrected.
+    - Waiting for Eldon.
+  - CE-SEC-008:
+    - Eldon approved #322 at 750dc543. The F2 to F10 work (049c349c) had landed after that, so it was reverted on #322 (b6bb4840) to keep the approved content, and moved to `ce-sec-008-part-2`.
+    - On part 2, the child fixed GPT's two Medium findings. Gemini 4 Argon then gave "approve with nits", and the coordinator fixed its two Lows (CE-SEC-011 text; N13 and N20 mutant tests).
+    - PR #331 is open.
+  - Partner: "proceed and merge":
+    - **#322 merged** (CE-SEC-008 part 1).
+    - **#300 merged** (CMP-036).
+  - #331 retargeted to main:
+    - When main was merged in, part 2's versions of the files #322 reverted were kept (a revert of the revert), after checking that main touched them only through the revert.
+    - A new part-2 log was added for the task trail.
+    - Full suite: 1775 passed, 0 failed.
+
+- After #332:
+  - Eldon approved #331, #332 and #328.
+  - Merged:
+    - **#332** (Tier 1 log).
+    - **#331** (CE-SEC-008 part 2), on the partner's Tier 3 say-so ("yes merge it").
+  - **CE-SEC-008 marked done.** Parts 1 and 2 are merged. Follow-ups stay in CE-SEC-009, CE-SEC-010 and CE-SEC-011.
+  - #328 GOV-071: main merged in (PLAN conflict: kept the CE-SEC rows and ERP-035). CI running; the PR is watched and will merge on green (Tier 2, Eldon approved).
+  - #319 CMP-010: Eldon's re-review at 8c341e0b found no number or vector wrong (T1 to T53 pass). Two sentence-level fixes (F1 ledger_only duty; F2 digest edge cases and a golden value) plus Lows sent to the author as round 7.
+
+- After #333: Wave 2 approved by the partner (agents A to D; Gemini reviews of Eldon's open PRs deferred, remind later; mark PLT-027 done).
+  - Plan cleanup:
+    - Done: BPL-043 (#312), PLT-027 (ADR-0069 merged as Proposed; open items owned by PLT-028 to PLT-032) and CMP-036 (#300 delivered the full row).
+    - BPL-041 stays doing, because slice 2 (real-bench CI sets the REQUIRE flag) is still open.
+    - The `tenant_role_holders` resolver Eldon asked for on #306 already exists as SEC-025. A duplicate ERP-036 was dropped after Eldon's review of #334, and its detail was folded into SEC-025's text: per-request read with no cache, tenant from the verified token, suspended or away members and pending invitations counted. The SEC-025 gate (ADR and security review before any build) is kept. ERP-034 covers the scheduled report.
+  - Claimed (doing):
+    - ERP-035: invoice tokens, Sonnet.
+    - CE-SEC-009 and CE-SEC-010: one design ADR-0070, Opus.
+    - PLT-028: spool state-machine spec, Opus.
+    - CE-SEC-011 slice 1: Sonnet. The dedicated connection and the keyed MAC wait for ADR-0070.
+  - Reviews go to Gemini 4 Argon, because the GPT models are at their usage limit.
+  - Reserved: ADR-0070 and Q-629 onward, both allocated by the coordinator only.
+
+- Wave 2 results. All reviews were Gemini 4 Argon, high, because the GPT models are at their usage limit.
+  - **#334** (plan cleanup and claims): merged after Eldon's re-check. ERP-036 was dropped as a duplicate of SEC-025, and its detail was folded into SEC-025.
+  - **#335 PLT-028** spool spec, 287 lines, docs-only:
+    - Gemini round 1 found 3 High, 3 Medium and 1 Low; all fixed.
+    - Round 2 resolved everything except capacity and found 2 new Medium (the key-rotation admission row, TX6 in the close state). Both were fixed, and the coordinator checked the diff.
+    - Q-629 to Q-634 added.
+    - Waiting for Eldon.
+  - **#336 ADR-0070** (CE-SEC-009, CE-SEC-010), Proposed:
+    - Round 1: 3 High, 2 Medium, all fixed; 4(c) partly rebutted and accepted.
+    - Round 2: 2 High, 1 Medium, all fixed.
+    - Round 3: 2 High left (non-tail event replacement; the drain probe verifying before attesting). The coordinator applied both plus two nits, and **stopped the loop** as with ADR-0069.
+    - Q-635 to Q-642 and rows CE-SEC-012 to CE-SEC-014 added.
+    - Waiting for Eldon.
+  - **#337 ERP-035** (invoice onto tokens):
+    - The first pass lost Cairo, the muted hierarchy and visible borders. Fixed: a heading font token, opacity at or above WCAG 4.5:1, and a hairline.
+    - Gemini: approve with nits. The coordinator fixed the 3 Lows (primary contrast on both surfaces).
+    - Q-643 asks Eldon for `muted` and `border` brand tokens.
+    - 1785 passed, 0 failed. Tier 2.
+  - **#338 CE-SEC-011 slice 1**:
+    - Gemini round 1 found 1 High (a workflow regression), 2 Medium and 1 Low; all fixed.
+    - Round 2 left one Medium (a swallowed `reqd=0` write), fixed.
+    - 1831 passed, 0 failed. Tier 3.
+
+- 2026-11-26, partner said "fix N1 and the small items on #319, update #309 to his answers, and run Gemini reviews of Eldon's #323 to #326, posted as sayegh9":
+  - **#319 CMP-010:**
+    - Eldon approved at ef3d15aa and raised N1 (Low-Medium) plus Lows. The coordinator wrote revision 8 at bc33e23c: printable-ASCII strings, else R-SCHEMA; the must-be-null rules named; R-BOUND covers row count; the PR body's location line.
+    - Gemini found 1 High in that change: T17 hit R-SCHEMA before R-TREAT. Fixed at 2ee642a4 (T17 now uses L7), together with a Low on required fields.
+    - Waiting for Eldon to confirm, then the partner's Tier 3 say-so.
+  - **#309 ADR-0068:**
+    - An Opus agent rewrote it to Eldon's three answers (no new store, plain policy labels, unique on field.add only) and closed E1 to E7, E9 and E10. E8 (NULL vs empty string on the bench) is now an acceptance condition.
+    - The coordinator merged main into the branch (no rebase) and resolved the PLAN, INDEX and open-questions conflicts. Retitled.
+    - Gemini found 2 Medium (a duplicate intent "continues"; check_ready blocked the granted path, and the doctype could be auto-created). Both fixed in revision 5 at 64286522. The Gemini re-check was clean.
+    - Waiting for Eldon's re-review.
+  - **Eldon's PRs**, Gemini 4 Argon reviews posted as sayegh9 (comments, not approvals):
+    - #323: no defects.
+    - #324: 3 Lows.
+    - #326: no defects, 2 build notes.
+    - #325: changes requested. 2 Medium: a hex value with a trailing newline passes the validator but the resolver refuses it; BP-BRAND-002 measures ratioBefore on the two surfaces only.
+  - The Antigravity quota ran out twice, so failed reviews were rerun after the reset, at most two at a time.
+
 ## Tokens or cost
 Unknown.
 

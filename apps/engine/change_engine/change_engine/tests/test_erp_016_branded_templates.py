@@ -1819,6 +1819,14 @@ class TestArabicPrintFontFallbacks(unittest.TestCase):
                         self.assertIn(fallback, names)
                         self.assertLess(names.index(fallback), generic, stack)
 
+    def test_a_token_fallback_that_already_names_an_arabic_font_is_not_repeated(self):
+        from change_engine.print_formats import document_tokens as dt
+
+        stack = dt._font_stack("Readex Pro", "dejavu sans, Noto Sans Arabic, sans-serif", "body")
+        self.assertEqual(stack, "'Readex Pro', 'Noto Sans Arabic', 'DejaVu Sans', sans-serif")
+        stack = dt._font_stack("Noto Sans Arabic", "sans-serif", "body")
+        self.assertEqual(stack, "'Noto Sans Arabic', 'DejaVu Sans', sans-serif")
+
 
 _ZERO_TOTALS = {"total_taxable_amount": "0.00", "total_vat_amount": "0.00", "grand_total": "0.00"}
 

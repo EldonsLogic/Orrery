@@ -45,6 +45,7 @@ All paths are under `apps/engine/change_engine/change_engine/`.
 - New test: every document stack has both fallbacks before any generic, and the token family first. It fails before the fix; three mutants (drop either fallback, move them after the generics) are caught.
 - Full suite: 1786 passed, 86 skipped. Written by Claude Sonnet 5.5 (sub-agent, no git); coordinator checked the diff.
 - Q-660 asks whether the fallbacks should move into the brand tokens (brand lane).
+- Gemini 4 Argon (high) re-review of the delta f5932658..2620d508: APPROVE with one Low (a token fallback that already names an Arabic font would repeat it). Fixed by the coordinator: the stack is de-duplicated case-insensitively, with a test. Full suite: 1787 passed, 86 skipped.
 - Still UNVERIFIED: the real-bench PDF (greys at opacity, #F3F4F6 panels, 0.5pt borders) and whether the renderer host has either fallback font installed.
 
 ## Tokens or cost

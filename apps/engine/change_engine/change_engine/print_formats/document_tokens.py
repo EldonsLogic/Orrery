@@ -94,8 +94,11 @@ def load_document_tokens(path: Path) -> DocumentTokens:
 
 def _font_stack(family: object, fallback: object, role: str) -> str:
     primary, *fallbacks = _font_names(family, fallback, role)
-    quoted = [f"'{name}'" for name in (primary, *_ARABIC_PRINT_FALLBACKS)]
-    return ", ".join(quoted + fallbacks)
+    named = [primary] + [name for name in _ARABIC_PRINT_FALLBACKS
+                         if name.lower() != primary.lower()]
+    seen = {name.lower() for name in named}
+    rest = [name for name in fallbacks if name.lower() not in seen]
+    return ", ".join([f"'{name}'" for name in named] + rest)
 
 
 def _font_names(family: object, fallback: object, role: str = "body") -> list[str]:

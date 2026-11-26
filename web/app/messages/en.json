@@ -394,6 +394,11 @@
     "dock": {
       "label": "Ask Seshna",
       "ask": "Ask <brand>Seshna</brand>"
+    },
+    "language": {
+      "label": "Language",
+      "ar": "عربي",
+      "en": "English"
     }
   },
   "branding": {
@@ -1374,9 +1379,9 @@
         "live": "Live"
       },
       "state": {
-        "done": "completed",
-        "current": "current stage",
-        "upcoming": "not started yet"
+        "done": "Done",
+        "current": "In progress",
+        "upcoming": "Not started"
       }
     },
     "loading": "Working"

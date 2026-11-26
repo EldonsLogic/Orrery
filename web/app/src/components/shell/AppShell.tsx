@@ -6,6 +6,7 @@ import { Alert, Button } from '../../ui';
 import { LoadingMark } from '../marks/LoadingMark';
 import { SideNav } from './SideNav';
 import { UserMenu } from './UserMenu';
+import { LanguageSwitch } from './LanguageSwitch';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useSession } from './SessionProvider';
 import { usesDrawer } from '../../lib/viewport';
@@ -98,6 +99,7 @@ export function AppShell({ children, brand }: { children: ReactNode; brand?: Rea
           </Link>
         ) : null}
         <WorkspaceSwitcher claims={claims} memberships={memberships} />
+        <LanguageSwitch />
         <UserMenu displayName={displayName} claims={claims} />
       </header>
       <div className={styles.body}>

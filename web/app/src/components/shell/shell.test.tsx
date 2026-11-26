@@ -82,6 +82,12 @@ describe('shell chrome (WEB-029)', () => {
     expect(out).toMatch(/aria-disabled="true"[^>]*>(?:(?!<\/li>).)*\(موقوفة\)/);
     expect(out).not.toContain('<select');
   });
+  it('has a visible language switch with Arabic pressed by default', () => {
+    const out = render(<HomeView />);
+    expect(out).toContain(`role="group" aria-label="${ar.language.label}"`);
+    expect(out).toMatch(/lang="ar" dir="rtl"[^>]*aria-pressed="true"[^>]*>عربي</);
+    expect(out).toMatch(/lang="en" dir="ltr"[^>]*aria-pressed="false"[^>]*>English</);
+  });
   it('shows the account as a round avatar with an accessible name', () => {
     const out = render(<HomeView />);
     expect(out).toMatch(/aria-label="[^"]*Sample Person[^"]*"[^>]*><span aria-hidden="true">SP<\/span>/);

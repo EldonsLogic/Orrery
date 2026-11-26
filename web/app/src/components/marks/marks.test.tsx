@@ -145,6 +145,17 @@ describe('ProgressMarks', () => {
     expect(paths(rtl)).toEqual(paths(ltr));
     expect(rtl).not.toMatch(MOTION);
   });
+  it('shows a visible status word under every step (WEB-029)', () => {
+    const out = render(<ProgressMarks buildState="built_in_sandbox" />);
+    const words = [...out.matchAll(/class="_stageState_[^"]*">([^<]+)</g)].map((m) => m[1]);
+    const s = messages.en.marks.progress.state;
+    expect(words).toEqual([s.done, s.done, s.done, s.current, s.upcoming]);
+  });
+  it('connects the steps: solid primary up to the current step, dashed and muted after it, on logical insets', () => {
+    const sheet = css('Marks.module.css');
+    expect(sheet).toMatch(/\.stage \+ \.stage::before \{[^}]*inset-inline-start[^}]*border-block-start: [^;]*solid var\(--color-primary\)/);
+    expect(sheet).toMatch(/\.stage\[data-state='upcoming'\]::before \{[^}]*dashed[^}]*var\(--color-border-control\)/);
+  });
 });
 
 describe('LoadingMark', () => {

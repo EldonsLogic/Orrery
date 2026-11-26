@@ -394,6 +394,11 @@
     "dock": {
       "label": "اسأل Seshna",
       "ask": "اسأل <brand>Seshna</brand>"
+    },
+    "language": {
+      "label": "اللغة",
+      "ar": "عربي",
+      "en": "English"
     }
   },
   "branding": {
@@ -1374,9 +1379,9 @@
         "live": "التشغيل"
       },
       "state": {
-        "done": "مكتملة",
-        "current": "المرحلة الحالية",
-        "upcoming": "لم تبدأ بعد"
+        "done": "تمّت",
+        "current": "جارية",
+        "upcoming": "لم تبدأ"
       }
     },
     "loading": "جارٍ العمل"

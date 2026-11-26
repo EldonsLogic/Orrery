@@ -1,7 +1,8 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
-import { Mark, VisuallyHidden } from '../../ui';
+import { Mark } from '../../ui';
 import { BUILD_STAGES, stageProgress } from '../../lib/buildProgress';
 import styles from './Marks.module.css';
 
@@ -14,14 +15,14 @@ export function ProgressMarks({ buildState, size = 24 }: { buildState: string | 
   const current = stageProgress(buildState);
   return (
     // role="list": list-style none drops list semantics in Safari and VoiceOver.
-    <ol role="list" className={styles.progress} aria-label={t('title')}>
+    <ol role="list" className={styles.progress} aria-label={t('title')} style={{ '--progress-mark': `${size}px` } as CSSProperties}>
       {BUILD_STAGES.map((stage, i) => {
         const state = i < current ? 'done' : i === current ? 'current' : 'upcoming';
         return (
           <li key={stage} className={styles.stage} data-state={state} aria-current={state === 'current' ? 'step' : undefined}>
             <Mark upper={state === 'upcoming' ? 'outline' : 'solid'} lower={state === 'done' ? 'solid' : 'outline'} size={size} />
             <span>{t(`stage.${stage}`)}</span>
-            <VisuallyHidden>{t(`state.${state}`)}</VisuallyHidden>
+            <span className={styles.stageState}>{t(`state.${state}`)}</span>
           </li>
         );
       })}

@@ -48,16 +48,30 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
   - left as is, for a founder call: SEC-002, INF-009, CMP-033's closing rule (does a design or decision row close on a Proposed ADR?), BPL-027 (row texts require `doing`), ERP-013 and QA-016 (Q-303 and Q-474 say they stay `doing`), SEC-004 and CMP-023 (coordination anchors; audit says SEC-004 done, CMP-023 done plus a wiring row).
   - not applied: dependency rewiring for ERP-032 and ERP-034 (cycle risk; needs a closer look).
   - noted: BPL-040 is `todo` on main while #309 is open (its claim is on that branch).
+- Results (each change written by Claude, cross-checked by Gemini 4 Argon high, at most two Gemini runs at a time):
+  - B, ERP-035 #337: Arabic fallbacks restored in the print loader, with a test (Sonnet 5.5). Gemini: APPROVE, one Low (duplicate names), fixed by the coordinator at e1c48c71. Full suite 1787 passed. Q-660 (brand lane). Re-review asked of Eldon on #337.
+  - C, ADR-0070 revision 5 #336: Mediums 1 to 4 and the Lows (Opus 5.5); CE-SEC-015 row, Q-648 and Q-649; CE-SEC-012 to CE-SEC-014 extended. Gemini: APPROVE as Proposed, two Lows, fixed by the coordinator at 435b34ab. Re-review asked of Eldon on #336 (production triggers raise the stakes on his open question).
+  - D, PLT-028 spec revision 2 #335: re-scoped to the #316 decisions, F1 to F10 (Opus 5.5); Q-644 to Q-647, Q-630, Q-631 and Q-633 amended, PLT-028 and PLT-032 text. Gemini: APPROVE, two Lows, fixed at 873f309f. Re-review asked of Eldon on #335.
+  - E, CMP-039 ADR-0071 #344 (new PR): Opus 5.5 design; build rows renumbered CMP-041 to CMP-044; Q-652 to Q-657; INDEX row. Gemini round 1: CHANGES (2 High, 2 Medium, 1 Low). Revision 2 by Opus 5.5 at 95cf124f (two stated deviations). Gemini round 2 running.
+  - A, CE-SEC-011 #338: R1 to R3 and three Lows (Opus 5.5), 20 of 20 mutants killed, full suite 1853 passed (coordinator re-ran it); CE-SEC-016 row and a slice 2 note on CE-SEC-011. Pushed at 6c1f1c46. Gemini round 1 running.
+  - E update: Gemini round 2 on ADR-0071 at 11ba398e: APPROVE as Proposed, no findings. Eldon's first read asked on #344.
+  - A update: Gemini round 1 on #338 at 6c1f1c46: APPROVE, no findings. Re-review asked of Eldon on #338; CI was running on 6c1f1c46 at hand-off.
+- Waiting on the partner: Tier 3 say-so on #309 (asked, no answer yet), then #319.
+- Advisor (second call, before done): flagged that #338's re-review went out while its CI was pending, that the #337 next step missed Eldon's PDF condition, and that the pending-decisions memory needed updating. Token cost unknown.
+- Review effort: Gemini 4 Argon high ran six reviews (B, C, D, E twice, A), never more than two at once, with no quota failures. Rounds per PR: #337 1, #336 1, #335 1, #344 2, #338 1. Token cost unknown.
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-round-2026-11-26.md: this live log.
 - docs/PLAN.md: CMP-039 claimed (#342); doing-row audit applied (coordination-14).
 
 ## Decisions
-- None yet. Pending partner Tier 3 say-so: #309, then #319.
+- None by the founders this session. Pending: partner Tier 3 say-so on #309, then #319; Eldon's answers on Q-644 to Q-649 and Q-652 to Q-657; the doing-row founder calls (does a design or decision row close on a Proposed ADR; BPL-027; SEC-002; INF-009; ERP-013; QA-016; SEC-004 and CMP-023).
 
 ## Tokens or cost
 Unknown.
 
 ## Next step
-Dispatch tasks A to F; apply task G; record each result here.
+- Eldon: re-reviews #335, #336, #337 and #338; first read of #344. #337 (Tier 2) merges after his re-review and a look at one real-bench PDF (his merge condition), or after he waives the PDF.
+- Partner: Tier 3 say-so on #309, then #319 (then the accountant).
+- After #338 merges: BPL-044 and BPL-033 (same file), CE-SEC-016, CE-SEC-011 slice 2. After #336: CE-SEC-012 to CE-SEC-015. After #335: PLT-028 code. After #344: CMP-041.
+- Worktrees on this machine: `orrery-wt/cmp-039-pack-loader-design` and the existing T3 worktrees for #335 to #338; remove after merge.

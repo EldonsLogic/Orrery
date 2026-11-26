@@ -288,23 +288,10 @@
   font-size: var(--text-small-size);
 }
 
-/* The page band: a flat Cobalt tint behind the top of every screen, so the glass has something to show. */
 .body {
-  position: relative;
-  isolation: isolate;
   display: flex;
   flex: 1 1 auto;
   min-block-size: 0;
-}
-
-.body::before {
-  content: '';
-  position: absolute;
-  inset-inline: 0;
-  inset-block-start: 0;
-  z-index: -1;
-  block-size: var(--page-band-size);
-  background: var(--page-band);
 }
 
 /* Side navigation: a full-height glass column; its content sticks under the top bar and scrolls on its own. */
@@ -433,10 +420,12 @@
   font-weight: var(--text-body-weight);
 }
 
+/* main is the size container for screen layouts (container queries, and full-bleed bands via cqw). */
 .main {
+  container-type: inline-size;
   flex: 1 1 auto;
   min-inline-size: 0;
-  padding-block: var(--space-6) var(--space-8);
+  padding-block: var(--main-pad-block) var(--space-8);
   padding-inline: max(var(--page-pad), var(--safe-inline));
 }
 
@@ -445,6 +434,7 @@
 }
 
 .content {
+  isolation: isolate;
   max-inline-size: var(--page-max);
   margin-inline: auto;
 }
@@ -506,7 +496,6 @@
 
 @media (max-width: 48rem) {
   .main {
-    padding-block: var(--space-3);
     /* clear the dock: control-lg plus its padding and the safe area */
     padding-block-end: calc(var(--control-lg) + var(--space-4) + var(--safe-block-end));
   }

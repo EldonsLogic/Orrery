@@ -16,7 +16,7 @@ describe('design foundation', () => {
       '--text-strong-weight', '--text-label-size', '--text-label-weight', '--text-kpi-size', '--text-kpi-line', '--text-kpi-weight',
       '--text-display-fluid', '--text-h1-fluid', '--measure',
       '--control-sm', '--control-md', '--control-lg', '--icon-sm', '--icon-md', '--icon-lg', '--control-gap',
-      '--page-max', '--page-pad', '--page-band', '--page-band-size', '--glass-fill', '--glass-filter', '--glass-edge', '--glass-highlight',
+      '--page-max', '--page-pad', '--page-band', '--main-pad-block', '--glass-fill', '--glass-filter', '--glass-edge', '--glass-highlight',
       '--bp-phone', '--bp-tablet', '--bp-laptop', '--bp-desktop',
     ];
     for (const r of roles) expect(root.split(`${r}:`)).toHaveLength(2);

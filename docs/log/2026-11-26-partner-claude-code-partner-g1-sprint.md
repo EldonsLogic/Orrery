@@ -46,9 +46,11 @@ Live coordinator log for the partner lane's G1 finishing sprint (RULES 51), cont
 - Dispatched R3 (#379 at ec438c50, Gemini).
 - A2 result (BPL-046, Opus 5.5): `length` and `precision` now reach the Custom Field (4 lines, the gate unchanged), 5 new tests, suite 1858 passed; committed at 95913241; draft PR #381 opened (373 lines). The bench now fails at step 56: the engine's own plan adds `ADD INDEX creation` on `tabSales Invoice Item` (`sort_field = creation`, no index on a fresh site), and the gate refuses it. Founder call sent to the partner: (A) provisioning creates the engine's expected indexes (recommended), (B) the gate accepts this index (ADR and Tier 3), (C) the index goes into the approved plan (waits on ADR-0068). Also found: the rollback after that refusal ended `recovery_required` with a changed export hash (cause UNVERIFIED; candidate for BPL-033).
 
+- R3 result (#379, Gemini): APPROVE with Lows at ec438c50, posted as a comment (own PR). Low 1 confirms the RPC path `take_snapshot` is reachable for DocField-only fields (returns `RECOVERY_REQUIRED`, not `REJECTED`): new row BPL-048 (todo, depends on BPL-044).
+
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-g1-sprint.md: this live log.
-- docs/PLAN.md: BPL-046 and BPL-044 claimed.
+- docs/PLAN.md: BPL-046 and BPL-044 claimed (#378); BPL-048 added (coordination-22).
 
 ## Decisions
 - Partner, 2026-11-26: "approved" for the Wave 0 and Wave 1 plan. Founder decisions 1 to 11 (ADR acceptance, #335 say-so, #337 merge, Q-421, #374 table, CE-SEC-011 split, row calls, ZATCA sandbox credentials, 50-tenant spike host, hosting shortlist, GOV-073) are open.

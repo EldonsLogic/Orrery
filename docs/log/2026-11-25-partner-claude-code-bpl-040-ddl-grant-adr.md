@@ -37,3 +37,11 @@ Revision 3 (Claude Opus 5.5 design sub-agent) answers N1 to N5, narrowing scope 
 - N4: caller and tenant rate first; the grant-hash budget is charged only after signature and tenant binding; test `cross_tenant_budget_poisoning_is_impossible`.
 - N5: every hash uses the contract grammar `sha256:` plus 64 lowercase hex; vectors from real contract values. Storage-gating citation corrected to `engine.py:1362-1363`.
 - New open point for the founders: who owns the compiler isolation check and Studio's display of the separate constraint change.
+
+## Revision 4 (2026-11-25: Eldon's review E1 to E10, Gemini 4 Argon F1 to F4, founders' answers)
+Revision 4 (Claude Opus 5.5 design sub-agent) applies the founders' three answers, which Eldon posted for both founders on PR #309, and the remaining review findings. Line numbers re-checked against main at 67660816.
+- Answer 1 (no new store): the regional store and the stored policy floor are gone. The reservation, the deployment's idempotency row and the Stage 3 intent commit in one tenant-database transaction (item 12). The verifier compares the signed `siteId` with the in-site copy only; trusted provisioning is the stated assumption (item 3, E4). Withdrawing the `kid` is the emergency stop (item 4).
+- Answer 2 (labels): `policyVersion` is recorded, never compared (items 2, 4, 11.2).
+- Answer 3 (unique only): v1 is `unique` on `field.add` only; `relation.add`, `entity.add` and index constraints stay refused. BPL-039 (Eldon) owns `constraint_change_not_isolated` and incremental compile; the adapter re-checks the shape, including `skippedOps` (items 8, 11.6, 27).
+- Other fixes: `apply_native_custom_field` and the reconcile predicate change in the constraint mode (F1, E3); only allow-listed phantom `MODIFY` (F1); pure checks before `_acquire` and side-effect-free clean refusals (F4); the eldon row split into contract and issuer rows (E6); entry-point refusals point to BPL-043 (E9); an unconsumed grant ends `failed` (E10); the NULL bench check is an acceptance condition (E8, not yet run). The ADR title and INDEX line now say "unique constraint" and "new"; Q-603 carries an update note.
+- Left open: the E8 bench run itself, and the PLAN.md hunk needs a rebase onto main (E9, coordinator).

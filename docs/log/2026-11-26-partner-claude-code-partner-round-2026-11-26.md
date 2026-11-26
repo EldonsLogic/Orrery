@@ -41,10 +41,17 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
 - Asked Eldon on #335 (comment, 2026-11-26): what "write-through" means (local synced spool or SEC-008 acknowledgement; Q-644) and startup with the store unreachable (F2; Q-645).
 - G, #341 (GOV-073): applied Eldon's two notes at 21d2dee2 (advisor one effort level up, none on Tier 1, token cost recorded; Fable 5.2), commented the old and new commit; merges on green.
 - Advisor (same-session Claude advisor, trial GOV-073): one call before dispatch. It caught that worktree isolation would fork from main instead of the PR heads, and asked for the #316 decisions in the C and D briefs, the held questions to Eldon in parallel, and plan rows kept in each PR branch. Token cost unknown.
+- F (doing-row audit, Claude Sonnet 5.5, read-only) returned: 32 partner `doing` rows; 3 done, 6 part done, 8 active, 13 stale, 2 undecided. Applied in this PR (coordinator):
+  - done: ERP-011 (#192, Eldon's Tier 3 approval, six live bench proofs), ERP-031 (#299, live run 45636525010).
+  - done and split, with the unfinished part as a new row: BPL-041 to BPL-046 (the real-bench REQUIRE phase was never wired; BPL-044 is now ready, but waits for #338, which touches `frappe_backend.py`); ERP-009 to ERP-039 (Q-311); ERP-010 to ERP-038 (bench run Q-475 to Q-477; CMP-015 now depends on ERP-038); ERP-016 to ERP-037 (bench render, #204 Lows); INF-003 to INF-016 (`deploy-staging` is `if: false`).
+  - released to `todo` (no open PR, no active work): CMP-005 (bench hook, compliance sign-off, Arabic review, CMP-022 table), ERP-008 (scopes and DENY tests beyond ADR-0039), PLT-003 (service not built), PLT-024 (Tier 3 approval on #123 and the SVG/XML Low; live binding is PLT-028 to PLT-032), ERP-029 (section 7 live gates), ERP-033 (the report run), GOV-055 (waits on Q-297), CMP-033 (decision open), BPL-032 and BPL-033 (now also depend on BPL-046).
+  - left as is, for a founder call: SEC-002, INF-009, CMP-033's closing rule (does a design or decision row close on a Proposed ADR?), BPL-027 (row texts require `doing`), ERP-013 and QA-016 (Q-303 and Q-474 say they stay `doing`), SEC-004 and CMP-023 (coordination anchors; audit says SEC-004 done, CMP-023 done plus a wiring row).
+  - not applied: dependency rewiring for ERP-032 and ERP-034 (cycle risk; needs a closer look).
+  - noted: BPL-040 is `todo` on main while #309 is open (its claim is on that branch).
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-round-2026-11-26.md: this live log.
-- docs/PLAN.md: CMP-039 claimed.
+- docs/PLAN.md: CMP-039 claimed (#342); doing-row audit applied (coordination-14).
 
 ## Decisions
 - None yet. Pending partner Tier 3 say-so: #309, then #319.

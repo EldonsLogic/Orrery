@@ -21,7 +21,7 @@ Eldon delegated his engineering open questions (GOV-074 triage, section B, 252 r
 
 ## Files touched
 - `docs/open-questions.md`: ANSWERED prefixes on the B rows.
-- `docs/PLAN.md`: GOV-075 row; ten follow-up rows (BPL-047, OPR-021, OPR-022, PLT-033, PLT-034, SEC-026, SEC-027, DSC-020, QA-021, WEB-030), all eldon, todo.
+- `docs/PLAN.md`: GOV-075 row; ten follow-up rows (BPL-047, OPR-021, OPR-022, PLT-036, PLT-034, SEC-026, SEC-027, DSC-020, QA-021, WEB-030), all eldon, todo.
 
 ## Decisions
 - Answers recorded in `docs/open-questions.md`; no ADR edited. Answers that need an ADR change say so.

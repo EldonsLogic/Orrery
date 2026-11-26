@@ -11,3 +11,4 @@ export { Stack, type StackProps } from './Stack';
 export { Table, type TableColumn, type TableProps } from './Table';
 export { TextField, type TextFieldProps } from './TextField';
 export { VisuallyHidden } from './VisuallyHidden';
+export { Icon, ICON_STROKE, type IconName, type IconProps, type IconSize } from './Icon';

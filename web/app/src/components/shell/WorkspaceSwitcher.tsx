@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import { ChevronsUpDown } from 'lucide-react';
+import { Icon } from '../../ui';
 import { LoadingMark } from '../marks/LoadingMark';
 import type { SessionClaims, WorkspaceMembership } from '../../lib/session';
 import { useSession } from './SessionProvider';
@@ -100,7 +100,7 @@ export function WorkspaceSwitcher({ claims, memberships }: { claims: SessionClai
         <span id={`${id}-name`} className={styles.switchName} dir="auto">
           {current?.name}
         </span>
-        <ChevronsUpDown aria-hidden="true" className={styles.chevron} />
+        <Icon name="chevronsUpDown" className={styles.chevron} />
       </button>
       <ul
         ref={list}

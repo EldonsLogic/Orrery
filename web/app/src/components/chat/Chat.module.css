@@ -1,46 +1,645 @@
-.page { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); max-inline-size: 52rem; margin-inline: auto; }
-.title { margin: 0; font-family: var(--font-heading); font-size: var(--text-h2-size); }
-.log { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 1.5); min-block-size: 12rem; list-style: none; margin: 0; padding: 0; }
-.row { display: flex; }
-.rowUser { justify-content: flex-end; }
-.bubble {
-  max-inline-size: 85%;
-  padding: calc(var(--space-unit) * 1.5) calc(var(--space-unit) * 2);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
-  border: 1px solid color-mix(in srgb, var(--color-text) 25%, transparent);
+/* Chat (WEB-004, design pass WEB-029). Foundation roles only (styles/foundation.css); logical properties throughout.
+   One calm column at the chat measure (45rem, about 720 at the 16 px root), Seshna turns at full width with the mark,
+   the person's turns as a quiet pill at the end side, proposals as solid cards, the composer docked in glass. */
+.page {
+  --chat-measure: 45rem;
+  --turn-gap: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  min-block-size: calc(100dvh - var(--topbar-height) - var(--main-pad-block));
+}
+
+@media (min-width: 48rem) {
+  .page {
+    --turn-gap: var(--space-4);
+  }
+}
+
+.srOnly {
+  position: absolute;
+  inline-size: var(--border-width);
+  block-size: var(--border-width);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.column {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--turn-gap);
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: var(--chat-measure);
+  margin-inline: auto;
+  padding-block-end: var(--space-3);
+}
+
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--turn-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  min-inline-size: 0;
+}
+
+.row[data-role='user'] {
+  justify-content: flex-end;
+}
+
+.row[data-role='system'] {
+  justify-content: center;
+}
+
+/* Text: plain, isolated, tabular figures so amounts line up; never mirrored. */
+.text {
+  margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   unicode-bidi: isolate;
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  font-variant-numeric: tabular-nums;
 }
-.user { background: var(--color-primary); color: var(--color-background); border-color: var(--color-primary); }
-.system { background: color-mix(in srgb, var(--color-text) 8%, var(--color-surface)); color: color-mix(in srgb, var(--color-text) 70%, transparent); font-size: var(--text-small-size); }
-.cursor { color: color-mix(in srgb, var(--color-text) 70%, transparent); }
-.meta { display: block; font-size: var(--text-caption-size); color: color-mix(in srgb, var(--color-text) 70%, transparent); margin-block-end: calc(var(--space-unit) / 2); }
-.user .meta { color: var(--color-background); }
-.empty { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 1.5); }
-.chips { display: flex; flex-wrap: wrap; gap: var(--space-unit); list-style: none; margin: 0; padding: 0; }
-.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(var(--space-unit) / 2); font-size: var(--text-small-size); }
-.step { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-unit); }
-.tool { font-family: var(--font-body); unicode-bidi: isolate; direction: ltr; }
-.composer { display: flex; flex-direction: column; gap: var(--space-unit); }
-.textarea {
-  inline-size: 100%;
+
+.userPill {
   box-sizing: border-box;
-  min-block-size: calc(var(--space-unit) * 10);
-  padding: var(--space-unit) calc(var(--space-unit) * 1.5);
-  border: 1px solid color-mix(in srgb, var(--color-text) 50%, transparent);
-  border-radius: var(--radius-control);
+  max-inline-size: min(85%, 36rem);
+  padding: var(--space-1_5) var(--space-2);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-text) 6%, var(--color-background));
+  color: var(--color-text);
+}
+
+.system {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+  text-align: center;
+}
+
+.seshna {
+  display: grid;
+  grid-template-columns: var(--control-sm) minmax(0, 1fr);
+  gap: var(--space-1_5);
+  inline-size: 100%;
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--control-sm);
+  block-size: var(--control-sm);
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.turnBody {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.turnBody > .text {
+  justify-self: stretch;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-sm);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+}
+
+.caret {
+  display: inline-block;
+  inline-size: var(--space-1);
+  block-size: 1em;
+  margin-inline-start: var(--space-0_5);
+  vertical-align: text-bottom;
+  border-radius: var(--border-width);
+  background: var(--color-primary);
+}
+
+/* Sources: the records an answer came from. */
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.sourcesLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+.sourceList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sourceChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  min-block-size: var(--control-sm);
+  box-sizing: border-box;
+  padding-inline: var(--space-1) var(--space-1_5);
+  border: var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.sourceChip:hover {
+  background: var(--state-hover);
+}
+
+.sourceChip > svg {
+  color: var(--color-primary);
+}
+
+.sourceKind {
+  color: var(--color-text-muted);
+}
+
+.sourceId {
+  font-weight: var(--text-label-weight);
+  white-space: nowrap;
+}
+
+/* Thinking: the loading mark sits in the avatar column, its label where the name goes. */
+.thinkingRow {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--control-sm);
+  padding-inline-start: calc((var(--control-sm) - var(--icon-md)) / 2);
+}
+
+.thinking {
+  gap: calc(var(--space-1_5) + (var(--control-sm) - var(--icon-md)) / 2);
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+/* What Seshna did: a quiet disclosure, open while a run is active. */
+.activity {
+  margin-inline-start: calc(var(--control-sm) + var(--space-1_5));
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.activitySummary {
+  display: inline-flex;
+  list-style: none;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--control-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.activitySummary::-webkit-details-marker {
+  display: none;
+}
+
+.activityChevron {
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+
+.activity:not([open]) .activityChevron {
+  transform: rotate(-90deg);
+}
+
+[dir='rtl'] .activity:not([open]) .activityChevron {
+  transform: rotate(90deg);
+}
+
+.activityCount {
+  font-variant-numeric: tabular-nums;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 0;
+  padding-inline-start: var(--space-2);
+  border-inline-start: var(--hairline);
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.tool {
+  unicode-bidi: isolate;
+  direction: ltr;
+  font-family: var(--font-body);
+}
+
+.cards {
+  display: contents;
+}
+
+/* Proposals: solid cards (never glass) for drafts that wait for a person. */
+.proposal {
+  display: grid;
+  gap: var(--space-1_5);
+  box-sizing: border-box;
+  margin-inline-start: calc(var(--control-sm) + var(--space-1_5));
+  padding: var(--space-2);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+@media (min-width: 48rem) {
+  .proposal {
+    padding: var(--space-3);
+  }
+}
+
+.proposalHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.proposalStatus {
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+}
+
+.proposalRisk {
+  display: inline-flex;
+  gap: var(--space-0_5);
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+.proposalTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h3-weight);
+}
+
+.proposalIntro {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.diff {
+  display: grid;
+  border: var(--hairline);
+  border-radius: var(--radius-sm);
+}
+
+.diffHead,
+.diffRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1_5);
+  padding: var(--space-1) var(--space-1_5);
+}
+
+.diffHead {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-label-weight);
+}
+
+.diffRows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diffRow {
+  border-block-start: var(--hairline);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.diffField {
+  color: var(--color-text-muted);
+}
+
+.diffBefore {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.diffAfter {
+  font-weight: var(--text-strong-weight);
+}
+
+.proposalActions > a {
+  text-decoration: none;
+}
+
+.proposalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding-block-start: var(--space-0_5);
+}
+
+.proposalNote {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+.error {
+  margin-inline-start: calc(var(--control-sm) + var(--space-1_5));
+}
+
+/* Empty state: the mark, a question, a short promise and suggested prompts, centred in the column. */
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin-block: auto;
+  padding-block: var(--space-4);
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h1-fluid);
+  line-height: var(--text-h1-line);
+  font-weight: var(--text-h1-weight);
+}
+
+.emptyIntro {
+  margin: 0;
+  max-inline-size: 34rem;
+  color: var(--color-text-muted);
+}
+
+.prompts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-1) 0 0;
+  list-style: none;
+}
+
+.prompt {
+  min-block-size: var(--control-md);
+  padding-inline: var(--space-2);
+  border: var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.prompt:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, var(--color-surface));
+}
+
+/* The dock: sticky at the bottom of the screen, the column's width. Below the field's top edge it paints the page colour,
+   so turns scroll away behind the glass rim and text never sits under the message box. */
+.dock {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 5;
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: var(--chat-measure);
+  margin-inline: auto;
+  padding-block: var(--space-1) max(var(--space-2), var(--safe-block-end));
+}
+
+.dock::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-inline: 0;
+  inset-block: var(--space-3) 0;
   background: var(--color-background);
+}
+
+.composer {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  padding: var(--space-1_5) var(--space-1_5) var(--space-1) var(--space-2);
+  border: var(--border-width) solid var(--color-border-control);
+  border-radius: var(--radius-md);
+  background: var(--glass-fill);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  box-shadow: var(--glass-highlight), var(--shadow-overlay);
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.field:hover {
+  border-color: var(--color-text);
+}
+
+.field:focus-within {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.textarea {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: var(--text-body-line);
+  max-block-size: calc(var(--text-body-line) * 8);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--color-text);
   font: inherit;
-  resize: vertical;
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  font-variant-numeric: tabular-nums;
+  field-sizing: content;
+  resize: none;
 }
-.textarea:focus-visible { outline: var(--focus-ring-width) solid var(--color-primary); outline-offset: var(--focus-ring-offset); }
-.textarea[aria-disabled='true'] { opacity: 0.5; cursor: not-allowed; }
-.bar { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
-.count { font-size: var(--text-caption-size); color: color-mix(in srgb, var(--color-text) 70%, transparent); }
-.hint { margin: 0; font-size: var(--text-small-size); color: color-mix(in srgb, var(--color-text) 70%, transparent); }
-.changes { margin: 0; padding-inline-start: calc(var(--space-unit) * 3); }
-.cardTitle { margin: 0; font-family: var(--font-heading); font-size: var(--text-h3-size); }
-.typing { display: inline-flex; align-items: center; gap: var(--space-unit); color: color-mix(in srgb, var(--color-text) 70%, transparent); font-size: var(--text-small-size); }
+
+.textarea:focus {
+  outline: none;
+}
+
+.textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+.textarea[aria-disabled='true'] {
+  color: var(--color-text-muted);
+  cursor: progress;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.mode {
+  display: inline-flex;
+}
+
+.modeSelect {
+  min-block-size: var(--control-sm);
+  padding-inline: var(--space-1_5);
+  border: var(--hairline);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  cursor: pointer;
+}
+
+.modeSelect[aria-disabled='true'] {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.barEnd {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.count {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.bar .sendButton {
+  inline-size: var(--control-sm);
+  padding-inline: 0;
+  border-radius: var(--radius-pill);
+}
+
+.hint {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-0_5) var(--space-2);
+  margin: 0;
+  padding-inline: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+/* The keyboard hint only where there is a keyboard. */
+@media (hover: none) {
+  .keyHint {
+    display: none;
+  }
+}
+
+.sourceChip:focus-visible,
+.prompt:focus-visible,
+.modeSelect:focus-visible,
+.activitySummary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (pointer: coarse) {
+  .prompt,
+  .modeSelect,
+  .sourceChip {
+    min-block-size: var(--touch-target);
+  }
+}
+
+/* Phones: captions step up to the small size (no fixed tiny text), and the activity and cards use the full width. */
+@media (max-width: 47.9375rem) {
+  .hint,
+  .sourcesLabel,
+  .proposalNote {
+    font-size: var(--text-small-size);
+    line-height: var(--text-small-line);
+  }
+
+  .proposal,
+  .activity,
+  .error {
+    margin-inline-start: 0;
+  }
+
+  .keyHint {
+    display: none;
+  }
+}
+
+/* The streaming caret blinks only when the reader allows motion; otherwise it is a steady block. */
+@media (prefers-reduced-motion: no-preference) {
+  .caret {
+    animation: caret 1s steps(2, start) infinite;
+  }
+
+  @keyframes caret {
+    to {
+      visibility: hidden;
+    }
+  }
+}

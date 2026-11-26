@@ -1,8 +1,27 @@
-import { RISKS, type ChatEvent, type RiskClass, type ToolOutcome } from './types';
+import { MAX_SOURCES, RISKS, type ChatEvent, type RiskClass, type SourceRef, type ToolOutcome } from './types';
 
 const OUTCOMES: ReadonlyArray<ToolOutcome> = ['ok', 'denied', 'error', 'pending_approval'];
 const str = (v: unknown, max = 500): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
 const risk = (v: unknown): v is RiskClass => (RISKS as ReadonlyArray<unknown>).includes(v);
+// Source records: an entity id (Blueprint style) and a record id (document numbers such as SO-00001). Nothing else passes.
+const ENTITY = /^[a-z][a-z0-9_]{0,47}$/;
+const RECORD = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+
+/** Validates a source list: at most MAX_SOURCES, each well-formed, duplicates dropped; null when anything is malformed. */
+export function parseSources(raw: unknown): SourceRef[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_SOURCES) return null;
+  const out: SourceRef[] = [];
+  for (const r of raw as unknown[]) {
+    const o = r as Record<string, unknown>;
+    if (typeof o !== 'object' || o === null || typeof o.entity !== 'string' || typeof o.id !== 'string') return null;
+    if (!ENTITY.test(o.entity) || !RECORD.test(o.id)) return null;
+    if (!out.some((x) => x.entity === o.entity && x.id === o.id)) out.push({ entity: o.entity, id: o.id });
+  }
+  return out;
+}
+
+/** The route of a source record. Both parts are validated above; the id is still encoded. */
+export const sourceHref = (s: SourceRef): string => `/records/${s.entity}/${encodeURIComponent(s.id)}/`;
 
 /** Allow-list validator for the wire shape: returns null for unknown types or bad fields (never throws). */
 export function parseChatEvent(raw: unknown): ChatEvent | null {
@@ -15,6 +34,10 @@ export function parseChatEvent(raw: unknown): ChatEvent | null {
       return str(e.messageId) && typeof e.delta === 'string' && e.delta.length <= 20000 ? { type: 'text_delta', messageId: e.messageId, delta: e.delta } : null;
     case 'text_end':
       return str(e.messageId) ? { type: 'text_end', messageId: e.messageId } : null;
+    case 'sources': {
+      const records = str(e.messageId) ? parseSources(e.records) : null;
+      return records ? { type: 'sources', messageId: e.messageId as string, records } : null;
+    }
     case 'tool_call':
       return str(e.callId) && str(e.tool) && risk(e.risk) ? { type: 'tool_call', callId: e.callId, tool: e.tool, risk: e.risk } : null;
     case 'tool_result':

@@ -7,6 +7,8 @@
  *   4, 32 and 64 only where a layout needs them.
  * Breakpoints (media queries cannot read variables, so these are the reference values; mobile-first, min-width):
  *   phone 375, tablet 48rem (768), laptop 64rem (1024), desktop 90rem (1440).
+ * Type: every size and line height is in rem on the 16 px root (the generated tokens and the roles below), so text follows
+ *   the reader's browser text size; spacing, controls and borders stay in px.
  * Radius: one per role. Cards and panels --radius-md, controls --radius-sm, badges --radius-pill. Border: 1px.
  * Glass: a material for chrome and overlays only (top bar, side navigation, the Ask Seshna dock, popovers), never for
  *   content cards, numbers, tables or forms, and never glass on glass. Solid surface unless backdrop-filter works,
@@ -28,8 +30,8 @@
   --text-label-size: var(--text-small-size);
   --text-label-line: var(--text-small-line);
   --text-label-weight: 500;
-  --text-kpi-size: 32px;
-  --text-kpi-line: 40px;
+  --text-kpi-size: 2rem;
+  --text-kpi-line: 2.5rem;
   --text-kpi-weight: 600;
   /* Fluid only for display and h1; body stays 16. */
   --text-display-fluid: clamp(2rem, 1.6rem + 1.2vw, 2.5rem);
@@ -56,13 +58,15 @@
   /* Glass, solid by default. */
   --glass-alpha: 100%;
   --glass-fill: color-mix(in srgb, var(--color-surface) var(--glass-alpha), transparent);
+  /* The same glass on the page band's tint, for the side navigation, so the material reads beside a plain page. */
+  --glass-fill-tinted: color-mix(in srgb, var(--page-band) var(--glass-alpha), transparent);
   --glass-filter: none;
   --glass-edge: var(--color-border);
   --glass-highlight: inset 0 1px 0 transparent;
 }
 
 [dir='rtl'] {
-  --text-kpi-line: 48px;
+  --text-kpi-line: 3rem;
 }
 
 @media (min-width: 48rem) {

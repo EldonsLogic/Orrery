@@ -3,8 +3,7 @@
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { FileText, House, MessageSquare, Package, Palette, ReceiptText, ShoppingCart, Users, Workflow, type LucideIcon } from 'lucide-react';
-import { Mark } from '../../ui';
+import { Icon, Mark, type IconName } from '../../ui';
 import { buildNav } from '../../lib/navigation';
 import { BUILD_STAGES, stageProgress } from '../../lib/buildProgress';
 import { callerOf, type SessionClaims } from '../../lib/session';
@@ -14,16 +13,16 @@ import { fixtureBlueprint } from '../../blueprint/fixture';
 import { fixtureData } from '../../records/fixture/rows';
 import styles from './Shell.module.css';
 
-// PLACEHOLDER icons (Lucide, ISC) until the brand icon set exists; decorative, the label carries the meaning.
-const ICONS: Readonly<Record<string, LucideIcon>> = {
-  home: House,
-  chat: MessageSquare,
-  blueprint: Workflow,
-  branding: Palette,
-  customer: Users,
-  item: Package,
-  sales_order: ShoppingCart,
-  sales_invoice: ReceiptText,
+// Icons through the one Icon component (placeholder set until the brand icon set exists); the label carries the meaning.
+const ICONS: Readonly<Record<string, IconName>> = {
+  home: 'home',
+  chat: 'chat',
+  blueprint: 'workflow',
+  branding: 'palette',
+  customer: 'users',
+  item: 'package',
+  sales_order: 'cart',
+  sales_invoice: 'receipt',
 };
 
 export function SideNav({ claims, buildState, onNavigate }: { claims: SessionClaims; buildState?: string; onNavigate: () => void }) {
@@ -54,12 +53,12 @@ export function SideNav({ claims, buildState, onNavigate }: { claims: SessionCla
           <ul className={styles.navList}>
             {s.items.map((i) => {
               const current = pathname.startsWith(i.href);
-              const Icon = ICONS[i.id] ?? FileText;
               return (
                 <li key={i.id}>
-                  <Link href={i.href} className={styles.navLink} aria-current={current ? 'page' : undefined} onClick={onNavigate}>
-                    <Icon aria-hidden="true" className={styles.navIcon} strokeWidth={1.75} />
-                    <span>{i.label}</span>
+                  {/* data-label feeds the rail tooltip (CSS, hidden from assistive technology); the span is the accessible name. */}
+                  <Link href={i.href} className={styles.navLink} data-label={i.label} aria-current={current ? 'page' : undefined} onClick={onNavigate}>
+                    <Icon name={ICONS[i.id] ?? 'file'} size="md" className={styles.navIcon} />
+                    <span className={styles.navText}>{i.label}</span>
                   </Link>
                 </li>
               );

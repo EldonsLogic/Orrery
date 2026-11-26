@@ -64,8 +64,8 @@ add('ghost-hover', 'primary ghost text on 20% primary tint (active) over backgro
 add('ghost-hover-surface', 'primary ghost text on 20% primary tint over surface', 'ui/Button.module.css', 'var(--color-primary) 20%', (c) => c.primary, (c) => mix(c.primary, 0.2, c.surface), N);
 add('secondary-hover', 'text on secondary button active (84% surface, 16% text)', 'ui/Button.module.css', 'var(--color-surface) 84%', (c) => c.text, (c) => mix(c.surface, 0.84, c.text), N);
 add('nav-active', 'text on nav link tint (14% primary) over surface', 'components/shell/Shell.module.css', 'var(--color-primary) 14%', (c) => c.text, (c) => mix(c.primary, 0.14, c.surface), N);
-add('user-bubble-meta', 'user bubble role label: background on primary', 'components/chat/Chat.module.css', '.user .meta', (c) => c.background, (c) => c.primary, N);
-add('system-bubble', 'system bubble: text 70% on text 8% over surface', 'components/chat/Chat.module.css', 'var(--color-text) 8%', (c) => mix(c.text, 0.7, mix(c.text, 0.08, c.surface)), (c) => mix(c.text, 0.08, c.surface), N);
+add('user-pill', 'chat user turn: text on text 6% over background', 'components/chat/Chat.module.css', 'var(--color-text) 6%, var(--color-background)', (c) => c.text, (c) => mix(c.text, 0.06, c.background), N);
+add('rail-tooltip', 'tablet rail tooltip: background on text', 'components/shell/Shell.module.css', 'background: var(--color-text)', (c) => c.background, (c) => c.text, N);
 for (const tone of ['primary', 'success', 'warning', 'danger']) {
   add(`alert-text/${tone}`, `alert text on ${tone} tint over surface`, 'ui/Alert.module.css', 'color: var(--color-text)', (c) => c.text, (c) => mix(c[tone], 0.14, c.surface), N);
   add(`alert-icon/${tone}`, `alert icon (${tone}) on its tint over surface`, 'ui/Alert.module.css', 'color: var(--alert-tone)', (c) => c[tone], (c) => mix(c[tone], 0.14, c.surface), UI);

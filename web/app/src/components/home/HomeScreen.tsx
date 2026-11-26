@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { ArrowDown, ArrowUp, TriangleAlert } from 'lucide-react';
 import type { Locale } from '../../i18n';
-import { Badge, Button, Card, Mark } from '../../ui';
+import { Badge, Button, Card, Icon, Mark } from '../../ui';
 import { cx } from '../../ui/cx';
 import button from '../../ui/Button.module.css';
 import { formatNumber } from '../../lib/format';
 import { ProgressMarks } from '../marks/ProgressMarks';
 import { StatusMark } from '../marks/StatusMark';
 import { LoadingMark } from '../marks/LoadingMark';
+import { InlineAskContext } from '../shell/inlineAsk';
+import { PHONE_QUERY, useMedia } from '../../lib/useMedia';
 import type { Activity, HomeOverview, Kpi, Money, TodayFacts } from '../../home/types';
 import styles from './Home.module.css';
 
@@ -66,14 +67,14 @@ function KpiTile({ kpi, locale }: { kpi: Kpi; locale: Locale }) {
       <div className={styles.tileFoot}>
         {kpi.change !== undefined ? (
           <>
-            <Badge tone={up ? 'success' : 'danger'} icon={up ? <ArrowUp className={styles.icon} /> : <ArrowDown className={styles.icon} />}>
+            <Badge tone={up ? 'success' : 'danger'} icon={<Icon name={up ? 'arrowUp' : 'arrowDown'} />}>
               {t(up ? 'up' : 'down', { value: formatNumber(locale, Math.abs(kpi.change), NS) })}
             </Badge>
             <span className={styles.caption}>{t('vsLast')}</span>
           </>
         ) : null}
         {kpi.overdue ? (
-          <Badge tone="warning" icon={<TriangleAlert className={styles.icon} />}>
+          <Badge tone="warning" icon={<Icon name="warning" />}>
             {t('overdue', { count: formatNumber(locale, kpi.overdue, NS) })}
           </Badge>
         ) : null}
@@ -154,6 +155,20 @@ export function HomeScreen({ data, loading = false, company, person }: { data: H
   const tc = useTranslations('chat.suggestions.owner');
   const locale = useLocale() as Locale;
   const [question, setQuestion] = useState('');
+  const phone = useMedia(PHONE_QUERY);
+  const ask = useRef<HTMLFormElement>(null);
+  const reportInlineAsk = useContext(InlineAskContext);
+  // While the inline Ask field is on screen the phone dock would only repeat it, so the shell hides the dock.
+  useEffect(() => {
+    const el = ask.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([entry]) => reportInlineAsk(Boolean(entry?.isIntersecting)));
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      reportInlineAsk(false);
+    };
+  }, [reportInlineAsk]);
   const live = data?.buildState === 'live';
   const date = data
     ? new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', calendar: 'gregory', numberingSystem: NS, timeZone: 'UTC' } as Intl.DateTimeFormatOptions).format(new Date(`${data.asOf}T00:00:00Z`))
@@ -186,16 +201,16 @@ export function HomeScreen({ data, loading = false, company, person }: { data: H
 
         {/* The chat screen owns the conversation; this entry takes the owner there. The input has no name, so the question
             never lands in the URL. Handing it to the chat composer is a follow-up (WEB-026 composer). */}
-        <form className={styles.ask} action="/chat/" method="get" role="search" aria-labelledby="ask-title">
+        <form ref={ask} className={styles.ask} action="/chat/" method="get" role="search" aria-labelledby="ask-title">
           <label id="ask-title" htmlFor="ask-input" className={styles.askLabel}>
             <Mark tone="accent" upper="solid" lower="outline" size={20} />
             <span>{t.rich('ask.title', { brand })}</span>
           </label>
           <div className={styles.askField}>
-            <input id="ask-input" className={styles.askInput} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t('ask.placeholder')} autoComplete="off" />
+            <input id="ask-input" className={styles.askInput} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t(phone ? 'ask.placeholderShort' : 'ask.placeholder')} autoComplete="off" />
             <Button type="submit" className={styles.askButton}>
               <span>{t('ask.submit')}</span>
-              <ArrowUp aria-hidden="true" />
+              <Icon name="arrowUp" />
             </Button>
           </div>
           <ul className={styles.chips} aria-label={t('ask.suggestions')}>

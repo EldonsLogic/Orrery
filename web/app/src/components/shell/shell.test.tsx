@@ -107,4 +107,40 @@ describe('shell chrome (WEB-029)', () => {
     expect(sheet).not.toMatch(/backdrop-filter: (?!var)/);
     expect(sheet).toMatch(/\.navWrap\[data-open='true'\] \{[^}]*background: var\(--color-surface\)/);
   });
+  it('gives phones the top bar room: language moves to the account menu, the company name gets the width (WEB-029)', () => {
+    const sheet = read('Shell.module.css');
+    const phone = sheet.slice(sheet.indexOf('@media (max-width: 47.9375rem)'));
+    expect(phone.slice(0, phone.indexOf('\n}\n'))).toMatch(/\.brand,\s*\.lang \{\s*display: none/);
+    expect(read('UserMenu.tsx')).toContain("t('language')");
+  });
+  it('collapses the side navigation to an icon rail on tablets, with a toggle and tooltips hidden from assistive technology', () => {
+    const out = render(<HomeView />);
+    expect(out).toMatch(/<button[^>]*aria-expanded="false" aria-controls="app-nav"[^>]*>(?:(?!<\/button>).)*توسيع التنقل/);
+    expect(out).toContain('data-rail="collapsed"');
+    const sheet = read('Shell.module.css');
+    const rail = sheet.slice(sheet.indexOf('@media (min-width: 48rem) and (max-width: 63.9375rem)'));
+    expect(rail).toContain("content: attr(data-label) / '';");
+    expect(rail).toMatch(/\.navLink:hover::after \{[^}]*visibility: visible/);
+    expect(rail).toMatch(/\.navWrap\[data-rail='expanded'\] \.navInner,[^{]*\{[^}]*background: var\(--color-surface\)/);
+  });
+  it('draws every icon from one family: stroke 1.5, nav icons 20 and button icons 16', () => {
+    const out = render(<HomeView />);
+    const icons = out.match(/<svg[^>]*class="lucide[^"]*"[^>]*>/g) ?? [];
+    expect(icons.length).toBeGreaterThan(4);
+    for (const i of icons) expect(i).toContain('stroke-width="1.5"');
+    for (const f of ['AppShell.tsx', 'SideNav.tsx', 'WorkspaceSwitcher.tsx', '../home/HomeScreen.tsx', '../chat/Composer.tsx', '../chat/Messages.tsx']) {
+      expect(read(f)).not.toContain("from 'lucide-react'");
+    }
+  });
+  it('keeps the phone dock off content: exact bottom padding, hidden with the keyboard or the inline Ask in view', () => {
+    const sheet = read('Shell.module.css');
+    expect(sheet).toMatch(/\.dock\[data-hidden='true'\] \{[^}]*visibility: hidden/);
+    expect(sheet).toContain('var(--space-1) + var(--control-lg) + max(var(--space-1), var(--safe-block-end)) + var(--border-width)');
+    expect(render(<HomeView />)).not.toMatch(/<nav[^>]*dock[^>]*data-hidden/);
+  });
+  it('tints the side navigation glass with the page band (flat, no gradient)', () => {
+    const sheet = read('Shell.module.css');
+    expect(sheet).toMatch(/\.navWrap \{[^}]*background: var\(--glass-fill-tinted\)/);
+    expect(sheet).not.toMatch(/gradient\(/);
+  });
 });

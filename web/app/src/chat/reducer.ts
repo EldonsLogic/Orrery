@@ -62,6 +62,8 @@ function onEvent(s: ChatState, e: ChatEvent): ChatState {
     }
     case 'text_end':
       return { ...s, messages: s.messages.map((m) => (m.id === e.messageId ? { ...m, streaming: false } : m)) };
+    case 'sources':
+      return { ...s, messages: s.messages.map((m) => (m.id === e.messageId && m.role === 'assistant' ? { ...m, sources: e.records } : m)) };
     case 'tool_call':
       return { ...s, activity: [...s.activity, { callId: e.callId, tool: e.tool, risk: e.risk, outcome: 'running' }] };
     case 'tool_result':

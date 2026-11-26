@@ -13,12 +13,16 @@ export type RiskClass = (typeof RISKS)[number];
 export type ToolOutcome = 'ok' | 'denied' | 'error' | 'pending_approval';
 
 export type ChangeLine = { label: string; before: string; after: string };
+/** A record an answer was drawn from (WEB-029). Shown as a chip that opens the record; the record screen re-checks access. */
+export type SourceRef = { entity: string; id: string };
+export const MAX_SOURCES = 10;
 
 /** The only events the screen reacts to; anything else is dropped (fail closed). */
 export type ChatEvent =
   | { type: 'run_started'; runId: string }
   | { type: 'text_delta'; messageId: string; delta: string }
   | { type: 'text_end'; messageId: string }
+  | { type: 'sources'; messageId: string; records: ReadonlyArray<SourceRef> }
   | { type: 'tool_call'; callId: string; tool: string; risk: RiskClass }
   | { type: 'tool_result'; callId: string; outcome: ToolOutcome }
   | { type: 'confirm_required'; confirmId: string; tool: string; risk: RiskClass; changes: ReadonlyArray<ChangeLine> }
@@ -41,7 +45,7 @@ export interface ChatPort {
 }
 
 export type ChatRole = 'user' | 'assistant' | 'system';
-export type ChatMessage = { id: string; role: ChatRole; text: string; streaming: boolean };
+export type ChatMessage = { id: string; role: ChatRole; text: string; streaming: boolean; sources?: ReadonlyArray<SourceRef> };
 export type ActivityStep = { callId: string; tool: string; risk: RiskClass; outcome: ToolOutcome | 'running' };
 export type PendingConfirm = { confirmId: string; tool: string; risk: RiskClass; changes: ReadonlyArray<ChangeLine> };
 export type PendingApproval = { approvalId: string; tool: string; risk: RiskClass };

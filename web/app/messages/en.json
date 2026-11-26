@@ -340,7 +340,9 @@
       },
       "blueprint": "Business blueprint",
       "chat": "Chat",
-      "branding": "Branding"
+      "branding": "Branding",
+      "expand": "Expand navigation",
+      "collapse": "Collapse navigation"
     },
     "workspace": {
       "label": "Workspace",
@@ -1188,8 +1190,9 @@
   "chat": {
     "title": "Chat",
     "empty": {
-      "intro": "Ask about your business or tell the assistant what to do. Try one of these.",
-      "suggestions": "Suggested prompts"
+      "intro": "Ask about your business or tell Seshna what to do. Answers come from your records, and nothing is written until a person approves it.",
+      "suggestions": "Suggested prompts",
+      "title": "What would you like to know?"
     },
     "suggestions": {
       "owner": {
@@ -1216,7 +1219,7 @@
     "roles": {
       "log": "Conversation",
       "user": "You",
-      "assistant": "Assistant",
+      "assistant": "Seshna",
       "system": "System"
     },
     "mode": {
@@ -1241,18 +1244,19 @@
     },
     "composer": {
       "label": "Message",
-      "placeholder": "Write a message",
+      "placeholder": "Ask about sales, cash, stock or a record",
       "hint": "Enter sends, Shift+Enter starts a new line.",
       "send": "Send",
       "cancel": "Stop",
-      "count": "{used} of {max}"
+      "count": "{used} of {max}",
+      "placeholderShort": "Ask a question"
     },
     "stream": {
-      "working": "The assistant is working",
+      "working": "Seshna is working",
       "cancelling": "Stopping"
     },
     "activity": {
-      "title": "What the assistant did",
+      "title": "What Seshna did",
       "risk": "Risk class {risk}",
       "outcome": {
         "running": "Running",
@@ -1260,25 +1264,32 @@
         "pending_approval": "Sent for approval",
         "denied": "Not allowed",
         "error": "Failed"
-      }
+      },
+      "summary": "{count, plural, one {# step} other {# steps}}"
     },
     "confirm": {
-      "title": "Confirm before it is written",
-      "intro": "The assistant wants to run {tool} (risk {risk}). Check what will change.",
+      "title": "Proposed change",
+      "intro": "Seshna wants to run {tool} (risk {risk}). Check what will change.",
       "changes": "Changes",
       "change": "{field}: {before} to {after}",
       "empty": "empty",
       "noChanges": "No field values change.",
       "confirm": "Confirm",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "field": "Field",
+      "before": "Now",
+      "after": "After",
+      "edit": "Edit",
+      "editHint": "Edit declines this draft and takes you back to the message box, so you can say what to change.",
+      "note": "Nothing is written until you confirm."
     },
     "approval": {
       "title": "Sent for approval",
-      "body": "{tool} (risk {risk}) needs an approver. Nothing has changed yet. It cannot be approved from the chat.",
+      "body": "{tool} (risk {risk}) needs an approver. Nothing has changed yet, and nothing posts until a person approves it in the approval inbox.",
       "open": "Open the approval inbox"
     },
     "clarify": {
-      "title": "The assistant needs more detail",
+      "title": "Seshna needs more detail",
       "whichRecord": "Which record do you mean? Give a number or a name.",
       "whichPeriod": "Which period do you mean?",
       "whichAction": "What would you like to do with it?",
@@ -1288,11 +1299,15 @@
       "title": "The request did not complete",
       "forbidden": "Your role does not allow this.",
       "rate_limited": "Too many requests. Wait a moment and try again.",
-      "unavailable": "The assistant is not available right now. Try again later.",
+      "unavailable": "Seshna is not available right now. Try again later.",
       "invalid_request": "The request could not be understood.",
       "cancelled": "The request was stopped.",
       "timeout": "The request took too long.",
       "unknown": "Something went wrong. Try again."
+    },
+    "sources": {
+      "label": "Sources",
+      "open": "Open {record}"
     }
   },
   "onboarding": {
@@ -1398,7 +1413,8 @@
       "placeholder": "Ask about sales, cash or stock",
       "submit": "Ask",
       "hint": "Answers come from your records. Anything <brand>Seshna</brand> drafts waits for your approval.",
-      "suggestions": "Suggested questions"
+      "suggestions": "Suggested questions",
+      "placeholderShort": "Ask a question"
     },
     "today": {
       "title": "Today",

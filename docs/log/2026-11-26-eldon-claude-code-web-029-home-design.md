@@ -23,6 +23,14 @@ First design pass, part 2 of 2: the owner home as the reference screen, on the W
 ## Checks
 pnpm lint, typecheck, test, next build, check_docs, check_repo_hygiene: pass. Screenshots at 375/768/1024/1440, EN and AR, light and dark, outside the repo; no horizontal overflow at any width.
 
+## Round 2 (review feedback, same session)
+- Ask Seshna is a slim hero on a flat Cobalt-tinted band: label with the Coral mark, a 48 px glass field with the Ask button inside at the end, chips, a caption.
+- KPI tiles: sparkline (six month-ends, no axes, low emphasis) on sales and cash only; each change in a success or danger pill with an arrow and a word.
+- Today moved beside activity (right column, 5) next to approvals (7); the record chips row is gone (the navigation has them).
+- Approvals: whole row is the hover target, amounts in one tabular column, Review as a small secondary button, the drafted mark line in caption size.
+- Rhythm: 48 between sections (32 on phones), 24 inside cards, card padding 24 (16 on phones); captions step up to 14 on phones.
+- Screenshots: all 16 (375/768/1024/1440 x EN/AR x light/dark) plus the not-live company at 375 and 1440; no horizontal overflow; fonts verified loaded.
+
 ## Tokens or cost
 Not measured.
 

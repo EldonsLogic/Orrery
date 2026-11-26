@@ -282,6 +282,8 @@ class PackPublisher:
         pub, wd = (prev["published"], prev["withdrawn"]) if prev else ([], [])
         known = sorted(pub + wd, key=lambda e: canon.semver(e["version"]))
         top = known[-1] if known else None
+        open_ids = set(prev["followUpOpen"]) if prev else set()
+        _check(not any(e["version"] == d.version and e["publishId"] in open_ids for e in pub), "PP-063")
         _check(top is None or canon.semver(d.version) > canon.semver(top["version"]), "PP-021")
         _check(top is None or (top["version"], top["contentDigest"]) == (d.base_version, d.base_digest), "PP-021")
         index = {

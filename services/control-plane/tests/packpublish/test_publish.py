@@ -261,3 +261,12 @@ def test_signoff_challenge_is_domain_separated():
     old = dict(sig, clientDataJSON=base64.urlsafe_b64encode(json.dumps(
         {"type": "webauthn.get", "challenge": base64.urlsafe_b64encode(bytes.fromhex("ab" * 32)).rstrip(b"=").decode()}).encode()).rstrip(b"=").decode())
     assert v.verify(ACC, sd, old, "production") is False
+
+
+def test_republish_of_urgent_version_with_open_follow_up_is_refused():
+    w = World()
+    _, r = w.publish(w.draft(change_kind="urgent", review_ref="review:sa:urgent-01"))
+    assert r["index"]["followUpOpen"] == [r["record"]["publishId"]]
+    again = w.draft(change_kind="scheduled")  # same version 0.2.0 again, based on 0.1.0
+    assert code(w.pub.publish, "r-again", again, w.signed(again), Actor(FDR, "tok:1")) == "PP-063"
+    assert json.loads(w.store.indexes["SA"])["indexSeq"] == 1  # nothing was committed

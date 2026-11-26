@@ -24,3 +24,4 @@ Unknown or approximate, if known.
 CMP-039 (partner, #344) reads the change record. CMP-038: upgrade scheduling, real ports, staff screen. Tier 3: needs a different-model review.
 
 - Follow-up (Eldon's #344 answer): adopted ADR-0071's domain-separated WebAuthn challenge in the store contract (now 0.3.0) and the record schema; `canon.signoff_challenge` and the fake verifier use it; `predecessorDigest` already chained the index and is documented for the loader walk-back.
+- Follow-up (#344 re-review L2, L3): republishing an urgent version with an open follow-up is refused (PP-063, test first) and defined in the store contract 0.4.0 (assumption 12); assumption 13 names Eldon's lane as owner of `minIndexSeq`, the repo pin, the cohort and the `check_upgrade` caller, with new plan row CMP-047 (todo, depends CMP-038). L1 (verify change records in every environment) goes to the partner in a #344 comment.

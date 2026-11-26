@@ -57,6 +57,7 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
   - E update: Gemini round 2 on ADR-0071 at 11ba398e: APPROVE as Proposed, no findings. Eldon's first read asked on #344.
   - A update: Gemini round 1 on #338 at 6c1f1c46: APPROVE, no findings. Re-review asked of Eldon on #338; CI was running on 6c1f1c46 at hand-off.
 - Waiting on the partner: Tier 3 say-so on #309 (asked, no answer yet), then #319.
+- Advisor (second call, before done): flagged that #338's re-review went out while its CI was pending, that the #337 next step missed Eldon's PDF condition, and that the pending-decisions memory needed updating. Token cost unknown.
 - Review effort: Gemini 4 Argon high ran six reviews (B, C, D, E twice, A), never more than two at once, with no quota failures. Rounds per PR: #337 1, #336 1, #335 1, #344 2, #338 1. Token cost unknown.
 
 ## Files touched
@@ -70,7 +71,7 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
 Unknown.
 
 ## Next step
-- Eldon: re-reviews #335, #336, #337 and #338; first read of #344. #337 (Tier 2) merges on his review if no defect is open.
+- Eldon: re-reviews #335, #336, #337 and #338; first read of #344. #337 (Tier 2) merges after his re-review and a look at one real-bench PDF (his merge condition), or after he waives the PDF.
 - Partner: Tier 3 say-so on #309, then #319 (then the accountant).
 - After #338 merges: BPL-044 and BPL-033 (same file), CE-SEC-016, CE-SEC-011 slice 2. After #336: CE-SEC-012 to CE-SEC-015. After #335: PLT-028 code. After #344: CMP-041.
 - Worktrees on this machine: `orrery-wt/cmp-039-pack-loader-design` and the existing T3 worktrees for #335 to #338; remove after merge.

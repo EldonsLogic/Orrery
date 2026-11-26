@@ -33,3 +33,15 @@ Unknown.
 
 ## Next step
 Partner confirms or objects to his rows on the PR. Eldon takes the founder list. The research items go to the market accountant, counsel and official ZATCA, FTA and ETA sources.
+
+## Founder answers added
+
+Eldon's founder answers of 2026-11-26 (second batch), recorded as given:
+
+- Q-9 and Q-129 (hosting): one major cloud using its in-country regions, plus a local provider only where it has none.
+- SOQ-10 (GTM-002): wait for a clickable demo before the 20-30 buyer and accountant interviews.
+- Q-295 (engine NDA): never named outside the founders, except the open-source notices page ADR-0016 already allows.
+- SOQ-4 (LEG-010, entity): one UAE entity first, serving all four markets; confirm it can invoice Saudi clients before signing.
+- SOQ-1 (Pilot A): the current lead fits the trading and distribution niche; they are Pilot A.
+- Q-479 (invoice accent): remove the accent rule from the v1 branded tax invoice; revisit in a brand review.
+- SOQ-2 (Pilot B): closed; Pilot A is the Odoo company, so no separate Pilot B.

@@ -27,7 +27,7 @@ import urllib.parse
 import urllib.request
 
 DEFAULT_MARKERS_FILE = Path(__file__).resolve().parent / "markers.json"
-DEFAULT_USER_AGENT = "Orrery-Invisibility-Crawler/1.0"
+DEFAULT_USER_AGENT = "Seshna-Invisibility-Crawler/1.0"
 CSS_URL_RE = re.compile(r"""url\(\s*['"]?([^'"\)\s]+)['"]?\s*\)""", re.IGNORECASE)
 CSS_IMPORT_RE = re.compile(r"""@import\s+['"]([^'"]+)['"]""", re.IGNORECASE)
 SOURCE_MAP_RE = re.compile(r"""sourceMappingURL\s*=\s*([^\s*'"]+)""")

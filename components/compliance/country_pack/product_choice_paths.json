@@ -1,0 +1,70 @@
+{
+  "description": "Per-market product-choice paths (CMP-036, ADR-0067). A PLATFORM-DEFAULT fact may back a locked pack path only if the path exactly equals a listed path; a listed path authorises neither an ancestor nor a descendant. Entries are reviewed one by one; an entry marked provisional is not settled.",
+  "markets": {
+    "SA": [
+      {
+        "path": "eInvoicing.componentId",
+        "reason": "Design choice: which platform component implements the market's e-invoicing."
+      },
+      {
+        "path": "eInvoicing.mode",
+        "reason": "Design choice: which e-invoicing mode the pack locks (Q-559 asks who decides it)."
+      },
+      {
+        "path": "formats.numberSystem",
+        "reason": "Display choice: digit system shown by default (founder decision on #300; not a tax rule)."
+      },
+      {
+        "path": "formats.decimalSeparator",
+        "reason": "Display choice: decimal separator shown on screen and print (founder decision on #300; not a tax rule)."
+      },
+      {
+        "path": "formats.thousandsSeparator",
+        "reason": "Display choice: thousands separator shown on screen and print (founder decision on #300; not a tax rule)."
+      },
+      {
+        "path": "formats.gregorianDateFormat",
+        "reason": "Display choice: Gregorian date layout (founder decision on #300; not a tax rule)."
+      },
+      {
+        "path": "printFormats.legalLayoutPrecedence",
+        "reason": "Display choice: the locked legal layout wins over tenant branding (founder decision on #300; the e-invoice standard's own field rules stay statutory)."
+      },
+      {
+        "path": "printFormats.templates",
+        "reason": "Display choice: which print template renders each document kind (founder decision on #300; any field or decimal the e-invoice standard dictates stays statutory and needs evidence)."
+      }
+    ],
+    "AE": [
+      {
+        "path": "tax.roundingRule",
+        "reason": "Platform rounding rule, listed only if the law is silent on invoice rounding.",
+        "provisional": "UNVERIFIED whether UAE law is silent on invoice rounding; ask the market accountant (Q-601 covers Saudi Arabia only)."
+      },
+      {
+        "path": "formats.numberSystem",
+        "reason": "Display choice: digit system shown by default (founder decision on #300; not a tax rule)."
+      },
+      {
+        "path": "formats.decimalSeparator",
+        "reason": "Display choice: decimal separator shown on screen and print (founder decision on #300; not a tax rule)."
+      },
+      {
+        "path": "formats.thousandsSeparator",
+        "reason": "Display choice: thousands separator shown on screen and print (founder decision on #300; not a tax rule)."
+      },
+      {
+        "path": "formats.gregorianDateFormat",
+        "reason": "Display choice: Gregorian date layout (founder decision on #300; not a tax rule)."
+      }
+    ],
+    "EG": [],
+    "QA": [
+      {
+        "path": "tax.roundingRule",
+        "reason": "Platform rounding rule, listed only if the law is silent on invoice rounding.",
+        "provisional": "UNVERIFIED whether Qatari law is silent on invoice rounding; ask the market accountant (Q-601 covers Saudi Arabia only)."
+      }
+    ]
+  }
+}

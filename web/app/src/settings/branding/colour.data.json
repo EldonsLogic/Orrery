@@ -1,0 +1,25 @@
+{
+  "note": "Data colours for the branding derivation (WEB-007), not UI styling. The base colours and default primary are generated from docs/brand/tokens/tokens.json into colour.tokens.generated.json (scripts/gen-branding-colours.mjs, drift test in scripts/). white, carbonDeep and carbonInk are the constants of docs/brand/tools/themelib.py (colour.test.ts checks them against the tokens). Kept in JSON so the tokens-only gate, which scans TS and CSS, sees no colour literals in code.",
+  "white": "#FFFFFF",
+  "carbonDeep": "#0E1117",
+  "carbonInk": "#12151B",
+  "samples": {
+    "parity": [
+      "#2443D0",
+      "#0B7A75",
+      "#7A1FA2",
+      "#F2C200",
+      "#808080",
+      "#C21F3A",
+      "#FFE066",
+      "#5B8DEF"
+    ],
+    "teal": "#0B7A75",
+    "grey": "#888888",
+    "danger": "#C21F3A",
+    "pale": "#FFE066",
+    "short": " #abc ",
+    "shortGrey": "#888",
+    "shortNorm": "#AABBCC"
+  }
+}

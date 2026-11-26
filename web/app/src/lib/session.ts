@@ -21,6 +21,8 @@ export type WorkspaceMembership = {
   /** Tenant display name (data, not UI copy). */
   name: string;
   status: 'active' | 'suspended';
+  /** BPL-020 build state of the tenant's Blueprint, for the plan status in the navigation. */
+  buildState?: string;
 };
 
 export type SessionState =
@@ -35,9 +37,9 @@ export type SignOutHandler = () => Promise<void>;
 
 // Synthetic fixture: invented names and ids; roles exist in the records fixture Blueprint.
 const FIXTURE_MEMBERSHIPS: ReadonlyArray<WorkspaceMembership> = [
-  { tenantId: 'tenant-fixture-a', name: 'Sample Trading Co', status: 'active' },
-  { tenantId: 'tenant-fixture-b', name: 'Example Foods', status: 'active' },
-  { tenantId: 'tenant-fixture-c', name: 'Demo Stores', status: 'suspended' },
+  { tenantId: 'tenant-fixture-a', name: 'Sample Trading Co', status: 'active', buildState: 'live' },
+  { tenantId: 'tenant-fixture-b', name: 'Example Foods', status: 'active', buildState: 'built_in_sandbox' },
+  { tenantId: 'tenant-fixture-c', name: 'Demo Stores', status: 'suspended', buildState: 'draft' },
 ];
 const FIXTURE_ROLES: Readonly<Record<string, ReadonlyArray<string>>> = {
   'tenant-fixture-a': ['owner'],

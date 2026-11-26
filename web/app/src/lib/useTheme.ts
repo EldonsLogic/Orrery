@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { createThemeEngine } from '../../theme/theme-engine.js';
+import { THEME_FIXTURE as FIXTURE } from './firstPaint';
 
 type Mode = 'light' | 'dark' | 'system';
 type Engine = ReturnType<typeof createThemeEngine>;
 
-// Synthetic fixture ids; real ids come from identity (ADR-0007) later.
-const FIXTURE = { tenantId: 'tenant-fixture-synthetic', userId: 'user-fixture-synthetic' };
 
 // Thin client hook over the merged theme engine (BRD-005).
 export function useTheme(): { mode: Mode; setMode: (m: Mode) => void } {

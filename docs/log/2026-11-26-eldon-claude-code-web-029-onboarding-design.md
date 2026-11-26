@@ -31,3 +31,6 @@ WEB-027 wires the decision to the DSC-009 review view; ProgressMarks labels are 
 
 ## Addendum: journey marks (Eldon decision 2026-11-26)
 - ProgressMarks now fills the Nuqta S up across the five steps (outline, upper tint, upper solid, upper solid plus lower tint, both solid), fixed per step; steps after the current one are muted; labels wrap at 375 in Arabic. Mark gained a `tint` fill (solid at 40% fill opacity). docs/brand/09-applications.md updated. lint, tsc, vitest and next build pass.
+
+## Addendum: no flash on refresh (Eldon bug report 2026-11-26)
+- web/app/src/lib/firstPaint.ts: a blocking inline script in the root layout head sets data-theme (engine bootScript), lang and dir from localStorage before paint; when the saved locale is not Arabic it adds `locale-pending` (CSS hides the body) and the provider removes it once the locale is applied, with a 1.5 s safety timeout in script and provider. No CSP exists in web/app/vercel.json, so nothing was weakened; a future CSP needs the hash of firstPaintScript(). Playwright on the static export (dark OS, saved English and light): at 50 ms body hidden with light theme, at 500 ms English ltr light, no dark or Arabic frame. lint, tsc, vitest (455) and next build pass.

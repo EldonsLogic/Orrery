@@ -73,6 +73,28 @@ describe('shell chrome (WEB-029)', () => {
     expect(out).toMatch(/class="[^"]*dockLink[^"]*" href="\/chat\/?"/);
     expect(out).toContain('<bdi>Seshna</bdi>');
   });
+  it('switches company through a labelled button and listbox, with suspended workspaces disabled', () => {
+    const out = render(<HomeView />);
+    expect(out).toMatch(/<button[^>]*aria-haspopup="listbox"[^>]*aria-expanded="false"/);
+    expect(out).toMatch(/<ul[^>]*role="listbox"[^>]*hidden=""/);
+    expect(out.match(/role="option"/g)).toHaveLength(3);
+    expect(out).toMatch(/role="option" aria-selected="true"[^>]*>(?:(?!<\/li>).)*Sample Trading Co/);
+    expect(out).toMatch(/aria-disabled="true"[^>]*>(?:(?!<\/li>).)*\(موقوفة\)/);
+    expect(out).not.toContain('<select');
+  });
+  it('shows the account as a round avatar with an accessible name', () => {
+    const out = render(<HomeView />);
+    expect(out).toMatch(/aria-label="[^"]*Sample Person[^"]*"[^>]*><span aria-hidden="true">SP<\/span>/);
+  });
+  it('gives every navigation item an icon and shows the plan status at the bottom', () => {
+    const out = render(<HomeView />);
+    const nav = out.slice(out.indexOf('<nav aria-label="' + ar.nav.label));
+    const links = nav.slice(0, nav.indexOf('</nav>')).match(/<a [^>]*>/g) ?? [];
+    expect(links.length).toBeGreaterThan(3);
+    expect(nav.match(/<a [^>]*><svg[^>]*aria-hidden="true"/g)).toHaveLength(links.length);
+    expect(nav).toContain(messages.ar.marks.progress.title);
+    expect(nav).toContain(messages.ar.marks.progress.stage.live);
+  });
   it('uses glass only through the foundation variables, with a solid drawer', () => {
     const sheet = read('Shell.module.css');
     expect(sheet.match(/backdrop-filter: var\(--glass-filter\)/g)?.length).toBeGreaterThanOrEqual(4);

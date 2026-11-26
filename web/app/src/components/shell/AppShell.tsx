@@ -102,7 +102,13 @@ export function AppShell({ children, brand }: { children: ReactNode; brand?: Rea
       </header>
       <div className={styles.body}>
         <div id="app-nav" className={styles.navWrap} data-open={drawer ? 'true' : 'false'}>
-          <SideNav claims={claims} onNavigate={() => setDrawer(false)} />
+          <div className={styles.navInner}>
+            <SideNav
+              claims={claims}
+              buildState={memberships.find((m) => m.tenantId === claims.tenantId)?.buildState}
+              onNavigate={() => setDrawer(false)}
+            />
+          </div>
         </div>
         <main id="main" tabIndex={-1} className={styles.main} inert={drawer}>
           {switchFailed ? (

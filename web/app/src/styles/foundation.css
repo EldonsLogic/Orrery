@@ -48,6 +48,9 @@
   /* Page frame: content max width and fluid padding (16 phone, 24 tablet, 32 laptop, 48 desktop). */
   --page-max: 1280px;
   --page-pad: var(--space-2);
+  /* A flat, solid Cobalt tint behind the top of each screen (not a gradient), so glass chrome has something to show. */
+  --page-band: color-mix(in srgb, var(--color-primary) 4%, var(--color-background));
+  --page-band-size: 280px;
 
   /* Glass, solid by default. */
   --glass-alpha: 100%;
@@ -81,21 +84,21 @@
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root {
-    --glass-alpha: 72%;
-    --glass-filter: blur(20px) saturate(160%);
+    --glass-alpha: 66%;
+    --glass-filter: blur(24px) saturate(160%);
     --glass-edge: color-mix(in srgb, var(--color-text) 10%, transparent);
     --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-surface) 80%, transparent);
   }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme='light']) {
-      --glass-alpha: 64%;
+      --glass-alpha: 58%;
       --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
     }
   }
 
   :root[data-theme='dark'] {
-    --glass-alpha: 64%;
+    --glass-alpha: 58%;
     --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
   }
 }

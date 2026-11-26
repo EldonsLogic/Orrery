@@ -11,8 +11,15 @@ import { useSession } from './SessionProvider';
 import styles from './Shell.module.css';
 
 const MODES = ['system', 'light', 'dark'] as const;
+const initials = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => [...w][0]?.toUpperCase() ?? '')
+    .join('');
 
-/** Disclosure panel (not an ARIA menu, so ordinary Tab order works): language, theme, MFA badge, sign-out. Escape closes and returns focus. */
+/** A round avatar opens a disclosure panel (not an ARIA menu, so ordinary Tab order works): language, theme, MFA badge, sign-out. Escape closes and returns focus. */
 export function UserMenu({ displayName, claims }: { displayName: string; claims: SessionClaims }) {
   const t = useTranslations('shell.user');
   const { locale, setLocale } = useSettings();
@@ -55,9 +62,10 @@ export function UserMenu({ displayName, claims }: { displayName: string; claims:
         className={styles.userButton}
         aria-expanded={open}
         aria-controls={panelId}
+        aria-label={t('open', { name: `\u2068${displayName}\u2069` })}
         onClick={() => setOpen((v) => !v)}
       >
-        {t('open', { name: `\u2068${displayName}\u2069` })}
+        <span aria-hidden="true">{initials(displayName)}</span>
       </button>
       {open ? (
         <div id={panelId} role="group" aria-label={t('panel')} className={styles.panel}>

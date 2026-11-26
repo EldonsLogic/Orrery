@@ -54,17 +54,23 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
   - D, PLT-028 spec revision 2 #335: re-scoped to the #316 decisions, F1 to F10 (Opus 5.5); Q-644 to Q-647, Q-630, Q-631 and Q-633 amended, PLT-028 and PLT-032 text. Gemini: APPROVE, two Lows, fixed at 873f309f. Re-review asked of Eldon on #335.
   - E, CMP-039 ADR-0071 #344 (new PR): Opus 5.5 design; build rows renumbered CMP-041 to CMP-044; Q-652 to Q-657; INDEX row. Gemini round 1: CHANGES (2 High, 2 Medium, 1 Low). Revision 2 by Opus 5.5 at 95cf124f (two stated deviations). Gemini round 2 running.
   - A, CE-SEC-011 #338: R1 to R3 and three Lows (Opus 5.5), 20 of 20 mutants killed, full suite 1853 passed (coordinator re-ran it); CE-SEC-016 row and a slice 2 note on CE-SEC-011. Pushed at 6c1f1c46. Gemini round 1 running.
-- Not yet asked of the partner: Tier 3 say-so on #309 (asked, waiting), then #319.
+  - E update: Gemini round 2 on ADR-0071 at 11ba398e: APPROVE as Proposed, no findings. Eldon's first read asked on #344.
+  - A update: Gemini round 1 on #338 at 6c1f1c46: APPROVE, no findings. Re-review asked of Eldon on #338; CI was running on 6c1f1c46 at hand-off.
+- Waiting on the partner: Tier 3 say-so on #309 (asked, no answer yet), then #319.
+- Review effort: Gemini 4 Argon high ran six reviews (B, C, D, E twice, A), never more than two at once, with no quota failures. Rounds per PR: #337 1, #336 1, #335 1, #344 2, #338 1. Token cost unknown.
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-round-2026-11-26.md: this live log.
 - docs/PLAN.md: CMP-039 claimed (#342); doing-row audit applied (coordination-14).
 
 ## Decisions
-- None yet. Pending partner Tier 3 say-so: #309, then #319.
+- None by the founders this session. Pending: partner Tier 3 say-so on #309, then #319; Eldon's answers on Q-644 to Q-649 and Q-652 to Q-657; the doing-row founder calls (does a design or decision row close on a Proposed ADR; BPL-027; SEC-002; INF-009; ERP-013; QA-016; SEC-004 and CMP-023).
 
 ## Tokens or cost
 Unknown.
 
 ## Next step
-Dispatch tasks A to F; apply task G; record each result here.
+- Eldon: re-reviews #335, #336, #337 and #338; first read of #344. #337 (Tier 2) merges on his review if no defect is open.
+- Partner: Tier 3 say-so on #309, then #319 (then the accountant).
+- After #338 merges: BPL-044 and BPL-033 (same file), CE-SEC-016, CE-SEC-011 slice 2. After #336: CE-SEC-012 to CE-SEC-015. After #335: PLT-028 code. After #344: CMP-041.
+- Worktrees on this machine: `orrery-wt/cmp-039-pack-loader-design` and the existing T3 worktrees for #335 to #338; remove after merge.

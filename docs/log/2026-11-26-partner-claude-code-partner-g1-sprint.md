@@ -47,6 +47,14 @@ Live coordinator log for the partner lane's G1 finishing sprint (RULES 51), cont
 - A2 result (BPL-046, Opus 5.5): `length` and `precision` now reach the Custom Field (4 lines, the gate unchanged), 5 new tests, suite 1858 passed; committed at 95913241; draft PR #381 opened (373 lines). The bench now fails at step 56: the engine's own plan adds `ADD INDEX creation` on `tabSales Invoice Item` (`sort_field = creation`, no index on a fresh site), and the gate refuses it. Founder call sent to the partner: (A) provisioning creates the engine's expected indexes (recommended), (B) the gate accepts this index (ADR and Tier 3), (C) the index goes into the approved plan (waits on ADR-0068). Also found: the rollback after that refusal ended `recovery_required` with a changed export hash (cause UNVERIFIED; candidate for BPL-033).
 
 - R3 result (#379, Gemini): APPROVE with Lows at ec438c50, posted as a comment (own PR). Low 1 confirms the RPC path `take_snapshot` is reachable for DocField-only fields (returns `RECOVERY_REQUIRED`, not `REJECTED`): new row BPL-048 (todo, depends on BPL-044).
+- #382 (coordination-22, Tier 1) merged on green.
+- #381 real-bench CI on 95913241 confirms the local result: test_01, 01b, 02 pass; test_03 fails at step 56 (`recovery_required`, stage `compensate`); tests 04 to 08 fail on the missing prerequisite. Stays draft until the partner's step 56 call.
+- R4 result (#380 revision 2 security review, Gemini): CHANGES, 2 Medium (3.7 puts the refresh after the intent append; `FrappeDeploymentAdapter.__init__` creates the audit table on the engine session, an implicit COMMIT, hazard H7), 4 Low; posted on #380. The last fix round waits for Eldon's re-review so both sets go in one pass.
+- R6 result (#370, #371, Gemini): #370 APPROVE at 910f54f1 (Eldon-owned rows only, evidence verified); #371 CHANGES at 247bff83 (Q-141 schema version contradicts Q-88; six external facts without URL and access date; partner rows answered without "Partner to confirm.", Q-472 puts a gateway route in Eldon's lane; two wrong Q citations). 33 rows touch the partner lane.
+- R7 result (#372, Gemini): CHANGES at 15b43c45 (ten answers bind the partner without "Partner to confirm."; Q-10 widens Q-680 beyond pilots; six partly answered questions; Q-602 drops counsel clearance for the name). #372 changes no rule now.
+- R9 result (#357, Gemini): APPROVE at c27e4781 (Tier 2; matches the Tool API and ADR-0058; no untracked engine change).
+- R8 result (#368 model-call 0.3.0, Gemini): CHANGES at 22a671f7, 1 High confirmed by the coordinator (`trace.cache_hit` is refused by the Contract 4 envelope, `additionalProperties: false`), 2 Medium (`token_id` not tied to `actor_kind`; overruns charge the platform layer below cap, against Q-679), 2 Low; Tier 3. PLT-033 aligns ADR-0053 after it.
+- Dispatched: R10 (#363), R11 (#359), Gemini 4 Argon high.
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-g1-sprint.md: this live log.

@@ -59,6 +59,13 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
 - Waiting on the partner: Tier 3 say-so on #309 (asked, no answer yet), then #319.
 - Advisor (second call, before done): flagged that #338's re-review went out while its CI was pending, that the #337 next step missed Eldon's PDF condition, and that the pending-decisions memory needed updating. Token cost unknown.
 - Review effort: Gemini 4 Argon high ran six reviews (B, C, D, E twice, A), never more than two at once, with no quota failures. Rounds per PR: #337 1, #336 1, #335 1, #344 2, #338 1. Token cost unknown.
+- Eldon's status message (relayed by the partner): his #335 answers (Q-644 write-through to the local volume; Q-645 sign-in and reads keep working while the store is down) applied in spool spec revision 2.1 at 98b86a93 (Opus 5.5); Gemini APPROVE, no findings; re-review asked with six inferences for him to confirm.
+- Reviews of Eldon's PRs (partner said "proceed", APPROVE allowed on clean Tier 1 or 2 PRs; Tier 3 approvals wait on the partner), posted as sayegh9:
+  - approved: #325 (Gemini), #321 (Gemini; conflicts with main), #278 (Gemini), #279 (Gemini), #324 (GPT-6.2 Sol; Tier 2 under ADR-0035; Lows open; conflicts with main).
+  - changes requested: #275 (Gemini; `check-css-vars.mjs` fails, PR's web CI red), #320 (GPT; Tier 3, Studio CI misses font-only changes), #276 (GPT; Tier 3, fenced tenant and unverified role increase), #277 (GPT; Tier 3, three High in ADR-0061), #285 (GPT; status survives a review change, item ids missing), #287 (Claude Fable 5.2, same-family; Tier 3, escaped JSON bypasses the deny lists), #286 (Fable, same-family; Tier 3, cadence edit stalls a schedule, reserved event domains change existing types).
+  - not reviewed: #232 (PLT-009, partner's lane per Q-127; take over or close is the partner's call).
+- Reviewer quota: Antigravity ran out at 12:27Z (about 3 h); the partner said to move to another provider, so reviews went to Codex GPT-6.2 Sol; both ChatGPT accounts then ran out (one until 2026-11-28); the partner said to run Claude only to finish the round, so #286 and #287 ran on Claude Fable 5.2, labelled same-family (not the RULES 42 different-model review).
+- #309 (BPL-040, ADR-0068 Proposed, Tier 3) merged on the partner's say-so ("yes, proceed and merge", 2026-11-26) after Eldon's approval at 64286522; main merged in first (row statuses only, ADR text unchanged). E8 (NULL vs '' on the bench) stays an acceptance condition.
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-round-2026-11-26.md: this live log.
@@ -72,6 +79,6 @@ Unknown.
 
 ## Next step
 - Eldon: re-reviews #335, #336, #337 and #338; first read of #344. #337 (Tier 2) merges after his re-review and a look at one real-bench PDF (his merge condition), or after he waives the PDF.
-- Partner: Tier 3 say-so on #309, then #319 (then the accountant).
+- Partner: Tier 3 say-so on #319 (then the accountant); #309 merged. Decide #232 (PLT-009). Tier 3 approvals on Eldon's PRs once their defects are fixed.
 - After #338 merges: BPL-044 and BPL-033 (same file), CE-SEC-016, CE-SEC-011 slice 2. After #336: CE-SEC-012 to CE-SEC-015. After #335: PLT-028 code. After #344: CMP-041.
 - Worktrees on this machine: `orrery-wt/cmp-039-pack-loader-design` and the existing T3 worktrees for #335 to #338; remove after merge.

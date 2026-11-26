@@ -1,0 +1,509 @@
+/* Owner home (WEB-029). Foundation roles only (styles/foundation.css). Glass on the Ask Seshna entry only; figures and lists stay solid. */
+.home {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+@media (min-width: 48.0625rem) {
+  .home {
+    gap: var(--space-4);
+  }
+}
+
+.header {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+.sep {
+  inline-size: var(--border-width);
+  block-size: var(--space-1_5);
+  background: var(--color-border-control);
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h1-fluid);
+  line-height: var(--text-h1-line);
+  font-weight: var(--text-h1-weight);
+}
+
+/* Ask Seshna: the primary action, in the glass material. */
+.ask {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: var(--border-width) solid var(--glass-edge);
+  border-radius: var(--radius-md);
+  background: var(--glass-fill);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  box-shadow: var(--glass-highlight);
+}
+
+@media (min-width: 48.0625rem) {
+  .ask {
+    padding: var(--space-3);
+  }
+}
+
+.askTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h3-weight);
+}
+
+.askRow {
+  display: flex;
+  gap: var(--space-1_5);
+}
+
+.askInput {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: var(--control-lg);
+}
+
+/* Narrow: the field takes the full width and the button sits under it. */
+@container (max-width: 30rem) {
+  .askRow {
+    flex-direction: column;
+  }
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--control-sm);
+  padding-inline: var(--space-1_5);
+  border: var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.chip:hover,
+.review:hover {
+  background: var(--state-hover);
+}
+
+.hint,
+.caption {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h1-weight);
+}
+
+.today > .sectionTitle {
+  margin-block-end: var(--space-2);
+}
+
+/* Today: one solid strip, facts divided by hairlines. */
+.facts {
+  display: grid;
+  margin: 0;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.fact {
+  display: grid;
+  gap: var(--space-0_5);
+  padding: var(--space-2);
+}
+
+.fact + .fact {
+  border-block-start: var(--hairline);
+}
+
+.fact dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+.factValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-strong-weight);
+}
+
+.factNote {
+  color: var(--color-text-muted);
+  font-size: var(--text-small-size);
+  font-weight: var(--text-body-weight);
+}
+
+@container (min-width: 40rem) {
+  .facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .fact {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .fact + .fact {
+    border-block-start: 0;
+    border-inline-start: var(--hairline);
+  }
+}
+
+.journey {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.body {
+  margin: 0;
+  max-inline-size: var(--measure);
+}
+
+.textLink {
+  color: var(--color-primary);
+  font-weight: var(--text-label-weight);
+}
+
+/* KPI tiles: 1, then 2, then 4 columns by the space the screen actually has. */
+.tiles {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Phones: a snap row, so the four figures stay one glance apart; the row scrolls, never the page. */
+@container (max-width: 31.99rem) {
+  .tiles {
+    grid-auto-flow: column;
+    grid-auto-columns: 80%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: none;
+  }
+
+  .tile {
+    scroll-snap-align: start;
+  }
+}
+
+@container (min-width: 32rem) {
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 60rem) {
+  .tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+.tile {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+@media (min-width: 48.0625rem) {
+  .tile {
+    padding: var(--space-3);
+  }
+}
+
+.tileLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+}
+
+.kpiValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-family: var(--font-heading);
+  font-size: var(--text-kpi-size);
+  line-height: var(--text-kpi-line);
+  font-weight: var(--text-kpi-weight);
+}
+
+.figure {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.currency {
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+  font-weight: var(--text-label-weight);
+}
+
+.amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-0_5);
+  font-weight: var(--text-strong-weight);
+  white-space: nowrap;
+}
+
+.delta,
+.warning {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0_5);
+  color: var(--color-text-muted);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.warning {
+  color: var(--color-warning);
+  font-weight: var(--text-label-weight);
+}
+
+.icon {
+  flex: none;
+  inline-size: var(--icon-sm);
+  block-size: var(--icon-sm);
+}
+
+/* Approvals and activity: one column, then 7:5 when there is room. */
+.columns {
+  display: grid;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@container (min-width: 60rem) {
+  .columns {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.panelHead {
+  display: grid;
+  gap: var(--space-0_5);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'main main' 'amount review';
+  align-items: center;
+  gap: var(--space-1_5) var(--space-2);
+  padding-block: var(--space-2);
+  border-block-start: var(--hairline);
+}
+
+.row:last-child {
+  padding-block-end: 0;
+}
+
+.rowMain {
+  grid-area: main;
+  display: grid;
+  gap: var(--space-0_5);
+  min-inline-size: 0;
+}
+
+.row > .amount {
+  grid-area: amount;
+}
+
+.review {
+  grid-area: review;
+}
+
+@container (min-width: 36rem) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: 'main amount review';
+  }
+}
+
+.rowTitle {
+  font-weight: var(--text-strong-weight);
+}
+
+.rowMeta {
+  color: var(--color-text-muted);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.rowStatus {
+  color: var(--color-text-muted);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.review {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--control-sm);
+  padding-inline: var(--space-1_5);
+  border: var(--border-width) solid var(--color-border-control);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.day {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.day + .day {
+  margin-block-start: var(--space-1);
+}
+
+.dayHeading {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+}
+
+.feed {
+  display: grid;
+  gap: var(--space-1_5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feedItem {
+  display: grid;
+  grid-template-columns: var(--space-6) minmax(0, 1fr);
+  gap: var(--space-1_5);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.feedText {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-0_5);
+}
+
+.feedText > .amount {
+  color: var(--color-text-muted);
+}
+
+.time {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.chip:focus-visible,
+.review:focus-visible,
+.textLink:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (pointer: coarse) {
+  .chip,
+  .review {
+    min-block-size: var(--touch-target);
+  }
+}

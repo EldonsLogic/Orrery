@@ -1380,5 +1380,74 @@
       }
     },
     "loading": "جارٍ العمل"
+  },
+  "home": {
+    "greeting": "مرحبًا بعودتك، {name}",
+    "loading": "جارٍ تحميل الملخص",
+    "status": {
+      "live": "مباشر",
+      "simulating": "قيد المحاكاة"
+    },
+    "ask": {
+      "title": "اسأل <brand>Seshna</brand>",
+      "label": "سؤالك",
+      "placeholder": "اسأل عن المبيعات أو النقد أو المخزون",
+      "submit": "اسأل",
+      "hint": "الإجابات من سجلاتك. كل ما تعدّه <brand>Seshna</brand> ينتظر موافقتك.",
+      "suggestions": "أسئلة مقترحة"
+    },
+    "today": {
+      "title": "اليوم",
+      "deliveries": "التسليمات المجدولة",
+      "collections": "مدفوعات العملاء المستحقة",
+      "payments": "مدفوعات الموردين المستحقة",
+      "count": "{count, plural, one {دفعة واحدة} two {دفعتان} few {# دفعات} many {# دفعة} other {# دفعة}}"
+    },
+    "journey": {
+      "title": "مسار البناء",
+      "body": "تشغّل <brand>Seshna</brand> شهرًا تجريبيًا على مخططك. راجعه ثم انتقل إلى التشغيل.",
+      "action": "افتح المخطط"
+    },
+    "kpis": {
+      "title": "هذا الشهر",
+      "simulated": "أرقام المحاكاة",
+      "sales_month": "مبيعات هذا الشهر",
+      "receivables": "الذمم المدينة القائمة",
+      "awaiting_approval": "بانتظار موافقتك",
+      "cash": "النقد في البنك",
+      "up": "ارتفاع {value}% عن الشهر الماضي",
+      "down": "انخفاض {value}% عن الشهر الماضي",
+      "overdue": "{count} متأخرة",
+      "oldest": "{days, plural, one {أقدمها منذ يوم} two {أقدمها منذ يومين} few {أقدمها منذ # أيام} many {أقدمها منذ # يومًا} other {أقدمها منذ # يوم}}"
+    },
+    "approvals": {
+      "title": "يحتاج إلى موافقتك",
+      "intro": "أعدّتها <brand>Seshna</brand>. لا يُرحَّل شيء قبل موافقتك.",
+      "review": "مراجعة",
+      "reviewLabel": "مراجعة {item}",
+      "empty": "لا شيء بانتظارك.",
+      "kind": {
+        "purchase_order": "أمر شراء {ref}",
+        "supplier_payment": "دفعة مورد {ref}",
+        "credit_note": "إشعار دائن {ref}",
+        "discount": "خصم على الطلب {ref}"
+      }
+    },
+    "activity": {
+      "title": "آخر النشاطات",
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "kind": {
+        "invoice_paid": "سدّد {party} الفاتورة {ref}",
+        "drafted": "أعدّت <brand>Seshna</brand> {count, plural, one {دفعة مورد واحدة} two {دفعتي مورد} few {# دفعات موردين} many {# دفعة مورد} other {# دفعة مورد}} للموافقة",
+        "approved": "وافقتَ على {ref}",
+        "stock_low": "{party} أقل من حد إعادة الطلب",
+        "order_created": "طلب جديد {ref} من {party}"
+      }
+    },
+    "shortcuts": "السجلات",
+    "currency": {
+      "SAR": "ر.س"
+    }
   }
 }

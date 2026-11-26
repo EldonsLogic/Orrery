@@ -5,6 +5,8 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const EXEMPT = /(^|\/)tokens(\.proposed)?(\.generated)?\.css$/;
+// The @font-face file names the families once; every other font-family stays token-only.
+const FACE_FILE = /(^|\/)app\/src\/styles\/fonts\.css$/;
 const EXT = /\.(css|ts|tsx)$/;
 const SKIP_DIRS = new Set(['node_modules', '.next', 'out', 'theme']);
 
@@ -24,7 +26,7 @@ export function scanText(text, file = '<memory>') {
   const out = [];
   if (EXEMPT.test(file.replaceAll('\\', '/'))) return out;
   text.split('\n').forEach((line, i) => {
-    for (const r of RULES) if (r.re.test(line)) out.push({ file, line: i + 1, rule: r.id, msg: r.msg });
+    for (const r of RULES) if (!(r.id === 'font-family' && FACE_FILE.test(file.replaceAll('\\', '/'))) && r.re.test(line)) out.push({ file, line: i + 1, rule: r.id, msg: r.msg });
   });
   return out;
 }

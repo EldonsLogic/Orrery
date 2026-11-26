@@ -68,3 +68,30 @@ def test_served_assets_are_local(client):
         assert s == 200, src
     status, css, _ = client.get("/tokens/tokens.css")
     assert status == 200 and b"--color-primary" in css
+
+
+def test_fonts_are_self_hosted_with_no_external_origin(client):
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert "googleapis" not in html and "gstatic" not in html and "/fonts/fonts.css" in html
+    for path in ("/", "/fonts/fonts.css", "/fonts/Cairo-subset.woff2", "/fonts/ReadexPro-subset.woff2"):
+        status, body, headers = client.get(path)
+        assert status == 200, path
+        csp = headers["Content-Security-Policy"]
+        assert "googleapis" not in csp and "gstatic" not in csp and "font-src 'self'" in csp
+    status, body, headers = client.get("/fonts/Cairo-subset.woff2")
+    assert headers["Content-Type"] == "font/woff2"
+    status, _, _ = client.get("/fonts/../server.py")
+    assert status != 200
+
+
+def test_every_font_url_in_served_stylesheet_resolves_as_woff2(client):
+    status, css, headers = client.get("/fonts/fonts.css")
+    assert status == 200 and headers["Content-Type"].startswith("text/css")
+    urls = re.findall(r"url\(\s*[\"']?([^\"')]+)[\"']?\s*\)", css.decode("utf-8"))
+    assert urls, "fonts.css declares no font files"
+    for url in urls:
+        assert url.startswith("/fonts/"), url
+        status, body, headers = client.get(url)
+        assert status == 200, url
+        assert headers["Content-Type"] == "font/woff2", url
+        assert len(body) > 0, url

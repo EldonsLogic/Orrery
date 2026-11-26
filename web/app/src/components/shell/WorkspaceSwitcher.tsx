@@ -97,7 +97,7 @@ export function WorkspaceSwitcher({ claims, memberships }: { claims: SessionClai
         <span aria-hidden="true" className={styles.orgAvatar}>
           {initial(current?.name ?? '')}
         </span>
-        <span id={`${id}-name`} className={styles.switchName}>
+        <span id={`${id}-name`} className={styles.switchName} dir="auto">
           {current?.name}
         </span>
         <ChevronsUpDown aria-hidden="true" className={styles.chevron} />

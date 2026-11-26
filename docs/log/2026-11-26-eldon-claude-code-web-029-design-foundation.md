@@ -24,6 +24,13 @@ First design pass, part 1 of 2: a shared design foundation for every app screen 
 ## Checks
 pnpm lint, typecheck, test (357 vitest + 135 node), next build, theme engine tests, check_docs, check_repo_hygiene, check_proposed: all pass. Screenshots at 375/768/1024/1440, EN and AR, light and dark, kept outside the repo.
 
+## Round 2 (review feedback, same session)
+- Merged origin/web-028-self-host-fonts (#320) so the preview renders Cairo and Readex Pro; #366 is now stacked on #320. Verified in the browser: both faces load, h1 computes to Cairo.
+- Company switcher (initial avatar, name, chevron, listbox in a glass popover, keyboard), round avatar for the account menu, visible language switch (عربي / English) beside it, icon menu button on phones.
+- Side navigation: full-height glass column with sticky, self-scrolling content; Lucide icons (lucide-react 1.75.0, ISC, recorded in docs/legal/licence-register.md) as placeholders; current item tinted with a 2px start-edge indicator; Seshna mark and build stage at the bottom (membership fixture gained buildState).
+- ProgressMarks: visible status word under each step (Done / In progress / Not started), a connecting line solid Cobalt up to the current step and dashed muted after it; marks unchanged (upper half solid for the current step, never mirrored).
+- Foundation: glass alpha 66% light / 58% dark with blur 24; `--page-band` (flat 4% Cobalt tint) and `--main-pad-block`; main is the size container.
+
 ## Tokens or cost
 Not measured.
 

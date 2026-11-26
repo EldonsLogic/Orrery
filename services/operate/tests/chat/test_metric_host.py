@@ -60,3 +60,8 @@ def test_permitted_role_gets_the_computed_value():
 def test_non_permitted_role_never_gets_a_value():
     model = run(("warehouse_keeper",))
     assert "115.01" not in seen(model)
+
+
+def test_sales_rep_gets_no_company_wide_value():
+    model = run(("sales_rep",))
+    assert "115.01" not in seen(model)

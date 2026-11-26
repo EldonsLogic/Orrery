@@ -22,3 +22,6 @@ Unknown or approximate, if known.
 
 ## Next step
 OPR-006: a real operate host entrypoint should call `wire_metrics` (none exists yet); vitest key-parity run.
+
+## Follow-up (2026-11-26)
+- Eldon's answer: `sales_rep` is removed from every metric in `services/operate/metrics/registry.py` (company-wide revenue and order count are owner, accountant and managers only). `general_manager` is not added: it is not a role in `contracts/examples/blueprint-trading-minimal.json`. Own-sales figures are a later slice.

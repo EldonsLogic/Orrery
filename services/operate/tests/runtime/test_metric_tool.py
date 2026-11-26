@@ -45,10 +45,10 @@ def test_generator_uses_registry_with_role_filtering():
     t = next(x for x in res.tools if x["name"] == "metric.query")
     assert t["kind"] == "read" and t["risk_class"] == "R0"
     assert t["input_schema"]["properties"]["metric"]["enum"] == sorted(default_registry())
-    assert t["requires"]["roles"] == ["accountant", "owner", "sales_rep"]  # Blueprint role ids, no extras
+    assert t["requires"]["roles"] == ["accountant", "owner"]  # Blueprint role ids, no extras; sales_rep gets no company-wide metric
     rbv = t["requires_by_value"]
     assert rbv["argument"] == "metric"
-    assert rbv["roles"]["sales.revenue"] == ["accountant", "owner", "sales_rep"]
+    assert rbv["roles"]["sales.revenue"] == ["accountant", "owner"]
     assert rbv["roles"]["finance.receivables_outstanding"] == ["accountant", "owner"]
     assert "roles" not in t["input_schema"]["properties"] and "tenant_id" not in t["input_schema"]["properties"]
     plain = generate_tool_api(bp)  # default behaviour unchanged
@@ -66,6 +66,8 @@ def test_value_is_code_computed_and_result_has_no_events():
 @pytest.mark.parametrize("args,roles,domain", [
     ({"metric": "nope.x"}, ("owner",), "metric_unknown"),
     ({"metric": "sales.revenue", "period": "2026-11", "currency": "SAR"}, ("warehouse_keeper",), "metric_permission_denied"),
+    ({"metric": "sales.revenue", "period": "2026-11", "currency": "SAR"}, ("sales_rep",), "metric_permission_denied"),
+    ({"metric": "sales.order_count", "period": "2026-11"}, ("sales_rep",), "metric_permission_denied"),
     ({"metric": "sales.revenue", "period": "2026-11", "currency": "SAR", "roles": ["owner"]}, ("owner",),
      "metric_invalid_params"),
     ({"metric": "sales.revenue", "period": "2026-11"}, ("owner",), "metric_invalid_params"),

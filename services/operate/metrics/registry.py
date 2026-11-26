@@ -105,7 +105,8 @@ def quantize(value: Decimal, currency: str) -> str:
 
 
 def default_registry() -> dict:
-    sales = frozenset({"owner", "accountant", "sales_rep"})  # ids from the example Blueprint's roles
+    # ids from the example Blueprint's roles; sales_rep gets no company-wide metrics (Eldon, 2026-11-26)
+    sales = frozenset({"owner", "accountant"})
     defs = (
         MetricDef("sales.revenue", "metrics.sales.revenue", "money", "month",
                   ("document.issued",), (), sales, revenue),

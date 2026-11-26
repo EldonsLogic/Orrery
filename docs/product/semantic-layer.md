@@ -25,7 +25,7 @@ Amounts are decimal strings in events (at most 18 integer and 6 fraction digits)
 The model sees `catalog(principal)`: ids, label keys, units and grains the caller may read. It asks for `get(principal, metric_id, params)` by id. The result is a typed object (`value`, `currency`, `watermark`, `event_count`). The model may explain it in words; it never computes, adjusts or re-rounds a number, and a number it writes that is not in a result is a defect. The UI renders the value from the result, not from model text.
 
 ## 4. Permissions and tenancy
-Permission is checked before any data is read, and again on every cache hit. The tenant comes from the verified principal. The event loader is not trusted: one event with a different `tenant_id` refuses the whole call. Duplicate `event_id`s count once (delivery is at-least-once).
+Permission is checked before any data is read, and again on every cache hit. Eldon, 2026-11-26: sales_rep gets no company-wide metrics; own-sales figures are a follow-up. The tenant comes from the verified principal. The event loader is not trusted: one event with a different `tenant_id` refuses the whole call. Duplicate `event_id`s count once (delivery is at-least-once).
 
 ## 5. Caching
 Per tenant, keyed by metric id and canonical params, valid while the highest event `sequence` is unchanged; any new event recomputes. Caches never cross tenants. A shared cache and a TTL come with the platform cache (Q-562).

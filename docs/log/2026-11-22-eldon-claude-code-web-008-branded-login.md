@@ -28,3 +28,9 @@ Real tenant token endpoint and identity wiring replace the fake and placeholder 
 - Medium: the real login takes the tenant from the host only (ADR-0007) through `tenantFromHost` and a local synthetic host map; the gateway will validate it later (PLT). The query-driven fixture choice moved to `/login/preview/`, off unless `NEXT_PUBLIC_LOGIN_PREVIEW=1`, noindex, dev only.
 - Medium: branding checks use the rendered colours in light and dark: button label on fill, hover and pressed; primary link and focus ring on the card surface (read from docs/brand/tokens). Hover, pressed and label tokens are now required. Button uses `--color-primary-label`, `-hover`, `-pressed`; `check-contrast.mjs` reads the same tokens. `next.config.mjs` sets the bundler root to the repo root for the read-only tokens.json import.
 - Low: tenant name and headline carry `lang` and `dir` of the locale actually shown.
+
+## Re-review fixes (partner re-review of 8e7680ea, WEB-008)
+- Merged origin/main into the branch (no rebase).
+- Medium: `web/scripts/check-css-vars.mjs` now reads both `docs/brand/tokens/tokens.css` and `tokens.proposed.css`, so `lint` passes on a clean checkout with no generated CSS (the four `--color-primary-*` and `--color-text-muted` names). New CLI tests in `check-css-vars.test.mjs` run the script on a temp tree with only the committed token files: one passes, one proves an undefined variable still fails.
+- Low: `web/app/README.md` login section updated. `/login/` resolves the tenant from the hostname only (`host.ts`); `?tenant=` works only on `/login/preview/` with `NEXT_PUBLIC_LOGIN_PREVIEW=1`. Rate limiting of tenant lookups remains a follow-up for the gateway.
+- Checks: clean state (no generated CSS) `check-css-vars` ok; `pnpm lint` ok; `pnpm test` ok (135 node, 364 vitest); `pnpm typecheck` ok; `pnpm build` ok; `check_repo_hygiene.py` ok.

@@ -8,7 +8,10 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SKIP_DIRS = new Set(['node_modules', '.next', 'out']);
-const TOKENS = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'brand', 'tokens', 'tokens.css');
+const TOKEN_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'brand', 'tokens');
+// Both accepted layers: tokens.css (v1) and tokens.proposed.css (v1.1, loaded after it). Read directly, so a clean checkout needs no generated file.
+const TOKEN_FILES = ['tokens.css', 'tokens.proposed.css'].map((f) => join(TOKEN_DIR, f));
+const readTokens = () => TOKEN_FILES.map((f) => readFileSync(f, 'utf8')).join('\n');
 const isTest = (f) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(f) || f.split(/[\\/]/).includes('__tests__');
 
 const strip = (css) => css.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
@@ -36,7 +39,7 @@ function* walk(dir, ext) {
   }
 }
 
-export function scanApp(appDir, tokensCss = readFileSync(TOKENS, 'utf8')) {
+export function scanApp(appDir, tokensCss = readTokens()) {
   const src = join(appDir, 'src');
   const read = (f) => readFileSync(f, 'utf8');
   const global = new Set(definedIn(tokensCss));

@@ -181,7 +181,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | OPR-003 | Tool API generator: typed actions per tenant from the Blueprint | Operate | G2 | BPL-003 | eldon | done |
 | OPR-004 | Tool permission enforcement with the caller's own role and scope | Operate | G2 | OPR-003,ERP-008 | eldon | todo |
 | OPR-005 | Confirm-before-write previews for chat actions | Operate | G2 | OPR-004 | eldon | todo |
-| OPR-006 | Semantic layer for metrics | Operate | G2 | BPL-003,ERP-009 | eldon | todo |
+| OPR-006 | Semantic layer for metrics | Operate | G2 | BPL-003,ERP-009 | eldon | doing |
 | OPR-007 | Approval inbox backend | Operate | G2 | OPR-004 | eldon | todo |
 | OPR-008 | Report builder | Operate | G2 | OPR-006 | eldon | todo |
 | OPR-009 | Change-by-chat through the Blueprint path | Operate | G2 | OPR-002,BPL-007 | eldon | done |

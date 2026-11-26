@@ -1,9 +1,26 @@
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronsUpDown,
+  CircleCheck,
+  CircleDashed,
+  CircleX,
+  Clock,
+  Download,
+  FileSpreadsheet,
   FileText,
+  History,
+  Inbox,
+  Lock,
+  Plus,
+  Search,
+  Settings,
+  Upload,
+  X,
   House,
   Menu,
   MessageSquare,
@@ -30,9 +47,26 @@ import styles from './Icon.module.css';
 const GLYPHS = {
   arrowDown: ArrowDown,
   arrowUp: ArrowUp,
+  back: ArrowLeft,
   chevronDown: ChevronDown,
   chevronsUpDown: ChevronsUpDown,
+  pageBack: ChevronLeft,
+  pageForward: ChevronRight,
+  statusDone: CircleCheck,
+  statusOpen: CircleDashed,
+  statusStopped: CircleX,
+  statusWaiting: Clock,
+  download: Download,
+  sheet: FileSpreadsheet,
   file: FileText,
+  history: History,
+  empty: Inbox,
+  lock: Lock,
+  plus: Plus,
+  search: Search,
+  settings: Settings,
+  upload: Upload,
+  close: X,
   home: House,
   menu: Menu,
   chat: MessageSquare,
@@ -52,7 +86,7 @@ export type IconName = keyof typeof GLYPHS;
 export type IconSize = 'sm' | 'md';
 export const ICON_STROKE = 1.5;
 /** Glyphs that point along the reading direction and flip in right-to-left layouts (brand marks never flip). */
-const DIRECTIONAL: ReadonlySet<IconName> = new Set<IconName>(['railCollapse', 'railExpand']);
+const DIRECTIONAL: ReadonlySet<IconName> = new Set<IconName>(['railCollapse', 'railExpand', 'back', 'pageBack', 'pageForward']);
 
 export type IconProps = { name: IconName; size?: IconSize; className?: string };
 

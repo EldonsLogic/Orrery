@@ -1,15 +1,20 @@
+/* Data table (WEB-029). Foundation roles only. Rows 40 high (--row-compact), a sticky header in muted label type, hairline rules,
+   row hover, figures in tabular digits at the logical end. The wrapper scrolls in both axes, so the header sticks inside it. */
 .wrap {
-  overflow-x: auto;
-  border-radius: var(--radius-card);
+  overflow: auto;
+  overscroll-behavior-inline: contain;
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
 .table {
   inline-size: 100%;
-  border-collapse: collapse;
-  background: var(--color-surface);
+  border-collapse: separate;
+  border-spacing: 0;
   color: var(--color-text);
-  font-size: var(--text-small-size);
-  line-height: var(--text-small-line);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
 }
 
 :lang(ar) .table {
@@ -17,8 +22,9 @@
 }
 
 .caption {
-  padding-block-end: var(--space-unit);
+  padding: var(--space-2) var(--space-2) var(--space-1);
   text-align: start;
+  font-family: var(--font-heading);
   font-size: var(--text-h3-size);
   line-height: var(--text-h3-line);
   font-weight: var(--text-h3-weight);
@@ -30,23 +36,76 @@
 }
 
 .cell {
-  padding: var(--space-unit) calc(var(--space-unit) * 1.5);
+  block-size: var(--row-compact);
+  box-sizing: border-box;
+  padding-block: var(--space-0_5);
+  padding-inline: var(--space-1_5);
   text-align: start;
-  border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  vertical-align: middle;
+  white-space: nowrap;
+  border-block-end: var(--hairline);
+}
+
+.cell:first-child {
+  padding-inline-start: var(--space-2);
+}
+
+.cell:last-child {
+  padding-inline-end: var(--space-2);
+}
+
+tbody tr:last-child .cell {
+  border-block-end: 0;
 }
 
 thead .cell {
-  font-weight: var(--text-h3-weight);
-  border-block-end-color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  block-size: var(--table-header-height);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-label-weight);
+}
+
+:lang(ar) thead .cell {
+  line-height: var(--text-caption-line-ar);
+}
+
+.table tbody tr {
+  position: relative;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.table tbody tr:hover {
+  background: var(--state-hover);
 }
 
 .rowHeader {
-  font-weight: var(--text-h3-weight);
+  font-weight: var(--text-label-weight);
 }
 
 .numeric {
   text-align: end;
   font-family: var(--font-heading); /* figures: Cairo, equal-width Western digits (BRD-011) */
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
   unicode-bidi: isolate;
+}
+
+/* Long text wraps instead of stretching the table (descriptions, import problems). */
+.wrapText {
+  white-space: normal;
+  min-inline-size: calc(var(--space-8) * 3);
+}
+
+.emptyCell {
+  block-size: auto;
+  padding: 0;
+  white-space: normal;
+}
+
+tbody tr:has(.emptyCell):hover {
+  background: transparent;
 }

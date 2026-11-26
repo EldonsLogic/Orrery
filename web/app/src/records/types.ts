@@ -16,7 +16,11 @@ export type FieldDef = {
   precision?: number;
 };
 
-export type EntityDef = { id: string; labels: Loc; pluralLabels: Loc; kind: string; fields: ReadonlyArray<FieldDef>; workflow?: string };
+/** A Blueprint relation; `child_table` rows live on the parent record under the relation id (line items). */
+export type RelationDef = { id: string; target: string; cardinality: string; kind?: string; labels?: Loc };
+export type EntityDef = {
+  id: string; labels: Loc; pluralLabels: Loc; kind: string; fields: ReadonlyArray<FieldDef>; workflow?: string; relations?: ReadonlyArray<RelationDef>;
+};
 export type StateDef = { id: string; kind?: string; locksEditing?: boolean; labels: Loc };
 export type WorkflowDef = { id: string; entity: string; states: ReadonlyArray<StateDef> };
 export type RoleDef = { id: string; labels: Loc; scope: { type: string; values?: ReadonlyArray<string> } };
@@ -53,7 +57,9 @@ export type ToolDef = {
 export type Caller = { roleIds: ReadonlyArray<string> };
 
 export type Money = { value: string; currency: string };
-export type RecordRow = { id: string; state?: string } & Record<string, unknown>;
+/** One entry of a record's history: who did what, when. Fixture-only until the gateway serves record history (Q-682). */
+export type HistoryEntry = { at: string; by: string; event: 'created' | 'updated' | 'state'; to?: string };
+export type RecordRow = { id: string; state?: string; history?: ReadonlyArray<HistoryEntry> } & Record<string, unknown>;
 
 export type RecordsData = {
   entities: ReadonlyArray<EntityDef>;

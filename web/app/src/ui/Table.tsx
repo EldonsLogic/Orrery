@@ -11,6 +11,12 @@ export type TableColumn<Row> = {
   numeric?: boolean;
   /** Render cells of this column as row headers (`<th scope="row">`). Use for the identifying column. */
   rowHeader?: boolean;
+  /** The column the rows are sorted by, for assistive technology (aria-sort). */
+  sort?: 'ascending' | 'descending';
+  /** Let long text wrap instead of widening the table. */
+  wrap?: boolean;
+  /** Extra class on the column's header and cells (for example to hide a column on narrow screens). */
+  className?: string;
   render?: (row: Row) => ReactNode;
 };
 
@@ -51,7 +57,7 @@ export function Table<Row extends Record<string, unknown>>({
         <thead>
           <tr>
             {columns.map((c) => (
-              <th key={c.key} scope="col" className={cx(styles.cell, c.numeric && styles.numeric)}>
+              <th key={c.key} scope="col" aria-sort={c.sort} className={cx(styles.cell, c.numeric && styles.numeric, c.className)}>
                 {c.header}
               </th>
             ))}
@@ -60,7 +66,7 @@ export function Table<Row extends Record<string, unknown>>({
         <tbody>
           {rows.length === 0 && empty ? (
             <tr>
-              <td colSpan={columns.length} className={styles.cell}>
+              <td colSpan={columns.length} className={cx(styles.cell, styles.emptyCell)}>
                 {empty}
               </td>
             </tr>
@@ -69,11 +75,11 @@ export function Table<Row extends Record<string, unknown>>({
               <tr key={rowKey(row, i)}>
                 {columns.map((c) =>
                   c.rowHeader ? (
-                    <th key={c.key} scope="row" className={cx(styles.cell, styles.rowHeader, c.numeric && styles.numeric)}>
+                    <th key={c.key} scope="row" className={cx(styles.cell, styles.rowHeader, c.numeric && styles.numeric, c.wrap && styles.wrapText, c.className)}>
                       {cell(row, c)}
                     </th>
                   ) : (
-                    <td key={c.key} className={cx(styles.cell, c.numeric && styles.numeric)}>
+                    <td key={c.key} className={cx(styles.cell, c.numeric && styles.numeric, c.wrap && styles.wrapText, c.className)}>
                       {cell(row, c)}
                     </td>
                   ),

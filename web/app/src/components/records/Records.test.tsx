@@ -41,7 +41,8 @@ describe.each(['rtl', 'ltr'] as const)('record screens in %s', (dir) => {
     expect(form).toContain(l === 'ar' ? 'حد الائتمان' : 'Credit limit');
   });
   it('keeps numbers, amounts and dates left-to-right', () => {
-    expect(list).toContain('<bdi dir="ltr" class="Records-module__num">1150.00 SAR</bdi>'.replace('Records-module__num', list.match(/<bdi dir="ltr" class="([^"]*)">1150\.00 SAR/)?.[1] ?? 'x'));
+    // WEB-029: the figure is grouped and the currency code is a muted label, both inside one left-to-right isolate.
+    expect(list).toMatch(/<bdi dir="ltr" class="[^"]*"><span class="[^"]*">1,150\.00<\/span> <span class="[^"]*">SAR<\/span><\/bdi>/);
     expect(list).toMatch(/<bdi dir="ltr">2026-03-01<\/bdi>/);
     expect(form).toMatch(/<input[^>]*dir="ltr"[^>]*value="50000\.00"|<input[^>]*value="50000\.00"[^>]*dir="ltr"/);
     expect(form).toMatch(/<input[^>]*dir="auto"[^>]*value="Sample Trading Co"|<input[^>]*value="Sample Trading Co"[^>]*dir="auto"/);
@@ -86,7 +87,7 @@ describe('record screens content', () => {
     ));
     expect(out).toContain('role="dialog"');
     expect(out).toContain('Mobile: +966500000001 to empty');
-    expect(out).toContain('Risk level: R2.');
+    expect(out).toContain('Risk: medium.'); // WEB-029: risk in words, never the internal code
     expect(out).toContain('Confirm');
     // QA-014 review: the dialog root is focusable so focus has a home while both buttons are disabled (busy).
     expect(render('en', <ConfirmWrite actionLabel="x" entityLabel="y" risk="R2" sensitive={false} changes={[]} busy onConfirm={() => {}} onCancel={() => {}} />)).toContain('tabindex="-1"');

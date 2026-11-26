@@ -106,4 +106,4 @@ export type Section =
   | { id: 'pending'; badges: Badges; total: number; groups: ReadonlyArray<PendingGroup> };
 
 export type SectionId = Section['id'];
-export type BlueprintView = { scope: 'all' | 'department'; revision: number; badges: Badges; sections: ReadonlyArray<Section> };
+export type BlueprintView = { scope: 'all' | 'department'; revision: number; buildState: string; badges: Badges; sections: ReadonlyArray<Section> };

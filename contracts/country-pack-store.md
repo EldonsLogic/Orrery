@@ -1,6 +1,6 @@
 # Country pack store: publish record, index and pin
 
-Version: 0.2.0
+Version: 0.3.0
 Status: draft (ADR-0071 Proposed, PR #344 under review)
 Owner: eldon (publisher, CMP-038); consumer: partner (loader, CMP-039)
 
@@ -30,9 +30,9 @@ Examples: `examples/country-pack-{record,index,pin}-*.json` must validate; `exam
 1. Role names follow ADR-0071 1.4: `market_accountant` and `founder` (the CMP-038 row says "accountant").
 2. The schemas describe the decoded JSON payloads only. The envelopes (`cpr1.`/`cpi1.`, base64url, ed25519 over a domain string plus the payload bytes, 64 KiB limit, strict parse) stay as ADR-0071 1.5 defines them.
 3. The publisher key envelope stays in production alongside the per-signer signatures; per-signer signatures add to it, they do not replace it.
-4. `signerSignature` format `webauthn.get.v1`: the WebAuthn challenge is the base64url of the 32 `statementDigest` bytes. Verifying it needs each signer's public credential in the reviewed `trusted_signers.json`; that file's format belongs to the loader (CMP-042) and is not in this contract.
+4. `signerSignature` format `webauthn.get.v1`: the WebAuthn challenge is the 32 bytes SHA-256(`country-pack-signoff-v1` + LF + the ASCII `statementDigest`), base64url without padding in `clientDataJSON.challenge` (domain separated, ADR-0071 1.8; Eldon's #344 answer). The same rule signs change record sign-offs. Verifying it needs each signer's public credential in the reviewed `trusted_signers.json`; that file's format belongs to the loader (CMP-042) and is not in this contract.
 5. Change records (withdrawal, floor raise, follow-up closure) are defined by [country-pack-change-record.schema.json](country-pack-change-record.schema.json): `id`, `kind`, `countryCode`, `target` (`{version}` or, for a closure, `{publishId}`), `reasonRef`, `baseIndexSeq`, `baseIndexDigest`, `statementDigest`, `requestedBy`, `recordedAt` and the same two `signOffs` as a publish (one `market_accountant`, one `founder`, different people, different step-ups, each signed over `statementDigest`, per-signer signatures in production). The statement is the digest of the canonical JSON of `{op: "pack_change", countryCode, kind, target, reasonRef, baseIndexDigest}`, so a change is bound to the exact index it was proposed against. The index's `changeRecords[].sha256` is the digest of the record's canonical JSON; the next index has `indexSeq` equal to `baseIndexSeq` plus 1. Per market only, no tenant fields. **CMP-039 (the pack loader, PR #344) must read this record**, check its two sign-offs like a publish's, and check that the index change it lists (withdrawal moved, floor raised, follow-up closed) matches `kind` and `target`. A tenant-member actor (`memberRef`) is out of scope for pin approvals. The publisher validates each record against the schema and the rules in `x-validator-rules` before it commits (refusal PP-062).
-6. The index carries a new field, `predecessorDigest`, which ADR-0071 revision 2 does not have: it answers the review finding that two indexes with the same `indexSeq` must be refused, and matches the brief for this slice.
+6. The index carries `predecessorDigest` (digest of the exact payload bytes of the previous index): it refuses two indexes with one `indexSeq` and lets a loader that is behind walk back through the signed index chain to its last verified index, verifying each index and the change records it lists (Eldon's #344 answer). An index need not re-list changes since a loader's last state. A withdrawal clears that version's open follow-up in the same record.
 7. The pin adds `v`, `typ`, `auditId` and a structured `approval` (ADR-0071 3.1 has a flat `approvalRef`); `approval.ref` is that reference. `changedBy` is `{actorKind, subject, tokenId}`: the actor is staff or a service, never a tenant member, so `memberRef` does not apply; staff subjects go only to the platform security stream, never a tenant audit (#316 decision 2).
 8. A repo pin uses approval `repo_draft` and cannot be a `republish`.
 9. Identifiers: `publishId` is a ULID; `tenantId`, `kid`, refs and staff subjects are opaque strings with conservative patterns. Change them in review if the registry or identity system uses other formats.
@@ -41,4 +41,5 @@ Examples: `examples/country-pack-{record,index,pin}-*.json` must validate; `exam
 
 ## Changelog
 - 0.1.0 (CMP-038 slice 1): first draft of the record, index, pin and common schemas, with examples and negative examples.
+- 0.3.0 (CMP-038 slice 4): adopts the partner's domain-separated WebAuthn challenge (Eldon's #344 answer, Q-656); not backward compatible for any `signerSignature` made over the raw digest (none exist, major is 0). Documents `predecessorDigest` as the chain a behind loader walks. Schema `$id`s stay at 0.1.0 (description-only change).
 - 0.2.0 (CMP-038 slice 4): change record body and schema (assumption 5 replaced); minor, backward compatible for existing records, indexes and pins.

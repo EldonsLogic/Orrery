@@ -22,3 +22,5 @@ Unknown or approximate, if known.
 
 ## Next step
 CMP-039 (partner, #344) reads the change record. CMP-038: upgrade scheduling, real ports, staff screen. Tier 3: needs a different-model review.
+
+- Follow-up (Eldon's #344 answer): adopted ADR-0071's domain-separated WebAuthn challenge in the store contract (now 0.3.0) and the record schema; `canon.signoff_challenge` and the fake verifier use it; `predecessorDigest` already chained the index and is documented for the loader walk-back.

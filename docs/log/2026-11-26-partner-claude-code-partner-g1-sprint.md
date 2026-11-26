@@ -20,6 +20,14 @@ Live coordinator log for the partner lane's G1 finishing sprint (RULES 51), cont
 - Claim (this PR): BPL-046 and BPL-044 set `doing` (owner partner). CE-SEC-011 is already `doing`; its slice 2 design (ADR-0073) runs under that row.
 - Advisor (GOV-073 trial, same-session Claude advisor), call 1, before the plan: caught that PLT-003 and CMP-004 wait on Proposed ADRs, that CE-SEC-016 is not ready while CE-SEC-011 is `doing`, that #344 needs the whole #350 stack, that #374 answers far more partner rows than the handoff named, and that the live log did not exist yet. Token cost unknown.
 
+- Dispatched (T3 `delegate_task`, briefs kept outside the repo; subagents run no git):
+  - A, BPL-046 (Tier 2): Claude Sonnet 5.5 high, own worktree from main. Allowed: `infra/dev/docker/run_real_bench_ci.py`, `infra/dev/docker/docker-compose.bpl027-test.yml`, `infra/dev/docker/tests/`, `infra/dev/docker/README.md`, `.github/workflows/real-bench.yml`.
+  - B, BPL-044 (Tier 2): Claude Sonnet 5.5 high, own worktree from main. Allowed: `CE/adapter/frappe_backend.py`, `CE/adapter/engine.py` (only if needed), new `CE/tests/test_bpl_044_docfield_snapshot.py`.
+  - D, CE-SEC-011 slice 2 design, ADR-0073 (Tier 3): Claude Opus 5.5 high, own worktree from main. Allowed: the new ADR-0073 file only; Q-684 to Q-686 reserved for it.
+  - E5, #344 ADR-0071 revision 5 (Eldon's L1: change records verified in every environment, only `signerSignature` production-only; re-check against #362 at 189a0840): Claude Opus 5.5 high in the #344 worktree. Allowed: the ADR-0071 file, CMP-041 to CMP-045 row text only if it states the production-only scope.
+  - R1, review #350 (Tier 3 contracts, failing check) and R2, review #374 with a per-question agree/concern table for the partner and Q-421 in #372: Gemini 4 Argon high. Both failed at once on the Antigravity quota (reset in about 46 min); retried on Codex GPT-6.2 Sol high (`codex`: out until 2026-11-28) and on the ChatGPT Personal account (also out). No non-Claude reviewer is available; R1 and R2 are retried on Gemini after the reset (background timer, no polling).
+- Main merged into #337 (8f9bbc85), #335 (0204b079) and #344 (6a54a3f2): only `docs/open-questions.md` (and `docs/PLAN.md` on #335) conflicted; resolved row by row, three-way against the merge base: both sides' rows kept by number, a row changed on one side only takes that side, RESOLVED wins over an open text. Checked: no row id lost or duplicated in either table; PLT-032 keeps #335's text, CE-SEC-009 and CE-SEC-010 keep main's `done`. Approvals were on the pre-merge heads; content files unchanged.
+
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-g1-sprint.md: this live log.
 - docs/PLAN.md: BPL-046 and BPL-044 claimed.

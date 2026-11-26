@@ -79,6 +79,11 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
 - Merged on the partner's say-so ("Merge all three", 2026-11-26): #336 (ADR-0070 Proposed), #338 (CE-SEC-011 slice 1), then #355 (ADR-0053 Proposed) after a merge-only update 2129b6f2 to bc58fd63 (`docs/open-questions.md` rows from both sides kept by number; design files unchanged; approval kept, CI green).
 - #337 not merged: Eldon's own merge condition (one real-bench PDF look, or his waiver) is still open; asked him on the PR.
 - Third fix round started (Claude Opus 5.5 high writers in the PR worktrees): D4 for #335 (N5 to N9, Q-675 and Q-676 answers) and E4 for #344 (contract 0.3.0 at #362 head 7f34f6e8, chain walk, withdrawal clears follow-up, Q-677 and Q-678 answers). Both PRs have used three Gemini rounds; a fourth needs the partner's say-so.
+- Third fix round done; the partner chose no fourth Gemini round ("Skip, send to Eldon"), so both deltas go to Eldon with only the writer's checks (same-family review):
+  - #335 PLT-028 revision 2.3 at b6b3e976 (head a0a57893 after merging main): N5 durable per-request commit (TX12, class `security`) for the four refusal kinds in both files, own reserve and per-source cap, platform security stream only; N6 to N9; Q-675 and Q-676 RESOLVED; PLT-032 row names `stop_write_through` and the reconcile conformance test.
+  - #344 CMP-039 ADR-0071 revision 4 at 99116add (head 5895161b after merging main): formats from `contracts/country-pack-store.md` 0.3.0 (#362), chain walk through `PackStore.index`, withdrawal clears its follow-up, Lows; Q-677 and Q-678 RESOLVED; CMP-043 to CMP-045 updated. Six design choices put to Eldon on the PR. Merges after #362.
+  - Re-review requests with old and new commits posted on both PRs.
+- Worktrees removed after merge: the #336, #338 and #355 worktrees (clean and pushed).
 - Coordination (this branch): Q-648, Q-649, Q-671 to Q-674, Q-679 RESOLVED with Eldon's answers; Q-680 RESOLVED by both founders; PLT-009, CE-SEC-009, CE-SEC-010, SEC-002, INF-009 and CMP-033 set done (partner decision below); CE-SEC-012, CE-SEC-013 and CE-SEC-015 take Q-648, Q-649, the trigger pre-flight check and the #336 re-review Lows; PLT-033 added for the model gateway follow-up (consent setting, durable refusals, overrun scope, redaction).
 
 ## Files touched
@@ -96,7 +101,7 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
 Unknown.
 
 ## Next step
-- Eldon: re-reviews #335, #336, #337 and #338; first read of #344. #337 (Tier 2) merges after his re-review and a look at one real-bench PDF (his merge condition), or after he waives the PDF.
-- Partner: #309 and #319 merged; CMP-010 waits on the accountant. Decide #232 (PLT-009). Tier 3 approvals on Eldon's PRs once their defects are fixed.
-- After #338 merges: BPL-044 and BPL-033 (same file), CE-SEC-016, CE-SEC-011 slice 2. After #336: CE-SEC-012 to CE-SEC-015. After #335: PLT-028 code. After #344: CMP-041.
-- Worktrees on this machine: `orrery-wt/cmp-039-pack-loader-design` and the existing T3 worktrees for #335 to #338; remove after merge.
+- Eldon: re-review #335 (a0a57893) and #344 (5895161b; after #362); confirm or waive the real-bench PDF look on #337, which then merges (Tier 2, approved); Q-646 still open.
+- Partner: review Eldon's open PRs #346, #347, #348, #350, #351, #356 to #363, #366 to #368 and #370 to #374 (#372 and #374 ask for partner agreement on open questions); Tier 3 acceptance on Eldon's #320, #276, #277, #286, #287 once fixed; remaining doing-row calls (BPL-027; ERP-013 and QA-016; SEC-004 and CMP-023).
+- Ready partner rows: PLT-033 (gateway follow-up), BPL-044 and BPL-033 (same file), CE-SEC-016, CE-SEC-011 slice 2; CE-SEC-012 to CE-SEC-015 wait for ADR-0070 Accepted; PLT-028 code after #335; CMP-041 after #344; CMP-010 waits on the accountant.
+- Worktrees left on this machine: `orrery-wt/cmp-039-pack-loader-design` (#344), T3 worktrees for #335 and #337; remove after merge.

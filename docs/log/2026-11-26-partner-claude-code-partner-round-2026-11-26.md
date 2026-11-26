@@ -28,6 +28,19 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
 
 ## Task trail
 - Claim: CMP-039 set `doing` (owner partner) in this PR.
+- #342 merged (Tier 1, green): CMP-039 claimed, this log opened.
+- Main merged into the #335, #336, #337 and #338 branches (only `docs/open-questions.md` conflicted; kept main's Q-627 and each branch's rows). Not pushed until each fix lands.
+- Dispatched (T3 `delegate_task`, Claude, shared checkout, each agent confined to its PR worktree, no git; briefs kept outside the repo):
+  - A, CE-SEC-011 #338 review fixes: Claude Opus 5.5 high. Allowed: #338 files plus `.github/workflows/tests.yml`.
+  - B, ERP-035 #337 Arabic font fallback: Claude Sonnet 5.5 high. Allowed: `print_formats/*` (not the generated snapshot), the ERP-007 and ERP-016 tests.
+  - C, ADR-0070 revision 5 (#336): Claude Opus 5.5 high. Allowed: the ADR-0070 file.
+  - D, PLT-028 spec re-scope (#335): Claude Opus 5.5 high. Allowed: `docs/specs/gateway-audit-spool.md`.
+  - E, CMP-039 ADR-0071 design: Claude Opus 5.5 high, new branch `cmp-039-pack-loader-design`. Allowed: the new ADR-0071 file.
+  - F, doing-row audit: Claude Sonnet 5.5 medium, read-only.
+- C and D briefs carry the eight #316 founder decisions verbatim, because ADR-0069 on main was not re-scoped after them (both reviews failed on that).
+- Asked Eldon on #335 (comment, 2026-11-26): what "write-through" means (local synced spool or SEC-008 acknowledgement; Q-644) and startup with the store unreachable (F2; Q-645).
+- G, #341 (GOV-073): applied Eldon's two notes at 21d2dee2 (advisor one effort level up, none on Tier 1, token cost recorded; Fable 5.2), commented the old and new commit; merges on green.
+- Advisor (same-session Claude advisor, trial GOV-073): one call before dispatch. It caught that worktree isolation would fork from main instead of the PR heads, and asked for the #316 decisions in the C and D briefs, the held questions to Eldon in parallel, and plan rows kept in each PR branch. Token cost unknown.
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-round-2026-11-26.md: this live log.

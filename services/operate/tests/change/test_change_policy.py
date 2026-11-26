@@ -103,7 +103,7 @@ ALLOWED = [
     ("action_label", [{"op": "set", "path": ["workflows", "sales_order_flow", "transitions", "deliver", "actionLabels",
                                              "en"], "value": "Ship"}]),
     ("report_label", [{"op": "set", "path": ["reports", "sales_overview", "labels", "en"], "value": "Sales"}]),
-    ("branding_colour", [{"op": "set", "path": ["branding", "accentColour"], "value": "#112233"}]),
+    ("branding_colour", [{"op": "set", "path": ["branding", "accentColour"], "value": "#1A5FB4"}]),  # #112233 is refused by the resolver (TKN-ACCENT-GREY)
     ("plain_override", [{"op": "set", "path": ["i18n", "labelOverrides", "sales_order.title", "en"],
                          "value": "Order"}]),
 ]

@@ -1,43 +1,56 @@
 """Rules 10 to 13: colour contrast, brand assets, white label, SA e-invoicing."""
 from __future__ import annotations
 
-from .colour import HEX_RE, auto_adjust, contrast, passes_all
-from .report import Report, ValidationContext, as_dict, as_list, ptr, sid
-from .theme_surfaces import SURFACES
+from tokens import codes as TC
+from tokens.brand_tools import BrandToolsUnavailable, derive_colours, failing_pair
 
-# Thresholds (docs/architecture/theming.md, "Guardrails"):
-#   primaryColour is used for text and links (tokens.json claims primary-on-surface at 4.5), so it
-#   must reach 4.5:1 against the surface AND the background of each theme.
-#   accentColour is graphics only (tokens.json note: "Coral is for graphics only"), so it must reach
-#   3:1 (UI components and graphics) against the surface AND the background of each theme.
-THRESHOLDS = {"primaryColour": 4.5, "accentColour": 3.0}
+from .colour import HEX_RE
+from .report import Report, ValidationContext, as_dict, as_list, ptr, sid
+
+# Q-64 (ADR-0057): the token resolver's OKLCH derive is authoritative. Rule 10 calls the same pure function
+# (tokens.brand_tools.derive_colours, themeAlgo 1) so a Blueprint that validates is never refused by the resolver.
+# The pair list, thresholds (4.5:1 text, 3:1 graphics) and shift limits live in docs/brand/tools/derive_tenant_theme.py.
+_ADJUSTED = {TC.ADJ_LIGHT_PRIMARY: "primaryColour", TC.ADJ_LIGHT_ACCENT: "accentColour"}
+_KEY_OF_PATH = {"/branding/primaryColour": "primaryColour", "/branding/accentColour": "accentColour"}
 
 
 def rule_contrast(bp: dict, ctx: ValidationContext | None, rep: Report) -> None:
-    """Rule 10. Per colour and theme: pass, auto_adjust (warning plus a proposal in report.adjustments;
-    same hue and saturation, nearest passing lightness within the allowed shift) or reject (error)."""
+    """Rule 10. The resolver's derive decides: a refusal is an error (BP-BRAND-001); a colour it has to darken to
+    reach AA is a warning plus a proposal in report.adjustments (BP-BRAND-002)."""
     branding = as_dict(bp.get("branding"))
-    for key, need in THRESHOLDS.items():
-        colour = branding.get(key)
-        if not (isinstance(colour, str) and HEX_RE.match(colour)):
-            continue
-        for theme, tokens in SURFACES.items():
-            bgs = [tokens["surface"], tokens["background"]]
-            if passes_all(colour, bgs, need):
+    primary, accent = branding.get("primaryColour"), branding.get("accentColour")
+    if not isinstance(primary, str):
+        return  # the schema step reports it; without a primary the resolver emits no tenant tokens
+    if not HEX_RE.fullmatch(primary):
+        rep.error("BP-BRAND-001", ptr("branding", "primaryColour"), "primaryColour is not a #RRGGBB hex colour")
+        return
+    if "accentColour" in branding and not (isinstance(accent, str) and HEX_RE.fullmatch(accent)):
+        rep.error("BP-BRAND-001", ptr("branding", "accentColour"), "accentColour is present but not a #RRGGBB hex colour")
+        return
+    try:
+        derived = derive_colours(primary, accent)
+    except BrandToolsUnavailable:
+        rep.error("BP-BRAND-001", ptr("branding", "primaryColour"), "brand colours could not be checked: the token derive is unavailable")
+        return
+    for f in derived.findings:
+        if f.severity == TC.REFUSAL:
+            key = _KEY_OF_PATH.get(f.path, "primaryColour")
+            colour = branding.get(key)
+            rep.error("BP-BRAND-001", ptr("branding", key),
+                      f"{key} {colour} is refused by the token derive ({f.code}) and cannot be adjusted")
+        elif f.code in _ADJUSTED:
+            key = _ADJUSTED[f.code]
+            colour, fixed = f.params["from"], f.params["to"]
+            pair = failing_pair(key, colour, fixed, derived.colours["light"]["primary"])
+            if pair is None:  # the derive changed the colour but no pair fails: fail closed rather than invent a ratio
+                rep.error("BP-BRAND-001", ptr("branding", key), f"{key} {colour}: the derive adjusted it but no failing pair was found")
                 continue
-            path = ptr("branding", key)
-            worst = min(contrast(colour, b) for b in bgs)
-            fixed = auto_adjust(colour, bgs, need)
-            if fixed is None:
-                rep.error("BP-BRAND-001", path,
-                          f"{key} {colour} has {worst:.2f}:1 in the {theme} theme (needs {need}:1) and cannot be adjusted")
-                continue
-            rep.warn("BP-BRAND-002", path,
-                     f"{key} {colour} has {worst:.2f}:1 in the {theme} theme (needs {need}:1); proposed {fixed}")
+            need, before, after = pair["min"], pair["before"], pair["after"]
+            rep.warn("BP-BRAND-002", ptr("branding", key),
+                     f"{key} {colour} fails {pair['id']} in the light theme with {before:.2f}:1 (needs {need}:1); proposed {fixed} gives {after:.2f}:1")
             rep.adjustments.append({
-                "path": path, "theme": theme, "original": colour.upper(), "proposed": fixed,
-                "threshold": need, "ratioBefore": round(worst, 2),
-                "ratioAfter": round(min(contrast(fixed, b) for b in bgs), 2),
+                "path": ptr("branding", key), "theme": "light", "original": colour.upper(), "proposed": fixed,
+                "threshold": need, "pair": pair["id"], "ratioBefore": round(before, 2), "ratioAfter": round(after, 2),
             })
 
 

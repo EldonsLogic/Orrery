@@ -1390,7 +1390,6 @@
     },
     "ask": {
       "title": "Ask <brand>Seshna</brand>",
-      "label": "Your question",
       "placeholder": "Ask about sales, cash or stock",
       "submit": "Ask",
       "hint": "Answers come from your records. Anything <brand>Seshna</brand> drafts waits for your approval.",
@@ -1415,10 +1414,11 @@
       "receivables": "Receivables outstanding",
       "awaiting_approval": "Awaiting your approval",
       "cash": "Cash in bank",
-      "up": "Up {value}% on last month",
-      "down": "Down {value}% on last month",
+      "up": "Up {value}%",
+      "down": "Down {value}%",
       "overdue": "{count} overdue",
-      "oldest": "Oldest waiting {days, plural, one {# day} other {# days}}"
+      "oldest": "Oldest waiting {days, plural, one {# day} other {# days}}",
+      "vsLast": "on last month"
     },
     "approvals": {
       "title": "Needs your approval",
@@ -1445,7 +1445,6 @@
         "order_created": "New order {ref} from {party}"
       }
     },
-    "shortcuts": "Records",
     "currency": {
       "SAR": "SAR"
     }

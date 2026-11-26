@@ -3,68 +3,113 @@
 import { useState, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
+import { ArrowDown, ArrowUp, TriangleAlert } from 'lucide-react';
 import type { Locale } from '../../i18n';
-import { Badge, Button, Card, Mark, VisuallyHidden } from '../../ui';
-import control from '../../ui/control.module.css';
+import { Badge, Button, Card, Mark } from '../../ui';
+import { cx } from '../../ui/cx';
+import button from '../../ui/Button.module.css';
 import { formatNumber } from '../../lib/format';
 import { ProgressMarks } from '../marks/ProgressMarks';
 import { StatusMark } from '../marks/StatusMark';
 import { LoadingMark } from '../marks/LoadingMark';
-import type { Activity, HomeOverview, Kpi, Money } from '../../home/types';
-import type { NavItem } from '../../lib/navigation';
+import type { Activity, HomeOverview, Kpi, Money, TodayFacts } from '../../home/types';
 import styles from './Home.module.css';
 
 // One digit system per view (latn), and the currency code as a small muted label after the figure.
 const NS = 'latn';
 const brand = (c: ReactNode) => <bdi>{c}</bdi>;
 // Document numbers never break at their hyphen (non-breaking hyphen), in either direction.
-const keep = (ref: string) => ref.replace(/-/g, '\u2011');
+const keep = (ref: string) => ref.replace(/-/g, '‑');
 
-function Amount({ value, locale, large }: { value: Money; locale: Locale; large?: boolean }) {
+function Amount({ value, locale, className }: { value: Money; locale: Locale; className?: string }) {
   const t = useTranslations('home.currency');
   return (
-    <span className={large ? styles.kpiValue : styles.amount}>
+    <span className={cx(styles.amount, className)}>
       <bdi className={styles.figure}>{formatNumber(locale, Math.round(value.amount), NS)}</bdi>
       <span className={styles.currency}>{t.has(value.currency) ? t(value.currency) : value.currency}</span>
     </span>
   );
 }
 
-const Icon = ({ d }: { d: string }) => (
-  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" className={styles.icon}>
-    <path d={d} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-const UP = 'M8 13V3M4 7l4-4 4 4';
-const DOWN = 'M8 3v10M4 9l4 4 4-4';
-const WARN = 'M8 2.5l6 11H2l6-11zM8 7v2.5M8 11.5v.01';
+/** Six month-ends, no axes, low emphasis. Decorative: the figure and the change beside it carry the meaning. SVG coordinates never mirror, so time runs left to right in both languages. */
+export function Sparkline({ values }: { values: ReadonlyArray<number> }) {
+  const w = 96;
+  const h = 32;
+  const min = Math.min(...values);
+  const span = Math.max(...values) - min || 1;
+  const pts = values.map((v, i) => `${((i / (values.length - 1)) * w).toFixed(1)},${(h - 2 - ((v - min) / span) * (h - 4)).toFixed(1)}`);
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className={styles.spark} aria-hidden="true" focusable="false">
+      <polyline points={pts.join(' ')} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
 
 function KpiTile({ kpi, locale }: { kpi: Kpi; locale: Locale }) {
   const t = useTranslations('home.kpis');
+  const up = (kpi.change ?? 0) >= 0;
   return (
     <li className={styles.tile}>
-      <span className={styles.tileLabel}>{t(kpi.id)}</span>
-      {'count' in kpi.value ? (
-        <span className={styles.kpiValue}>
-          <bdi className={styles.figure}>{formatNumber(locale, kpi.value.count, NS)}</bdi>
-        </span>
-      ) : (
-        <Amount value={kpi.value} locale={locale} large />
-      )}
-      {kpi.change !== undefined ? (
-        <span className={styles.delta}>
-          <Icon d={kpi.change >= 0 ? UP : DOWN} />
-          {t(kpi.change >= 0 ? 'up' : 'down', { value: formatNumber(locale, Math.abs(kpi.change), NS) })}
-        </span>
-      ) : null}
-      {kpi.overdue ? (
-        <span className={styles.warning}>
-          <Icon d={WARN} />
-          {t('overdue', { count: formatNumber(locale, kpi.overdue, NS) })}
-        </span>
-      ) : null}
-      {kpi.oldestDays ? <span className={styles.delta}>{t('oldest', { days: kpi.oldestDays })}</span> : null}
+      <div className={styles.tileHead}>
+        <span className={styles.tileLabel}>{t(kpi.id)}</span>
+        {kpi.trend ? <Sparkline values={kpi.trend} /> : null}
+      </div>
+      <div className={styles.tileValue}>
+        {'count' in kpi.value ? (
+          <span className={styles.kpiValue}>
+            <bdi className={styles.figure}>{formatNumber(locale, kpi.value.count, NS)}</bdi>
+          </span>
+        ) : (
+          <Amount value={kpi.value} locale={locale} className={styles.kpiValue} />
+        )}
+      </div>
+      <div className={styles.tileFoot}>
+        {kpi.change !== undefined ? (
+          <>
+            <Badge tone={up ? 'success' : 'danger'} icon={up ? <ArrowUp className={styles.icon} /> : <ArrowDown className={styles.icon} />}>
+              {t(up ? 'up' : 'down', { value: formatNumber(locale, Math.abs(kpi.change), NS) })}
+            </Badge>
+            <span className={styles.caption}>{t('vsLast')}</span>
+          </>
+        ) : null}
+        {kpi.overdue ? (
+          <Badge tone="warning" icon={<TriangleAlert className={styles.icon} />}>
+            {t('overdue', { count: formatNumber(locale, kpi.overdue, NS) })}
+          </Badge>
+        ) : null}
+        {kpi.oldestDays ? <span className={styles.caption}>{t('oldest', { days: kpi.oldestDays })}</span> : null}
+      </div>
     </li>
+  );
+}
+
+function Today({ facts, locale }: { facts: TodayFacts; locale: Locale }) {
+  const t = useTranslations('home.today');
+  return (
+    <Card as="section" aria-labelledby="today-title" className={styles.panel}>
+      <h2 id="today-title" className={styles.sectionTitle}>
+        {t('title')}
+      </h2>
+      <dl className={styles.facts}>
+        <div className={styles.fact}>
+          <dt>{t('deliveries')}</dt>
+          <dd>
+            <bdi className={cx(styles.figure, styles.factFigure)}>{formatNumber(locale, facts.deliveries, NS)}</bdi>
+          </dd>
+        </div>
+        {(['collections', 'payments'] as const).map((k) => (
+          <div key={k} className={styles.fact}>
+            <dt>
+              {t(k)}
+              <span className={styles.factNote}>{t('count', { count: facts[k].count })}</span>
+            </dt>
+            <dd>
+              <Amount value={facts[k]} locale={locale} className={styles.factFigure} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
   );
 }
 
@@ -75,7 +120,10 @@ function ActivityList({ items, asOf, locale }: { items: ReadonlyArray<Activity>;
   const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', numberingSystem: NS, timeZone: 'UTC' } as Intl.DateTimeFormatOptions);
   const days = [...new Set(items.map((a) => dayKey(a.at)))];
   return (
-    <>
+    <Card as="section" aria-labelledby="activity-title" className={styles.panel}>
+      <h2 id="activity-title" className={styles.sectionTitle}>
+        {t('title')}
+      </h2>
       {days.map((day) => (
         <div key={day} className={styles.day}>
           <h3 className={styles.dayHeading}>{day === asOf ? t('today') : t('yesterday')}</h3>
@@ -88,14 +136,7 @@ function ActivityList({ items, asOf, locale }: { items: ReadonlyArray<Activity>;
                     {time.format(new Date(a.at))}
                   </time>
                   <span className={styles.feedText}>
-                    <span>
-                      {t.rich(`kind.${a.kind}`, {
-                        brand,
-                        ref: keep(a.ref ?? ''),
-                        party: a.party?.[locale] ?? '',
-                        count: a.count ?? 0,
-                      })}
-                    </span>
+                    <span>{t.rich(`kind.${a.kind}`, { brand, ref: keep(a.ref ?? ''), party: a.party?.[locale] ?? '', count: a.count ?? 0 })}</span>
                     {a.amount ? <Amount value={a.amount} locale={locale} /> : null}
                   </span>
                 </li>
@@ -103,24 +144,12 @@ function ActivityList({ items, asOf, locale }: { items: ReadonlyArray<Activity>;
           </ol>
         </div>
       ))}
-    </>
+    </Card>
   );
 }
 
-/** The owner's home: greeting, Ask Seshna, today or the build journey, the month's figures, approvals and activity. */
-export function HomeScreen({
-  data,
-  loading = false,
-  company,
-  person,
-  shortcuts,
-}: {
-  data: HomeOverview | null;
-  loading?: boolean;
-  company: string;
-  person: string;
-  shortcuts: ReadonlyArray<NavItem>;
-}) {
+/** The owner's home: greeting, Ask Seshna, the build journey if not live, the month's figures, approvals, today and activity. */
+export function HomeScreen({ data, loading = false, company, person }: { data: HomeOverview | null; loading?: boolean; company: string; person: string }) {
   const t = useTranslations('home');
   const tc = useTranslations('chat.suggestions.owner');
   const locale = useLocale() as Locale;
@@ -129,83 +158,58 @@ export function HomeScreen({
   const date = data
     ? new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', calendar: 'gregory', numberingSystem: NS, timeZone: 'UTC' } as Intl.DateTimeFormatOptions).format(new Date(`${data.asOf}T00:00:00Z`))
     : null;
-  // The chat screen owns the conversation; this entry only takes the owner there. The input has no name, so the
-  // question never lands in the URL. Handing it to the chat composer is a follow-up (WEB-026 composer).
 
   return (
     <section aria-labelledby="home-title" className={styles.home}>
-      <header className={styles.header}>
-        <p className={styles.eyebrow}>
-          <span>{company}</span>
-          {date ? (
-            <>
-              <span aria-hidden="true" className={styles.sep} />
-              <span>{date}</span>
-            </>
-          ) : null}
-        </p>
-        <div className={styles.titleRow}>
-          <h1 id="home-title" className={styles.title}>
-            {t('greeting', { name: person })}
-          </h1>
-          {data ? (
-            <Badge tone={live ? 'success' : 'neutral'} icon={<Mark upper="solid" lower={live ? 'solid' : 'outline'} size={16} />}>
-              {t(live ? 'status.live' : 'status.simulating')}
-            </Badge>
-          ) : null}
-        </div>
-      </header>
+      <div className={styles.hero}>
+        <header className={styles.header}>
+          <p className={styles.eyebrow}>
+            <span>{company}</span>
+            {date ? (
+              <>
+                <span aria-hidden="true" className={styles.sep} />
+                <span>{date}</span>
+              </>
+            ) : null}
+          </p>
+          <div className={styles.titleRow}>
+            <h1 id="home-title" className={styles.title}>
+              {t('greeting', { name: person })}
+            </h1>
+            {data ? (
+              <Badge tone={live ? 'success' : 'neutral'} icon={<Mark upper="solid" lower={live ? 'solid' : 'outline'} size={16} />}>
+                {t(live ? 'status.live' : 'status.simulating')}
+              </Badge>
+            ) : null}
+          </div>
+        </header>
 
-      <form className={styles.ask} action="/chat/" method="get" role="search" aria-labelledby="ask-title">
-        <h2 id="ask-title" className={styles.askTitle}>
-          <Mark tone="accent" upper="solid" lower="outline" size={24} />
-          <span>{t.rich('ask.title', { brand })}</span>
-        </h2>
-        <div className={styles.askRow}>
-          <VisuallyHidden>
-            <label htmlFor="ask-input">{t('ask.label')}</label>
-          </VisuallyHidden>
-          <input id="ask-input" className={`${control.control} ${styles.askInput}`} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t('ask.placeholder')} autoComplete="off" />
-          <Button type="submit" size="lg">
-            {t('ask.submit')}
-          </Button>
-        </div>
-        <ul className={styles.chips} aria-label={t('ask.suggestions')}>
-          {(['cash', 'approvals', 'sales'] as const).map((k) => (
-            <li key={k}>
-              <Link href="/chat/" className={styles.chip}>
-                {tc(k)}
-              </Link>
-            </li>
-          ))}
-        </ul>
-        <p className={styles.hint}>{t.rich('ask.hint', { brand })}</p>
-      </form>
-
-      {live && data?.today ? (
-        <section aria-labelledby="today-title" className={styles.today}>
-          <h2 id="today-title" className={styles.sectionTitle}>
-            {t('today.title')}
-          </h2>
-          <dl className={styles.facts}>
-            <div className={styles.fact}>
-              <dt>{t('today.deliveries')}</dt>
-              <dd className={styles.factValue}>
-                <bdi className={styles.figure}>{formatNumber(locale, data.today.deliveries, NS)}</bdi>
-              </dd>
-            </div>
-            {(['collections', 'payments'] as const).map((k) => (
-              <div key={k} className={styles.fact}>
-                <dt>{t(`today.${k}`)}</dt>
-                <dd className={styles.factValue}>
-                  <Amount value={data.today![k]} locale={locale} />
-                  <span className={styles.factNote}>{t('today.count', { count: data.today![k].count })}</span>
-                </dd>
-              </div>
+        {/* The chat screen owns the conversation; this entry takes the owner there. The input has no name, so the question
+            never lands in the URL. Handing it to the chat composer is a follow-up (WEB-026 composer). */}
+        <form className={styles.ask} action="/chat/" method="get" role="search" aria-labelledby="ask-title">
+          <label id="ask-title" htmlFor="ask-input" className={styles.askLabel}>
+            <Mark tone="accent" upper="solid" lower="outline" size={20} />
+            <span>{t.rich('ask.title', { brand })}</span>
+          </label>
+          <div className={styles.askField}>
+            <input id="ask-input" className={styles.askInput} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t('ask.placeholder')} autoComplete="off" />
+            <Button type="submit" className={styles.askButton}>
+              <span>{t('ask.submit')}</span>
+              <ArrowUp aria-hidden="true" />
+            </Button>
+          </div>
+          <ul className={styles.chips} aria-label={t('ask.suggestions')}>
+            {(['cash', 'approvals', 'sales'] as const).map((k) => (
+              <li key={k}>
+                <Link href="/chat/" className={styles.chip}>
+                  {tc(k)}
+                </Link>
+              </li>
             ))}
-          </dl>
-        </section>
-      ) : null}
+          </ul>
+          <p className={styles.caption}>{t.rich('ask.hint', { brand })}</p>
+        </form>
+      </div>
 
       {data && !live ? (
         <Card as="section" aria-labelledby="journey-title" className={styles.journey}>
@@ -236,70 +240,49 @@ export function HomeScreen({
         </section>
       ) : null}
 
-      {data ? (
-      <div className={styles.columns}>
-        {data && data.kpis.length > 0 ? (
-          <Card as="section" aria-labelledby="approvals-title" className={styles.panel}>
-            <div className={styles.panelHead}>
-              <h2 id="approvals-title" className={styles.sectionTitle}>
-                {t('approvals.title')}
-              </h2>
-              <p className={styles.caption}>{t.rich('approvals.intro', { brand })}</p>
-            </div>
-            {data.approvals.length === 0 ? (
-              <p className={styles.body}>{t('approvals.empty')}</p>
-            ) : (
-              <ul role="list" className={styles.rows}>
-                {data.approvals.map((a) => {
-                  const title = t(`approvals.kind.${a.kind}`, { ref: keep(a.ref) });
-                  return (
-                    <li key={a.id} className={styles.row}>
-                      <div className={styles.rowMain}>
-                        <span className={styles.rowTitle}>{title}</span>
-                        <span className={styles.rowMeta}>
-                          {a.party[locale]} · {a.reason[locale]}
-                        </span>
-                        <StatusMark status="drafted" size={16} className={styles.rowStatus} />
-                      </div>
-                      <Amount value={a.amount} locale={locale} />
-                      <Link href="/chat/" className={styles.review} aria-label={t('approvals.reviewLabel', { item: title })}>
-                        {t('approvals.review')}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Card>
-        ) : null}
-        {data.activity.length > 0 ? (
-          <Card as="section" aria-labelledby="activity-title" className={styles.panel}>
-            <h2 id="activity-title" className={styles.sectionTitle}>
-              {t('activity.title')}
-            </h2>
-            <ActivityList items={data.activity} asOf={data.asOf} locale={locale} />
-          </Card>
-        ) : null}
-      </div>
+      {data && (data.kpis.length > 0 || data.activity.length > 0) ? (
+        <div className={styles.columns}>
+          {data.kpis.length > 0 ? (
+            <Card as="section" aria-labelledby="approvals-title" className={styles.panel}>
+              <div className={styles.panelHead}>
+                <h2 id="approvals-title" className={styles.sectionTitle}>
+                  {t('approvals.title')}
+                </h2>
+                <p className={styles.caption}>{t.rich('approvals.intro', { brand })}</p>
+              </div>
+              {data.approvals.length === 0 ? (
+                <p className={styles.body}>{t('approvals.empty')}</p>
+              ) : (
+                <ul role="list" className={styles.rows}>
+                  {data.approvals.map((a) => {
+                    const title = t(`approvals.kind.${a.kind}`, { ref: keep(a.ref) });
+                    return (
+                      <li key={a.id} className={styles.row}>
+                        <div className={styles.rowMain}>
+                          <span className={styles.rowTitle}>{title}</span>
+                          <span className={styles.rowMeta}>
+                            {a.party[locale]} · {a.reason[locale]}
+                          </span>
+                          <StatusMark status="drafted" size={16} className={styles.rowStatus} />
+                        </div>
+                        <Amount value={a.amount} locale={locale} className={styles.rowAmount} />
+                        <Link href="/chat/" className={cx(button.root, button.secondary, button.sm, styles.review)} aria-label={t('approvals.reviewLabel', { item: title })}>
+                          {t('approvals.review')}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+          ) : null}
+          <div className={styles.side}>
+            {live && data.today ? <Today facts={data.today} locale={locale} /> : null}
+            {data.activity.length > 0 ? <ActivityList items={data.activity} asOf={data.asOf} locale={locale} /> : null}
+          </div>
+        </div>
       ) : loading ? (
         <LoadingMark label={t('loading')} />
-      ) : null}
-
-      {shortcuts.length > 0 ? (
-        <nav aria-labelledby="shortcuts-title" className={styles.shortcuts}>
-          <h2 id="shortcuts-title" className={styles.caption}>
-            {t('shortcuts')}
-          </h2>
-          <ul className={styles.chips}>
-            {shortcuts.map((s) => (
-              <li key={s.id}>
-                <Link href={s.href} className={styles.chip}>
-                  {s.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
       ) : null}
     </section>
   );

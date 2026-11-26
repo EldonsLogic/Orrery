@@ -14,6 +14,8 @@ export type Kpi = {
   overdue?: number;
   /** Days the oldest item has waited. */
   oldestDays?: number;
+  /** Month-end values for the last six months, oldest first; drawn as a sparkline only where a trend earns its place. */
+  trend?: ReadonlyArray<number>;
 };
 
 export type ApprovalKind = 'purchase_order' | 'supplier_payment' | 'credit_note' | 'discount';

@@ -13,10 +13,10 @@ export const liveHome: HomeOverview = {
     payments: { count: 2, amount: 21050, currency: SAR },
   },
   kpis: [
-    { id: 'sales_month', value: { amount: 482350, currency: SAR }, change: 12.4 },
+    { id: 'sales_month', value: { amount: 482350, currency: SAR }, change: 12.4, trend: [361200, 392800, 377400, 405900, 429100, 482350] },
     { id: 'receivables', value: { amount: 216480, currency: SAR }, overdue: 3 },
     { id: 'awaiting_approval', value: { count: 4 }, oldestDays: 2 },
-    { id: 'cash', value: { amount: 1204880, currency: SAR }, change: -3.1 },
+    { id: 'cash', value: { amount: 1204880, currency: SAR }, change: -3.1, trend: [1068400, 1121700, 1159300, 1187600, 1243400, 1204880] },
   ],
   approvals: [
     {

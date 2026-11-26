@@ -42,6 +42,6 @@ export function HomeView({ port = fixtureHomePort }: { port?: HomePort }) {
       </section>
     );
   }
-  // While loading (and when the port has no overview) the header, Ask Seshna and the record shortcuts still show.
-  return <HomeScreen data={data ?? null} loading={data === undefined} company={current?.name ?? ''} person={session.displayName} shortcuts={items} />;
+  // While loading (and when the port has no overview) the header and Ask Seshna still show; records live in the navigation.
+  return <HomeScreen data={data ?? null} loading={data === undefined} company={current?.name ?? ''} person={session.displayName} />;
 }

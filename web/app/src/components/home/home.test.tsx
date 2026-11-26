@@ -8,14 +8,13 @@ import { messages, type Locale } from '../../i18n';
 import { liveHome, simulatingHome } from '../../home/fixture';
 import { fixtureHomePort, scopeOverview } from '../../home/port';
 import type { HomeOverview } from '../../home/types';
-import { HomeScreen } from './HomeScreen';
+import { HomeScreen, Sparkline } from './HomeScreen';
 
-const shortcuts = [{ id: 'sales_order', label: 'Sales orders', href: '/records/sales_order/' }];
 const render = (data: HomeOverview | null, locale: Locale = 'en', loading = false) =>
   renderToString(
     <div dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       <NextIntlClientProvider locale={locale} messages={messages[locale]} timeZone="UTC">
-        <HomeScreen data={data} loading={loading} company="Sample Trading Co" person="Sample Person" shortcuts={shortcuts} />
+        <HomeScreen data={data} loading={loading} company="Sample Trading Co" person="Sample Person" />
       </NextIntlClientProvider>
     </div>,
   );
@@ -35,8 +34,8 @@ describe('owner home (live)', () => {
     const out = text(render(liveHome));
     for (const k of ['sales_month', 'receivables', 'awaiting_approval', 'cash'] as const) expect(out).toContain(messages.en.home.kpis[k]);
     expect(out).toContain('482,350SAR');
-    expect(out).toContain('Up 12.4% on last month');
-    expect(out).toContain('Down 3.1% on last month');
+    expect(out).toContain('Up 12.4%on last month');
+    expect(out).toContain('Down 3.1%on last month');
     expect(out).toContain('3 overdue');
     expect(out).toContain('Oldest waiting 2 days');
   });
@@ -74,8 +73,24 @@ describe('owner home (not live, Arabic)', () => {
   it('keeps the header, Ask Seshna and shortcuts while loading', () => {
     const out = render(null, 'ar', true);
     expect(out).toContain(messages.ar.home.loading);
-    expect(out).toContain('Sales orders');
+    expect(out).toContain('id="ask-input"');
     expect(out).not.toContain('id="kpi-title"');
+  });
+});
+
+describe('KPI detail', () => {
+  it('draws sparklines for sales and cash only, decorative and unmirrored', () => {
+    const html = render(liveHome);
+    expect(html.match(/<polyline/g)).toHaveLength(2);
+    const spark = renderToString(<Sparkline values={[1, 2, 3, 2, 4, 5]} />);
+    expect(spark).toContain('aria-hidden="true"');
+    expect(spark).toContain('points="0.0,30.0');
+  });
+  it('puts each change in a success or danger pill and Review as a small secondary button', () => {
+    const html = render(liveHome);
+    expect(html).toMatch(/_success_[^"]*"><span aria-hidden="true"[^>]*><svg[\s\S]*?Up 12\.4%/);
+    expect(html).toMatch(/_danger_[^"]*"><span aria-hidden="true"[^>]*><svg[\s\S]*?Down 3\.1%/);
+    expect(html.match(/class="_root_[^"]* _secondary_[^"]* _sm_[^"]*[^"]*" aria-label="Review/g)).toHaveLength(liveHome.approvals.length);
   });
 });
 
@@ -94,7 +109,7 @@ describe('home styles', () => {
   const sheet = readFileSync(join(__dirname, 'Home.module.css'), 'utf8');
   it('uses glass only on the Ask Seshna entry and tabular figures for numbers', () => {
     expect(sheet.match(/^\s+backdrop-filter: var\(--glass-filter\)/gm)).toHaveLength(1);
-    expect(sheet).toMatch(/\.ask \{[^}]*var\(--glass-fill\)/);
+    expect(sheet).toMatch(/\.askField \{[^}]*var\(--glass-fill\)/);
     expect(sheet).toMatch(/\.figure \{[^}]*tabular-nums/);
     expect(sheet).not.toMatch(/\b\d+px\b/);
   });

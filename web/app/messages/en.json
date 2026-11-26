@@ -1269,7 +1269,7 @@
     },
     "confirm": {
       "title": "Proposed change",
-      "intro": "Seshna wants to run {tool} (risk {risk}). Check what will change.",
+      "intro": "Seshna drafted this change. Check it before anything is written.",
       "changes": "Changes",
       "change": "{field}: {before} to {after}",
       "empty": "empty",
@@ -1281,11 +1281,12 @@
       "after": "After",
       "edit": "Edit",
       "editHint": "Edit declines this draft and takes you back to the message box, so you can say what to change.",
-      "note": "Nothing is written until you confirm."
+      "note": "Nothing is written until you confirm.",
+      "status": "Status"
     },
     "approval": {
       "title": "Sent for approval",
-      "body": "{tool} (risk {risk}) needs an approver. Nothing has changed yet, and nothing posts until a person approves it in the approval inbox.",
+      "body": "Nothing has changed yet. A person must approve it in the approval inbox before anything posts.",
       "open": "Open the approval inbox"
     },
     "clarify": {
@@ -1308,6 +1309,20 @@
     "sources": {
       "label": "Sources",
       "open": "Open {record}"
+    },
+    "tools": {
+      "list": "List {entity}",
+      "get": "Open {entity}",
+      "create": "Create {entity}",
+      "update": "Update {entity}",
+      "submit": "Submit {entity}",
+      "cancel": "Cancel {entity}",
+      "deliver": "Deliver {entity}",
+      "generic": "Run a task"
+    },
+    "risk": {
+      "confirm": "You confirm",
+      "readOnly": "Read only"
     }
   },
   "onboarding": {

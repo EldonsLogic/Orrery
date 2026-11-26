@@ -23,7 +23,7 @@ export function fixtureScript(req: SendRequest): ReadonlyArray<ChatEvent> {
     return [
       { type: 'tool_call', callId: call, tool: 'sales_order.submit', risk: 'R3' },
       { type: 'tool_result', callId: call, outcome: 'pending_approval' },
-      { type: 'approval_pending', approvalId: id('a'), tool: 'sales_order.submit', risk: 'R3' },
+      { type: 'approval_pending', approvalId: id('a'), tool: 'sales_order.submit', risk: 'R3', record: { entity: 'sales_order', id: 'SO-00002' } },
       { type: 'run_finished', outcome: 'interrupt' },
     ];
   }
@@ -36,9 +36,10 @@ export function fixtureScript(req: SendRequest): ReadonlyArray<ChatEvent> {
         confirmId: id('k'),
         tool: 'sales_order.update',
         risk: 'R2',
+        record: { entity: 'sales_order', id: 'SO-00006' },
         changes: [
-          { label: 'Status', before: 'Draft', after: 'Confirmed' },
-          { label: 'Delivery date', before: '2026-03-06', after: '2026-03-09' },
+          { field: 'order_date', label: 'Order date', before: '2026-03-06', after: '2026-03-09' },
+          { field: 'subtotal', label: 'Subtotal', before: '300.00', after: '450.00' },
         ],
       },
       { type: 'run_finished', outcome: 'interrupt' },

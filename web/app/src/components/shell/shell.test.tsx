@@ -143,4 +143,11 @@ describe('shell chrome (WEB-029)', () => {
     expect(sheet).toMatch(/\.navWrap \{[^}]*background: var\(--glass-fill-tinted\)/);
     expect(sheet).not.toMatch(/gradient\(/);
   });
+  it('writes the prefixed backdrop filter first, so the minifier keeps the unprefixed one Chrome reads (glass blur)', () => {
+    for (const f of ['Shell.module.css', '../home/Home.module.css', '../chat/Chat.module.css']) {
+      const sheet = read(f);
+      expect(sheet).toContain('backdrop-filter: var(--glass-filter)');
+      expect(sheet).not.toMatch(/(?<!-webkit-)backdrop-filter: var\(--glass-filter\);\s*-webkit-backdrop-filter/);
+    }
+  });
 });

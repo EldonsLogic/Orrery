@@ -100,8 +100,9 @@
   border: var(--border-width) solid var(--color-border-control);
   border-radius: var(--radius-md);
   background: var(--glass-fill);
-  backdrop-filter: var(--glass-filter);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   box-shadow: var(--glass-highlight);
   transition: border-color var(--motion-fast) var(--motion-ease);
 }

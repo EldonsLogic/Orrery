@@ -142,7 +142,7 @@ describe('flows with the fake port', () => {
     expect(s.confirm?.risk).toBe('R2');
     expect(p.decisions).toEqual([]);
     const out = render('en', <ConfirmCard confirm={s.confirm!} onAnswer={() => {}} />);
-    expect(out).toContain('Status: Draft to Confirmed');
+    expect(out).toContain('Order date: 2026-03-06 to 2026-03-09'); // WEB-029: fixture fields carry Blueprint ids
     expect(out).toContain('>Confirm<');
     expect(out).toContain('>Cancel<');
     p.respond({ confirmId: s.confirm!.confirmId, accepted: true });

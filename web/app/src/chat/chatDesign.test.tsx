@@ -9,7 +9,7 @@ import { messages } from '../i18n';
 import { ChatScreen } from '../components/chat/ChatScreen';
 import { ApprovalCard, ChatError, ClarifyPrompt, ConfirmCard } from '../components/chat/Cards';
 import { Composer } from '../components/chat/Composer';
-import { MessageList, Thinking } from '../components/chat/Messages';
+import { ActivityList, MessageList, Thinking } from '../components/chat/Messages';
 import { createFakePort } from './fake';
 import { fixtureScript } from './fixture';
 import { parseChatEvent, parseSources, sourceHref } from './events';
@@ -147,5 +147,55 @@ describe('composer and empty state', () => {
   }
   it('keeps every size on the foundation roles (no px in the stylesheet)', () => {
     expect(sheet).not.toMatch(/\d+px/);
+  });
+});
+
+describe('customer-facing words (round 2)', () => {
+  const visible = (html: string) => html.replace(/<[^>]+>/g, ' ');
+  const confirm = {
+    confirmId: 'k1',
+    tool: 'sales_order.update',
+    risk: 'R2' as const,
+    record: { entity: 'sales_order', id: 'SO-00006' },
+    changes: [
+      { field: 'order_date', label: 'Order date', before: '2026-03-06', after: '2026-03-09' },
+      { field: 'state', label: 'Status', before: 'draft', after: 'pending_approval' },
+    ],
+  };
+  it('names the action and record in words, never the tool id or a risk code', () => {
+    const en = render('en', <ConfirmCard confirm={confirm} onAnswer={() => {}} />);
+    expect(visible(en)).toMatch(/Update sales order\s+SO-00006/);
+    expect(visible(en)).toContain(messages.en.chat.risk.confirm);
+    expect(visible(en)).not.toMatch(/sales_order\.|\bR[0-4]\b/);
+    expect(en).toContain('data-tool="sales_order.update"');
+    const ap = render('en', <ApprovalCard approval={{ approvalId: 'a1', tool: 'sales_order.submit', risk: 'R3', record: { entity: 'sales_order', id: 'SO-00002' } }} />);
+    expect(visible(ap)).toMatch(/Submit sales order\s+SO-00002/);
+    expect(visible(ap)).not.toMatch(/sales_order\.|\bR[0-4]\b/);
+    const act = render('ar', <ActivityList steps={[{ callId: 'c', tool: 'sales_order.list', risk: 'R0', outcome: 'ok' }, { callId: 'd', tool: 'made.up', risk: 'R4', outcome: 'denied' }]} />);
+    expect(visible(act)).toContain('عرض أوامر البيع');
+    expect(visible(act)).toContain(messages.ar.chat.tools.generic);
+    expect(visible(act)).not.toMatch(/sales_order|made\.up|\bR[0-4]\b/);
+  });
+  it('shows field labels and state values from the Blueprint in the reader language', () => {
+    const ar = visible(render('ar', <ConfirmCard confirm={confirm} onAnswer={() => {}} />));
+    expect(ar).toContain('تاريخ الطلب');
+    expect(ar).toContain(messages.ar.chat.confirm.status);
+    expect(ar).toContain('مسودة');
+    expect(ar).toContain('بانتظار الاعتماد');
+    expect(ar).not.toMatch(/Order date|Status|Draft|pending_approval/);
+  });
+  it('drops a confirmation whose record reference is malformed', () => {
+    expect(parseChatEvent({ type: 'confirm_required', confirmId: 'k', tool: 't.u', risk: 'R2', changes: [], record: { entity: 'x', id: '../y' } })).toBeNull();
+    expect(parseChatEvent({ type: 'approval_pending', approvalId: 'a', tool: 't.u', risk: 'R3', record: { entity: 'sales_order', id: 'SO-1' } })).toMatchObject({ record: { id: 'SO-1' } });
+    expect(parseChatEvent({ type: 'confirm_required', confirmId: 'k', tool: 't.u', risk: 'R2', changes: [{ field: 'Bad Field', label: 'x', before: '', after: '' }] })).toBeNull();
+  });
+  it('picks the mode with a segmented radiogroup, one 2px focus ring on the field', () => {
+    const out = render('en', <Composer mode="act" running={false} onMode={() => {}} onSend={() => true} onCancel={() => {}} />);
+    expect(out).toMatch(/role="radiogroup" aria-label="Mode"/);
+    expect(out.match(/type="radio"/g)).toHaveLength(4);
+    expect(out.match(/<input[^>]*checked=""[^>]*>/g)?.join('')).toContain('value="act"');
+    expect(out).not.toContain('<select');
+    expect(sheet).toMatch(/\.field:has\(\.textarea:focus-visible\) \{[^}]*outline: var\(--focus-ring-width\) solid var\(--color-primary\);[^}]*outline-offset: calc\(var\(--border-width\) \* -1\)/);
+    expect(sheet).not.toMatch(/\.field:focus-within/);
   });
 });

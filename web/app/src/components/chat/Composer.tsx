@@ -64,30 +64,30 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           }}
         />
         <div className={styles.bar}>
-          <label className={styles.mode}>
-            <VisuallyHidden>{tm('label')}</VisuallyHidden>
-            <select
-              className={styles.modeSelect}
-              value={mode}
-              aria-describedby="chat-mode-hint"
-              aria-disabled={running || undefined}
-              onMouseDown={(e) => {
-                if (running) e.preventDefault();
-              }}
-              onKeyDown={(e) => {
-                if (running && e.key !== 'Tab') e.preventDefault();
-              }}
-              onChange={(e) => {
-                if (!running) onMode(e.target.value as ChatMode);
-              }}
-            >
-              {MODES.map((m) => (
-                <option key={m} value={m}>
-                  {tm(`${m}.name`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* The mode as a segmented control: native radios (arrow keys move and select), one group, labelled and explained. */}
+          <div role="radiogroup" aria-label={tm('label')} aria-describedby="chat-mode-hint" aria-disabled={running || undefined} className={styles.modes}>
+            {MODES.map((m) => (
+              <label key={m} className={styles.modeOption}>
+                <input
+                  type="radio"
+                  name="chat-mode"
+                  value={m}
+                  checked={mode === m}
+                  className={styles.modeInput}
+                  onClick={(e) => {
+                    if (running) e.preventDefault();
+                  }}
+                  onKeyDown={(e) => {
+                    if (running && e.key !== 'Tab') e.preventDefault();
+                  }}
+                  onChange={() => {
+                    if (!running) onMode(m);
+                  }}
+                />
+                <span>{tm(`${m}.name`)}</span>
+              </label>
+            ))}
+          </div>
           <span className={styles.barEnd}>
             {text.length >= COUNT_FROM ? <span className={styles.count}>{t('count', { used: text.length, max: MAX_MESSAGE_LENGTH })}</span> : null}
             {running ? (

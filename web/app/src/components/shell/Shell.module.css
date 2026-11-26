@@ -43,8 +43,9 @@
   padding-inline: max(var(--page-pad), var(--safe-inline));
   padding-block-start: max(var(--space-1), var(--safe-block-start));
   background: var(--glass-fill);
-  backdrop-filter: var(--glass-filter);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border-block-end: var(--border-width) solid var(--glass-edge);
   box-shadow: var(--glass-highlight);
 }
@@ -187,8 +188,9 @@
   padding: var(--space-1);
   list-style: none;
   background: var(--glass-fill);
-  backdrop-filter: var(--glass-filter);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: var(--border-width) solid var(--glass-edge);
   border-radius: var(--radius-md);
   box-shadow: var(--glass-highlight), var(--shadow-overlay);
@@ -309,8 +311,9 @@
   margin-block-start: var(--space-1);
   padding: var(--space-2);
   background: var(--glass-fill);
-  backdrop-filter: var(--glass-filter);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border: var(--border-width) solid var(--glass-edge);
   border-radius: var(--radius-md);
   box-shadow: var(--glass-highlight), var(--shadow-overlay);
@@ -341,8 +344,9 @@
   flex: 0 0 var(--sidebar-width);
   box-sizing: border-box;
   background: var(--glass-fill-tinted);
-  backdrop-filter: var(--glass-filter);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border-inline-end: var(--border-width) solid var(--glass-edge);
 }
 
@@ -504,8 +508,9 @@
   padding: var(--space-1) max(var(--page-pad), var(--safe-inline));
   padding-block-end: max(var(--space-1), var(--safe-block-end));
   background: var(--glass-fill);
-  backdrop-filter: var(--glass-filter);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border-block-start: var(--border-width) solid var(--glass-edge);
   transition:
     transform var(--motion-fast) var(--motion-ease),

@@ -20,6 +20,12 @@ export function parseSources(raw: unknown): SourceRef[] | null {
   return out;
 }
 
+/** An optional record reference: undefined when absent, null when malformed (the whole event is then dropped). */
+const recordOf = (raw: unknown): SourceRef | undefined | null => {
+  if (raw === undefined) return undefined;
+  return parseSources([raw])?.[0] ?? null;
+};
+
 /** The route of a source record. Both parts are validated above; the id is still encoded. */
 export const sourceHref = (s: SourceRef): string => `/records/${s.entity}/${encodeURIComponent(s.id)}/`;
 
@@ -48,12 +54,18 @@ export function parseChatEvent(raw: unknown): ChatEvent | null {
       for (const c of e.changes as unknown[]) {
         const o = c as Record<string, unknown>;
         if (typeof o !== 'object' || o === null || !str(o.label) || typeof o.before !== 'string' || typeof o.after !== 'string') return null;
-        changes.push({ label: o.label, before: o.before, after: o.after });
+        if (o.field !== undefined && !(typeof o.field === 'string' && ENTITY.test(o.field))) return null;
+        changes.push(o.field ? { field: o.field as string, label: o.label, before: o.before, after: o.after } : { label: o.label, before: o.before, after: o.after });
       }
-      return { type: 'confirm_required', confirmId: e.confirmId, tool: e.tool, risk: e.risk, changes };
+      const rec = recordOf(e.record);
+      if (rec === null) return null;
+      return { type: 'confirm_required', confirmId: e.confirmId, tool: e.tool, risk: e.risk, changes, ...(rec ? { record: rec } : {}) };
     }
-    case 'approval_pending':
-      return str(e.approvalId) && str(e.tool) && risk(e.risk) ? { type: 'approval_pending', approvalId: e.approvalId, tool: e.tool, risk: e.risk } : null;
+    case 'approval_pending': {
+      const rec = recordOf(e.record);
+      if (!str(e.approvalId) || !str(e.tool) || !risk(e.risk) || rec === null) return null;
+      return { type: 'approval_pending', approvalId: e.approvalId, tool: e.tool, risk: e.risk, ...(rec ? { record: rec } : {}) };
+    }
     case 'abstain':
       return str(e.clarifyKey, 100) ? { type: 'abstain', clarifyKey: e.clarifyKey } : null;
     case 'run_error':

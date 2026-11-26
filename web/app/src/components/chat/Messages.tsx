@@ -7,10 +7,31 @@ import { Badge, Icon, Mark, VisuallyHidden } from '../../ui';
 import { LoadingMark } from '../marks/LoadingMark';
 import { textLang } from '../../chat/text';
 import { sourceHref } from '../../chat/events';
+import { toolPhrase } from '../../chat/labels';
 import { fixtureData } from '../../records/fixture/rows';
 import { pick } from '../../records/labels';
 import type { ActivityStep, ChatMessage, SourceRef, ToolOutcome } from '../../chat/types';
 import styles from './Chat.module.css';
+
+/** An action in words ("Update sales order SO-00006"), never the tool id. */
+export function ActionLabel({ tool, record }: { tool: string; record?: SourceRef }) {
+  const t = useTranslations('chat.tools');
+  const locale = useLocale();
+  const p = toolPhrase(fixtureData, tool, locale);
+  return (
+    <>
+      {t(p.key, { entity: p.entity })}
+      {record ? (
+        <>
+          {' '}
+          <bdi dir="ltr" className={styles.recordId}>
+            {record.id}
+          </bdi>
+        </>
+      ) : null}
+    </>
+  );
+}
 
 /** A Seshna turn: the mark at the start, the name, then the content at full column width (no bubble). */
 export function SeshnaTurn({ children, role, busy }: { children: ReactNode; role?: 'note'; busy?: boolean }) {
@@ -102,7 +123,7 @@ const TONE: Record<ToolOutcome | 'running', 'success' | 'warning' | 'danger' | '
   error: 'danger',
 };
 
-/** Tool name, risk class and outcome only. Arguments and results never reach this list. Quiet: a disclosure under the turn. */
+/** The action in words and its outcome only; the tool id and risk class stay in data attributes. Arguments and results never reach this list. */
 export function ActivityList({ steps, open = false }: { steps: ReadonlyArray<ActivityStep>; open?: boolean }) {
   const t = useTranslations('chat.activity');
   if (!steps.length) return null;
@@ -115,13 +136,10 @@ export function ActivityList({ steps, open = false }: { steps: ReadonlyArray<Act
       </summary>
       <ul className={styles.steps}>
         {steps.map((s) => (
-          <li key={s.callId} className={styles.step}>
-            <bdi className={styles.tool} lang="en">
-              {s.tool}
-            </bdi>
-            <Badge tone="neutral" aria-label={t('risk', { risk: s.risk })}>
-              {s.risk}
-            </Badge>
+          <li key={s.callId} className={styles.step} data-tool={s.tool} data-risk={s.risk}>
+            <span>
+              <ActionLabel tool={s.tool} />
+            </span>
             <Badge tone={TONE[s.outcome]}>{t(`outcome.${s.outcome}`)}</Badge>
           </li>
         ))}

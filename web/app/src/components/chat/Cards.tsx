@@ -1,13 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { Alert, Button, VisuallyHidden } from '../../ui';
 import { cx } from '../../ui/cx';
 import button from '../../ui/Button.module.css';
 import type { PendingApproval, PendingConfirm } from '../../chat/types';
+import { changeView } from '../../chat/labels';
+import { fixtureData } from '../../records/fixture/rows';
 import { StatusMark } from '../marks/StatusMark';
-import { SeshnaTurn } from './Messages';
+import { ActionLabel, SeshnaTurn } from './Messages';
 import styles from './Chat.module.css';
 
 /**
@@ -17,22 +19,20 @@ import styles from './Chat.module.css';
  */
 export function ConfirmCard({ confirm, onAnswer, onEdit }: { confirm: PendingConfirm; onAnswer: (accepted: boolean) => void; onEdit?: () => void }) {
   const t = useTranslations('chat.confirm');
+  const tr = useTranslations('chat.risk');
+  const locale = useLocale();
+  const rows = confirm.changes.map((c) => changeView(fixtureData, confirm.record?.entity, c, locale, t('status')));
+  // Tool id and risk class stay out of sight (data attributes for support); the card says the action and the step in words.
   return (
-    <section aria-labelledby="chat-confirm-title" className={styles.proposal}>
+    <section aria-labelledby="chat-confirm-title" className={styles.proposal} data-tool={confirm.tool} data-risk={confirm.risk}>
       <header className={styles.proposalHead}>
         <StatusMark status="drafted" className={styles.proposalStatus} />
-        <span className={styles.proposalRisk}>
-          <bdi lang="en" className={styles.tool}>
-            {confirm.tool}
-          </bdi>
-          <span aria-hidden="true">·</span>
-          <span>{confirm.risk}</span>
-        </span>
+        <span className={styles.proposalStep}>{tr('confirm')}</span>
       </header>
       <h2 id="chat-confirm-title" className={styles.proposalTitle}>
-        {t('title')}
+        <ActionLabel tool={confirm.tool} record={confirm.record} />
       </h2>
-      <p className={styles.proposalIntro}>{t('intro', { tool: confirm.tool, risk: confirm.risk })}</p>
+      <p className={styles.proposalIntro}>{t('intro')}</p>
       {confirm.changes.length ? (
         <div className={styles.diff}>
           <div className={styles.diffHead} aria-hidden="true">
@@ -41,7 +41,7 @@ export function ConfirmCard({ confirm, onAnswer, onEdit }: { confirm: PendingCon
             <span>{t('after')}</span>
           </div>
           <ul className={styles.diffRows} aria-label={t('changes')}>
-            {confirm.changes.map((c, i) => (
+            {rows.map((c, i) => (
               <li key={i} className={styles.diffRow}>
                 <VisuallyHidden>{t('change', { field: c.label, before: c.before || t('empty'), after: c.after || t('empty') })}</VisuallyHidden>
                 <span aria-hidden="true" className={styles.diffField} dir="auto">
@@ -83,19 +83,15 @@ export function ConfirmCard({ confirm, onAnswer, onEdit }: { confirm: PendingCon
 export function ApprovalCard({ approval }: { approval: PendingApproval }) {
   const t = useTranslations('chat.approval');
   return (
-    <section aria-label={t('title')} className={styles.proposal} data-kind="approval">
+    <section aria-label={t('title')} className={styles.proposal} data-kind="approval" data-tool={approval.tool} data-risk={approval.risk}>
       <header className={styles.proposalHead}>
         <StatusMark status="drafted" className={styles.proposalStatus} />
-        <span className={styles.proposalRisk}>
-          <bdi lang="en" className={styles.tool}>
-            {approval.tool}
-          </bdi>
-          <span aria-hidden="true">·</span>
-          <span>{approval.risk}</span>
-        </span>
+        <span className={styles.proposalStep}>{t('title')}</span>
       </header>
-      <h2 className={styles.proposalTitle}>{t('title')}</h2>
-      <p className={styles.proposalIntro}>{t('body', { tool: approval.tool, risk: approval.risk })}</p>
+      <h2 className={styles.proposalTitle}>
+        <ActionLabel tool={approval.tool} record={approval.record} />
+      </h2>
+      <p className={styles.proposalIntro}>{t('body')}</p>
       <div className={styles.proposalActions}>
         <Link href="/approvals/" className={cx(button.root, button.secondary, button.md)}>
           {t('open')}

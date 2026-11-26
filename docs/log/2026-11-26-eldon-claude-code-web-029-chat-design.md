@@ -18,10 +18,10 @@ WEB-029 part 3: the chat screen design pass, plus every open note from the home 
 - docs/brand/tools/build_tokens_css.py and the regenerated docs/brand/tokens/tokens.css: type sizes and line heights in rem on a 16 px root; foundation KPI roles in rem.
 - web/app/messages/{en,ar}.json: chat, rail and placeholder strings; the assistant is named Seshna.
 - web/scripts/check-contrast.mjs and its test: the old chat bubble pairs replaced by the user turn and the rail tooltip.
-- docs/open-questions.md: Q-629 (approve in the chat versus ADR-0044).
+- docs/open-questions.md: Q-681 (approve in the chat versus ADR-0044).
 
 ## Decisions
-- Approve / Edit / Reject from the brief is mapped to Confirm / Edit / Cancel on the confirm card; approvals stay in the inbox (ADR-0044 item 2, WEB-004 tests). Open as Q-629.
+- Approve / Edit / Reject from the brief is mapped to Confirm / Edit / Cancel on the confirm card; approvals stay in the inbox (ADR-0044 item 2, WEB-004 tests). Open as Q-681.
 - Edit declines the draft (fail closed) and returns focus to the composer; there is no edit API.
 - Tooltips on the rail use CSS alt text (`content: attr(data-label) / ''`) so names are not read twice.
 
@@ -33,3 +33,12 @@ Not measured.
 
 ## Next step
 WEB-029 follow-ups: the AG-UI mapper (WEB-026) must emit `sources` from the server for real answers; prefill the chat composer from the home Ask field; BRD: Seshna icon set from the Nuqta S geometry (swap in ui/Icon.tsx).
+
+## Round 2 (coordinator review, same session)
+- No jargon: cards and the activity list say the action in words with the record ("Update sales order SO-00006", from the Blueprint's entity labels) and the step in words ("You confirm", "Sent for approval"); tool ids and risk codes only in `data-tool` / `data-risk`. `confirm_required` and `approval_pending` take an optional validated `record`; change lines an optional Blueprint `field` id (web/app/src/chat/labels.ts).
+- Diff table in the reader's language: field labels and workflow state values from the Blueprint; the WEB-004 test line now checks the fixture's order date change.
+- Top bar overlap: the minifier kept only `-webkit-backdrop-filter` of each pair, so Chrome drew every glass surface without blur and text under the top bar stayed readable. The prefixed property now comes first in every sheet (test added); blur verified in the built CSS and the browser.
+- Mode picker: a segmented radiogroup (native radios, arrow keys) instead of a select.
+- Composer focus: one 2px ring over the field's own border.
+- Open question renumbered Q-681 (Q-629 is the partner's in #335).
+- Screenshots: chat at 375/768/1024/1440, EN and AR, light and dark (round 4); no horizontal overflow.

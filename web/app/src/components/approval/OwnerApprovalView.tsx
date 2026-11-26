@@ -19,7 +19,14 @@ const isolate = (v: string): string => `\u2068${v}\u2069`; // keep untrusted tex
  * network here. All customer- or document-derived text is a React text child (never HTML); sentences are label keys.
  * Not wired to the live host until Q-544 and Q-505 are settled.
  */
-export function OwnerApprovalView({ view, port, initialChoice = null }: { view: ReviewModel; port: ApprovalPort; initialChoice?: DecisionKey | null }) {
+export function OwnerApprovalView(props: { view: ReviewModel; port: ApprovalPort; initialChoice?: DecisionKey | null }) {
+  const v = props.view;
+  // The form and its status belong to one review: a different tenant, Blueprint or digest remounts the screen, so a
+  // status, a pending call's result or a choice from the earlier review can never show on the new one.
+  return <ApprovalScreen key={JSON.stringify([v.tenantId, v.blueprintId, v.blueprintDigest, v.quoteDigest])} {...props} />;
+}
+
+function ApprovalScreen({ view, port, initialChoice = null }: { view: ReviewModel; port: ApprovalPort; initialChoice?: DecisionKey | null }) {
   const locale = useLocale();
   const t = useTranslations('ownerApproval') as unknown as Translate & { has: (k: string) => boolean };
   const say = (key: string, values?: Record<string, string | number>) => {
@@ -31,7 +38,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
   const money = (m: Money) => <bdi dir="ltr" className={styles.num}>{`${m.currency} ${m.text}`}</bdi>;
   const when = (iso: string) => {
     const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeZone: 'UTC' }).format(d);
+    return Number.isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short' }).format(d);
   };
 
   // The form belongs to the view it was filled against: when either digest changes, the choice, reason, note and ticks are gone.
@@ -42,7 +49,8 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
   const choice = form?.decision ?? null;
   const opt = view.decisions.find((d) => d.key === choice);
   const stale = status.kind === 'stale';
-  const ready = !!form && buildRequest(view, form) !== null && status.kind !== 'sending' && !stale;
+  const sending = status.kind === 'sending';
+  const ready = !!form && buildRequest(view, form) !== null && !sending && !stale;
   const patch = (p: Partial<Form>) => form && setStored({ ...form, ...p });
 
   const pickChoice = (d: DecisionKey) => setStored(emptyForm(view, d));
@@ -119,6 +127,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
             <Card as="article" className={styles.card}>
               <h3>
                 <bdi className={styles.name}>{loc(it.labels)}</bdi> <span className={styles.muted}>({say(it.kindKey)})</span>
+                <span className={styles.muted}> {t('ui.itemId')}: </span><bdi dir="ltr" className={styles.num}>{it.id}</bdi>
               </h3>
               {it.details ? detail(it.details) : null}
             </Card>
@@ -235,7 +244,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
                 <Button
                   key={d.key}
                   variant={d.key === 'approve' ? 'primary' : d.key === 'reject' ? 'danger' : 'secondary'}
-                  disabled={!d.allowed || stale}
+                  disabled={!d.allowed || stale || sending}
                   aria-pressed={choice === d.key}
                   onClick={() => pickChoice(d.key)}
                 >
@@ -245,7 +254,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
             </div>
             {opt && opt.allowed && !stale ? (
               <div className={styles.form}>
-                <Select label={t('ui.reason')} value={form?.reason ?? ''} onChange={(e) => patch({ reason: e.target.value })}>
+                <Select label={t('ui.reason')} disabled={sending} value={form?.reason ?? ''} onChange={(e) => patch({ reason: e.target.value })}>
                   <option value="">{t('ui.reasonPick')}</option>
                   {opt.reasons.map((r) => (
                     <option key={r.value} value={r.value}>{say(r.labelKey)}</option>
@@ -253,6 +262,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
                 </Select>
                 <TextField
                   id={noteId}
+                  disabled={sending}
                   label={t('ui.note')}
                   hint={t('ui.noteHint', { limit: view.noteLimit })}
                   maxLength={view.noteLimit}
@@ -260,7 +270,7 @@ export function OwnerApprovalView({ view, port, initialChoice = null }: { view: 
                   onChange={(e) => patch({ note: e.target.value })}
                 />
                 {opt.key === 'approve' ? (
-                  <fieldset>
+                  <fieldset disabled={sending}>
                     <legend>{t('ui.confirmHeading')}</legend>
                     {view.confirmations.map((c) => (
                       <Checkbox

@@ -1437,6 +1437,7 @@
       "done": "Your decision was recorded.",
       "blockers": "Why you cannot decide",
       "more": "{count} more items are not listed.",
+      "itemId": "ID",
       "noItems": "Nothing listed.",
       "recurring": "Monthly subscription",
       "oneOff": "One-off charges",

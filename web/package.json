@@ -2,7 +2,9 @@
   "name": "web",
   "private": true,
   "packageManager": "pnpm@10.34.9",
-  "engines": { "node": ">=20.9.0" },
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "tokens": "node scripts/copy-tokens.mjs",
     "lint": "eslint . && node scripts/check-tokens-only.mjs && node scripts/check-rtl-css.mjs && node scripts/check-css-vars.mjs && node scripts/check-contrast.mjs",
@@ -15,6 +17,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.5",
     "eslint": "9.39.5",
+    "jsdom": "26.1.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.73.0",
     "vitest": "4.1.12"

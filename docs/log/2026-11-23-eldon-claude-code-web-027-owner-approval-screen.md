@@ -32,3 +32,9 @@ R1: the form is bound to the view digests (`Form.for`, `emptyForm`); a form made
 
 ## Q-585 applied
 Eldon decided Q-585 (2026-11-23): the three read confirmations are required only to approve. `buildRequest` sends reject and request changes without them (empty list) and the screen hides the ticks for those choices. Q-585 marked resolved.
+
+## Review fixes (partner review of PR #285)
+- Screen remounts per tenant, Blueprint and both digests (status and pending result can no longer carry over); decision controls disabled while sending.
+- Summary shows each item ID next to its name; valid-until shows localized date, time and timezone (Intl, ar and en).
+- Q-526 row updated (delivered on fixtures; confirmations for approvals only, Q-585).
+- Tests: `approvalLive.test.tsx` (jsdom, added as a web dev dependency), 5 new, red before and green after.

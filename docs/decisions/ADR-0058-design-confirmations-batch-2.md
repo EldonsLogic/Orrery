@@ -1,8 +1,8 @@
 # ADR-0058: Design confirmations, batch 2 (compiler scope, connectors, fonts, Tool API risk)
 
-Status: Proposed
+Status: Accepted
 Owner: eldon
-Approved by: pending (partner review)
+Approved by: Eldon, answering for both founders, 2026-11-25, recorded in docs/log/2026-11-25-eldon-claude-code-founder-answers-adr-0057-0058.md
 
 ## Context
 ADR-0057 (Proposed, PR #253, not yet merged) proposes answers to the first batch of "confirm" rows in [docs/open-questions.md](../open-questions.md); this ADR does not depend on its content, but should merge after #253 because both add to `docs/decisions/INDEX.md`. A second pass over the open Eldon-owned rows found 21 candidates. Each was re-read against the current row and the cited code end to end; a row is kept here only when the code (or an accepted ADR or existing plan row) truly answers it. Rows that need a founder business, legal or tax decision, partner work, a contract schema change, or that rest on thin evidence are left open (listed below). Everything decided here is in Eldon's lane or in an existing row; no obligation is added to the partner's lane.

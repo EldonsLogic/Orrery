@@ -235,7 +235,7 @@
   },
   "x-validator-rules": [
     "integrity.contentHash equals sha256 of the canonical JSON of the artifact without artifactId and integrity; artifactId equals 'art_' + the first 32 hex characters of that hash.",
-    "steps[].seq is 1..n in array order; steps are sorted by (phase, pointer, kind); no two steps share (kind, pointer).",
+    "steps[].seq is 1..n in array order; steps are sorted by (phase, pointer, kind), then for settings.set by params.property; no two steps share (kind, pointer), except that settings.set is keyed on (kind, pointer, params.property): several settings.set steps may share a section pointer if their properties differ (ADR-0057, Q-51).",
     "components are sorted by id with unique ids; skippedOps by pointer; postConditions by id; sourceOps within a step by pointer.",
     "Every op of the source diff appears exactly once, either in some step's sourceOps or in skippedOps; derivedFrom does not count.",
     "A derived reorder (a step with derivedFrom): every derivedFrom pointer is an add or remove op of the source diff on a direct child of the step's pointer, and is in the sourceOps of another step of the same artifact; the step's params.order lists exactly the keys active when it runs (phase 6: the target keys in target order, then the removed keys) (ADR-0072).",

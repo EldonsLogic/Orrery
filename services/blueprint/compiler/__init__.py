@@ -1,6 +1,6 @@
 """Blueprint compiler (BPL-004): Blueprint + component registry + engine mapping -> compiled artifact.
 
-Contracts: compiled-artifact.schema.json 0.1.0, engine-adapter.md 0.1.2 section 9, engine-mapping.schema.json 0.1.0.
+Contracts: compiled-artifact.schema.json 0.1.0, engine-adapter.md 0.1.3 section 9, engine-mapping.schema.json 0.1.0.
 Deterministic and pure. It emits configuration only: no ledger, tax, e-invoice or payroll figure, rate or rule is
 computed or chosen here; every value in a step is copied verbatim from the Blueprint (ADR-0030, ADR-0033).
 
@@ -13,12 +13,8 @@ Open questions (conservative reading taken; to move to docs/open-questions.md):
 1. Initial build source diff. The contract compiles from diff(base, target), but an initial build has no base.
    The compiler diffs an empty skeleton (same top-level containers, no content) to the target with bpdiff, takes
    sourceOps, skippedOps and risk counts from that diff, and sets diffHash null as the schema requires.
-2. settings.set uniqueness. x-validator-rules say no two steps share (kind, pointer), but every company,
-   compliance and i18n property is its own settings.set on the section pointer ("/company"), as the fake adapter's
-   test kit stand-in does. The property breaks the sort tie. Contract needs either a per-property pointer or an
-   exemption for settings.set.
-3. i18n.labelOverrides. Contract 9.3 names only i18n.defaultLocale (settings.set) and the glossary (skipped).
-   labelOverrides is compiled as settings.set, matching the fake's settings_intl exported properties.
+2. settings.set uniqueness. RESOLVED (ADR-0057 Q-51, contract 0.1.3): the key is (kind, pointer, params.property).
+3. i18n.labelOverrides. RESOLVED (ADR-0057 Q-52, contract 0.1.3 section 9.3): compiled as settings.set.
 4. Adapter id. The BPL-005 fixture and the golden mapping target adapter "change_engine"; the fake adapter and
    the sample artifacts use the engine's name (contract 16.12). The compiler passes meta.engineTarget through.
 5. Phase order versus references. Contract 9.4 says additions run before their users, but entity.add (phase 4)

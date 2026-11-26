@@ -2183,9 +2183,13 @@ class TestFooterAndArabicReview(unittest.TestCase):
                 doc = _render(kind)
                 self.assertNotIn("Orrery", doc)
                 self.assertNotIn("orrery", doc.lower())
+                self.assertNotIn("Seshna", doc)
+                self.assertNotIn("seshna", doc.lower())
                 self.assertIn(en, doc)
                 self.assertIn(ar, doc)
-                self.assertNotIn("Orrery", _render(kind, branding=TENANT_BRANDING))
+                branded = _render(kind, branding=TENANT_BRANDING)
+                self.assertNotIn("Orrery", branded)
+                self.assertNotIn("Seshna", branded)
 
     def test_footer_label_is_unreviewed_arabic(self):
         self.assertIn("powered_by", UNREVIEWED_ARABIC_LABELS)

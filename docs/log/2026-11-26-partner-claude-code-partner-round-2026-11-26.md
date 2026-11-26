@@ -66,6 +66,7 @@ Live coordinator log for the partner lane (RULES 51), continuing from 2026-11-25
   - not reviewed: #232 (PLT-009, partner's lane per Q-127; take over or close is the partner's call).
 - Reviewer quota: Antigravity ran out at 12:27Z (about 3 h); the partner said to move to another provider, so reviews went to Codex GPT-6.2 Sol; both ChatGPT accounts then ran out (one until 2026-11-28); the partner said to run Claude only to finish the round, so #286 and #287 ran on Claude Fable 5.2, labelled same-family (not the RULES 42 different-model review).
 - #309 (BPL-040, ADR-0068 Proposed, Tier 3) merged on the partner's say-so ("yes, proceed and merge", 2026-11-26) after Eldon's approval at 64286522; main merged in first (row statuses only, ADR text unchanged). E8 (NULL vs '' on the bench) stays an acceptance condition.
+- #319 (CMP-010 KSA VAT return design, Tier 3) merged on the partner's say-so ("yes 319", 2026-11-26) after Eldon's approval at 2ee642a4; main merged in first (only `docs/open-questions.md`, design text unchanged). The accountant review is still required before CMP-010 code.
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-round-2026-11-26.md: this live log.
@@ -79,6 +80,6 @@ Unknown.
 
 ## Next step
 - Eldon: re-reviews #335, #336, #337 and #338; first read of #344. #337 (Tier 2) merges after his re-review and a look at one real-bench PDF (his merge condition), or after he waives the PDF.
-- Partner: Tier 3 say-so on #319 (then the accountant); #309 merged. Decide #232 (PLT-009). Tier 3 approvals on Eldon's PRs once their defects are fixed.
+- Partner: #309 and #319 merged; CMP-010 waits on the accountant. Decide #232 (PLT-009). Tier 3 approvals on Eldon's PRs once their defects are fixed.
 - After #338 merges: BPL-044 and BPL-033 (same file), CE-SEC-016, CE-SEC-011 slice 2. After #336: CE-SEC-012 to CE-SEC-015. After #335: PLT-028 code. After #344: CMP-041.
 - Worktrees on this machine: `orrery-wt/cmp-039-pack-loader-design` and the existing T3 worktrees for #335 to #338; remove after merge.

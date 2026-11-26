@@ -295,6 +295,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | FND-005 | Data room | Fundraising | G2 | LEG-010 | eldon | todo |
 | FND-006 | Autonomy and reuse chart for investors | Fundraising | G3 | BPL-022,GTM-006 | eldon | todo |
 | FND-007 | Cap table and funding terms with counsel | Fundraising | G3 | LEG-010 | eldon | todo |
+| FND-008 | Investor narrative, built by Eldon and his Claude session: a one-page thesis and story (problem, why now, wedge market, how the product works, moat and trust work, proof plan from the first pilot, business model, the ask), refreshed at each gate exit. The narrative lives outside the repo (AGENTS.md: no investor documents in the repo); this row tracks the work, and FND-004 builds the deck from it | Fundraising | G1 | - | eldon | todo |
 | CMP-021 | Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) | Compliance | G1 | BPL-002,BPL-009 | partner | done |
 | CMP-022 | Calendar and Hijri (Umm al-Qura) conversion library choice, licence and tests | Compliance | G1 | CMP-005 | partner | done |
 | CMP-023 | Per-company calendar and week settings (week start, weekend, working days and hours, Ramadan hours, number system) | Compliance | G2 | CMP-021,CMP-022 | partner | doing |

@@ -92,11 +92,13 @@ def steps_from_ops(ops: list[dict]) -> tuple[list[dict], list[dict], list[Issue]
 
 def post_conditions(steps: list[dict], target: dict) -> list[dict]:
     """At least one check per step subject (9.7), using only ids and counts, never properties the adapter may not
-    export (15.2): `exists` per subject, `count_equals` per top-level collection, `order_equals` for entity fields
-    and workflow states (order-significant, keyed by id)."""
+    export (15.2): `exists` per subject (`quarantined` or `disabled` for a removal), `count_equals` per top-level
+    collection, `order_equals` for the fields and states of entities and workflows a step touches."""
     rows: dict[tuple, dict] = {}
     for s in steps:
-        rows[(s["pointer"], "exists")] = {"check": "exists", "pointer": s["pointer"]}
+        check = "quarantined" if s["kind"].endswith(".quarantine") else "disabled" if s["kind"].endswith(".disable") \
+            else "exists"
+        rows[(s["pointer"], check)] = {"check": check, "pointer": s["pointer"]}
     for section in ADD_KIND:
         if any(s["pointer"].startswith("/" + section + "/") for s in steps):
             rows[("/" + section, "count_equals")] = {"check": "count_equals", "pointer": "/" + section,
@@ -104,7 +106,8 @@ def post_conditions(steps: list[dict], target: dict) -> list[dict]:
     for section, child in ORDER_CHECKS:
         for node in target.get(section, []):
             keys = [c["id"] for c in node.get(child, [])]
-            if keys:
+            own = f"/{section}/{_esc(node['id'])}"
+            if keys and any(s["pointer"] == own or s["pointer"].startswith(own + "/") for s in steps):
                 pointer = f"/{section}/{_esc(node['id'])}/{child}"
                 rows[(pointer, "order_equals")] = {"check": "order_equals", "pointer": pointer, "expected": keys}
     out = []

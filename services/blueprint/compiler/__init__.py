@@ -6,6 +6,7 @@ computed or chosen here; every value in a step is copied verbatim from the Bluep
 
     from compiler import compile_blueprint, plan_view
     result = compile_blueprint(blueprint, registry, mapping, environment="sandbox")
+    change = compile_blueprint(target, registry, mapping, environment="sandbox", base=base)  # with its inverse
     result.ok, result.artifact, result.errors
 
 Open questions (conservative reading taken; to move to docs/open-questions.md):
@@ -33,8 +34,8 @@ Open questions (conservative reading taken; to move to docs/open-questions.md):
 11. Post-conditions use exists, count_equals and order_equals only: exportedProperties lists are open (16.3), so
    property_equals could fail on a correct site. Approval steps and report metrics are not order-checked because
    they are not keyed by id.
-12. Scope. Only the initial build (base null, no inverse) is compiled. Incremental compiles (base to target with an
-   embedded inverse, as in the samples) need their own plan row or a scope decision.
+12. Scope. compile_blueprint(..., base=<revision>) compiles base to target with an embedded inverse (BPL-039, ADR-0058,
+   rules and refusals in incremental.py); without a base it compiles the initial build (base null, no inverse).
 13. Environment. The Blueprint has no target environment field; the caller passes it. The CLI defaults to
    production, which fails closed for draft mappings and below-certified components.
 """

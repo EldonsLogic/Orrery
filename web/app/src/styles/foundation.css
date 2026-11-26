@@ -48,9 +48,10 @@
   /* Page frame: content max width and fluid padding (16 phone, 24 tablet, 32 laptop, 48 desktop). */
   --page-max: 1280px;
   --page-pad: var(--space-2);
-  /* A flat, solid Cobalt tint behind the top of each screen (not a gradient), so glass chrome has something to show. */
+  /* Space above the first section of a screen (24 on phones, 48 from tablet up). */
+  --main-pad-block: var(--space-3);
+  /* A flat, solid Cobalt tint for the top band of a screen's hero (not a gradient), so glass chrome has something to show. */
   --page-band: color-mix(in srgb, var(--color-primary) 4%, var(--color-background));
-  --page-band-size: 280px;
 
   /* Glass, solid by default. */
   --glass-alpha: 100%;
@@ -67,6 +68,7 @@
 @media (min-width: 48rem) {
   :root {
     --page-pad: var(--space-3);
+    --main-pad-block: var(--space-6);
   }
 }
 

@@ -18,6 +18,7 @@ BPL-044 (#310 re-review N2): before a field step, the execute path now reads the
 ## Files touched
 - apps/engine/change_engine/change_engine/adapter/frappe_backend.py: `_has_docfield`, DocField read in `_apply_or_restore_custom_field`.
 - apps/engine/change_engine/change_engine/tests/test_bpl_044_docfield_snapshot.py: new regression tests.
+- .github/workflows/tests.yml: the new test joins the BPL-027 offline step (CI fails closed on unmapped tests).
 - docs/PLAN.md: BPL-044 done once this merges (left `doing` here).
 
 ## Decisions

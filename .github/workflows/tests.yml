@@ -88,7 +88,7 @@ jobs:
             case "$path" in
               */test_*.py|*/tests.py|*/tests/*_test.py)
                 case "$path" in
-                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/core/hrms_skeleton/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*|components/compliance/company_calendar/tests/*) continue ;;
+                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|contracts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/core/hrms_skeleton/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*|components/compliance/company_calendar/tests/*) continue ;;
                   components/sales/trading/tests/*) continue ;;
                   services/discovery/accountant_view/tests/*|services/discovery/gap_analysis/tests/*|services/discovery/quote/tests/*|services/discovery/template_flow/tests/*|services/operate/memory/tests/*) continue ;;
                 esac
@@ -143,6 +143,7 @@ jobs:
           echo "engine=$(check_path '^(apps/engine/|services/blueprint/|services/discovery/(prevalidate|connectors)/|components/|infra/dev/docker/|docs/brand/tokens/tokens\.json$)')" >> "$GITHUB_OUTPUT"
           echo "evals=$(check_path '^(evals/|services/(blueprint|discovery|operate)/)')" >> "$GITHUB_OUTPUT"
           echo "scripts=$(check_path '^scripts/')" >> "$GITHUB_OUTPUT"
+          echo "contracts=$(check_path '^contracts/')" >> "$GITHUB_OUTPUT"
           echo "infra=$(check_path '^(infra/|apps/engine/)')" >> "$GITHUB_OUTPUT"
           echo "components=$(check_path '^(components/|apps/engine/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
 
@@ -468,6 +469,13 @@ jobs:
       - name: Script tests (phase exit check)
         if: steps.filter.outputs.scripts == 'true' && !cancelled()
         run: python3 -m pytest scripts/tests -q
+
+      # --- contracts ---
+      - name: Country pack store contract tests (CMP-038)
+        if: steps.filter.outputs.contracts == 'true' && !cancelled()
+        run: |
+          pip install jsonschema referencing pytest
+          python3 -m pytest contracts/tests -q
 
       # --- infra ---
       # Dev bench discovery loads apps/engine/change_engine/change_engine/tests/test_erp_014_accounting_properties.py.

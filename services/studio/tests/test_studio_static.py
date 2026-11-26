@@ -82,3 +82,16 @@ def test_fonts_are_self_hosted_with_no_external_origin(client):
     assert headers["Content-Type"] == "font/woff2"
     status, _, _ = client.get("/fonts/../server.py")
     assert status != 200
+
+
+def test_every_font_url_in_served_stylesheet_resolves_as_woff2(client):
+    status, css, headers = client.get("/fonts/fonts.css")
+    assert status == 200 and headers["Content-Type"].startswith("text/css")
+    urls = re.findall(r"url\(\s*[\"']?([^\"')]+)[\"']?\s*\)", css.decode("utf-8"))
+    assert urls, "fonts.css declares no font files"
+    for url in urls:
+        assert url.startswith("/fonts/"), url
+        status, body, headers = client.get(url)
+        assert status == 200, url
+        assert headers["Content-Type"] == "font/woff2", url
+        assert len(body) > 0, url

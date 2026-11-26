@@ -11,6 +11,7 @@
 .input {
   flex: 1;
   text-align: end;
+  font-family: var(--font-heading); /* figures: Cairo, equal-width Western digits (BRD-011) */
   font-variant-numeric: tabular-nums;
 }
 

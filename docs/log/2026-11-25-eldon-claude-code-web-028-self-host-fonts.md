@@ -26,3 +26,11 @@ Founder decision on tabular figures for amounts (Cairo digits, accept proportion
 
 ## Addendum: tabular figures decision (2026-11-25)
 Implemented Eldon's decision: `.numeric` in Table and TextField and `.day` in DatePicker set `font-family: var(--font-heading)` (Cairo) with `tabular-nums`. No new token. Recorded in `docs/brand/font-licence-check.md` item 7. Known limit: Arabic-Indic digits stay proportional until a tabular instance exists.
+
+## Addendum: partner review fixes on PR #320 (2026-11-26)
+- Merged origin/main into the branch (no rebase).
+- CI: `.github/workflows/tests.yml` now lists `web/app/public/fonts/**` and `web/app/src/styles/fonts.css` in both `paths` triggers (after `!web/**`) and in the Studio suite filter.
+- Studio test `test_every_font_url_in_served_stylesheet_resolves_as_woff2` parses `url(...)` in the served fonts.css and asserts 200 and `font/woff2` for each.
+- `DatePicker.module.css`: typed date input uses `var(--font-heading)` with `tabular-nums`.
+- Glyph coverage verified with fontTools on the shipped subset files: both subsets lack U+063B to U+063F; Readex Pro subset also lacks U+06F0 to U+06F9. Cairo subset covers 102/256 and Readex Pro 73/256 of U+0600 to U+06FF. Corrected `docs/brand/font-licence-check.md` and refreshed `docs/legal/licence-register.md` (bundled status, Studio references).
+- Checks: Studio pytest 72 passed; web test 337 passed; web lint ok; check_docs, check_repo_hygiene, check_plan_independence ok.

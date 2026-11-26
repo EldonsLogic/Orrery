@@ -9,6 +9,7 @@ Implements ADR-001 (Rev 2.3) Section 8, Section 9, and Section 9.1:
 - Clears DocType cache and records durable recovery audit trail.
 """
 
+import logging
 import time
 from typing import Any, Dict, List, Optional, Set, Union
 
@@ -18,7 +19,15 @@ except ImportError:
     frappe = None
 
 from .safety_guardrails import TIER_1_GOVERNANCE_ROLES
-from .schema_reconciler import make_bounded_lock_key
+from .schema_reconciler import (
+    acquire_scoped_locks,
+    begin_fresh_read_view_checked,
+    blocked_response,
+    engine_refusal,
+    release_scoped_locks,
+)
+
+logger = logging.getLogger(__name__)
 
 AUTHORIZED_ROLLBACK_ROLES: Set[str] = {
     "System Manager",
@@ -26,6 +35,32 @@ AUTHORIZED_ROLLBACK_ROLES: Set[str] = {
     "Operations Director",
     "Sales Manager",
 }
+
+
+def _read_record(db: Any, deployment_id: str) -> Optional[Dict[str, Any]]:
+    if hasattr(db, "get_deployment_record") and callable(getattr(db, "get_deployment_record", None)):
+        return db.get_deployment_record(deployment_id)
+    if hasattr(db, "audit_journal") and isinstance(db.audit_journal, dict):
+        return db.audit_journal.get(deployment_id)
+    return None
+
+
+def _already_finished(record: Dict[str, Any], deployment_id: str, start_time: float) -> Optional[Dict[str, Any]]:
+    """The answer for a deployment that is already rolled back or quarantined, else ``None``."""
+    status = record.get("status")
+    if status not in ("ROLLED_BACK", "QUARANTINED"):
+        return None
+    done = "rolled back" if status == "ROLLED_BACK" else "quarantined"
+    return {
+        "deployment_id": deployment_id,
+        "status": status,
+        "success": True,
+        "disposition": f"ALREADY_{status}",
+        "message": f"Deployment '{deployment_id}' is already {done}.",
+        "doctype": record.get("doctype"),
+        "fieldname": record.get("fieldname"),
+        "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+    }
 
 
 def execute_rollback(
@@ -92,12 +127,13 @@ def execute_rollback(
         from change_engine.api.endpoints import FrappeDeploymentAdapter
         db = FrappeDeploymentAdapter()
 
-    # Step 3: Retrieves deployment record from tabChange Engine Audit (or db audit store)
-    record = None
-    if hasattr(db, "get_deployment_record") and callable(getattr(db, "get_deployment_record", None)):
-        record = db.get_deployment_record(deployment_id)
-    elif hasattr(db, "audit_journal") and isinstance(db.audit_journal, dict):
-        record = db.audit_journal.get(deployment_id)
+    # Step 3: Retrieves deployment record from tabChange Engine Audit (or db audit store). A fresh view first: the
+    # read's audit-table check (CREATE TABLE IF NOT EXISTS) commits implicitly, so it must never run over a caller's
+    # pending writes; with writes pending the view refuses and nothing is read (CE-SEC-011 review).
+    failed_view = begin_fresh_read_view_checked(db)
+    if failed_view:
+        return engine_refusal(blocked_response(failed_view), deployment_id, "ENGINE_UNAVAILABLE", start_time)
+    record = _read_record(db, deployment_id)
 
     if not record:
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
@@ -111,58 +147,65 @@ def execute_rollback(
             "execution_time_ms": execution_time_ms,
         }
 
-    current_status = record.get("status")
-    if current_status == "ROLLED_BACK":
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "ROLLED_BACK",
-            "success": True,
-            "disposition": "ALREADY_ROLLED_BACK",
-            "message": f"Deployment '{deployment_id}' is already rolled back.",
-            "doctype": record.get("doctype"),
-            "fieldname": record.get("fieldname"),
-            "execution_time_ms": execution_time_ms,
-        }
-
-    if current_status == "QUARANTINED":
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "QUARANTINED",
-            "success": True,
-            "disposition": "ALREADY_QUARANTINED",
-            "message": f"Deployment '{deployment_id}' is already quarantined.",
-            "doctype": record.get("doctype"),
-            "fieldname": record.get("fieldname"),
-            "execution_time_ms": execution_time_ms,
-        }
+    finished = _already_finished(record, deployment_id, start_time)
+    if finished is not None:
+        return finished
 
     site_id = record.get("site_id") or "default"
     doctype = record.get("doctype", "")
     fieldname = record.get("fieldname", "")
 
-    # Step 4: Bounded advisory lock GET_LOCK <= 64 chars (§7.2)
-    lock_key = make_bounded_lock_key(site_id, doctype)
+    # Step 4: The target lock (<= 64 chars, §7.2), then a fresh read view, then the record and its hold are read
+    # AGAIN under the lock (CE-SEC-011): the unlocked read above only finds which target to lock.
     lock_wait_seconds = int(kwargs.get("lock_wait_seconds", 5))
-    lock_result = db.acquire_advisory_lock(lock_key, wait_seconds=lock_wait_seconds)
-
-    if lock_result != 1:
-        reason = "Lock wait timeout (0)" if lock_result == 0 else "Database lock error (NULL)"
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "REJECTED",
-            "success": False,
-            "stage": "ACQUIRE",
-            "disposition": "LOCK_CONTENTION_OR_TIMEOUT",
-            "reason": f"Could not acquire MariaDB GET_LOCK for rollback ({reason})",
-            "doctype": doctype,
-            "fieldname": fieldname,
-            "execution_time_ms": execution_time_ms,
-        }
-
+    held: List[str] = []
     try:
+        locked = acquire_scoped_locks(db, held, site_id, doctype, None, lock_wait_seconds)
+        if locked is not None:
+            code, reason = locked
+            execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "success": False,
+                "stage": "ACQUIRE",
+                "disposition": "LOCK_CONTENTION_OR_TIMEOUT",
+                "reason_code": code,
+                "reason": reason.replace("MariaDB GET_LOCK", "MariaDB GET_LOCK for rollback"),
+                "doctype": doctype,
+                "fieldname": fieldname,
+                "execution_time_ms": execution_time_ms,
+            }
+
+        failed_view = begin_fresh_read_view_checked(db)
+        if failed_view:
+            return engine_refusal(blocked_response(failed_view), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype)
+        fresh = _read_record(db, deployment_id)
+        # A deployment that is still PREPARED or RECOVERY_REQUIRED is a hold: an ordinary revert must not clear it
+        # (the locked recovery path is CE-SEC-009). The same record, the same row, now seen under the lock.
+        if isinstance(fresh, dict) and fresh.get("status") in ("PREPARED", "RECOVERY_REQUIRED"):
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "success": False,
+                "stage": "INSPECT",
+                "disposition": "DEPLOYMENT_ON_HOLD",
+                "reason_code": "recovery_hold",
+                "reason": "The deployment is held for recovery; it cannot be reverted until it is recovered.",
+                "doctype": fresh.get("doctype"),
+                "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+            }
+        if (not isinstance(fresh, dict) or fresh.get("doctype", "") != doctype
+                or (fresh.get("site_id") or "default") != site_id):
+            # The record vanished or is not the one whose target was locked: nothing is done.
+            return engine_refusal(blocked_response("deployment record"), deployment_id, "ENGINE_UNAVAILABLE",
+                                  start_time, doctype=doctype)
+        finished = _already_finished(fresh, deployment_id, start_time)  # a concurrent revert finished first
+        if finished is not None:
+            return finished
+        record = fresh  # everything below acts on the record as seen under the lock
+
         # Step 5: Classify deployment type (Report vs Workflow vs Property Setter vs Custom Field)
         is_report = (
             record.get("deployment_type") == "report"
@@ -493,4 +536,4 @@ def execute_rollback(
             return outcome
 
     finally:
-        db.release_advisory_lock(lock_key)
+        release_scoped_locks(db, held)

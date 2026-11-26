@@ -59,6 +59,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0050-build-state-machine.md](ADR-0050-build-state-machine.md) | Build state machine, draft to live, with the human gates | Proposed |
 | [ADR-0051-adapter-role-and-state-namespacing.md](ADR-0051-adapter-role-and-state-namespacing.md) | Adapter-owned engine roles and workflow states carry a reserved prefix, collisions are refused, role.upsert writes the mapped grants | Proposed |
 | [ADR-0052-isolated-browser-runner-placement.md](ADR-0052-isolated-browser-runner-placement.md) | Isolated browser runner placement (Tier 5 connector) | Proposed |
+| [ADR-0053-model-gateway.md](ADR-0053-model-gateway.md) | Model gateway home, routing, budgets, caching and residency (PLT-009); original author Eldon (#232) | Proposed |
 | [ADR-0057-compiler-and-studio-design-confirmations.md](ADR-0057-compiler-and-studio-design-confirmations.md) | Compiler, token-resolver and Studio design confirmations from open questions | Accepted |
 | [ADR-0056-golden-path-mapping-gaps.md](ADR-0056-golden-path-mapping-gaps.md) | Golden-path engine mapping: complete unmapped list, computed fields engine-authoritative | Proposed |
 | [ADR-0054-model-call-contract.md](ADR-0054-model-call-contract.md) | Model-call interface contract | Proposed |
@@ -71,3 +72,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0067-country-pack-production-blockers-and-product-choice.md](ADR-0067-country-pack-production-blockers-and-product-choice.md) | Country pack production rules: per-market product-choice list for PLATFORM-DEFAULT, open blockers refuse production, record checks (CMP-036); amends ADR-0063 and ADR-0059 | Proposed |
 | [ADR-0068-ddl-gate-approval-pass-through.md](ADR-0068-ddl-gate-approval-pass-through.md) | A signed, single-use DDL-gate grant lets one audited path add a unique constraint to a new adapter-owned custom field on an allow-listed built-in engine type (BPL-040, Q-603) | Proposed |
 | [ADR-0069-gateway-live-binding-audit-spool.md](ADR-0069-gateway-live-binding-audit-spool.md) | Gateway live binding: durable audit spool, identity-bound audit records, request and response size caps (PLT-027) | Proposed |
+| [ADR-0070-change-engine-deployment-journal-and-recovery.md](ADR-0070-change-engine-deployment-journal-and-recovery.md) | Change engine deployment journal tables, keyed evidence MAC, legacy-row migration and the locked recovery entry point (CE-SEC-009, CE-SEC-010) | Proposed |

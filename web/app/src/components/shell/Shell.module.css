@@ -219,6 +219,44 @@
   cursor: not-allowed;
 }
 
+/* Language: a small segmented switch beside the avatar; on phones only the other language shows. */
+.lang {
+  display: inline-flex;
+  flex: none;
+  padding: var(--space-0_5);
+  border: var(--border-width) solid var(--glass-edge);
+  border-radius: var(--radius-pill);
+}
+
+.langButton {
+  min-block-size: var(--control-sm);
+  padding-inline: var(--space-1_5);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+  cursor: pointer;
+}
+
+.langButton:hover {
+  color: var(--color-text);
+}
+
+.langButton[aria-pressed='true'] {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.langButton:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
 /* Account: a round avatar with the person's initials. */
 .userMenu {
   position: relative;
@@ -492,6 +530,10 @@
     inline-size: var(--touch-target);
     block-size: var(--touch-target);
   }
+
+  .langButton {
+    min-block-size: calc(var(--touch-target) - var(--space-1) - var(--border-width) * 2);
+  }
 }
 
 @media (max-width: 48rem) {
@@ -504,8 +546,12 @@
     display: inline-block;
   }
 
-  /* Phones: menu, company and account fit one row; the lockup returns from tablet up. */
+  /* Phones: menu, company, language and account fit one row; the lockup returns from tablet up. */
   .brand {
+    display: none;
+  }
+
+  .langButton[aria-pressed='true'] {
     display: none;
   }
 

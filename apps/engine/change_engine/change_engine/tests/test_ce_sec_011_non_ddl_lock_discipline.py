@@ -345,7 +345,7 @@ class TestC1RevertHoldIsCheckedUnderTheTargetLock(unittest.TestCase):
         self.assertEqual(out["status"], "QUARANTINED", out)
         names = [n for n, _ in order]
         lock_at = names.index("acquire_advisory_lock")
-        view_at = names.index("begin_fresh_read_view")
+        view_at = names.index("begin_fresh_read_view", lock_at)  # the view after the lock (one also opens before)
         reads = [i for i, n in enumerate(names) if n == "get_deployment_record"]
         self.assertLess(lock_at, view_at)
         self.assertTrue(any(i > view_at for i in reads), "the hold is read on the fresh view, under the lock")

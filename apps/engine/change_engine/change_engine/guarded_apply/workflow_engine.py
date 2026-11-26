@@ -36,10 +36,12 @@ from .schema_reconciler import (
     blocked_response,
     compute_canonical_payload_hash,
     engine_refusal,
+    read_apply_target,
     release_scoped_locks,
     session_discarded_response,
     set_lock_wait_timeout_checked,
     settle_apply,
+    target_unchanged,
 )
 
 logger = logging.getLogger(__name__)
@@ -634,6 +636,10 @@ def execute_workflow_deployment(
             "status": "PREPARED",
         }
 
+        # What the apply will write, as committed now (under the locks): a failed apply is clean only if it reads
+        # the same afterwards.
+        target_before = read_apply_target(db, "workflow", doctype, wf.workflow_name)
+
         # The session lock-wait timeout is set and read back BEFORE any intent exists: if it is not effective
         # nothing is written and nothing runs (CE-SEC-008).
         if not set_lock_wait_timeout_checked(db, lock_wait_seconds):
@@ -759,9 +765,12 @@ def execute_workflow_deployment(
 
         if apply_error:
             # The previous workflow's deactivation is already committed: the target is not in a known-clean state.
+            # Otherwise a failure is clean only when the target reads back as it was before the intent.
+            clean = not deactivated_prev and target_unchanged(
+                target_before, read_apply_target(db, "workflow", doctype, wf.workflow_name))
             outcome = {
                 "deployment_id": deployment_id,
-                "status": "RECOVERY_REQUIRED" if deactivated_prev else "FAILED_CLEAN",
+                "status": "FAILED_CLEAN" if clean else "RECOVERY_REQUIRED",
                 "success": False,
                 "stage": "APPLY",
                 "disposition": "WORKFLOW_APPLY_FAILED",
@@ -769,7 +778,9 @@ def execute_workflow_deployment(
                 "reason": (
                     "The workflow could not be applied after the previous workflow was deactivated; the deployment "
                     "is held for recovery." if deactivated_prev
-                    else "The workflow could not be applied; the details are in the server log."),
+                    else "The workflow could not be applied; the details are in the server log." if clean
+                    else "The workflow apply failed and its effect could not be ruled out; the deployment is held "
+                         "for recovery."),
                 "doctype": doctype,
                 "workflow_name": wf.workflow_name,
                 "execution_time_ms": execution_time_ms,

@@ -56,6 +56,17 @@ All paths are under `apps/engine/change_engine/change_engine/`.
 - Tests: `TestR5QuarantineSecondWriteFailureIsAHold` (4 tests; 3 failed before the fix, all pass after).
 - Full suite: 1831 passed, 86 skipped, 0 failed.
 
+## Eldon's security review at 4a6606b7 (2026-11-26): fixes
+- Written by Claude Opus 5.5 (sub-agent, no git, confined to the #338 files and `tests.yml`); the coordinator re-ran the suite.
+- R1: `python-tests` was red because the workflow's unmapped-test loop flagged the CE-SEC-011 test file; both CE-SEC-011 test files are now on the CE-SEC-008 run line in `.github/workflows/tests.yml` (one line).
+- R2: the six non-DDL adapter writes (`apply_property_setter`, `ensure_workflow_state`, `ensure_workflow_action`, `apply_workflow`, `set_workflow_active`, `apply_report`) go through `_require_guarded_write()`, which checks the session and the locks before the write and before the commit; a lost lock discards the session and holds the deployment (intent stays PREPARED). The reviewer's probe was reproduced first (workflow and report returned APPLIED with the locks dropped).
+- R3: refusal, not a resolver. The site map lives only in `FrappeRuntimeBackend`, so an RPC-built live adapter now asks the site database for any tenant identity other than the one it computed (a site-state row, or audit rows under a tenant id) and refuses with `site_unresolvable` if it finds one or the read fails. The revert RPC already takes its site from the record (test proves `recovery_hold` on a mapped site). Remaining gap: a mapped site with no state row and no tenant-id audit row still runs under its host name; recorded as CE-SEC-011 slice 2.
+- Lows: the target is read back before reporting FAILED_CLEAN (a changed or unreadable target gives RECOVERY_REQUIRED, `apply_failed`); the revert refuses `engine_unavailable` when the caller has pending writes, so its CREATE TABLE never commits them; tests for the revert site and doctype checks and the ALREADY_* replays.
+- New row CE-SEC-016 (the review's "not from this PR" item, plus the three writes still without a lock check). Q-658 and Q-659 were not used.
+- Mutation check: 20 of 20 mutants killed. Full suite: 1853 passed, 86 skipped (was 1831).
+- UNVERIFIED: the real-bench effect of the read-back SQL and of the revert change; real-bench test order where `test_ce_sec_005_real_bench.py` test_04 maps a tenant onto its site (later admin RPC applies there are refused; today those are staff calls, refused on roles first).
+- Size: about 182 changed source lines plus a 522-line test file, over the 400-line guide; kept in one PR because the review asked for all three fixes before merge.
+
 ## Tokens or cost
 Unknown.
 

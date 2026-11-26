@@ -258,6 +258,26 @@ def settle_apply(db: Any, failed: bool) -> bool:
     return getattr(db, "session_unusable", False) is not True
 
 
+def read_apply_target(db: Any, kind: str, doctype: str, name: Any, fieldname: Any = None,
+                      property_name: Any = None) -> Optional[Tuple[Any, ...]]:
+    """The committed state of a non-DDL apply's target, for the before/after comparison that alone allows
+    FAILED_CLEAN (CE-SEC-011 review); ``None`` when it cannot be read, which never compares as unchanged.
+    Never raises."""
+    reader = getattr(db, "read_apply_target", None)
+    if not callable(reader):
+        return () if getattr(db, "in_memory", False) is True else None
+    try:
+        return reader(kind, doctype, name, fieldname, property_name)
+    except Exception:
+        logger.exception("could not read the deployment target back")
+        return None
+
+
+def target_unchanged(before: Optional[Tuple[Any, ...]], after: Optional[Tuple[Any, ...]]) -> bool:
+    """A failed apply is clean only when the target read the same before the intent and after the rollback."""
+    return before is not None and after is not None and before == after
+
+
 def session_discarded_response() -> Dict[str, Any]:
     """The refusal for a deployment whose session was discarded: nothing is finalized, the intent stays as the hold."""
     return {

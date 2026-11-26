@@ -1344,6 +1344,63 @@ class FrappeDeploymentAdapter:
             offline_simulator=bool(self.in_memory or self.offline_ddl_simulator),
         )
 
+    def read_apply_target(self, kind: str, doctype: str, name: Optional[str], fieldname: Optional[str] = None,
+                          property_name: Optional[str] = None) -> Tuple[Any, ...]:
+        """The committed state of what a non-DDL apply writes (its rows and their ``modified``), so that a failed
+        apply whose commit still went through is never reported FAILED_CLEAN (CE-SEC-011 review). A failed read
+        raises ``DurableEvidenceError``; it is never read as "unchanged"."""
+        if self.in_memory:
+            if kind == "property_setter":
+                found: Any = self.property_setters.get((doctype, fieldname, property_name))
+            elif kind == "workflow":
+                found = {n: w for n, w in self.workflows.items() if n == name or w.get("document_type") == doctype}
+            elif kind == "report":
+                found = self.reports.get(name)
+            else:
+                raise DurableEvidenceError("unknown apply target")
+            return (repr(found),)
+        if kind == "property_setter":
+            field_clause = "field_name = %s" if fieldname else "(field_name IS NULL OR field_name = '')"
+            query = ("SELECT name, value, modified FROM `tabProperty Setter` WHERE doc_type = %s AND "
+                     f"{field_clause} AND property = %s ORDER BY name")
+            params: Tuple[Any, ...] = (doctype, fieldname, property_name) if fieldname else (doctype, property_name)
+        elif kind == "workflow":
+            query = ("SELECT name, is_active, modified FROM `tabWorkflow` WHERE name = %s OR document_type = %s "
+                     "ORDER BY name")
+            params = (name, doctype)
+        elif kind == "report":
+            query = "SELECT name, disabled, modified FROM `tabReport` WHERE name = %s"
+            params = (name,)
+        else:
+            raise DurableEvidenceError("unknown apply target")
+        try:
+            rows = self._frappe.db.sql(query, params)
+        except Exception as exc:
+            raise DurableEvidenceError("the deployment target could not be read back") from exc
+        return tuple(tuple(str(v) for v in row) for row in rows or ())
+
+    def has_other_tenant_identity(self, site_id: str) -> bool:
+        """Whether this site's database shows a tenant identity other than ``site_id``: a site-state row the backend
+        writes when it provisions a tenant site, or an audit row under a tenant id. A table that does not exist is
+        no evidence; a read that fails raises ``DurableEvidenceError`` (CE-SEC-011 review)."""
+        if self.in_memory:
+            return False
+        try:
+            rows = self._frappe.db.sql(
+                "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() "
+                "AND TABLE_NAME IN (%s, %s)", (_SITE_STATE_TABLE, self.audit_table))
+            present = {str(r[0]).lower() for r in rows or ()}
+            if _SITE_STATE_TABLE.lower() in present and self._frappe.db.sql(
+                    f"SELECT tenant_id FROM `{_SITE_STATE_TABLE}` WHERE tenant_id <> %s LIMIT 1", (site_id,)):
+                return True
+            if self.audit_table.lower() in present:
+                sites = self._frappe.db.sql(
+                    f"SELECT DISTINCT site_id FROM `{self.audit_table}` WHERE site_id <> %s", (site_id,))
+                return any(isinstance(r[0], str) and _TENANT_ID_RE.fullmatch(r[0]) for r in sites or ())
+        except Exception as exc:
+            raise DurableEvidenceError("the site's tenant identity could not be read") from exc
+        return False
+
     # -- durable evidence (CE-SEC-008) ---------------------------------------------------
     def _require_usable_session(self) -> None:
         """Once a session is discarded nothing may commit, finalize or rely on a lock through this adapter."""
@@ -1366,6 +1423,12 @@ class FrappeDeploymentAdapter:
             if not held:
                 self.mark_session_unusable()
                 raise SessionDiscardedError("an advisory lock is no longer held by this session")
+
+    def _require_guarded_write(self) -> None:
+        """A non-DDL write (property setter, workflow, report) is sent and committed only on a usable session that
+        still holds every advisory lock it took, like the single-field path (CE-SEC-011 review)."""
+        self._require_usable_session()
+        self._require_locks_held()
 
     def _commit_durable(self) -> None:
         self._require_usable_session()
@@ -1805,6 +1868,7 @@ class FrappeDeploymentAdapter:
         value: Any,
         property_type: str = "Data",
     ) -> None:
+        self._require_guarded_write()
         self.apply_called = True
         if self.simulate_apply_error:
             raise TimeoutError("(1205, 'Lock wait timeout exceeded')")
@@ -1836,6 +1900,7 @@ class FrappeDeploymentAdapter:
                         value=value,
                         property_type=property_type,
                     )
+                self._require_guarded_write()
                 self._commit_durable()
 
     def get_property_setter(
@@ -1945,6 +2010,7 @@ class FrappeDeploymentAdapter:
             return None
 
     def ensure_workflow_state(self, state_name: str, style: Optional[str] = None) -> None:
+        self._require_guarded_write()
         if self.in_memory:
             self.workflow_states[state_name] = {
                 "name": state_name,
@@ -1960,11 +2026,13 @@ class FrappeDeploymentAdapter:
                         "style": style or "Primary",
                     })
                     ws.insert(ignore_permissions=True)
+                    self._require_guarded_write()
                     self._commit_durable()
 
     def ensure_workflow_action(self, action_name: str) -> None:
         """Create the ``Workflow Action Master`` a transition names, when it does not exist. Called by the workflow
         engine after the intent and under the locks (CE-SEC-011), and committed like ``ensure_workflow_state``."""
+        self._require_guarded_write()
         if self.in_memory:
             self.workflow_actions[action_name] = {"name": action_name, "workflow_action_name": action_name}
         elif hasattr(self._frappe, "db") and hasattr(self._frappe, "get_doc"):
@@ -1973,6 +2041,7 @@ class FrappeDeploymentAdapter:
                     "doctype": "Workflow Action Master",
                     "workflow_action_name": action_name,
                 }).insert(ignore_permissions=True)
+                self._require_guarded_write()
                 self._commit_durable()
 
     def get_workflow_state(self, state_name: str) -> Optional[Dict[str, Any]]:
@@ -2019,6 +2088,7 @@ class FrappeDeploymentAdapter:
         return None
 
     def apply_workflow(self, doctype: str, workflow_data: Dict[str, Any]) -> None:
+        self._require_guarded_write()
         self.apply_called = True
         wf_name = workflow_data.get("workflow_name")
         if self.in_memory:
@@ -2033,15 +2103,18 @@ class FrappeDeploymentAdapter:
                 else:
                     w_doc = self._frappe.get_doc(workflow_data)
                     w_doc.insert(ignore_permissions=True)
+                self._require_guarded_write()
                 self._commit_durable()
 
     def set_workflow_active(self, workflow_name: str, is_active: int) -> None:
+        self._require_guarded_write()
         if self.in_memory:
             if workflow_name in self.workflows:
                 self.workflows[workflow_name]["is_active"] = is_active
         else:
             if hasattr(self._frappe, "db") and hasattr(self._frappe.db, "set_value"):
                 self._frappe.db.set_value("Workflow", workflow_name, "is_active", is_active)
+                self._require_guarded_write()
                 self._commit_durable()
 
     def get_report(self, report_name: str) -> Optional[Dict[str, Any]]:
@@ -2057,6 +2130,7 @@ class FrappeDeploymentAdapter:
         return None
 
     def apply_report(self, report_name: str, report_doc: Dict[str, Any]) -> None:
+        self._require_guarded_write()
         self.apply_called = True
         if self.in_memory:
             self.reports[report_name] = dict(report_doc)
@@ -2069,6 +2143,7 @@ class FrappeDeploymentAdapter:
                 else:
                     r_doc = self._frappe.get_doc(report_doc)
                     r_doc.insert(ignore_permissions=True)
+                self._require_guarded_write()
                 self._commit_durable()
 
     def set_report_disabled(self, report_name: str, disabled: int = 1) -> None:
@@ -2158,6 +2233,8 @@ def _reject_invalid_deployment_id(deployment_id: Any, start_time: float, **extra
 # The runtime backend's tenant-id grammar (frappe_backend._SAFE_TENANT_RE). It forbids '-', '.', uppercase and a
 # trailing '_', so the backend's site name ``<tenant with _ as ->.<domain>`` maps back to exactly one tenant id.
 _TENANT_ID_RE = re.compile(r"t_[a-z0-9][a-z0-9_]{1,59}[a-z0-9]")
+# The tenant-database copy of the site state the runtime backend writes when it provisions a tenant site.
+_SITE_STATE_TABLE = "tabChange Engine Blueprint State"
 
 
 def _tenant_of_site(resolved: str, site_resolver: Any = None) -> Optional[str]:
@@ -2233,6 +2310,28 @@ def _site_rejection(deployment_id: Any, start_time: float, disposition: str, cod
         **extra,
         "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
     }
+
+
+def _unmapped_site_refusal(db: Any, built_here: bool, site_id: Any, deployment_id: Any, start_time: float,
+                           **extra: Any) -> Optional[Dict[str, Any]]:
+    """An RPC call that built its own adapter has no backend ``site_resolver``, so a custom ``site_map`` site gets
+    the wrong identity: the host name, or the tenant whose default site name the host happens to look like
+    (``t-beta.other.test`` reads as ``t_beta``), beside holds and replay records the backend wrote under the real
+    tenant id (CE-SEC-011 review). When the site's own database shows a tenant identity other than the computed one
+    (a provisioned site-state row, or audit rows under a tenant id), the call is refused with
+    ``site_unresolvable``; a read that fails refuses too. A default-domain tenant site's own rows carry its own
+    identity and do not refuse; an injected adapter carries its own resolver and is not affected."""
+    if not built_here or getattr(db, "in_memory", True) is not False or getattr(db, "site_resolver", None) is not None:
+        return None
+    try:
+        mapped = db.has_other_tenant_identity(site_id)
+    except Exception:
+        logger.exception("could not tell whether site %s is a mapped tenant site", deployment_id)
+        mapped = True
+    if not mapped:
+        return None
+    return _site_rejection(deployment_id, start_time, "SITE_UNRESOLVABLE", "site_unresolvable",
+                           "The site identity could not be resolved.", **extra)
 
 
 _LOCK_WAIT_TEXT = re.compile(r"[0-9]{1,9}")
@@ -2447,12 +2546,14 @@ def apply_configuration_change(
 
     # Step 2: Initialize or resolve deployment adapter
     db = adapter or kwargs.get("db")
-    if db is None:
+    built_here = db is None
+    if built_here:
         db = FrappeDeploymentAdapter()
 
     # Step 3: Resolve site_id and idempotency_key
     site_id, site_rejection = _resolve_site_id(site_id or kwargs.get("site"), deployment_id, start_time,
                                                   site_resolver=getattr(db, "site_resolver", None))
+    site_rejection = site_rejection or _unmapped_site_refusal(db, built_here, site_id, deployment_id, start_time)
     if site_rejection:
         return site_rejection
 
@@ -2700,12 +2801,15 @@ def apply_property_setter_change(
         }
 
     db = kwargs.get("adapter") or kwargs.get("db")
-    if db is None:
+    built_here = db is None
+    if built_here:
         db = FrappeDeploymentAdapter()
 
     site_id, site_rejection = _resolve_site_id(
         kwargs.get("site") or kwargs.get("site_id"), deployment_id, start_time,
         site_resolver=getattr(db, "site_resolver", None), doctype=doctype)
+    site_rejection = site_rejection or _unmapped_site_refusal(db, built_here, site_id, deployment_id, start_time,
+                                                              doctype=doctype)
     if site_rejection:
         return site_rejection
 
@@ -2818,12 +2922,15 @@ def apply_workflow_change(
         }
 
     db = kwargs.get("adapter") or kwargs.get("db")
-    if db is None:
+    built_here = db is None
+    if built_here:
         db = FrappeDeploymentAdapter()
 
     site_id, site_rejection = _resolve_site_id(
         kwargs.get("site") or kwargs.get("site_id"), deployment_id, start_time,
         site_resolver=getattr(db, "site_resolver", None), doctype=doctype)
+    site_rejection = site_rejection or _unmapped_site_refusal(db, built_here, site_id, deployment_id, start_time,
+                                                              doctype=doctype)
     if site_rejection:
         return site_rejection
 
@@ -2935,12 +3042,15 @@ def apply_report_change(
         }
 
     db = kwargs.get("adapter") or kwargs.get("db")
-    if db is None:
+    built_here = db is None
+    if built_here:
         db = FrappeDeploymentAdapter()
 
     site_id, site_rejection = _resolve_site_id(
         kwargs.get("site") or kwargs.get("site_id"), deployment_id, start_time,
         site_resolver=getattr(db, "site_resolver", None), doctype=doctype)
+    site_rejection = site_rejection or _unmapped_site_refusal(db, built_here, site_id, deployment_id, start_time,
+                                                              doctype=doctype)
     if site_rejection:
         return site_rejection
 

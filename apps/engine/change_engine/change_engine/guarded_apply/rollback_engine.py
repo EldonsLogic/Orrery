@@ -127,7 +127,12 @@ def execute_rollback(
         from change_engine.api.endpoints import FrappeDeploymentAdapter
         db = FrappeDeploymentAdapter()
 
-    # Step 3: Retrieves deployment record from tabChange Engine Audit (or db audit store)
+    # Step 3: Retrieves deployment record from tabChange Engine Audit (or db audit store). A fresh view first: the
+    # read's audit-table check (CREATE TABLE IF NOT EXISTS) commits implicitly, so it must never run over a caller's
+    # pending writes; with writes pending the view refuses and nothing is read (CE-SEC-011 review).
+    failed_view = begin_fresh_read_view_checked(db)
+    if failed_view:
+        return engine_refusal(blocked_response(failed_view), deployment_id, "ENGINE_UNAVAILABLE", start_time)
     record = _read_record(db, deployment_id)
 
     if not record:

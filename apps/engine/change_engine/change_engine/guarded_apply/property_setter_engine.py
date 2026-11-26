@@ -38,10 +38,12 @@ from .schema_reconciler import (
     blocked_response,
     compute_canonical_payload_hash,
     engine_refusal,
+    read_apply_target,
     release_scoped_locks,
     session_discarded_response,
     set_lock_wait_timeout_checked,
     settle_apply,
+    target_unchanged,
 )
 
 logger = logging.getLogger(__name__)
@@ -375,6 +377,10 @@ def execute_property_setter_deployment(
             "status": "PREPARED",
         }
 
+        # What the apply will write, as committed now (under the locks): a failed apply is clean only if it reads
+        # the same afterwards.
+        target_before = read_apply_target(db, "property_setter", doctype, None, fieldname, property_name)
+
         # The session lock-wait timeout is set and read back BEFORE any intent exists: if it is not effective
         # nothing is written and nothing runs (CE-SEC-008).
         if not set_lock_wait_timeout_checked(db, lock_wait_seconds):
@@ -486,9 +492,13 @@ def execute_property_setter_deployment(
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
         if apply_error:
+            # A failure is clean only when the target reads back as it was before the intent (the commit of a
+            # write that raised may still have gone through).
+            clean = not main_committed and target_unchanged(
+                target_before, read_apply_target(db, "property_setter", doctype, None, fieldname, property_name))
             outcome = {
                 "deployment_id": deployment_id,
-                "status": "RECOVERY_REQUIRED" if main_committed else "FAILED_CLEAN",
+                "status": "FAILED_CLEAN" if clean else "RECOVERY_REQUIRED",
                 "success": False,
                 "stage": "APPLY",
                 "disposition": "PROPERTY_SETTER_APPLY_FAILED",
@@ -496,7 +506,9 @@ def execute_property_setter_deployment(
                 "reason": (
                     "The Property Setter was only partly applied; the deployment is held for recovery."
                     if main_committed else
-                    "The Property Setter could not be applied; the details are in the server log."),
+                    "The Property Setter could not be applied; the details are in the server log." if clean else
+                    "The Property Setter apply failed and its effect could not be ruled out; the deployment is "
+                    "held for recovery."),
                 "doctype": doctype,
                 "fieldname": fieldname,
                 "property_name": property_name,

@@ -50,7 +50,8 @@ def test_dictionary_has_english_and_arabic_and_covers_every_key_the_ui_uses():
     script = "global.window={};require(process.argv[1]);process.stdout.write(JSON.stringify(window.STUDIO_I18N));"
     out = subprocess.run(["node", "-e", script, str(STATIC / "i18n.js")], capture_output=True, text=True, check=True)
     d = json.loads(out.stdout)
-    assert set(d) == {"en", "ar"} and set(d["ar"]) <= set(d["en"])
+    assert set(d) == {"en", "ar"}
+    assert set(d["ar"]) == set(d["en"]), (sorted(set(d["en"]) - set(d["ar"])), sorted(set(d["ar"]) - set(d["en"])))
     used = set()
     used |= set(re.findall(r'data-i18n="([^"]+)"', (STATIC / "index.html").read_text(encoding="utf-8")))
     used |= set(re.findall(r"\b[tT]\('([a-zA-Z0-9.]+)'", (STATIC / "app.js").read_text(encoding="utf-8")))
@@ -68,3 +69,16 @@ def test_served_assets_are_local(client):
         assert s == 200, src
     status, css, _ = client.get("/tokens/tokens.css")
     assert status == 200 and b"--color-primary" in css
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is needed to read i18n.js")
+def test_arabic_keeps_placeholders_and_never_names_the_engine():
+    script = "global.window={};require(process.argv[1]);process.stdout.write(JSON.stringify(window.STUDIO_I18N));"
+    out = subprocess.run(["node", "-e", script, str(STATIC / "i18n.js")], capture_output=True, text=True, check=True)
+    d = json.loads(out.stdout)
+    token = re.compile(r"\{[a-zA-Z]+\}")
+    for k, en in d["en"].items():
+        ar = d["ar"][k]
+        assert ar.strip(), k
+        assert sorted(token.findall(ar)) == sorted(token.findall(en)), k
+        assert not re.search(r"frappe|erpnext", ar, re.I), k

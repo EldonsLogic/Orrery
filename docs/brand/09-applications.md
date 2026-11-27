@@ -28,11 +28,11 @@ The mark's two halves carry product state (kit "Extending the system", guideline
 | Status | Both halves outline = not started; upper solid, lower outline = drafted by the AI; both solid = approved by a person. Always beside its word; status colours always pair with an icon and a word | `StatusMark`: Blueprint viewer header and the draft settings section, component factory request detail, chat approval card |
 | Progress | Five marks: Discover, Blueprint, Build, Simulate, Live. Completed stages solid, the current stage half (upper solid, lower outline), upcoming stages outline. Mapped from the build state (`contracts/build-states.md`): no state = Discover; `draft` = Blueprint; `owner_approved`, `team_reviewed` = Build; `built_in_sandbox` = Simulate; `simulated` = Live; `live` = all complete. The list follows the reading direction; each mark is never mirrored | `ProgressMarks`: Blueprint viewer header |
 | Bullets | A small solid Cobalt mark. Coral (`tone="accent"`) on at most one item per view, always with a text label | `Mark` |
-| Loading (PROPOSED) | See below | `LoadingMark`: app session loading, workspace switch, chat "working", factory list loading |
+| Loading | See below | `LoadingMark`: app session loading, workspace switch, chat "working", factory list loading |
 
 Every state obeys the misuse rules: never rotated, mirrored (also in RTL), stretched, recoloured outside the palette, split apart or squared at the round ends; no gradients, glows or shadows.
 
-### Loading mark (PROPOSED, awaiting founder approval)
+### Loading mark (approved by Eldon, 2026-11-26)
 The kit defines no loading animation. Proposal: when the platform is working, the fill cycles outline, then the upper half, then both halves, about 0.8 s per step on a 2.4 s loop with a 150 ms fade. Only fill opacity changes; the halves never rotate, scale or move. It always sits beside a visible text label (`role="status"`).
 Under `prefers-reduced-motion: reduce` the animation stops and the mark shows the static drafted state (upper solid, lower outline) with the same label.
 Button busy states keep the small generic spinner inside the button; content placeholders keep skeletons.

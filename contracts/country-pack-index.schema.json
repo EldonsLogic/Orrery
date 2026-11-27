@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:country-pack-index:0.1.0",
+  "version": "0.1.0",
+  "title": "Country pack index",
+  "description": "Draft. The decoded payload of the signed per-country index of published and withdrawn pack versions (envelope prefix cpi1., ADR-0071 items 1.5 and 1.6, Proposed). One per key environment and country. CMP-038 issues a new one on every publish, republish, withdrawal, floor raise and follow-up closure; CMP-039 verifies it. Unknown keys are refused. Rules JSON Schema cannot express are in x-validator-rules.",
+  "x-validator-rules": [
+    "each version appears at most once in published, and no version in published appears in withdrawn (index_malformed)",
+    "predecessorDigest is the digest of the exact payload bytes of the index with indexSeq minus 1; two different indexes never share an indexSeq",
+    "indexSeq never goes down, floor never goes down and no withdrawn entry is ever dropped relative to any index already verified (index_rollback, floor_regression, withdrawal_reversed)",
+    "every followUpOpen publishId is a published entry's publishId",
+    "every withdrawal, floor raise and follow-up closure since the previous index is listed in changeRecords; each change record carries the same two-person sign-off as a publish (CMP-038 defines its body)",
+    "keyEnv equals the signing key's environment and the deployment key environment; a retired key never verifies an index"
+  ],
+  "type": "object",
+  "required": [
+    "v", "typ", "kid", "keyEnv", "countryCode", "indexSeq", "predecessorDigest", "issuedAt",
+    "published", "withdrawn", "floor", "followUpOpen", "changeRecords"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "const": 1 },
+    "typ": { "const": "country_pack_index" },
+    "kid": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/kid" },
+    "keyEnv": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/keyEnv" },
+    "countryCode": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/countryCode" },
+    "indexSeq": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/posInt" },
+    "predecessorDigest": {
+      "description": "Digest of the previous index payload; null only on the first index (indexSeq 1).",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" }
+      ]
+    },
+    "issuedAt": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/utcTime" },
+    "published": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["version", "contentDigest", "publishId"],
+        "additionalProperties": false,
+        "properties": {
+          "version": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/semver" },
+          "contentDigest": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" },
+          "publishId": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/publishId" }
+        }
+      }
+    },
+    "withdrawn": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["version", "contentDigest", "reasonRef"],
+        "additionalProperties": false,
+        "properties": {
+          "version": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/semver" },
+          "contentDigest": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" },
+          "reasonRef": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref" }
+        }
+      }
+    },
+    "floor": {
+      "description": "Lowest version any tenant may be pinned to.",
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/semver"
+    },
+    "followUpOpen": {
+      "description": "publishIds of urgent versions whose follow-up review is still open.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/publishId" }
+    },
+    "changeRecords": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref" },
+          "kind": { "enum": ["withdrawal", "floor_raise", "follow_up_closure"] },
+          "sha256": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" }
+        }
+      }
+    }
+  },
+  "if": { "properties": { "indexSeq": { "const": 1 } } },
+  "then": { "properties": { "predecessorDigest": { "type": "null" } } },
+  "else": { "properties": { "predecessorDigest": { "type": "string" } } }
+}

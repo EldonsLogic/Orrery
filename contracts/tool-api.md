@@ -1,6 +1,6 @@
 # Tool API
 
-Version: 0.3.1
+Version: 0.3.2
 Status: draft
 Owner: eldon
 
@@ -71,7 +71,7 @@ The stored set is `{toolApiVersion, blueprintRevision, registry, manifests, cont
 | `sales_order.transition` | write | per transition `allowedRoles` | `transition_id` in {submit_small, submit_large, approve_large, deliver, cancel_draft}; guard `total_amount < 50000` evaluated by code |
 | `sales_order.transition` with `approve_large` | write | owner | `approval.required = true`, rule `large_order_approval`; self-approval refused |
 | `sales_invoice.create` | write | accountant | `effects.ledger = true`, `effects.tax = true`; always `approval.required = true` for chat callers (agents draft, humans approve) |
-| `metric.query` | read | by report visibility | `metric` enum: `sales.revenue`, `sales.order_count`, `sales.revenue_by_customer`, `finance.receivables_aging`, `sales.order_list` |
+| `metric.query` | read | by report visibility, or by the platform metric registry (since 0.3.2) | `metric` enum: `sales.revenue`, `sales.order_count`, `sales.revenue_by_customer`, `finance.receivables_aging`, `sales.order_list`. With the registry (OPR-006, [semantic-layer](../docs/product/semantic-layer.md)) the enum is the registry ids a chat role may read (`sales.revenue`, `sales.order_count`, `finance.receivables_outstanding`), arguments `period` or `as_of` plus `currency`, never roles or tenant; refusals are the `metric_*` catalog codes (catalog 0.2.0) |
 | `blueprint.propose_change` | admin | roles with `isAdmin` | Produces a diff, never applies directly |
 
 Sample call and result:

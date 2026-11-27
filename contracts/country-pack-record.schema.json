@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:country-pack-record:0.1.0",
+  "version": "0.1.0",
+  "title": "Country pack publish record",
+  "description": "Draft. The decoded payload of one signed published country pack version (envelope prefix cpr1., ADR-0071 items 1.2 to 1.5, Proposed). CMP-038 writes it; CMP-039 verifies it. Every field is required unless the schema says otherwise; unknown keys are refused. Rules JSON Schema cannot express are in x-validator-rules and contracts/country-pack-store.md.",
+  "x-validator-rules": [
+    "the two signOffs carry different signerId values (signoff_same_person)",
+    "the two signOffs carry different mfa.assertionRef values, and each mfa.boundTo equals its own entry's signerId and statementDigest (signoff_mfa)",
+    "publishedBy equals one of the two signOffs' signerId",
+    "every signOff statementDigest is the digest of the RFC 8785 canonical JSON of {packId, version, contentDigest, diffDigest, changeKind} of this record (signoff_statement_mismatch)",
+    "0 <= signedAt - mfa.authTime <= 300 seconds; every signedAt <= publishedAt",
+    "the founder signerId maps one to one to founderLogin in the reviewed trusted_signers.json; the market_accountant signerId is on that file's roster for its market and is not a founder signerId; market equals countryCode",
+    "every signerSignature verifies over the signer's statementDigest with the credential the reviewed trusted_signers.json lists for that signerId (Q-652)",
+    "contentDigest is the digest of the RFC 8785 canonical JSON of {countryCode, packId, version, files} with files sorted by path; each files[].sha256 is over the exact stored bytes",
+    "predecessor, when not null, names a lower version; supersedes, when not null, names a record with the same packId, version and contentDigest",
+    "packId, countryCode, componentId and version equal those in pack.json; keyEnv equals the signing key's environment and the deployment key environment"
+  ],
+  "type": "object",
+  "required": [
+    "v", "typ", "kid", "keyEnv", "publishId", "publishedAt", "publishedBy",
+    "packId", "countryCode", "componentId", "version", "contentDigest", "files",
+    "predecessor", "supersedes", "changeKind", "followUp", "diffDigest", "evidenceRefs", "signOffs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "const": 1 },
+    "typ": { "const": "country_pack_version" },
+    "kid": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/kid" },
+    "keyEnv": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/keyEnv" },
+    "publishId": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/publishId" },
+    "publishedAt": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/utcTime" },
+    "publishedBy": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/staffSubject" },
+    "packId": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/packId" },
+    "countryCode": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/countryCode" },
+    "componentId": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/componentId" },
+    "version": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/semver" },
+    "contentDigest": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" },
+    "files": {
+      "description": "The closed bundle file set (ADR-0071 1.1): pack.json, manifest.json and evidence.json once each, strings.json at most once.",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": { "$ref": "#/$defs/file" },
+      "allOf": [
+        { "contains": { "properties": { "path": { "const": "pack.json" } } }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "path": { "const": "manifest.json" } } }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "path": { "const": "evidence.json" } } }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "path": { "const": "strings.json" } } }, "minContains": 0, "maxContains": 1 }
+      ]
+    },
+    "predecessor": {
+      "description": "Highest published or withdrawn release with a lower version, or null for the first.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/versionDigest" }
+      ]
+    },
+    "supersedes": {
+      "description": "null, or on a republish the publishId of the record this one replaces.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/publishId" }
+      ]
+    },
+    "changeKind": { "enum": ["scheduled", "urgent"] },
+    "followUp": {
+      "type": "object",
+      "required": ["required"],
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "boolean" },
+        "reviewRef": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref" }
+      }
+    },
+    "diffDigest": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" },
+    "evidenceRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["id", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref" },
+          "sha256": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" }
+        }
+      }
+    },
+    "signOffs": {
+      "description": "Exactly two sign-offs: one market_accountant and one founder (ADR-0071 1.4). Distinct people is an x-validator-rule.",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/accountantSignOff" },
+          { "$ref": "#/$defs/founderSignOff" }
+        ]
+      },
+      "allOf": [
+        { "contains": { "properties": { "role": { "const": "market_accountant" } } }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "role": { "const": "founder" } } }, "minContains": 1, "maxContains": 1 }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "changeKind": { "const": "urgent" } } },
+      "then": {
+        "properties": {
+          "followUp": { "properties": { "required": { "const": true } }, "required": ["required", "reviewRef"] }
+        }
+      },
+      "else": {
+        "properties": {
+          "followUp": { "properties": { "required": { "const": false } }, "not": { "required": ["reviewRef"] } }
+        }
+      }
+    },
+    {
+      "description": "Q-652: in production every signer signs with their own WebAuthn credential; the single publisher key alone may publish only outside production.",
+      "if": { "properties": { "keyEnv": { "const": "production" } } },
+      "then": {
+        "properties": {
+          "signOffs": {
+            "items": {
+              "required": ["signerSignature"],
+              "properties": { "mfa": { "properties": { "method": { "const": "webauthn" } } } }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "file": {
+      "type": "object",
+      "required": ["path", "sha256", "size"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "enum": ["pack.json", "manifest.json", "evidence.json", "strings.json"] },
+        "sha256": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" },
+        "size": { "type": "integer", "minimum": 1, "maximum": 1048576 }
+      }
+    },
+    "mfa": {
+      "type": "object",
+      "required": ["assertionRef", "method", "authTime", "boundTo"],
+      "additionalProperties": false,
+      "properties": {
+        "assertionRef": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref" },
+        "method": { "enum": ["totp", "webauthn"] },
+        "authTime": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/utcTime" },
+        "boundTo": {
+          "type": "object",
+          "required": ["signerId", "statementDigest"],
+          "additionalProperties": false,
+          "properties": {
+            "signerId": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/staffSubject" },
+            "statementDigest": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" }
+          }
+        }
+      }
+    },
+    "signerSignature": {
+      "description": "The signer's own WebAuthn assertion over statementDigest (Q-652). The challenge in clientDataJSON is the base64url (no padding) of SHA-256 over the ASCII bytes 'country-pack-signoff-v1' + LF + statementDigest (ADR-0071 1.8). All byte fields are base64url without padding.",
+      "type": "object",
+      "required": ["format", "credentialId", "authenticatorData", "clientDataJSON", "signature"],
+      "additionalProperties": false,
+      "properties": {
+        "format": { "const": "webauthn.get.v1" },
+        "credentialId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,1366}(?![\\s\\S])" },
+        "authenticatorData": { "type": "string", "pattern": "^[A-Za-z0-9_-]{49,4096}(?![\\s\\S])" },
+        "clientDataJSON": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,4096}(?![\\s\\S])" },
+        "signature": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,2048}(?![\\s\\S])" }
+      }
+    },
+    "signOffBase": {
+      "type": "object",
+      "required": ["role", "signerId", "signedAt", "statementDigest", "mfa"],
+      "properties": {
+        "signerId": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/staffSubject" },
+        "signedAt": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/utcTime" },
+        "statementDigest": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" },
+        "mfa": { "$ref": "#/$defs/mfa" },
+        "signerSignature": { "$ref": "#/$defs/signerSignature" }
+      }
+    },
+    "accountantSignOff": {
+      "$ref": "#/$defs/signOffBase",
+      "required": ["name", "market", "signOffRef"],
+      "unevaluatedProperties": false,
+      "properties": {
+        "role": { "const": "market_accountant" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" },
+        "market": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/countryCode" },
+        "signOffRef": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref" }
+      }
+    },
+    "founderSignOff": {
+      "$ref": "#/$defs/signOffBase",
+      "required": ["founderLogin"],
+      "unevaluatedProperties": false,
+      "properties": {
+        "role": { "const": "founder" },
+        "founderLogin": { "type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?![\\s\\S])" }
+      }
+    }
+  }
+}

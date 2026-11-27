@@ -11,6 +11,7 @@ Implements ADR-001 (Rev 2.3) Section 5, Section 8, and Section 9.1:
 
 import hashlib
 import json
+import logging
 import time
 from typing import Any, Dict, List, Optional, Set, Union
 
@@ -29,11 +30,23 @@ from .safety_guardrails import (
     ZoneSafetyViolation,
 )
 from .schema_reconciler import (
+    TIMEOUT_NOT_EFFECTIVE,
     IdempotencyConflictError,
     RevisionHashError,
+    acquire_scoped_locks,
+    begin_fresh_read_view_checked,
+    blocked_response,
     compute_canonical_payload_hash,
-    make_bounded_lock_key,
+    engine_refusal,
+    read_apply_target,
+    release_scoped_locks,
+    session_discarded_response,
+    set_lock_wait_timeout_checked,
+    settle_apply,
+    target_unchanged,
 )
+
+logger = logging.getLogger(__name__)
 
 # Strict allowlist and default Frappe property_type mapping for approved Property Setter mutations (§5)
 PROPERTY_TYPE_MAP: Dict[str, str] = {
@@ -196,29 +209,34 @@ def execute_property_setter_deployment(
             "execution_time_ms": execution_time_ms,
         }
 
-    # Step 2: Bounded advisory lock GET_LOCK <= 64 chars (§7.2)
-    lock_key = make_bounded_lock_key(site_id, doctype)
+    # Step 2: Site-scoped idempotency lock, then the target lock (both <= 64 chars, §7.2), a fresh read view
+    # after them, and a lookup that fails blocks (CE-SEC-011: the single-field path's discipline).
     lock_wait_seconds = int(kwargs.get("lock_wait_seconds", 5))
-    lock_result = db.acquire_advisory_lock(lock_key, wait_seconds=lock_wait_seconds)
-
-    if lock_result != 1:
-        reason = "Lock wait timeout (0)" if lock_result == 0 else "Database lock error (NULL)"
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "REJECTED",
-            "success": False,
-            "stage": "ACQUIRE",
-            "disposition": "LOCK_CONTENTION_OR_TIMEOUT",
-            "reason": f"Could not acquire MariaDB GET_LOCK ({reason})",
-            "doctype": doctype,
-            "fieldname": fieldname,
-            "execution_time_ms": execution_time_ms,
-        }
-
+    idempotency_key = kwargs.get("idempotency_key") or f"idemp-{deployment_id}"
+    held: List[str] = []
     try:
+        locked = acquire_scoped_locks(db, held, site_id, doctype, idempotency_key, lock_wait_seconds)
+        if locked is not None:
+            code, reason = locked
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "success": False,
+                "stage": "ACQUIRE",
+                "disposition": "LOCK_CONTENTION_OR_TIMEOUT",
+                "reason_code": code,
+                "reason": reason,
+                "doctype": doctype,
+                "fieldname": fieldname,
+                "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+            }
+
+        failed_view = begin_fresh_read_view_checked(db)
+        if failed_view:
+            return engine_refusal(blocked_response(failed_view), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype, fieldname=fieldname)
+
         # Step 2.5: Idempotency Binding Check (§7.1)
-        idempotency_key = kwargs.get("idempotency_key") or f"idemp-{deployment_id}"
         payload_hash = compute_canonical_payload_hash(
             site_id,
             doctype,
@@ -230,8 +248,17 @@ def execute_property_setter_deployment(
             },
         )
 
-        existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        try:
+            existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        except Exception:
+            logger.exception("durable idempotency lookup failed for %s", deployment_id)
+            return engine_refusal(blocked_response("idempotency"), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype, fieldname=fieldname)
         if existing is not None:
+            if not isinstance(existing, dict) or not isinstance(existing.get("outcome"), dict):
+                logger.error("the stored outcome for %s is not the expected shape", deployment_id)
+                return engine_refusal(blocked_response("idempotency"), deployment_id, "ENGINE_UNAVAILABLE",
+                                      start_time, doctype=doctype, fieldname=fieldname)
             if existing.get("payload_hash") != payload_hash:
                 raise IdempotencyConflictError(
                     f"IDEMPOTENCY_CONFLICT: Key '{idempotency_key}' was already used with a different payload."
@@ -241,7 +268,14 @@ def execute_property_setter_deployment(
             return cached_outcome
 
         # Target DocType recovery state gate (§8.1)
-        if hasattr(db, "is_target_in_recovery_required") and db.is_target_in_recovery_required(site_id, doctype):
+        try:
+            target_blocked = bool(
+                hasattr(db, "is_target_in_recovery_required") and db.is_target_in_recovery_required(site_id, doctype))
+        except Exception:
+            logger.exception("durable recovery lookup failed for %s", deployment_id)
+            return engine_refusal(blocked_response("recovery"), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype, fieldname=fieldname)
+        if target_blocked:
             execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return {
                 "deployment_id": deployment_id,
@@ -310,14 +344,16 @@ def execute_property_setter_deployment(
                     # A live adapter without a readable revision hash must not get a stand-in that
                     # compares equal on both sides (ERP-027).
                     raise RevisionHashError("adapter cannot report the DocType revision hash")
-            except RevisionHashError as exc:
+            except RevisionHashError:
+                logger.exception("DocType revision hash unreadable for %s", deployment_id)
                 return {
                     "deployment_id": deployment_id,
                     "status": "REJECTED",
                     "success": False,
                     "stage": "INSPECT",
                     "disposition": "REVISION_HASH_UNAVAILABLE",
-                    "reason": f"Cannot read the DocType configuration revision: {exc}",
+                    "reason_code": "revision_unavailable",
+                    "reason": "Cannot read the DocType configuration revision.",
                     "doctype": doctype,
                     "fieldname": fieldname,
                     "property_name": property_name,
@@ -341,9 +377,20 @@ def execute_property_setter_deployment(
             "status": "PREPARED",
         }
 
+        # What the apply will write, as committed now (under the locks): a failed apply is clean only if it reads
+        # the same afterwards.
+        target_before = read_apply_target(db, "property_setter", doctype, None, fieldname, property_name)
+
+        # The session lock-wait timeout is set and read back BEFORE any intent exists: if it is not effective
+        # nothing is written and nothing runs (CE-SEC-008).
+        if not set_lock_wait_timeout_checked(db, lock_wait_seconds):
+            return engine_refusal(TIMEOUT_NOT_EFFECTIVE, deployment_id, "LOCK_TIMEOUT_NOT_EFFECTIVE", start_time,
+                                  doctype=doctype, fieldname=fieldname)
+
         try:
             db.persist_prepare_and_audit_intent(prepare_record)
-        except Exception as prep_exc:
+        except Exception:
+            logger.exception("could not persist the deployment intent for %s", deployment_id)
             execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return {
                 "deployment_id": deployment_id,
@@ -351,12 +398,14 @@ def execute_property_setter_deployment(
                 "success": False,
                 "stage": "PREPARE",
                 "disposition": "AUDIT_PREPARE_FAILED",
-                "reason": f"Fail-closed: Could not persist audit intent: {prep_exc}",
+                "reason_code": "audit_prepare_failed",
+                "reason": "Fail-closed: Could not persist deployment/audit intent.",
                 "execution_time_ms": execution_time_ms,
             }
 
         # Step 4: Applies Property Setter via native frappe.make_property_setter or db adapter
         apply_error: Optional[str] = None
+        main_committed = False
         try:
             if hasattr(db, "apply_property_setter") and callable(getattr(db, "apply_property_setter", None)):
                 db.apply_property_setter(
@@ -389,38 +438,46 @@ def execute_property_setter_deployment(
             # ADR-001 Rev 2.3 (§9.1): When quarantining a field (hidden=1), also set reqd=0
             # to guarantee that hiding the field does not cause mandatory validation errors on document save.
             if property_name == "hidden" and int(normalized_value) == 1 and fieldname:
-                try:
-                    if hasattr(db, "apply_property_setter") and callable(getattr(db, "apply_property_setter", None)):
-                        db.apply_property_setter(
+                # The main property is committed by now: a failure of this second write leaves the field hidden but
+                # still mandatory, so it is a partial apply (held), never swallowed and never "clean".
+                main_committed = True
+                if hasattr(db, "apply_property_setter") and callable(getattr(db, "apply_property_setter", None)):
+                    db.apply_property_setter(
+                        doctype=doctype,
+                        fieldname=fieldname,
+                        property_name="reqd",
+                        value=0,
+                        property_type="Check",
+                    )
+                elif frappe and hasattr(frappe, "make_property_setter"):
+                    try:
+                        frappe.make_property_setter({
+                            "doctype": doctype,
+                            "fieldname": fieldname,
+                            "property": "reqd",
+                            "value": 0,
+                            "property_type": "Check",
+                        })
+                    except TypeError:
+                        frappe.make_property_setter(
                             doctype=doctype,
                             fieldname=fieldname,
-                            property_name="reqd",
+                            property="reqd",
                             value=0,
                             property_type="Check",
                         )
-                    elif frappe and hasattr(frappe, "make_property_setter"):
-                        try:
-                            frappe.make_property_setter({
-                                "doctype": doctype,
-                                "fieldname": fieldname,
-                                "property": "reqd",
-                                "value": 0,
-                                "property_type": "Check",
-                            })
-                        except TypeError:
-                            frappe.make_property_setter(
-                                doctype=doctype,
-                                fieldname=fieldname,
-                                property="reqd",
-                                value=0,
-                                property_type="Check",
-                            )
-                        if hasattr(frappe, "db") and hasattr(frappe.db, "commit"):
-                            frappe.db.commit()
-                except Exception:
-                    pass
-        except Exception as exc:
-            apply_error = str(exc)
+                    if hasattr(frappe, "db") and hasattr(frappe.db, "commit"):
+                        frappe.db.commit()
+        except Exception:
+            # The raw error stays in the log.
+            logger.exception("Property Setter apply for %s raised", deployment_id)
+            apply_error = "partial_apply" if main_committed else "apply_failed"
+
+        # A failed apply leaves uncommitted writes: they are rolled back before any outcome is recorded, and a
+        # session that cannot be relied on is never finalized (the intent stays as the hold).
+        if not settle_apply(db, failed=bool(apply_error)):
+            return engine_refusal(session_discarded_response(), deployment_id, "SESSION_DISCARDED", start_time,
+                                  doctype=doctype, fieldname=fieldname, property_name=property_name)
 
         # Step 5: Clears DocType cache frappe.clear_cache(doctype=doctype)
         try:
@@ -435,13 +492,23 @@ def execute_property_setter_deployment(
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
         if apply_error:
+            # A failure is clean only when the target reads back as it was before the intent (the commit of a
+            # write that raised may still have gone through).
+            clean = not main_committed and target_unchanged(
+                target_before, read_apply_target(db, "property_setter", doctype, None, fieldname, property_name))
             outcome = {
                 "deployment_id": deployment_id,
-                "status": "FAILED_CLEAN",
+                "status": "FAILED_CLEAN" if clean else "RECOVERY_REQUIRED",
                 "success": False,
                 "stage": "APPLY",
                 "disposition": "PROPERTY_SETTER_APPLY_FAILED",
-                "reason": apply_error,
+                "reason_code": apply_error,
+                "reason": (
+                    "The Property Setter was only partly applied; the deployment is held for recovery."
+                    if main_committed else
+                    "The Property Setter could not be applied; the details are in the server log." if clean else
+                    "The Property Setter apply failed and its effect could not be ruled out; the deployment is "
+                    "held for recovery."),
                 "doctype": doctype,
                 "fieldname": fieldname,
                 "property_name": property_name,
@@ -502,13 +569,14 @@ def execute_property_setter_deployment(
                 deployment_id,
                 {"payload_hash": payload_hash, "outcome": outcome},
             )
-        except Exception as fin_exc:
+        except Exception:
+            logger.exception("finalization of %s failed after the apply ran", deployment_id)
             outcome = {
                 **outcome,
                 "status": "RECOVERY_REQUIRED",
-                "finalization_error": str(fin_exc),
+                "finalization_error": "finalization_failed",
             }
 
         return outcome
     finally:
-        db.release_advisory_lock(lock_key)
+        release_scoped_locks(db, held)

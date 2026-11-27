@@ -32,6 +32,7 @@ for path in (str(DOCKER_DIR), str(ENGINE_ROOT)):
         sys.path.insert(0, path)
 
 import run_real_bench_ci  # noqa: E402
+import provision_tenant_site  # noqa: E402  (importable once the runner is: it appends scripts/)
 from change_engine.tests import test_erp_014_accounting_properties as erp014  # noqa: E402
 
 
@@ -82,11 +83,13 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
         """Run the runner with docker and the children faked. ``drop_rcs`` are the exit codes of successive
         site drops; ``outputs_by_layer`` maps ERP014/ERP015 to that layer's unittest output."""
         compose_calls, unittest_calls, other_calls = [], [], []
+        self.compose_timeouts = []
         drop_rcs = iter(drop_rcs or ())
         self.compose_calls, self.verifier_calls = compose_calls, other_calls  # visible even when the run raises
 
         def fake_compose(project, compose_file, env, *args, **kwargs):
             compose_calls.append(args)
+            self.compose_timeouts.append(kwargs.get("timeout"))
             if args[:2] == ("ps", "--status"):
                 return subprocess.CompletedProcess([], 0, stdout="engine\nmariadb\nredis-cache\nredis-queue\n", stderr="")
             if "ce_sec_005_drop" in args:
@@ -126,6 +129,18 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
             self.assertRegex(tenant_id, r"^t_[A-Za-z0-9_]+$", site)
         self.assertEqual({s.split("-")[0] for s, _ in provisioned}, {"ce005", "erp014", "erp015"})
         self.assertEqual(len(unittest_calls), 2)
+
+    def test_every_site_gets_the_provisioning_index_sync_after_new_site(self) -> None:
+        """BPL-046: the same program as scripts/provision_tenant_site.py, last in the same call (sh -e)."""
+        _, compose_calls, _ = self._run()
+        provisions = [args for args in compose_calls if "ce_sec_005_provision" in args]
+        self.assertEqual(len(provisions), 1 + len(run_real_bench_ci.VALUATION_LAYERS))
+        for args in provisions:
+            script = args[args.index("-ec") + 1]
+            self.assertTrue(script.endswith('cd sites && ../env/bin/python -c "$index_sync" "$site"'))
+            self.assertLess(script.index("bench new-site"), script.index("$index_sync\""))
+            self.assertIn(provision_tenant_site.INDEX_SYNC_PY, args)
+            self.assertEqual(self.compose_timeouts[compose_calls.index(args)], run_real_bench_ci.PROVISION_TIMEOUT)
 
     def test_the_live_layers_run_with_site_project_and_require_flags(self) -> None:
         rc, compose_calls, unittest_calls = self._run()

@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "typ": "country_pack_pin",
+  "tenantId": "tenant-fictional-01",
+  "source": "store",
+  "countryCode": "SA",
+  "packId": "sa",
+  "version": "0.3.0",
+  "contentDigest": "sha256:4727ded989943c32ca3c12d93cc70b489a4c36d3f98c9d40fefe37e1d3bc1ddf",
+  "publishId": "01JD0000000000000000000002",
+  "indexSeqAtPin": 3,
+  "pinSeq": 4,
+  "changeKind": "upgrade",
+  "changedBy": {
+    "actorKind": "service",
+    "subject": "svc:pack-scheduler",
+    "tokenId": "tok:01JD00000000000000000000AA"
+  },
+  "approval": {
+    "kind": "founder_rollback",
+    "ref": "approval:sa:rollback-01",
+    "approvedBy": "staff:founder-a",
+    "stepUpRef": "stepup:staff:founder-a:09",
+    "reasonRef": "reason:sa:rollback-01"
+  },
+  "changedAt": "2026-11-21T00:00:00Z",
+  "auditId": "audit:01JD00000000000000000000AB"
+}

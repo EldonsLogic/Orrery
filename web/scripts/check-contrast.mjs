@@ -7,18 +7,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const tokensFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'brand', 'tokens', 'tokens.css');
+const proposedFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'brand', 'tokens', 'tokens.proposed.css');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'app', 'src');
 
-export function readThemes(css) {
-  const grab = (re) => {
-    const m = css.match(re);
+export function readThemes(css, proposedCss = '') {
+  const grab = (re, text = css) => {
+    const m = text.match(re);
     if (!m) throw new Error(`token block not found: ${re}`);
     return Object.fromEntries([...m[1].matchAll(/--(color-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g)].map((x) => [x[1], x[2]]));
   };
-  return {
-    light: grab(/:root\s*\{([^}]*)\}/),
-    dark: grab(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/),
-  };
+  const light = grab(/:root\s*\{([^}]*)\}/);
+  const dark = grab(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/);
+  if (proposedCss) {
+    // The accepted v1.1 layer (hover, pressed and label tokens), loaded after tokens.css by the app.
+    Object.assign(light, grab(/:root\s*\{([^}]*)\}/, proposedCss));
+    Object.assign(dark, grab(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/, proposedCss));
+  }
+  return { light, dark };
 }
 
 const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -54,10 +59,10 @@ for (const [bn, base] of [['surface', S], ['background', B]]) {
 }
 add('navHeading/surface', 'nav heading (opacity .75) on surface', 'components/shell/Shell.module.css', 'opacity: 0.75', dimOn(0.75, S), S, N);
 add('onboarding-progress/background', 'onboarding progress (opacity .75) on background', 'components/onboarding/Onboarding.module.css', 'opacity: 0.75', dimOn(0.75, B), B, N);
-add('on-primary', 'background on primary (button, user bubble, skip link, badge)', 'ui/Button.module.css', 'color: var(--color-background)', (c) => c.background, (c) => c.primary, N);
+add('on-primary', 'primary label on primary (button)', 'ui/Button.module.css', 'color: var(--color-primary-label)', (c) => c['primary-label'], (c) => c.primary, N);
 add('on-danger', 'background on danger button', 'ui/Button.module.css', 'color: var(--color-background)', (c) => c.background, (c) => c.danger, N);
-add('on-primary-hover', 'background on primary hover (88% primary, 12% text)', 'ui/Button.module.css', 'var(--color-primary) 88%', (c) => c.background, (c) => mix(c.primary, 0.88, c.text), N);
-add('on-primary-active', 'background on primary active (76% primary, 24% text)', 'ui/Button.module.css', 'var(--color-primary) 76%', (c) => c.background, (c) => mix(c.primary, 0.76, c.text), N);
+add('on-primary-hover', 'primary label on primary hover', 'ui/Button.module.css', 'background: var(--color-primary-hover)', (c) => c['primary-label'], (c) => c['primary-hover'], N);
+add('on-primary-active', 'primary label on primary pressed', 'ui/Button.module.css', 'background: var(--color-primary-pressed)', (c) => c['primary-label'], (c) => c['primary-pressed'], N);
 add('on-danger-hover', 'background on danger hover', 'ui/Button.module.css', 'var(--color-danger) 88%', (c) => c.background, (c) => mix(c.danger, 0.88, c.text), N);
 add('on-danger-active', 'background on danger active', 'ui/Button.module.css', 'var(--color-danger) 76%', (c) => c.background, (c) => mix(c.danger, 0.76, c.text), N);
 add('ghost-hover', 'primary ghost text on 20% primary tint (active) over background', 'ui/Button.module.css', 'var(--color-primary) 20%', (c) => c.primary, (c) => mix(c.primary, 0.2, c.background), N);
@@ -88,11 +93,12 @@ export function evaluate(themes) {
   return out;
 }
 
+export const proposedCss = () => fs.readFileSync(proposedFile, 'utf8');
 export const tokenCss = () => fs.readFileSync(tokensFile, 'utf8');
 export const readSource = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const failed = evaluate(readThemes(tokenCss())).filter((r) => r.ratio < r.min);
+  const failed = evaluate(readThemes(tokenCss(), proposedCss())).filter((r) => r.ratio < r.min);
   for (const r of failed) console.error(`${r.mode} ${r.id} ${r.ratio.toFixed(2)} < ${r.min}`);
   if (failed.length) process.exit(1);
   console.log('check-contrast: ok');

@@ -54,15 +54,15 @@
 
 .primary {
   background: var(--color-primary);
-  color: var(--color-background);
+  color: var(--color-primary-label);
 }
 
 .primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-primary) 88%, var(--color-text));
+  background: var(--color-primary-hover);
 }
 
 .primary:active:not(:disabled) {
-  background: color-mix(in srgb, var(--color-primary) 76%, var(--color-text));
+  background: var(--color-primary-pressed);
 }
 
 .danger {

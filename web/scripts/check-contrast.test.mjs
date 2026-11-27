@@ -2,13 +2,13 @@ import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
-import { PAIRS_ALL, evaluate, mix, ratio, readSource, readThemes, tokenCss } from './check-contrast.mjs';
+import { PAIRS_ALL, evaluate, mix, proposedCss, ratio, readSource, readThemes, tokenCss } from './check-contrast.mjs';
 
 // Pairs that fail AA and are tracked in docs/specs/qa-014-accessibility-audit.md (A-12). Token values are generated and not
 // edited here; a listed pair runs as a known failure (node:test todo) so CI stays green. Format: 'mode id' -> reason.
 const KNOWN = {};
 
-const themes = readThemes(tokenCss());
+const themes = readThemes(tokenCss(), proposedCss());
 
 test('ratio matches published WCAG values', () => {
   assert.equal(ratio('#000000', '#ffffff').toFixed(2), '21.00');

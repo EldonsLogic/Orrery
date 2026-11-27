@@ -1,0 +1,48 @@
+{
+  "tenants": {
+    "sample-trading": {
+      "slug": "sample-trading",
+      "displayName": { "ar": "شركة العينة للتجارة", "en": "Sample Trading Co" },
+      "headline": { "ar": "أهلاً بعودتك", "en": "Welcome back" },
+      "logo": { "onLight": "/icons/app-icon.svg" },
+      "showLogo": true,
+      "light": {
+        "--color-primary": "#006E67",
+        "--color-primary-hover": "#02635E",
+        "--color-primary-pressed": "#045955",
+        "--color-primary-label": "#FFFFFF",
+        "--color-link-visited": "#084645",
+        "--state-selected": "rgba(0,110,103,0.12)"
+      },
+      "dark": {
+        "--color-primary": "#7CB0AA",
+        "--color-primary-hover": "#8CB9B4",
+        "--color-primary-pressed": "#6F9D98",
+        "--color-primary-label": "#0E1117",
+        "--color-link-visited": "#ADCAC9",
+        "--state-selected": "rgba(124,176,170,0.16)"
+      }
+    },
+    "example-foods": {
+      "slug": "example-foods",
+      "displayName": { "ar": "أمثلة للأغذية", "en": "Example Foods" },
+      "showLogo": false,
+      "light": {
+        "--color-primary": "#7A3E9D",
+        "--color-primary-hover": "#6E398D",
+        "--color-primary-pressed": "#61347E",
+        "--color-primary-label": "#FFFFFF",
+        "--color-link-visited": "#4B2C62",
+        "--state-selected": "rgba(122,62,157,0.12)"
+      },
+      "dark": {
+        "--color-primary": "#B993D3",
+        "--color-primary-hover": "#C1A0D8",
+        "--color-primary-pressed": "#A483BC",
+        "--color-primary-label": "#0E1117",
+        "--color-link-visited": "#CEBAE0",
+        "--state-selected": "rgba(185,147,211,0.16)"
+      }
+    }
+  }
+}

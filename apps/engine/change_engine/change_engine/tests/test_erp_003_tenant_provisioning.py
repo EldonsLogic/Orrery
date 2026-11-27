@@ -11,6 +11,7 @@ Validates:
 7. Secret handling: no secrets on host CLI argv, env forwarding via docker compose exec, admin password returned or written to 0600 credentials file, secret masking on errors.
 8. Fail-closed verification on missing root password, new-site failure, set-config failure, and list-apps failure/mismatch.
 9. Compose runtime targeting (`docker compose exec -T` via provision_tenant_site.py and provision_tenant.sh; no `ce-engine-dev`).
+10. BPL-046 index sync right after new-site: Frappe's own updatedb, only ADD INDEX sent, any other DDL fails closed.
 """
 
 import json
@@ -20,7 +21,10 @@ import stat
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest import mock
 
@@ -31,10 +35,20 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 from provision_tenant_site import (  # noqa: E402
     DEFAULT_IN_SCOPE_APPS,
+    INDEX_SYNC_PY,
     ProvisioningError,
     TenantConfig,
     TenantProvisioner,
+    index_sync_command,
 )
+
+INDEX_SYNC_OK = json.dumps({"tables": 838, "indexes_added": ["ALTER TABLE `tabX` ADD INDEX `creation`(`creation`)"],
+                            "modify_not_sent": 0})
+
+
+def _bench_ok(cmd):
+    """Every bench call succeeds; the index sync prints its report."""
+    return (0, INDEX_SYNC_OK, "") if INDEX_SYNC_PY in cmd else (0, "OK", "")
 
 
 class TestERP003TenantProvisioning(unittest.TestCase):
@@ -184,11 +198,12 @@ class TestERP003TenantProvisioning(unittest.TestCase):
         self.assertEqual(overrides["currency"], "SAR")
         self.assertEqual(overrides["country"], "Saudi Arabia")
 
-        # set_config plan uses `bench --site ... set-config`, never python -c
+        # set_config plan uses `bench --site ... set-config`, never python -c (the BPL-046 index sync is python)
         set_cfg_cmds = plan["commands"]["set_config"]
         self.assertTrue(all(c[:4] == ["bench", "--site", "riyadh.tenants.local", "set-config"] for c in set_cfg_cmds))
         self.assertNotIn("frappe.conf.save", serialized)
-        self.assertNotIn("python", serialized)
+        self.assertNotIn("python", json.dumps(set_cfg_cmds))
+        self.assertEqual(plan["commands"]["index_sync"], index_sync_command("riyadh.tenants.local"))
 
     def test_07_live_provisioning_uses_set_config_env_secrets_and_returns_admin_password(self):
         """Live flow keeps secrets off command argv, uses bench set-config, and returns admin_password."""
@@ -199,7 +214,7 @@ class TestERP003TenantProvisioning(unittest.TestCase):
             calls.append((cmd, env_overrides or {}))
             if cmd[:4] == ["bench", "--site", "dubai-logistics.localhost", "list-apps"]:
                 return 0, json.dumps({"dubai-logistics.localhost": ["frappe", "erpnext", "hrms", "change_engine"]}), ""
-            return 0, "OK", ""
+            return _bench_ok(cmd)
 
         cfg = TenantConfig(tenant_id="dubai-logistics", country="AE")
         provisioner = TenantProvisioner(
@@ -225,8 +240,12 @@ class TestERP003TenantProvisioning(unittest.TestCase):
         self.assertNotIn(result["admin_password"], flat_cmd)
         self.assertNotIn(result["db_password"], flat_cmd)
 
+        # Second call: the BPL-046 index sync, without secrets; its report is returned
+        self.assertEqual(calls[1], (index_sync_command("dubai-logistics.localhost"), {}))
+        self.assertEqual(result["index_sync"], json.loads(INDEX_SYNC_OK))
+
         # Middle calls: bench --site <site> set-config (no python -c or frappe.conf.save)
-        cfg_calls = [cmd for cmd, _ in calls[1:-1]]
+        cfg_calls = [cmd for cmd, _ in calls[2:-1]]
         self.assertEqual(len(cfg_calls), 7)
         for cmd in cfg_calls:
             self.assertEqual(cmd[:4], ["bench", "--site", "dubai-logistics.localhost", "set-config"])
@@ -272,7 +291,7 @@ class TestERP003TenantProvisioning(unittest.TestCase):
         def fail_on_set_config(cmd):
             if "set-config" in cmd:
                 return 1, "", "config write error"
-            return 0, "OK", ""
+            return _bench_ok(cmd)
 
         fail_cfg_prov = TenantProvisioner(
             config=cfg,
@@ -287,7 +306,7 @@ class TestERP003TenantProvisioning(unittest.TestCase):
         def fail_on_list_apps(cmd):
             if "list-apps" in cmd:
                 return 1, "", "site missing"
-            return 0, "OK", ""
+            return _bench_ok(cmd)
 
         fail_list_prov = TenantProvisioner(
             config=cfg,
@@ -302,7 +321,7 @@ class TestERP003TenantProvisioning(unittest.TestCase):
         def missing_app_list(cmd):
             if "list-apps" in cmd:
                 return 0, json.dumps({"cairo-retail.localhost": ["frappe", "erpnext"]}), ""
-            return 0, "OK", ""
+            return _bench_ok(cmd)
 
         missing_app_prov = TenantProvisioner(
             config=cfg,
@@ -317,7 +336,7 @@ class TestERP003TenantProvisioning(unittest.TestCase):
         def bad_json_list(cmd):
             if "list-apps" in cmd:
                 return 0, "not-json", ""
-            return 0, "OK", ""
+            return _bench_ok(cmd)
 
         bad_json_prov = TenantProvisioner(
             config=cfg,
@@ -347,7 +366,7 @@ class TestERP003TenantProvisioning(unittest.TestCase):
             if "list-apps" in cmd:
                 proc.stdout = json.dumps({"doha-traders.localhost": ["frappe", "erpnext", "hrms", "change_engine"]})
             else:
-                proc.stdout = "OK"
+                proc.stdout = _bench_ok(cmd)[1]
             proc.stderr = ""
             return proc
 
@@ -407,7 +426,7 @@ class TestERP003TenantProvisioning(unittest.TestCase):
             if "list-apps" in cmd:
                 proc.stdout = json.dumps({"doha-traders.localhost": ["frappe", "erpnext", "hrms", "change_engine"]})
             else:
-                proc.stdout = "OK"
+                proc.stdout = _bench_ok(cmd)[1]
             proc.stderr = ""
             return proc
 
@@ -521,6 +540,83 @@ class TestERP003TenantProvisioning(unittest.TestCase):
                 ])
             self.assertEqual(rc_fail, 1)
             self.assertFalse(reserved.exists())
+
+
+class TestBPL046IndexSync(unittest.TestCase):
+    """Provisioning adds the indexes the engine's own schema sync expects, before any apply, and fails closed."""
+
+    def test_a_failed_or_unreadable_index_sync_stops_provisioning_before_set_config(self):
+        root_secret = "test-root-" + secrets.token_hex(8)
+        for rc, out in ((1, f"boom {root_secret}"), (0, "OK"), (0, json.dumps({"tables": 0, "indexes_added": []})),
+                        (0, json.dumps({"tables": 5}))):
+            with self.subTest(rc=rc, out=out):
+                calls = []
+
+                def executor(cmd, env_overrides=None, calls=calls, rc=rc, out=out):
+                    calls.append(cmd)
+                    return (rc, out, "") if INDEX_SYNC_PY in cmd else (0, "OK", "")
+
+                prov = TenantProvisioner(TenantConfig(tenant_id="doha-retail", country="QA"),
+                                         mariadb_root_password=root_secret, executor=executor)
+                with self.assertRaisesRegex(ProvisioningError, "Index sync failed") as ctx:
+                    prov.provision(dry_run=False)
+                self.assertNotIn(root_secret, str(ctx.exception))
+                self.assertEqual(len(calls), 2, "nothing runs after a failed index sync")
+
+    def _run_program(self, statements_by_doctype):
+        """Run INDEX_SYNC_PY against a stand-in frappe whose updatedb emits the given DDL."""
+        sent, destroyed = [], []
+        db = types.SimpleNamespace(sql_ddl=lambda query, debug=False: sent.append(query))
+        db.updatedb = lambda doctype: [db.sql_ddl(q) for q in statements_by_doctype[doctype]]
+        fake = types.SimpleNamespace(
+            init=lambda site, sites_path: None, connect=lambda: None, destroy=lambda: destroyed.append(1), db=db,
+            get_all=lambda doctype, filters, pluck, order_by: sorted(statements_by_doctype),
+        )
+        out = StringIO()
+        with mock.patch.dict(sys.modules, {"frappe": fake}), mock.patch.object(sys, "argv", ["-c", "t.localhost"]):
+            try:
+                with redirect_stdout(out):
+                    exec(compile(INDEX_SYNC_PY, "index_sync", "exec"), {"__name__": "__main__"})  # noqa: S102
+            finally:
+                self.assertEqual(destroyed, [1], "the connection is always released")
+        return sent, out.getvalue()
+
+    def test_only_index_additions_are_sent_and_reported(self):
+        add = "ALTER TABLE `tabSales Invoice Item` ADD INDEX `creation`(`creation`)"
+        modify = "ALTER TABLE `tabSales Invoice Item` MODIFY `rate` decimal(21,9) not null default 0"
+        sent, out = self._run_program({"Sales Invoice Item": [modify, add], "Customer": []})
+        self.assertEqual(sent, [add])
+        self.assertEqual(json.loads(out), {"tables": 2, "indexes_added": [add], "modify_not_sent": 1})
+
+    def test_any_other_ddl_fails_closed(self):
+        for stmt in ("ALTER TABLE `tabX` ADD COLUMN `y` int(11)", "ALTER TABLE `tabX` DROP INDEX `y_index`",
+                     "ALTER TABLE `tabX` MODIFY `y` int(11), ADD UNIQUE INDEX IF NOT EXISTS y (`y`)",
+                     "create table `tabX` (name varchar(140) primary key)",
+                     # #381 review: a statement that starts with ADD INDEX may carry more clauses or a second statement
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`), DROP INDEX `b`",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`), DROP COLUMN `c`",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`), CHANGE `c` `d` int(11)",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`); DROP TABLE `tabX`",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`",
+                     "ALTER TABLE `tabX` MODIFY `y` varchar(140) unique",
+                     # #381 re-review: a quote inside a comment moves the parser's clause ends; the strict index shape
+                     # refuses the whole statement, so the hidden DROP COLUMN is never sent
+                     "ALTER TABLE `t` ADD INDEX `a`(`a`) /* ' */ , DROP COLUMN `c`, ADD INDEX `b`(`b`) /* ' */",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`) -- x",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`(140))",
+                     "ALTER TABLE `tabX` ADD INDEX IF NOT EXISTS `a`(`a`)"):
+            with self.subTest(stmt):
+                with self.assertRaisesRegex(SystemExit, "index sync refused DDL"):
+                    self._run_program({"X": [stmt]})
+
+    def test_a_mixed_statement_sends_only_its_index_clauses(self):
+        """Frappe's alter() joins clauses: MODIFY plus ADD INDEX sends the ADD INDEX part, never skips it (#381)."""
+        mixed = ("ALTER TABLE `tabX` MODIFY `note` varchar(140) default '#fff, -- b; c', ADD INDEX `creation`(`creation`), "
+                 "ADD INDEX `unique_code_index`(`unique_code`)")
+        sent, out = self._run_program({"X": [mixed]})
+        rebuilt = "ALTER TABLE `tabX` ADD INDEX `creation`(`creation`), ADD INDEX `unique_code_index`(`unique_code`)"
+        self.assertEqual(sent, [rebuilt])
+        self.assertEqual(json.loads(out), {"tables": 1, "indexes_added": [rebuilt], "modify_not_sent": 1})
 
 
 if __name__ == "__main__":

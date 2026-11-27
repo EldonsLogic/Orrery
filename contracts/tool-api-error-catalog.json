@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "entries": [
     {
       "id": "insufficient_stock",
@@ -236,6 +236,97 @@
       },
       "review": "unreviewed",
       "owner_action": "ask_owner"
+    },
+    {
+      "id": "metric_unknown",
+      "class": "invalid_arguments",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.metric_unknown",
+      "messages": {
+        "en": "That metric does not exist.",
+        "ar": "هذا المقياس غير موجود."
+      },
+      "review": "unreviewed",
+      "owner_action": "fix_input"
+    },
+    {
+      "id": "metric_permission_denied",
+      "class": "permission_denied",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.metric_permission_denied",
+      "messages": {
+        "en": "Your role is not allowed to read this metric.",
+        "ar": "دورك لا يسمح بقراءة هذا المقياس."
+      },
+      "review": "unreviewed",
+      "owner_action": "ask_owner"
+    },
+    {
+      "id": "metric_invalid_params",
+      "class": "invalid_arguments",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.metric_invalid_params",
+      "messages": {
+        "en": "The metric request has missing or invalid parameters.",
+        "ar": "طلب المقياس ينقصه معامل أو يحتوي معاملا غير صالح."
+      },
+      "review": "unreviewed",
+      "owner_action": "fix_input"
+    },
+    {
+      "id": "metric_tenant_mismatch",
+      "class": "permission_denied",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.metric_tenant_mismatch",
+      "messages": {
+        "en": "The metric data does not belong to your company, so it was refused.",
+        "ar": "بيانات المقياس لا تخص شركتك، لذلك تم رفض الطلب."
+      },
+      "review": "unreviewed",
+      "owner_action": "contact_support"
+    },
+    {
+      "id": "metric_currency_mismatch",
+      "class": "invalid_arguments",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.metric_currency_mismatch",
+      "messages": {
+        "en": "The records use a different currency from the one requested.",
+        "ar": "السجلات بعملة مختلفة عن العملة المطلوبة."
+      },
+      "review": "unreviewed",
+      "owner_action": "ask_owner"
+    },
+    {
+      "id": "metric_bad_event_data",
+      "class": "engine_error",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.metric_bad_event_data",
+      "messages": {
+        "en": "The metric could not be computed because some records are malformed.",
+        "ar": "تعذر حساب المقياس لأن بعض السجلات غير سليمة."
+      },
+      "review": "unreviewed",
+      "owner_action": "contact_support"
+    },
+    {
+      "id": "metric_no_principal",
+      "class": "permission_denied",
+      "retryable": false,
+      "params": {},
+      "message_key": "errors.domain.metric_no_principal",
+      "messages": {
+        "en": "Your identity could not be verified for this request.",
+        "ar": "تعذر التحقق من هويتك لهذا الطلب."
+      },
+      "review": "unreviewed",
+      "owner_action": "contact_support"
     }
   ]
 }

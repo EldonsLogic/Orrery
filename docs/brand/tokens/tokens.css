@@ -10,8 +10,8 @@
   --color-danger: #C21F3A;
   --seshna-mark: #2443D0;
   --seshna-mark-accent: #E0552C;
-  --font-heading: "Cairo", system-ui, sans-serif;
-  --font-body: "Readex Pro", system-ui, sans-serif;
+  --font-heading: "Cairo", "Geeza Pro", "Noto Naskh Arabic", "Segoe UI", Tahoma, system-ui, sans-serif;
+  --font-body: "Readex Pro", "Geeza Pro", "Noto Naskh Arabic", "Segoe UI", Tahoma, system-ui, sans-serif;
   --text-display-size: 2.5rem;
   --text-display-line: 3rem;
   --text-display-weight: 600;

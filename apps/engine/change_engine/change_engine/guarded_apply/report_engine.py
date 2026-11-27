@@ -11,6 +11,7 @@ Implements PRD-001 (Declarative Primitive 4: Report Builder) and ADR-001 / ADR-0
 
 import hashlib
 import json
+import logging
 import re
 import time
 from typing import Any, Dict, List, Optional, Set, Union
@@ -23,10 +24,22 @@ except ImportError:
 
 from .safety_guardrails import ZONE_2_LOCKED_DOCTYPES, is_locked_doctype
 from .schema_reconciler import (
+    TIMEOUT_NOT_EFFECTIVE,
     IdempotencyConflictError,
+    acquire_scoped_locks,
+    begin_fresh_read_view_checked,
+    blocked_response,
     compute_canonical_payload_hash,
-    make_bounded_lock_key,
+    engine_refusal,
+    read_apply_target,
+    release_scoped_locks,
+    session_discarded_response,
+    set_lock_wait_timeout_checked,
+    settle_apply,
+    target_unchanged,
 )
+
+logger = logging.getLogger(__name__)
 
 # Authorized roles for Report Builder deployment (§5, §10)
 AUTHORIZED_REPORT_ROLES: Set[str] = {
@@ -169,10 +182,12 @@ def validate_report_definition(
     if isinstance(report_def, dict):
         try:
             rd = ReportDefinition(**report_def)
-        except Exception as exc:
+        except Exception:
+            # The validator's own text carries the caller's input and library details: fixed text only.
+            logger.exception("report definition failed schema validation")
             return ReportValidationResult(
                 is_valid=False,
-                errors=[f"Schema validation error: {exc}"],
+                errors=["The report definition did not pass schema validation."],
                 warnings=[],
             )
     else:
@@ -232,8 +247,9 @@ def validate_report_definition(
         if isinstance(chart_obj, dict):
             try:
                 chart_obj = ReportChartConfig(**chart_obj)
-            except Exception as chart_exc:
-                errors.append(f"Chart configuration error: {chart_exc}")
+            except Exception:
+                logger.exception("report chart failed schema validation")
+                errors.append("The chart configuration did not pass schema validation.")
                 chart_obj = None
 
         if chart_obj:
@@ -409,7 +425,8 @@ def execute_report_deployment(
             rep_dict["ref_doctype"] = doctype
         try:
             rd = ReportDefinition(**rep_dict)
-        except Exception as exc:
+        except Exception:
+            logger.exception("report definition failed schema validation for %s", deployment_id)
             execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return {
                 "deployment_id": deployment_id,
@@ -417,7 +434,8 @@ def execute_report_deployment(
                 "success": False,
                 "stage": "VALIDATE",
                 "disposition": "INVALID_REPORT_PAYLOAD",
-                "reason": f"Report definition schema validation failed: {exc}",
+                "reason_code": "invalid_report_payload",
+                "reason": "The report definition did not pass schema validation.",
                 "doctype": doctype,
                 "execution_time_ms": execution_time_ms,
             }
@@ -433,6 +451,7 @@ def execute_report_deployment(
             "success": False,
             "stage": "VALIDATE",
             "disposition": "INVALID_REPORT_DEFINITION",
+            "reason_code": "invalid_report_definition",
             "reason": "; ".join(val_result.errors),
             "errors": val_result.errors,
             "warnings": val_result.warnings,
@@ -441,33 +460,47 @@ def execute_report_deployment(
             "execution_time_ms": execution_time_ms,
         }
 
-    # Step 3: Bounded advisory lock GET_LOCK <= 64 chars (§7.2)
-    lock_key = make_bounded_lock_key(site_id, doctype)
+    # Step 3: Site-scoped idempotency lock, then the target lock (both <= 64 chars, §7.2), a fresh read view
+    # after them, and a lookup that fails blocks (CE-SEC-011: the single-field path's discipline).
     lock_wait_seconds = int(kwargs.get("lock_wait_seconds", 5))
-    lock_result = db.acquire_advisory_lock(lock_key, wait_seconds=lock_wait_seconds)
-
-    if lock_result != 1:
-        reason = "Lock wait timeout (0)" if lock_result == 0 else "Database lock error (NULL)"
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "REJECTED",
-            "success": False,
-            "stage": "ACQUIRE",
-            "disposition": "LOCK_CONTENTION_OR_TIMEOUT",
-            "reason": f"Could not acquire MariaDB GET_LOCK ({reason})",
-            "doctype": doctype,
-            "report_name": rd.report_name,
-            "execution_time_ms": execution_time_ms,
-        }
-
+    idempotency_key = kwargs.get("idempotency_key") or f"idemp-{deployment_id}"
+    held: List[str] = []
     try:
+        locked = acquire_scoped_locks(db, held, site_id, doctype, idempotency_key, lock_wait_seconds)
+        if locked is not None:
+            code, reason = locked
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "success": False,
+                "stage": "ACQUIRE",
+                "disposition": "LOCK_CONTENTION_OR_TIMEOUT",
+                "reason_code": code,
+                "reason": reason,
+                "doctype": doctype,
+                "report_name": rd.report_name,
+                "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+            }
+
+        failed_view = begin_fresh_read_view_checked(db)
+        if failed_view:
+            return engine_refusal(blocked_response(failed_view), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype)
+
         # Step 4: Idempotency Binding Check (§7.1)
-        idempotency_key = kwargs.get("idempotency_key") or f"idemp-{deployment_id}"
         payload_hash = compute_canonical_payload_hash(site_id, doctype, rd.model_dump())
 
-        existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        try:
+            existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        except Exception:
+            logger.exception("durable idempotency lookup failed for %s", deployment_id)
+            return engine_refusal(blocked_response("idempotency"), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype)
         if existing is not None:
+            if not isinstance(existing, dict) or not isinstance(existing.get("outcome"), dict):
+                logger.error("the stored outcome for %s is not the expected shape", deployment_id)
+                return engine_refusal(blocked_response("idempotency"), deployment_id, "ENGINE_UNAVAILABLE",
+                                      start_time, doctype=doctype)
             if existing.get("payload_hash") != payload_hash:
                 raise IdempotencyConflictError(
                     f"IDEMPOTENCY_CONFLICT: Key '{idempotency_key}' was already used with a different payload."
@@ -477,7 +510,14 @@ def execute_report_deployment(
             return cached_outcome
 
         # Step 4.5: Target DocType recovery state gate (§8.1)
-        if hasattr(db, "is_target_in_recovery_required") and db.is_target_in_recovery_required(site_id, doctype):
+        try:
+            target_blocked = bool(
+                hasattr(db, "is_target_in_recovery_required") and db.is_target_in_recovery_required(site_id, doctype))
+        except Exception:
+            logger.exception("durable recovery lookup failed for %s", deployment_id)
+            return engine_refusal(blocked_response("recovery"), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype)
+        if target_blocked:
             execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return {
                 "deployment_id": deployment_id,
@@ -521,10 +561,21 @@ def execute_report_deployment(
             "status": "PREPARED",
         }
 
+        # What the apply will write, as committed now (under the locks): a failed apply is clean only if it reads
+        # the same afterwards.
+        target_before = read_apply_target(db, "report", doctype, rd.report_name)
+
+        # The session lock-wait timeout is set and read back BEFORE any intent exists: if it is not effective
+        # nothing is written and nothing runs (CE-SEC-008).
+        if not set_lock_wait_timeout_checked(db, lock_wait_seconds):
+            return engine_refusal(TIMEOUT_NOT_EFFECTIVE, deployment_id, "LOCK_TIMEOUT_NOT_EFFECTIVE", start_time,
+                                  doctype=doctype)
+
         # Fail-closed prepare audit
         try:
             db.persist_prepare_and_audit_intent(prepare_record)
-        except Exception as prep_exc:
+        except Exception:
+            logger.exception("could not persist the deployment intent for %s", deployment_id)
             execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return {
                 "deployment_id": deployment_id,
@@ -532,7 +583,8 @@ def execute_report_deployment(
                 "success": False,
                 "stage": "PREPARE",
                 "disposition": "AUDIT_PREPARE_FAILED",
-                "reason": f"Fail-closed: Could not persist audit intent: {prep_exc}",
+                "reason_code": "audit_prepare_failed",
+                "reason": "Fail-closed: Could not persist deployment/audit intent.",
                 "doctype": doctype,
                 "execution_time_ms": execution_time_ms,
             }
@@ -604,8 +656,16 @@ def execute_report_deployment(
                     r_doc.insert(ignore_permissions=True)
                 if hasattr(frappe.db, "commit"):
                     frappe.db.commit()
-        except Exception as exc:
-            apply_error = str(exc)
+        except Exception:
+            # The raw error stays in the log.
+            logger.exception("Report apply for %s raised", deployment_id)
+            apply_error = "apply_failed"
+
+        # A failed apply leaves uncommitted writes: they are rolled back before any outcome is recorded, and a
+        # session that cannot be relied on is never finalized (the intent stays as the hold).
+        if not settle_apply(db, failed=bool(apply_error)):
+            return engine_refusal(session_discarded_response(), deployment_id, "SESSION_DISCARDED", start_time,
+                                  doctype=doctype, report_name=rd.report_name)
 
         # Step 8: Clear DocType cache
         try:
@@ -619,13 +679,19 @@ def execute_report_deployment(
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
         if apply_error:
+            # A failure is clean only when the target reads back as it was before the intent (the commit of a
+            # write that raised may still have gone through).
+            clean = target_unchanged(target_before, read_apply_target(db, "report", doctype, rd.report_name))
             outcome = {
                 "deployment_id": deployment_id,
-                "status": "FAILED_CLEAN",
+                "status": "FAILED_CLEAN" if clean else "RECOVERY_REQUIRED",
                 "success": False,
                 "stage": "APPLY",
                 "disposition": "REPORT_APPLY_FAILED",
-                "reason": apply_error,
+                "reason_code": apply_error,
+                "reason": ("The report could not be applied; the details are in the server log." if clean else
+                           "The report apply failed and its effect could not be ruled out; the deployment is held "
+                           "for recovery."),
                 "doctype": doctype,
                 "report_name": rd.report_name,
                 "execution_time_ms": execution_time_ms,
@@ -652,14 +718,15 @@ def execute_report_deployment(
                 deployment_id,
                 {"payload_hash": payload_hash, "outcome": outcome, "baseline_snapshot": baseline_snapshot},
             )
-        except Exception as fin_exc:
+        except Exception:
+            logger.exception("finalization of %s failed after the apply ran", deployment_id)
             outcome = {
                 **outcome,
                 "status": "RECOVERY_REQUIRED",
-                "finalization_error": str(fin_exc),
+                "finalization_error": "finalization_failed",
             }
 
         return outcome
 
     finally:
-        db.release_advisory_lock(lock_key)
+        release_scoped_locks(db, held)

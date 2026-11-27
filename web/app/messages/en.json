@@ -1528,5 +1528,14 @@
     "title": "Settings",
     "nav": "Settings sections",
     "branding": "Branding"
+  },
+  "metrics": {
+    "sales": {
+      "revenue": "Revenue",
+      "order_count": "Invoices issued"
+    },
+    "finance": {
+      "receivables_outstanding": "Outstanding receivables"
+    }
   }
 }

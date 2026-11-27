@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "typ": "country_pack_pin",
+  "tenantId": "tenant-fictional-01",
+  "source": "store",
+  "countryCode": "SA",
+  "packId": "sa",
+  "version": "0.2.0",
+  "contentDigest": "sha256:7a7ba2a723e7c22b238142f0b706b672fc17c7f8661bdaeb3882776237fb54dc",
+  "publishId": "01JD0000000000000000000001",
+  "indexSeqAtPin": 3,
+  "pinSeq": 5,
+  "changeKind": "rollback",
+  "changedBy": {
+    "actorKind": "staff",
+    "subject": "staff:founder-a",
+    "tokenId": "tok:01JD00000000000000000000AC"
+  },
+  "approval": {
+    "kind": "founder_rollback",
+    "ref": "approval:sa:rollback-01",
+    "approvedBy": "staff:founder-a",
+    "stepUpRef": "stepup:staff:founder-a:09",
+    "reasonRef": "reason:sa:rollback-01"
+  },
+  "changedAt": "2026-11-22T08:00:00Z",
+  "auditId": "audit:01JD00000000000000000000AD"
+}

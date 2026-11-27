@@ -1528,5 +1528,14 @@
     "title": "الإعدادات",
     "nav": "أقسام الإعدادات",
     "branding": "الهوية"
+  },
+  "metrics": {
+    "sales": {
+      "revenue": "الإيرادات",
+      "order_count": "الفواتير الصادرة"
+    },
+    "finance": {
+      "receivables_outstanding": "الذمم المدينة المستحقة"
+    }
   }
 }

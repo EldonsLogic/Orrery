@@ -1,0 +1,21 @@
+{
+  "base": "blueprint-modules-minimal.json",
+  "note": "Negative cases for modules.crm (ADR-0079). Each case edits the valid base by JSON pointer; the result must fail the Blueprint schema at a path containing 'expect'. Run by contracts/tests/test_blueprint_modules.py.",
+  "cases": [
+    { "name": "unknown-module", "set": { "/modules/sales_crm": {} }, "expect": "modules" },
+    { "name": "crm-missing-pipeline", "remove": ["/modules/crm/pipeline"], "expect": "modules/crm" },
+    { "name": "crm-missing-customer-concept", "remove": ["/modules/crm/entities/customer"], "expect": "modules/crm/entities" },
+    { "name": "crm-unknown-concept", "set": { "/modules/crm/entities/ticket": "lead" }, "expect": "modules/crm/entities" },
+    { "name": "crm-no-manage-role", "set": { "/modules/crm/roles/manage": [] }, "expect": "modules/crm/roles/manage" },
+    { "name": "crm-two-won-stages", "set": { "/modules/crm/pipeline/stages/2/kind": "won", "/modules/crm/pipeline/stages/2/probabilityPercent": 100 }, "expect": "modules/crm/pipeline/stages" },
+    { "name": "crm-no-lost-stage", "remove": ["/modules/crm/pipeline/stages/4"], "expect": "modules/crm/pipeline/stages" },
+    { "name": "crm-won-not-100", "set": { "/modules/crm/pipeline/stages/3/probabilityPercent": 90 }, "expect": "modules/crm/pipeline/stages/3/probabilityPercent" },
+    { "name": "crm-probability-over-100", "set": { "/modules/crm/pipeline/stages/0/probabilityPercent": 120 }, "expect": "modules/crm/pipeline/stages/0/probabilityPercent" },
+    { "name": "crm-stage-formula", "set": { "/modules/crm/pipeline/stages/0/formula": "value * 0.1" }, "expect": "modules/crm/pipeline/stages/0" },
+    { "name": "crm-stage-label-missing-ar", "set": { "/modules/crm/pipeline/stages/0/labels": { "en": "Qualify" } }, "expect": "modules/crm/pipeline/stages/0/labels" },
+    { "name": "crm-campaign-link-without-campaign", "remove": ["/modules/crm/entities/campaign"], "expect": "modules/crm/entities" },
+    { "name": "crm-activities-without-activity", "remove": ["/modules/crm/entities/activity"], "expect": "modules/crm/entities" },
+    { "name": "crm-unknown-activity-type", "set": { "/modules/crm/activityTypes": ["call", "fax"] }, "expect": "modules/crm/activityTypes/1" },
+    { "name": "crm-bad-component-id", "set": { "/modules/crm/component": "CRM" }, "expect": "modules/crm/component" }
+  ]
+}

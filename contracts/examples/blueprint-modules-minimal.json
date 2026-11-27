@@ -1,0 +1,141 @@
+{
+  "$schema": "../blueprint.schema.json",
+  "meta": { "id": "example-modules-001", "schemaVersion": "0.1.0", "revision": 1, "locales": ["ar", "en"], "defaultLocale": "ar", "buildState": "draft", "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z" },
+  "company": {
+    "legalName": { "ar": "شركة المثال للخدمات", "en": "Example Services Co." },
+    "country": "SA",
+    "languages": { "primary": "ar", "secondary": ["en"] },
+    "sizeBand": "25-49"
+  },
+  "locations": [
+    { "id": "hq", "kind": "branch", "labels": { "ar": "المقر الرئيسي", "en": "Head office" } }
+  ],
+  "components": [
+    { "id": "core.customer", "versionRange": "^0.1.0" },
+    { "id": "crm.core", "versionRange": "^0.1.0" }
+  ],
+  "entities": [
+    {
+      "id": "customer", "kind": "master",
+      "labels": { "ar": "عميل", "en": "Customer" },
+      "fields": [{ "id": "customer_name", "type": "string", "required": true, "labels": { "ar": "اسم العميل", "en": "Customer name" } }],
+      "components": [{ "component": "core.customer", "mode": "implements" }],
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "contact", "kind": "master",
+      "labels": { "ar": "جهة اتصال", "en": "Contact" },
+      "fields": [{ "id": "full_name", "type": "string", "required": true, "labels": { "ar": "الاسم", "en": "Name" } }, { "id": "mobile", "type": "phone", "labels": { "ar": "الجوال", "en": "Mobile" } }],
+      "components": [{ "component": "crm.core", "mode": "implements" }],
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "lead", "kind": "master",
+      "labels": { "ar": "عميل محتمل", "en": "Lead" },
+      "fields": [{ "id": "lead_name", "type": "string", "required": true, "labels": { "ar": "الاسم", "en": "Name" } }, { "id": "campaign", "type": "link", "target": "campaign", "labels": { "ar": "الحملة", "en": "Campaign" } }],
+      "components": [{ "component": "crm.core", "mode": "implements" }],
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "opportunity", "kind": "master",
+      "labels": { "ar": "فرصة بيع", "en": "Opportunity" },
+      "fields": [{ "id": "customer", "type": "link", "target": "customer", "required": true, "labels": { "ar": "العميل", "en": "Customer" } }, { "id": "expected_value", "type": "money", "precision": 2, "min": 0, "labels": { "ar": "القيمة المتوقعة", "en": "Expected value" } }],
+      "components": [{ "component": "crm.core", "mode": "implements" }],
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "crm_activity", "kind": "master",
+      "labels": { "ar": "نشاط", "en": "Activity" },
+      "fields": [{ "id": "subject", "type": "string", "required": true, "labels": { "ar": "الموضوع", "en": "Subject" } }, { "id": "due_at", "type": "datetime", "labels": { "ar": "الموعد", "en": "Due" } }],
+      "components": [{ "component": "crm.core", "mode": "implements" }],
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "campaign", "kind": "master",
+      "labels": { "ar": "حملة", "en": "Campaign" },
+      "fields": [{ "id": "campaign_name", "type": "string", "required": true, "labels": { "ar": "اسم الحملة", "en": "Campaign name" } }],
+      "components": [{ "component": "crm.core", "mode": "implements" }],
+      "provenance": { "source": "template", "humanEdited": false }
+    }
+  ],
+  "roles": [
+    {
+      "id": "owner", "function": "owner", "isAdmin": true,
+      "labels": { "ar": "المالك", "en": "Owner" },
+      "scope": { "type": "company" },
+      "permissions": [
+        { "entity": "customer", "actions": ["read", "create", "update", "export"] },
+        { "entity": "contact", "actions": ["read", "create", "update"] },
+        { "entity": "lead", "actions": ["read", "create", "update", "export"] },
+        { "entity": "opportunity", "actions": ["read", "create", "update", "export"] },
+        { "entity": "crm_activity", "actions": ["read", "create", "update"] },
+        { "entity": "campaign", "actions": ["read", "create", "update"] }
+      ],
+      "homeView": { "layout": "owner_overview", "reports": ["pipeline_overview"] },
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "sales_rep", "function": "sales",
+      "labels": { "ar": "مندوب مبيعات", "en": "Sales rep" },
+      "scope": { "type": "own_records" },
+      "permissions": [
+        { "entity": "customer", "actions": ["read"] },
+        { "entity": "contact", "actions": ["read", "create", "update"] },
+        { "entity": "lead", "actions": ["read", "create", "update"] },
+        { "entity": "opportunity", "actions": ["read", "create", "update"] },
+        { "entity": "crm_activity", "actions": ["read", "create", "update"] }
+      ],
+      "homeView": { "layout": "task_list" },
+      "provenance": { "source": "template", "humanEdited": false }
+    }
+  ],
+  "reports": [
+    {
+      "id": "pipeline_overview", "kind": "dashboard",
+      "labels": { "ar": "خط المبيعات", "en": "Pipeline overview" },
+      "entity": "opportunity",
+      "metrics": [{ "ref": "crm.weighted_pipeline_value", "display": "kpi" }, { "ref": "crm.win_rate", "display": "kpi" }, { "ref": "crm.leads_by_source", "display": "bar" }],
+      "visibleToRoles": ["owner"],
+      "provenance": { "source": "template", "humanEdited": false }
+    }
+  ],
+  "compliance": {
+    "country": "SA",
+    "countryPack": { "id": "sa", "version": "0.1.0" },
+    "eInvoicing": { "mode": "none" },
+    "vat": { "registered": false },
+    "hijriDisplay": { "enabled": true },
+    "documentLanguages": ["ar", "en"]
+  },
+  "i18n": { "defaultLocale": "ar" },
+  "branding": {
+    "displayName": { "ar": "المثال للخدمات", "en": "Example Services" },
+    "primaryColour": "#1F5FAE",
+    "poweredBy": { "show": true },
+    "provenance": { "source": "template", "humanEdited": false }
+  },
+  "modules": {
+    "crm": {
+      "component": "crm.core",
+      "entities": { "lead": "lead", "opportunity": "opportunity", "customer": "customer", "contact": "contact", "activity": "crm_activity", "campaign": "campaign" },
+      "roles": { "manage": ["owner"], "work": ["sales_rep"] },
+      "pipeline": {
+        "stages": [
+          { "id": "qualify", "kind": "open", "probabilityPercent": 10, "labels": { "ar": "تأهيل", "en": "Qualify" } },
+          { "id": "proposal", "kind": "open", "probabilityPercent": 50, "labels": { "ar": "عرض سعر", "en": "Proposal" } },
+          { "id": "negotiation", "kind": "open", "probabilityPercent": 75, "labels": { "ar": "تفاوض", "en": "Negotiation" } },
+          { "id": "won", "kind": "won", "probabilityPercent": 100, "labels": { "ar": "تم الكسب", "en": "Won" } },
+          { "id": "lost", "kind": "lost", "probabilityPercent": 0, "labels": { "ar": "خسارة", "en": "Lost" } }
+        ]
+      },
+      "leadSources": [
+        { "id": "referral", "labels": { "ar": "توصية", "en": "Referral" } },
+        { "id": "exhibition", "labels": { "ar": "معرض", "en": "Exhibition" } }
+      ],
+      "lostReasons": [{ "id": "price", "labels": { "ar": "السعر", "en": "Price" } }],
+      "activityTypes": ["call", "meeting", "visit", "note", "follow_up"],
+      "campaignLink": true,
+      "provenance": { "source": "template", "ref": "crm_starter@0.1.0", "humanEdited": false }
+    }
+  }
+}

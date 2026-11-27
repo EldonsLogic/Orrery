@@ -62,6 +62,11 @@ Live coordinator log for the partner lane's G1 finishing sprint (RULES 51), cont
 - 2026-11-27: Eldon APPROVED #380 at c78a0d13 (Sonnet 5.5 for him, plus his line-by-line), no High or Medium; Nit N2 (CE-SEC-020 not named in ADR section 6) left for a later follow-up so the approval stands. Tier 3: needs the partner's say-so; the HUMAN-ONLY items (3.2 early publication, 3.6 idle-lock residual, Q-311, partner confirming Q-684 to Q-688) stay open.
 - The session's local working folder outside the repo (briefs and saved review files) was cleared overnight. Posted reviews on GitHub are unaffected; the per-question #374 table file is gone (its summary is in this log and in the #374 review). Briefs are now passed inline.
 - Dispatched on Gemini 4 Argon high after the quota reset: R4b (#380 revision 3 security re-check, delta from its revision 2 review) and R10 retry (#363).
+- R10 result (#363, Gemini): APPROVE with Lows at cd34eb18 (Tier 2): `MetricService` gets roles not filtered by the Blueprint's chat roles; `defs_for` ignores `tenant_id`; thin refusal tests.
+- R4b result (#380 revision 3, Gemini security re-check): APPROVE as Proposed with 2 Lows at c78a0d13: all six revision 2 findings fixed; no bypass, cross-tenant or lost-write path. Lows for the build rows: more engine-session CREATE TABLE in `frappe_backend.py` (`:327`, `:351-352`, `:1094`) and a fail-open `check_health`; CE-SEC-020's named targets use sqlite, not the engine session; revert paths must follow 3.7. Posted; row text fixes come in a coordination PR after #380 merges, so Eldon's approval stands.
+- R12 result (#361, Gemini): APPROVE with Lows at 87fcc600 (metric errors flip to retryable through `build_error`; Tool API 7.1 table stale; missing tests).
+- R13 result (#358, Gemini): APPROVE with Lows at f4cc2964 (conflict with main is trivial, `docs/open-questions.md` only); Lows 1, 2 and 5 flagged for before live data: fractional-second timestamps refused, unknown `document_type` silently counts as zero, and revenue and receivables from events miss cancellations, debit notes and opening balances (Q-670, ADR-0031).
+- Dispatched: R11 (#359) and R14 (#356), Gemini 4 Argon high.
 
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-g1-sprint.md: this live log.

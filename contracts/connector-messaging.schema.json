@@ -19,6 +19,8 @@
     "a send with riskClass null is refused: no action-policy row exists for it; auto_reply therefore cannot execute until an AP-MSG row is accepted and a later contract version names that row in riskClass",
     "conversation windowOpenUntil is computed by platform code as min(providerSentAt, webhook.receivedAt) of the latest inbound message plus serviceWindowHours, from the provider timestamp in the signed body, never from our receive time alone; a message without providerSentAt never opens or extends a window",
     "an inbound message whose providerSentAt is older than webhook.maxEventAgeHours, or more than 300 seconds ahead of webhook.receivedAt, is dropped, alerted and audited and becomes no object, except an opt-out keyword, which is still processed as a revoke and never opens a window",
+    "dedupRetentionHours is at least maxEventAgeHours (JSON Schema cannot compare the two values): a capability with a shorter retention is refused, so a late retry is either still deduplicated or too old, never new; an opt-out keyword is processed whatever its age, and an old STOP cannot end a later grant",
+    "providerTimestampRaw is read from the signed body as a string (never a JSON number) and must be exactly 10 or 13 digits, or the message fails closed (dropped, alerted, audited); that the digits are unix seconds (10) or milliseconds (13) is UNVERIFIED, so providerSentAt is derived only after that check",
     "dedup keys are stored durably (dedupStore durable) for dedupRetentionHours; loss of the dedup store fails closed: inbound processing stops until it is restored",
     "an auto_reply send has no text field: the platform resolves approvedTextId to the tenant-approved text of autoReplyPolicyRef for classifiedIntent, byte for byte; it is refused unless confidence >= confidenceThreshold and the inbound message has no flags (section 5)",
     "contentHash is the sha256 of the sanitised text, recomputed by platform code; never taken from the provider",
@@ -66,8 +68,8 @@
             "signedTimestamp": {"type": "boolean"},
             "replayWindowSeconds": {"type": ["integer", "null"], "minimum": 60, "maximum": 3600},
             "payloadTimestamp": {"type": "boolean", "description": "The signed body carries a per-message provider timestamp (providerSentAt). Meta: true as assumed, UNVERIFIED (Q-721)."},
-            "maxEventAgeHours": {"type": ["integer", "null"], "minimum": 37, "maximum": 72, "description": "Drop a message whose providerSentAt is older than this: above Meta's 36-hour retry period, never above the dedup retention minimum, so every replay is either deduplicated or too old."},
-            "dedupRetentionHours": {"type": "integer", "minimum": 72, "maximum": 2160},
+            "maxEventAgeHours": {"type": ["integer", "null"], "minimum": 37, "maximum": 192, "description": "Drop a message whose providerSentAt is older than this. WhatsApp retries for up to 7 days (Meta, 2026-11-27), so a legitimate late retry must not be dropped: default 192 for WhatsApp. Never above dedupRetentionHours (validator rule), so every replay is either deduplicated or too old."},
+            "dedupRetentionHours": {"type": "integer", "minimum": 192, "maximum": 2160, "default": 192, "description": "At least 7 days (WhatsApp retry period, Meta 2026-11-27) plus a 24 h margin, and at least maxEventAgeHours (validator rule)."},
             "dedupStore": {"const": "durable", "description": "Seen dedup keys are kept in a durable store for dedupRetentionHours, never an in-memory or evictable cache."}
           },
           "allOf": [
@@ -105,6 +107,7 @@
         "messageId": {"$ref": "#/$defs/ref"}, "providerMessageId": {"$ref": "#/$defs/providerId"},
         "conversationId": {"$ref": "#/$defs/ref"}, "channel": {"$ref": "#/$defs/channel"},
         "providerSentAt": {"oneOf": [{"$ref": "#/$defs/time"}, {"type": "null"}], "description": "The provider's message timestamp read from the signed body; null only for a provider whose payload carries none (never on a Meta channel)."},
+        "providerTimestampRaw": {"type": "string", "pattern": "^([0-9]{10}|[0-9]{13})$", "description": "The provider's per-message timestamp exactly as it appears in the signed body (Meta: messages[].timestamp, statuses[].timestamp, a string). Fail closed unless 10 or 13 digits. That it is unix seconds is UNVERIFIED."},
         "receivedAt": {"$ref": "#/$defs/time"},
         "trust": {"const": "untrusted"},
         "retentionClass": {"const": "transcript"},
@@ -129,7 +132,7 @@
           }
         }
       },
-      "if": {"properties": {"channel": {"$ref": "#/$defs/metaChannel"}}}, "then": {"properties": {"providerSentAt": {"type": "string"}}}
+      "if": {"properties": {"channel": {"$ref": "#/$defs/metaChannel"}}}, "then": {"required": ["providerTimestampRaw"], "properties": {"providerSentAt": {"type": "string"}}}
     },
     "sendRequest": {
       "type": "object", "additionalProperties": false,

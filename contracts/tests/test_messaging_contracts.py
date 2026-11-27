@@ -65,6 +65,9 @@ EXPECTED = {
     "capability-event-age-too-long": ("maximum", "maxEventAgeHours", None),
     "capability-meta-no-payload-timestamp": ("const", "payloadTimestamp", None),
     "inbound-meta-no-provider-time": ("type", "providerSentAt", None),
+    "inbound-meta-bad-timestamp-format": ("pattern", "providerTimestampRaw", None),
+    "inbound-meta-timestamp-not-string": ("type", "providerTimestampRaw", None),
+    "capability-dedup-retention-no-margin": ("minimum", "dedupRetentionHours", None),
 }
 HASH_EXCLUDED = ("payloadHash", "confirmationId", "approvalId", "sentBy")
 
@@ -182,7 +185,7 @@ def test_validator_rules_cover_review_findings():
     rules = " ".join(SCHEMA["x-validator-rules"])
     for needle in ("credentialRef", "another tenant", "windowOpenUntil is null", "latest record", "test allowlist",
                    "production", "confidenceThreshold", "approvedTextId", "payloadHash", "eventType", "recordedAt",
-                   "supersedes names the latest", "providerSentAt", "durable", "riskClass null", "sentBy differs",
+                   "supersedes names the latest", "providerSentAt", "durable", "dedupRetentionHours is at least maxEventAgeHours", "10 or 13 digits", "riskClass null", "sentBy differs",
                    "tainted is set by platform code"):
         assert needle in rules, needle
 
@@ -292,8 +295,54 @@ def test_window_is_computed_from_provider_time():
     assert t(conv["windowOpenUntil"]) == t(inbound["providerSentAt"]) + timedelta(hours=cap["serviceWindowHours"])
 
 
+def webhook_refusal(wh):
+    """Reference for the validator rule JSON Schema cannot express: retention covers the age limit."""
+    if wh["maxEventAgeHours"] is not None and wh["dedupRetentionHours"] < wh["maxEventAgeHours"]:
+        return "retention-below-age"
+    return None
+
+
 def test_event_age_limit_sits_inside_dedup_retention():
     wh = SCHEMA["$defs"]["capability"]["properties"]["webhook"]["properties"]
-    assert wh["maxEventAgeHours"]["minimum"] > 36  # above Meta's retry period (UNVERIFIED, Q-721)
+    assert wh["maxEventAgeHours"]["minimum"] > 36  # above the generic Graph API retry period (UNVERIFIED, Q-721)
+    # WhatsApp retries for up to 7 days (Meta, 2026-11-27): minimum is 7 days plus a 24 h margin
+    assert wh["dedupRetentionHours"]["minimum"] == 192
+    assert wh["maxEventAgeHours"]["maximum"] == 192
     assert wh["maxEventAgeHours"]["maximum"] <= wh["dedupRetentionHours"]["minimum"]
     assert wh["dedupStore"]["const"] == "durable"
+
+
+def test_whatsapp_example_uses_the_192_hour_default():
+    wh = load(C / "examples/connector-messaging-capability-whatsapp.json")["webhook"]
+    assert wh["maxEventAgeHours"] == 192 and wh["dedupRetentionHours"] >= 192
+    assert webhook_refusal(wh) is None
+
+
+def test_retention_shorter_than_event_age_is_refused_by_the_validator():
+    wh = dict(load(C / "examples/connector-messaging-capability-whatsapp.json")["webhook"])
+    wh["dedupRetentionHours"] = 192
+    wh["maxEventAgeHours"] = 192
+    assert webhook_refusal(wh) is None
+    for age, ret in ((192, 191), (100, 99)):
+        wh.update(maxEventAgeHours=age, dedupRetentionHours=ret)
+        assert webhook_refusal(wh) == "retention-below-age"
+    assert "dedupRetentionHours is at least maxEventAgeHours" in " ".join(SCHEMA["x-validator-rules"])
+
+
+def test_meta_timestamp_is_a_string_of_10_or_13_digits():
+    ok = load(C / "examples/connector-messaging-inbound-text.json")
+    assert isinstance(ok["providerTimestampRaw"], str) and V.is_valid(ok)
+    for bad in ("", "1749416", "17494163830", "174941638312345", "17494163a3", 1749416383):
+        assert not V.is_valid({**ok, "providerTimestampRaw": bad}), bad
+    for good in ("1749416383", "1749416383000"):
+        assert V.is_valid({**ok, "providerTimestampRaw": good}), good
+    no_raw = {k: v for k, v in ok.items() if k != "providerTimestampRaw"}
+    assert not V.is_valid(no_raw)  # required on a Meta channel
+    assert "UNVERIFIED" in DOC and "unix seconds" in DOC
+
+
+def test_meta_sources_and_unverified_wording_are_recorded():
+    for url in ("https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks",
+                "https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components"):
+        assert url in DOC
+    assert "up to 7 days" in DOC and "X-Hub-Signature-256" in DOC and "2026-11-27" in DOC

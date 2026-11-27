@@ -40,3 +40,11 @@ Partner review of ADR-0078 and a security review by a different model; SEC actio
 - Risk class: auto-reply `riskClass: null` (no class until the SEC row, refused); R3 interim for human and agent-draft sends; migration to an AP-MSG row reference is a 0.2.0 bump later, none now. AP-MSG-01 to AP-MSG-04 proposed in docs/security/action-policy-table.md; Q-720 updated.
 - Lows: `tainted` set by platform code, schema-forced when `conversationId` is present; `payloadHash` excludes `sentBy` (example hashes recomputed); `sentBy` `usr_` against `draftedBy` `agt_` makes them disjoint in the schema, plus a validator rule.
 - Files: contracts/connector-messaging.md, .schema.json, examples, tests/test_messaging_contracts.py, docs/security/action-policy-table.md, docs/open-questions.md (Q-720, Q-721).
+
+## Update: Q-721 Meta facts applied (partner's comment on PR #394)
+- Delegated by Eldon's orchestrating session to an implementation worker; test first: 3 new invalid examples and 6 new or stricter tests failed before the schema change.
+- Retry period is up to 7 days and every subscribed app is retried: `dedupRetentionHours` minimum 192 (7 days plus 24 h), `maxEventAgeHours` 37 to 192 (default 192 for WhatsApp), and a validator rule (reference check in the tests) that retention is at least the age limit. Opt-outs stay always processed; an old STOP still cannot end a later grant.
+- Per-message timestamp is a string: new `providerTimestampRaw` (pattern 10 or 13 digits, required on Meta channels, fail closed); "unix seconds" marked UNVERIFIED.
+- Signature carries no signed timestamp (`X-Hub-Signature-256`, `sha256=`, App Secret, raw body); HMAC wording marked UNVERIFIED. Both Meta sources added with access date 2026-11-27 (contract section 8, ADR-0078 platform facts and decision 8).
+- Q-721 now records the answers and keeps the UNVERIFIED parts open.
+- Files: contracts/connector-messaging.md, .schema.json, examples (whatsapp capability, inbound-text, 3 new invalid, 1 widened), tests/test_messaging_contracts.py, ADR-0078, docs/open-questions.md.

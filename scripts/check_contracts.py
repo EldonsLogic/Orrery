@@ -4,6 +4,7 @@ validates against its schema, and cross-file $refs resolve. Needs `jsonschema` (
 """
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 try:
@@ -25,6 +26,15 @@ PAIRS = [("examples/blueprint-*.json", "blueprint.schema.json"),
          ("examples/country-pack-pin-*.json", "country-pack-pin.schema.json"),
          ("examples/payments-*.json", "connector-payments.schema.json")]
 # invalid example glob -> schema file: every match must FAIL its schema (negative tests)
+# schemas whose examples load non-integers as Decimal, so `10.0` is not an integer (connector-payments.md 1.3)
+STRICT_NUMBERS = {"connector-payments.schema.json"}
+
+
+def load_example(path, schema_name):
+    text = path.read_text(encoding="utf-8")
+    return json.loads(text, parse_float=Decimal) if schema_name in STRICT_NUMBERS else json.loads(text)
+
+
 INVALID_PAIRS = [("examples/invalid/country-pack-record-*.json", "country-pack-record.schema.json"),
                  ("examples/invalid/country-pack-index-*.json", "country-pack-index.schema.json"),
                  ("examples/invalid/country-pack-pin-*.json", "country-pack-pin.schema.json"),
@@ -53,7 +63,7 @@ def main():
             continue
         validator = Draft202012Validator(json.loads(sf.read_text(encoding="utf-8")), registry=registry)
         for ex in sorted(C.glob(pattern)):
-            for e in validator.iter_errors(json.loads(ex.read_text(encoding="utf-8"))):
+            for e in validator.iter_errors(load_example(ex, schema_name)):
                 errors.append(f"{ex.relative_to(ROOT)}: {'/'.join(map(str, e.absolute_path))}: {e.message[:160]}")
     for pattern, schema_name in INVALID_PAIRS:
         validator = Draft202012Validator(json.loads((C / schema_name).read_text(encoding="utf-8")), registry=registry)
@@ -61,7 +71,7 @@ def main():
         if not matches:
             errors.append(f"no invalid examples for {schema_name}")
         for ex in matches:
-            if validator.is_valid(json.loads(ex.read_text(encoding="utf-8"))):
+            if validator.is_valid(load_example(ex, schema_name)):
                 errors.append(f"{ex.relative_to(ROOT)}: invalid example unexpectedly validates")
     for e in errors:
         print(e)

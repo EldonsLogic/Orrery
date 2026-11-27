@@ -80,14 +80,14 @@ Cheap, high-volume, aggregated by Part 5 into usage records.
 | `meter.simulation_run` | records replayed, duration |
 
 ### Payment events (proposed, [ADR-0077](../docs/decisions/ADR-0077-payments-connector-bring-your-own-gateway.md); additive, since 0.2.0)
-Emitted by the payments gateway service only after webhook verification and a status re-read ([connector-payments.md](connector-payments.md) sections 5 and 6). `data_class: "financial"`; `subject` is the payment record. `data`: `payment_id`, `checkout_id`, `links` (invoices or orders), `amount` (`minor` integer, ISO 4217 `currency`), `provider`, `environment` (`sandbox` or `live`), `gateway_payment_ref`; never card data, payer names or gateway free text.
+Emitted by the payments gateway service only after webhook verification and a status re-read ([connector-payments.md](connector-payments.md) sections 5 and 6). `data_class: "financial"`; `subject` is the payment record. `data`: `payment_id`, `checkout_id`, `links` (invoices or orders; credit notes on refund events), `amount` (`minor` integer, ISO 4217 `currency`), `provider`, `environment` (`sandbox` or `live`), `gateway_payment_ref` (`<provider>:<id>`); never card data, payer names or gateway free text.
 | Type | When |
 |---|---|
-| `payment.checkout_created` | A hosted checkout session or token charge was created |
+| `payment.checkout_created` | A hosted checkout session was created |
 | `payment.authorised`, `payment.captured` | Verified status from the gateway |
 | `payment.failed` (data adds `failure_code`), `payment.expired` | Declined, gateway error, mismatch, or the session expired |
 | `payment.refund_requested`, `payment.refunded`, `payment.voided` | R4 refund or void path |
-| `payment.webhook_rejected` | Audit: an inbound webhook failed verification (endpoint id and error code, no body) |
+| `payment.webhook_rejected` | Audit: a webhook to a known endpoint failed verification (`endpoint_id`, `error_code`, no body, no `payment_id`) |
 | `payment.reconciliation_mismatch` | A settlement line did not match a payment or ledger entry |
 
 ### Platform events (no tenant data)

@@ -1,1 +1,1 @@
-{"kind": "checkout_request", "idempotency_key": "chk_01J9A7Q2", "links": [{"entity": "sales_invoice", "id": "SINV-00042"}], "amount": {"minor": 10.5, "currency": "SAR"}, "mode": "hosted_redirect", "return_path": "/pay/return/chk_01J9A7Q2", "expires_in_s": 3600, "environment": "sandbox"}
+{"kind": "checkout_request", "idempotency_key": "chk_01J9A7Q2", "links": [{"entity": "sales_invoice", "id": "SINV-00042"}], "amount": {"minor": 10.5, "currency": "SAR"}, "mode": "hosted_redirect", "return_path": "/pay/return/chk_01J9A7Q2", "expires_in_s": 3600}

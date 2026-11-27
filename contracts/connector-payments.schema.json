@@ -2,27 +2,31 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:platform:contract:connector-payments",
   "version": "0.1.0",
-  "title": "Payments connector messages (capabilities, checkout request, refund request, payment event)",
-  "description": "See contracts/connector-payments.md and ADR-0077. No field may carry card data.",
+  "title": "Payments connector messages (capabilities, connect, checkout, refund, payment event)",
+  "description": "See contracts/connector-payments.md and ADR-0077. No field may carry card data; the schema alone does not guarantee that (section 1.2).",
   "x-validator-rules": [
-    "Any string with 13 to 19 digits passing the Luhn check is refused (PAY-DATA-001); the schema refuses digit runs of 13 or more in ids.",
-    "checkout_request.amount equals the code-computed outstanding balance of its links (PAY-AMT-001).",
-    "refund_request.amount is at most the captured amount minus earlier refunds (PAY-REFUND-001)."
+    "PAY-DATA-001 (code, every string before persist or log): after removing spaces and - : . _, a 13 to 19 digit run starting 2 to 6 that passes Luhn is refused.",
+    "JSON numbers with a fraction or exponent are never integers (`10.0` is refused); currency is checked against the ISO 4217 table and its exponent.",
+    "A gateway ref's prefix equals the provider id after `payments.` (PAY-AMT-002).",
+    "checkout_request.amount equals the code-computed outstanding balance of its links (PAY-AMT-001); one open checkout per link (PAY-CHK-001).",
+    "refund_request: currency equals the payment's (PAY-AMT-001); amount is reserved atomically against captured minus refunded minus pending (PAY-REFUND-001); the approval hash matches (section 4)."
   ],
   "type": "object",
   "required": ["kind"],
   "oneOf": [
     {"$ref": "#/$defs/capabilities"},
+    {"$ref": "#/$defs/connect_request"},
     {"$ref": "#/$defs/checkout_request"},
     {"$ref": "#/$defs/refund_request"},
     {"$ref": "#/$defs/payment_event"}
   ],
   "$defs": {
-    "ref": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,64}$", "not": {"pattern": "[0-9]{13,}"}},
-    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "ref": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$", "not": {"pattern": "[0-9](?:[-:._]?[0-9]){12,}"}},
+    "gateway_ref": {"type": "string", "pattern": "^[a-z0-9_]{2,32}:[A-Za-z0-9_.:-]{1,96}$"},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$", "not": {"enum": ["XXX", "XTS", "XAU", "XAG", "XPD", "XPT", "XDR", "XBA", "XBB", "XBC", "XBD", "XSU", "XUA"]}},
     "amount": {
       "type": "object", "additionalProperties": false, "required": ["minor", "currency"],
-      "properties": {"minor": {"type": "integer", "minimum": 1}, "currency": {"$ref": "#/$defs/currency"}}
+      "properties": {"minor": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}, "currency": {"$ref": "#/$defs/currency"}}
     },
     "links": {
       "type": "array", "minItems": 1, "maxItems": 50,
@@ -31,47 +35,64 @@
         "properties": {"entity": {"enum": ["sales_invoice", "sales_order", "credit_note"]}, "id": {"$ref": "#/$defs/ref"}}
       }
     },
+    "provider": {"type": "string", "pattern": "^payments\\.[a-z0-9_]{2,32}$"},
     "environment": {"enum": ["sandbox", "live"]},
     "capabilities": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "provider", "adapter_version", "checkout_modes", "card_data", "methods", "currencies", "countries", "refunds", "voids", "webhook", "sandbox"],
+      "required": ["kind", "provider", "adapter_version", "checkout_modes", "card_data", "methods", "currencies", "countries", "refunds", "voids", "key_mode_check", "webhook", "sandbox"],
       "properties": {
         "kind": {"const": "capabilities"},
-        "provider": {"type": "string", "pattern": "^payments\\.[a-z0-9_]{2,32}$"},
+        "provider": {"$ref": "#/$defs/provider"},
         "adapter_version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
-        "checkout_modes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["hosted_redirect", "hosted_fields", "token"]}},
+        "checkout_modes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["hosted_redirect", "hosted_fields"]}},
         "card_data": {"const": "none"},
         "methods": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["card", "mada", "apple_pay", "google_pay", "stc_pay", "bank_transfer", "wallet"]}},
         "currencies": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/currency"}},
         "countries": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["SA", "AE", "EG", "QA"]}},
         "refunds": {"enum": ["full", "partial", "none"]},
         "voids": {"type": "boolean"},
+        "key_mode_check": {"enum": ["key_prefix", "probe"]},
         "webhook": {
           "type": "object", "additionalProperties": false,
-          "required": ["scheme", "signature_header", "timestamp_header", "replay_window_s", "status_reread"],
+          "required": ["scheme", "signature_header", "timestamp_header", "event_id_source", "replay_window_s", "status_reread"],
           "properties": {
             "scheme": {"enum": ["hmac_sha256", "rsa_sha256", "ed25519", "secret_token"]},
             "signature_header": {"type": "string", "pattern": "^[A-Za-z0-9-]{1,64}$"},
             "timestamp_header": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9-]{1,64}$"},
+            "event_id_source": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_./-]{1,64}$"},
             "replay_window_s": {"type": "integer", "minimum": 30, "maximum": 600},
             "status_reread": {"const": true}
-          }
+          },
+          "if": {"properties": {"scheme": {"const": "secret_token"}}},
+          "else": {"properties": {"timestamp_header": {"type": "string"}}}
         },
         "sandbox": {"const": true}
       }
     },
+    "connect_request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "idempotency_key", "connection_id", "provider", "environment", "merchant_ref", "approval_id"],
+      "properties": {
+        "kind": {"const": "connect_request"},
+        "idempotency_key": {"$ref": "#/$defs/ref"},
+        "connection_id": {"$ref": "#/$defs/ref"},
+        "provider": {"$ref": "#/$defs/provider"},
+        "environment": {"$ref": "#/$defs/environment"},
+        "merchant_ref": {"$ref": "#/$defs/gateway_ref"},
+        "approval_id": {"$ref": "#/$defs/ref"}
+      }
+    },
     "checkout_request": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "idempotency_key", "links", "amount", "mode", "return_path", "expires_in_s", "environment"],
+      "required": ["kind", "idempotency_key", "links", "amount", "mode", "return_path", "expires_in_s"],
       "properties": {
         "kind": {"const": "checkout_request"},
         "idempotency_key": {"$ref": "#/$defs/ref"},
-        "links": {"$ref": "#/$defs/links"},
+        "links": {"$ref": "#/$defs/links", "items": {"properties": {"entity": {"enum": ["sales_invoice", "sales_order"]}}}},
         "amount": {"$ref": "#/$defs/amount"},
-        "mode": {"enum": ["hosted_redirect", "hosted_fields", "token"]},
+        "mode": {"enum": ["hosted_redirect", "hosted_fields"]},
         "return_path": {"type": "string", "pattern": "^/pay/return/[A-Za-z0-9_-]{1,64}$"},
-        "expires_in_s": {"type": "integer", "minimum": 300, "maximum": 86400},
-        "environment": {"$ref": "#/$defs/environment"}
+        "expires_in_s": {"type": "integer", "minimum": 300, "maximum": 86400}
       }
     },
     "refund_request": {
@@ -83,7 +104,7 @@
         "payment_id": {"$ref": "#/$defs/ref"},
         "action": {"enum": ["refund", "void"]},
         "amount": {"$ref": "#/$defs/amount"},
-        "links": {"$ref": "#/$defs/links"},
+        "links": {"$ref": "#/$defs/links", "items": {"properties": {"entity": {"const": "credit_note"}}}},
         "reason_code": {"enum": ["duplicate", "customer_request", "fraud_suspected", "order_cancelled", "other"]},
         "approval_id": {"$ref": "#/$defs/ref"}
       },
@@ -93,22 +114,28 @@
     },
     "payment_event": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "type", "payment_id", "checkout_id", "links", "amount", "provider", "environment", "gateway_payment_ref"],
+      "required": ["kind", "type", "provider", "environment"],
       "properties": {
         "kind": {"const": "payment_event"},
-        "type": {"enum": ["payment.checkout_created", "payment.authorised", "payment.captured", "payment.failed", "payment.expired", "payment.refund_requested", "payment.refunded", "payment.voided"]},
+        "type": {"enum": ["payment.checkout_created", "payment.authorised", "payment.captured", "payment.failed", "payment.expired", "payment.refund_requested", "payment.refunded", "payment.voided", "payment.webhook_rejected", "payment.reconciliation_mismatch"]},
         "payment_id": {"$ref": "#/$defs/ref"},
         "checkout_id": {"$ref": "#/$defs/ref"},
         "links": {"$ref": "#/$defs/links"},
         "amount": {"$ref": "#/$defs/amount"},
-        "provider": {"type": "string", "pattern": "^payments\\.[a-z0-9_]{2,32}$"},
+        "provider": {"$ref": "#/$defs/provider"},
         "environment": {"$ref": "#/$defs/environment"},
-        "gateway_payment_ref": {"$ref": "#/$defs/ref"},
-        "failure_code": {"enum": ["PAY-GW-001", "PAY-GW-002", "PAY-AMT-002", "PAY-ENV-001"]}
+        "gateway_payment_ref": {"$ref": "#/$defs/gateway_ref"},
+        "failure_code": {"enum": ["PAY-GW-001", "PAY-GW-002", "PAY-AMT-002", "PAY-ENV-001"]},
+        "endpoint_id": {"type": "string", "pattern": "^whk_[A-Za-z0-9]{20,60}$"},
+        "error_code": {"enum": ["PAY-HOOK-001", "PAY-HOOK-002", "PAY-ENV-001", "PAY-DATA-001", "PAY-RECON-001"]}
       },
-      "if": {"properties": {"type": {"const": "payment.failed"}}},
-      "then": {"required": ["failure_code"]},
-      "else": {"not": {"required": ["failure_code"]}}
+      "allOf": [
+        {"if": {"properties": {"type": {"const": "payment.failed"}}}, "then": {"required": ["failure_code"]}, "else": {"not": {"required": ["failure_code"]}}},
+        {"if": {"properties": {"type": {"enum": ["payment.webhook_rejected", "payment.reconciliation_mismatch"]}}},
+         "then": {"required": ["error_code"]},
+         "else": {"required": ["payment_id", "checkout_id", "links", "amount", "gateway_payment_ref"], "not": {"required": ["error_code"]}}},
+        {"if": {"properties": {"type": {"const": "payment.webhook_rejected"}}}, "then": {"required": ["endpoint_id"]}, "else": {"not": {"required": ["endpoint_id"]}}}
+      ]
     }
   }
 }

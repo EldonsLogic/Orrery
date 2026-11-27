@@ -1,0 +1,1 @@
+{"kind": "payment_event", "type": "payment.webhook_rejected", "provider": "payments.examplepay", "environment": "sandbox", "error_code": "PAY-HOOK-001"}

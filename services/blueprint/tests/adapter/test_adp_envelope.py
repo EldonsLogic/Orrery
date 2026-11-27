@@ -81,7 +81,7 @@ def test_adp_c_003_missing_or_invalid_context(h, bad):
     assert_no_effect(h, "t_alpha", before, ev)
 
 
-@pytest.mark.parametrize("version", ["0.2.0", "1.1.1", "0.0.9", "2.0.0"])
+@pytest.mark.parametrize("version", ["0.9.0", "1.1.1", "0.0.9", "2.0.0"])
 def test_adp_c_004_other_major_minor(h, version):
     t.site_at_rev1(h)
     before, ev = t.snapshot(h), len(h.events())

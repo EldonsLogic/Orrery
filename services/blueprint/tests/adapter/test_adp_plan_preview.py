@@ -163,3 +163,33 @@ def test_adp_c_033_delta_is_neutral(h):
     assert {"add", "quarantine"} <= seen
     restore = planned(h, t.sample("remove-field"), "preview")["delta"]
     assert restore and restore[0]["change"] == "quarantine"
+
+
+def _reorder(order, previous):
+    return t.make_step("field.reorder", "/entities/customer/fields", "entity", "customer",
+                       {"order": order, "previousOrder": previous})
+
+
+def test_adp_c_072_reorder_lists_exactly_the_active_keys(h):
+    """9.4 since contract 0.2.0 (ADR-0072): an adapter that speaks 0.2 lists artifact schema 0.2.0 and blocks a reorder
+    whose order is not exactly the active keys, each once; an adapter that speaks only 0.1 refuses a 0.2.0 artifact."""
+    t.site_at_rev1(h)
+    caps = h.call("capabilities", t.ctx("platform"), {})["result"]
+    speaks_02 = any(v.split(".")[:2] == ["0", "2"] for v in caps["contractVersions"])
+    assert speaks_02 == ("0.2.0" in caps["artifactSchemaVersions"])
+    if not speaks_02:
+        art = t.variant([t.field_step("customer", "x1")])
+        art["artifactSchema"] = art["inverse"]["artifactSchema"] = "0.2.0"
+        before, ev = t.snapshot(h), len(h.events())
+        assert t.code_of(t.plan(h, t.seal(art))) == "unsupported_contract_version"
+        assert_no_effect(h, "t_alpha", before, ev)
+        return
+    cust = next(e for e in t.export(h)["export"]["sections"]["entities"] if e["id"] == "customer")
+    keys = [f["id"] for f in cust["fields"]]
+    good = planned(h, t.variant([_reorder(keys[::-1], keys)]))
+    assert good["steps"][0]["disposition"] != "blocked", good
+    for order in (keys[1:], keys + ["not_there"], keys + keys[:1], keys[1:] + keys[:1] * 2):
+        result = planned(h, t.variant([_reorder(order, keys)]))
+        (step,) = result["steps"]
+        assert result["verdict"] == "rejected" and step["disposition"] == "blocked", order
+        assert step["reasonCode"] == "definition_conflict"

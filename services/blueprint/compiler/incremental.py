@@ -177,18 +177,18 @@ def _collections(frm: dict, to: dict):
 
 
 def _reaches(before: list, after: list, restores: bool) -> bool:
-    """True when the adapter reaches `after` from `before` with no reorder step: an added key is appended, a single
-    restored key returns to its former index; several restores each return to an index taken after the others left,
-    so that order is not predicted (False)."""
-    added = sorted((k for k in after if k not in before), key=_esc)  # phase 5 runs them in pointer order
-    if restores and len(added) > 1:
+    """True when the adapter surely reaches `after` from `before` with no reorder step. Removals keep the order of the
+    rest. A forward add may be a restore: the site can still hold a quarantined element with the same definition
+    (an earlier removal, or a rolled-back add), which the adapter puts back at its former index, and the compiler
+    cannot see that history; so a forward add never reaches (False). In an inverse (`restores`) a single add restores
+    what the forward quarantined, at its former index; several restores each return to an index taken after the
+    others left, so that order is not predicted (False)."""
+    added = [k for k in after if k not in before]
+    if added and (not restores or len(added) > 1):
         return False
     active = list(before)
     for k in added:
-        if restores:
-            active.insert(min(after.index(k), len(active)), k)
-        else:
-            active.append(k)
+        active.insert(min(after.index(k), len(active)), k)
     return [k for k in active if k in after] == after
 
 

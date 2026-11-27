@@ -47,3 +47,7 @@ test('the chat user turn and the tablet rail tooltip are on the contrast list (W
   assert.ok(PAIRS_ALL.some((p) => p.id === 'user-pill'));
   assert.ok(PAIRS_ALL.some((p) => p.id === 'rail-tooltip'));
 });
+
+test('the current nav icon and its start-edge indicator (primary on the 14% tint over glass) are on the contrast list', () => {
+  for (const bn of ['white', 'black']) assert.ok(PAIRS_ALL.some((p) => p.id === `glass-current-nav-icon/${bn}` && p.min === 3), bn);
+});

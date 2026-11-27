@@ -164,6 +164,17 @@ describe('ProgressMarks', () => {
     const s = messages.en.marks.progress.state;
     expect(words).toEqual([s.done, s.done, s.done, s.current, s.upcoming]);
   });
+  it('never breaks a stage name mid-word; narrow containers stack the stages as a vertical list (WEB-029 N2)', () => {
+    const sheet = css('Marks.module.css');
+    expect(sheet).not.toMatch(/overflow-wrap:\s*anywhere|word-break:\s*break-all/);
+    expect(sheet).toMatch(/\.progress \{[^}]*container-type: inline-size[^}]*flex-wrap: wrap/);
+    const at = sheet.indexOf('@container (inline-size < 28rem)');
+    expect(at).toBeGreaterThan(-1);
+    const narrow = sheet.slice(at);
+    expect(narrow).toMatch(/\.stage \{[^}]*flex-basis: 100%[^}]*flex-direction: row/);
+    expect(narrow).toMatch(/\.stage \+ \.stage::before \{[^}]*border-inline-start: [^;]*solid var\(--color-primary\)/);
+    expect(narrow).toMatch(/\.stage\[data-state='upcoming'\]::before \{[^}]*border-inline-start-style: dashed/);
+  });
   it('connects the steps: solid primary up to the current step, dashed and muted after it, on logical insets', () => {
     const sheet = css('Marks.module.css');
     expect(sheet).toMatch(/\.stage \+ \.stage::before \{[^}]*inset-inline-start[^}]*border-block-start: [^;]*solid var\(--color-primary\)/);

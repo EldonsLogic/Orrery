@@ -7,7 +7,10 @@
 
 .progress {
   --progress-mark: var(--space-3);
+  container-type: inline-size;
   display: flex;
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
   inline-size: 100%;
   margin: 0;
   padding: 0;
@@ -30,20 +33,6 @@
   min-inline-size: calc(var(--progress-mark) * 3.5);
   font-size: var(--text-small-size);
   line-height: var(--text-small-line);
-  overflow-wrap: anywhere;
-}
-
-/* Narrow phones: five stages leave about 62px each, so only the current stage keeps its state line on screen; the
-   others keep it for assistive technology (the name and the mark still show). */
-@media (max-width: 30rem) {
-  .stage:not([data-state='current']) .stageState {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
 }
 
 .stage + .stage::before {
@@ -79,6 +68,32 @@
 
 .stage[data-state='current'] {
   font-weight: var(--text-h3-weight);
+}
+
+/* Narrow containers (phones, a side column): five columns would leave about 62px a stage and break the names, so the
+   stages stack as a vertical list, one row each (mark, name, state), joined by a vertical line on the start side. */
+@container (inline-size < 28rem) {
+  .stage {
+    flex-basis: 100%;
+    flex-direction: row;
+    gap: var(--space-1);
+    min-block-size: var(--progress-mark);
+    text-align: start;
+  }
+
+  .stage + .stage::before {
+    inset-block-start: calc(var(--space-1) * -1);
+    inset-inline-start: calc(var(--progress-mark) / 2 - var(--border-width));
+    inset-inline-end: auto;
+    block-size: var(--space-1);
+    border-block-start: 0;
+    border-inline-start: calc(var(--border-width) * 2) solid var(--color-primary);
+  }
+
+  .stage[data-state='upcoming']::before {
+    border-inline-start-style: dashed;
+    border-inline-start-color: var(--color-border-control);
+  }
 }
 
 /* PROPOSED loading loop: outline, then the upper half, then both halves, about 0.8 s each. */

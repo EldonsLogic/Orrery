@@ -20,6 +20,8 @@ CODES = {
     "PP-051": "rollback approval is missing, not a founder or stale",
     "PP-060": "change target is not allowed",
     "PP-061": "the index moved since this change was proposed",
+    "PP-062": "change record is not valid",
+    "PP-063": "a republish of an urgent version needs its follow-up review closed first",
 }
 
 

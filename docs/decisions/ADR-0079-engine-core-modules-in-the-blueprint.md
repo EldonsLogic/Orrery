@@ -40,5 +40,8 @@ Item 5 is enforced by the engine's own field list, not by name: [contracts/engin
 ## Note (BPL-055, #398 review: email)
 Email is not in 0.8.0. The engine's Email Campaign sends from a scheduler with no approval step, and the messaging connector's consent records do not cover email, so `channels.email` and the `email_campaign` concept move to BPL-066, after the email sending connector contract (DSC-025). Until then marketing sends go only through the messaging connector.
 
+## Note (BPL-066: email in 0.9.0)
+Email returns in Blueprint 0.9.0, additive, on the email sending connector contract (DSC-025, [ADR-0081](ADR-0081-email-sending-connector.md)). `channels.email` names a DSC-025 integration (`x-email-connectors`, `BP-MOD-006`) and the `email_campaign` concept is a Seshna record, never the engine's Email Campaign, whose scheduler never sends. Consent is per contact, channel `email`, country and purpose `marketing`, a cross-channel STOP is honoured, and every send and A/B winner send is R3, human, with an `approvalId`. The module gains a template library (brand tokens only; Arabic rtl and English ltr variants; plain-text part; platform-worded unsubscribe block and a footer with the sender's postal address), saved reusable blocks, A/B tests with a deterministic winner rule (no model picks the winner), tracking off by default and fixed send windows per country (`BP-MOD-007` to `BP-MOD-009`). bpdiff classes email consent, sender identity, the unsubscribe and footer blocks, tracking and the winner release as `compliance` and template content as `config`. Open: Q-730 to Q-733.
+
 ## Supersedes
 none

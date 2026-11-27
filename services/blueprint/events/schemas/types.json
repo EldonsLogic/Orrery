@@ -12,6 +12,7 @@
   "component",
   "data",
   "document",
+  "email",
   "engine",
   "eval",
   "memory",
@@ -430,6 +431,86 @@
    "requires_trace": false,
    "data_schema": "data.agent.schema.json#/$defs/eval_regression_detected",
    "assumed": "platform-level: tenant_id platform; no trace required (assumption)"
+  },
+  "email.send_requested": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/send_requested"
+  },
+  "email.delivered": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/delivery"
+  },
+  "email.bounced": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/bounced"
+  },
+  "email.complained": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/revoking"
+  },
+  "email.unsubscribed": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/revoking"
+  },
+  "email.opened": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/delivery"
+  },
+  "email.clicked": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/clicked"
+  },
+  "email.suppressed": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/suppression"
+  },
+  "email.suppression_lifted": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/suppression"
+  },
+  "email.webhook_rejected": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.email.schema.json#/$defs/webhook_rejected"
   },
   "meter.ai_usage": {
    "schema_version": 1,

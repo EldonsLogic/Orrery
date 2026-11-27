@@ -9,7 +9,7 @@ from validator import validate
 
 EXAMPLE = REPO / "contracts" / "examples" / "blueprint-modules-minimal.json"
 TRADING = REPO / "services" / "blueprint" / "fixtures" / "trading-distribution.blueprint.json"
-MOD_CODES = {"BP-MOD-001", "BP-MOD-002", "BP-MOD-003", "BP-MOD-004", "BP-MOD-005"}
+MOD_CODES = {f"BP-MOD-{n:03d}" for n in range(1, 10)}
 
 
 def example():
@@ -327,3 +327,121 @@ def test_distinct_scrap_warehouse_passes():
     _add_store(bp, "scrap_store")
     _wh(bp)["scrap"] = "scrap_store"
     assert codes(bp) == set()
+
+
+# Email (BPL-066): connector, templates, A/B tests and send windows.
+def _mkt(bp):
+    return bp["modules"]["marketing"]
+
+
+def _email(bp):
+    return _mkt(bp)["channels"]["email"]
+
+
+def _ab(bp):
+    return _mkt(bp)["abTests"][0]
+
+
+def _variant(bp, locale="ar"):
+    return next(v for v in _mkt(bp)["emailTemplates"][0]["variants"] if v["locale"] == locale)
+
+
+@pytest.mark.parametrize("connector", ["msg.meta_whatsapp", "email.zeptomail", "smtp.generic"])
+def test_email_channel_needs_a_dsc025_connector(connector):
+    bp = example()
+    next(i for i in bp["integrations"] if i["id"] == _email(bp)["integration"])["connector"] = connector
+    assert codes(bp) == {"BP-MOD-006"}
+
+
+def test_email_integration_must_resolve():
+    bp = example()
+    _email(bp)["integration"] = "no_such_integration"
+    assert codes(bp) == {"BP-MOD-006"}
+
+
+def test_ab_variants_must_sum_to_100():
+    bp = example()
+    _ab(bp)["variants"][0]["sharePercent"] = 60
+    assert codes(bp) == {"BP-MOD-008"}
+
+
+@pytest.mark.parametrize("metric,tracking", [("opens", {"opens": False, "clicks": True}),
+                                             ("opens", {}), ("clicks", {"opens": True, "clicks": False})])
+def test_ab_winner_metric_needs_its_tracking(metric, tracking):
+    """Opens only when open tracking is on; clicks only when click tracking is on; conversions always."""
+    bp = example()
+    _email(bp)["tracking"] = tracking
+    _ab(bp)["winnerRule"]["metric"] = metric
+    assert codes(bp) == {"BP-MOD-008"}
+
+
+@pytest.mark.parametrize("metric,tracking", [("opens", {"opens": True}), ("conversions", {})])
+def test_ab_winner_metric_with_its_tracking_passes(metric, tracking):
+    bp = example()
+    _email(bp)["tracking"] = tracking
+    _ab(bp)["winnerRule"]["metric"] = metric
+    assert codes(bp) == set()
+
+
+def test_ab_template_must_resolve():
+    bp = example()
+    _ab(bp)["templateId"] = "no_such_template"
+    assert codes(bp) == {"BP-MOD-008"}
+
+
+def test_ab_content_variant_template_must_resolve():
+    bp = example()
+    ab = _ab(bp)
+    ab["on"] = "content"
+    del ab["templateId"]
+    for v in ab["variants"]:
+        del v["subject"]
+        v["templateId"] = "monthly_offer"
+    assert codes(bp) == set()
+    ab["variants"][1]["templateId"] = "no_such_template"
+    assert codes(bp) == {"BP-MOD-008"}
+
+
+def test_saved_block_must_resolve_in_the_same_locale():
+    bp = example()
+    saved = next(b for b in _variant(bp)["blocks"] if b["type"] == "saved")
+    saved["ref"] = "no_such_block"
+    assert codes(bp) == {"BP-MOD-007"}
+    bp = example()
+    _variant(bp, "en")["blocks"].append({"id": "header", "type": "saved", "ref": "brand_header"})  # an ar block
+    assert codes(bp) == {"BP-MOD-007"}
+
+
+@pytest.mark.parametrize("edit", [lambda b: b.update(entity="no_such_entity"), lambda b: b.update(fields=["no_such_field"])])
+def test_product_block_entity_and_fields_resolve(edit):
+    bp = example()
+    edit(next(b for b in _variant(bp)["blocks"] if b["type"] == "product"))
+    assert codes(bp) == {"BP-MOD-007"}
+
+
+def test_template_has_one_variant_per_locale():
+    bp = example()
+    variants = _mkt(bp)["emailTemplates"][0]["variants"]
+    variants.append(copy.deepcopy(variants[0]))
+    assert "BP-MOD-007" in codes(bp)
+
+
+@pytest.mark.parametrize("window", [{"country": "SA", "from": "20:00", "to": "10:00"},
+                                    {"country": "SA", "from": "10:00", "to": "10:00"}])
+def test_send_window_runs_forward(window):
+    bp = example()
+    _email(bp)["sendWindows"] = [window]
+    assert codes(bp) == {"BP-MOD-009"}
+
+
+def test_send_window_one_per_country():
+    bp = example()
+    _email(bp)["sendWindows"].append(dict(_email(bp)["sendWindows"][0]))
+    assert codes(bp) == {"BP-MOD-009"}
+
+
+def test_template_without_unsubscribe_block_is_refused():
+    """The schema refuses it; the validator report carries the schema error (fail closed)."""
+    bp = example()
+    del _variant(bp)["unsubscribe"]
+    assert not validate(bp).ok

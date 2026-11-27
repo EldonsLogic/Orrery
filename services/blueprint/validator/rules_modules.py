@@ -1,5 +1,6 @@
 """Module rules (ADR-0079, contracts/blueprint-modules.md): engine rigid-zone fields on bound entities, view date
-fields, the timesheet invoicing component, manufacturing warehouses, the marketing messaging connector. The other
+fields, the timesheet invoicing component, manufacturing warehouses, the marketing messaging and email connectors,
+email templates, A/B tests and send windows. The other
 module cross-reference rules are contract text for now (Q-700)."""
 from __future__ import annotations
 
@@ -70,7 +71,12 @@ def rule_modules(bp: dict, ctx: ValidationContext | None, rep: Report) -> None:
     _view_dates(as_dict(modules.get("projects")), ents, rep)
     _invoicing(bp, as_dict(modules.get("projects")), ctx, rep)
     _warehouses(bp, as_dict(modules.get("manufacturing")), rep)
-    _messaging(bp, as_dict(modules.get("marketing")), load_schema(ctx).get("x-messaging-connectors"), rep)
+    mkt = as_dict(modules.get("marketing"))
+    _messaging(bp, mkt, load_schema(ctx).get("x-messaging-connectors"), rep)
+    _email_channel(bp, mkt, load_schema(ctx).get("x-email-connectors"), rep)
+    _email_templates(bp, mkt, ents, rep)
+    _ab_tests(mkt, rep)
+    _send_windows(mkt, rep)
 
 
 def _rows(eid: str, ents: dict) -> list[str]:
@@ -178,3 +184,92 @@ def _messaging(bp: dict, mkt: dict, allowed, rep: Report) -> None:
         rep.error("BP-MOD-005", path, f"integration '{ref}' does not resolve to an integration with a connector")
     elif conn not in {c for c in as_list(allowed) if isinstance(c, str)}:
         rep.error("BP-MOD-005", path, f"integration '{ref}' uses connector '{conn}', not a DSC-022 messaging connector")
+
+
+def _email_channel(bp: dict, mkt: dict, allowed, rep: Report) -> None:
+    """BP-MOD-006: channels.email.integration resolves to an integration on a DSC-025 email connector."""
+    ref = sid(as_dict(as_dict(mkt.get("channels")).get("email")).get("integration"))
+    if not ref:
+        return
+    path = ptr("modules", "marketing", "channels", "email", "integration")
+    conn = next((sid(it.get("connector")) for _, it in items(bp.get("integrations")) if it.get("id") == ref), None)
+    if conn is None:
+        rep.error("BP-MOD-006", path, f"integration '{ref}' does not resolve to an integration with a connector")
+    elif conn not in {c for c in as_list(allowed) if isinstance(c, str)}:
+        rep.error("BP-MOD-006", path, f"integration '{ref}' uses connector '{conn}', not a DSC-025 email connector")
+
+
+def _email_templates(bp: dict, mkt: dict, ents: dict, rep: Report) -> None:
+    """BP-MOD-007: one variant per locale, every meta.locales locale covered; saved block references resolve to a
+    block of the same locale; a product block names an entity and fields of it."""
+    saved = {b.get("id"): b.get("locale") for _, b in items(mkt.get("emailBlocks")) if sid(b.get("id"))}
+    locales = {l for l in as_list(as_dict(bp.get("meta")).get("locales")) if isinstance(l, str)}
+    for t, tpl in items(mkt.get("emailTemplates")):
+        seen: set = set()
+        for v, var in items(tpl.get("variants")):
+            loc = sid(var.get("locale"))
+            vpath = ("modules", "marketing", "emailTemplates", t, "variants", v)
+            if loc in seen:
+                rep.error("BP-MOD-007", ptr(*vpath, "locale"), f"template '{tpl.get('id')}' has two '{loc}' variants")
+            seen.add(loc)
+            for b, block in items(var.get("blocks")):
+                _email_block(block, loc, saved, ents, ptr(*vpath, "blocks", b), rep)
+        for loc in sorted(locales - seen):
+            rep.error("BP-MOD-007", ptr("modules", "marketing", "emailTemplates", t, "variants"),
+                      f"template '{tpl.get('id')}' has no '{loc}' variant")
+
+
+def _email_block(block: dict, loc, saved: dict, ents: dict, path: str, rep: Report) -> None:
+    if block.get("type") == "saved":
+        ref = sid(block.get("ref"))
+        if ref not in saved:
+            rep.error("BP-MOD-007", path, f"saved block '{ref}' does not resolve")
+        elif saved[ref] != loc:
+            rep.error("BP-MOD-007", path, f"saved block '{ref}' is for locale '{saved[ref]}', not '{loc}'")
+    elif block.get("type") == "product":
+        eid = sid(block.get("entity"))
+        if eid not in ents:
+            rep.error("BP-MOD-007", path, f"product block entity '{eid}' does not resolve")
+            return
+        known = {sid(f.get("id")) for _, f in items(ents[eid][1].get("fields"))}
+        for fid in as_list(block.get("fields")):
+            if not sid(fid) or fid not in known:
+                rep.error("BP-MOD-007", path, f"product block field '{fid}' is not a field of entity '{eid}'")
+
+
+_METRIC_TRACKING = {"opens": "opens", "clicks": "clicks"}  # conversions are counted by code, no tracking needed
+
+
+def _ab_tests(mkt: dict, rep: Report) -> None:
+    """BP-MOD-008: variant shares sum to 100; templates resolve; the winner metric has its tracking switched on."""
+    templates = {sid(t.get("id")) for _, t in items(mkt.get("emailTemplates"))} - {None}
+    tracking = as_dict(as_dict(as_dict(mkt.get("channels")).get("email")).get("tracking"))
+    for a, test in items(mkt.get("abTests")):
+        base = ("modules", "marketing", "abTests", a)
+        shares = [v.get("sharePercent") for _, v in items(test.get("variants"))]
+        if not all(type(s) is int for s in shares) or sum(shares) != 100:
+            rep.error("BP-MOD-008", ptr(*base, "variants"), f"A/B test '{test.get('id')}' variant shares do not sum to 100")
+        refs = [(ptr(*base, "templateId"), sid(test.get("templateId")))] if "templateId" in test else []
+        refs += [(ptr(*base, "variants", v, "templateId"), sid(var.get("templateId")))
+                 for v, var in items(test.get("variants")) if "templateId" in var]
+        for path, ref in refs:
+            if ref not in templates:
+                rep.error("BP-MOD-008", path, f"email template '{ref}' does not resolve")
+        metric = sid(as_dict(test.get("winnerRule")).get("metric"))
+        if metric in _METRIC_TRACKING and tracking.get(_METRIC_TRACKING[metric]) is not True:
+            rep.error("BP-MOD-008", ptr(*base, "winnerRule", "metric"),
+                      f"winner metric '{metric}' needs channels.email.tracking.{_METRIC_TRACKING[metric]} switched on")
+
+
+def _send_windows(mkt: dict, rep: Report) -> None:
+    """BP-MOD-009: each window runs forward within one day; one window per country."""
+    seen: set = set()
+    for w, win in items(as_dict(as_dict(mkt.get("channels")).get("email")).get("sendWindows")):
+        path = ptr("modules", "marketing", "channels", "email", "sendWindows", w)
+        start, end = win.get("from"), win.get("to")
+        if isinstance(start, str) and isinstance(end, str) and not start < end:
+            rep.error("BP-MOD-009", path, f"send window {start} to {end} does not run forward")
+        country = sid(win.get("country"))
+        if country and country in seen:
+            rep.error("BP-MOD-009", path, f"second send window for country '{country}'")
+        seen.add(country)

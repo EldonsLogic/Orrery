@@ -75,16 +75,21 @@
     "branding.poweredBy.show=false requires the white-label entitlement on the tenant plan.",
     "Compliance: when compliance.eInvoicing.mode is not 'none' for country SA, documentLanguages must contain 'ar' and company.vatNumber must be set.",
     "Assistants (ADR-0043): roles resolve and belong to the department (or are owner or general manager); the department has at least one role; tools are in the tenant's generated tool set, agent-creatable, at most R2, and every R2 tool has confirm=true; at least one invoking role may call each tool; never approve, reject, submit, cancel, amend or delete verbs, approval.decide, blueprint tools, protected bank, contact or access tools, or writes other than create, update and export on ledger- or stock-class entities, with or without a tool set; a transition tool lists its allowed transitions, none an approve, reject or reversal move or one with its own approval rule; no tool is listed twice; memory tools need a memory scope; limits are within platform and plan caps; the instructions key resolves.",
-    "Modules (ADR-0079): a module is on for this company only when its key is present. Its component is listed in components and provides the capability <module>.module; every concept entity resolves and has an implements binding to a component providing <module>.<concept>; every module role resolves and holds read on each required concept entity (listing a role grants nothing). A report metric whose id starts with a module prefix (crm., projects., manufacturing., marketing.) needs that module on and must be in the module's metric list in contracts/blueprint-modules.md.",
+    "Modules (ADR-0079): a module is on for this company only when its key is present. Its component is listed in components and provides the capability <module>.module; every concept entity resolves and has exactly one implementing component for its concept: the module component (which provides <module>.<concept>) or, for a shared concept listed in x-module-shared-concepts, a component providing one of the listed capabilities, never both; two concepts of one module never name the same entity; every module role resolves and holds read on each required concept entity (listing a role grants nothing). A report metric whose id starts with a module prefix (crm., projects., manufacturing., marketing.) needs that module on and must be in the module's metric list in contracts/blueprint-modules.md.",
     "CRM (ADR-0079): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique.",
     "Projects (ADR-0079): task status and view ids are unique; every board column lists task status ids and each status sits in exactly one column of a board; timeline and calendar fields are date or datetime fields of the view's concept entity (BP-MOD-002); visibleToRoles resolve and hold read on that entity. timesheets.invoicingComponent is listed in components and, when the registry is known, is a rigid (certified) component (BP-MOD-003).",
     "Module rigid zone (ADR-0079, BP-MOD-001): on an entity bound by a module concept (every modules.<key>.entities value), and on every entity reached from it through child_table relations at any depth, no field id and no component parameter key equals an engine rigid-zone field of that concept's engine record or its rows, listed in contracts/engine-rigid-fields.json (for example valuation_rate, rm_cost_as_per, billing_rate, tax_category, cost_center). A Blueprint never declares, overrides, renames or sets a default or options on those fields; the list is missing or a bound concept is not in it: refused (fail closed). Custom fields with any other name, money and percent included, are plain data: they never feed posting, valuation or tax."
   ],
+  "x-module-shared-concepts": {
+    "crm.customer": ["core.customer.entities"],
+    "crm.campaign": ["marketing.campaign"]
+  },
   "$defs": {
     "modules": {
       "type": "object",
+      "minProperties": 1,
       "additionalProperties": false,
-      "description": "Optional (Blueprint 0.5.0, ADR-0079). Engine-core modules this company opts into. A module is on when its key is present; absent means off. Each module binds its concept vocabulary to Blueprint entities and roles and names the component that implements it; settings carry configuration only, never formulas, posting or valuation logic.",
+      "description": "Optional (Blueprint 0.5.0, ADR-0079). Engine-core modules this company opts into. A module is on when its key is present; absent means off. An empty object is refused: omit modules when no module is on. Each module binds its concept vocabulary to Blueprint entities and roles and names the component that implements it; settings carry configuration only, never formulas, posting or valuation logic.",
       "properties": {
         "crm": { "$ref": "#/$defs/crmModule" },
         "projects": { "$ref": "#/$defs/projectsModule" }
@@ -112,7 +117,7 @@
     },
     "crmModule": {
       "type": "object",
-      "description": "CRM on the engine's core CRM records only (ADR-0076 item 5): leads, opportunities, customers, contacts, activities and the campaign link. Never the separate CRM app.",
+      "description": "CRM on the engine's core CRM records plus framework records (Contact, Event, ToDo, Communication) (ADR-0076 item 5): leads, opportunities, customers, contacts, activities and the campaign link. Never the separate CRM app.",
       "required": ["component", "entities", "roles", "pipeline", "provenance"],
       "additionalProperties": false,
       "properties": {
@@ -121,7 +126,7 @@
           "type": "object",
           "required": ["opportunity", "customer"],
           "additionalProperties": false,
-          "description": "Concept to Blueprint entity id.",
+          "description": "Concept to Blueprint entity id: one entity per concept, by design. Shared concepts (x-module-shared-concepts) may be implemented by the owning component instead of the module component.",
           "properties": {
             "lead": { "$ref": "#/$defs/id" },
             "opportunity": { "$ref": "#/$defs/id" },

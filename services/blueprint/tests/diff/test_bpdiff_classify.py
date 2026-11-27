@@ -85,6 +85,18 @@ def test_classification_table(name):
     ("remove", "modules/projects", "destructive"),
     ("remove", "modules", "destructive"),
     ("replace", "modules/crm/pipeline/stages/*/probabilityPercent", "config"),
+    ("remove", "modules/crm/pipeline/stages/*", "destructive"),
+    ("remove", "modules/crm/leadSources/*", "destructive"),
+    ("remove", "modules/crm/lostReasons/*", "destructive"),
+    ("replace", "modules/crm/entities/opportunity", "destructive"),
+    ("remove", "modules/crm/entities/lead", "destructive"),
+    ("replace", "modules/crm/entities", "destructive"),
+    ("replace", "modules/crm/pipeline/stages/*/kind", "destructive"),
+    ("replace", "modules/crm/component", "destructive"),
+    ("add", "modules/crm/pipeline/stages/*", "config"),
+    ("add", "modules/crm/leadSources/*", "config"),
+    ("add", "modules/crm/entities/lead", "config"),
+    ("replace", "modules/crm/pipeline/stages/*/labels/en", "cosmetic"),
 ])
 def test_impact_rules(kind, path, expected):
     assert impact_of(kind, spath(path)) == expected
@@ -163,3 +175,21 @@ def test_module_removal_is_destructive():
     del b["modules"]["projects"]
     ops = diff(a, b)["ops"]
     assert ops and {o["impact"] for o in ops} == {"destructive"}
+
+
+@pytest.mark.parametrize("name,edit", [
+    ("stage removed", lambda c: c["pipeline"]["stages"].pop(1)),
+    ("lead source removed", lambda c: c["leadSources"].pop(0)),
+    ("lost reason removed", lambda c: c["lostReasons"].pop(0)),
+    ("opportunity rebound", lambda c: c["entities"].__setitem__("opportunity", "lead")),
+    ("stage kind changed", lambda c: c["pipeline"]["stages"][2].update(kind="won", probabilityPercent=100)),
+    ("component swapped", lambda c: c.__setitem__("component", "crm.other")),
+])
+def test_destructive_crm_changes_take_the_ddl_gate(name, edit):
+    """#395 review M2: a change that orphans opportunities or repoints a concept is destructive (rule 6)."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    edit(b["modules"]["crm"])
+    d = diff(a, b)
+    assert "destructive" in {o["impact"] for o in d["ops"]}, (name, [(o["pointer"], o["impact"]) for o in d["ops"]])
+    assert d["risk"]["needsDdlPlanGate"]

@@ -3,7 +3,7 @@
  * without a DOM (same pattern as the branding controller). One controller belongs to one tenant; `attach()`'s
  * cleanup makes every late result a no-op. Until `load()` succeeds nothing is editable.
  */
-import { DEFAULT_TEMPLATES, checkTemplate, TEMPLATE_KINDS, type DocumentTemplatesPort, type DocumentTemplatesSettings, type TemplateKind, type TemplateSettings } from './port';
+import { DEFAULT_TEMPLATES, checkTemplate, type DocumentTemplatesPort, type DocumentTemplatesSettings } from './port';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'forbidden' | 'invalid' | 'failed';
 export type DocumentTemplatesState = {
@@ -43,13 +43,13 @@ export function createDocumentTemplatesController(port: DocumentTemplatesPort, i
         generation++;
       };
     },
-    edit(kind: TemplateKind, patch: Partial<TemplateSettings>) {
-      if (editable()) set({ settings: { ...state.settings, [kind]: { ...state.settings[kind], ...patch } }, status: 'idle' });
+    edit(patch: Partial<DocumentTemplatesSettings>) {
+      if (editable()) set({ settings: { ...state.settings, ...patch }, status: 'idle' });
     },
-    /** True when every template passes the same check the server runs. */
-    valid: () => TEMPLATE_KINDS.every((k) => checkTemplate(state.settings[k])),
+    /** True when the settings pass the same check the server runs. */
+    valid: () => checkTemplate(state.settings),
     async save() {
-      if (!editable() || !TEMPLATE_KINDS.every((k) => checkTemplate(state.settings[k]))) return;
+      if (!editable() || !checkTemplate(state.settings)) return;
       const mine = generation;
       set({ status: 'saving' });
       const r = await port.save(state.settings);

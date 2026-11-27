@@ -484,9 +484,9 @@
   },
   "documents": {
     "title": "Document templates",
-    "intro": "Choose how your invoices, quotes and purchase orders look. You can change the logo position, the accent colour and the footer text. The legally required parts of each document are fixed.",
+    "intro": "Choose how your invoices, quotes and purchase orders look. The logo position, the brand colour on table headers and the footer text apply to all of them. The legally required parts of each document are fixed.",
     "list": "Templates",
-    "settings": "Template settings",
+    "settings": "Document settings",
     "kinds": {
       "tax_invoice": "Tax invoice",
       "quote": "Quote",
@@ -499,15 +499,17 @@
       "end": "End of the header"
     },
     "accent": {
-      "label": "Accent colour",
-      "hint": "Taken from your brand colours. It is used for rules and headings.",
-      "primary": "Primary colour",
-      "accent": "Accent colour"
+      "label": "Brand colour on table headers",
+      "hint": "Uses your primary brand colour for table headers on documents. It never changes legally required parts."
     },
     "footer": {
-      "label": "Footer text",
+      "label": {
+        "ar": "Footer text, Arabic",
+        "en": "Footer text, English"
+      },
       "hint": "Plain text, up to {max} characters.",
-      "invalid": "Remove special characters or shorten the text."
+      "invalid": "Remove special characters or shorten the text.",
+      "both": "Fill in both languages or leave both empty."
     },
     "locked": {
       "title": "Locked parts",
@@ -523,7 +525,8 @@
       "qr": "QR code",
       "terms": "Terms",
       "supplier": "Supplier",
-      "delivery": "Delivery"
+      "delivery": "Delivery",
+      "footer": "Document reference and mark"
     },
     "preview": {
       "title": "Preview",
@@ -538,7 +541,8 @@
         "qr": "QR code",
         "terms": "Payment and delivery terms",
         "supplier": "Supplier name",
-        "delivery": "Delivery address"
+        "delivery": "Delivery address",
+        "footer": "Document reference, page number"
       }
     },
     "noAccess": {

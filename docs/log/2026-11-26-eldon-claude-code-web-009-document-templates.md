@@ -22,3 +22,6 @@ Unknown.
 
 ## Next step
 WEB-009 follow-ups: (1) partner lane, ERP-016: the engine branding input has no per-template logo placement or footer text, so a contract and the real adapter are needed before wiring live (UNVERIFIED whether the footer region may carry tenant text); (2) real logo from the WEB-007 asset once SEC-006 reports it clean; (3) live preview from the engine renderer instead of fixture text; (4) Arabic strings need native review (ADR-0033).
+
+## Review fixes (#359, partner review at 352d6e25)
+Claude Sonnet 5.5 for Eldon: footer kept as a locked last region on all three kinds with the tenant text as a bilingual slot inside it; the accent is no longer a text colour (primary text, contrast pairs added to check-contrast); the settings now mirror contract `branding.documentHeader` (tenant-wide `logoPosition`, `accentOnDocuments`, `footerText` {ar, en}), so follow-up (1) above is superseded; SessionProvider tests added for workspace switch and non-admin denial.

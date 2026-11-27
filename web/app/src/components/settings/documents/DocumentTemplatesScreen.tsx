@@ -1,19 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { useTranslations } from 'next-intl';
-import { Alert, Button, Card, Select, Stack, TextField, VisuallyHidden } from '../../../ui';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { Alert, Button, Card, Checkbox, Select, Stack, TextField, VisuallyHidden } from '../../../ui';
 import { canEditDocumentTemplates } from '../../../settings/documents/access';
 import { createDocumentTemplatesController } from '../../../settings/documents/controller';
 import {
-  ACCENT_TOKENS,
+  FOOTER_LOCALES,
   FOOTER_MAX,
   LOCKED_REGIONS,
   LOGO_PLACEMENTS,
   TEMPLATE_KINDS,
-  checkTemplate,
+  footerLocaleOk,
   createFakeDocumentTemplatesPort,
-  type AccentToken,
   type DocumentTemplatesPort,
   type DocumentTemplatesSettings,
   type LogoPlacement,
@@ -49,15 +48,16 @@ export function DocumentTemplatesScreen({ portFor }: { portFor?: (tenantId: stri
 
 export function DocumentTemplatesEditor({ port, initial, initialKind = 'tax_invoice' }: { port: DocumentTemplatesPort; initial: DocumentTemplatesSettings | null; initialKind?: TemplateKind }) {
   const t = useTranslations('documents');
+  const locale = useLocale();
   const [kind, setKind] = useState<TemplateKind>(initialKind);
   const ctrl = useMemo(() => createDocumentTemplatesController(port, initial), [port, initial]);
   useEffect(() => ctrl.attach(), [ctrl]);
-  const { settings, status, loaded } = useSyncExternalStore(ctrl.subscribe, ctrl.get, ctrl.get);
+  const { settings: cur, status, loaded } = useSyncExternalStore(ctrl.subscribe, ctrl.get, ctrl.get);
   const editable = loaded === 'ready';
-  const cur = settings[kind];
-  const footerOk = checkTemplate(cur);
+  const filled = FOOTER_LOCALES.filter((l) => cur.footerText[l] !== '').length;
+  const footerMixed = filled === 1;
   const regions = LOCKED_REGIONS[kind];
-  const previewStyle = { '--doc-accent': cur.accent === 'accent' ? 'var(--color-accent)' : 'var(--color-primary)' } as CSSProperties;
+  const tenantFooter = plainText(cur.footerText[locale === 'ar' ? 'ar' : 'en'], FOOTER_MAX);
 
   return (
     <section aria-labelledby="documents-title" className={styles.page}>
@@ -80,30 +80,27 @@ export function DocumentTemplatesEditor({ port, initial, initialKind = 'tax_invo
         <Stack>
           <Card as="section" aria-label={t('settings')}>
             <Stack>
-              <h2>{t(`kinds.${kind}`)}</h2>
-              <Select label={t('logo.label')} value={cur.logoPlacement} disabled={!editable} onChange={(e) => ctrl.edit(kind, { logoPlacement: e.target.value as LogoPlacement })}>
+              <Select label={t('logo.label')} value={cur.logoPosition} disabled={!editable} onChange={(e) => ctrl.edit({ logoPosition: e.target.value as LogoPlacement })}>
                 {LOGO_PLACEMENTS.map((p) => (
                   <option key={p} value={p}>
                     {t(`logo.${p}`)}
                   </option>
                 ))}
               </Select>
-              <Select label={t('accent.label')} hint={t('accent.hint')} value={cur.accent} disabled={!editable} onChange={(e) => ctrl.edit(kind, { accent: e.target.value as AccentToken })}>
-                {ACCENT_TOKENS.map((a) => (
-                  <option key={a} value={a}>
-                    {t(`accent.${a}`)}
-                  </option>
-                ))}
-              </Select>
-              <TextField
-                label={t('footer.label')}
-                hint={t('footer.hint', { max: FOOTER_MAX })}
-                value={cur.footerText}
-                disabled={!editable}
-                maxLength={FOOTER_MAX}
-                onChange={(e) => ctrl.edit(kind, { footerText: e.target.value })}
-                error={footerOk ? undefined : t('footer.invalid')}
-              />
+              <Checkbox label={t('accent.label')} hint={t('accent.hint')} checked={cur.accentOnDocuments} disabled={!editable} onChange={(e) => ctrl.edit({ accentOnDocuments: e.target.checked })} />
+              {FOOTER_LOCALES.map((l) => (
+                <TextField
+                  key={l}
+                  label={t(`footer.label.${l}`)}
+                  hint={t('footer.hint', { max: FOOTER_MAX })}
+                  value={cur.footerText[l]}
+                  dir={l === 'ar' ? 'rtl' : 'ltr'}
+                  disabled={!editable}
+                  maxLength={FOOTER_MAX}
+                  onChange={(e) => ctrl.edit({ footerText: { ...cur.footerText, [l]: e.target.value } })}
+                  error={footerLocaleOk(cur.footerText[l]) ? (footerMixed && cur.footerText[l] === '' ? t('footer.both') : undefined) : t('footer.invalid')}
+                />
+              ))}
             </Stack>
           </Card>
           <Card as="section" aria-labelledby="documents-locked">
@@ -121,19 +118,19 @@ export function DocumentTemplatesEditor({ port, initial, initialKind = 'tax_invo
         <section aria-labelledby="documents-preview">
           <h2 id="documents-preview">{t('preview.title')}</h2>
           <p>{t('preview.note')}</p>
-          <div className={styles.paper} style={previewStyle} role="group" aria-label={t(`kinds.${kind}`)}>
+          <div className={styles.paper} data-accent={cur.accentOnDocuments ? 'on' : 'off'} role="group" aria-label={t(`kinds.${kind}`)}>
             {regions.map((r) => (
-              <div key={r} data-locked-region={r} className={r === 'header' ? styles.header : styles.region}>
+              <div key={r} data-locked-region={r} className={r === 'header' ? styles.header : r === 'lines' ? styles.lines : styles.region}>
                 {r === 'header' ? (
-                  <div className={styles.logoRow} data-placement={cur.logoPlacement}>
+                  <div className={styles.logoRow} data-placement={cur.logoPosition}>
                     <span className={styles.logo}>{t('preview.logo')}</span>
                   </div>
                 ) : null}
                 <strong className={styles.regionName}>{t(`regions.${r}`)}</strong>
                 <span>{t(`preview.sample.${r}`)}</span>
+                {r === 'footer' && tenantFooter ? <span className={styles.footerText}>{tenantFooter}</span> : null}
               </div>
             ))}
-            {cur.footerText ? <p className={styles.footer}>{plainText(cur.footerText, FOOTER_MAX)}</p> : null}
           </div>
         </section>
       </div>

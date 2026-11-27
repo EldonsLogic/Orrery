@@ -246,3 +246,68 @@ def test_money_moves_need_approval_and_environment_is_never_requested():
         assert "approval_id" in SCHEMA["$defs"][name]["required"]
     assert "environment" not in SCHEMA["$defs"]["checkout_request"]["properties"]
     assert "connection_id" in SCHEMA["$defs"]["checkout_request"]["required"]
+
+
+def posting_risk(receipt):
+    """Q-723 (Eldon, 2026-11-27), section 11: the AP-PAY-05 risk class of a drafted receipt; reference for DSC-023.
+
+    R3 only for an exact match: one open sales invoice in the payment's tenant and currency, allocated in full,
+    equal to the net captured amount, from a payment not held unallocated. Anything else is R4. Non-human origins
+    (webhook, re-read, sweep, reconciliation, agent) never post, in either class."""
+    if receipt["origin"] != "human":
+        raise ValueError("refused: a capture never posts by itself")
+    links = receipt["allocations"]
+    if receipt["payment_state"] == "captured" and len(links) == 1:
+        a = links[0]
+        if (a["entity"] == "sales_invoice" and a["tenant_id"] == receipt["tenant_id"]
+                and a["currency"] == receipt["currency"]
+                and a["allocated_minor"] == a["outstanding_minor"] == receipt["net_captured_minor"]):
+            return "R3"
+    return "R4"
+
+
+def _link(entity="sales_invoice", tenant="t1", currency="SAR", outstanding=11500, allocated=11500):
+    return {"entity": entity, "tenant_id": tenant, "currency": currency,
+            "outstanding_minor": outstanding, "allocated_minor": allocated}
+
+
+def _receipt(**over):
+    base = {"origin": "human", "tenant_id": "t1", "currency": "SAR", "net_captured_minor": 11500,
+            "payment_state": "captured", "allocations": [_link()]}
+    return base | over
+
+
+def test_posting_risk_exact_single_invoice_match_is_r3():
+    assert posting_risk(_receipt()) == "R3"
+
+
+@pytest.mark.parametrize("receipt", [
+    _receipt(net_captured_minor=5000, allocations=[_link(allocated=5000)]),  # partial (under payment)
+    _receipt(net_captured_minor=12000),  # over payment
+    _receipt(net_captured_minor=20000, allocations=[_link(outstanding=10000, allocated=10000)] * 2),  # several invoices
+    _receipt(payment_state="unallocated"),
+    _receipt(allocations=[]),
+    _receipt(currency="AED"),  # currency difference
+    _receipt(allocations=[_link(tenant="t2")]),
+    _receipt(allocations=[_link(entity="sales_order")]),
+], ids=["partial", "over", "several", "unallocated", "no-link", "currency", "other-tenant", "order"])
+def test_posting_risk_anything_else_is_r4(receipt):
+    assert posting_risk(receipt) == "R4"
+
+
+@pytest.mark.parametrize("origin", ["webhook", "reread", "sweep", "reconciliation", "agent"])
+def test_capture_never_posts_by_itself(origin):
+    for r in (_receipt(origin=origin), _receipt(origin=origin, payment_state="unallocated")):
+        with pytest.raises(ValueError):
+            posting_risk(r)
+
+
+def test_posting_risk_class_is_documented():
+    """Q-723: the contract and the AP-PAY-05 row state the R3 exact match and the R4 default."""
+    md = (C / "connector-payments.md").read_text(encoding="utf-8")
+    sec = md.split("## 11. Ledger posting", 1)[1].split("\n## ", 1)[0]
+    assert "exactly matches one open invoice" in sec and "R3" in sec and "R4" in sec and "Q-723" in sec
+    assert "founder question" not in sec
+    table = (C.parent / "docs" / "security" / "action-policy-table.md").read_text(encoding="utf-8")
+    row = next(line for line in table.splitlines() if line.startswith("| AP-PAY-05"))
+    assert "R3 exact match" in row and "R4 otherwise" in row and "risk class open" not in row

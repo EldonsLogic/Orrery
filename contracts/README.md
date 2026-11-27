@@ -11,8 +11,9 @@ The contracts are the source of truth for how the five parts of the platform tal
 | 2 | Component manifest | [component.manifest.schema.json](component.manifest.schema.json) | 0.2.0 |
 | 3 | Tool API | [tool-api.md](tool-api.md) | 0.3.0 |
 | - | Tool API domain error catalog | [tool-api-error-catalog.json](tool-api-error-catalog.json), [schema](tool-api-error-catalog.schema.json) | 0.1.0 |
-| 4 | Event stream (0.2.0 adds the proposed `payment.*` types, ADR-0077) | [events.md](events.md) | 0.2.0 |
+| 4 | Event stream (0.2.0 adds the proposed `payment.*` types, ADR-0077; 0.3.0 adds `message.*`, `consent.*` and `meter.message_sent`, ADR-0078) | [events.md](events.md) | 0.3.0 |
 | - | Connector interface | [connector-interface.md](connector-interface.md) | 0.1.0 |
+| - | Messaging and SMS connector (draft, ADR-0078 Proposed; examples `examples/connector-messaging-*.json`, negative examples `examples/invalid/`) | [connector-messaging.md](connector-messaging.md), [schema](connector-messaging.schema.json) | 0.1.0 |
 | - | Build states | [build-states.md](build-states.md) | 0.1.0 |
 | - | Engine adapter (operations, errors, conformance; schemas in [engine-adapter/](engine-adapter/)) | [engine-adapter.md](engine-adapter.md) | 0.1.2 |
 | - | Compiled artifact | [compiled-artifact.schema.json](compiled-artifact.schema.json) | 0.1.0 |

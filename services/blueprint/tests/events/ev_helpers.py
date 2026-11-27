@@ -99,6 +99,28 @@ DATA["payment.webhook_rejected"] = {"provider": "payments.examplepay", "environm
 DATA["payment.reconciliation_mismatch"] = {"provider": "payments.examplepay", "environment": "sandbox",
                                            "error_code": "PAY-RECON-001"}
 
+# message and consent events (contracts/connector-messaging.md section 10; fictional sandbox data, no text or numbers)
+_H = "a" * 64  # bare hex: personal event data strings stay within 64 characters
+DATA["message.received"] = {"message_id": "msg_1", "conversation_id": "conv_1", "channel": "whatsapp",
+                            "channel_account_ref": "ca_1", "provider_event_id": "evt.1", "content_hash": _H,
+                            "verification": "meta_hmac_sha256", "flags": [], "tainted": True}
+DATA["message.send_requested"] = {"message_id": "msg_2", "conversation_id": "conv_1", "channel": "whatsapp",
+                                  "channel_account_ref": "ca_1", "country": "SA", "mode": "session_reply",
+                                  "origin": "human", "sent_by": "usr_1", "confirmation_id": "cnf_1",
+                                  "payload_hash": _H, "tainted": True, "sandbox": True, "risk_class": "R3",
+                                  "approval_id": None}
+DATA["message.status_changed"] = {"message_id": "msg_2", "channel": "whatsapp", "channel_account_ref": "ca_1",
+                                  "status": "delivered", "cost_micro_usd": None, "provider_event_id": "evt.2",
+                                  "dedup_key": _H}
+DATA["consent.recorded"] = {"consent_id": "cns_1", "supersedes": None, "contact_ref": "ct_1", "channel": "whatsapp",
+                            "country": "SA", "purpose": "marketing", "captured_by": "contact", "method": "web_form",
+                            "text_version": "mkt-ar-1"}
+DATA["consent.revoked"] = {"consent_id": "cns_2", "supersedes": "cns_1", "contact_ref": "ct_1", "channel": "whatsapp",
+                           "country": "SA", "purpose": "marketing", "revoked_by": "contact_keyword",
+                           "source_message_id": "msg_3"}
+DATA["meter.message_sent"] = {"channel": "whatsapp", "category": "session", "country": "SA",
+                              "provider": "msg.meta_whatsapp", "cost_micro_usd": None}
+
 
 def concrete_type(key: str) -> str:
     return key.replace("<entity>", "sales_order")

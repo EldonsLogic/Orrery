@@ -24,7 +24,8 @@ PAIRS = [("examples/blueprint-*.json", "blueprint.schema.json"),
          ("examples/country-pack-record-*.json", "country-pack-record.schema.json"),
          ("examples/country-pack-index-*.json", "country-pack-index.schema.json"),
          ("examples/country-pack-pin-*.json", "country-pack-pin.schema.json"),
-         ("examples/payments-*.json", "connector-payments.schema.json")]
+         ("examples/payments-*.json", "connector-payments.schema.json"),
+         ("examples/connector-messaging-*.json", "connector-messaging.schema.json")]
 # invalid example glob -> schema file: every match must FAIL its schema (negative tests)
 # schemas whose examples load non-integers as Decimal, so `10.0` is not an integer (connector-payments.md 1.3)
 STRICT_NUMBERS = {"connector-payments.schema.json"}
@@ -38,7 +39,8 @@ def load_example(path, schema_name):
 INVALID_PAIRS = [("examples/invalid/country-pack-record-*.json", "country-pack-record.schema.json"),
                  ("examples/invalid/country-pack-index-*.json", "country-pack-index.schema.json"),
                  ("examples/invalid/country-pack-pin-*.json", "country-pack-pin.schema.json"),
-                 ("examples/invalid/payments-*.json", "connector-payments.schema.json")]
+                 ("examples/invalid/payments-*.json", "connector-payments.schema.json"),
+                 ("examples/invalid/connector-messaging-*.json", "connector-messaging.schema.json")]
 
 
 def main():

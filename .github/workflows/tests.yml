@@ -156,7 +156,7 @@ jobs:
 
       # --- services/blueprint ---
       - name: Install dependencies (services/blueprint)
-        if: steps.filter.outputs.blueprint == 'true'
+        if: steps.filter.outputs.blueprint == 'true' && !cancelled()
         run: pip install -r services/blueprint/requirements.txt "pydantic>=2"
 
       - name: Lint (services/blueprint)
@@ -199,7 +199,7 @@ jobs:
 
       # --- services/discovery ---
       - name: Install dependencies (services/discovery)
-        if: steps.filter.outputs.discovery == 'true'
+        if: steps.filter.outputs.discovery == 'true' && !cancelled()
         run: pip install -r services/discovery/requirements.txt -r services/blueprint/requirements.txt
 
       - name: Lint (services/discovery)
@@ -218,7 +218,7 @@ jobs:
 
       # --- services/gateway ---
       - name: Install dependencies (services/gateway)
-        if: steps.filter.outputs.gateway == 'true'
+        if: steps.filter.outputs.gateway == 'true' && !cancelled()
         run: pip install -r services/blueprint/requirements.txt "pydantic>=2"
 
       - name: Lint (services/gateway)
@@ -234,7 +234,7 @@ jobs:
 
       # --- services/operate ---
       - name: Install dependencies (services/operate)
-        if: steps.filter.outputs.operate == 'true'
+        if: steps.filter.outputs.operate == 'true' && !cancelled()
         run: pip install -r services/blueprint/requirements.txt "pydantic>=2"
 
       - name: Lint (services/operate)
@@ -251,7 +251,7 @@ jobs:
 
       # --- services/studio ---
       - name: Install dependencies (services/studio)
-        if: steps.filter.outputs.studio == 'true'
+        if: steps.filter.outputs.studio == 'true' && !cancelled()
         run: pip install -r services/blueprint/requirements.txt "pydantic>=2"
 
       - name: Lint (services/studio)
@@ -264,7 +264,7 @@ jobs:
 
       # --- apps/engine ---
       - name: Install dependencies (apps/engine)
-        if: steps.filter.outputs.engine == 'true'
+        if: steps.filter.outputs.engine == 'true' && !cancelled()
         run: pip install -r services/blueprint/requirements.txt "pydantic>=2" "werkzeug==3.1.3" "pymysql>=1.1" "hijridate==2.6.0"
 
       - name: Lint (apps/engine)
@@ -453,7 +453,7 @@ jobs:
 
       # --- evals ---
       - name: Install dependencies (evals)
-        if: steps.filter.outputs.evals == 'true'
+        if: steps.filter.outputs.evals == 'true' && !cancelled()
         run: pip install -r services/blueprint/requirements.txt -r evals/requirements.txt -r services/discovery/requirements.txt
 
       - name: Eval harness tests and sets
@@ -497,7 +497,7 @@ jobs:
 
       # --- components ---
       - name: Install dependencies (components)
-        if: steps.filter.outputs.components == 'true'
+        if: steps.filter.outputs.components == 'true' && !cancelled()
         run: pip install -r services/blueprint/requirements.txt
 
       - name: Trading Arabic pack and engine audit tests

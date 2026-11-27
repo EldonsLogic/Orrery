@@ -168,6 +168,52 @@
         "records_replayed",
         "duration_ms"
       ]
+    },
+    "message_sent": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "enum": [
+            "whatsapp",
+            "messenger",
+            "sms"
+          ]
+        },
+        "category": {
+          "enum": [
+            "utility",
+            "marketing",
+            "session"
+          ]
+        },
+        "country": {
+          "enum": [
+            "SA",
+            "AE",
+            "EG",
+            "QA"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "cost_micro_usd": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "channel",
+        "category",
+        "country",
+        "provider",
+        "cost_micro_usd"
+      ]
     }
   }
 }

@@ -111,6 +111,8 @@ Every store and artefact kind has one class. A new store or artefact needs a row
 | Audit log (postings, configuration changes, AI actions, support access) | C2 | Yes (actor identity) | Append-only; holds references and hashes, not C3 values |
 | Application logs, metrics, traces, cost and usage records | C1 by design | Minimal (user and tenant IDs) | If tenant content leaks into a log, the log is the class of the leak and it is an incident |
 | Support tickets and support session records | C2 | Yes | Screenshots and pasted data follow the mixed-content rule |
+| Customer messages: inbound and outbound text, template params ([connector-messaging](../../contracts/connector-messaging.md) section 11) | C3 until classified, then C2 or C3 | Yes | Always L3 inbound; free text follows the mixed-content rule; transcript retention, expiry open (D-10); production held until LEG-003 and LEG-012 |
+| Messaging consent records and contact keyed hashes ([connector-messaging](../../contracts/connector-messaging.md) section 6) | C2 | Yes | Append-only; kept while the contact exists plus the audit minimum |
 | Support access tokens, break-glass credentials | C4 | No | Auto-expiring |
 | Backups and tenant exports | Class of the highest data inside (C3) | Yes | Same country, encrypted, per tenant |
 | Deletion certificates and tombstones | C1 | No | Hold tenant ID, hashes and dates only |

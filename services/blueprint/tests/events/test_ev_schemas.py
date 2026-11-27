@@ -227,3 +227,28 @@ def test_payment_error_codes_are_tied_to_their_event_type(key, field, bad):
     ev = make(key)
     ev["data"] = {**ev["data"], field: bad}
     assert not validate_event(stamp(ev, 1)).ok
+
+
+MESSAGING_TYPES = {"message.received", "message.send_requested", "message.status_changed", "consent.recorded",
+                   "consent.revoked"}
+
+
+def test_messaging_types_registered_and_domains_reserved():
+    """DSC-022: every messaging type in contracts/events.md is registered; record patterns cannot claim the domains."""
+    reg = default_registry()
+    assert {k for k in reg.keys() if k.split(".")[0] in ("message", "consent")} == MESSAGING_TYPES
+    assert MESSAGING_TYPES | {"meter.message_sent"} <= contract_types()
+    for verb in ("created", "updated", "transitioned", "deleted"):
+        assert reg.lookup(f"message.{verb}") is None and reg.lookup(f"consent.{verb}") is None
+    for key in MESSAGING_TYPES:
+        assert reg.lookup(key).data_class == "personal"
+    assert reg.lookup("meter.message_sent").kind == "meter"
+
+
+@pytest.mark.parametrize("key,field", [("message.received", "text"), ("message.send_requested", "text"),
+                                       ("message.send_requested", "params"), ("consent.recorded", "phone")])
+def test_message_events_carry_no_body_or_number(key, field):
+    ev = make(key)
+    assert validate_event(stamp(ev, 1)).ok
+    ev["data"] = {**ev["data"], field: "x"}
+    assert not validate_event(stamp(ev, 1)).ok

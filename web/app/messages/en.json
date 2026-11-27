@@ -1386,6 +1386,74 @@
     },
     "loading": "Working"
   },
+  "home": {
+    "greeting": "Welcome back, {name}",
+    "loading": "Loading your overview",
+    "status": {
+      "live": "Live",
+      "simulating": "In simulation"
+    },
+    "ask": {
+      "title": "Ask <brand>Seshna</brand>",
+      "placeholder": "Ask about sales, cash or stock",
+      "submit": "Ask",
+      "hint": "Answers come from your records. Anything <brand>Seshna</brand> drafts waits for your approval.",
+      "suggestions": "Suggested questions"
+    },
+    "today": {
+      "title": "Today",
+      "deliveries": "Deliveries scheduled",
+      "collections": "Customer payments due",
+      "payments": "Supplier payments due",
+      "count": "{count, plural, one {# payment} other {# payments}}"
+    },
+    "journey": {
+      "title": "Your build",
+      "body": "<brand>Seshna</brand> is running a simulated month on your blueprint. Review it, then go live.",
+      "action": "Open the blueprint"
+    },
+    "kpis": {
+      "title": "This month",
+      "simulated": "Simulated figures",
+      "sales_month": "Sales this month",
+      "receivables": "Receivables outstanding",
+      "awaiting_approval": "Awaiting your approval",
+      "cash": "Cash in bank",
+      "up": "Up {value}%",
+      "down": "Down {value}%",
+      "overdue": "{count} overdue",
+      "oldest": "Oldest waiting {days, plural, one {# day} other {# days}}",
+      "vsLast": "on last month"
+    },
+    "approvals": {
+      "title": "Needs your approval",
+      "intro": "Drafted by <brand>Seshna</brand>. Nothing posts until you approve.",
+      "review": "Review",
+      "reviewLabel": "Review {item}",
+      "empty": "Nothing is waiting for you.",
+      "kind": {
+        "purchase_order": "Purchase order {ref}",
+        "supplier_payment": "Supplier payment {ref}",
+        "credit_note": "Credit note {ref}",
+        "discount": "Discount on order {ref}"
+      }
+    },
+    "activity": {
+      "title": "Recent activity",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "kind": {
+        "invoice_paid": "{party} paid invoice {ref}",
+        "drafted": "<brand>Seshna</brand> drafted {count, plural, one {# supplier payment} other {# supplier payments}} for approval",
+        "approved": "You approved {ref}",
+        "stock_low": "{party} is below the reorder level",
+        "order_created": "New order {ref} from {party}"
+      }
+    },
+    "currency": {
+      "SAR": "SAR"
+    }
+  },
   "metrics": {
     "sales": {
       "revenue": "Revenue",

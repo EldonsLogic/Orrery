@@ -26,7 +26,7 @@ describe('session placeholder', () => {
     if (fixtureSession.status !== 'ready') throw new Error('fixture');
     const ok = await placeholderSwitchWorkspace(fixtureSession.claims, 'tenant-fixture-b');
     expect(ok.ok && ok.claims.tenantId).toBe('tenant-fixture-b');
-    expect(callerOf(fixtureSession.claims).roleIds).toEqual(['sales_rep']);
+    expect(callerOf(fixtureSession.claims).roleIds).toEqual(['owner']);
     expect((await placeholderSwitchWorkspace(fixtureSession.claims, 'tenant-fixture-c')).ok).toBe(false);
     expect((await placeholderSwitchWorkspace(fixtureSession.claims, 'unknown')).ok).toBe(false);
   });

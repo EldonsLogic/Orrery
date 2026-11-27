@@ -42,7 +42,7 @@ const FIXTURE_MEMBERSHIPS: ReadonlyArray<WorkspaceMembership> = [
   { tenantId: 'tenant-fixture-c', name: 'Demo Stores', status: 'suspended', buildState: 'draft' },
 ];
 const FIXTURE_ROLES: Readonly<Record<string, ReadonlyArray<string>>> = {
-  'tenant-fixture-a': ['sales_rep'],
+  'tenant-fixture-a': ['owner'],
   'tenant-fixture-b': ['owner'],
   'tenant-fixture-c': ['accountant'],
 };

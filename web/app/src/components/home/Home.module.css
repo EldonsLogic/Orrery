@@ -1,0 +1,541 @@
+/* Owner home (WEB-029). Foundation roles only (styles/foundation.css). Glass on the Ask Seshna field only; figures and lists stay solid.
+   Rhythm: 48 between sections (32 on phones), 24 inside cards, card padding 24 (16 on phones). */
+.home {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+@media (min-width: 48.0625rem) {
+  .home {
+    gap: var(--space-6);
+  }
+}
+
+/* Hero: greeting and the Ask Seshna front door, on the page band. The band is flat and solid (not a gradient) and spans the
+   whole main area (the shell's main is the size container), from the top bar to just below the hero, so the glass reads. */
+.hero {
+  position: relative;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset-inline: calc((100cqw - 100%) / -2 - var(--page-pad));
+  inset-block: calc(var(--main-pad-block) * -1) calc(var(--space-2) * -1);
+  background: var(--page-band);
+  border-block-end: var(--hairline);
+}
+
+@media (min-width: 48.0625rem) {
+  .hero::before {
+    inset-block-end: calc(var(--space-4) * -1);
+  }
+}
+
+.header {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+.sep {
+  inline-size: var(--border-width);
+  block-size: var(--space-1_5);
+  background: var(--color-border-control);
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h1-fluid);
+  line-height: var(--text-h1-line);
+  font-weight: var(--text-h1-weight);
+}
+
+.ask {
+  display: grid;
+  gap: var(--space-1_5);
+  max-inline-size: 48rem;
+}
+
+.askLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+}
+
+/* The field: one glass control, 48 high on desktop, the Ask button inside at the end. */
+.askField {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  min-block-size: calc(var(--control-lg) + var(--space-1));
+  padding-block: var(--space-0_5);
+  padding-inline: var(--space-2) var(--space-0_5);
+  border: var(--border-width) solid var(--color-border-control);
+  border-radius: var(--radius-md);
+  background: var(--glass-fill);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.askField:hover {
+  border-color: var(--color-text);
+}
+
+.askField:focus-within {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.askInput {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: var(--control-md);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+}
+
+.askInput:focus {
+  outline: none;
+}
+
+.askInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+.askButton {
+  flex: none;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--control-sm);
+  padding-inline: var(--space-1_5);
+  border: var(--hairline);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.chip:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, var(--color-surface));
+}
+
+.caption {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h1-weight);
+}
+
+.journey {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.body {
+  margin: 0;
+  max-inline-size: var(--measure);
+}
+
+.textLink {
+  color: var(--color-primary);
+  font-weight: var(--text-label-weight);
+}
+
+/* KPI tiles: 4, then 2, then a snap row on phones; the row scrolls, never the page. */
+.tiles {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@container (max-width: 31.99rem) {
+  .tiles {
+    grid-auto-flow: column;
+    grid-auto-columns: 82%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: none;
+  }
+
+  .tile {
+    scroll-snap-align: start;
+  }
+}
+
+@container (min-width: 32rem) {
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 60rem) {
+  .tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+.tile {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1_5);
+  padding: var(--space-2);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.tileLabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+}
+
+.tileHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  min-block-size: var(--space-3);
+}
+
+.tileValue {
+  min-block-size: var(--text-kpi-line);
+}
+
+.kpiValue {
+  font-family: var(--font-heading);
+  font-size: var(--text-kpi-size);
+  line-height: var(--text-kpi-line);
+  font-weight: var(--text-kpi-weight);
+}
+
+.kpiValue .currency {
+  font-size: var(--text-small-size);
+}
+
+.spark {
+  flex: none;
+  inline-size: var(--space-8);
+  block-size: var(--space-3);
+  color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+}
+
+.tileFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--space-3);
+}
+
+.figure {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.currency {
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-label-weight);
+}
+
+.amount {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-0_5);
+  font-weight: var(--text-strong-weight);
+  white-space: nowrap;
+}
+
+.icon {
+  flex: none;
+  inline-size: var(--icon-sm);
+  block-size: var(--icon-sm);
+}
+
+/* Approvals (7) beside today and activity (5); one column on narrow screens. */
+.columns {
+  display: grid;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@container (min-width: 60rem) {
+  .columns {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+}
+
+.side {
+  display: grid;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.panelHead {
+  display: grid;
+  gap: var(--space-0_5);
+}
+
+.rows {
+  display: grid;
+  margin: 0;
+  margin-inline: calc(var(--space-1_5) * -1);
+  margin-block-end: calc(var(--space-1_5) * -1);
+  padding: 0;
+  list-style: none;
+}
+
+/* The whole row is the hover target; amounts line up in one tabular column. */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'main main' 'amount review';
+  align-items: center;
+  gap: var(--space-1_5) var(--space-2);
+  padding: var(--space-2) var(--space-1_5);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.row + .row {
+  border-block-start: var(--hairline);
+}
+
+.row:hover {
+  background: var(--state-hover);
+}
+
+.rowMain {
+  grid-area: main;
+  display: grid;
+  gap: var(--space-0_5);
+  min-inline-size: 0;
+}
+
+.rowAmount {
+  grid-area: amount;
+}
+
+.review {
+  grid-area: review;
+  text-decoration: none;
+}
+
+@container (min-width: 36rem) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) var(--space-12) auto;
+    grid-template-areas: 'main amount review';
+  }
+
+  .rowAmount {
+    justify-self: end;
+  }
+}
+
+.rowTitle {
+  font-weight: var(--text-strong-weight);
+}
+
+.rowMeta {
+  color: var(--color-text-muted);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.rowStatus {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+/* Today: label and figure rows inside one card. */
+.facts {
+  display: grid;
+  margin: 0;
+}
+
+.fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-block: var(--space-1_5);
+}
+
+.fact + .fact {
+  border-block-start: var(--hairline);
+}
+
+.fact:last-child {
+  padding-block-end: 0;
+}
+
+.fact dt {
+  display: grid;
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+.fact dd {
+  margin: 0;
+}
+
+.factFigure {
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-strong-weight);
+}
+
+.factNote {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+.day {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.dayHeading {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-label-weight);
+}
+
+.feed {
+  display: grid;
+  gap: var(--space-1_5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feedItem {
+  display: grid;
+  grid-template-columns: var(--space-6) minmax(0, 1fr);
+  gap: var(--space-1_5);
+  font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.feedText {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-0_5);
+}
+
+.feedText > .amount {
+  color: var(--color-text-muted);
+}
+
+.time {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.chip:focus-visible,
+.review:focus-visible,
+.textLink:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (pointer: coarse) {
+  .chip {
+    min-block-size: var(--touch-target);
+  }
+}
+
+/* Phones: no fixed tiny text; captions step up to the small size. */
+@media (max-width: 48rem) {
+  .caption,
+  .rowStatus,
+  .dayHeading,
+  .factNote {
+    font-size: var(--text-small-size);
+    line-height: var(--text-small-line);
+  }
+}

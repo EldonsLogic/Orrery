@@ -1376,5 +1376,14 @@
       }
     },
     "loading": "جارٍ العمل"
+  },
+  "metrics": {
+    "sales": {
+      "revenue": "الإيرادات",
+      "order_count": "الفواتير الصادرة"
+    },
+    "finance": {
+      "receivables_outstanding": "الذمم المدينة المستحقة"
+    }
   }
 }

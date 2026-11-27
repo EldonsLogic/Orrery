@@ -1,0 +1,1 @@
+{"kind": "refund_request", "idempotency_key": "7c2e9a41-0d3b-4f6a-b8e2-1a9c5d7f3e20", "payment_id": "pay_01J9A8", "action": "refund", "basis": "unallocated", "amount": {"minor": 115000, "currency": "SAR"}, "reason_code": "over_collected", "approval_id": "ap_912", "links": [{"entity": "credit_note", "id": "CN-00007"}]}

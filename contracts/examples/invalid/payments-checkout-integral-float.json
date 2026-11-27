@@ -1,0 +1,1 @@
+{"kind": "checkout_request", "idempotency_key": "0b6f7d2e-3c4a-4e1b-9a7d-5f2c8e1b4a90", "connection_id": "conn_examplepay_1", "links": [{"entity": "sales_invoice", "id": "SINV-00042"}], "amount": {"minor": 10.0, "currency": "SAR"}, "mode": "hosted_redirect", "return_path": "/pay/return/chk_01J9A7Q2", "expires_in_s": 3600}

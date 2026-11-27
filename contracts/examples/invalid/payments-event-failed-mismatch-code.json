@@ -1,0 +1,1 @@
+{"kind": "payment_event", "type": "payment.failed", "payment_id": "pay_01J9A8", "checkout_id": "chk_01J9A7Q2", "links": [{"entity": "sales_invoice", "id": "SINV-00042"}], "amount": {"minor": 115000, "currency": "SAR"}, "provider": "payments.examplepay", "environment": "sandbox", "gateway_payment_ref": "examplepay:gw_7f3a91", "failure_code": "PAY-AMT-002"}

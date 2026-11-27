@@ -176,3 +176,54 @@ def test_platform_scope():
     assert validate_event(stamp(ev, 1)).ok
     ev["tenant_id"] = "t_acme"
     assert any(i.code == "EVS-TENANT-002" for i in validate_event(stamp(ev, 1)).errors)
+
+
+PAYMENTS_SCHEMA = Path(__file__).resolve().parents[4] / "contracts" / "connector-payments.schema.json"
+
+
+def payment_types():
+    doc = json.loads(PAYMENTS_SCHEMA.read_text(encoding="utf-8"))
+    return set(doc["$defs"]["payment_event"]["properties"]["type"]["enum"])
+
+
+def test_payment_types_registered_and_domain_reserved():
+    """DSC-021: every payment_event type is registered; record patterns cannot claim the payment domain."""
+    reg = default_registry()
+    assert {k for k in reg.keys() if k.startswith("payment.")} == payment_types()
+    for verb in ("created", "updated", "transitioned", "deleted"):
+        assert reg.lookup(f"payment.{verb}") is None
+    assert reg.lookup("payment.captured").data_class == "financial"
+    assert reg.lookup("payment.captured").requires_subject
+
+
+def test_payment_webhook_rejected_forbids_payment_fields():
+    ev = make("payment.webhook_rejected")
+    assert validate_event(stamp(ev, 1)).ok
+    ev["data"] = {**ev["data"], "payment_id": "pay_1"}
+    assert not validate_event(stamp(ev, 1)).ok
+
+
+def test_payment_gateway_ref_optional_only_before_the_gateway_knows_it():
+    ev = make("payment.checkout_created")
+    ev["data"] = {k: v for k, v in ev["data"].items() if k != "gateway_payment_ref"}
+    assert validate_event(stamp(ev, 1)).ok
+    ev = make("payment.captured")
+    ev["data"] = {k: v for k, v in ev["data"].items() if k != "gateway_payment_ref"}
+    assert not validate_event(stamp(ev, 1)).ok
+
+
+def test_payment_refund_events_are_keyed_by_gateway_refund_ref():
+    ev = make("payment.refunded")
+    ev["data"] = {k: v for k, v in ev["data"].items() if k != "gateway_refund_ref"}
+    assert not validate_event(stamp(ev, 1)).ok
+
+
+@pytest.mark.parametrize("key,field,bad", [
+    ("payment.failed", "failure_code", "PAY-AMT-002"),
+    ("payment.webhook_rejected", "error_code", "PAY-RECON-001"),
+    ("payment.reconciliation_mismatch", "error_code", "PAY-HOOK-001"),
+])
+def test_payment_error_codes_are_tied_to_their_event_type(key, field, bad):
+    ev = make(key)
+    ev["data"] = {**ev["data"], field: bad}
+    assert not validate_event(stamp(ev, 1)).ok

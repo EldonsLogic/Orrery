@@ -47,7 +47,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | LEG-002 | Add LICENSE file policy (proprietary, all rights reserved) and per-folder licence notes (interim LICENSE added; counsel to finalise) | Legal | G0 | GOV-004 | eldon | doing |
 | LEG-003 | Engage counsel in KSA, UAE, Egypt and Qatar; scope of work | Legal | G0 | - | eldon | doing |
 | LEG-004 | Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) | Legal | G0 | GOV-004 | partner | done |
-| LEG-005 | Register seshna.com and the @seshna handles (ADR-0066) | Legal | G0 | - | eldon | todo |
+| LEG-005 | Register seshna.com and the @seshna handles (ADR-0066). seshna.com bought by Eldon 2026-11-27; the @seshna handles are still open | Legal | G0 | - | eldon | doing |
 | LEG-006 | GPL licence-boundary review: SaaS-only engine, separate services, no distribution | Legal | G1 | LEG-003 | eldon | todo |
 | LEG-007 | Counsel opinion: vendor certification needed to sell ZATCA-compliant software | Legal | G1 | LEG-003 | eldon | todo |
 | LEG-008 | Name clearance: trademark search and counsel opinion (KSA, UAE, Egypt, Qatar, international) | Legal | G1 | LEG-003 | eldon | todo |

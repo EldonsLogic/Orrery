@@ -81,6 +81,23 @@ for _t in ("published", "deprecated", "request_created", "request_reviewed"):
     DATA[f"component.{_t}"] = {"component_id": "core.x"}
 for _t in ("upgrade_canary_started", "upgrade_promoted", "upgrade_rolled_back"):
     DATA[f"engine.{_t}"] = {"canary_id": "k1"}
+# payment events (contracts/connector-payments.md section 6; fictional sandbox data)
+_PAY = {"payment_id": "pay_1", "checkout_id": "chk_1", "links": [{"entity": "sales_invoice", "id": "SINV-1"}],
+        "amount": {"minor": 115000, "currency": "SAR"}, "provider": "payments.examplepay", "environment": "sandbox",
+        "gateway_payment_ref": "examplepay:gw_1"}
+for _t in ("checkout_created", "checkout_cancelled", "authorised", "captured", "expired"):
+    DATA[f"payment.{_t}"] = _PAY
+DATA["payment.failed"] = {**_PAY, "failure_code": "PAY-GW-002"}
+DATA["payment.held_unallocated"] = {**_PAY, "unallocated_reason": "over_collected"}
+DATA["payment.refund_requested"] = {**_PAY, "refund_id": "rfd_1"}
+DATA["payment.refunded"] = {**_PAY, "refund_id": "rfd_1", "gateway_refund_ref": "examplepay:re_1", "origin": "seshna"}
+DATA["payment.refund_failed"] = {**_PAY, "refund_id": "rfd_1", "failure_code": "PAY-GW-002"}
+DATA["payment.voided"] = {**_PAY, "origin": "external"}
+DATA["payment.disputed"] = {**_PAY, "dispute_status": "opened"}
+DATA["payment.webhook_rejected"] = {"provider": "payments.examplepay", "environment": "sandbox",
+                                    "endpoint_id": "whk_3QpZr8LmXv2NcTyBa7KdQe", "error_code": "PAY-HOOK-001"}
+DATA["payment.reconciliation_mismatch"] = {"provider": "payments.examplepay", "environment": "sandbox",
+                                           "error_code": "PAY-RECON-001"}
 
 
 def concrete_type(key: str) -> str:

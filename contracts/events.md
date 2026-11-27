@@ -93,15 +93,18 @@ Cheap, high-volume, aggregated by Part 5 into usage records.
 | `meter.message_sent` | channel, template category or `session`, country, provider, cost_micro_usd ([connector-messaging](connector-messaging.md)) |
 
 ### Payment events (proposed, [ADR-0077](../docs/decisions/ADR-0077-payments-connector-bring-your-own-gateway.md); additive, since 0.2.0)
-Emitted by the payments gateway service only after webhook verification and a status re-read ([connector-payments.md](connector-payments.md) sections 5 and 6). `data_class: "financial"`; `subject` is the payment record. `data`: `payment_id`, `checkout_id`, `links` (invoices or orders; credit notes on refund events), `amount` (`minor` integer, ISO 4217 `currency`), `provider`, `environment` (`sandbox` or `live`), `gateway_payment_ref` (`<provider>:<id>`); never card data, payer names or gateway free text.
+Emitted by the payments gateway service only after webhook verification and a status re-read ([connector-payments.md](connector-payments.md) sections 5 and 6). `data_class: "financial"` (`operational` for the rejected-webhook audit); `subject` is the payment record. `data`: `payment_id`, `checkout_id`, `links` (invoices or orders; credit notes on refund events), `amount` (`minor` integer, ISO 4217 `currency`), `provider`, `environment` (`sandbox` or `live`), `gateway_payment_ref` (`<provider>:<id>`, optional only on the two checkout events); never card data, payer names or gateway free text. The `payment` domain is reserved: record events of an engine entity never use it. Extra fields and allowed error codes per type: connector-payments section 6.
 | Type | When |
 |---|---|
-| `payment.checkout_created` | A hosted checkout session was created |
-| `payment.authorised`, `payment.captured` | Verified status from the gateway |
-| `payment.failed` (data adds `failure_code`), `payment.expired` | Declined, gateway error, mismatch, or the session expired |
-| `payment.refund_requested`, `payment.refunded`, `payment.voided` | R4 refund or void path |
-| `payment.webhook_rejected` | Audit: a webhook to a known endpoint failed verification (`endpoint_id`, `error_code`, no body, no `payment_id`) |
-| `payment.reconciliation_mismatch` | A settlement line did not match a payment or ledger entry |
+| `payment.checkout_created`, `payment.checkout_cancelled` | A hosted checkout session was created, or cancelled because a newer one replaced it |
+| `payment.authorised`, `payment.captured`, `payment.expired` | Verified status from the gateway |
+| `payment.failed` | The gateway declined (`failure_code`); a mismatch is never a failure |
+| `payment.held_unallocated` | Money captured that settles nothing: amount mismatch, over-collection or a cancelled order (`unallocated_reason`) |
+| `payment.refund_requested`, `payment.refunded`, `payment.refund_failed` | R4 refund path, one `payment.refunded` per gateway refund id; also refunds made in the gateway dashboard and lost chargebacks (`origin`) |
+| `payment.voided` | A void (R4 or made in the gateway dashboard, `origin`) |
+| `payment.disputed` | A chargeback or dispute opened, won or lost; a person is alerted |
+| `payment.webhook_rejected` | Audit: a webhook to a known endpoint failed verification (`endpoint_id`, `error_code`, no body, no payment fields) |
+| `payment.reconciliation_mismatch` | A settlement line, or a re-read with no money captured, did not match (`error_code`) |
 
 ### Platform events (no tenant data)
 `component.published`, `component.deprecated`, `component.request_created`, `component.request_reviewed`, `engine.upgrade_canary_started`, `engine.upgrade_promoted`, `engine.upgrade_rolled_back`. These carry `tenant_id: "platform"`.

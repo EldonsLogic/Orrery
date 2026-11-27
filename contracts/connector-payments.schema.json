@@ -5,11 +5,13 @@
   "title": "Payments connector messages (capabilities, connect, checkout, refund, payment event)",
   "description": "See contracts/connector-payments.md and ADR-0077. No field may carry card data; the schema alone does not guarantee that (section 1.2).",
   "x-validator-rules": [
-    "PAY-DATA-001 (code, every string before persist or log): after removing spaces and - : . _, a 13 to 19 digit run starting 2 to 6 that passes Luhn is refused.",
-    "JSON numbers with a fraction or exponent are never integers (`10.0` is refused); currency is checked against the ISO 4217 table and its exponent.",
+    "PAY-DATA-001 (code, every string before persist or log): after removing spaces and - : . _, a 13 to 19 digit run starting 2 to 6 that passes Luhn is refused; a validated UUID keeps its dashes.",
+    "JSON numbers with a fraction or exponent are never integers (`10.0` is refused); currency is checked against the ISO 4217 table and its exponent; decimal sources with excess precision are refused (PAY-AMT-003).",
     "A gateway ref's prefix equals the provider id after `payments.` (PAY-AMT-002).",
-    "checkout_request.amount equals the code-computed outstanding balance of its links (PAY-AMT-001); one open checkout per link (PAY-CHK-001).",
-    "refund_request: currency equals the payment's (PAY-AMT-001); amount is reserved atomically against captured minus refunded minus pending (PAY-REFUND-001); the approval hash matches (section 4)."
+    "checkout_request.amount equals the code-computed outstanding balance of its links (PAY-AMT-001); a new checkout cancels older open sessions on the same links first (PAY-CHK-001).",
+    "refund_request: currency equals the payment's (PAY-AMT-001); amount is reserved atomically against the basis balance (PAY-REFUND-001); the approval hash matches (section 4.3).",
+    "connect_request: merchant_ref equals the account id returned by probe_id; staged secrets are unmodified and match their fingerprints (section 4.4).",
+    "capabilities.webhook: dedupe_retention_days is at least max(7, retry_period_s / 86400 + 5) (section 5.5)."
   ],
   "type": "object",
   "required": ["kind"],
@@ -21,7 +23,11 @@
     {"$ref": "#/$defs/payment_event"}
   ],
   "$defs": {
-    "ref": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$", "not": {"pattern": "[0-9](?:[-:._]?[0-9]){12,}"}},
+    "ref": {
+      "type": "string",
+      "if": {"pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"},
+      "else": {"pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$", "not": {"pattern": "[0-9](?:[-:._]*[0-9]){12,}"}}
+    },
     "gateway_ref": {"type": "string", "pattern": "^[a-z0-9_]{2,32}:[A-Za-z0-9_.:-]{1,96}$"},
     "currency": {"type": "string", "pattern": "^[A-Z]{3}$", "not": {"enum": ["XXX", "XTS", "XAU", "XAG", "XPD", "XPT", "XDR", "XBA", "XBB", "XBC", "XBD", "XSU", "XUA"]}},
     "amount": {
@@ -29,7 +35,7 @@
       "properties": {"minor": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}, "currency": {"$ref": "#/$defs/currency"}}
     },
     "links": {
-      "type": "array", "minItems": 1, "maxItems": 50,
+      "type": "array", "minItems": 1, "maxItems": 50, "uniqueItems": true,
       "items": {
         "type": "object", "additionalProperties": false, "required": ["entity", "id"],
         "properties": {"entity": {"enum": ["sales_invoice", "sales_order", "credit_note"]}, "id": {"$ref": "#/$defs/ref"}}
@@ -44,7 +50,7 @@
         "kind": {"const": "capabilities"},
         "provider": {"$ref": "#/$defs/provider"},
         "adapter_version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
-        "checkout_modes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["hosted_redirect", "hosted_fields"]}},
+        "checkout_modes": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["hosted_redirect"]}},
         "card_data": {"const": "none"},
         "methods": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["card", "mada", "apple_pay", "google_pay", "stc_pay", "bank_transfer", "wallet"]}},
         "currencies": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/currency"}},
@@ -54,43 +60,64 @@
         "key_mode_check": {"enum": ["key_prefix", "probe"]},
         "webhook": {
           "type": "object", "additionalProperties": false,
-          "required": ["scheme", "signature_header", "timestamp_header", "event_id_source", "replay_window_s", "status_reread"],
+          "required": ["scheme", "signature_location", "verifier", "event_id_source", "retry_period_s", "dedupe_retention_days", "status_reread"],
           "properties": {
-            "scheme": {"enum": ["hmac_sha256", "rsa_sha256", "ed25519", "secret_token"]},
-            "signature_header": {"type": "string", "pattern": "^[A-Za-z0-9-]{1,64}$"},
-            "timestamp_header": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9-]{1,64}$"},
-            "event_id_source": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_./-]{1,64}$"},
+            "scheme": {"enum": ["hmac_sha256_signed_timestamp", "aes256gcm_encrypted_body", "hmac_sha256_selected_fields", "body_secret_token"]},
+            "signature_location": {"type": "string", "pattern": "^(header|body):[A-Za-z0-9_.-]{1,64}$"},
+            "verifier": {"enum": ["receiver", "payments_job"]},
             "replay_window_s": {"type": "integer", "minimum": 30, "maximum": 600},
+            "event_id_source": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_./-]{1,64}$"},
+            "retry_period_s": {"type": ["integer", "null"], "minimum": 0, "maximum": 31536000},
+            "dedupe_retention_days": {"type": "integer", "minimum": 7, "maximum": 400},
             "status_reread": {"const": true}
           },
-          "if": {"properties": {"scheme": {"const": "secret_token"}}},
-          "else": {"properties": {"timestamp_header": {"type": "string"}}}
+          "allOf": [
+            {"if": {"properties": {"scheme": {"const": "hmac_sha256_signed_timestamp"}}},
+             "then": {"required": ["replay_window_s"]}, "else": {"not": {"required": ["replay_window_s"]}}},
+            {"if": {"properties": {"scheme": {"const": "hmac_sha256_selected_fields"}}},
+             "then": {"properties": {"verifier": {"const": "payments_job"}}}, "else": {"properties": {"verifier": {"const": "receiver"}}}},
+            {"if": {"properties": {"retry_period_s": {"type": "null"}}},
+             "then": {"properties": {"dedupe_retention_days": {"minimum": 35}}}}
+          ]
         },
         "sandbox": {"const": true}
       }
     },
     "connect_request": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "idempotency_key", "connection_id", "provider", "environment", "merchant_ref", "approval_id"],
+      "required": ["kind", "idempotency_key", "connection_id", "provider", "environment", "staged_secrets", "probe_id", "merchant_ref", "approval_id"],
       "properties": {
         "kind": {"const": "connect_request"},
         "idempotency_key": {"$ref": "#/$defs/ref"},
         "connection_id": {"$ref": "#/$defs/ref"},
         "provider": {"$ref": "#/$defs/provider"},
         "environment": {"$ref": "#/$defs/environment"},
+        "staged_secrets": {
+          "type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["slot", "staged_id", "fingerprint"],
+            "properties": {
+              "slot": {"enum": ["api_key", "webhook_secret"]},
+              "staged_id": {"$ref": "#/$defs/ref"},
+              "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+            }
+          }
+        },
+        "probe_id": {"$ref": "#/$defs/ref"},
         "merchant_ref": {"$ref": "#/$defs/gateway_ref"},
         "approval_id": {"$ref": "#/$defs/ref"}
       }
     },
     "checkout_request": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "idempotency_key", "links", "amount", "mode", "return_path", "expires_in_s"],
+      "required": ["kind", "idempotency_key", "connection_id", "links", "amount", "mode", "return_path", "expires_in_s"],
       "properties": {
         "kind": {"const": "checkout_request"},
         "idempotency_key": {"$ref": "#/$defs/ref"},
+        "connection_id": {"$ref": "#/$defs/ref"},
         "links": {"$ref": "#/$defs/links", "items": {"properties": {"entity": {"enum": ["sales_invoice", "sales_order"]}}}},
         "amount": {"$ref": "#/$defs/amount"},
-        "mode": {"enum": ["hosted_redirect", "hosted_fields"]},
+        "mode": {"enum": ["hosted_redirect"]},
         "return_path": {"type": "string", "pattern": "^/pay/return/[A-Za-z0-9_-]{1,64}$"},
         "expires_in_s": {"type": "integer", "minimum": 300, "maximum": 86400}
       }
@@ -103,21 +130,26 @@
         "idempotency_key": {"$ref": "#/$defs/ref"},
         "payment_id": {"$ref": "#/$defs/ref"},
         "action": {"enum": ["refund", "void"]},
+        "basis": {"enum": ["credit_note", "unallocated"]},
         "amount": {"$ref": "#/$defs/amount"},
         "links": {"$ref": "#/$defs/links", "items": {"properties": {"entity": {"const": "credit_note"}}}},
-        "reason_code": {"enum": ["duplicate", "customer_request", "fraud_suspected", "order_cancelled", "other"]},
+        "reason_code": {"enum": ["duplicate", "customer_request", "fraud_suspected", "order_cancelled", "over_collected", "other"]},
         "approval_id": {"$ref": "#/$defs/ref"}
       },
-      "if": {"properties": {"action": {"const": "refund"}}},
-      "then": {"required": ["amount", "links"]},
-      "else": {"not": {"required": ["amount"]}}
+      "allOf": [
+        {"if": {"properties": {"action": {"const": "refund"}}},
+         "then": {"required": ["amount", "basis"]},
+         "else": {"not": {"anyOf": [{"required": ["amount"]}, {"required": ["basis"]}, {"required": ["links"]}]}}},
+        {"if": {"required": ["basis"], "properties": {"basis": {"const": "credit_note"}}}, "then": {"required": ["links"]}},
+        {"if": {"required": ["basis"], "properties": {"basis": {"const": "unallocated"}}}, "then": {"not": {"required": ["links"]}}}
+      ]
     },
     "payment_event": {
       "type": "object", "additionalProperties": false,
       "required": ["kind", "type", "provider", "environment"],
       "properties": {
         "kind": {"const": "payment_event"},
-        "type": {"enum": ["payment.checkout_created", "payment.authorised", "payment.captured", "payment.failed", "payment.expired", "payment.refund_requested", "payment.refunded", "payment.voided", "payment.webhook_rejected", "payment.reconciliation_mismatch"]},
+        "type": {"enum": ["payment.checkout_created", "payment.checkout_cancelled", "payment.authorised", "payment.captured", "payment.failed", "payment.expired", "payment.held_unallocated", "payment.refund_requested", "payment.refunded", "payment.refund_failed", "payment.voided", "payment.disputed", "payment.webhook_rejected", "payment.reconciliation_mismatch"]},
         "payment_id": {"$ref": "#/$defs/ref"},
         "checkout_id": {"$ref": "#/$defs/ref"},
         "links": {"$ref": "#/$defs/links"},
@@ -125,16 +157,33 @@
         "provider": {"$ref": "#/$defs/provider"},
         "environment": {"$ref": "#/$defs/environment"},
         "gateway_payment_ref": {"$ref": "#/$defs/gateway_ref"},
-        "failure_code": {"enum": ["PAY-GW-001", "PAY-GW-002", "PAY-AMT-002", "PAY-ENV-001"]},
-        "endpoint_id": {"type": "string", "pattern": "^whk_[A-Za-z0-9]{20,60}$"},
-        "error_code": {"enum": ["PAY-HOOK-001", "PAY-HOOK-002", "PAY-ENV-001", "PAY-DATA-001", "PAY-RECON-001"]}
+        "refund_id": {"$ref": "#/$defs/ref"},
+        "gateway_refund_ref": {"$ref": "#/$defs/gateway_ref"},
+        "origin": {"enum": ["seshna", "external", "chargeback"]},
+        "unallocated_reason": {"enum": ["amount_mismatch", "over_collected", "order_cancelled"]},
+        "dispute_status": {"enum": ["opened", "won", "lost"]},
+        "failure_code": {"enum": ["PAY-GW-002"]},
+        "endpoint_id": {"type": "string", "pattern": "^whk_[A-Za-z0-9]{22,60}$"},
+        "error_code": {"enum": ["PAY-HOOK-001", "PAY-HOOK-002", "PAY-ENV-001", "PAY-DATA-001", "PAY-AMT-002", "PAY-RECON-001"]}
       },
       "allOf": [
-        {"if": {"properties": {"type": {"const": "payment.failed"}}}, "then": {"required": ["failure_code"]}, "else": {"not": {"required": ["failure_code"]}}},
+        {"if": {"properties": {"type": {"enum": ["payment.failed", "payment.refund_failed"]}}}, "then": {"required": ["failure_code"]}, "else": {"not": {"required": ["failure_code"]}}},
+        {"if": {"properties": {"type": {"const": "payment.webhook_rejected"}}},
+         "then": {"required": ["endpoint_id", "error_code"], "properties": {"error_code": {"enum": ["PAY-HOOK-001", "PAY-HOOK-002", "PAY-ENV-001", "PAY-DATA-001"]}},
+                  "not": {"anyOf": [{"required": ["payment_id"]}, {"required": ["checkout_id"]}, {"required": ["links"]}, {"required": ["amount"]}, {"required": ["gateway_payment_ref"]}]}},
+         "else": {"not": {"required": ["endpoint_id"]}}},
+        {"if": {"properties": {"type": {"const": "payment.reconciliation_mismatch"}}},
+         "then": {"required": ["error_code"], "properties": {"error_code": {"enum": ["PAY-AMT-002", "PAY-RECON-001", "PAY-DATA-001"]}}}},
         {"if": {"properties": {"type": {"enum": ["payment.webhook_rejected", "payment.reconciliation_mismatch"]}}},
-         "then": {"required": ["error_code"]},
-         "else": {"required": ["payment_id", "checkout_id", "links", "amount", "gateway_payment_ref"], "not": {"required": ["error_code"]}}},
-        {"if": {"properties": {"type": {"const": "payment.webhook_rejected"}}}, "then": {"required": ["endpoint_id"]}, "else": {"not": {"required": ["endpoint_id"]}}}
+         "else": {"required": ["payment_id", "checkout_id", "links", "amount"], "not": {"required": ["error_code"]}}},
+        {"if": {"properties": {"type": {"enum": ["payment.webhook_rejected", "payment.reconciliation_mismatch", "payment.checkout_created", "payment.checkout_cancelled"]}}},
+         "else": {"required": ["gateway_payment_ref"]}},
+        {"if": {"properties": {"type": {"enum": ["payment.refund_requested", "payment.refunded", "payment.refund_failed"]}}},
+         "then": {"required": ["refund_id"]}, "else": {"not": {"required": ["refund_id"]}}},
+        {"if": {"properties": {"type": {"const": "payment.refunded"}}}, "then": {"required": ["gateway_refund_ref", "origin"]}},
+        {"if": {"properties": {"type": {"const": "payment.voided"}}}, "then": {"required": ["origin"]}},
+        {"if": {"properties": {"type": {"const": "payment.held_unallocated"}}}, "then": {"required": ["unallocated_reason"]}, "else": {"not": {"required": ["unallocated_reason"]}}},
+        {"if": {"properties": {"type": {"const": "payment.disputed"}}}, "then": {"required": ["dispute_status"]}, "else": {"not": {"required": ["dispute_status"]}}}
       ]
     }
   }

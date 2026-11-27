@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Factory drafting request (BPL-017, internal input, not a contract)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "component_id", "need", "title", "description", "locale"],
+  "properties": {
+    "request_id": { "type": "string", "pattern": "^crq_[a-z0-9_]{1,40}$" },
+    "component_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}$" },
+    "need": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref"],
+      "properties": {
+        "kind": { "enum": ["entity", "screen", "report", "print_format"] },
+        "ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" }
+      }
+    },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "locale": { "enum": ["ar", "en"] }
+  }
+}

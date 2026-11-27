@@ -53,7 +53,7 @@ Producers of calls: the chat runtime (model chooses tool and arguments), schedul
 | The gateway may trust | The gateway must not trust |
 |---|---|
 | Tenant and user from the verified session token, checked against the routed tenant (T50) | Anything in the request `caller` object: `role_ids`, `tenant_id`, `user_id` (T41) |
-| Roles loaded from identity for this tenant at call time | Role names, SQL, code, formulas, URLs or keys in arguments (section 10 already forbids them) |
+| A complete role set loaded from the regional assignment store for this tenant at call time that passed the tenant and integrity check, while the tenant is not fenced, counting a permission increase only once its sync is verified; a decrease applies at once (ADR-0060 items 7, 8 and 11, Tool API 0.3.2) | Role names, SQL, code, formulas, URLs or keys in arguments (section 10 already forbids them) |
 | The tool set stored with the current revision | That a tool the model names exists for this caller: check `unknown_tool` then permission |
 | An approval record whose hash matches the call (once the change below lands) | An approval decided in the same model turn, or by the requester, or with tainted context (T42, T43) |
 | A stored idempotency result for the same user, tool and key | A stored result for the same key from another user (T44) |

@@ -18,14 +18,23 @@ COMPLIANCE_COMPANY = [("company", "country"), ("company", "vatNumber"), ("compan
                       ("company", "locale", "currency"), ("company", "locale", "fiscalYear")]
 # Module settings that move stock or ledger value, or decide who may be messaged (ADR-0079, DSC-022): reviewed as compliance, the strictest
 # non-structural class. Ancestors match too, so replacing a whole module is compliance as well.
-MODULE_COMPLIANCE = [("modules", "manufacturing", "warehouses"), ("modules", "marketing", "consent"),
-                     ("modules", "marketing", "channels")]
+MODULE_COMPLIANCE = ([("modules", "manufacturing", k) for k in  # stock value and which materials move (#397 review)
+                      ("warehouses", "bom", "operations", "materialTransfer", "batchFromWorkOrder", "subcontracting")]
+                     + [("modules", "marketing", "consent"), ("modules", "marketing", "channels")])
 # A segment decides who is messaged (#398 re-review): any change to it, other than its labels, is compliance.
 SEGMENTS = ("modules", "marketing", "segments")
 META_COSMETIC = [("meta", "revision"), ("meta", "createdAt"), ("meta", "updatedAt")]
 DESTRUCTIVE_NODES = {spath(p) for p in (
     "locations/*", "components/*", "entities/*", "entities/*/fields/*", "entities/*/fields/*/options/*",
-    "entities/*/relations/*", "entities/*/components/*", "workflows/*", "workflows/*/states/*")}
+    "entities/*/relations/*", "entities/*/components/*", "workflows/*", "workflows/*/states/*",
+    "modules/crm/pipeline/stages/*", "modules/crm/leadSources/*", "modules/crm/lostReasons/*",
+    "modules/projects/taskStatuses/*", "modules/projects/views/*", "modules/projects/views/*/board/columns/*",
+    "modules/projects/timesheets")}
+# ADR-0079 (#395 review M2, #396 review H2): repointing what a module record is or which stage outcome it has, or
+# switching timesheets off, orphans records.
+DESTRUCTIVE_CHANGES = {spath("modules/crm/pipeline/stages/*/kind"), spath("modules/projects/timesheets/enabled")}
+# Billing hours through a sales invoice reaches the ledger (#396 review H2): any change is compliance.
+BILLING_PATHS = [spath("modules/projects/timesheets/billable"), spath("modules/projects/timesheets/invoicingComponent")]
 DATA_FIELD_PROPS = {"type", "required", "unique", "precision", "min", "max", "maxLength", "target", "computed"}
 SECTIONS = {"meta", "company", "compliance", "i18n", "branding"}
 STEPS = spath("approvals/*/steps")
@@ -51,7 +60,8 @@ def impact_of(kind: str, sp: SPath) -> str:
     if kind == "remove" and sp[:1] == ("modules",) and len(sp) <= 2:
         return "destructive"  # a module switched off (Q-700): stricter than access, checked first
     head = sp[0] if sp else ""
-    if head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE):
+    if (head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE)
+            or any(_starts(sp, p) for p in BILLING_PATHS)):
         return "compliance"
     if head == "branding":
         return "branding"
@@ -67,7 +77,7 @@ def impact_of(kind: str, sp: SPath) -> str:
             or (head == "workflows" and len(sp) >= 4 and sp[2] == "transitions"
                 and (len(sp) == 4 or sp[4] == "approval"))):
         return "access"
-    if kind == "remove" and sp in DESTRUCTIVE_NODES:
+    if (kind == "remove" and sp in DESTRUCTIVE_NODES) or (kind != "add" and _module_rebind(sp)):
         return "destructive"
     if _data_shape(sp):
         return "data_shape"
@@ -77,6 +87,15 @@ def impact_of(kind: str, sp: SPath) -> str:
 def _module_roles(sp: SPath) -> bool:
     """modules/<key>/roles, or a whole module or the modules object replaced (they carry role lists)."""
     return sp[:1] == ("modules",) and (len(sp) <= 2 or sp[2] == "roles")
+
+
+def _module_rebind(sp: SPath) -> bool:
+    """A module's component swapped, a concept binding (or the whole binding map) rebound or removed, or a CRM stage's
+    kind changed. Adding a binding is not destructive."""
+    if sp[:1] != ("modules",) or len(sp) < 3:
+        return False
+    return ((len(sp) == 3 and sp[2] in ("component", "entities"))
+            or (len(sp) == 4 and sp[2] == "entities") or sp in DESTRUCTIVE_CHANGES)
 
 
 def _data_shape(sp: SPath) -> bool:

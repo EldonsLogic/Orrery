@@ -86,6 +86,41 @@ def m_timesheet_line_nested_child(bp):     # and so are rows of those rows
     bind_child(bp, "timesheet_line", "timesheet_line_split", [field("base_billing_rate", "money")], "splits")
 
 
+def m_timesheet_line_is_billable(bp):      # #396 review H1: the flag that picks lines for the sales invoice
+    bind_child(bp, "timesheet", "timesheet_line", [field("hours", "decimal"), field("is_billable", "boolean")])
+
+
+def m_timesheet_customer(bp):
+    entity(bp, "timesheet")["fields"].append(field("customer", "link"))
+
+
+def m_timesheet_currency(bp):
+    entity(bp, "timesheet")["fields"].append(field("currency", "string"))
+
+
+def m_timesheet_company(bp):
+    entity(bp, "timesheet")["fields"].append(field("company", "string"))
+
+
+def m_project_customer(bp):
+    entity(bp, "project")["fields"].append(field("customer", "link"))
+
+
+@pytest.mark.parametrize("mutate", [m_timesheet_line_is_billable, m_timesheet_customer, m_timesheet_currency,
+                                    m_timesheet_company, m_project_customer])
+def test_engine_billing_field_on_bound_entity_is_refused(mutate):
+    bp = example()
+    mutate(bp)
+    assert "BP-MOD-001" in codes(bp)
+
+
+def test_child_row_is_billable_error_points_at_the_child_field():
+    bp = example()
+    m_timesheet_line_is_billable(bp)
+    i = next(k for k, e in enumerate(bp["entities"]) if e["id"] == "timesheet_line")
+    assert f"/entities/{i}/fields/1/id" in [e.path for e in validate(bp).errors if e.code == "BP-MOD-001"]
+
+
 @pytest.mark.parametrize("mutate", [m_timesheet_billing_rate, m_timesheet_base_costing_rate, m_timesheet_sales_invoice,
                                     m_activity_type_rate, m_customer_tax_category, m_customer_receivable_account,
                                     m_project_cost_center, m_customer_parameter_override, m_timesheet_line_child,
@@ -204,6 +239,20 @@ def test_invoicing_component_missing_from_known_registry_fails_closed():
 def test_engine_rigid_field_on_manufacturing_entity(eid, fid):
     bp = example()
     entity(bp, eid)["fields"].append(field(fid, "money"))
+    assert "BP-MOD-001" in codes(bp)
+
+
+# #397 review M4: stock-shaping and warehouse fields (read from the pinned v15.124.5 doctypes, 2026-11-27).
+@pytest.mark.parametrize("eid,fid", [
+    ("work_order", "skip_transfer"), ("work_order", "from_wip_warehouse"), ("work_order", "use_multi_level_bom"),
+    ("bom", "transfer_material_against"), ("bom", "is_default"), ("bom", "currency"),
+    ("subcontracting_order", "set_warehouse"), ("subcontracting_order", "supplier_warehouse"),
+    ("subcontracting_receipt", "set_warehouse"), ("subcontracting_receipt", "supplier_warehouse"),
+    ("subcontracting_receipt", "rejected_warehouse"), ("item", "standard_rate"),
+])
+def test_stock_shaping_engine_field_on_manufacturing_entity(eid, fid):
+    bp = example()
+    entity(bp, eid)["fields"].append(field(fid, "string"))
     assert "BP-MOD-001" in codes(bp)
 
 

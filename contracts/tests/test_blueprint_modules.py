@@ -214,3 +214,106 @@ def test_rigid_field_names_are_engine_field_names():
             assert set(g) <= cats, (name, set(g) - cats)
             for fields in g.values():
                 assert fields and all(re.fullmatch(r"[a-z][a-z0-9_]*", f) for f in fields), (name, fields)
+
+
+# Shared concepts (#395 review M1): a concept another part also owns may be implemented by that part's component.
+FIXTURE_REGISTRY = C.parent / "services" / "blueprint" / "fixtures" / "registry"
+
+
+def _capabilities(component_id, bp=None):
+    """Fixture manifest capabilities, plus <module>.<concept> for every concept of a module this component implements
+    in `bp` (the contract makes the module component provide them; module components have no fixture manifest)."""
+    f = FIXTURE_REGISTRY / f"{component_id}.json"
+    caps = set()
+    if f.exists():
+        caps = {p["capability"] for p in json.loads(f.read_text(encoding="utf-8"))["provides"]}
+    for key, mod in (bp or {}).get("modules", {}).items():
+        if mod.get("component") == component_id:
+            caps |= {f"{key}.{c}" for c in SCHEMA["$defs"][f"{key}Module"]["properties"]["entities"]["properties"]}
+    return caps
+
+
+def test_shared_concepts_are_declared_and_documented():
+    shared = SCHEMA["x-module-shared-concepts"]
+    assert {"crm.customer", "crm.campaign"} <= set(shared)
+    for concept, caps in shared.items():
+        module, name = concept.split(".")
+        assert module in SCHEMA["$defs"]["modules"]["properties"], concept
+        assert name in SCHEMA["$defs"][f"{module}Module"]["properties"]["entities"]["properties"], concept
+        assert caps and all("." in c and not c.startswith(module + ".") for c in caps), concept
+        for c in caps:
+            assert f"`{c}`" in DOC, (concept, c)
+
+
+def test_example_concept_bindings_follow_the_shared_concept_rule():
+    """Every concept entity implements the module component, or (shared concept) a component providing a listed
+    capability, never both. The fixture manifest for core.customer provides core.customer.entities, not crm.customer."""
+    bp = load("blueprint-modules-minimal.json")
+    shared = SCHEMA["x-module-shared-concepts"]
+    ents = {e["id"]: e for e in bp["entities"]}
+    for key, mod in bp["modules"].items():
+        for concept, eid in mod["entities"].items():
+            impl = {b["component"] for b in ents[eid].get("components", []) if b["mode"] == "implements"}
+            via_module = mod["component"] in impl
+            via_shared = any(set(shared.get(f"{key}.{concept}", [])) & _capabilities(c, bp) for c in impl)
+            assert via_module or via_shared, (key, concept, eid, impl)
+            assert not (via_module and via_shared), ("one implementer per concept", concept)
+    customer = ents[bp["modules"]["crm"]["entities"]["customer"]]
+    assert [b["component"] for b in customer["components"]] == ["core.customer"]
+
+
+def test_one_concept_binds_one_entity():
+    """Intended (#395 review Low): a concept names exactly one Blueprint entity; two concepts never name the same
+    entity (that half is a validator cross-rule, BPL-060)."""
+    for module in SCHEMA["$defs"]["modules"]["properties"]:
+        for concept, ref in SCHEMA["$defs"][f"{module}Module"]["properties"]["entities"]["properties"].items():
+            assert ref == {"$ref": "#/$defs/id"}, (module, concept)
+    assert any("never name the same entity" in r for r in SCHEMA["x-validator-rules"])
+
+
+def test_module_validator_rules_say_what_is_implemented():
+    """#396 review M3: a module entry in x-validator-rules either names its validator code or says it is contract
+    text until BPL-060, so the schema never promises a check the validator lacks."""
+    names = ("Modules (", "CRM (", "Projects (", "Manufacturing (", "Marketing (")
+    entries = [r for r in SCHEMA["x-validator-rules"] if r.startswith(names)]
+    assert entries
+    for r in entries:
+        assert "BP-MOD-" in r or "contract text until BPL-060" in r, r[:60]
+    projects = next(r for r in entries if r.startswith("Projects ("))
+    assert "contract text until BPL-060" in projects and "BP-MOD-002" in projects and "BP-MOD-003" in projects
+
+
+def test_adr_states_the_default_break():
+    """#396 review M5: 0.6.0 refuses expression-like string defaults; contracts/README lets a 0.x minor break only
+    when the ADR says so."""
+    adr = next((C.parent / "docs" / "decisions").glob("ADR-0079-*.md")).read_text(encoding="utf-8")
+    assert re.search(r"0\.6\.0 is not purely additive.*`eval:`", adr, re.S)
+
+
+def test_stock_entry_is_component_only():
+    """#397 review H1: Stock Entry posts the stock (not the work order or job card); it is component-only, Tier 3,
+    human floor on submit and cancel, and offered to no Blueprint concept."""
+    rule = next(r for r in SCHEMA["x-validator-rules"] if r.startswith("Manufacturing ("))
+    assert "Stock Entry" in rule and "component-only" in rule
+    line = next(l for l in DOC.splitlines() if "Stock Entry" in l and "component-only" in l)
+    assert "Tier 3" in line and "submit and cancel" in line
+    concepts = SCHEMA["$defs"]["manufacturingModule"]["properties"]["entities"]["properties"]
+    assert "stock_entry" not in concepts
+
+
+@pytest.mark.parametrize("setting,value", [
+    ("rm_cost_as_per", "Valuation Rate"), ("backflush_raw_materials_based_on", "BOM"),
+    ("backflush_raw_materials_of_subcontract_based_on", "BOM"), ("material_consumption", "0"),
+    ("get_rm_cost_from_consumption_entry", "0"), ("add_corrective_operation_cost_in_finished_good_valuation", "0"),
+    ("set_op_cost_and_scrap_from_sub_assemblies", "0"), ("update_bom_costs_automatically", "0"),
+])
+def test_engine_manufacturing_settings_are_listed_with_value(setting, value):
+    """#397 review M2: every valuation-shaping engine setting is named with its pinned default, locked by the
+    component, Tier 3 with an accountant sign-off."""
+    row = next((l for l in DOC.splitlines() if l.startswith(f"| `{setting}`")), None)
+    assert row and f"`{value}`" in row, setting
+
+
+def test_subcontracting_names_its_purchase_order_source():
+    """#397 review M5: the engine's Subcontracting Order requires a purchase order."""
+    assert re.search(r"Subcontracting Order requires a `purchase_order`.*`purchasing\.purchase_order`", DOC)

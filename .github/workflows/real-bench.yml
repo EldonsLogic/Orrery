@@ -11,6 +11,9 @@ on:
       - "infra/dev/docker/**"
       - "components/**"
       - "scripts/provision_tenant_site.py"
+      - "services/blueprint/**"  # BPL-046: the BPL-027 class compiles the fixture with these
+      - "contracts/**"
+      - "docs/brand/**"
       - ".github/workflows/real-bench.yml"
   schedule:
     - cron: "30 2 * * 1"  # weekly full real-bench run, Monday UTC (CE-SEC-005)
@@ -26,7 +29,7 @@ permissions:
 jobs:
   real-bench-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7

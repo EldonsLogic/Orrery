@@ -1,4 +1,5 @@
-"""ERP-031 offline tests: the ERP-014 and ERP-015 live layers run in real-bench CI and cannot skip there.
+"""ERP-031 and BPL-046 offline tests: the ERP-014 and ERP-015 live layers and the BPL-027 bench class run in
+real-bench CI and cannot skip there.
 
 No bench is needed. They prove that the runner gives each live layer its own fresh site with a
 ``tenant_id``, sets the REQUIRE flags, and fails when a live layer reports a skip; that a REQUIRE flag
@@ -8,7 +9,11 @@ real bench in CI, not here.
 """
 from __future__ import annotations
 
+import ast
+from contextlib import redirect_stderr, redirect_stdout
 import importlib
+import io
+import json
 import os
 from pathlib import Path
 import re
@@ -79,17 +84,24 @@ RAN_OK = "Ran 99 tests in 1.0s\n\nOK\n"
 
 class TestRunnerRunsTheValuationLayers(unittest.TestCase):
     def _run(self, unittest_output: str = RAN_OK, unittest_rc: int = 0, reuse: bool = False, drop_rcs=None,
-             outputs_by_layer=None, stdout_by_layer=None):
+             outputs_by_layer=None, stdout_by_layer=None, bpl027_output: str = RAN_OK, bpl027_stdout: str = "",
+             bpl027_rc: int = 0, deps_rc: int = 0):
         """Run the runner with docker and the children faked. ``drop_rcs`` are the exit codes of successive
-        site drops; ``outputs_by_layer`` maps ERP014/ERP015 to that layer's unittest output."""
+        site drops; ``outputs_by_layer`` maps ERP014/ERP015 to that layer's unittest output; the ``bpl027_*``
+        arguments fake the BPL-027 class run and ``deps_rc`` its dependency install."""
         compose_calls, unittest_calls, other_calls = [], [], []
-        self.compose_timeouts = []
+        self.bpl027_calls, self.compose_timeouts = [], []
         drop_rcs = iter(drop_rcs or ())
         self.compose_calls, self.verifier_calls = compose_calls, other_calls  # visible even when the run raises
 
         def fake_compose(project, compose_file, env, *args, **kwargs):
             compose_calls.append(args)
             self.compose_timeouts.append(kwargs.get("timeout"))
+            if run_real_bench_ci.BPL027_LIVE_CLASS in args:
+                self.bpl027_calls.append((args, kwargs))
+                return subprocess.CompletedProcess([], bpl027_rc, stdout=bpl027_stdout, stderr=bpl027_output)
+            if "env/bin/pip" in args:
+                return subprocess.CompletedProcess([], deps_rc, stdout="", stderr=f"pip said {env['ADMIN_PASSWORD']}")
             if args[:2] == ("ps", "--status"):
                 return subprocess.CompletedProcess([], 0, stdout="engine\nmariadb\nredis-cache\nredis-queue\n", stderr="")
             if "ce_sec_005_drop" in args:
@@ -123,24 +135,12 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
         rc, compose_calls, unittest_calls = self._run()
         self.assertEqual(rc, 0)
         provisioned = self._provisioned(compose_calls)
-        self.assertEqual(len(provisioned), 3, provisioned)
-        self.assertEqual(len({site for site, _ in provisioned}), 3, "no site is shared: the probes need a fresh one")
+        self.assertEqual(len(provisioned), 4, provisioned)
+        self.assertEqual(len({site for site, _ in provisioned}), 4, "no site is shared: the probes need a fresh one")
         for site, tenant_id in provisioned:
             self.assertRegex(tenant_id, r"^t_[A-Za-z0-9_]+$", site)
-        self.assertEqual({s.split("-")[0] for s, _ in provisioned}, {"ce005", "erp014", "erp015"})
+        self.assertEqual({s.split("-")[0] for s, _ in provisioned}, {"ce005", "erp014", "erp015", "bpl027"})
         self.assertEqual(len(unittest_calls), 2)
-
-    def test_every_site_gets_the_provisioning_index_sync_after_new_site(self) -> None:
-        """BPL-046: the same program as scripts/provision_tenant_site.py, last in the same call (sh -e)."""
-        _, compose_calls, _ = self._run()
-        provisions = [args for args in compose_calls if "ce_sec_005_provision" in args]
-        self.assertEqual(len(provisions), 1 + len(run_real_bench_ci.VALUATION_LAYERS))
-        for args in provisions:
-            script = args[args.index("-ec") + 1]
-            self.assertTrue(script.endswith('cd sites && ../env/bin/python -c "$index_sync" "$site"'))
-            self.assertLess(script.index("bench new-site"), script.index("$index_sync\""))
-            self.assertIn(provision_tenant_site.INDEX_SYNC_PY, args)
-            self.assertEqual(self.compose_timeouts[compose_calls.index(args)], run_real_bench_ci.PROVISION_TIMEOUT)
 
     def test_the_live_layers_run_with_site_project_and_require_flags(self) -> None:
         rc, compose_calls, unittest_calls = self._run()
@@ -224,10 +224,10 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
 
     def test_reused_project_attempts_every_drop_when_the_first_fails(self) -> None:
         with self.assertRaises(RuntimeError) as caught:
-            self._run(reuse=True, drop_rcs=[1, 0, 0])
+            self._run(reuse=True, drop_rcs=[1, 0, 0, 0])
         provisioned = [s for s, _ in self._provisioned(self.compose_calls)]
         dropped = [args[-1] for args in self.compose_calls if "ce_sec_005_drop" in args]
-        self.assertEqual(len(provisioned), 3)
+        self.assertEqual(len(provisioned), 4)
         self.assertEqual(dropped, provisioned, "every site is dropped even though the first drop failed")
         self.assertIn(provisioned[0], str(caught.exception))
 
@@ -252,6 +252,114 @@ class TestRunnerRunsTheValuationLayers(unittest.TestCase):
         self.assertFalse(skipped(""))
 
 
+class TestRunnerRunsTheBpl027Class(unittest.TestCase):
+    """BPL-046: the BPL-027 bench class runs inside the engine container, on a fresh site, and cannot skip."""
+
+    _run = TestRunnerRunsTheValuationLayers._run
+    _provisioned = staticmethod(TestRunnerRunsTheValuationLayers._provisioned)
+    BPL027_TEST_FILE = ENGINE_ROOT / "change_engine" / "tests" / "test_bpl_027_fixture_real_adapter.py"
+
+    def test_the_phase_is_listed_and_budgeted(self) -> None:
+        limits = dict(run_real_bench_ci.PHASES)
+        self.assertEqual(limits["install bpl-027 test dependency"], run_real_bench_ci.BPL027_DEPS_TIMEOUT)
+        self.assertEqual(limits["provision bpl027 site"], run_real_bench_ci.PROVISION_TIMEOUT)
+        self.assertEqual(limits["bpl-027 bench class"], run_real_bench_ci.BPL027_TEST_TIMEOUT)
+
+    def test_the_class_runs_in_the_engine_on_its_own_fresh_site_with_the_require_flag(self) -> None:
+        rc, compose_calls, _ = self._run()
+        self.assertEqual(rc, 0)
+        (args, kwargs), = self.bpl027_calls
+        site, = [s for s, _ in self._provisioned(compose_calls) if s.startswith("bpl027-")]
+        env_flags = {value for flag, value in zip(args, args[1:]) if flag == "-e"}
+        self.assertLessEqual({f"BPL027_BENCH_SITE={site}", "REQUIRE_BPL027_LIVE=1"}, env_flags)
+        self.assertEqual(args[args.index("engine"):],
+                         ("engine", "sh", "-ec", 'cd sites && exec ../env/bin/python -m unittest -v "$1"',
+                          "bpl_046_tests", run_real_bench_ci.BPL027_LIVE_CLASS))
+        self.assertFalse(kwargs.get("stream"), "the output must be captured to be judged")
+        self.assertEqual(kwargs["timeout"], run_real_bench_ci.BPL027_TEST_TIMEOUT)
+
+    def test_the_dependency_and_the_fresh_site_come_before_the_class(self) -> None:
+        _, compose_calls, _ = self._run()
+        pip = next(i for i, args in enumerate(compose_calls) if "env/bin/pip" in args)
+        new_site = next(i for i, args in enumerate(compose_calls) if args[-1].startswith("t_bpl027"))
+        tests = compose_calls.index(self.bpl027_calls[0][0])
+        self.assertLess(pip, new_site)
+        self.assertLess(new_site, tests)
+        self.assertEqual(self.compose_timeouts[pip], run_real_bench_ci.BPL027_DEPS_TIMEOUT)
+        pins = list(compose_calls[pip][compose_calls[pip].index("-q") + 1:])
+        pinned = (REPO_ROOT / "services" / "blueprint" / "requirements.txt").read_text(encoding="utf-8")
+        self.assertEqual(pins, [p for p in pinned.split() if not p.startswith("pytest")], "every pin but pytest")
+        self.assertRegex(" ".join(pins), r"^jsonschema==\d")
+
+    def test_every_site_gets_the_provisioning_index_sync_after_new_site(self) -> None:
+        """BPL-046: the same program as scripts/provision_tenant_site.py, last in the same call (sh -e)."""
+        _, compose_calls, _ = self._run()
+        provisions = [args for args in compose_calls if "ce_sec_005_provision" in args]
+        self.assertEqual(len(provisions), 2 + len(run_real_bench_ci.VALUATION_LAYERS))
+        for args in provisions:
+            script = args[args.index("-ec") + 1]
+            self.assertTrue(script.endswith('cd sites && ../env/bin/python -c "$index_sync" "$site"'))
+            self.assertLess(script.index("bench new-site"), script.index("$index_sync\""))
+            self.assertIn(provision_tenant_site.INDEX_SYNC_PY, args)
+            self.assertEqual(self.compose_timeouts[compose_calls.index(args)], run_real_bench_ci.PROVISION_TIMEOUT)
+
+    def test_a_failed_dependency_install_fails_the_run_privately_and_tears_down(self) -> None:
+        out = io.StringIO()
+        with redirect_stderr(out), redirect_stdout(out), self.assertRaisesRegex(RuntimeError, "BPL-027"):
+            self._run(deps_rc=1)
+        self.assertEqual(self.bpl027_calls, [])
+        self.assertIn("pip said <REDACTED>", out.getvalue())
+        self.assertTrue(any(args[0] == "down" for args in self.compose_calls))
+
+    def test_a_skip_even_with_exit_code_zero_fails_the_run(self) -> None:
+        rc, _, _ = self._run(bpl027_output="Ran 10 tests in 1s\n\nOK (skipped=1)\n")
+        self.assertNotEqual(rc, 0)
+
+    def test_a_vacuous_or_short_run_fails_the_run(self) -> None:
+        minimum = run_real_bench_ci.BPL027_MINIMUM_TESTS
+        for output in ("Ran 0 tests in 0.000s\n\nNO TESTS RAN\n", "OK\n", f"Ran {minimum - 1} tests in 1s\n\nOK\n"):
+            with self.subTest(output):
+                rc, _, _ = self._run(bpl027_output=output, bpl027_stdout=f"Ran {minimum} tests in 1s\n")
+                self.assertNotEqual(rc, 0)
+        rc, _, _ = self._run(bpl027_output=f"Ran {minimum} tests in 1s\n\nOK\n")
+        self.assertEqual(rc, 0, "the expected count passes")
+
+    def test_a_failing_class_fails_the_run(self) -> None:
+        rc, _, _ = self._run(bpl027_rc=1, bpl027_output="Ran 10 tests in 1s\n\nFAILED (failures=1)\n")
+        self.assertEqual(rc, 1)
+
+    def test_a_failing_valuation_layer_does_not_hide_the_class(self) -> None:
+        rc, _, _ = self._run(unittest_rc=1, unittest_output="FAILED (failures=1)\n")
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(self.bpl027_calls), 1)
+
+    def test_the_minimum_count_and_variable_names_match_the_real_class(self) -> None:
+        """Read with ast: the engine test module needs packages this offline suite does not."""
+        source = self.BPL027_TEST_FILE.read_text(encoding="utf-8")
+        module, _, name = run_real_bench_ci.BPL027_LIVE_CLASS.rpartition(".")
+        self.assertEqual(module.rpartition(".")[2], self.BPL027_TEST_FILE.stem)
+        cls, = [n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == name]
+        tests = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
+        self.assertEqual(run_real_bench_ci.BPL027_MINIMUM_TESTS, len(tests), "raise the minimum with a new live test")
+        self.assertIn('REQUIRE_LIVE_ENV = "REQUIRE_BPL027_LIVE"', source)
+        self.assertIn('os.environ.get("BPL027_BENCH_SITE"', source)
+
+    def test_every_compose_command_layers_the_read_only_bpl027_mounts(self) -> None:
+        cmd = run_real_bench_ci._compose_cmd("bpl046contract", run_real_bench_ci.DEFAULT_COMPOSE_FILE,
+                                             "config", "--format", "json")
+        env = {**os.environ, "DB_ROOT_PASSWORD": "synthetic-placeholder", "ADMIN_PASSWORD": "synthetic-placeholder"}
+        res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=30, check=False)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        engine = json.loads(res.stdout)["services"]["engine"]
+        self.assertEqual(engine["environment"]["PLATFORM_REPO_ROOT"], "~/frappe-bench/platform-repo")
+        mounts = {v["target"].partition("/frappe-bench/")[2]: v for v in engine["volumes"]}
+        for part in ("services/blueprint", "contracts", "docs/brand/tools", "docs/brand/tokens"):
+            mount = mounts[f"platform-repo/{part}"]
+            self.assertTrue(mount.get("read_only"), part)
+            self.assertEqual(Path(mount["source"]), REPO_ROOT / part)
+        self.assertIn("apps/change_engine", mounts, "the base file's mounts are kept")
+
+
 class TestWorkflowLeavesTimeForTheLiveLayers(unittest.TestCase):
     HEADROOM_SECONDS = 300  # Actions setup (checkout, Python) and the runner's own cleanup, outside the phase limits
 
@@ -262,7 +370,7 @@ class TestWorkflowLeavesTimeForTheLiveLayers(unittest.TestCase):
         names = [name for name, _ in run_real_bench_ci.PHASES]
         for needed in ("startup", "engine readiness", "http readiness", "verifier", "ce-sec-005 tests", "teardown"):
             self.assertIn(needed, names)
-        self.assertEqual(sum(n.startswith("provision") for n in names), 1 + len(run_real_bench_ci.VALUATION_LAYERS))
+        self.assertEqual(sum(n.startswith("provision") for n in names), 2 + len(run_real_bench_ci.VALUATION_LAYERS))
         self.assertEqual(sum(n.startswith("live layer") for n in names), len(run_real_bench_ci.VALUATION_LAYERS))
         self.assertEqual(run_real_bench_ci.TOTAL_PHASE_LIMIT_SECONDS, sum(s for _, s in run_real_bench_ci.PHASES))
 

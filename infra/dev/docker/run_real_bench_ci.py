@@ -8,7 +8,10 @@ services instead of mocks. Keeps database, admin and internal credentials out of
 Startup and the CE-SEC-005 tests each have a five-minute limit; provisioning, with its index sync, eight minutes.
 ERP-031 adds the ERP-014 and ERP-015 live valuation layers: each gets its own freshly provisioned site (with
 ``tenant_id``, as the probes refuse a used site), runs with its REQUIRE flag so a missing bench is a failure, and a layer that reports any
-skip, or that ran fewer than its expected live tests (a vacuous run), fails the run. ``PHASES`` lists every sequential
+skip, or that ran fewer than its expected live tests (a vacuous run), fails the run. BPL-046 judges the BPL-027
+bench class by the same rules: it runs inside the engine container, which gets the BPL-027 read-only mounts from
+``docker-compose.bpl027-test.yml`` and the compiler's pinned test dependency, on its own fresh site with
+``REQUIRE_BPL027_LIVE=1``. ``PHASES`` lists every sequential
 phase's limit; ``TOTAL_PHASE_LIMIT_SECONDS`` is their sum, and the CI job limit must cover it plus setup and cleanup headroom.
 """
 from __future__ import annotations
@@ -30,6 +33,8 @@ import uuid
 
 DOCKER_DIR = Path(__file__).resolve().parent
 DEFAULT_COMPOSE_FILE = DOCKER_DIR / "docker-compose.dev.yml"
+# BPL-046: always layered on the stack: read-only mounts of the Blueprint compiler and contracts.
+BPL027_COMPOSE_FILE = DOCKER_DIR / "docker-compose.bpl027-test.yml"
 SAFE_PROJECT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 REPO_ROOT = DOCKER_DIR.parents[2]
 ENGINE_PYTHONPATH = REPO_ROOT / "apps" / "engine" / "change_engine"
@@ -44,6 +49,9 @@ VALUATION_LAYERS = (
     ("erp015", "change_engine.tests.test_erp_015_inventory_valuation.TestLiveInventoryValuation",
      "ERP015_COMPOSE_PROJECT", "ERP015_BENCH_SITE", "REQUIRE_ERP015_LIVE", 10),
 )
+# BPL-046: only the bench class (the module's offline tests skip when a bench is configured), and all of its tests.
+BPL027_LIVE_CLASS = "change_engine.tests.test_bpl_027_fixture_real_adapter.TestBpl027FixtureRealAdapter"
+BPL027_MINIMUM_TESTS = 10
 STARTUP_TIMEOUT = 300
 ENGINE_READY_TIMEOUT = 120
 # BPL-046: bench new-site took 297 to 306 s on a local machine (well under that in CI), the index sync about 45 s.
@@ -54,6 +62,8 @@ HTTP_READY_TIMEOUT = 60
 VERIFIER_TIMEOUT = 120
 SEC005_TEST_TIMEOUT = 300
 VALUATION_TEST_TIMEOUT = 600  # BPL-046: the layers took 22 to 36 s in CI
+BPL027_DEPS_TIMEOUT = 120
+BPL027_TEST_TIMEOUT = 600
 TEARDOWN_TIMEOUT = 120
 DIAGNOSTICS_TIMEOUT = 30
 # Every sequential phase of a fresh-stack run (CI), in order, with its limit in seconds.
@@ -66,6 +76,9 @@ PHASES = (
     ("ce-sec-005 tests", SEC005_TEST_TIMEOUT),
     *((f"provision {layer[0]} site", PROVISION_TIMEOUT) for layer in VALUATION_LAYERS),
     *((f"live layer {layer[0]}", VALUATION_TEST_TIMEOUT) for layer in VALUATION_LAYERS),
+    ("install bpl-027 test dependency", BPL027_DEPS_TIMEOUT),
+    ("provision bpl027 site", PROVISION_TIMEOUT),
+    ("bpl-027 bench class", BPL027_TEST_TIMEOUT),
     ("diagnostics", DIAGNOSTICS_TIMEOUT),
     ("teardown", TEARDOWN_TIMEOUT),
 )
@@ -113,6 +126,8 @@ def _compose_cmd(project: str, compose_file: Path, *args: str) -> list[str]:
         os.devnull,
         "-f",
         str(compose_file),
+        "-f",
+        str(BPL027_COMPOSE_FILE),
         *args,
     ]
 
@@ -286,9 +301,24 @@ def unittest_tests_run(stderr: str) -> int:
     return int(matches[0]) if len(matches) == 1 else 0
 
 
+def _judge_live_run(label: str, res: subprocess.CompletedProcess, env: dict[str, str], minimum: int) -> int:
+    """Print a live run's redacted output. Skips, failures and runs that executed fewer than the expected live tests
+    all return non-zero."""
+    output = redact((res.stdout or "") + (res.stderr or ""), env)
+    print(output.rstrip("\n"), file=sys.stdout if res.returncode == 0 else sys.stderr)
+    if res.returncode == 0 and unittest_reported_skips(output):
+        print(f"{label} live layer skipped tests: that is a failure in real-bench CI.", file=sys.stderr)
+        return 1
+    ran = unittest_tests_run(redact(res.stderr or "", env))
+    if res.returncode == 0 and ran < minimum:
+        print(f"{label} live layer ran {ran} tests, expected at least {minimum}: a vacuous run is a failure "
+              "in real-bench CI.", file=sys.stderr)
+        return 1
+    return res.returncode
+
+
 def _run_valuation_layer(env: dict[str, str], project: str, site: str, layer: tuple[str, ...]) -> int:
-    """Run one ERP-014/ERP-015 live class on the host against its own site. Skips, failures and runs that
-    executed fewer than the expected live tests all return non-zero."""
+    """Run one ERP-014/ERP-015 live class on the host against its own site and judge it."""
     prefix, live_class, project_var, site_var, require_var, minimum = layer
     print(f"Running {prefix.upper()} live valuation layer against {site}...")
     res = subprocess.run(
@@ -301,17 +331,57 @@ def _run_valuation_layer(env: dict[str, str], project: str, site: str, layer: tu
         capture_output=True,
         text=True,
     )
-    output = redact((res.stdout or "") + (res.stderr or ""), env)
-    print(output.rstrip("\n"), file=sys.stdout if res.returncode == 0 else sys.stderr)
-    if res.returncode == 0 and unittest_reported_skips(output):
-        print(f"{prefix.upper()} live layer skipped tests: that is a failure in real-bench CI.", file=sys.stderr)
-        return 1
-    ran = unittest_tests_run(redact(res.stderr or "", env))
-    if res.returncode == 0 and ran < minimum:
-        print(f"{prefix.upper()} live layer ran {ran} tests, expected at least {minimum}: a vacuous run is a failure "
-              "in real-bench CI.", file=sys.stderr)
-        return 1
-    return res.returncode
+    return _judge_live_run(prefix.upper(), res, env, minimum)
+
+
+def _install_bpl027_dependencies(project: str, compose_file: Path, env: dict[str, str]) -> None:
+    """Install the Blueprint compiler's pinned requirements (test-only, not in the image) into the bench environment.
+    pytest is left out: the class runs under unittest."""
+    requirements = (REPO_ROOT / "services" / "blueprint" / "requirements.txt").read_text(encoding="utf-8")
+    pins = [line.strip() for line in requirements.splitlines()
+            if line.strip() and not line.startswith("#") and not re.match(r"pytest\b", line.strip())]
+    res = _run_compose(
+        project,
+        compose_file,
+        env,
+        "exec",
+        "-T",
+        "engine",
+        "env/bin/pip",
+        "install",
+        "-q",
+        *pins,
+        timeout=BPL027_DEPS_TIMEOUT,
+    )
+    if res.returncode != 0:
+        print(redact((res.stdout or "") + (res.stderr or ""), env), file=sys.stderr)
+        raise RuntimeError(f"Failed installing the BPL-027 test dependency (exit {res.returncode}).")
+
+
+def _run_bpl027_class(project: str, compose_file: Path, env: dict[str, str], site: str) -> int:
+    """Run the BPL-027 bench class inside the engine container against its own fresh site and judge it."""
+    print(f"Running BPL027 bench class against {site}...")
+    res = _run_compose(
+        project,
+        compose_file,
+        env,
+        "exec",
+        "-T",
+        "-e",
+        f"BPL027_BENCH_SITE={site}",
+        "-e",
+        "REQUIRE_BPL027_LIVE=1",
+        "-e",
+        "PYTHONUNBUFFERED=1",
+        "engine",
+        "sh",
+        "-ec",
+        'cd sites && exec ../env/bin/python -m unittest -v "$1"',
+        "bpl_046_tests",
+        BPL027_LIVE_CLASS,
+        timeout=BPL027_TEST_TIMEOUT,
+    )
+    return _judge_live_run("BPL027", res, env, BPL027_MINIMUM_TESTS)
 
 
 def redact(text: str, env: dict[str, str]) -> str:
@@ -374,6 +444,7 @@ def run_real_bench_ci(
 
     provisioned_sites: list[str] = []
     valuation_sites = {layer[0]: f"{layer[0]}-{run_id}.localhost" for layer in VALUATION_LAYERS}
+    bpl027_site = f"bpl027-{run_id}.localhost"
     succeeded = False
     try:
         if not reuse_project:
@@ -446,6 +517,13 @@ def run_real_bench_ci(
             _provision_site(project_name, compose_file, env, layer_site)
             provisioned_sites.append(layer_site)
             results.append(_run_valuation_layer(env, project_name, layer_site, layer))
+
+        # BPL-046: last, so a failure to set it up cannot hide the layers above.
+        _install_bpl027_dependencies(project_name, compose_file, env)
+        print(f"Provisioning synthetic site {bpl027_site} for the BPL027 bench class...")
+        _provision_site(project_name, compose_file, env, bpl027_site)
+        provisioned_sites.append(bpl027_site)
+        results.append(_run_bpl027_class(project_name, compose_file, env, bpl027_site))
         succeeded = not any(results)
         return next((rc for rc in results if rc), 0)
     finally:

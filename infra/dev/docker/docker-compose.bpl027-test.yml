@@ -4,6 +4,8 @@
 #     -f infra/dev/docker/docker-compose.dev.yml -f infra/dev/docker/docker-compose.bpl027-test.yml up -d
 # It adds read-only mounts of the Blueprint compiler and contracts so the test can compile the
 # fixture inside the bench. Synthetic data only. See apps/engine/change_engine/README.md (BPL-027).
+# BPL-046: run_real_bench_ci.py layers this file on every stack it drives. The brand token tools and
+# tokens are mounted too: Blueprint validation rule 10 (brand colours) loads them and fails closed without.
 services:
   engine:
     environment:
@@ -11,3 +13,5 @@ services:
     volumes:
       - ../../../services/blueprint:/home/frappe/frappe-bench/platform-repo/services/blueprint:ro
       - ../../../contracts:/home/frappe/frappe-bench/platform-repo/contracts:ro
+      - ../../../docs/brand/tools:/home/frappe/frappe-bench/platform-repo/docs/brand/tools:ro
+      - ../../../docs/brand/tokens:/home/frappe/frappe-bench/platform-repo/docs/brand/tokens:ro

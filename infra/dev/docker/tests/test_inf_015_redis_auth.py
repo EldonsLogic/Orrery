@@ -181,7 +181,7 @@ class RunnerPasswordTests(unittest.TestCase):
             if args[0] == "up":
                 passwords.append(env.get("REDIS_PASSWORD"))
             return subprocess.CompletedProcess([], 0, stdout="engine\nmariadb\nredis-cache\nredis-queue\n",
-                                               stderr="")
+                                               stderr="Ran 99 tests in 1.0s\n\nOK\n")  # BPL-046 judges a compose child
 
         verify_envs = []
 

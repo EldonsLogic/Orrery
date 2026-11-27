@@ -460,7 +460,9 @@
       "errType": "Only PNG or JPEG files are accepted.",
       "errSize": "The file must be larger than 0 and at most 2 MB.",
       "errFailed": "The logo could not be uploaded. Try again.",
-      "body": "Shown in the app header and on your documents."
+      "body": "Shown in the app header and on your documents.",
+      "choose": "Choose a logo",
+      "none": "No file chosen"
     },
     "preview": {
       "title": "Live preview",
@@ -538,7 +540,7 @@
     "introDept": "This is the part of the business blueprint that covers your department. You can read it but not change it on this page.",
     "toc": "On this page",
     "badge": {
-      "unverified": "UNVERIFIED"
+      "unverified": "Not checked yet"
     },
     "noAccess": {
       "title": "Nothing to show",
@@ -742,7 +744,7 @@
       "update": "Change {entity}.",
       "delete": "Delete {entity}.",
       "transition": "Move {entity} on: {steps}.",
-      "other": "Another action: {name}."
+      "other": "Another action set up for this assistant."
     },
     "assistants": {
       "roles": "Used by: {roles}.",
@@ -788,6 +790,78 @@
         "branding": "branding",
         "assistant": "assistant",
         "other": "item"
+      },
+      "opBare": {
+        "add": "Added {kind}",
+        "remove": "Removed {kind}",
+        "replace": "Changed {kind}",
+        "reorder": "Reordered {kind}"
+      }
+    },
+    "proposal": {
+      "eyebrow": "Prepared for you by Seshna",
+      "revisionDate": "Draft {n}",
+      "summary": {
+        "modules": "Modules",
+        "approved": "Approved by you",
+        "gaps": "Gaps to close",
+        "monthly": "Per month",
+        "review": "Review and decide"
+      },
+      "modules": {
+        "title": "Modules in your system",
+        "hint": "Each module is a tested building block. Approved ones you already confirmed in the chat; the rest the AI drafted from your answers.",
+        "count": "{approved} of {total} approved"
+      },
+      "gaps": {
+        "title": "What is not covered yet",
+        "hint": "Needs that no module covers today. We build each one once, for every customer, and test it before it reaches you.",
+        "none": "Everything in your plan is covered.",
+        "count": "{count} to close",
+        "plan": "What we will do",
+        "status": {
+          "uncovered": "Not covered yet",
+          "partial": "Only partly covered"
+        },
+        "kind": {
+          "compliance": "Tax or legal rule",
+          "component": "Module",
+          "entity": "Record",
+          "workflow": "Process",
+          "report": "Report",
+          "other": "Other"
+        }
+      },
+      "price": {
+        "title": "Draft price",
+        "hint": "What the system costs, from the modules above.",
+        "notBinding": "This is a draft price, not a final offer. Please check it before you decide.",
+        "monthly": "Monthly subscription",
+        "oneOff": "One-off charges",
+        "subtotal": "Subtotal before VAT",
+        "vat": "VAT {rate}%",
+        "total": "Total",
+        "unavailable": "The price is being checked. You can decide once it is ready.",
+        "caption": "{name}, in {currency}"
+      },
+      "decision": {
+        "title": "Your decision",
+        "intro": "Read the blueprint, then choose. Nothing goes live from here.",
+        "approve": "Approve blueprint",
+        "askChanges": "Ask for changes",
+        "askHint": "Tell Seshna in the chat what to change. You get a new draft to review.",
+        "confirmTitle": "Before you approve",
+        "confirm": {
+          "summary": "I read what you will build.",
+          "quote": "I read the price.",
+          "gaps": "I read what is not covered."
+        },
+        "stepUp": "We will ask you to confirm it is you.",
+        "submit": "Approve blueprint",
+        "cancel": "Cancel",
+        "notLive": "Approving does not start your business on the system. Our team still reviews and tests it first.",
+        "notRecordedTitle": "Not recorded yet",
+        "notRecordedBody": "Approving from this page opens soon. Nothing has changed and nothing goes live."
       }
     }
   },
@@ -804,7 +878,8 @@
     "session": {
       "mfa": "MFA verified",
       "roles": "Roles",
-      "version": "Session version"
+      "version": "Session version",
+      "signedInAs": "Signed in as"
     },
     "roles": {
       "support": "Support",
@@ -1224,6 +1299,10 @@
         "CRQ-023": "A human may not attest plain for a draft with a money field",
         "CRQ-024": "A human risk-class attestation is needed before approval"
       }
+    },
+    "realm": {
+      "label": "Staff realm",
+      "note": "Internal tools. Customers never see this area."
     }
   },
   "chat": {
@@ -1415,7 +1494,11 @@
           "You can return to this guide from the help menu."
         ]
       }
-    }
+    },
+    "eyebrow": "Getting started",
+    "reassure": "Nothing goes live without your approval.",
+    "stepsLabel": "Steps in this guide",
+    "journeyLabel": "Where you are"
   },
   "pwa": {
     "name": "Seshna",

@@ -70,7 +70,7 @@ for (const [bn, backdrop] of [['white', '#ffffff'], ['black', '#000000']]) {
 add('muted/surface', 'muted text on surface (popover, panel, footer)', 'components/shell/Shell.module.css', 'color: var(--color-text-muted)', (c) => c['text-muted'], S, N);
 add('border-control/surface', 'control border (select, active language) on surface', 'components/shell/Shell.module.css', 'var(--color-border-control)', (c) => c['border-control'], S, UI);
 add('option-active-ring/hover', 'active option ring (primary) on hover tint over surface', 'components/shell/Shell.module.css', ".option[data-active='true']", (c) => c.primary, (c) => mix(c.text, 0.06, c.surface), UI);
-add('onboarding-progress/background', 'onboarding progress (opacity .75) on background', 'components/onboarding/Onboarding.module.css', 'opacity: 0.75', dimOn(0.75, B), B, N);
+add('console-realm', 'staff realm strip: background on text, and its note at opacity .8', 'components/console/Console.module.css', 'opacity: 0.8', (c) => mix(c.background, 0.8, c.text), (c) => c.text, N);
 add('on-primary', 'background on primary (button, user bubble, skip link, badge)', 'ui/Button.module.css', 'color: var(--color-background)', (c) => c.background, (c) => c.primary, N);
 add('on-danger', 'background on danger button', 'ui/Button.module.css', 'color: var(--color-background)', (c) => c.background, (c) => c.danger, N);
 add('on-primary-hover', 'background on primary hover (88% primary, 12% text)', 'ui/Button.module.css', 'var(--color-primary) 88%', (c) => c.background, (c) => mix(c.primary, 0.88, c.text), N);

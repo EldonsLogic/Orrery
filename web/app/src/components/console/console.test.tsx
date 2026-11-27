@@ -9,7 +9,7 @@ import type { StaffClaims } from '../../console/types';
 import { Providers } from '../Providers';
 import { AuditViewer } from './AuditViewer';
 import { ConsoleProvider } from './ConsoleProvider';
-import { ConsoleShell } from './ConsoleShell';
+import { ConsoleShell, isCurrentConsolePath } from './ConsoleShell';
 import { GrantBanner } from './GrantBanner';
 import { GrantsScreen } from './GrantsScreen';
 import { TenantList } from './TenantList';
@@ -101,6 +101,22 @@ describe('team console', () => {
     expect(bare(<AuditViewer />, claims(['security']))).toContain('tenant-fixture-b');
     expect(bare(<AuditViewer />, claims(['support'], { staffId: 'staff-fixture-2' }))).not.toContain('tenant-fixture-d');
     expect(bare(<AuditViewer />, claims(['support'], { staffId: 'staff-fixture-2' }))).toContain('Example Foods');
+  });
+  it('marks the staff realm on every console page, also when access is denied (WEB-029)', () => {
+    const ok = shell(<TenantList />, claims(['support']));
+    expect(ok).toContain('data-realm="staff"');
+    expect(ok).toContain(messages.ar.console.realm.label);
+    const denied = shell(<TenantList />, null);
+    expect(denied).toContain('data-realm="staff"');
+    expect(denied).toContain(messages.ar.console.realm.label);
+  });
+  it('the current console page is marked in the navigation', () => {
+    expect(isCurrentConsolePath('/console/', '/console/')).toBe(true);
+    expect(isCurrentConsolePath('/console/', '/console')).toBe(true);
+    expect(isCurrentConsolePath('/console/', '/console/audit/')).toBe(false);
+    expect(isCurrentConsolePath('/console/audit/', '/console/audit')).toBe(true);
+    expect(isCurrentConsolePath('/console/grants/', '/console/audit/')).toBe(false);
+    expect(isCurrentConsolePath('/console/grants/', '')).toBe(false);
   });
   it('navigation shows only what the role may open', () => {
     const out = shell(<TenantList />, claims(['support']));

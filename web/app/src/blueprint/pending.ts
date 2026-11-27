@@ -23,12 +23,12 @@ const ORDER: ReadonlyArray<PendingClass> = ['money', 'access', 'process', 'cosme
 export function summarisePending(ops: ReadonlyArray<DiffOp>, locale: string): { total: number; groups: ReadonlyArray<PendingGroup> } {
   const groups = ORDER.map((cls): PendingGroup => {
     const mine = ops.filter((o) => classOf(o) === cls);
-    const items: Msg[] = mine.map((o) =>
-      msg(`pending.op.${o.op}`, {
-        kind: msg(`pending.kind.${KINDS.has(o.subject.kind) ? o.subject.kind : 'other'}`),
-        name: pick(o.labels?.after ?? o.labels?.before ?? undefined, locale, o.subject.id),
-      }),
-    );
+    // A change without a label names only its kind: the internal id is never shown.
+    const items: Msg[] = mine.map((o) => {
+      const kind = msg(`pending.kind.${KINDS.has(o.subject.kind) ? o.subject.kind : 'other'}`);
+      const name = pick(o.labels?.after ?? o.labels?.before ?? undefined, locale, '');
+      return name ? msg(`pending.op.${o.op}`, { kind, name }) : msg(`pending.opBare.${o.op}`, { kind });
+    });
     return { cls, count: mine.length, items };
   });
   return { total: ops.length, groups: groups.filter((g) => g.count > 0) };

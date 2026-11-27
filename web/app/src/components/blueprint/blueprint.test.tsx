@@ -6,6 +6,8 @@ import type { ReactElement } from 'react';
 import { messages } from '../../i18n';
 import { buildBlueprintView } from '../../blueprint/summary';
 import { fixtureBlueprint, fixturePending } from '../../blueprint/fixture';
+import { fixtureProposal } from '../../blueprint/fixture/proposal';
+import { buildProposalView } from '../../blueprint/proposal';
 import { fixtureSession } from '../../lib/session';
 import { Providers } from '../Providers';
 import { AppShell } from '../shell/AppShell';
@@ -17,7 +19,11 @@ const doc = (roles: string[], locale: 'ar' | 'en') =>
   renderToString(
     <div dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       <NextIntlClientProvider locale={locale} messages={messages[locale]}>
-        <BlueprintDocument view={buildBlueprintView(fixtureBlueprint, { roleIds: roles }, locale, fixturePending)} locale={locale} />
+        <BlueprintDocument
+          view={buildBlueprintView(fixtureBlueprint, { roleIds: roles }, locale, fixturePending)}
+          proposal={buildProposalView(fixtureProposal, locale)}
+          locale={locale}
+        />
       </NextIntlClientProvider>
     </div>,
   );
@@ -70,6 +76,37 @@ describe('blueprint viewer', () => {
   });
   it('never names the engine in visible text', () => {
     for (const l of ['ar', 'en'] as const) expect(doc(['owner'], l)).not.toMatch(ENGINE);
+  });
+  it.each(['ar', 'en'] as const)('presents modules with status marks, flagged gaps, a draft price and the two decisions (%s)', (l) => {
+    const out = doc(['owner'], l);
+    const p = messages[l].blueprint.proposal;
+    for (const id of ['modules', 'gaps', 'price', 'decision']) expect(out).toContain(`id="bp-${id}"`);
+    for (const m of fixtureProposal.modules) expect(out).toContain(m.labels[l]);
+    expect(out).toContain('data-status="approved"');
+    for (const g of fixtureProposal.gaps) expect(out).toContain(g.labels[l]);
+    expect(out).toContain(p.gaps.status.uncovered);
+    expect(out).toContain(p.price.notBinding);
+    expect(out).toContain('12,075.00');
+    expect(out).toContain(p.decision.approve);
+    expect(out).toContain(p.decision.askChanges);
+    expect(out).toMatch(/href="\/chat\/?"/);
+    expect(out).toContain(p.decision.notLive);
+  });
+  it('never shows internal ids, component refs or tool names to the owner', () => {
+    for (const l of ['ar', 'en'] as const) {
+      const text = doc(['owner'], l).replace(/<[^>]+>/g, ' ');
+      for (const m of fixtureProposal.modules) expect(text).not.toContain(m.id);
+      for (const g of fixtureProposal.gaps) expect(text).not.toContain(g.id);
+      expect(text).not.toMatch(/\b[a-z]+_[a-z_]+\b/);
+      expect(text).not.toMatch(/\b[a-z_]+\.(list|create|update|delete|transition)\b/);
+      expect(text).not.toContain('UNVERIFIED');
+      for (const op of fixturePending) if (!op.labels) expect(text).not.toContain(`: ${op.subject.id}`); // an unlabelled change names its kind only
+    }
+  });
+  it('gives a sales rep no price and no decision', () => {
+    const out = doc(['sales_rep'], 'en');
+    expect(out).not.toContain('id="bp-price"');
+    expect(out).not.toContain('id="bp-decision"');
   });
   it('sits inside the app shell with one main landmark and a nav item', () => {
     const out = shell(<BlueprintView />);

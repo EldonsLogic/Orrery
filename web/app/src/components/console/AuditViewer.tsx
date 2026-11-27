@@ -32,9 +32,11 @@ export function AuditViewer() {
     ));
   const tenantName = (id: string) => data.tenants.find((x) => x.tenantId === id)?.name ?? id;
   return (
-    <section className={styles.section} aria-labelledby="audit-h">
-      <h1 id="audit-h">{t('title')}</h1>
-      <p>{t('intro')}</p>
+    <section className={styles.page} aria-labelledby="audit-h">
+      <header className={styles.head}>
+        <h1 id="audit-h">{t('title')}</h1>
+        <p className={styles.intro}>{t('intro')}</p>
+      </header>
       <div className={styles.filters}>
         <Select label={t('tenant')} value={tenant} onChange={(e) => setTenant(e.target.value)}>
           <option value="">{t('any')}</option>
@@ -52,16 +54,17 @@ export function AuditViewer() {
       <div className={styles.tableWrap}>
         <Table<AuditEntry & Record<string, unknown>>
           caption={t('caption')}
+          captionHidden
           rows={rows}
           rowKey={(e) => e.seq}
           empty={t('empty')}
           columns={[
-            { key: 'at', header: t('col.at'), rowHeader: true, render: (e) => <bdi dir="ltr">{formatUtc(e.at)}</bdi> },
+            { key: 'at', header: t('col.at'), rowHeader: true, render: (e) => <bdi dir="ltr" className={styles.countdown}>{formatUtc(e.at)}</bdi> },
             { key: 'action', header: t('col.action'), render: (e) => t(`actions.${e.action}`) },
             { key: 'decision', header: t('col.decision'), render: (e) => <Badge tone={e.decision === 'allow' ? 'success' : 'danger'}>{t(`decision.${e.decision}`)}</Badge> },
-            { key: 'actor', header: t('col.actor'), render: (e) => <bdi dir="ltr">{e.subject ?? '-'}</bdi> },
+            { key: 'actor', header: t('col.actor'), render: (e) => <bdi dir="ltr" className={styles.mono}>{e.subject ?? '-'}</bdi> },
             { key: 'tenant', header: t('col.tenant'), render: (e) => (e.tenant ? tenantName(e.tenant) : '-') },
-            { key: 'code', header: t('col.code'), render: (e) => <bdi dir="ltr">{e.code}</bdi> },
+            { key: 'code', header: t('col.code'), render: (e) => <bdi dir="ltr" className={styles.mono}>{e.code}</bdi> },
           ]}
         />
       </div>

@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from 'react';
 import { cx } from './cx';
 import styles from './Field.module.css';
+import hidden from './VisuallyHidden.module.css';
 
 export type FieldMessages = {
   /** Visible label, already translated. */
@@ -11,6 +12,8 @@ export type FieldMessages = {
   /** Visible marker for required fields (for example the translated word or an asterisk). */
   requiredMark?: ReactNode;
   id?: string;
+  /** Keep the label for assistive technology only, when a visible heading beside the control already names it. */
+  labelHidden?: boolean;
 };
 
 type Wiring = {
@@ -26,6 +29,7 @@ export function Field({
   error,
   requiredMark,
   id: idProp,
+  labelHidden = false,
   className,
   children,
 }: FieldMessages & { className?: string; children: (wiring: Wiring) => ReactNode }) {
@@ -36,7 +40,7 @@ export function Field({
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
   return (
     <div className={cx(styles.root, className)}>
-      <label htmlFor={id} className={styles.label}>
+      <label htmlFor={id} className={cx(styles.label, labelHidden && hidden.root)} data-label-hidden={labelHidden ? 'true' : undefined}>
         {label}
         {requiredMark ? <span className={styles.mark}> {requiredMark}</span> : null}
       </label>

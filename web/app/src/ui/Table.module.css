@@ -1,6 +1,8 @@
 /* Data table (WEB-029). Foundation roles only. Rows 40 high (--row-compact), a sticky header in muted label type, hairline rules,
    row hover, figures in tabular digits at the logical end. The wrapper scrolls in both axes, so the header sticks inside it. */
 .wrap {
+  /* Positioned, so a visually hidden caption stays inside the scroller instead of widening the page. */
+  position: relative;
   overflow: auto;
   overscroll-behavior-inline: contain;
   border: var(--hairline);

@@ -47,6 +47,21 @@ describe.each(['en', 'ar'] as const)('onboarding screens in %s', (locale) => {
     expect(out).not.toContain(`>${m.back}<`);
     expect(out).toContain('aria-labelledby="onboarding-title"');
   });
+  it('shows the five-stage journey with Discover current, and says nothing goes live without approval', () => {
+    const out = render(locale, 0);
+    const marks = messages[locale].marks.progress;
+    expect(out).toContain(`aria-label="${marks.title}"`);
+    expect(out).toContain(marks.stage.discover);
+    expect(out).toContain(marks.stage.live);
+    expect(out).toContain(m.reassure);
+  });
+  it('lists every step and marks the current one', () => {
+    const out = render(locale, 2);
+    for (const id of onboardingSteps) expect(out).toContain(m.steps[id].title);
+    expect(out).toContain('data-step="documents" data-state="current"');
+    expect(out).toContain('data-step="welcome" data-state="done"');
+    expect(out).toContain('data-step="ready" data-state="upcoming"');
+  });
   it('middle step shows back', () => {
     expect(render(locale, 2)).toContain(m.back);
   });

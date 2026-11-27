@@ -32,9 +32,11 @@ export function TenantList() {
 
   const rows = buildTenantList(data.tenants, session.roles, { query, status, region, health });
   return (
-    <section className={styles.section} aria-labelledby="tenants-h">
-      <h1 id="tenants-h">{t('title')}</h1>
-      <p>{t('intro')}</p>
+    <section className={styles.page} aria-labelledby="tenants-h">
+      <header className={styles.head}>
+        <h1 id="tenants-h">{t('title')}</h1>
+        <p className={styles.intro}>{t('intro')}</p>
+      </header>
       <div className={styles.filters}>
         <TextField label={t('search')} type="search" value={query} onChange={(e) => setQuery(e.target.value)} />
         <Select label={t('status')} value={status} onChange={(e) => setStatus(e.target.value as TenantStatus | '')}>
@@ -70,6 +72,7 @@ export function TenantList() {
       <div className={styles.tableWrap}>
         <Table<TenantMeta & Record<string, unknown>>
           caption={t('caption')}
+          captionHidden
           rows={rows}
           rowKey={(r) => r.tenantId}
           empty={t('empty')}

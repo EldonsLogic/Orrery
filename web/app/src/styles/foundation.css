@@ -5,8 +5,10 @@
  * Spacing: the steps come from tokens.proposed (Q-70): --space-0_5 (4), --space-1 (8), --space-1_5 (12),
  *   --space-2 (16), --space-3 (24), --space-4 (32), --space-6 (48), --space-8 (64). Core steps are 8/12/16/24/48;
  *   4, 32 and 64 only where a layout needs them.
- * Breakpoints (media queries cannot read variables, so these are the reference values; mobile-first, min-width):
- *   phone 375, tablet from 768.01px (`width > 48rem`, so 768 is still phone chrome and the shell and spacing agree), laptop 64rem (1024), desktop 90rem (1440).
+ * Breakpoints (media queries cannot read variables, so these are the reference values; mobile-first):
+ *   phone 375, tablet 48rem (768; phone chrome is below it, so spacing and chrome agree), laptop 64rem (1024), desktop 90rem (1440).
+ * Type: every size and line height is in rem on the 16 px root (the generated tokens and the roles below), so text follows
+ *   the reader's browser text size; spacing, controls and borders stay in px.
  * Radius: one per role. Cards and panels --radius-md, controls --radius-sm, badges --radius-pill. Border: 1px.
  * Glass: a material for chrome only (top bar, side navigation, the Ask Seshna dock), never for content cards, numbers,
  *   tables or forms, and never glass on glass: popovers and panels open from the glass top bar and over the glass
@@ -31,8 +33,8 @@
   --text-label-size: var(--text-small-size);
   --text-label-line: var(--text-small-line);
   --text-label-weight: 500;
-  --text-kpi-size: 32px;
-  --text-kpi-line: 40px;
+  --text-kpi-size: 2rem;
+  --text-kpi-line: 2.5rem;
   --text-kpi-weight: 600;
   /* Fluid only for display and h1; body stays 16. */
   --text-display-fluid: clamp(2rem, 1.6rem + 1.2vw, 2.5rem);
@@ -59,15 +61,17 @@
   /* Glass, solid by default. */
   --glass-alpha: 100%;
   --glass-fill: color-mix(in srgb, var(--color-surface) var(--glass-alpha), transparent);
+  /* The same glass on the page band's tint, for the side navigation, so the material reads beside a plain page. */
+  --glass-fill-tinted: color-mix(in srgb, var(--page-band) var(--glass-alpha), transparent);
   --glass-filter: none;
   --glass-edge: var(--color-border);
 }
 
 [dir='rtl'] {
-  --text-kpi-line: 48px;
+  --text-kpi-line: 3rem;
 }
 
-@media (width > 48rem) {
+@media (min-width: 48rem) {
   :root {
     --page-pad: var(--space-3);
     --main-pad-block: var(--space-6);

@@ -47,8 +47,9 @@
   padding-inline: max(var(--page-pad), var(--safe-inline));
   padding-block-start: max(var(--space-1), var(--safe-block-start));
   background: var(--glass-fill);
-  backdrop-filter: var(--glass-filter);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border-block-end: var(--border-width) solid var(--glass-edge);
 }
 
@@ -91,12 +92,8 @@
   background: var(--state-hover);
 }
 
-.menuIcon {
-  inline-size: var(--icon-md);
-  block-size: var(--icon-md);
-}
-
 .menuButton:focus-visible,
+.railToggle:focus-visible,
 .userButton:focus-visible,
 .switchButton:focus-visible,
 .popover:focus-visible,
@@ -180,9 +177,6 @@
 }
 
 .chevron {
-  flex: none;
-  inline-size: var(--icon-sm);
-  block-size: var(--icon-sm);
   color: var(--color-text-muted);
 }
 
@@ -345,13 +339,15 @@
   min-block-size: 0;
 }
 
-/* Side navigation: a full-height glass column; its content sticks under the top bar and scrolls on its own. */
+/* Side navigation: a full-height glass column; its content sticks under the top bar and scrolls on its own. It takes the
+   page band's flat Cobalt tint (no gradient) so the glass reads against the plain page beside it. */
 .navWrap {
   flex: 0 0 var(--sidebar-width);
   box-sizing: border-box;
-  background: var(--glass-fill);
-  backdrop-filter: var(--glass-filter);
+  background: var(--glass-fill-tinted);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border-inline-end: var(--border-width) solid var(--glass-edge);
 }
 
@@ -413,9 +409,6 @@
 }
 
 .navIcon {
-  flex: none;
-  inline-size: var(--icon-md);
-  block-size: var(--icon-md);
   color: var(--color-text-muted);
 }
 
@@ -484,6 +477,11 @@
   outline: none;
 }
 
+/* The chat docks its own composer at the bottom, so main keeps no bottom padding there. */
+.main[data-screen='chat'] {
+  padding-block-end: 0;
+}
+
 .content {
   isolation: isolate;
   max-inline-size: var(--page-max);
@@ -511,9 +509,19 @@
   padding: var(--space-1) max(var(--page-pad), var(--safe-inline));
   padding-block-end: max(var(--space-1), var(--safe-block-end));
   background: var(--glass-fill);
-  backdrop-filter: var(--glass-filter);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   border-block-start: var(--border-width) solid var(--glass-edge);
+  transition:
+    transform var(--motion-fast) var(--motion-ease),
+    visibility var(--motion-fast) var(--motion-ease);
+}
+
+/* Hidden while the on-screen keyboard is open or the inline Ask field is in view (it slides below the screen edge). */
+.dock[data-hidden='true'] {
+  visibility: hidden;
+  transform: translateY(100%);
 }
 
 .dockLink {
@@ -554,50 +562,31 @@
   }
 }
 
-@media (max-width: 48rem) {
+@media (max-width: 47.9375rem) {
   .main {
-    /* clear the dock: control-lg plus its padding and the safe area */
-    padding-block-end: calc(var(--control-lg) + var(--space-4) + var(--safe-block-end));
+    /* Clear the dock exactly: its height (padding, control-lg, the bottom padding or safe area, the edge) plus one step. */
+    padding-block-end: calc(
+      var(--space-1) + var(--control-lg) + max(var(--space-1), var(--safe-block-end)) + var(--border-width) + var(--space-3)
+    );
+  }
+
+  .main[data-screen='chat'] {
+    padding-block-end: 0;
   }
 
   .menuButton {
     display: inline-grid;
   }
 
+  /* Phones: menu, company and account share one row and the company name gets the room. The lockup returns from tablet up;
+     the language moves into the account menu (it is there at every width). */
+  .brand,
+  .lang {
+    display: none;
+  }
+
   .topBar {
     gap: var(--space-1);
-  }
-
-  /* Phones: one button that names the other language (tap to switch); the current language stays in the accessibility
-     tree, visually hidden, so the group still reads as a two-way switch. */
-  .lang {
-    border: 0;
-    padding: 0;
-  }
-
-  .langButton {
-    min-inline-size: var(--touch-target);
-    padding-inline: var(--space-1);
-    border-color: var(--glass-edge);
-    color: var(--color-text);
-  }
-
-  .langButton[aria-pressed='true'] {
-    position: absolute;
-    inline-size: 1px;
-    min-inline-size: 0;
-    block-size: 1px;
-    min-block-size: 0;
-    padding: 0;
-    border: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  /* Phones: menu, company, language and account fit one row; the lockup returns from tablet up. */
-  .brand {
-    display: none;
   }
 
   .navWrap {
@@ -622,21 +611,128 @@
   }
 }
 
-@media (max-width: 22.5rem) {
-  .chevron {
-    display: none;
-  }
-}
-
-@media (width > 48rem) {
+@media (min-width: 48rem) {
   .dock {
     display: none;
   }
 }
 
-@media (width > 48rem) and (width < 64rem) {
+/* The rail toggle exists only on tablets. */
+.railToggle {
+  display: none;
+}
+
+/* Tablets (768 to 1023): the side navigation is an icon rail. Hover shows a tooltip with the label; keyboard focus inside
+   (a link with :focus-visible) or the toggle expands it over the content (solid, like the phone drawer, so it is never glass on glass). Labels stay in
+   the accessibility tree at every state; only their painting changes. */
+@media (min-width: 48rem) and (max-width: 63.9375rem) {
   .navWrap {
-    flex-basis: calc(var(--sidebar-width) - var(--space-6));
+    position: relative;
+    z-index: 8;
+    flex-basis: var(--sidebar-width-collapsed);
+  }
+
+  .navInner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    inline-size: var(--sidebar-width-collapsed);
+    overflow: visible;
+    padding: var(--space-2) var(--space-1_5);
+  }
+
+  .railToggle {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    inline-size: var(--control-md);
+    block-size: var(--control-md);
+    margin-inline: auto;
+    padding: 0;
+    border: var(--border-width) solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  .railToggle:hover {
+    background: var(--state-hover);
+    color: var(--color-text);
+  }
+
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navHeading,
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navText,
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navFooterText,
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navEmpty {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navSection + .navSection {
+    padding-block-start: var(--space-2);
+    border-block-start: var(--hairline);
+  }
+
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navLink {
+    justify-content: center;
+    inline-size: var(--control-md);
+    margin-inline: auto;
+    padding-inline: 0;
+  }
+
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navLink[aria-current='page']::before {
+    inset-inline-start: calc(var(--space-1) * -1);
+  }
+
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navFooter {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  /* Tooltip: the label beside the icon on hover. Its content is hidden from assistive technology (the span names the link). */
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navLink::after {
+    content: attr(data-label) / '';
+    position: absolute;
+    inset-inline-start: calc(100% + var(--space-1_5));
+    inset-block-start: 50%;
+    z-index: 21;
+    padding: var(--space-0_5) var(--space-1);
+    border-radius: var(--radius-sm);
+    background: var(--color-text);
+    color: var(--color-background);
+    font-size: var(--text-label-size);
+    line-height: var(--text-label-line);
+    font-weight: var(--text-label-weight);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-50%);
+    transition: opacity var(--motion-fast) var(--motion-ease);
+  }
+
+  .navWrap[data-rail='collapsed']:not(:has(.navLink:focus-visible)) .navLink:hover::after {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* Expanded: the full-width navigation floats over the content, solid, with the overlay shadow. */
+  .navWrap[data-rail='expanded'] .navInner,
+  .navWrap:has(.navLink:focus-visible) .navInner {
+    inline-size: var(--sidebar-width);
+    background: var(--color-surface);
+    border-inline-end: var(--hairline);
+    box-shadow: var(--shadow-overlay);
+  }
+
+  .navWrap[data-rail='expanded'] .railToggle,
+  .navWrap:has(.navLink:focus-visible) .railToggle {
+    margin-inline: auto 0;
   }
 }
 

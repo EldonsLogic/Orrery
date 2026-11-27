@@ -1,0 +1,22 @@
+/* One icon family (WEB-029): sizes from the foundation roles, colour from the text, centred in its line box. */
+.root {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+  color: currentColor;
+}
+
+.sm {
+  inline-size: var(--icon-sm);
+  block-size: var(--icon-sm);
+}
+
+.md {
+  inline-size: var(--icon-md);
+  block-size: var(--icon-md);
+}
+
+[dir='rtl'] .root[data-directional='true'] {
+  /* rtl-ok: this is the right-to-left counterpart; it flips direction-bound glyphs only */
+  transform: scaleX(-1);
+}

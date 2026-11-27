@@ -62,16 +62,18 @@ function onEvent(s: ChatState, e: ChatEvent): ChatState {
     }
     case 'text_end':
       return { ...s, messages: s.messages.map((m) => (m.id === e.messageId ? { ...m, streaming: false } : m)) };
+    case 'sources':
+      return { ...s, messages: s.messages.map((m) => (m.id === e.messageId && m.role === 'assistant' ? { ...m, sources: e.records } : m)) };
     case 'tool_call':
       return { ...s, activity: [...s.activity, { callId: e.callId, tool: e.tool, risk: e.risk, outcome: 'running' }] };
     case 'tool_result':
       return { ...s, activity: s.activity.map((x) => (x.callId === e.callId ? { ...x, outcome: e.outcome } : x)) };
     case 'confirm_required':
-      return { ...s, confirm: { confirmId: e.confirmId, tool: e.tool, risk: e.risk, changes: e.changes } };
+      return { ...s, confirm: { confirmId: e.confirmId, tool: e.tool, risk: e.risk, changes: e.changes, ...(e.record ? { record: e.record } : {}) } };
     case 'approval_pending':
       return s.approvals.some((x) => x.approvalId === e.approvalId)
         ? s
-        : { ...s, approvals: [...s.approvals, { approvalId: e.approvalId, tool: e.tool, risk: e.risk }] };
+        : { ...s, approvals: [...s.approvals, { approvalId: e.approvalId, tool: e.tool, risk: e.risk, ...(e.record ? { record: e.record } : {}) }] };
     case 'abstain':
       return { ...s, clarifyKey: e.clarifyKey };
     case 'run_error':

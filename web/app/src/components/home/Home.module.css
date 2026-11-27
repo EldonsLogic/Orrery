@@ -6,7 +6,7 @@
   gap: var(--space-4);
 }
 
-@media (min-width: 48.0625rem) {
+@media (min-width: 48rem) {
   .home {
     gap: var(--space-6);
   }
@@ -30,7 +30,7 @@
   border-block-end: var(--hairline);
 }
 
-@media (min-width: 48.0625rem) {
+@media (min-width: 48rem) {
   .hero::before {
     inset-block-end: calc(var(--space-4) * -1);
   }
@@ -100,8 +100,9 @@
   border: var(--border-width) solid var(--color-border-control);
   border-radius: var(--radius-md);
   background: var(--glass-fill);
-  backdrop-filter: var(--glass-filter);
+  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   transition: border-color var(--motion-fast) var(--motion-ease);
 }
 
@@ -319,12 +320,6 @@
   white-space: nowrap;
 }
 
-.icon {
-  flex: none;
-  inline-size: var(--icon-sm);
-  block-size: var(--icon-sm);
-}
-
 /* Approvals (7) beside today and activity (5); one column on narrow screens. */
 .columns {
   display: grid;
@@ -530,7 +525,7 @@
 }
 
 /* Phones: no fixed tiny text; captions step up to the small size. */
-@media (max-width: 48rem) {
+@media (max-width: 47.9375rem) {
   .caption,
   .rowStatus,
   .dayHeading,

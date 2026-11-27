@@ -43,8 +43,9 @@ test('the CLI exits 0 and says ok when every pair passes', () => {
   assert.match(r.stdout, /check-contrast: ok/);
 });
 
-test('every var(--color-*) pair in the user bubble label is on the contrast list', () => {
-  assert.ok(PAIRS_ALL.some((p) => p.id === 'user-bubble-meta'));
+test('the chat user turn and the tablet rail tooltip are on the contrast list (WEB-029)', () => {
+  assert.ok(PAIRS_ALL.some((p) => p.id === 'user-pill'));
+  assert.ok(PAIRS_ALL.some((p) => p.id === 'rail-tooltip'));
 });
 
 test('the current nav icon and its start-edge indicator (primary on the 14% tint over glass) are on the contrast list', () => {

@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Menu as MenuIcon } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { Alert, Button } from '../../ui';
+import { Alert, Button, Icon } from '../../ui';
 import { LoadingMark } from '../marks/LoadingMark';
 import { SideNav } from './SideNav';
 import { UserMenu } from './UserMenu';
 import { LanguageSwitch } from './LanguageSwitch';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useSession } from './SessionProvider';
-import { usesDrawer } from '../../lib/viewport';
+import { InlineAskContext } from './inlineAsk';
+import { usesDrawer, usesRail } from '../../lib/viewport';
+import { dockShown, keyboardOpen } from '../../lib/dock';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import styles from './Shell.module.css';
@@ -24,27 +25,48 @@ export function AppShell({ children, brand }: { children: ReactNode; brand?: Rea
   const pathname = usePathname() ?? '';
   const { session, switchFailed, dismissError, retry } = useSession();
   const [drawer, setDrawer] = useState(false);
+  // Tablet icon rail: collapsed by default, expanded by its toggle (keyboard focus inside also expands it, in CSS).
+  const [rail, setRail] = useState(false);
+  const [keyboard, setKeyboard] = useState(false);
+  const [inlineAsk, setInlineAsk] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
+  const railToggle = useRef<HTMLButtonElement>(null);
+  const onChat = pathname.startsWith('/chat');
+  const reportInlineAsk = useCallback((inView: boolean) => setInlineAsk(inView), []);
 
   useEffect(() => {
-    if (!drawer) return;
+    if (!drawer && !rail) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key !== 'Escape') return;
+      if (drawer) {
         setDrawer(false);
         toggle.current?.focus();
+      } else {
+        setRail(false);
+        railToggle.current?.focus();
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [drawer]);
+  }, [drawer, rail]);
 
-  // Leaving the narrow layout (rotate, resize) closes the drawer so it cannot reopen stale.
+  // Leaving a layout (rotate, resize) closes its drawer or rail so neither can reopen stale.
   useEffect(() => {
     const onResize = () => {
       if (!usesDrawer(window.innerWidth)) setDrawer(false);
+      if (!usesRail(window.innerWidth)) setRail(false);
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // The on-screen keyboard (visual viewport shrinks) hides the phone dock so it never sits on the field being typed in.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onVv = () => setKeyboard(keyboardOpen(window.innerHeight, vv.height));
+    vv.addEventListener('resize', onVv);
+    return () => vv.removeEventListener('resize', onVv);
   }, []);
 
   const skip = (
@@ -92,7 +114,7 @@ export function AppShell({ children, brand }: { children: ReactNode; brand?: Rea
           aria-controls="app-nav"
           onClick={() => setDrawer((v) => !v)}
         >
-          <MenuIcon aria-hidden="true" className={styles.menuIcon} strokeWidth={1.75} />
+          <Icon name="menu" size="md" />
           <span className={styles.switcherLabel}>{t('nav.toggle')}</span>
         </button>
         {brand ? (
@@ -105,16 +127,30 @@ export function AppShell({ children, brand }: { children: ReactNode; brand?: Rea
         <UserMenu displayName={displayName} claims={claims} />
       </header>
       <div className={styles.body}>
-        <div id="app-nav" className={styles.navWrap} data-open={drawer ? 'true' : 'false'}>
+        <div id="app-nav" className={styles.navWrap} data-open={drawer ? 'true' : 'false'} data-rail={rail ? 'expanded' : 'collapsed'}>
           <div className={styles.navInner}>
+            <button
+              ref={railToggle}
+              type="button"
+              className={styles.railToggle}
+              aria-expanded={rail}
+              aria-controls="app-nav"
+              onClick={() => setRail((v) => !v)}
+            >
+              <Icon name={rail ? 'railCollapse' : 'railExpand'} size="md" />
+              <span className={styles.switcherLabel}>{t(rail ? 'nav.collapse' : 'nav.expand')}</span>
+            </button>
             <SideNav
               claims={claims}
               buildState={memberships.find((m) => m.tenantId === claims.tenantId)?.buildState}
-              onNavigate={() => setDrawer(false)}
+              onNavigate={() => {
+                setDrawer(false);
+                setRail(false);
+              }}
             />
           </div>
         </div>
-        <main id="main" tabIndex={-1} className={styles.main} inert={drawer}>
+        <main id="main" tabIndex={-1} className={styles.main} data-screen={onChat ? 'chat' : undefined} inert={drawer}>
           {switchFailed ? (
             <Alert tone="danger" title={t('workspace.failedTitle')}>
               <p>{t('workspace.failedBody')}</p>
@@ -128,12 +164,19 @@ export function AppShell({ children, brand }: { children: ReactNode; brand?: Rea
               {t('state.noWorkspace.body')}
             </Alert>
           ) : (
-            <div className={styles.content}>{children}</div>
+            <InlineAskContext.Provider value={reportInlineAsk}>
+              <div className={styles.content}>{children}</div>
+            </InlineAskContext.Provider>
           )}
         </main>
       </div>
-      {pathname.startsWith('/chat/') ? null : (
-        <nav aria-label={t('dock.label')} className={styles.dock} inert={drawer}>
+      {onChat ? null : (
+        <nav
+          aria-label={t('dock.label')}
+          className={styles.dock}
+          data-hidden={dockShown({ onChat, keyboard, inlineAskInView: inlineAsk }) ? undefined : 'true'}
+          inert={drawer || keyboard || inlineAsk}
+        >
           <Link href="/chat/" className={styles.dockLink}>
             <span>{t.rich('dock.ask', { brand: (c) => <bdi>{c}</bdi> })}</span>
           </Link>

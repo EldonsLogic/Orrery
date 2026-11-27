@@ -27,3 +27,11 @@ Unknown.
 
 ## Next step
 BPL-054 (manufacturing, 0.7.0) stacked on this branch.
+
+## Review fixes (#396 RULES 42 review at 87629de1)
+- Merged bpl-052-crm-blueprint (its #395 fixes) into this branch first.
+- M1: rigid-zone field rule. A pure schema rule is not possible (entities do not say which module concept binds them), so the terms live in the schema (root `x-rigid-zone-terms`, shared with the contract guard) and the new validator rule `BP-MOD-001` (services/blueprint/validator/rules_modules.py) refuses a rigid-zone field id (billing_rate, costing_rate, amount and the like) on any module-bound entity and a money field on the bound timesheet or activity_type; tests in services/blueprint/tests/test_modules.py.
+- M2: `timesheets.billable: true` needs `enabled: true` and `invoicingComponent` (schema); `BP-MOD-003` checks it is listed and rigid; negative cases `projects-billable-while-disabled`, `projects-billable-without-invoicing-component`.
+- L3: `projects-calendar-with-board` uses a valid column id and `projects-unknown-view-kind` expects `/kind`; both now match their path exactly (`exact: true`), checked by deleting each clause.
+- L4: timeline and calendar date-field rule is in the validator (`BP-MOD-002`); Q-700 updated.
+- L5: module role changes are `access` (from #395).

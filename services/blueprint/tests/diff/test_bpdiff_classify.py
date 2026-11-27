@@ -76,6 +76,17 @@ def test_classification_table(name):
     ("reorder", "workflows/*/states", "config"),
     ("reorder", "entities", "cosmetic"),
     ("reorder", "roles", "cosmetic"),
+    ("add", "modules/crm/roles/manage/*", "access"),
+    ("replace", "modules/crm/roles/work", "access"),
+    ("remove", "modules/crm/roles/view", "access"),
+    ("replace", "modules/crm/roles", "access"),
+    ("replace", "modules/crm/pipeline/stages/*/probabilityPercent", "config"),
+    ("replace", "modules/manufacturing/warehouses/workInProgress", "compliance"),
+    ("add", "modules/manufacturing/warehouses/scrap", "compliance"),
+    ("replace", "modules/manufacturing/warehouses", "compliance"),
+    ("replace", "modules/manufacturing", "compliance"),
+    ("replace", "modules/manufacturing/roles/manage", "access"),
+    ("replace", "modules/manufacturing/materialTransfer", "config"),
 ])
 def test_impact_rules(kind, path, expected):
     assert impact_of(kind, spath(path)) == expected
@@ -132,3 +143,25 @@ def test_key_table_covers_every_object_array_in_the_contract():
         required = set(items.get("required", []))
         assert set(KEYED[path]) <= required, (path, KEYED[path], required)
         assert path + ("*",) in NOUN
+
+
+def _modules_example():
+    return json.loads((h.REPO / "contracts" / "examples" / "blueprint-modules-minimal.json").read_text(encoding="utf-8"))
+
+
+def test_module_role_change_is_access():
+    """#395 review: promoting a role to module manager takes the access-review path, not config."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    b["modules"]["crm"]["roles"]["manage"].append("sales_rep")
+    ops = diff(a, b)["ops"]
+    assert ops and {o["impact"] for o in ops} == {"access"}
+
+
+def test_manufacturing_warehouse_change_is_compliance():
+    """#397 review: a warehouse choice moves stock and, through the warehouse account, ledger value."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    b["modules"]["manufacturing"]["warehouses"]["workInProgress"] = "fg_store"
+    ops = diff(a, b)["ops"]
+    assert ops and {o["impact"] for o in ops} == {"compliance"}

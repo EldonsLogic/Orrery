@@ -30,3 +30,10 @@ Unknown.
 
 ## Next step
 BPL-053 (projects and boards, 0.6.0) stacked on this branch; partner reviews ADR-0079.
+
+## Review fixes (#395 RULES 42 review at f3916b65)
+- M1: `moduleRoles` description reworded so it grants nothing (screens treat roles as managers, workers, viewers); contract test `test_module_roles_description_grants_nothing`.
+- M2: bpdiff classes `modules/<key>/roles` (and a whole module, which carries role lists) as `access`; impact-rule rows plus `test_module_role_change_is_access`; diff README rule 5.
+- L3: rigid-zone guard widened to cost, tax, payroll, rate, price, amount, posting, account terms (substring or camelCase and snake_case token), walking shared module defs; matcher self-tests.
+- L4: open pipeline stage needs probabilityPercent 1 to 99 (schema); negative cases `crm-open-stage-zero`, `crm-open-stage-100`.
+- L5: Q-701 and blueprint-modules.md note that Converted may be derived from the quotation to order flow (bench item).

@@ -74,10 +74,10 @@ Each op gets one `impact`. First matching rule wins, evaluated on `schemaPath`:
 | # | Rule | Impact |
 |---|---|---|
 | 1 | `reorder`: approval steps / other order-significant arrays / the rest | `access` / `config` / `cosmetic` |
-| 2 | Anything under `compliance`; `company/country`, `vatNumber`, `crNumber`, `locale/currency`, `locale/fiscalYear` (also an op that replaces a whole parent of these) | `compliance` |
+| 2 | Anything under `compliance`; `company/country`, `vatNumber`, `crNumber`, `locale/currency`, `locale/fiscalYear`, `modules/manufacturing/warehouses` (stock and, through the warehouse account, ledger value; ADR-0079) (also an op that replaces a whole parent of these) | `compliance` |
 | 3 | Anything under `branding` (colours, logo, display name, login page, document header, powered-by) | `branding` |
 | 4 | A label key in the path (`labels`, `pluralLabels`, `actionLabels`, `city`, `note`, `reason`, `description`); anything under `provenance`; `i18n` except `defaultLocale`; `meta/revision`, `createdAt`, `updatedAt` | `cosmetic` |
-| 5 | Anything under `roles`, `approvals` or `assistants` (ADR-0043, except labels and provenance); `visibleToRoles`, `allowedRoles`, `hiddenFields`, `readOnlyFields` anywhere; a workflow transition added, removed or changed as a whole, or its `approval` | `access` |
+| 5 | Anything under `roles`, `approvals` or `assistants` (ADR-0043, except labels and provenance); `visibleToRoles`, `allowedRoles`, `hiddenFields`, `readOnlyFields` anywhere; `modules/<key>/roles` (ADR-0079), and a whole module or the `modules` object, which carry role lists; a workflow transition added, removed or changed as a whole, or its `approval` | `access` |
 | 6 | `remove` of a location, component, entity, field, select option, relation, entity component binding, workflow or workflow state | `destructive` |
 | 7 | Entity added; entity `kind`; field added; field `type`, `required`, `unique`, `precision`, `min`, `max`, `maxLength`, `target`, `computed` (changed, added or removed); any relation change; any entity component binding change | `data_shape` |
 | 8 | Everything else (company locale and languages, locations, components, workflows, reports, integrations, select option add, `default`, `readOnly`, numbering, `meta` other than rule 4) | `config` |

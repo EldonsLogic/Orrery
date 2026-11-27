@@ -16,6 +16,9 @@ LABEL_KEYS = {"labels", "pluralLabels", "actionLabels", "city", "note", "reason"
 ACCESS_KEYS = {"visibleToRoles", "allowedRoles", "hiddenFields", "readOnlyFields"}
 COMPLIANCE_COMPANY = [("company", "country"), ("company", "vatNumber"), ("company", "crNumber"),
                       ("company", "locale", "currency"), ("company", "locale", "fiscalYear")]
+# Module settings that move stock, ledger value or consent (ADR-0079): reviewed as compliance, the strictest
+# non-structural class. Ancestors match too, so replacing a whole module is compliance as well.
+MODULE_COMPLIANCE = [("modules", "manufacturing", "warehouses")]
 META_COSMETIC = [("meta", "revision"), ("meta", "createdAt"), ("meta", "updatedAt")]
 DESTRUCTIVE_NODES = {spath(p) for p in (
     "locations/*", "components/*", "entities/*", "entities/*/fields/*", "entities/*/fields/*/options/*",
@@ -43,7 +46,7 @@ def impact_of(kind: str, sp: SPath) -> str:
             return "access"
         return "config" if sp in ORDER_SIGNIFICANT else "cosmetic"
     head = sp[0] if sp else ""
-    if head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY):
+    if head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE):
         return "compliance"
     if head == "branding":
         return "branding"
@@ -53,7 +56,7 @@ def impact_of(kind: str, sp: SPath) -> str:
     if ("provenance" in sp or LABEL_KEYS & set(sp) or (head == "i18n" and not _starts(sp, ("i18n", "defaultLocale")))
             or any(_starts(sp, p) for p in META_COSMETIC)):
         return "cosmetic"
-    if (head in ("roles", "approvals", "assistants") or ACCESS_KEYS & set(sp)
+    if (head in ("roles", "approvals", "assistants") or ACCESS_KEYS & set(sp) or _module_roles(sp)
             or (head == "workflows" and len(sp) >= 4 and sp[2] == "transitions"
                 and (len(sp) == 4 or sp[4] == "approval"))):
         return "access"
@@ -62,6 +65,11 @@ def impact_of(kind: str, sp: SPath) -> str:
     if _data_shape(sp):
         return "data_shape"
     return "config"
+
+
+def _module_roles(sp: SPath) -> bool:
+    """modules/<key>/roles, or a whole module or the modules object (which carry role lists)."""
+    return sp[:1] == ("modules",) and (len(sp) <= 2 or sp[2] == "roles")
 
 
 def _data_shape(sp: SPath) -> bool:

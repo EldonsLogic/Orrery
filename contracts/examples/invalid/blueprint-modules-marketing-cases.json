@@ -1,0 +1,19 @@
+{
+  "base": "blueprint-modules-minimal.json",
+  "note": "Negative cases for modules.marketing (ADR-0079). Each case edits the valid base by JSON pointer; the result must fail the Blueprint schema at a path containing 'expect'. Run by contracts/tests/test_blueprint_modules.py.",
+  "cases": [
+    { "name": "mkt-missing-consent", "remove": ["/modules/marketing/consent"], "expect": "modules/marketing" },
+    { "name": "mkt-opt-in-off", "set": { "/modules/marketing/consent/optInRequired": false }, "expect": "modules/marketing/consent/optInRequired" },
+    { "name": "mkt-no-unsubscribe", "set": { "/modules/marketing/consent/unsubscribeRoute": false }, "expect": "modules/marketing/consent/unsubscribeRoute" },
+    { "name": "mkt-no-channels", "set": { "/modules/marketing/channels": {} }, "expect": "modules/marketing/channels" },
+    { "name": "mkt-unknown-channel", "set": { "/modules/marketing/channels/sms_blast": { "enabled": true } }, "expect": "modules/marketing/channels" },
+    { "name": "mkt-messaging-without-integration", "remove": ["/modules/marketing/channels/messaging/integration"], "expect": "modules/marketing/channels/messaging" },
+    { "name": "mkt-messaging-free-text", "set": { "/modules/marketing/channels/messaging/templatesOnly": false }, "expect": "modules/marketing/channels/messaging/templatesOnly" },
+    { "name": "mkt-messaging-without-entity", "remove": ["/modules/marketing/entities/messaging_campaign"], "expect": "modules/marketing/entities" },
+    { "name": "mkt-email-without-entity", "remove": ["/modules/marketing/entities/email_campaign"], "expect": "modules/marketing/entities" },
+    { "name": "mkt-missing-campaign-concept", "remove": ["/modules/marketing/entities/campaign"], "expect": "modules/marketing/entities" },
+    { "name": "mkt-segment-unknown-audience", "set": { "/modules/marketing/segments/0/audience": "supplier" }, "expect": "modules/marketing/segments/0/audience" },
+    { "name": "mkt-segment-sql", "set": { "/modules/marketing/segments/0/query": "select * from contact" }, "expect": "modules/marketing/segments/0" },
+    { "name": "mkt-segment-bad-op", "set": { "/modules/marketing/segments/0/filters/0/op": "like" }, "expect": "modules/marketing/segments/0/filters/0/op" }
+  ]
+}

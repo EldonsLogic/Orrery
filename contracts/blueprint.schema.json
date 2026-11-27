@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:platform:contract:blueprint:0.7.0",
-  "version": "0.7.0",
+  "$id": "urn:platform:contract:blueprint:0.8.0",
+  "version": "0.8.0",
   "title": "Blueprint",
   "description": "Contract 1. The typed, versioned description of one tenant's business: entities, workflows, roles, approvals, reports, integrations, compliance, i18n, branding. The Blueprint is configuration, never code. Cross-reference rules that JSON Schema cannot express (ids resolve, locales covered, contrast passes) are enforced by the Blueprint validator in Part 2 and listed in x-validator-rules.",
   "type": "object",
@@ -78,7 +78,8 @@
     "Modules (ADR-0079): a module is on for this company only when its key is present. Its component is listed in components and provides the capability <module>.module; every concept entity resolves and has an implements binding to a component providing <module>.<concept>; every module role resolves and holds read on each required concept entity (listing a role grants nothing). A report metric whose id starts with a module prefix (crm., projects., manufacturing., marketing.) needs that module on and must be in the module's metric list in contracts/blueprint-modules.md.",
     "CRM (ADR-0079): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique.",
     "Projects (ADR-0079): task status and view ids are unique; every board column lists task status ids and each status sits in exactly one column of a board; timeline and calendar fields are date or datetime fields of the view's concept entity; visibleToRoles resolve and hold read on that entity.",
-    "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse; the work order, job card and subcontracting receipt transitions that move stock are stock-class (ADR-0037) and their submits keep the human floor (ADR-0027). Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint field may set them."
+    "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse; the work order, job card and subcontracting receipt transitions that move stock are stock-class (ADR-0037) and their submits keep the human floor (ADR-0027). Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint field may set them.",
+    "Marketing (ADR-0079): entities.campaign equals modules.crm.entities.campaign when both are set; a segment's audience concept is bound in modules.crm.entities (lead, contact, customer) and its filter fields exist on that entity; segment ids are unique. channels.messaging.integration resolves to an integration whose connector is a messaging connector from the DSC-022 contract. A send goes only to recipients with a recorded opt-in for that channel and carries an unsubscribe route; messaging sends use approved templates only."
   ],
   "$defs": {
     "modules": {
@@ -88,7 +89,8 @@
       "properties": {
         "crm": { "$ref": "#/$defs/crmModule" },
         "projects": { "$ref": "#/$defs/projectsModule" },
-        "manufacturing": { "$ref": "#/$defs/manufacturingModule" }
+        "manufacturing": { "$ref": "#/$defs/manufacturingModule" },
+        "marketing": { "$ref": "#/$defs/marketingModule" }
       }
     },
     "moduleRoles": {
@@ -372,6 +374,85 @@
         { "if": { "properties": { "bom": { "properties": { "withOperations": { "const": true } }, "required": ["withOperations"] } }, "required": ["bom"] }, "then": { "required": ["operations"], "properties": { "operations": { "properties": { "enabled": { "const": true } } } } } },
         { "if": { "properties": { "materialTransfer": { "const": "job_card" } }, "required": ["materialTransfer"] }, "then": { "required": ["operations"], "properties": { "operations": { "required": ["jobCards"], "properties": { "jobCards": { "const": true } } } } } },
         { "if": { "properties": { "subcontracting": { "properties": { "enabled": { "const": true } } } }, "required": ["subcontracting"] }, "then": { "properties": { "entities": { "required": ["subcontracting_order", "subcontracting_receipt"] } } } }
+      ]
+    },
+    "marketingModule": {
+      "type": "object",
+      "description": "Marketing (Blueprint 0.8.0): segments, campaigns, email campaigns on the engine's core records, and messaging campaigns sent only through the messaging connector (DSC-022). Consent is not optional.",
+      "required": ["component", "entities", "roles", "consent", "channels", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "component": { "$ref": "#/$defs/componentId" },
+        "entities": {
+          "type": "object",
+          "required": ["campaign"],
+          "additionalProperties": false,
+          "description": "Concept to Blueprint entity id. campaign is shared with the CRM campaign link.",
+          "properties": {
+            "campaign": { "$ref": "#/$defs/id" },
+            "email_campaign": { "$ref": "#/$defs/id" },
+            "messaging_campaign": { "$ref": "#/$defs/id" }
+          }
+        },
+        "roles": { "$ref": "#/$defs/moduleRoles" },
+        "segments": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "Saved audiences. Filters are guards over the audience entity (AND); no free text query.",
+          "items": {
+            "type": "object",
+            "required": ["id", "labels", "audience", "filters"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "labels": { "$ref": "#/$defs/localizedText" },
+              "audience": { "enum": ["lead", "contact", "customer"], "description": "CRM concept the segment selects from." },
+              "filters": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/guard" } },
+              "visibleToRoles": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+            }
+          }
+        },
+        "consent": {
+          "type": "object",
+          "required": ["optInRequired", "unsubscribeRoute"],
+          "additionalProperties": false,
+          "description": "PDPL and channel rules. The opt-in records themselves are tenant data kept by the component, never in the Blueprint.",
+          "properties": {
+            "optInRequired": { "const": true, "description": "Only recipients with a recorded opt-in for the channel are sent to." },
+            "unsubscribeRoute": { "const": true, "description": "Every message carries a way to opt out, honoured before the next send." },
+            "doubleOptIn": { "type": "boolean", "default": false }
+          }
+        },
+        "channels": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "email": {
+              "type": "object",
+              "required": ["enabled"],
+              "additionalProperties": false,
+              "properties": { "enabled": { "type": "boolean" } }
+            },
+            "messaging": {
+              "type": "object",
+              "required": ["enabled"],
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "integration": { "$ref": "#/$defs/id", "description": "Integration id whose connector is a messaging connector (DSC-022)." },
+                "templatesOnly": { "const": true, "default": true, "description": "Marketing messages use provider-approved templates only." }
+              },
+              "if": { "properties": { "enabled": { "const": true } } },
+              "then": { "required": ["integration", "templatesOnly"] }
+            }
+          }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      },
+      "allOf": [
+        { "if": { "properties": { "channels": { "properties": { "email": { "properties": { "enabled": { "const": true } } } }, "required": ["email"] } }, "required": ["channels"] }, "then": { "properties": { "entities": { "required": ["email_campaign"] } } } },
+        { "if": { "properties": { "channels": { "properties": { "messaging": { "properties": { "enabled": { "const": true } } } }, "required": ["messaging"] } }, "required": ["channels"] }, "then": { "properties": { "entities": { "required": ["messaging_campaign"] } } } }
       ]
     },
     "assistant": {

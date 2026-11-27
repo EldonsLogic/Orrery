@@ -2,7 +2,7 @@
 
 Status: draft
 Owner: eldon
-Version: 0.7.0
+Version: 0.8.0
 
 Part of contract 1 ([blueprint.schema.json](blueprint.schema.json), `$defs/modules`). How an engine-core module joins a tenant's Blueprint. Decision: [ADR-0079](../docs/decisions/ADR-0079-engine-core-modules-in-the-blueprint.md) (Proposed); scope: [ADR-0076](../docs/decisions/ADR-0076-phase-1-module-scope.md). Example: [examples/blueprint-modules-minimal.json](examples/blueprint-modules-minimal.json); negative cases: `examples/invalid/blueprint-modules-*-cases.json`, run by `tests/test_blueprint_modules.py`.
 
@@ -70,7 +70,23 @@ Core BOM, work order, job card, routing and subcontracting records. This object 
 
 Metrics: `manufacturing.work_orders_by_status`, `manufacturing.planned_vs_produced`, `manufacturing.job_card_hours`, `manufacturing.material_shortages`, `manufacturing.open_subcontracting`
 
+## Module `marketing`
+Segments, campaigns and email campaigns on core records, plus messaging campaigns sent only through the messaging connector. The messaging connector contract is DSC-022, still in progress on another branch. This contract refers to it by row id only and fixes no connector id.
+
+| Concept | Required | Engine record (internal) |
+|---|---|---|
+| `campaign` | yes | Campaign (the same entity as the CRM campaign link) |
+| `email_campaign` | when `channels.email.enabled` | Email Campaign with Campaign Email Schedule rows (`email_campaign_for` Lead, Contact or Email Group) |
+| `messaging_campaign` | when `channels.messaging.enabled` | none: a Seshna record kept by the marketing component; sends go through the DSC-022 connector |
+
+- `segments[]`: a saved audience over a CRM concept (`lead`, `contact` or `customer`) with up to ten guard filters (AND); no free-text query. For email the component compiles a segment to Email Group members (UNVERIFIED until BPL-059).
+- `consent`: `optInRequired` and `unsubscribeRoute` are always true. A send goes only to recipients with a recorded opt-in for that channel. The engine's unsubscribed flags on leads and contacts, and its unsubscribe records, are honoured before every send. Opt-in records are tenant data kept by the component, never in the Blueprint (PDPL).
+- `channels.messaging`: names an `integrations[]` entry whose connector is a messaging connector from DSC-022. Marketing messages use provider-approved templates only. Each customer's provider verification, templates and sender approvals are that customer's go-live items (ADR-0076 item 11). Inbound replies are untrusted content.
+
+Metrics: `marketing.campaign_reach`, `marketing.opt_in_rate`, `marketing.unsubscribes`, `marketing.delivery_rate`, `marketing.leads_from_campaign`
+
 ## Changelog
+- 0.8.0 (BPL-055): `modules.marketing` with segments, mandatory consent, and email and messaging channels; messaging refers loosely to DSC-022. Additive.
 - 0.7.0 (BPL-054): `modules.manufacturing` with BOM, work order, job card, routing and subcontracting concepts, warehouses as inventory touch points, and no costing or valuation fields. Additive.
 - 0.6.0 (BPL-053): `modules.projects` with task statuses mapped to engine statuses, board, timeline, calendar and list views, and timesheets. Additive.
 - 0.5.0 (BPL-052): optional `modules` with `crm`; shared `moduleRoles` and `moduleOption`. Additive: every 0.4.0 Blueprint stays valid; `meta.schemaVersion` stays `0.1.0` (Q-141).

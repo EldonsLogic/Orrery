@@ -468,7 +468,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BPL-052 | Blueprint contract additions for CRM on the engine's core CRM doctypes (lead, opportunity, customer, contact, pipeline stages); no AGPL apps (ADR-0076 item 5); ADR for the contract change | Blueprint | G1 | GOV-078 | eldon | doing |
 | BPL-053 | Blueprint contract additions for projects and boards: board, timeline and calendar views over the engine's Task and Timesheet, view config per role; ADR for the contract change | Blueprint | G1 | GOV-078 | eldon | doing |
 | BPL-054 | Blueprint contract additions for manufacturing on engine core (BOM, work order, routing, batches); ADR for the contract change | Blueprint | G1 | GOV-078 | eldon | doing |
-| BPL-055 | Blueprint contract additions for marketing (campaigns, segments, consent and opt-in, send through the DSC-022 connector); ADR for the contract change | Blueprint | G1 | GOV-078,DSC-022 | eldon | todo |
+| BPL-055 | Blueprint contract additions for marketing (campaigns, segments, consent and opt-in, send through the DSC-022 connector); ADR for the contract change | Blueprint | G1 | GOV-078,DSC-022 | eldon | doing |
 | BPL-056 | CRM component under `components/` from the BPL-052 contract, behind our UI, engine invisible | Blueprint | G2 | BPL-052 | partner | todo |
 | BPL-057 | Projects and boards component under `components/` from the BPL-053 contract | Blueprint | G2 | BPL-053 | partner | todo |
 | BPL-058 | Manufacturing component under `components/` from the BPL-054 contract | Blueprint | G2 | BPL-054 | partner | todo |

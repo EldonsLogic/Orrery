@@ -1,0 +1,44 @@
+# ADR-0081: Email sending connector: bring your own provider, verified webhooks feed suppression and consent, marketing only by a human with approval
+
+Status: Proposed
+Owner: eldon
+Approved by: pending (Eldon proposer; partner review on this PR). Touches credentials, untrusted inbound webhooks and personal data: Tier 3, needs a security review by a different model.
+
+## Context
+[ADR-0076](ADR-0076-phase-1-module-scope.md) (Proposed) adds email marketing to phase 1 (Eldon, 2026-11-27) and plan row DSC-025 asks for the email sending connector contract first; the build is DSC-026 at G2. Tenants already send invoices and notices by email and want campaigns. Email brings a new processor (the email provider), credentials that can send as the tenant, webhooks from the internet that change who may be contacted, and mailbox-provider rules that decide whether mail arrives at all. The [messaging connector](https://github.com/EldonsLogic/Orrery/pull/394) (DSC-022, PR #394) already defines consent, approval and risk rules for WhatsApp and SMS; the [payments connector](https://github.com/EldonsLogic/Orrery/pull/393) (DSC-021, PR #393) defines bring-your-own-provider and staged write-once secrets.
+
+External facts (all accessed 2026-11-27):
+- [RFC 8058](https://www.rfc-editor.org/rfc/rfc8058.html): one-click unsubscribe needs a `List-Unsubscribe` header with one HTTPS URI and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; both must be covered by a valid DKIM signature; the sender must not answer with a redirect; the receiver's POST carries no cookies or authorization.
+- [Gmail sender guidelines](https://support.google.com/a/answer/81126): from 1 February 2024, senders of 5,000 or more messages a day to personal Gmail accounts need SPF and DKIM, DMARC (policy may be `none`) with the From domain aligned, one-click unsubscribe plus a visible link for marketing, and a spam rate below 0.30%.
+- [Yahoo sender best practices](https://senders.yahooinc.com/best-practices/): bulk senders need SPF, DKIM and a passing DMARC policy of at least `p=none`, one-click unsubscribe for marketing (RFC 8058 POST highly recommended) and a body link, unsubscribes processed within 2 days, spam rate below 0.3%.
+- Provider webhook signing and suppression, read in each provider's docs: Amazon SES reports bounces and complaints through Amazon SNS ([SES notifications](https://docs.aws.amazon.com/ses/latest/dg/monitor-sending-activity-using-notifications.html)), SNS messages must be signature-checked, SignatureVersion 2 is SHA256 ([SNS verification](https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html)), and the SES account suppression list holds hard bounces and complaints, with no complaint data from Gmail ([SES suppression list](https://docs.aws.amazon.com/ses/latest/dg/sending-email-suppression-list.html)). Postmark states it has no HMAC webhook signatures and offers basic auth in the URL and IP allowlisting ([Postmark webhooks](https://postmarkapp.com/developer/webhooks/webhooks-overview)). SendGrid signs with ECDSA over a timestamp header and the raw body ([SendGrid security](https://www.twilio.com/docs/sendgrid/for-developers/tracking-events/getting-started-event-webhook-security-features)). Mailgun signs with HMAC-SHA256 over timestamp and token and says to reject reused tokens ([Mailgun securing webhooks](https://documentation.mailgun.com/docs/mailgun/user-manual/webhooks/securing-webhooks)). Zoho ZeptoMail lists bounce webhooks ([ZeptoMail webhooks](https://www.zoho.com/zeptomail/webhooks-instant-notification.html)) but its webhook signing was not found in its own docs: UNVERIFIED (Q-727). Postmark, SendGrid and Mailgun suppression APIs are UNVERIFIED as to scope and were not read in full.
+- Whether PDPL (KSA, Qatar), UAE PDPL or Egyptian law needs consent for open tracking (a pixel that reads the device) is UNVERIFIED pending counsel (LEG-012).
+
+## Decision
+1. **Bring your own provider.** The tenant connects its own account; Seshna holds no sending account and no shared IP pool for tenant mail. Examples: Amazon SES, Postmark, SendGrid, Mailgun, Zoho ZeptoMail. Contract 0.1.0 enables the four whose webhook scheme was read in their docs; ZeptoMail is refused (`EML-016`) until Q-727 is answered and a contract change adds its scheme. Seshna's own staff notifications (S14) are a separate service.
+2. **Credentials per tenant, staged write-once.** The API key (S11, send job only) and webhook verification material (S13, receiving endpoint only) are staged into write-once slots, bound to an R4 approval by fingerprint, probed read-only and moved live only if unchanged, as DSC-021 does for gateway keys. Rotation and exposure rules follow DSC-021: the customer rotates at the provider, Seshna disables at once on suspected exposure.
+3. **Sender domains are the customer's go-live items**: SPF pass, DKIM pass and a DMARC record with alignment before any send; a dedicated subdomain is recommended for marketing. The bulk-sender rules of Gmail and Yahoo apply to every marketing send whatever its volume.
+4. **Same consent rules as DSC-022.** Email marketing consent is a DSC-022 consent record with channel `email` (append-only, ordered by `recordedAt`, only the contact's own opt-in lifts a contact's revoke). We reuse that model rather than fork it; adding `email` to its channel list is a one-value change made when the second of the two PRs merges (Q-728).
+5. **RFC 8058 one-click unsubscribe** on every marketing send, both headers DKIM-signed, plus a visible body link. The one-click endpoint never redirects, needs no login, applies at once and can only unsubscribe the recipient its token names.
+6. **Verified, idempotent webhooks feed suppression and consent.** Bounces (hard and soft), complaints and unsubscribes are verified per the provider's scheme, deduplicated durably and fail closed on unknown types. A hard bounce or complaint suppresses all mail to that address at once; an unsubscribe suppresses marketing at once and revokes consent; the suppression is written before the webhook is acknowledged. Seshna's suppression list is authoritative; the provider's is synced, never relied on alone.
+7. **Marketing sends are R3 with human approval, never agent-created**, exactly as DSC-022 marketing templates. Transactional email (invoices, credit notes, statements, receipts, notices) is a separate purpose, not marketing: no marketing consent, no tracking, no batch, agent-draftable with a human confirming each. No send is R1. The AP-EML rows are proposed for SEC (Q-726).
+8. **Open and click tracking off by default**, per-tenant opt-in (R4 proposed), never on transactional mail, links tracked by id not URL, and no tracking pixel for a contact in a country whose pack needs consent for it unless the contact gave it; until LEG-012 answers, all four phase-1 countries count as needing consent (UNVERIFIED legal point).
+9. **Rate limits and warm-up** per connection; a new domain or connection warms up with a daily marketing cap (placeholder, Q-729); campaigns pause at a 0.3% complaint rate.
+10. **Inbound content is untrusted.** Webhook bodies, bounce diagnostics, complaint reports and click URLs are L3 data; only enumerated fields survive and none reaches a model.
+11. **Data class.** Recipient addresses and rendered bodies are C2 with the PD tag; addresses live only as keyed hashes in the suppression list and as contact records; event data carries no address, subject, body or URL; keys and webhook secrets are C4.
+
+## Alternatives rejected
+- A Seshna sending account with shared IPs: one tenant's bad list would hurt every tenant's delivery, and Seshna would become the sender of record for others' marketing.
+- Trusting the provider's suppression list alone: SES gets no Gmail complaint data and lists differ per provider; a provider switch would lose them.
+- Allowing agents to draft marketing campaigns: DSC-022 forbids it for messaging; email reaches more people per send, so the rule is not looser here.
+- Enabling ZeptoMail on an authorization header alone: without a documented signature that is a shared secret sent with every request, and the docs were not found; wait for Q-727.
+- Tracking on by default: it reads the recipient's device and may need consent in our markets (LEG-012).
+
+## Consequences
+- DSC-026 (G2) builds the adapters for the four providers against this contract, sandbox only, with a security review by a different model.
+- BPL-066 adds templates, A/B rules and tracking settings on top of this contract; BPL-055 campaigns send through it.
+- SEC must accept AP-EML-01 to AP-EML-04 (Q-726); LEG-012 must answer the tracking-consent point; DSC-022 gains channel `email` (Q-728).
+- Customers must set DNS records and get provider production access before go-live; Seshna's onboarding checks them.
+
+## Supersedes
+None.

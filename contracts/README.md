@@ -11,7 +11,7 @@ The contracts are the source of truth for how the five parts of the platform tal
 | 2 | Component manifest | [component.manifest.schema.json](component.manifest.schema.json) | 0.2.0 |
 | 3 | Tool API | [tool-api.md](tool-api.md) | 0.3.0 |
 | - | Tool API domain error catalog | [tool-api-error-catalog.json](tool-api-error-catalog.json), [schema](tool-api-error-catalog.schema.json) | 0.1.0 |
-| 4 | Event stream | [events.md](events.md) | 0.1.0 |
+| 4 | Event stream (0.2.0 adds the proposed `payment.*` types, ADR-0077) | [events.md](events.md) | 0.2.0 |
 | - | Connector interface | [connector-interface.md](connector-interface.md) | 0.1.0 |
 | - | Build states | [build-states.md](build-states.md) | 0.1.0 |
 | - | Engine adapter (operations, errors, conformance; schemas in [engine-adapter/](engine-adapter/)) | [engine-adapter.md](engine-adapter.md) | 0.1.2 |
@@ -19,6 +19,7 @@ The contracts are the source of truth for how the five parts of the platform tal
 | - | Model-call interface (draft, ADR-0054 Proposed; examples `examples/model-call-*.json`) | [model-call.md](model-call.md), [schema](model-call.schema.json) | 0.2.0 |
 | - | Blueprint-to-engine mapping (draft, ADR-0030 and ADR-0055 Proposed) | [engine-mapping.md](engine-mapping.md), [schema](engine-mapping.schema.json) | 0.2.0 |
 | - | Country pack store: publish record, index and tenant pin (draft, ADR-0071 Proposed, Q-656; examples `examples/country-pack-*.json`, negative examples `examples/invalid/`) | [country-pack-store.md](country-pack-store.md), schemas [record](country-pack-record.schema.json), [index](country-pack-index.schema.json), [pin](country-pack-pin.schema.json), [common](country-pack-common.schema.json) | 0.1.0 |
+| - | Payments connector (draft, ADR-0077 Proposed; examples `examples/payments-*.json`, negative examples `examples/invalid/payments-*.json`, tests `tests/test_payments_contract.py`) | [connector-payments.md](connector-payments.md), [schema](connector-payments.schema.json) | 0.1.0 |
 
 Examples: [examples/blueprint-trading-minimal.json](examples/blueprint-trading-minimal.json), [examples/engine-mapping-golden-path.json](examples/engine-mapping-golden-path.json) and [examples/engine-mapping-purchasing.json](examples/engine-mapping-purchasing.json) (fictional data; must always validate against their schemas).
 Compiled-artifact samples: [examples/compiled-artifact-add-field.json](examples/compiled-artifact-add-field.json), [examples/compiled-artifact-add-workflow-state.json](examples/compiled-artifact-add-workflow-state.json), [examples/compiled-artifact-remove-field.json](examples/compiled-artifact-remove-field.json) (fictional; built from the example Blueprint with bpdiff hashes).

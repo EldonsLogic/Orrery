@@ -1,6 +1,6 @@
 # Event stream
 
-Version: 0.1.0
+Version: 0.2.0
 Status: draft
 Owner: eldon
 
@@ -78,6 +78,17 @@ Cheap, high-volume, aggregated by Part 5 into usage records.
 | `meter.documents_issued` | doc type, count (for e-invoicing volumes) |
 | `meter.connector_run` | connector id, rows, bytes, tier |
 | `meter.simulation_run` | records replayed, duration |
+
+### Payment events (proposed, [ADR-0077](../docs/decisions/ADR-0077-payments-connector-bring-your-own-gateway.md); additive, since 0.2.0)
+Emitted by the payments gateway service only after webhook verification and a status re-read ([connector-payments.md](connector-payments.md) sections 5 and 6). `data_class: "financial"`; `subject` is the payment record. `data`: `payment_id`, `checkout_id`, `links` (invoices or orders), `amount` (`minor` integer, ISO 4217 `currency`), `provider`, `environment` (`sandbox` or `live`), `gateway_payment_ref`; never card data, payer names or gateway free text.
+| Type | When |
+|---|---|
+| `payment.checkout_created` | A hosted checkout session or token charge was created |
+| `payment.authorised`, `payment.captured` | Verified status from the gateway |
+| `payment.failed` (data adds `failure_code`), `payment.expired` | Declined, gateway error, mismatch, or the session expired |
+| `payment.refund_requested`, `payment.refunded`, `payment.voided` | R4 refund or void path |
+| `payment.webhook_rejected` | Audit: an inbound webhook failed verification (endpoint id and error code, no body) |
+| `payment.reconciliation_mismatch` | A settlement line did not match a payment or ledger entry |
 
 ### Platform events (no tenant data)
 `component.published`, `component.deprecated`, `component.request_created`, `component.request_reviewed`, `engine.upgrade_canary_started`, `engine.upgrade_promoted`, `engine.upgrade_rolled_back`. These carry `tenant_id: "platform"`.

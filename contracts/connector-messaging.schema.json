@@ -9,10 +9,17 @@
     "the tenant segment of credentialRef (secret://tenant/<tenant>/msg/...) equals tenantId; a capability whose credentialRef names another tenant is refused (MSG-014)",
     "channelAccountRef, conversationId, contactRef, consentRef, templateId, autoReplyPolicyRef, approvedTextId and testAllowlistRef of a send all resolve inside the send's tenantId; a ref that resolves to another tenant is refused (MSG-014), never followed",
     "a session_reply is refused unless the conversation's windowOpenUntil is set and now is before it; when windowOpenUntil is null (SMS, or no inbound yet) the session reply is refused and a template is required (MSG-003)",
-    "a template send is refused unless the template is approved for that language and category, and consentRef is the latest record by time for the same tenant, contactRef, channel, country and purpose covering the category, in state granted (MSG-004, MSG-005, MSG-006)",
-    "a granted consent record after a revoke carries afterRevocation copied by platform code from the superseded record; its capturedAt is after afterRevocation.revokedAt and its evidenceHash is new; a revoke by the contact or a provider block is lifted only by the contact's own opt-in (capturedBy contact), never by a tenant user",
-    "payloadHash is the sha256 of the canonical send_request (UTF-8 JSON, sorted keys, no whitespace) without payloadHash, confirmationId and approvalId, recomputed by platform code at confirmation and at execution; any mismatch voids the confirmation and the approval (action-policy section 5)",
-    "sentBy is the user who made the confirmation gesture over the rendering of that payloadHash; for agent_draft, draftedBy is the agent id and sentBy a different principal, a human user",
+    "a template send is refused unless the template is approved for that language and category, and consentRef is the latest record by recordedAt for the same tenant, contactRef, channel, country and purpose covering the category, in state granted (MSG-004, MSG-005, MSG-006)",
+    "consent records of one key (tenant, contactRef, channel, country, purpose) are ordered only by recordedAt, which platform code sets when it appends the record and which is strictly later than the key's latest record; capturedAt is tenant-supplied evidence and never orders records",
+    "supersedes names the latest record (by recordedAt) for the record's key at the moment it is appended; it is null only when no record exists for that key; any other value, including null after a STOP, is refused and the record is not appended",
+    "a granted consent record whose superseded record is a revoke carries afterRevocation, copied by platform code from that revoke (consentId, revokedBy, revokedAt); its capturedAt is after afterRevocation.revokedAt and its evidenceHash is new; a revoke by the contact or a provider block is lifted only by the contact's own opt-in (capturedBy contact), never by a tenant user",
+    "payloadHash is the sha256 of the canonical send_request (UTF-8 JSON, sorted keys, no whitespace) without payloadHash, confirmationId, approvalId and sentBy, so it covers the content that was approved and does not change when the confirming user is recorded; recomputed by platform code at confirmation and at execution; any mismatch voids the confirmation and the approval (action-policy section 5)",
+    "sentBy is the user who made the confirmation gesture over the rendering of that payloadHash; for agent_draft, sentBy differs from draftedBy: the schema makes them disjoint (usr_ against agt_ ids) and the validator also checks that sentBy resolves to a human user of the tenant, never an agent or service principal",
+    "tainted is set by platform code, never by the caller: it is true for any send whose contact has a conversation holding inbound content on that channel account, whatever the mode or category (the schema forces it when conversationId is present)",
+    "a send with riskClass null is refused: no action-policy row exists for it; auto_reply therefore cannot execute until an AP-MSG row is accepted and a later contract version names that row in riskClass",
+    "conversation windowOpenUntil is computed by platform code as min(providerSentAt, webhook.receivedAt) of the latest inbound message plus serviceWindowHours, from the provider timestamp in the signed body, never from our receive time alone; a message without providerSentAt never opens or extends a window",
+    "an inbound message whose providerSentAt is older than webhook.maxEventAgeHours, or more than 300 seconds ahead of webhook.receivedAt, is dropped, alerted and audited and becomes no object, except an opt-out keyword, which is still processed as a revoke and never opens a window",
+    "dedup keys are stored durably (dedupStore durable) for dedupRetentionHours; loss of the dedup store fails closed: inbound processing stops until it is restored",
     "an auto_reply send has no text field: the platform resolves approvedTextId to the tenant-approved text of autoReplyPolicyRef for classifiedIntent, byte for byte; it is refused unless confidence >= confidenceThreshold and the inbound message has no flags (section 5)",
     "contentHash is the sha256 of the sanitised text, recomputed by platform code; never taken from the provider",
     "a send under a capability with sandbox true is refused unless contactRef is on the tenant test allowlist named by testAllowlistRef (MSG-012); a capability with sandbox true is refused in a production site class",
@@ -54,18 +61,24 @@
         "sandbox": {"type": "boolean"},
         "siteClass": {"enum": ["sandbox", "production"]},
         "webhook": {
-          "type": "object", "additionalProperties": false, "required": ["signedTimestamp", "replayWindowSeconds", "dedupRetentionHours"],
+          "type": "object", "additionalProperties": false, "required": ["signedTimestamp", "replayWindowSeconds", "payloadTimestamp", "maxEventAgeHours", "dedupRetentionHours", "dedupStore"],
           "properties": {
             "signedTimestamp": {"type": "boolean"},
             "replayWindowSeconds": {"type": ["integer", "null"], "minimum": 60, "maximum": 3600},
-            "dedupRetentionHours": {"type": "integer", "minimum": 72, "maximum": 2160}
+            "payloadTimestamp": {"type": "boolean", "description": "The signed body carries a per-message provider timestamp (providerSentAt). Meta: true as assumed, UNVERIFIED (Q-721)."},
+            "maxEventAgeHours": {"type": ["integer", "null"], "minimum": 37, "maximum": 72, "description": "Drop a message whose providerSentAt is older than this: above Meta's 36-hour retry period, never above the dedup retention minimum, so every replay is either deduplicated or too old."},
+            "dedupRetentionHours": {"type": "integer", "minimum": 72, "maximum": 2160},
+            "dedupStore": {"const": "durable", "description": "Seen dedup keys are kept in a durable store for dedupRetentionHours, never an in-memory or evictable cache."}
           },
-          "if": {"properties": {"signedTimestamp": {"const": false}}}, "then": {"properties": {"replayWindowSeconds": {"type": "null"}}}, "else": {"properties": {"replayWindowSeconds": {"type": "integer"}}}
+          "allOf": [
+            {"if": {"properties": {"signedTimestamp": {"const": false}}}, "then": {"properties": {"replayWindowSeconds": {"type": "null"}}}, "else": {"properties": {"replayWindowSeconds": {"type": "integer"}}}},
+            {"if": {"properties": {"payloadTimestamp": {"const": true}}}, "then": {"properties": {"maxEventAgeHours": {"type": "integer"}}}, "else": {"properties": {"maxEventAgeHours": {"type": "null"}}}}
+          ]
         }
       },
       "allOf": [
         {"if": {"properties": {"connectorId": {"enum": ["msg.meta_whatsapp", "msg.meta_instagram", "msg.meta_messenger"]}}},
-         "then": {"properties": {"channel": {"$ref": "#/$defs/metaChannel"}, "webhook": {"properties": {"signedTimestamp": {"const": false}}}}},
+         "then": {"properties": {"channel": {"$ref": "#/$defs/metaChannel"}, "webhook": {"properties": {"signedTimestamp": {"const": false}, "payloadTimestamp": {"const": true}}}}},
          "else": {"properties": {"channel": {"const": "sms"}, "serviceWindowHours": {"type": "null"}}}},
         {"if": {"properties": {"siteClass": {"const": "production"}}}, "then": {"properties": {"sandbox": {"const": false}}}}
       ]
@@ -86,11 +99,12 @@
     },
     "inboundMessage": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "tenantId", "messageId", "providerMessageId", "conversationId", "channel", "receivedAt", "trust", "retentionClass", "content", "webhook"],
+      "required": ["kind", "tenantId", "messageId", "providerMessageId", "conversationId", "channel", "providerSentAt", "receivedAt", "trust", "retentionClass", "content", "webhook"],
       "properties": {
         "kind": {"const": "inbound_message"}, "tenantId": {"$ref": "#/$defs/tenantId"},
         "messageId": {"$ref": "#/$defs/ref"}, "providerMessageId": {"$ref": "#/$defs/providerId"},
         "conversationId": {"$ref": "#/$defs/ref"}, "channel": {"$ref": "#/$defs/channel"},
+        "providerSentAt": {"oneOf": [{"$ref": "#/$defs/time"}, {"type": "null"}], "description": "The provider's message timestamp read from the signed body; null only for a provider whose payload carries none (never on a Meta channel)."},
         "receivedAt": {"$ref": "#/$defs/time"},
         "trust": {"const": "untrusted"},
         "retentionClass": {"const": "transcript"},
@@ -114,7 +128,8 @@
             "receivedAt": {"$ref": "#/$defs/time"}
           }
         }
-      }
+      },
+      "if": {"properties": {"channel": {"$ref": "#/$defs/metaChannel"}}}, "then": {"properties": {"providerSentAt": {"type": "string"}}}
     },
     "sendRequest": {
       "type": "object", "additionalProperties": false,
@@ -138,8 +153,8 @@
         },
         "consentRef": {"$ref": "#/$defs/ref"},
         "origin": {"enum": ["human", "agent_draft", "auto_reply"]},
-        "sentBy": {"$ref": "#/$defs/ref"},
-        "draftedBy": {"$ref": "#/$defs/ref"},
+        "sentBy": {"type": "string", "pattern": "^usr_[A-Za-z0-9_-]{1,64}$", "description": "A human user id. Disjoint from draftedBy (agent ids), so sentBy can never equal draftedBy."},
+        "draftedBy": {"type": "string", "pattern": "^agt_[A-Za-z0-9_-]{1,64}$"},
         "confirmationId": {"$ref": "#/$defs/ref"},
         "payloadHash": {"$ref": "#/$defs/hash"},
         "tainted": {"type": "boolean"},
@@ -150,7 +165,7 @@
         "classifiedIntent": {"enum": ["greeting_ack", "opening_hours", "location", "handoff_ack"]},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "confidenceThreshold": {"type": "number", "minimum": 0.8, "maximum": 1},
-        "riskClass": {"const": "R3", "description": "Proposed, SEC action-policy row pending (Q-720): every send is an external send, so not R1."},
+        "riskClass": {"enum": ["R3", null], "description": "Interim, SEC action-policy row pending (Q-720): R3 fail closed for human and agent_draft sends; null (no class) for auto_reply, which is refused while null. A later minor version replaces this with an AP-MSG row reference (contract section 3)."},
         "approvalId": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]}
       },
       "allOf": [
@@ -162,13 +177,14 @@
          "then": {"properties": {"origin": {"const": "human"}, "approvalId": {"$ref": "#/$defs/ref"}}, "required": ["approvalId"]}},
         {"if": {"properties": {"origin": {"const": "auto_reply"}}},
          "then": {"required": ["autoReplyPolicyRef", "approvedTextId", "classifiedIntent", "confidence", "confidenceThreshold"],
-                  "properties": {"mode": {"const": "session_reply"}, "channel": {"$ref": "#/$defs/metaChannel"}},
+                  "properties": {"mode": {"const": "session_reply"}, "channel": {"$ref": "#/$defs/metaChannel"}, "riskClass": {"const": null}},
                   "not": {"anyOf": [{"required": ["text"]}, {"required": ["sentBy"]}, {"required": ["draftedBy"]}, {"required": ["confirmationId"]}]}},
-         "else": {"required": ["sentBy", "confirmationId"],
+         "else": {"required": ["sentBy", "confirmationId"], "properties": {"riskClass": {"const": "R3"}},
                   "not": {"anyOf": [{"required": ["autoReplyPolicyRef"]}, {"required": ["approvedTextId"]}, {"required": ["classifiedIntent"]}, {"required": ["confidence"]}, {"required": ["confidenceThreshold"]}]},
                   "if": {"properties": {"mode": {"const": "session_reply"}}}, "then": {"required": ["text"]}}},
         {"if": {"properties": {"origin": {"const": "agent_draft"}}}, "then": {"required": ["draftedBy"]}, "else": {"not": {"required": ["draftedBy"]}}},
-        {"if": {"properties": {"sandbox": {"const": true}}}, "then": {"required": ["testAllowlistRef"]}, "else": {"not": {"required": ["testAllowlistRef"]}}}
+        {"if": {"properties": {"sandbox": {"const": true}}}, "then": {"required": ["testAllowlistRef"]}, "else": {"not": {"required": ["testAllowlistRef"]}}},
+        {"if": {"required": ["conversationId"]}, "then": {"properties": {"tainted": {"const": true}}}}
       ]
     },
     "deliveryStatus": {
@@ -186,7 +202,7 @@
     },
     "consentRecord": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "tenantId", "consentId", "contactRef", "channel", "country", "purpose", "state", "capturedAt", "capturedBy", "method", "textVersion", "language", "evidenceHash", "supersedes"],
+      "required": ["kind", "tenantId", "consentId", "contactRef", "channel", "country", "purpose", "state", "capturedAt", "recordedAt", "capturedBy", "method", "textVersion", "language", "evidenceHash", "supersedes"],
       "properties": {
         "kind": {"const": "consent_record"}, "tenantId": {"$ref": "#/$defs/tenantId"},
         "consentId": {"$ref": "#/$defs/ref"}, "contactRef": {"$ref": "#/$defs/ref"},
@@ -195,6 +211,7 @@
         "purpose": {"enum": ["utility", "marketing"]},
         "state": {"enum": ["granted", "revoked"]},
         "capturedAt": {"$ref": "#/$defs/time"},
+        "recordedAt": {"$ref": "#/$defs/time", "description": "Set by platform code when the record is appended; the only ordering key. capturedAt is tenant-supplied and never orders records."},
         "capturedBy": {"enum": ["contact", "tenant_user", "provider"]},
         "method": {"enum": ["web_form", "in_person", "chat_keyword", "sms_keyword", "phone"]},
         "textVersion": {"type": "string", "pattern": "^[a-z0-9_.-]{1,40}$"},

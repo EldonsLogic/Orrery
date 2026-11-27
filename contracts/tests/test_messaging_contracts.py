@@ -57,7 +57,16 @@ EXPECTED = {
     "sms-session-reply": ("const", "mode", "MSG-003"),
     "inbound-no-flags": ("required", "flags", None),
     "inbound-unknown-event-type": ("enum", "eventType", "MSG-013"),
+    "consent-no-recorded-at": ("required", "recordedAt", None),
+    "auto-reply-risk-r3": ("const", "riskClass", None),
+    "agent-draft-self-confirmed": ("pattern", "sentBy", None),
+    "template-in-thread-untainted": ("const", "tainted", None),
+    "capability-dedup-in-memory": ("const", "dedupStore", None),
+    "capability-event-age-too-long": ("maximum", "maxEventAgeHours", None),
+    "capability-meta-no-payload-timestamp": ("const", "payloadTimestamp", None),
+    "inbound-meta-no-provider-time": ("type", "providerSentAt", None),
 }
+HASH_EXCLUDED = ("payloadHash", "confirmationId", "approvalId", "sentBy")
 
 
 def load(p):
@@ -143,7 +152,7 @@ def test_hashes_are_real_and_not_reused():
         if o["kind"] == "inbound_message" and "text" in o["content"]:
             assert o["content"]["contentHash"] == sha(o["content"]["text"])
         if o["kind"] == "send_request":
-            canon = {k: v for k, v in o.items() if k not in ("payloadHash", "confirmationId", "approvalId")}
+            canon = {k: v for k, v in o.items() if k not in HASH_EXCLUDED}
             assert o["payloadHash"] == sha(json.dumps(canon, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
         for v in re.findall(r"sha256:[0-9a-f]{64}", json.dumps(o)):
             assert seen.setdefault(v, p.name) == p.name, f"{v} reused in {p.name} and {seen[v]}"
@@ -172,5 +181,119 @@ def test_regrant_after_contact_stop_needs_contact_opt_in_after_revoke():
 def test_validator_rules_cover_review_findings():
     rules = " ".join(SCHEMA["x-validator-rules"])
     for needle in ("credentialRef", "another tenant", "windowOpenUntil is null", "latest record", "test allowlist",
-                   "production", "confidenceThreshold", "approvedTextId", "payloadHash", "eventType"):
+                   "production", "confidenceThreshold", "approvedTextId", "payloadHash", "eventType", "recordedAt",
+                   "supersedes names the latest", "providerSentAt", "durable", "riskClass null", "sentBy differs",
+                   "tainted is set by platform code"):
         assert needle in rules, needle
+
+
+def test_payload_hash_excludes_the_confirming_user():
+    rule = next(r for r in SCHEMA["x-validator-rules"] if r.startswith("payloadHash"))
+    for field in HASH_EXCLUDED:
+        assert field in rule, field
+
+
+def test_drafter_never_confirms_own_draft():
+    props = SCHEMA["$defs"]["sendRequest"]["properties"]
+    assert props["sentBy"]["pattern"].startswith("^usr_") and props["draftedBy"]["pattern"].startswith("^agt_")
+    for p in VALID:
+        o = load(p)
+        if o.get("origin") == "agent_draft":
+            assert o["sentBy"] != o["draftedBy"], p.name
+
+
+def test_auto_reply_has_no_risk_class_until_its_row():
+    for p in VALID:
+        o = load(p)
+        if o["kind"] == "send_request":
+            assert o["riskClass"] == (None if o["origin"] == "auto_reply" else "R3"), p.name
+    assert "AP-MSG-04" in (C.parent / "docs/security/action-policy-table.md").read_text(encoding="utf-8")
+
+
+# M3, the consent chain: a reference implementation of the validator rules "supersedes names the latest record"
+# and "ordering by recordedAt", over the history of one key (tenant, contact, channel, country, purpose).
+KEY = ("tenantId", "contactRef", "channel", "country", "purpose")
+
+
+def chain_refusal(history, new):
+    """Why platform code refuses to append `new` to `history`, or None when it is accepted."""
+    if not V.is_valid(new):
+        return "schema"
+    same_key = [r for r in history if all(r[k] == new[k] for k in KEY)]
+    if not same_key:
+        return None if new["supersedes"] is None else "supersedes a record that does not exist"
+    head = max(same_key, key=lambda r: r["recordedAt"])
+    if new["supersedes"] != head["consentId"]:
+        return "supersedes is not the latest record"
+    if new["recordedAt"] <= head["recordedAt"]:
+        return "recordedAt not after the latest record"
+    if new["state"] == "granted" and head["state"] == "revoked":
+        copied = {"consentId": head["consentId"], "revokedBy": head["revokedBy"], "revokedAt": head["revokedAt"]}
+        if new.get("afterRevocation") != copied:
+            return "afterRevocation is not the superseded revoke"
+    return None
+
+
+GRANT = {"kind": "consent_record", "tenantId": "t_demo_trading", "consentId": "cns_0042_mkt", "contactRef": "ct_0042",
+         "channel": "whatsapp", "country": "SA", "purpose": "marketing", "state": "granted",
+         "capturedAt": "2025-12-01T10:00:00Z", "recordedAt": "2025-12-01T10:00:03Z", "capturedBy": "contact",
+         "method": "web_form", "textVersion": "mkt-ar-1", "language": "ar",
+         "evidenceHash": "sha256:" + "1" * 64, "supersedes": None}
+STOP = load(C / "examples/connector-messaging-consent-revoked.json")
+REGRANT = load(C / "examples/connector-messaging-consent-regrant-by-contact.json")
+
+
+def tenant_grant(**kw):
+    return {**GRANT, "consentId": "cns_0042_mkt_t1", "capturedBy": "tenant_user", "method": "in_person",
+            "evidenceHash": "sha256:" + "2" * 64, "capturedAt": "2026-03-01T10:00:00Z",
+            "recordedAt": "2026-03-01T10:00:02Z", **kw}
+
+
+def test_consent_chain_accepts_the_example_history():
+    assert chain_refusal([], GRANT) is None
+    assert chain_refusal([GRANT], STOP) is None
+    assert chain_refusal([GRANT, STOP], REGRANT) is None
+
+
+@pytest.mark.parametrize("history,new,reason", [
+    # the #394 re-review bypass: after a STOP, a tenant user records a fresh grant with supersedes null
+    ([GRANT, STOP], tenant_grant(), "supersedes is not the latest record"),
+    # pointing at the old grant, skipping the STOP
+    ([GRANT, STOP], tenant_grant(supersedes="cns_0042_mkt"), "supersedes is not the latest record"),
+    # chaining to the STOP without the platform-copied afterRevocation
+    ([GRANT, STOP], tenant_grant(supersedes="cns_0042_mkt_r1"), "afterRevocation is not the superseded revoke"),
+    # backdating capturedAt before the STOP does not move the record in the order: recordedAt decides
+    ([GRANT, STOP], tenant_grant(supersedes="cns_0042_mkt", capturedAt="2025-12-15T10:00:00Z"),
+     "supersedes is not the latest record"),
+    # a second first record for a key that already has one
+    ([GRANT], {**GRANT, "consentId": "cns_0042_mkt_b", "recordedAt": "2026-03-01T10:00:00Z"},
+     "supersedes is not the latest record"),
+    # a recordedAt that is not after the latest record (platform clock only moves forward per key)
+    ([GRANT, STOP], {**REGRANT, "recordedAt": "2026-01-01T11:00:01Z"}, "recordedAt not after the latest record"),
+])
+def test_consent_chain_refuses(history, new, reason):
+    assert chain_refusal(history, new) == reason
+
+
+def test_tenant_grant_after_stop_with_afterrevocation_fails_schema():
+    copied = {"consentId": STOP["consentId"], "revokedBy": STOP["revokedBy"], "revokedAt": STOP["revokedAt"]}
+    assert chain_refusal([GRANT, STOP], tenant_grant(supersedes=STOP["consentId"], afterRevocation=copied)) == "schema"
+
+
+# M7, replay: the window comes from the provider time in the signed body; the age limit sits inside dedup retention.
+def test_window_is_computed_from_provider_time():
+    from datetime import datetime, timedelta
+    t = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+    conv = load(C / "examples/connector-messaging-conversation-open.json")
+    inbound = load(C / "examples/connector-messaging-inbound-text.json")
+    cap = load(C / "examples/connector-messaging-capability-whatsapp.json")
+    assert inbound["providerSentAt"] != inbound["webhook"]["receivedAt"]
+    assert conv["lastInboundAt"] == inbound["providerSentAt"]
+    assert t(conv["windowOpenUntil"]) == t(inbound["providerSentAt"]) + timedelta(hours=cap["serviceWindowHours"])
+
+
+def test_event_age_limit_sits_inside_dedup_retention():
+    wh = SCHEMA["$defs"]["capability"]["properties"]["webhook"]["properties"]
+    assert wh["maxEventAgeHours"]["minimum"] > 36  # above Meta's retry period (UNVERIFIED, Q-721)
+    assert wh["maxEventAgeHours"]["maximum"] <= wh["dedupRetentionHours"]["minimum"]
+    assert wh["dedupStore"]["const"] == "durable"

@@ -55,9 +55,19 @@ Events: `engine.upgrade_*` ([events](../../contracts/events.md)).
 The engine is headless and internal. Our gateway and web app are the only customer-facing surfaces: own API paths, engine paths blocked or rewritten, engine headers removed, cookies renamed, errors mapped to our error model, our own print formats and emails. Nothing customer-visible names the engine. Enforcement: hygiene check in CI plus a staging crawl test.
 
 ## Licence boundary
-- Frappe Framework: MIT. ERPNext, HRMS: GPL-3. ERPGulf ZATCA app: MIT (used). lavaloon ZATCA app: AGPL (not used). Evidence and access dates: [open-source research](../research/04-open-source.md).
+- Frappe Framework: MIT. ERPNext, HRMS: GPL-3. ERPGulf ZATCA app: MIT (used). lavaloon ZATCA app and Frappe's AGPL apps (CRM, Helpdesk, Insights and others): AGPL (forbidden, listed in the [licence register](../legal/licence-register.md) section 2). Evidence and access dates: [open-source research](../research/04-open-source.md).
 - **SaaS only; the engine is never distributed to customers** without legal review (hybrid or on-prem later is a legal item). GPL has no network clause, so SaaS use does not force source release (counsel to confirm).
 - Our AI services, compiler, web apps and control plane are **separate services** that talk to the engine over API; no code of ours is linked into the GPL process. Our Frappe apps that load into the engine process (core, compliance, change-engine, components under `apps/engine/`) are the exposed surface: counsel decides whether they must be GPL-compatible; until then keep them thin and keep proprietary logic in external services where possible.
+- **Business logic stays outside the engine ([ADR-0080](../decisions/ADR-0080-ip-boundary-business-logic-outside-the-engine.md)).** Payroll and its statutory files, end-of-service, zakat, e-invoicing rules, tax rules and our valuation policies live in our own deterministic services, which call the engine through this adapter. Engine apps under `apps/engine/` are thin adapters. They import `erpnext` or `hrms` only in tests and proofs. Code under `services/` never imports `frappe`, `erpnext` or `hrms`. CI checks: QA-022, QA-024.
+- **No engine assets reach a customer's browser.** The gateway serves no engine JS, CSS, templates or asset routes (`/assets/...`, Desk, website pages), including MIT Frappe assets (ADR-0016). Serving GPL JS or CSS to a browser hands over a copy, which is conveying (FSF #WMS). Generated documents such as PDFs, CSV and JSON are engine output, not code. Use our own print and email templates, not stock ones copied verbatim (FSF #WhatCaseIsOutputGPL). CI check: QA-023.
+- **Handovers that count as distribution need counsel and an ADR first.** The following hand over a copy of the engine or of our in-process apps:
+  - on-premises or customer-controlled cloud installs (LEG-017, G5);
+  - reseller or white-label images;
+  - full bench or site backups that include app code, as opposed to business-data exports;
+  - sharing components or images with partners;
+  - code escrow.
+
+  Two more may count, and both are questions for the lawyer, not settled facts (UNVERIFIED): copies moved between our own group companies (FSF #DistributeSubsidiary, local law decides) and code given to an acquirer in due diligence. None of these happens without counsel's written answer and a new ADR.
 - Do not use "ERPNext" or "Frappe" in the product name, domain or ads (trademark policy).
 - Record the licence of every adopted dependency in NOTICE.md.
 

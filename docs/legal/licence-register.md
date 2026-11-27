@@ -47,9 +47,20 @@ Recorded ahead of first use under ADR-0044 (Proposed). Not in any lockfile yet; 
 
 ## 2. Forbidden components
 
-| Component | Upstream / source | Licence | Status | Reason |
+Never installed in the engine image, vendored, or used as a base. AGPL-3.0 section 13 requires offering source to every user who interacts with a modified version over a network, which conflicts with our SaaS architecture, the invisible engine (ADR-0016) and our proprietary services (ADR-0080). Source for the list: `docs/research/gpl-saas-boundary.md` rule 7 (branch `leg-006-gpl-saas-research`). Each licence was re-checked with the GitHub licence API (`https://api.github.com/repos/<owner>/<repo>/license`) on the access date shown; all ten returned `AGPL-3.0`, so none is UNVERIFIED.
+
+| App | Licence | SPDX | Source (licence file) | Accessed |
 |---|---|---|---|---|
-| **Lavaloon ZATCA app** | Upstream Frappe marketplace | GNU AGPL v3.0 | Rejected / Forbidden | AGPL-3.0 network copyleft conflicts with our SaaS architecture and proprietary service boundary. |
+| **Frappe CRM** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/frappe/crm](https://github.com/frappe/crm/blob/develop/LICENSE) | 2026-11-27 |
+| **Frappe Helpdesk** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/frappe/helpdesk](https://github.com/frappe/helpdesk/blob/develop/LICENSE) | 2026-11-27 |
+| **Frappe Insights** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/frappe/insights](https://github.com/frappe/insights/blob/develop/license.txt) | 2026-11-27 |
+| **Frappe Gameplan** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/frappe/gameplan](https://github.com/frappe/gameplan/blob/develop/LICENSE) | 2026-11-27 |
+| **Frappe LMS** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/frappe/lms](https://github.com/frappe/lms/blob/develop/license.txt) | 2026-11-27 |
+| **Frappe Drive** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/frappe/drive](https://github.com/frappe/drive/blob/develop/LICENSE) | 2026-11-27 |
+| **Frappe Print Designer** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/frappe/print_designer](https://github.com/frappe/print_designer/blob/develop/license.txt) | 2026-11-27 |
+| **Frappe Books** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/frappe/books](https://github.com/frappe/books/blob/master/LICENSE) | 2026-11-27 |
+| **Frappe Press (the code behind Frappe Cloud)** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/frappe/press](https://github.com/frappe/press/blob/develop/license.txt) | 2026-11-27 |
+| **lavaloon ZATCA app (`ksa_compliance`)** | GNU Affero GPL v3.0 | AGPL-3.0 | [github.com/lavaloon-eg/ksa_compliance](https://github.com/lavaloon-eg/ksa_compliance/blob/master/LICENSE) | 2026-11-27 |
 
 ## 3. Infrastructure base containers
 
@@ -74,3 +85,4 @@ accessed 2026-11-19. No source is copied into this repository.
 1. Version pins are tested in `infra/dev/docker` (ERP-001) before promotion to production.
 2. Any newly adopted Frappe app or Python/Node library must be added to this register before merging to `main`.
 3. GPL boundaries are reviewed by counsel under LEG-006 to ensure SaaS API boundaries remain clean and non-derivative.
+4. Re-check licences at every engine bump: re-read the licence files of Frappe, ERPNext, HRMS and every added app with the GitHub licence API, and record the date here. A move of any of them to AGPL blocks the bump until a new ADR decides. Frappe has already moved its newer apps to AGPL.

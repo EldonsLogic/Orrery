@@ -76,6 +76,10 @@ for (const tone of ['primary', 'success', 'warning', 'danger']) {
 add('blueprint-node-stroke', 'flow node stroke (text 50%) on surface', 'components/blueprint/Blueprint.module.css', 'var(--color-text) 50%', dimOn(0.5, S), S, UI);
 add('blueprint-edge', 'flow edge (text 60%) on background', 'components/blueprint/Blueprint.module.css', 'var(--color-text) 60%', dimOn(0.6, B), B, UI);
 add('blueprint-badge-text', 'flow step number (background) on primary', 'components/blueprint/Blueprint.module.css', 'fill: var(--color-background)', (c) => c.background, (c) => c.primary, N);
+const DT = 'components/settings/documents/DocumentTemplatesScreen.module.css';
+add('doc-region-name/surface', 'document preview region name (primary text, never the accent) on surface', DT, '.regionName { color: var(--color-primary); }', (c) => c.primary, S, N);
+add('doc-table-head', 'document preview table header (accentOnDocuments): background on primary', DT, 'color: var(--color-background); }', (c) => c.background, (c) => c.primary, N);
+add('doc-rule/surface', 'document preview top rule, logo outline and footer rule (primary graphic) on surface', DT, 'border-block-start: 4px solid var(--color-primary)', (c) => c.primary, S, UI);
 
 export const PAIRS_ALL = P;
 

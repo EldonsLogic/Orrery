@@ -30,3 +30,10 @@ Unknown.
 
 ## Next step
 Partner: rerun the #381 bench (BPL-046) on this compiler; the adapter refusal for a missing Link target stays with BPL-033. Set BPL-051 done when merged.
+
+## Review fixes (RULES 42 review on #391, verdict CHANGES)
+- Medium: an inverse (`restores=True`) now breaks an `entity.add` cycle by pointer instead of refusing, so removing a Link cycle in one revision compiles. Reason: a restore re-activates a stored entity (fake adapter reinserts the retained definition; real adapter keeps the custom type and only unhides a built-in type's fields), so its Link targets already exist; read from `apps/engine` (not edited). A forward add cycle still refuses `CMP-ART-007`. Test: rev 1 adds A and B, rev 2 adds A->B and B->A as `field.add`, rev 3 removes both; compile, apply and rollback on the fake adapter restore the rev 2 export hash. Failed first with `CMP-ART-007` on the restore side, as the review said.
+- Low 1: `CMP-ART-007` names only entities on a cycle (strongly connected components of more than one entity); test with an entity bridging two cycles.
+- Low 2: `link_targets` counts only fields of type `link` and every relation kind; test with a non-link field carrying `target`.
+- ADR-0075 and contract 9.4 reworded to match. Golden hashes and snapshots unchanged (the fixture has no restore cycle and no non-link `target`).
+- Checks: services/blueprint 2447 passed; studio 70; control-plane 472; operate 832 (1 skipped); contracts/tests 56; check_contracts, check_docs, check_repo_hygiene OK.

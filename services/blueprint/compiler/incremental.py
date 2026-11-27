@@ -261,7 +261,7 @@ def steps_from_diff(d: dict, base: dict, target: dict, *, restores: bool = False
         s["ddlImpact"] = "additive" if kind in ADDITIVE else "semantic" if prop in SEMANTIC.get(kind, ()) else "none"
         s["reversible"] = irreversible_reason(s) is None
     steps = sorted(by_key.values(), key=lambda s: (s["phase"], s["pointer"], s["kind"], s["params"].get("property", "")))
-    steps, cycles = order_by_links(steps)  # BPL-051: Link targets added first, dependants quarantined first
+    steps, cycles = order_by_links(steps, restores=restores)  # BPL-051: targets added first, dependants removed first
     issues += cycles
     for i, s in enumerate(steps, 1):
         s["seq"] = i

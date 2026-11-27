@@ -94,12 +94,14 @@ def steps_from_ops(ops: list[dict]) -> tuple[list[dict], list[dict], list[Issue]
 
 
 def link_targets(definition: Any) -> set[str]:
-    """Entity ids an entity definition links to: every field or relation with a `target` (a link field, or a relation,
-    which the adapter creates as a Link)."""
+    """Entity ids an entity definition links to: every field of type `link` and every relation (reference, child table
+    and many-to-many all point the engine at the target type). Other field types are excluded even if they carry a
+    `target`: the schema allows `target` only for type link, so on any other type it is no Link the engine resolves."""
     if not isinstance(definition, dict):
         return set()
-    return {el["target"] for key in ("fields", "relations") for el in definition.get(key) or []
-            if isinstance(el, dict) and isinstance(el.get("target"), str)}
+    fields = [f for f in definition.get("fields") or [] if isinstance(f, dict) and f.get("type") == "link"]
+    relations = [r for r in definition.get("relations") or [] if isinstance(r, dict)]
+    return {el["target"] for el in fields + relations if isinstance(el.get("target"), str)}
 
 
 def _topo(group: list[dict], dependants_first: bool) -> tuple[list[dict], list[str]]:
@@ -134,28 +136,34 @@ def _topo(group: list[dict], dependants_first: bool) -> tuple[list[dict], list[s
 
 
 def _stuck(by_id: dict, after: dict) -> set[str]:
-    """Entities on a Link cycle (or between cycles): what is left after removing, from both ends, every entity with
-    no remaining predecessor or no remaining successor."""
-    left = set(by_id)
-    while True:
-        drop = {e for e in left if not after[e] & left or not any(e in after[p] for p in left)}
-        if not drop:
-            return left
-        left -= drop
+    """Entities on a Link cycle: the members of every strongly connected component of size > 1 (self-links add no
+    edge), found as the entities reachable again from one of their own successors. An entity between two cycles is
+    not on one and is not named."""
+    def reach(start: set[str]) -> set[str]:
+        seen, todo = set(), list(start)
+        while todo:
+            e = todo.pop()
+            if e not in seen:
+                seen.add(e)
+                todo += after[e]
+        return seen
+    return {e for e in by_id if e in reach(after[e])}
 
 
-def order_by_links(steps: list[dict]) -> tuple[list[dict], list[Issue]]:
+def order_by_links(steps: list[dict], *, restores: bool = False) -> tuple[list[dict], list[Issue]]:
     """BPL-051 (Q-691): reorder the entity.add steps (phase 4) so every Link target is created before the entities that
     link to it, and the entity.quarantine steps (phase 16) so dependants go first. `steps` must already be in the
-    9.4 sort order; every other step keeps its place. A Link cycle among new entities refuses (CMP-ART-007); a
-    quarantine cycle is broken by pointer, as quarantine keeps the storage."""
+    9.4 sort order; every other step keeps its place. A Link cycle among new entities refuses (CMP-ART-007). A
+    quarantine cycle is broken by pointer, as quarantine keeps the stored entity; so is an add cycle when `restores`
+    (an inverse, whose entity.add steps only re-activate entities the forward quarantined: the stored types still
+    exist, so their Links resolve in any order)."""
     out, issues = list(steps), []
     for kind, dependants_first in (("entity.add", False), ("entity.quarantine", True)):
         idx = [i for i, s in enumerate(out) if s["kind"] == kind]
         order, cycle = _topo([out[i] for i in idx], dependants_first)
         for i, s in zip(idx, order):
             out[i] = s
-        if cycle and not dependants_first:
+        if cycle and not dependants_first and not restores:
             ids = ", ".join(p.rsplit("/", 1)[-1] for p in cycle)
             issues += [Issue("CMP-ART-007", p, f"Link cycle among new entities ({ids}); add the closing Link as a "
                              "field in a later revision") for p in cycle]

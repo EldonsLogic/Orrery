@@ -7,11 +7,14 @@ Pieces reused, never copied: compile_blueprint (services/blueprint/compiler), th
 and the Phase 1 TLV encoder (components/compliance/zatca_sa/phase1.py). In-memory state only; nothing is written to disk.
 
 Open questions (conservative reading taken; to move to docs/open-questions.md by a founder lane):
-1. Rollback. The compiler emits only initial builds (inverse null, compiler question 12), and the adapter contract
-   refuses to roll those back (rollback_not_possible / no_inverse). /api/rollback therefore calls the real rollback and
-   returns that refusal; the site does not change. To show the undo path, /api/apply takes {"failAtStep": N}: the fake
-   fails that step and compensates (status compensated, export hash back to the pre-apply hash, quarantined leftovers
-   in retained). A real rollback needs incremental compiles with an embedded inverse.
+1. Rollback (BPL-039). The first apply is an initial build (inverse null), which the adapter contract refuses to roll
+   back (rollback_not_possible / no_inverse). Every later apply is an incremental compile against the engine-form
+   Blueprint that was last applied (same re-targeting and dropped field types, so the base hash matches the site), with
+   an embedded inverse; /api/rollback rolls the latest one back, and the history moves back one revision. A change with
+   an irreversible step is refused as a whole (irreversible_step), site unchanged. /api/compile reports one
+   artifact-level "reversible" answer before apply. /api/apply also takes {"failAtStep": N} to show the automatic
+   undo: the fake fails that step and compensates (export hash back to the pre-apply hash). With no edit since the
+   last apply, /api/compile reports "unchanged" and /api/apply refuses with STUDIO-NO-CHANGES.
 2. Two artifact ids. The Compile tab shows the artifact for the Blueprint as written (adapter "change_engine"). Apply
    re-targets a copy to the engine's adapter id (compiler question 4) and, for the fake only, drops 'attachment'
    fields (the fake declares that value type unsupported). Its artifact id and step count can differ; both are shown.
@@ -24,6 +27,7 @@ Open questions (conservative reading taken; to move to docs/open-questions.md by
 6. Engine name guard. Any JSON response that contains the engine's name is replaced by STUDIO-ENGINE-NAME (500), so a
    label a user types that happens to contain that word is refused instead of shown.
 7. Lanes. services/studio/ is not listed in scripts/lanes.json (shared by default); a founder should assign it.
-8. A plugged engine (STUDIO_ENGINE=module:factory) drops no fields; its unsupported value types are not discoverable
-   through capabilities (contract 0.1.2 has no such field).
+8. A plugged engine (STUDIO_ENGINE=module:factory) drops no fields up front; its unsupported value types are not
+   discoverable through capabilities (contract 0.1.2 has no such field). When its preview rejects, apply retries once
+   without 'attachment' fields, and later incremental applies keep that skip (question 1).
 """

@@ -111,7 +111,9 @@ class Session:
             self.provisioned = False
             self.last_applied: Optional[dict] = None
             self.last_applied_bp: Optional[dict] = None   # the Blueprint revision behind last_applied (BPL-039)
-            self.history: list = []                       # applied (artifact, Blueprint) pairs, newest last
+            self.last_engine_bp: Optional[dict] = None    # the engine-form Blueprint that was compiled into last_applied
+            self.last_skip: tuple = ()                    # the field types dropped from it
+            self.history: list = []                       # applied (artifact, Blueprint, engine-form, skip), newest last
             return self.state()
 
     def _base_bp(self) -> Optional[dict]:
@@ -228,6 +230,7 @@ class Session:
     def compile(self) -> dict:
         with self._lock:
             r = self._compile(self.blueprint, base=self._base_bp())
+            unchanged = self.last_applied_bp is not None and self._base_bp() is None   # no edit since the last apply
         if not r.ok:
             return {"ok": False, "refusals": _issues(r)}
         a = r.artifact
@@ -240,8 +243,11 @@ class Session:
                 "kinds": dict(sorted(Counter(s["kind"] for s in steps).items())),
                 "postConditionCount": len(a["postConditions"]), "skippedOpCount": len(a["skippedOps"]),
                 "risk": {k: a["risk"].get(k) for k in RISK_KEYS}, "environment": ENVIRONMENT,
-                "incremental": self._base_bp() is not None,
-                "irreversibleCount": sum(1 for s in steps if s["irreversibleReason"])}
+                "incremental": a["blueprint"].get("base") is not None, "unchanged": unchanged,
+                "irreversibleCount": sum(1 for s in steps if s["irreversibleReason"]),
+                # One artifact-level answer (contract 5.7): only an incremental artifact carries an inverse, and one
+                # irreversible step blocks the rollback of the whole artifact.
+                "reversible": a.get("inverse") is not None and not a["risk"].get("irreversibleSteps")}
 
     # ------------------------------------------------------------------ engine
     def _call(self, operation: str, payload: dict, where: str) -> dict:
@@ -254,13 +260,16 @@ class Session:
 
     def _engine_artifact(self, extra_unsupported: tuple = ()) -> tuple:
         """Re-target a copy for the engine (compiler open question 4) and drop field types it cannot store. After the
-        first apply the same re-targeting is applied to the base revision and the compile is incremental (BPL-039)."""
+        first apply the base is the engine-form Blueprint that was applied, and the target drops at least the field
+        types that one dropped, so the base revision hash matches the site (BPL-039)."""
         adapter_id = self._call("capabilities", {}, "/engine")["adapterId"]
         mp, mans = copy.deepcopy(self.mapping), copy.deepcopy(self._manifests)
         mp["engine"]["adapter"] = adapter_id
         for m in mans:
             m["engineCompatibility"]["adapter"] = adapter_id
-        skip = tuple(self.engine.unsupported_field_types) + tuple(extra_unsupported)
+        base_bp = self._base_bp()
+        skip = tuple(dict.fromkeys(tuple(self.engine.unsupported_field_types) + tuple(extra_unsupported)
+                                   + (self.last_skip if base_bp is not None else ())))
         counts = []
 
         def retarget(src: dict) -> dict:
@@ -274,11 +283,11 @@ class Session:
             return bp
 
         bp = retarget(self.blueprint)
-        base = retarget(self._base_bp()) if self._base_bp() is not None else None
+        base = self.last_engine_bp if base_bp is not None else None
         r = self._compile(bp, Registry.from_manifests(mans), mp, base=base)
         if not r.ok:
             raise StudioError(409, r.errors[0].code, r.errors[0].path or "/", stage="retarget")
-        return r.artifact, counts[0]
+        return r.artifact, counts[0], bp, skip
 
     def _export(self) -> dict:
         return self._call("export_config", {}, "/site")
@@ -290,7 +299,8 @@ class Session:
         applied = s.get("applied") or {}
         return {"provisioned": True, "state": s.get("state"), "appliedArtifactId": applied.get("artifactId"),
                 "revision": (applied.get("revision") or {}).get("revision"), "historyDepth": len(self.history),
-                "canRollback": self.last_applied is not None and self.last_applied.get("inverse") is not None}
+                "canRollback": self.last_applied is not None and self.last_applied.get("inverse") is not None
+                               and not self.last_applied["risk"].get("irreversibleSteps")}
 
     @staticmethod
     def _outcome(res: dict) -> dict:
@@ -316,10 +326,12 @@ class Session:
         if fail_at is not None and (isinstance(fail_at, bool) or not isinstance(fail_at, int) or fail_at < 1):
             raise StudioError(400, "STUDIO-FIELD-TYPE", "/failAtStep")
         with self._lock:
+            if self.last_applied_bp is not None and self._base_bp() is None:
+                raise StudioError(409, "STUDIO-NO-CHANGES", "/")   # nothing edited since the last apply
             r = self._compile(self.blueprint, base=self._base_bp())
             if not r.ok:
                 return {"ok": False, "stage": "compile", "refusals": _issues(r), "site": self._site_view()}
-            art, dropped = self._engine_artifact()
+            art, dropped, engine_bp, skip = self._engine_artifact()
             if fail_at is not None and fail_at > len(art["steps"]):
                 raise StudioError(400, "STUDIO-STEP-OUT-OF-RANGE", "/failAtStep", max=len(art["steps"]))
             if not self.provisioned:
@@ -332,7 +344,7 @@ class Session:
             if preview["verdict"] == "rejected" and self.engine.kind == "plugged":
                 # A plugged engine cannot list its unsupported value types (contract 0.1.2, Studio question 7), and the
                 # real adapter rejects 'attachment' fields like the fake does. Retry once without them; say so in the result.
-                art, dropped = self._engine_artifact(extra_unsupported=("attachment",))
+                art, dropped, engine_bp, skip = self._engine_artifact(extra_unsupported=("attachment",))
                 preview = self._call("preview", {"artifact": art}, "/artifact")
             if preview["verdict"] == "rejected":
                 raise StudioError(409, "STUDIO-PREVIEW-REJECTED", "/artifact", verdict="rejected")
@@ -343,8 +355,9 @@ class Session:
             res = self._call("apply", {"idempotencyKey": tk.key(), "artifact": art, "planToken": plan["planToken"],
                                        "approvals": approvals}, "/artifact")
             if res.get("status") in ("applied", "already_applied"):
-                self.last_applied, self.last_applied_bp = art, copy.deepcopy(self.blueprint)
-                self.history.append((art, self.last_applied_bp))
+                entry = (art, copy.deepcopy(self.blueprint), engine_bp, skip)
+                self.history.append(entry)
+                self.last_applied, self.last_applied_bp, self.last_engine_bp, self.last_skip = entry
             after = self._export()["exportHash"]
             out = self._outcome(res)
             out.update(ok=res.get("status") in ("applied", "already_applied"), stage="apply",
@@ -371,7 +384,8 @@ class Session:
             after = self._export()["exportHash"]
             if res.get("status") == "applied":
                 self.history.pop()
-                self.last_applied, self.last_applied_bp = self.history[-1] if self.history else (None, None)
+                self.last_applied, self.last_applied_bp, self.last_engine_bp, self.last_skip = (
+                    self.history[-1] if self.history else (None, None, None, ()))
             out = self._outcome(res)
             out.update(ok=res.get("status") == "applied", stage="rollback", approvalsGranted=sorted(approvals), exportHashBefore=before,
                        exportHashAfter=after, siteChanged=before != after, site=self._site_view())

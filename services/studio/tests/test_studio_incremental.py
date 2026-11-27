@@ -78,9 +78,35 @@ def test_an_irreversible_change_is_flagged_and_its_rollback_is_refused_with_the_
     assert len(s.history) == 2
 
 
+def test_compile_gives_one_artifact_level_reversible_answer(client, s):
+    initial = client.post("/api/compile")[1]
+    assert initial["reversible"] is False and initial["unchanged"] is False  # an initial build has no inverse
+    client.post("/api/apply", {})
+    client.put("/api/blueprint/entities/customer/labels", {"en": "Client", "ar": "عميل"})
+    assert client.post("/api/compile")[1]["reversible"] is True
+    _set_max_length(s, "customer", "customer_name", 20)  # one irreversible step blocks the whole artifact
+    comp = client.post("/api/compile")[1]
+    assert comp["irreversibleCount"] == 1 and comp["reversible"] is False
+    assert client.post("/api/apply", {})[1]["ok"]
+    assert client.get("/api/state")[1]["site"]["canRollback"] is False
+
+
+def test_no_edit_since_the_last_apply_is_reported_and_apply_refuses(client, s):
+    client.post("/api/apply", {})
+    assert client.post("/api/compile")[1]["unchanged"] is True
+    status, body, _ = client.post("/api/apply", {})
+    assert status == 409 and body["error"]["code"] == "STUDIO-NO-CHANGES"
+    client.put("/api/blueprint/entities/customer/labels", {"en": "Client", "ar": "عميل"})
+    assert client.post("/api/apply", {})[1]["ok"]
+    assert client.post("/api/rollback")[1]["ok"]
+    again = client.post("/api/compile")[1]  # the working Blueprint still holds the edit the site no longer has
+    assert again["unchanged"] is False and again["incremental"] is True
+
+
 def test_new_ui_strings_exist_in_both_languages():
     src = (STATIC / "i18n.js").read_text(encoding="utf-8")
     for key in ("compile.incremental", "steps.irreversible", "apply.history", "apply.kind", "apply.incremental", "apply.full", "steps.reversible", "apply.rolledBack", "reason.irreversible_step",
                 "reason.length_reduction", "reason.type_change", "reason.link_target_change", "reason.precision_reduction",
-                "reason.no_inverse", "reason.not_latest"):
+                "reason.no_inverse", "reason.not_latest", "code.rollback_not_possible", "code.STUDIO-NO-CHANGES",
+                "compile.reversible", "compile.notReversibleInitial", "compile.notReversibleSteps", "compile.unchanged"):
         assert len(re.findall(r"'%s':" % re.escape(key), src)) == 2, key

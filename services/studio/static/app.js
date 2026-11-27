@@ -170,11 +170,17 @@
   function renderCompile() {
     var r = data.compile, st = $('compileStatus');
     if (!r) { st.textContent = t('compile.running'); return; }
-    if (r.ok) {
+    if (r.ok && r.unchanged) {
       st.className = 'status ok';
+      fill(st, el('b', { text: t('compile.unchanged') }));
+      $('refusals').replaceChildren();
+    } else if (r.ok) {
+      st.className = 'status ok';
+      var undo = r.reversible ? t('compile.reversible') : r.irreversibleCount ? t('compile.notReversibleSteps', { n: r.irreversibleCount }) : t('compile.notReversibleInitial');
       fill(st, el('b', { text: t('compile.ok', { n: r.stepCount }) }), el('span', { class: 'mono', text: r.artifactId, dir: 'ltr' }),
         el('span', { class: 'hint', text: t('compile.summary', { pc: r.postConditionCount, impact: r.risk.maxImpact, env: r.environment }) }),
-        r.risk.touchesLedgerOrTax ? el('span', { class: 'tag', text: t('compile.ledger') }) : null);
+        r.risk.touchesLedgerOrTax ? el('span', { class: 'tag', text: t('compile.ledger') }) : null,
+        el('span', { class: r.irreversibleCount ? 'err' : 'hint', text: undo }));
       $('refusals').replaceChildren();
     } else if (r.refusals) {
       st.className = 'status bad';
@@ -186,9 +192,9 @@
     } else {
       st.className = 'status bad'; st.textContent = hint(r.error && r.error.code);
     }
-    var steps = r.ok ? r.steps : [];
+    var steps = r.ok && !r.unchanged ? r.steps : [];
     $('incNote').textContent = r.ok && r.incremental ? t('compile.incremental') : '';
-    var kinds = ['all'].concat(r.ok ? Object.keys(r.kinds) : []);
+    var kinds = ['all'].concat(steps.length ? Object.keys(r.kinds) : []);
     if (kinds.indexOf(ui.kind) < 0) ui.kind = 'all';
     $('kinds').replaceChildren.apply($('kinds'), kinds.map(function (k) {
       var n = k === 'all' ? steps.length : r.kinds[k];
@@ -215,7 +221,7 @@
     busy(true);
     api('POST', '/api/rollback').then(function (r) { r.isRollback = true; data.apply = r; afterSite(); });
   }
-  function afterSite() { busy(false); renderApply(); loadExport(); api('GET', '/api/state').then(function (s) { if (s.ok) { data.state = s; renderState(); } }); }
+  function afterSite() { busy(false); renderApply(); loadExport(); runCompile(); api('GET', '/api/state').then(function (s) { if (s.ok) { data.state = s; renderState(); } }); }
   function kv(pairs) {
     return el('dl', { class: 'kv' }, [].concat.apply([], pairs.filter(Boolean).map(function (p) {
       return [el('dt', { text: p[0] }), el('dd', { class: p[2] || '', text: p[1], dir: p[2] ? 'ltr' : null })];
@@ -258,6 +264,7 @@
     var rows = r.isRollback ? [
       r.ok ? [t('apply.history'), String(r.site.historyDepth)] : null,
       [t('apply.siteChanged'), r.siteChanged ? t('yes') : t('no')],
+      [t('apply.approvals'), (r.approvalsGranted || []).join(', ')],
       [t('apply.hashBefore'), r.exportHashBefore, 'mono'], [t('apply.hashAfter'), r.exportHashAfter, 'mono']
     ] : [
       [t('apply.kind'), r.incremental ? t('apply.incremental') : t('apply.full')],
@@ -269,7 +276,7 @@
     ];
     var why = r.isRollback && !r.ok && r.error && has('reason.' + r.error.reasonCode) ? el('p', { class: 'err', text: t('reason.' + r.error.reasonCode) }) : null;
     var done = r.isRollback && r.ok ? el('p', { class: 'hint', text: t('apply.rolledBack') }) : null;
-    out.replaceChildren(head, why, done, kv(rows));
+    fill(out, head, why, done, kv(rows));
   }
   function loadExport() { api('GET', '/api/export').then(function (r) { data.exp = r; renderExport(); }); }
   function renderExport() {

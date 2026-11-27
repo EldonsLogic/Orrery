@@ -30,6 +30,10 @@
       "body": {
         "family": "Readex Pro",
         "fallback": "system-ui, sans-serif"
+      },
+      "heading": {
+        "family": "Cairo",
+        "fallback": "system-ui, sans-serif"
       }
     }
   }

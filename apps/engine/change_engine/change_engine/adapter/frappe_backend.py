@@ -1162,6 +1162,14 @@ class FrappeRuntimeBackend:
         if hasattr(f.db, "commit"):
             f.db.commit()
 
+    @staticmethod
+    def _has_docfield(dep: FrappeDeploymentAdapter, doctype: str, fieldname: str) -> bool:
+        """Does the type's own definition declare the field? Read on the snapshot's connection; a failed read raises,
+        it is never "absent"."""
+        return bool(dep._frappe.db.sql(
+            "SELECT name FROM `tabDocField` WHERE parent = %s AND fieldname = %s", (doctype, fieldname)
+        ))
+
     def _apply_or_restore_custom_field(
         self,
         f: Any,
@@ -1174,7 +1182,16 @@ class FrappeRuntimeBackend:
         """Create the custom field, or restore a quarantined one; True only when this call created it."""
         dep_id = self._next_id("dep_cf")
         snap = dep.take_snapshot(doctype, fieldname, expected_deployment_id=dep_id)
-        if snap.has_meta and snap.has_col:
+        has_meta = snap.has_meta
+        # BPL-044: the fields of a type this adapter made are DocField rows, not Custom Field rows, so both are read. An
+        # errored snapshot keeps its own refusal below.
+        if not snap.error_code and self._has_docfield(dep, doctype, fieldname):
+            # Fail closed: one name held by both is ambiguous, and a DocField of a type the adapter did not make is not
+            # a field it may restore.
+            if has_meta or not self._adapter_owns_doctype(f, doctype):
+                raise FrappeBackendError("recovery_required", stage="execute")
+            has_meta = True
+        if has_meta and snap.has_col:
             # Non-destructive restore of a quarantined field (preserve column & existing rows!). The field exists, so a
             # unique or index request is only accepted if it already carries it (it is never added here, Q-603).
             if self._lacks_constraint(f.get_meta(doctype).get_field(fieldname), defn.get("unique"), defn.get("indexed")):
@@ -1185,7 +1202,7 @@ class FrappeRuntimeBackend:
             dep.clear_doctype_cache(doctype)
             return False
 
-        if snap.has_meta != snap.has_col:
+        if has_meta != snap.has_col:
             raise FrappeBackendError("recovery_required", stage="execute")
 
         frappe_field_def = self._to_frappe_field_def(doctype, fieldname, defn)

@@ -1376,5 +1376,14 @@
       }
     },
     "loading": "Working"
+  },
+  "metrics": {
+    "sales": {
+      "revenue": "Revenue",
+      "order_count": "Invoices issued"
+    },
+    "finance": {
+      "receivables_outstanding": "Outstanding receivables"
+    }
   }
 }

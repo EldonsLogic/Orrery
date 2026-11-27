@@ -1,8 +1,11 @@
 """In-memory fakes for tests only. Never import from production code."""
 from __future__ import annotations
 
+import base64
 import copy
 import json
+
+from .canon import signoff_challenge
 
 
 class FakeTrustedSigners:
@@ -16,9 +19,14 @@ class FakeTrustedSigners:
         return self.founders.get(signer_id)
 
 
+def _client_data(statement_digest: str) -> str:
+    cd = {"type": "webauthn.get", "challenge": signoff_challenge(statement_digest), "origin": "https://staff.example.test"}
+    return base64.urlsafe_b64encode(json.dumps(cd, sort_keys=True).encode()).rstrip(b"=").decode()
+
+
 def fake_signature(signer_id: str, statement_digest: str) -> dict:
     return {"format": "webauthn.get.v1", "credentialId": "cred-" + signer_id.replace(":", "-").ljust(16, "x"),
-            "authenticatorData": "A" * 49, "clientDataJSON": "B" * 20, "signature": "fake" + signer_id.replace(":", "-") + statement_digest[7:]}
+            "authenticatorData": "A" * 49, "clientDataJSON": _client_data(statement_digest), "signature": "fake" + signer_id.replace(":", "-") + statement_digest[7:]}
 
 
 class FakeSignerVerifier:

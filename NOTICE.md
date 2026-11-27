@@ -7,7 +7,9 @@ This repository is proprietary. This file summarizes what we use or plan to use 
 | Frappe Framework | 15.126.0 | MIT | Engine framework | Used as the platform base. Full-stack metadata and ORM. |
 | ERPNext | 15.124.5 | GPL-3.0 | Engine, run as SaaS | Enterprise modules. Not bundled in this repository. Not distributed to customers. Our services stay separate and talk over API. |
 | Change engine module | 0.1.0 | Proprietary / Founder contribution | Engine app | Guarded apply, DDL gate, rollback, audit, runtime policies (`apps/engine/change_engine/`). |
-| Frappe HRMS | v15 (planned) | GPL-3.0 | Engine skeleton only | Not bundled here. Same SaaS-only rule. |
+| Frappe HRMS | v15 (planned) | GPL-3.0 | Engine skeleton only | Not bundled here. Same SaaS-only rule. HR basics and payroll use no HRMS function until ADR-0074 is Accepted (ADR-0076, Proposed). |
+| Frappe Webshop | - (not pinned) | GPL-3.0 (GitHub licence API, accessed 2026-11-27) | Planned for e-commerce (ERP-042) | Not pinned or installed until ADR-0074 is Accepted. Its pages and assets never reach customers (ADR-0016). |
+| Saudi POS app (not yet named) | - | UNVERIFIED | NOT used; point of sale deferred | CMP-050 identifies it and checks its licence and ZATCA claim (ADR-0076 item 6). |
 | ERPGulf ZATCA app | Planned | MIT | ZATCA e-invoicing | Planned; evaluated in the G1 spike (CMP-002). |
 | lavaloon ZATCA app | - | AGPL-3.0 | NOT used | Rejected because of the AGPL. |
 

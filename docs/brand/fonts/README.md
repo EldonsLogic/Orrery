@@ -1,6 +1,6 @@
 # Fonts
 
-No font files are bundled in this repo. Cairo replaces Alexandria for headings (ADR-0066, 2026-11-23); Readex Pro stays for body.
+The only font files in the repo are the two subset WOFF2 files in `web/app/public/fonts/` (WEB-028), with their OFL.txt; provenance is in [font-provenance.md](../font-provenance.md). Cairo replaces Alexandria for headings (ADR-0066, 2026-11-23); Readex Pro stays for body.
 
 | Font | Use | Source | Licence |
 |---|---|---|---|
@@ -14,7 +14,7 @@ Alexandria is retired from the brand (it was the v1 heading font). Code outside 
 - Self-host the WOFF2 files; do not call Google Fonts at runtime (privacy, latency, availability). `preview.html` uses a Google Fonts link for review only.
 - Subset to Latin and Arabic (plus punctuation and digits), and check coverage of the 2025 SAR and AED currency symbols (open item).
 - Load only the weights used: Cairo 500 and 600; Readex Pro 400 and 500. Use `font-display: swap` and the fallbacks in `tokens.css`.
-- Record the licence text and a PROVENANCE note next to each font file once added. (The web app does not load any web font yet: it uses the token font stacks with system fallbacks.)
+- Record the licence text and a PROVENANCE note next to each font file once added. The web app loads them through `web/app/src/styles/fonts.css` and the Studio serves the same files at `/fonts/`. Verified coverage and gaps (no `tnum`, no riyal sign): `font-licence-check.md`.
 
 ## Licence notes (OFL 1.1)
 - Subsetting or converting to WOFF2 counts as modification under the OFL: keep the OFL.txt with each file, and do not use a Reserved Font Name (Readex Pro: 'RevReading Lexend') for a modified file.

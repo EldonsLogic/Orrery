@@ -99,5 +99,5 @@
 }
 
 .steps li[aria-current='step'] {
-  font-weight: 700;
+  font-weight: var(--text-h3-weight);
 }

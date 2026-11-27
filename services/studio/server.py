@@ -17,14 +17,15 @@ from .session import Session, StudioError
 LOOPBACK = ("127.0.0.1", "::1", "localhost")
 DEFAULT_PORT = 8765
 MAX_BODY = 1_048_576
-CSP = ("default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; "
-       "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; "
+       "font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 SECURITY_HEADERS = {"Content-Security-Policy": CSP, "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
                     "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"}
 STATIC = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
           "/i18n.js": ("i18n.js", "text/javascript; charset=utf-8"), "/qr.js": ("qr.js", "text/javascript; charset=utf-8"),
           "/app.css": ("app.css", "text/css; charset=utf-8")}
+FONT_FILES = {"/fonts/Cairo-subset.woff2", "/fonts/ReadexPro-subset.woff2"}  # same files the web app serves (WEB-028)
 TOKEN_CSS = {"/tokens/tokens.css": "tokens.css", "/tokens/tokens.proposed.css": "tokens.proposed.css"}
 ENGINE_NAME = re.compile("frap" + "pe|erp" + "next", re.I)  # ADR-0016: never in a response
 ENTITY_LABELS = re.compile(r"/api/blueprint/entities/([^/]{1,64})/labels")
@@ -200,6 +201,10 @@ class Handler(BaseHTTPRequestHandler):
             if method == "GET" and url.path in STATIC:
                 name, ctype = STATIC[url.path]
                 return self._send(200, (P.STATIC_DIR / name).read_bytes(), ctype)
+            if method == "GET" and url.path == "/fonts/fonts.css":
+                return self._send(200, P.FONTS_CSS.read_bytes(), "text/css; charset=utf-8")
+            if method == "GET" and url.path in FONT_FILES:
+                return self._send(200, (P.FONTS_DIR / url.path.rsplit("/", 1)[1]).read_bytes(), "font/woff2")
             if method == "GET" and url.path in TOKEN_CSS:
                 return self._send(200, (P.TOKENS_DIR / TOKEN_CSS[url.path]).read_bytes(), "text/css; charset=utf-8")
             handler = self._route(method, url.path, url.query)

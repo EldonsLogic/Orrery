@@ -27,7 +27,7 @@
 }
 
 .stage[data-state='current'] {
-  font-weight: 600;
+  font-weight: var(--text-h3-weight);
 }
 
 /* PROPOSED loading loop: outline, then the upper half, then both halves, about 0.8 s each. */

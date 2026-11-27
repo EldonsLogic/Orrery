@@ -176,3 +176,49 @@ def test_platform_scope():
     assert validate_event(stamp(ev, 1)).ok
     ev["tenant_id"] = "t_acme"
     assert any(i.code == "EVS-TENANT-002" for i in validate_event(stamp(ev, 1)).errors)
+
+
+EMAIL_SCHEMA = Path(__file__).resolve().parents[4] / "contracts" / "connector-email.schema.json"
+
+
+def test_email_types_registered_and_domain_reserved():
+    """DSC-025: every email event type is registered; record patterns cannot claim the email domain."""
+    reg = default_registry()
+    declared = set(json.loads(EMAIL_SCHEMA.read_text(encoding="utf-8"))["x-event-types"])
+    assert {k for k in reg.keys() if k.startswith("email.")} == declared
+    for verb in ("created", "updated", "transitioned", "deleted"):
+        assert reg.lookup(f"email.{verb}") is None
+    assert reg.lookup("email.bounced").data_class == "personal"
+    assert reg.lookup("email.bounced").requires_subject
+
+
+@pytest.mark.parametrize("key,field,bad", [
+    ("email.clicked", "url", "https://shop.example/offer"),
+    ("email.bounced", "diagnostic", "550 user unknown"),
+    ("email.send_requested", "subject_line", "Spring offer"),
+    ("email.suppressed", "address", "someone@example.test"),
+])
+def test_email_events_refuse_content_and_addresses(key, field, bad):
+    ev = make(key)
+    assert validate_event(stamp(ev, 1)).ok
+    ev["data"] = {**ev["data"], field: bad}
+    assert not validate_event(stamp(ev, 1)).ok
+
+
+@pytest.mark.parametrize("key,field,bad", [
+    ("email.bounced", "dedup_key", "sha256:" + "a" * 64),
+    ("email.suppressed", "address_hash", "hmac-sha256:" + "c" * 64),
+    ("email.webhook_rejected", "error_code", "EML-005"),
+    ("email.send_requested", "risk_class", "R1"),
+])
+def test_email_event_values_are_constrained(key, field, bad):
+    ev = make(key)
+    ev["data"] = {**ev["data"], field: bad}
+    assert not validate_event(stamp(ev, 1)).ok
+
+
+def test_email_hard_bounce_and_complaint_name_their_suppression():
+    for key, field in (("email.bounced", "suppression_id"), ("email.complained", "consent_revocation_ref")):
+        ev = make(key)
+        ev["data"] = {k: v for k, v in ev["data"].items() if k != field}
+        assert not validate_event(stamp(ev, 1)).ok

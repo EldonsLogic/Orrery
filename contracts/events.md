@@ -79,6 +79,18 @@ Cheap, high-volume, aggregated by Part 5 into usage records.
 | `meter.connector_run` | connector id, rows, bytes, tier |
 | `meter.simulation_run` | records replayed, duration |
 
+### Email events (proposed, [ADR-0081](../docs/decisions/ADR-0081-email-sending-connector.md); additive)
+Emitted by the email connector only after webhook verification ([connector-email](connector-email.md) sections 5 and 12). No address, subject line, body, URL or provider diagnostic text: opaque refs and bare 64-character hex hashes only, in closed data objects. `data_class: personal` (`operational` for the rejected-webhook audit), `kind: record` with the send or suppression entry as subject. The `email` domain is reserved: record events of an engine entity never use it. Data schemas: `services/blueprint/events/schemas/data.email.schema.json`.
+| Type | When |
+|---|---|
+| `email.send_requested` | A confirmed transactional or marketing send was submitted (purpose, mode, template, consent ref or batch, who sent, payload hash, tracking flags) |
+| `email.delivered`, `email.opened` | Verified provider event; opens only where tracking is enabled and allowed |
+| `email.clicked` | Verified click on a tracked link (`link_id`, never the URL) |
+| `email.bounced` | Hard or soft bounce with the enhanced SMTP status; a hard bounce names its suppression entry |
+| `email.complained`, `email.unsubscribed` | Spam complaint or unsubscribe (one-click, body link or provider); names the suppression entry and the consent revoke |
+| `email.suppressed`, `email.suppression_lifted` | A suppression entry was added, or lifted by the contact's opt-in or a re-verified address |
+| `email.webhook_rejected` | Audit: a webhook to a known endpoint failed verification (`endpoint_id`, `error_code`, no body) |
+
 ### Platform events (no tenant data)
 `component.published`, `component.deprecated`, `component.request_created`, `component.request_reviewed`, `engine.upgrade_canary_started`, `engine.upgrade_promoted`, `engine.upgrade_rolled_back`. These carry `tenant_id: "platform"`.
 

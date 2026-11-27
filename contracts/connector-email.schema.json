@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:connector-email:0.1.0",
+  "version": "0.1.0",
+  "title": "Email sending connector objects",
+  "description": "Draft (ADR-0081 Proposed, DSC-025). The six objects of connector-email.md, told apart by kind. Unknown keys are refused. Rules JSON Schema cannot express are in x-validator-rules.",
+  "x-event-types": ["email.send_requested", "email.delivered", "email.bounced", "email.complained", "email.unsubscribed", "email.opened", "email.clicked", "email.suppressed", "email.suppression_lifted", "email.webhook_rejected"],
+  "x-validator-rules": [
+    "tenantId is set by the platform from the verified connection binding (webhooks: from the endpoint id in the URL path, then the verified signature), never from payload text (section 8)",
+    "the tenant segment of apiKeyRef and webhookSecretRef equals tenantId, and the two refs differ (EML-014)",
+    "connectionRef, senderDomainRef, contactRef, consentRef, segmentRef, templateId, documentRef, trackingPolicyRef and testAllowlistRef of a send resolve inside the send's tenantId; a ref to another tenant is refused, never followed (EML-014)",
+    "a send is refused unless senderDomainRef is a sender_domain of the tenant in state verified, and fromDomain equals that domain (EML-003)",
+    "a marketing send is refused unless, for each recipient, the latest DSC-022 consent_record by recordedAt for (tenant, contactRef, channel email, country, purpose marketing) is granted (EML-004); for a batch the check runs per recipient at execution and a refused recipient is skipped and counted, never sent",
+    "a send is refused for a recipient with an active suppression_entry whose scope covers the send's purpose (EML-005), checked at execution, not only at approval",
+    "connect: each stagedSecrets fingerprint equals sha256 of the staged slot's value at apply; the staged slot is write-once and unmodified; any difference refuses the apply (EML-015)",
+    "payloadHash is the sha256 of the canonical send_request (UTF-8 JSON, sorted keys, no whitespace) without payloadHash, confirmationId, approvalId and sentBy; recomputed at confirmation and at execution; a mismatch voids both (action-policy section 5)",
+    "sentBy resolves to a human user of the tenant who made the confirmation gesture over that payloadHash; for agent_draft it is disjoint from draftedBy by id prefix (usr_ against agt_)",
+    "a recipient list is resolved by platform code from segmentRef at execution; recipientCount and recipientSetHash are recomputed and a mismatch with the approved values voids the approval",
+    "tracking.opens is true only if the tenant's trackingPolicyRef enables it and, per recipient, the country pack does not require consent for tracking or the contact holds a granted tracking consent; until LEG-012 answers, every phase-1 country counts as consent-required, so no pixel is inserted without that consent (EML-010)",
+    "a verified webhook event carrying bounceType hard, or eventType complained or unsubscribed, creates its suppression_entry before the webhook is acknowledged; a store failure returns 5xx so the provider retries (section 7)",
+    "dedupKey is sha256 of connectorId, connectionRef and providerEventId; a repeat is acknowledged and dropped; keys are kept durably for dedupRetentionHours; loss of the store stops inbound processing (fail closed)",
+    "a delivery_event whose providerOccurredAt is older than webhook.maxEventAgeHours, or more than 300 seconds ahead of receivedAt, is dropped, alerted and audited, unless it is bounced, complained or unsubscribed: those are always applied (a replay can only suppress again)",
+    "Mailgun: the signature token is cached for dedupRetentionHours and a seen token is refused (EML-001); SendGrid: the signed timestamp must be inside replayWindowSeconds",
+    "a suppression lift (state lifted) for reason complaint or unsubscribe names a consentRef whose record has capturedBy contact and capturedAt after the suppression's createdAt; a tenant user can never lift it",
+    "a send under a capability with environment sandbox is refused unless every recipient is on the tenant test allowlist named by testAllowlistRef (EML-012)",
+    "a verified webhook whose event type is not in the eventType list is acknowledged, dropped, alerted and audited, and becomes no object (EML-013)"
+  ],
+  "type": "object",
+  "required": ["kind", "tenantId"],
+  "properties": {"kind": {"enum": ["capability", "connect_request", "sender_domain", "send_request", "delivery_event", "suppression_entry"]}},
+  "oneOf": [
+    {"$ref": "#/$defs/capability"}, {"$ref": "#/$defs/connectRequest"}, {"$ref": "#/$defs/senderDomain"},
+    {"$ref": "#/$defs/sendRequest"}, {"$ref": "#/$defs/deliveryEvent"}, {"$ref": "#/$defs/suppressionEntry"}
+  ],
+  "$defs": {
+    "tenantId": {"type": "string", "pattern": "^t_[a-z0-9_]{1,40}$"},
+    "ref": {"type": "string", "pattern": "^[a-z]{2,4}_[A-Za-z0-9_-]{1,64}$"},
+    "providerId": {"type": "string", "pattern": "^[A-Za-z0-9_.:=+/<>@-]{1,200}$"},
+    "connectorId": {"enum": ["email.ses", "email.postmark", "email.sendgrid", "email.mailgun"]},
+    "country": {"enum": ["SA", "AE", "EG", "QA"]},
+    "time": {"type": "string", "format": "date-time"},
+    "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "keyedHash": {"type": "string", "pattern": "^hmac-sha256:[0-9a-f]{64}$"},
+    "domain": {"type": "string", "pattern": "^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"},
+    "secretRef": {"type": "string", "pattern": "^secret://tenant/t_[a-z0-9_]{1,40}/email/[a-z0-9_-]+/(api_key|webhook)$"},
+    "capability": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "connectorId", "connectorVersion", "connectionRef", "environment", "siteClass", "apiKeyRef", "webhookSecretRef", "suppressionApi", "trackingSupport", "trackingEnabled", "rateLimit", "warmup", "webhook"],
+      "properties": {
+        "kind": {"const": "capability"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "connectorId": {"$ref": "#/$defs/connectorId"},
+        "connectorVersion": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+        "connectionRef": {"$ref": "#/$defs/ref"},
+        "environment": {"enum": ["sandbox", "live"]},
+        "siteClass": {"enum": ["sandbox", "production"]},
+        "apiKeyRef": {"allOf": [{"$ref": "#/$defs/secretRef"}, {"pattern": "/api_key$"}], "description": "S11: the provider API key, readable only by the tenant's email send job."},
+        "webhookSecretRef": {"allOf": [{"$ref": "#/$defs/secretRef"}, {"pattern": "/webhook$"}], "description": "S13: webhook verification material (HMAC key, basic-auth pair or provider public key), readable only by the receiving endpoint."},
+        "suppressionApi": {"type": "boolean", "description": "The provider exposes a suppression list API; Seshna's list stays authoritative either way (section 7)."},
+        "trackingSupport": {"type": "object", "additionalProperties": false, "required": ["opens", "clicks"], "properties": {"opens": {"type": "boolean"}, "clicks": {"type": "boolean"}}},
+        "trackingEnabled": {"type": "object", "additionalProperties": false, "required": ["opens", "clicks"], "properties": {"opens": {"type": "boolean", "default": false}, "clicks": {"type": "boolean", "default": false}}},
+        "trackingPolicyRef": {"$ref": "#/$defs/ref"},
+        "rateLimit": {"type": "object", "additionalProperties": false, "required": ["maxPerSecond", "maxPerDay"], "properties": {"maxPerSecond": {"type": "integer", "minimum": 1, "maximum": 500}, "maxPerDay": {"type": "integer", "minimum": 1, "maximum": 5000000}}},
+        "warmup": {"type": "object", "additionalProperties": false, "required": ["state", "marketingDailyCap"], "properties": {"state": {"enum": ["warming", "complete"]}, "marketingDailyCap": {"type": "integer", "minimum": 1}}},
+        "webhook": {
+          "type": "object", "additionalProperties": false,
+          "required": ["scheme", "signedTimestamp", "replayWindowSeconds", "maxEventAgeHours", "dedupRetentionHours", "dedupStore"],
+          "properties": {
+            "scheme": {"enum": ["sns_signature_v2", "basic_auth_ip_allowlist", "ecdsa_signed_timestamp", "hmac_sha256_timestamp_token"]},
+            "signedTimestamp": {"type": "boolean"},
+            "replayWindowSeconds": {"type": ["integer", "null"], "minimum": 60, "maximum": 3600},
+            "maxEventAgeHours": {"type": "integer", "minimum": 24, "maximum": 168},
+            "dedupRetentionHours": {"type": "integer", "minimum": 168, "maximum": 2160, "default": 192},
+            "dedupStore": {"const": "durable"}
+          },
+          "if": {"properties": {"signedTimestamp": {"const": true}}}, "then": {"properties": {"replayWindowSeconds": {"type": "integer"}}}, "else": {"properties": {"replayWindowSeconds": {"type": "null"}}}
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"connectorId": {"const": "email.ses"}}}, "then": {"properties": {"webhook": {"properties": {"scheme": {"const": "sns_signature_v2"}, "signedTimestamp": {"const": false}}}}}},
+        {"if": {"properties": {"connectorId": {"const": "email.postmark"}}}, "then": {"properties": {"webhook": {"properties": {"scheme": {"const": "basic_auth_ip_allowlist"}, "signedTimestamp": {"const": false}}}}}},
+        {"if": {"properties": {"connectorId": {"const": "email.sendgrid"}}}, "then": {"properties": {"webhook": {"properties": {"scheme": {"const": "ecdsa_signed_timestamp"}, "signedTimestamp": {"const": true}}}}}},
+        {"if": {"properties": {"connectorId": {"const": "email.mailgun"}}}, "then": {"properties": {"webhook": {"properties": {"scheme": {"const": "hmac_sha256_timestamp_token"}, "signedTimestamp": {"const": true}}}}}},
+        {"if": {"properties": {"siteClass": {"const": "production"}}}, "then": {"properties": {"environment": {"const": "live"}}}},
+        {"if": {"properties": {"trackingEnabled": {"anyOf": [{"properties": {"opens": {"const": true}}}, {"properties": {"clicks": {"const": true}}}]}}}, "then": {"required": ["trackingPolicyRef"]}}
+      ]
+    },
+    "connectRequest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "connectionRef", "revision", "connectorId", "environment", "stagedSecrets", "probeId", "providerAccountRef", "approvalId", "riskClass"],
+      "properties": {
+        "kind": {"const": "connect_request"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "connectionRef": {"$ref": "#/$defs/ref"},
+        "revision": {"type": "integer", "minimum": 0},
+        "connectorId": {"$ref": "#/$defs/connectorId"},
+        "environment": {"enum": ["sandbox", "live"]},
+        "stagedSecrets": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {"type": "object", "additionalProperties": false, "required": ["slot", "stagedId", "fingerprint"],
+                    "properties": {"slot": {"enum": ["api_key", "webhook"]}, "stagedId": {"type": "string", "pattern": "^stg_[A-Za-z0-9]{22,40}$"}, "fingerprint": {"$ref": "#/$defs/hash"}}},
+          "allOf": [{"contains": {"properties": {"slot": {"const": "api_key"}}}}, {"contains": {"properties": {"slot": {"const": "webhook"}}}}]
+        },
+        "probeId": {"$ref": "#/$defs/ref"},
+        "providerAccountRef": {"$ref": "#/$defs/providerId", "description": "Copied from the read-only probe, never typed."},
+        "approvalId": {"$ref": "#/$defs/ref"},
+        "riskClass": {"const": "R4"}
+      }
+    },
+    "senderDomain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "domainId", "domain", "dedicatedSubdomain", "state", "checks", "checkedAt", "goLiveItem"],
+      "properties": {
+        "kind": {"const": "sender_domain"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "domainId": {"$ref": "#/$defs/ref"},
+        "domain": {"$ref": "#/$defs/domain"},
+        "dedicatedSubdomain": {"type": "boolean", "description": "Recommended (for example news.example.com), so marketing reputation does not hit the tenant's own mailbox domain."},
+        "state": {"enum": ["pending", "verified", "failed"]},
+        "checks": {
+          "type": "object", "additionalProperties": false, "required": ["spf", "dkim", "dmarc"],
+          "properties": {
+            "spf": {"enum": ["pass", "fail", "pending"]},
+            "dkim": {"enum": ["pass", "fail", "pending"]},
+            "dmarc": {"type": "object", "additionalProperties": false, "required": ["record", "policy", "aligned"],
+                      "properties": {"record": {"enum": ["present", "missing"]}, "policy": {"enum": ["none", "quarantine", "reject", null]}, "aligned": {"type": "boolean"}}}
+          }
+        },
+        "checkedAt": {"$ref": "#/$defs/time"},
+        "goLiveItem": {"const": true}
+      },
+      "if": {"properties": {"state": {"const": "verified"}}},
+      "then": {"properties": {"checks": {"properties": {"spf": {"const": "pass"}, "dkim": {"const": "pass"}, "dmarc": {"properties": {"record": {"const": "present"}, "policy": {"enum": ["none", "quarantine", "reject"]}, "aligned": {"const": true}}}}}}}
+    },
+    "sendRequest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "idempotencyKey", "connectionRef", "senderDomainRef", "fromLocalPart", "fromDomain", "purpose", "mode", "country", "templateId", "language", "origin", "sentBy", "confirmationId", "payloadHash", "riskClass", "tracking", "sandbox"],
+      "properties": {
+        "kind": {"const": "send_request"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "idempotencyKey": {"type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"},
+        "connectionRef": {"$ref": "#/$defs/ref"},
+        "senderDomainRef": {"$ref": "#/$defs/ref"},
+        "fromLocalPart": {"type": "string", "pattern": "^[a-z0-9._-]{1,64}$"},
+        "fromDomain": {"$ref": "#/$defs/domain"},
+        "replyToRef": {"$ref": "#/$defs/ref"},
+        "purpose": {"enum": ["transactional", "marketing"]},
+        "mode": {"enum": ["single", "campaign_batch"]},
+        "country": {"$ref": "#/$defs/country"},
+        "contactRef": {"$ref": "#/$defs/ref"},
+        "batch": {"type": "object", "additionalProperties": false, "required": ["batchId", "segmentRef", "recipientCount", "recipientSetHash"],
+                  "properties": {"batchId": {"$ref": "#/$defs/ref"}, "segmentRef": {"$ref": "#/$defs/ref"}, "recipientCount": {"type": "integer", "minimum": 1, "maximum": 1000000}, "recipientSetHash": {"$ref": "#/$defs/hash"}}},
+        "consentRef": {"$ref": "#/$defs/ref"},
+        "documentRef": {"type": "object", "additionalProperties": false, "required": ["noticeType", "id"],
+                        "properties": {"noticeType": {"enum": ["invoice", "credit_note", "statement", "payment_receipt", "order_confirmation", "account_notice"]}, "id": {"type": "string", "minLength": 1, "maxLength": 64}}},
+        "templateId": {"$ref": "#/$defs/ref"},
+        "language": {"enum": ["ar", "en"]},
+        "params": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 200}},
+        "headers": {"type": "object", "additionalProperties": false, "required": ["listUnsubscribe", "listUnsubscribePost", "dkimSignsUnsubscribeHeaders"],
+                    "properties": {"listUnsubscribe": {"type": "string", "pattern": "^https://[a-z0-9.-]+/u/[A-Za-z0-9_-]{22,128}$"}, "listUnsubscribeMailto": {"type": "boolean"}, "listUnsubscribePost": {"const": "List-Unsubscribe=One-Click"}, "dkimSignsUnsubscribeHeaders": {"const": true}}},
+        "bodyUnsubscribeLink": {"type": "boolean"},
+        "tracking": {"type": "object", "additionalProperties": false, "required": ["opens", "clicks"], "properties": {"opens": {"type": "boolean"}, "clicks": {"type": "boolean"}}},
+        "trackingPolicyRef": {"$ref": "#/$defs/ref"},
+        "origin": {"enum": ["human", "agent_draft"]},
+        "sentBy": {"type": "string", "pattern": "^usr_[A-Za-z0-9_-]{1,64}$"},
+        "draftedBy": {"type": "string", "pattern": "^agt_[A-Za-z0-9_-]{1,64}$"},
+        "confirmationId": {"$ref": "#/$defs/ref"},
+        "payloadHash": {"$ref": "#/$defs/hash"},
+        "riskClass": {"const": "R3", "description": "Interim, SEC action-policy row pending (Q-726): every send reaches a person outside the tenant, so none is R1."},
+        "approvalId": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]},
+        "sandbox": {"type": "boolean"},
+        "testAllowlistRef": {"$ref": "#/$defs/ref"}
+      },
+      "allOf": [
+        {"if": {"properties": {"mode": {"const": "single"}}}, "then": {"required": ["contactRef"], "not": {"required": ["batch"]}}, "else": {"required": ["batch"], "not": {"required": ["contactRef"]}}},
+        {"if": {"properties": {"purpose": {"const": "marketing"}}},
+         "then": {"required": ["headers", "bodyUnsubscribeLink", "approvalId"], "not": {"required": ["documentRef"]},
+                  "properties": {"origin": {"const": "human"}, "approvalId": {"$ref": "#/$defs/ref"}, "bodyUnsubscribeLink": {"const": true}}},
+         "else": {"required": ["documentRef"], "not": {"anyOf": [{"required": ["consentRef"]}, {"required": ["trackingPolicyRef"]}]},
+                  "properties": {"mode": {"const": "single"}, "tracking": {"properties": {"opens": {"const": false}, "clicks": {"const": false}}}}}},
+        {"if": {"properties": {"purpose": {"const": "marketing"}, "mode": {"const": "single"}}}, "then": {"required": ["consentRef"]}},
+        {"if": {"properties": {"tracking": {"anyOf": [{"properties": {"opens": {"const": true}}}, {"properties": {"clicks": {"const": true}}}]}}}, "then": {"required": ["trackingPolicyRef"]}},
+        {"if": {"properties": {"origin": {"const": "agent_draft"}}}, "then": {"required": ["draftedBy"]}, "else": {"not": {"required": ["draftedBy"]}}},
+        {"if": {"properties": {"sandbox": {"const": true}}}, "then": {"required": ["testAllowlistRef"]}, "else": {"not": {"required": ["testAllowlistRef"]}}}
+      ]
+    },
+    "deliveryEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "eventId", "connectionRef", "sendRef", "providerMessageId", "eventType", "providerOccurredAt", "trust", "webhook"],
+      "properties": {
+        "kind": {"const": "delivery_event"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "eventId": {"$ref": "#/$defs/ref"},
+        "connectionRef": {"$ref": "#/$defs/ref"},
+        "sendRef": {"$ref": "#/$defs/ref"},
+        "contactRef": {"$ref": "#/$defs/ref"},
+        "providerMessageId": {"$ref": "#/$defs/providerId"},
+        "eventType": {"enum": ["delivered", "bounced", "complained", "unsubscribed", "opened", "clicked"]},
+        "bounceType": {"enum": ["hard", "soft"]},
+        "smtpStatus": {"type": "string", "pattern": "^[245]\\.[0-9]{1,3}\\.[0-9]{1,3}$"},
+        "unsubscribeSource": {"enum": ["one_click_post", "body_link", "provider"]},
+        "linkId": {"$ref": "#/$defs/ref"},
+        "suppressionId": {"$ref": "#/$defs/ref"},
+        "consentRevocationRef": {"$ref": "#/$defs/ref"},
+        "providerOccurredAt": {"$ref": "#/$defs/time"},
+        "trust": {"const": "untrusted"},
+        "webhook": {
+          "type": "object", "additionalProperties": false, "required": ["signatureVerified", "scheme", "providerEventId", "dedupKey", "receivedAt"],
+          "properties": {
+            "signatureVerified": {"const": true},
+            "scheme": {"enum": ["sns_signature_v2", "basic_auth_ip_allowlist", "ecdsa_signed_timestamp", "hmac_sha256_timestamp_token", "one_click_token"]},
+            "providerEventId": {"$ref": "#/$defs/providerId"},
+            "dedupKey": {"$ref": "#/$defs/hash"},
+            "receivedAt": {"$ref": "#/$defs/time"}
+          }
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"eventType": {"const": "bounced"}}}, "then": {"required": ["bounceType", "smtpStatus"]}, "else": {"not": {"required": ["bounceType"]}}},
+        {"if": {"properties": {"eventType": {"const": "bounced"}, "bounceType": {"const": "hard"}}, "required": ["bounceType"]}, "then": {"required": ["suppressionId"]}},
+        {"if": {"properties": {"eventType": {"enum": ["complained", "unsubscribed"]}}}, "then": {"required": ["suppressionId", "consentRevocationRef"]}},
+        {"if": {"properties": {"eventType": {"const": "unsubscribed"}}}, "then": {"required": ["unsubscribeSource"]}, "else": {"not": {"required": ["unsubscribeSource"]}}},
+        {"if": {"properties": {"eventType": {"const": "clicked"}}}, "then": {"required": ["linkId"]}, "else": {"not": {"required": ["linkId"]}}},
+        {"if": {"properties": {"webhook": {"properties": {"scheme": {"const": "one_click_token"}}}}}, "then": {"properties": {"eventType": {"const": "unsubscribed"}, "unsubscribeSource": {"const": "one_click_post"}}}}
+      ]
+    },
+    "suppressionEntry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "suppressionId", "addressHash", "reason", "scope", "state", "createdAt", "supersedes", "providerSync"],
+      "properties": {
+        "kind": {"const": "suppression_entry"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "suppressionId": {"$ref": "#/$defs/ref"},
+        "addressHash": {"$ref": "#/$defs/keyedHash", "description": "Keyed hash of the normalised address (per-tenant key), for lookup; the address itself is never in this object."},
+        "contactRef": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]},
+        "reason": {"enum": ["hard_bounce", "soft_bounce_repeated", "complaint", "unsubscribe", "manual"]},
+        "scope": {"enum": ["all", "marketing"]},
+        "state": {"enum": ["active", "lifted"]},
+        "sourceEventId": {"$ref": "#/$defs/ref"},
+        "createdAt": {"$ref": "#/$defs/time"},
+        "supersedes": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]},
+        "liftBasis": {"enum": ["contact_opt_in", "address_reverified"]},
+        "liftConsentRef": {"$ref": "#/$defs/ref"},
+        "liftedBy": {"type": "string", "pattern": "^(usr|ctc)_[A-Za-z0-9_-]{1,64}$"},
+        "providerSync": {"enum": ["pending", "synced", "not_supported"]}
+      },
+      "allOf": [
+        {"if": {"properties": {"reason": {"enum": ["hard_bounce", "soft_bounce_repeated", "complaint"]}}}, "then": {"properties": {"scope": {"const": "all"}}}},
+        {"if": {"properties": {"reason": {"const": "unsubscribe"}}}, "then": {"properties": {"scope": {"const": "marketing"}}}},
+        {"if": {"properties": {"reason": {"enum": ["hard_bounce", "soft_bounce_repeated", "complaint", "unsubscribe"]}, "state": {"const": "active"}}}, "then": {"required": ["sourceEventId"]}},
+        {"if": {"properties": {"state": {"const": "lifted"}}},
+         "then": {"required": ["liftBasis", "liftedBy"], "properties": {"supersedes": {"$ref": "#/$defs/ref"}}},
+         "else": {"not": {"anyOf": [{"required": ["liftBasis"]}, {"required": ["liftConsentRef"]}, {"required": ["liftedBy"]}]}}},
+        {"if": {"properties": {"state": {"const": "lifted"}, "reason": {"enum": ["complaint", "unsubscribe"]}}},
+         "then": {"required": ["liftConsentRef"], "properties": {"liftBasis": {"const": "contact_opt_in"}, "liftedBy": {"pattern": "^ctc_"}}}},
+        {"if": {"properties": {"state": {"const": "lifted"}, "reason": {"enum": ["hard_bounce", "soft_bounce_repeated"]}}},
+         "then": {"properties": {"liftBasis": {"const": "address_reverified"}}}}
+      ]
+    }
+  }
+}

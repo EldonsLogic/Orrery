@@ -62,6 +62,8 @@ for (const [bn, backdrop] of [['white', '#ffffff'], ['black', '#000000']]) {
   add(`glass-muted/${bn}`, `muted text (nav heading, footer label, language) on glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', 'color: var(--color-text-muted)', (c) => c['text-muted'], glass, N);
   add(`glass-icon/${bn}`, `muted icon (nav icon, chevron) on glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', '.navIcon', (c) => c['text-muted'], glass, UI);
   add(`glass-on-primary-nav/${bn}`, `current nav link text on 14% primary tint over glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', 'var(--color-primary) 14%', (c) => c.text, (c) => mix(c.primary, 0.14, glass(c)), N);
+  // WCAG 2.2 SC 1.4.11: the current item's icon and its start-edge indicator are primary graphics on that same tint.
+  add(`glass-current-nav-icon/${bn}`, `current nav icon and indicator (primary) on 14% primary tint over glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', ".navLink[aria-current='page'] .navIcon", (c) => c.primary, (c) => mix(c.primary, 0.14, glass(c)), UI);
 }
 add('muted/surface', 'muted text on surface (popover, panel, footer)', 'components/shell/Shell.module.css', 'color: var(--color-text-muted)', (c) => c['text-muted'], S, N);
 add('border-control/surface', 'control border (select, active language) on surface', 'components/shell/Shell.module.css', 'var(--color-border-control)', (c) => c['border-control'], S, UI);

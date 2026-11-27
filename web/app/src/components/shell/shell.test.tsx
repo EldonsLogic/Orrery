@@ -52,6 +52,11 @@ describe('app shell (Arabic, rtl)', () => {
     expect(loading).toContain(ar.state.loading);
     expect(loading).not.toContain('<nav');
   });
+  it('keeps the language storage key in one place (firstPaint)', () => {
+    const src = readFileSync(join(__dirname, '../Providers.tsx'), 'utf8');
+    expect(src).not.toContain("'platform.locale.v1'");
+    expect(src).toContain('LOCALE_STORAGE_KEY');
+  });
   it('never names the engine in visible text', () => {
     const word = new RegExp(['fra', 'ppe|erp', 'next'].join(''), 'i');
     for (const l of ['en', 'ar'] as const) expect(JSON.stringify(messages[l].shell)).not.toMatch(word);
@@ -103,7 +108,7 @@ describe('shell chrome (WEB-029)', () => {
   });
   it('uses glass only through the foundation variables, with a solid drawer', () => {
     const sheet = read('Shell.module.css');
-    expect(sheet.match(/backdrop-filter: var\(--glass-filter\)/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(sheet.match(/(?:-webkit-)?backdrop-filter: var\(--glass-filter\)/g)).toHaveLength(6); // top bar, side navigation, dock; each with the -webkit- copy
     expect(sheet).not.toMatch(/backdrop-filter: (?!var)/);
     expect(sheet).toMatch(/\.navWrap\[data-open='true'\] \{[^}]*background: var\(--color-surface\)/);
   });

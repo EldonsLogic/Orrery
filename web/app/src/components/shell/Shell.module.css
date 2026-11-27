@@ -1,4 +1,4 @@
-/* App shell (WEB-003, design pass WEB-029). Glass is chrome only: top bar, side navigation, phone dock, popovers. */
+/* App shell (WEB-003, design pass WEB-029). Glass is chrome only: top bar, side navigation, phone dock; popovers and panels are solid. */
 .root {
   display: flex;
   flex-direction: column;
@@ -6,6 +6,8 @@
   min-block-size: 100dvh;
   /* One height for the top bar, the sticky side navigation and the drawer: the 44px touch target, the bar padding and its border. */
   --shell-bar-height: calc(var(--touch-target) + var(--space-2) + var(--border-width));
+  /* The bar grows when the safe area is taller than its padding (notched phones); the sticky navigation follows it. */
+  --shell-bar-offset: calc(var(--shell-bar-height) + max(0px, var(--safe-block-start) - var(--space-1)));
   background: var(--color-background);
   color: var(--color-text);
   font-family: var(--font-body);
@@ -170,6 +172,8 @@
 }
 
 .switchName {
+  /* Never squeezed to nothing: the user must always see which company they are in. */
+  min-inline-size: var(--space-6);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -353,9 +357,9 @@
 
 .navInner {
   position: sticky;
-  inset-block-start: var(--shell-bar-height);
+  inset-block-start: var(--shell-bar-offset);
   box-sizing: border-box;
-  block-size: calc(100dvh - var(--shell-bar-height));
+  block-size: calc(100dvh - var(--shell-bar-offset));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--space-3) var(--space-2) var(--space-2);
@@ -546,7 +550,7 @@
   }
 
   .langButton {
-    min-block-size: calc(var(--touch-target) - var(--border-width) * 2);
+    min-block-size: var(--touch-target);
   }
 }
 
@@ -558,6 +562,37 @@
 
   .menuButton {
     display: inline-grid;
+  }
+
+  .topBar {
+    gap: var(--space-1);
+  }
+
+  /* Phones: one button that names the other language (tap to switch); the current language stays in the accessibility
+     tree, visually hidden, so the group still reads as a two-way switch. */
+  .lang {
+    border: 0;
+    padding: 0;
+  }
+
+  .langButton {
+    min-inline-size: var(--touch-target);
+    padding-inline: var(--space-1);
+    border-color: var(--glass-edge);
+    color: var(--color-text);
+  }
+
+  .langButton[aria-pressed='true'] {
+    position: absolute;
+    inline-size: 1px;
+    min-inline-size: 0;
+    block-size: 1px;
+    min-block-size: 0;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   /* Phones: menu, company, language and account fit one row; the lockup returns from tablet up. */
@@ -584,6 +619,12 @@
   .navWrap[data-open='true'] .navInner {
     position: static;
     block-size: 100%;
+  }
+}
+
+@media (max-width: 22.5rem) {
+  .chevron {
+    display: none;
   }
 }
 

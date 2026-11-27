@@ -3,10 +3,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
 import { RouteTitle } from './RouteTitle';
-import { PENDING_TIMEOUT_MS, releaseLocalePending } from '../lib/firstPaint';
+import { LOCALE_STORAGE_KEY, PENDING_TIMEOUT_MS, releaseLocalePending } from '../lib/firstPaint';
 import { defaultLocale, directionOf, isLocale, messages, type Direction, type Locale } from '../i18n';
 
-const STORAGE_KEY = 'platform.locale.v1'; // the user's language setting (fixture until settings exist)
+const STORAGE_KEY = LOCALE_STORAGE_KEY; // the user's language setting (fixture until settings exist); shared with the first-paint script
 
 type Settings = { locale: Locale; setLocale: (l: Locale) => void; direction: Direction; setDirection: (d: Direction | null) => void };
 const SettingsContext = createContext<Settings | null>(null);

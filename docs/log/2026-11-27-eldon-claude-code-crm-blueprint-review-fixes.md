@@ -44,3 +44,14 @@ Partner re-review of #395; then the #396 review fixes and merge up through #397 
 - M5: Subcontracting Order needs a purchase order from a listed purchasing component (contract text; check in BPL-060).
 - M6: BPL-061 and BPL-062 cover manufacturing, the switch mappings and the rigid list in `compiler/mapping.py`.
 - Lows: `manufacturing.item` is a shared concept (`core.item.entities`); changelog corrected; sources cited.
+
+## #398 review fixes (BPL-055, at 8d361bdf: 2 High, 6 Medium, 4 Low)
+- Merge of BPL-054: campaign now implements the marketing component when marketing is on (shared-concept rule).
+- H1: email out of 0.8.0 (no `channels.email`, no `email_campaign` concept); it moves to BPL-066 after DSC-025; the engine scheduler never sends.
+- H2: contract states a contact's STOP stays binding and a revoke may be the first record; the fix itself belongs in #394 (Q-703); #398 stays held behind #394.
+- M3, M4: campaign records draft-only; R3 release bound to frozen recipients, content hash and schedule; no assistant create, update or send tool (validator owed, BPL-060).
+- M5: Marketing validator entry marked contract text except `BP-MOD-005`; `filters` needs at least one entry.
+- M6: bpdiff: integration `connector` or `direction` change and integration removal are `compliance`; component swap `destructive`.
+- M7: `in` lists capped at 20 values (schema); identifier-field filters refused (BPL-060).
+- M8: BPL-059 duties, BPL-061 and BPL-062 marketing scope.
+- Lows: `doubleOptIn` dropped; membership computed by code, `data_class` tagging; claims marked UNVERIFIED; BPL-055 row notes DSC-022 is `todo`.

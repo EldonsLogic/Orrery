@@ -37,5 +37,8 @@ Item 5 is enforced by the engine's own field list, not by name: [contracts/engin
 ## Note (BPL-053, #396 review: the 0.6.0 break)
 0.6.0 is not purely additive. The field `default` rule refuses a string default that starts with `eval:`, `=` or `:` (an engine expression, not a literal), so a 0.5.0 Blueprint carrying one no longer validates. [contracts/README.md](../../contracts/README.md) rule 1 allows a 0.x minor to break only when the ADR says so; this note says so. Such a Blueprint drops the default or replaces it with a literal; no tenant Blueprint exists yet, so nothing migrates.
 
+## Note (BPL-055, #398 review: email)
+Email is not in 0.8.0. The engine's Email Campaign sends from a scheduler with no approval step, and the messaging connector's consent records do not cover email, so `channels.email` and the `email_campaign` concept move to BPL-066, after the email sending connector contract (DSC-025). Until then marketing sends go only through the messaging connector.
+
 ## Supersedes
 none

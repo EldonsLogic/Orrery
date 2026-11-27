@@ -80,7 +80,7 @@
     "CRM (ADR-0079, contract text until BPL-060): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique.",
     "Projects (ADR-0079): timeline and calendar fields are date or datetime fields of the view's concept entity (BP-MOD-002). The rest is contract text until BPL-060 (#396 review): task status and view ids are unique; every board column lists task status ids that resolve and each status sits in exactly one column of a board; visibleToRoles resolve and hold read on that entity. timesheets.invoicingComponent is listed in components and, when the registry is known, is a rigid (certified) component (BP-MOD-003).",
     "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse, workInProgress differs from finishedGoods and scrap differs from both (BP-MOD-004); the warehouse-to-account link is set only by the certified component, never by the Blueprint. Stock moves are posted by the engine's Stock Entry (material transfer, material consumption, manufacture) and the subcontracting receipt, not by the work order or job card: Stock Entry is component-only (no concept, entity or permission in the Blueprint), Tier 3, stock-class (ADR-0037), human floor on submit and cancel (ADR-0027); the subcontracting receipt is the same. Contract text until BPL-060: no Blueprint entity implements the manufacturing component outside its concepts, the rigid fields stay refused on an entity that still implements the component after its concept is unbound, and subcontracting needs a listed component providing purchase orders. Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint setting in this module object offers them, and no field on item, bom, their child_table rows or any other manufacturing-bound entity may declare the engine's own fields for them (valuation_rate, rm_cost_as_per, operating_cost, BOM line rate and amount; contracts/engine-rigid-fields.json, BP-MOD-001).",
-    "Marketing (ADR-0079): entities.campaign equals modules.crm.entities.campaign when both are set; a segment's audience concept is bound in modules.crm.entities (lead, contact, customer) and its filter fields exist on that entity; segment ids are unique. channels.messaging.integration resolves to an integration whose connector is in x-messaging-connectors (BP-MOD-005). A marketing send goes only to a contact with a granted consent for that contact, channel, country and purpose marketing (DSC-022 section 6, MSG-005) and carries an unsubscribe route; members without a contactRef are skipped; imports and segment membership never create consent; messaging sends use approved templates only. Every marketing send or campaign is R3, origin human with a required approvalId, and never agent-creatable (DSC-022 section 3, AP-MSG-03 proposed), so no assistant may list it (assistant tools are at most R2).",
+    "Marketing (ADR-0079): channels.messaging.integration resolves to an integration whose connector is in x-messaging-connectors (BP-MOD-005). The rest is contract text until BPL-060 (#398 review): modules.crm is on; entities.campaign equals modules.crm.entities.campaign when both are set; a segment's audience concept is bound in modules.crm.entities (lead, contact, customer), its filter fields exist on that entity and are never contact identifier fields (phone, email, identity numbers); segment ids are unique; visibleToRoles resolve; no assistant lists a create, update or send tool on campaign or messaging_campaign records. A marketing send goes only to a contact with a granted consent for that contact, channel, country and purpose marketing (DSC-022 section 6, MSG-005) and carries an unsubscribe route; a contact's own revoke (STOP) stays binding through every later tenant record until the contact's own opt-in; members without a contactRef are skipped; imports and segment membership never create consent; messaging sends use approved templates only. Campaign records are draft-only; a send is released only by an R3 approval, origin human with a required approvalId, bound to the frozen recipient list, the content hash and the schedule (any change voids it), and never agent-creatable (DSC-022 section 3, AP-MSG-03 proposed).",
     "Module rigid zone (ADR-0079, BP-MOD-001): on an entity bound by a module concept (every modules.<key>.entities value), and on every entity reached from it through child_table relations at any depth, no field id and no component parameter key equals an engine rigid-zone field of that concept's engine record or its rows, listed in contracts/engine-rigid-fields.json (for example valuation_rate, rm_cost_as_per, billing_rate, tax_category, cost_center). A Blueprint never declares, overrides, renames or sets a default or options on those fields; the list is missing or a bound concept is not in it: refused (fail closed). Custom fields with any other name, money and percent included, are plain data: they never feed posting, valuation or tax."
   ],
   "x-module-shared-concepts": {
@@ -391,7 +391,7 @@
     },
     "marketingModule": {
       "type": "object",
-      "description": "Marketing (Blueprint 0.8.0): segments, campaigns, email campaigns on the engine's core records, and messaging campaigns sent only through the messaging connector (DSC-022). Consent is not optional.",
+      "description": "Marketing (Blueprint 0.8.0): segments, campaigns on the engine's core records, and messaging campaigns sent only through the messaging connector (DSC-022). Consent is not optional. Email is not in 0.8.0: it joins with BPL-066 once the email sending connector contract (DSC-025) defines email consent, unsubscribe and the human release (#398 review).",
       "required": ["component", "entities", "roles", "consent", "channels", "provenance"],
       "additionalProperties": false,
       "properties": {
@@ -403,7 +403,6 @@
           "description": "Concept to Blueprint entity id. campaign is shared with the CRM campaign link.",
           "properties": {
             "campaign": { "$ref": "#/$defs/id" },
-            "email_campaign": { "$ref": "#/$defs/id" },
             "messaging_campaign": { "$ref": "#/$defs/id" }
           }
         },
@@ -420,7 +419,7 @@
               "id": { "$ref": "#/$defs/id" },
               "labels": { "$ref": "#/$defs/localizedText" },
               "audience": { "enum": ["lead", "contact", "customer"], "description": "CRM concept the segment selects from. Consent and sends are keyed by contact (DSC-022 contactRef): a lead or customer member without a contact is skipped at send." },
-              "filters": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/guard" } },
+              "filters": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/guard" }, "allOf": [{ "items": { "properties": { "value": { "maxItems": 20 } } } }], "description": "Guards over the audience entity (AND). At least one: a whole-audience segment states its guard explicitly. Never a recipient list: an in or not_in value holds at most 20 entries, and filters on contact identifier fields (phone, email, identity numbers) are refused by the validator (contract text until BPL-060)." },
               "visibleToRoles": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" }, "description": "Roles that see the segment. An empty list means nobody." }
             }
           }
@@ -432,26 +431,18 @@
           "description": "PDPL and channel rules. The consent records themselves are tenant data kept per DSC-022 section 6, never in the Blueprint; imports and segment membership never create consent.",
           "properties": {
             "optInRequired": { "const": true, "description": "A marketing send goes only to a contact with a granted consent for that contact, channel, country and purpose marketing (DSC-022 section 6; refused as MSG-005 otherwise). A utility-purpose consent never covers a marketing send." },
-            "unsubscribeRoute": { "const": true, "description": "Every message carries a way to opt out, honoured before the next send." },
-            "doubleOptIn": { "type": "boolean", "default": false }
+            "unsubscribeRoute": { "const": true, "description": "Every message carries a way to opt out, honoured before the next send." }
           }
         },
         "channels": {
           "type": "object",
           "additionalProperties": false,
           "minProperties": 1,
-          "description": "At least one channel is enabled while the module is on.",
+          "description": "At least one channel is enabled while the module is on. 0.8.0 has messaging only; email joins with BPL-066 (DSC-025).",
           "anyOf": [
-            { "required": ["email"], "properties": { "email": { "properties": { "enabled": { "const": true } } } } },
             { "required": ["messaging"], "properties": { "messaging": { "properties": { "enabled": { "const": true } } } } }
           ],
           "properties": {
-            "email": {
-              "type": "object",
-              "required": ["enabled"],
-              "additionalProperties": false,
-              "properties": { "enabled": { "type": "boolean" } }
-            },
             "messaging": {
               "type": "object",
               "required": ["enabled"],
@@ -469,7 +460,6 @@
         "provenance": { "$ref": "#/$defs/provenance" }
       },
       "allOf": [
-        { "if": { "properties": { "channels": { "properties": { "email": { "properties": { "enabled": { "const": true } } } }, "required": ["email"] } }, "required": ["channels"] }, "then": { "properties": { "entities": { "required": ["email_campaign"] } } } },
         { "if": { "properties": { "channels": { "properties": { "messaging": { "properties": { "enabled": { "const": true } } } }, "required": ["messaging"] } }, "required": ["channels"] }, "then": { "properties": { "entities": { "required": ["messaging_campaign"] } } } }
       ]
     },

@@ -317,3 +317,27 @@ def test_engine_manufacturing_settings_are_listed_with_value(setting, value):
 def test_subcontracting_names_its_purchase_order_source():
     """#397 review M5: the engine's Subcontracting Order requires a purchase order."""
     assert re.search(r"Subcontracting Order requires a `purchase_order`.*`purchasing\.purchase_order`", DOC)
+
+
+def _marketing_doc():
+    return DOC[DOC.index("## Module `marketing`"):DOC.index("## Changelog")]
+
+
+def test_marketing_email_waits_for_its_own_contract():
+    """#398 review H1: email has no consent or approval path yet, and the engine's scheduler sends without approval.
+    Email is not in 0.8.0; BPL-066 adds it after DSC-025."""
+    props = SCHEMA["$defs"]["marketingModule"]["properties"]
+    assert "email" not in props["channels"]["properties"] and "email_campaign" not in props["entities"]["properties"]
+    text = _marketing_doc()
+    assert "BPL-066" in text and "DSC-025" in text and "scheduler" in text
+
+
+def test_marketing_send_rules_are_stated():
+    """#398 review M3, M4, H2 and Low 10: draft-only records and a human release bound to audience, content and
+    schedule; a contact's STOP stays binding; segment membership is computed by code and untrusted for models."""
+    text = _marketing_doc()
+    for phrase in ("draft-only", "frozen recipient list", "content hash", "voids the approval",
+                   "stays binding", "computed by code", "data_class", "never agent-creatable"):
+        assert phrase in text, phrase
+    rule = next(r for r in SCHEMA["x-validator-rules"] if r.startswith("Marketing ("))
+    assert "contract text until BPL-060" in rule and "BP-MOD-005" in rule

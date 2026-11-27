@@ -23,6 +23,9 @@ MODULE_COMPLIANCE = ([("modules", "manufacturing", k) for k in  # stock value an
                      + [("modules", "marketing", "consent"), ("modules", "marketing", "channels")])
 # A segment decides who is messaged (#398 re-review): any change to it, other than its labels, is compliance.
 SEGMENTS = ("modules", "marketing", "segments")
+# Which external party receives data, and in which direction (#398 review M6): reviewed as compliance (PDPL).
+INTEGRATION_ROUTE = {spath("integrations"), spath("integrations/*"), spath("integrations/*/connector"),
+                     spath("integrations/*/direction")}
 META_COSMETIC = [("meta", "revision"), ("meta", "createdAt"), ("meta", "updatedAt")]
 DESTRUCTIVE_NODES = {spath(p) for p in (
     "locations/*", "components/*", "entities/*", "entities/*/fields/*", "entities/*/fields/*/options/*",
@@ -61,7 +64,8 @@ def impact_of(kind: str, sp: SPath) -> str:
         return "destructive"  # a module switched off (Q-700): stricter than access, checked first
     head = sp[0] if sp else ""
     if (head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE)
-            or any(_starts(sp, p) for p in BILLING_PATHS)):
+            or any(_starts(sp, p) for p in BILLING_PATHS)
+            or (kind != "add" and sp in INTEGRATION_ROUTE)):
         return "compliance"
     if head == "branding":
         return "branding"

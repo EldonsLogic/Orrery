@@ -195,7 +195,7 @@ CASES = {
     "add_role": (None, _add_role, {("add", "BPD-ROLE-ADDED", "access")}),
     "remove_role": (None, _remove_role, {("remove", "BPD-ROLE-REMOVED", "access")}),
     "add_report": (None, _add_report, {("add", "BPD-REPORT-ADDED", "config")}),
-    "remove_integration": (None, _remove_integration, {("remove", "BPD-INTEGRATION-REMOVED", "config")}),
+    "remove_integration": (None, _remove_integration, {("remove", "BPD-INTEGRATION-REMOVED", "compliance")}),
     "change_provenance": (None, _provenance, {("replace", "BPD-ENTITY-CHANGED", "cosmetic")}),
     "bump_revision": (None, _revision, {("replace", "BPD-META-CHANGED", "cosmetic")}),
     "transition_allowed_roles": (None, _transition_roles, {("replace", "BPD-TRANSITION-CHANGED", "access")}),

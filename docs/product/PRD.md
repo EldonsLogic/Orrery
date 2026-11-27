@@ -25,7 +25,7 @@ See [personas.md](personas.md). Primary buyer: the owner. Strong influencer: the
 | Per-tenant branding and light/dark themes | Per-client code forks |
 | Entitlements and metering in place from day one | Public self-serve gating (free-first at launch) |
 
-Full not-doing list: [module-map.md](module-map.md).
+Full not-doing list: [module-map.md](module-map.md). Phase 1 adds ten modules (CRM, projects and boards, HR basics, payroll, omnichannel inbox, zakat, point of sale, e-commerce, manufacturing, marketing) as Blueprint components, contracts first, with add-on engine apps held for the GPL answer and point of sale deferred ([ADR-0075](../decisions/ADR-0075-phase-1-module-scope.md), Proposed). Filing tax or zakat for customers stays not-doing.
 
 ## 5. Principles
 Taken from the context brief and AGENTS.md: open source first, configuration over code, deterministic ledger/tax/e-invoicing/payroll/audit, Arabic-first, compliance never "later", numbers from code and words from the model, customer content is untrusted input, everything logged, no client-specific code.

@@ -240,3 +240,33 @@ def test_rollback_approval_rules():
     idx["published"] = [{"version": "0.2.0", "contentDigest": "sha256:" + "0" * 64, "publishId": "0" * 26}, idx["published"][0]]
     w.store.indexes["SA"] = canonical(idx)
     assert code(rollback, w) == "PP-050"  # below the floor
+
+
+def test_signoff_challenge_is_domain_separated():
+    """Eldon's #344 answer, ADR-0071 1.8: challenge = SHA-256("country-pack-signoff-v1\n" + statementDigest ASCII),
+    carried base64url in clientDataJSON. The raw digest bytes (contract 0.2.0) must no longer verify."""
+    import base64
+    import hashlib
+    from packpublish.canon import signoff_challenge
+    from packpublish.fakes import FakeSignerVerifier
+    sd = "sha256:" + "ab" * 32
+    want = base64.urlsafe_b64encode(hashlib.sha256(b"country-pack-signoff-v1\n" + sd.encode("ascii")).digest()).rstrip(b"=").decode()
+    assert signoff_challenge(sd) == want
+    assert signoff_challenge(sd) != base64.urlsafe_b64encode(bytes.fromhex("ab" * 32)).rstrip(b"=").decode()
+    sig = fake_signature(ACC, sd)
+    cd = json.loads(base64.urlsafe_b64decode(sig["clientDataJSON"] + "=="))
+    assert cd["type"] == "webauthn.get" and cd["challenge"] == want
+    v = FakeSignerVerifier()
+    assert v.verify(ACC, sd, sig, "production") is True
+    old = dict(sig, clientDataJSON=base64.urlsafe_b64encode(json.dumps(
+        {"type": "webauthn.get", "challenge": base64.urlsafe_b64encode(bytes.fromhex("ab" * 32)).rstrip(b"=").decode()}).encode()).rstrip(b"=").decode())
+    assert v.verify(ACC, sd, old, "production") is False
+
+
+def test_republish_of_urgent_version_with_open_follow_up_is_refused():
+    w = World()
+    _, r = w.publish(w.draft(change_kind="urgent", review_ref="review:sa:urgent-01"))
+    assert r["index"]["followUpOpen"] == [r["record"]["publishId"]]
+    again = w.draft(change_kind="scheduled")  # same version 0.2.0 again, based on 0.1.0
+    assert code(w.pub.publish, "r-again", again, w.signed(again), Actor(FDR, "tok:1")) == "PP-063"
+    assert json.loads(w.store.indexes["SA"])["indexSeq"] == 1  # nothing was committed

@@ -490,7 +490,7 @@
   /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
-  box-shadow: var(--glass-highlight), var(--shadow-overlay);
+  box-shadow: var(--shadow-overlay);
   transition: border-color var(--motion-fast) var(--motion-ease);
 }
 

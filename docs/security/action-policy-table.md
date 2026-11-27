@@ -56,7 +56,7 @@ Each row of the table has these fields. Field names are illustrative; the contra
 | R1 | Record change with no ledger, stock, money or external effect | Initiator's own submission; logged |
 | R2 | Stock movement or ledger posting arising from an operational document | Human submits (floor); approval above a tenant limit |
 | R3 | Direct ledger posting, external send of a financial document, money movement | Human submits; second approver above a limit or by tenant setting; step-up |
-| R4 | Reversal of posted history, permission or role change, bank-detail change, agent limit or autonomy change, Blueprint publish | Always a second, different, eligible human approver (section 6); with none available the action is refused, never self-approved (Q-41: R4 has no self-approval); step-up; short expiry; break-glass only through section 8 |
+| R4 | Reversal of posted history, permission or role change, bank-detail change, contact-detail change (email, phone, notify-to, webhook; its own tool, never agent-creatable, Q-139), agent limit or autonomy change, Blueprint publish | Always a second, different, eligible human approver (section 6); with none available the action is refused, never self-approved (Q-41: R4 has no self-approval); step-up; short expiry; break-glass only through section 8 |
 
 The class sets the minimum. A row may be stricter, never looser. The class assignments in section 11 are still for founder, accountant and compliance review.
 

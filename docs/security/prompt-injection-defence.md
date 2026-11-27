@@ -195,7 +195,7 @@ Further rules:
 
 ### 5.1 Recipients and targets
 1. The model never chooses where data goes. An email address, phone number, URL, webhook, bank account or connector target is acceptable only if it is (a) an existing verified record field in the tenant, selected by record id, or (b) typed by the user in an L2 turn, or (c) confirmed by the user per field on a screen that shows the value and its source.
-2. A taint-derived recipient is shown beside the previously stored value for that party, with the difference marked. Changing a stored bank detail or payment address is an R4 class action and always a separate human-initiated request (T13).
+2. A taint-derived recipient is shown beside the previously stored value for that party, with the difference marked. Changing a stored bank detail or payment address, or a contact detail (email, phone, notify-to, webhook), is an R4 class action and always a separate human-initiated request (T13); the Tool API gives contact-detail changes their own R4 tool, never agent-creatable (Q-139, ADR-0058).
 3. Reply-to and sender fields in forwarded email are L3 and never become a recipient by default.
 
 ### 5.2 Rendering model output (T46)

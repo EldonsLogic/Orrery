@@ -95,9 +95,13 @@ Live coordinator log for the partner lane's G1 finishing sprint (RULES 51), cont
 - Advisor (GOV-073 trial), call 2, before this batch: order by what unblocks G1; check #391's reviewer (its RULES 42 review was Claude Sonnet on Claude Opus, same family, so not a different-vendor review); #344 needs #362 merged first; test_06 (BPL-032's check) has no expectedFailure, so #381 cannot go green before BPL-032: take Eldon's split, and BPL-032 has the same circular dependency on BPL-046 as BPL-033 had (founder call); re-reviews delta only; same-family reviews do not meet RULES 42 for Tier 3, so post COMMENT only there; #388 is the partner's call (RULES 33, counsel); Q-721 is an external fact needing a source. Token cost unknown.
 - Applied: R20 (#391, Claude Sonnet 5.5, same-family) dispatched; the split of #381 dispatched (Claude Sonnet 5.5, own worktree: the length and precision fix, the provisioning index sync and the runner change for the existing sites move to a new PR; #381 keeps the BPL-027 phase as a draft); re-reviews R21 (#392), R22 (#371, #372, #374; Claude Haiku 5.5) and R23 (#368) dispatched. Checked by the coordinator on Eldon's branches: Q-421 recorded as not agreed, Q-602 keeps counsel, "Partner to confirm" markers back, access dates added.
 
+- #381: Eldon's re-review at 311e58ac: one Medium (a quote inside a SQL comment moves the clause ends, so a hidden DROP COLUMN passed). Fixed by the coordinator at 553b9937: every sent ADD INDEX clause must fully match the engine's one index shape (all 62 additions in CI have it); a prefix-match mutant fails 2 tests. Re-review asked.
+- Q-721 checked against Meta's developer docs (accessed 2026-11-27) and posted on #394: no signed timestamp; WhatsApp retries for up to 7 days (the generic Graph page says 36 h), so the 72 h dedup minimum is too low; `messages[].timestamp` is a string.
+- #362 merged by Eldon; #344 (CMP-039, ADR-0071 Proposed) merged on the partner's earlier say-so at 27265a40 (Eldon's approval at c4bae35b, later commits only merge main); its worktree removed. CMP-039 set done (the partner's rule: a design row is done when its Proposed ADR merges); CMP-043 now refuses the store path outside sandbox until CMP-045 (Eldon's carried Low).
+
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-g1-sprint.md: this live log.
-- docs/PLAN.md: BPL-046 and BPL-044 claimed (#378); BPL-048 added (coordination-22); BPL-044 and ERP-035 done, CE-SEC-020 and CE-SEC-011 text (coordination-24); BPL-050 added (coordination-25).
+- docs/PLAN.md: BPL-046 and BPL-044 claimed (#378); BPL-048 added (coordination-22); BPL-044 and ERP-035 done, CE-SEC-020 and CE-SEC-011 text (coordination-24); BPL-050 added (coordination-25); CMP-039 done and CMP-043 text (coordination-28).
 - docs/open-questions.md: Q-684 to Q-688 partner agreement (coordination-24).
 
 ## Decisions

@@ -598,14 +598,20 @@ class TestBPL046IndexSync(unittest.TestCase):
                      "ALTER TABLE `tabX` ADD INDEX `a`(`a`), CHANGE `c` `d` int(11)",
                      "ALTER TABLE `tabX` ADD INDEX `a`(`a`); DROP TABLE `tabX`",
                      "ALTER TABLE `tabX` ADD INDEX `a`(`a`",
-                     "ALTER TABLE `tabX` MODIFY `y` varchar(140) unique"):
+                     "ALTER TABLE `tabX` MODIFY `y` varchar(140) unique",
+                     # #381 re-review: a quote inside a comment moves the parser's clause ends; the strict index shape
+                     # refuses the whole statement, so the hidden DROP COLUMN is never sent
+                     "ALTER TABLE `t` ADD INDEX `a`(`a`) /* ' */ , DROP COLUMN `c`, ADD INDEX `b`(`b`) /* ' */",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`) -- x",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`(140))",
+                     "ALTER TABLE `tabX` ADD INDEX IF NOT EXISTS `a`(`a`)"):
             with self.subTest(stmt):
                 with self.assertRaisesRegex(SystemExit, "index sync refused DDL"):
                     self._run_program({"X": [stmt]})
 
     def test_a_mixed_statement_sends_only_its_index_clauses(self):
         """Frappe's alter() joins clauses: MODIFY plus ADD INDEX sends the ADD INDEX part, never skips it (#381)."""
-        mixed = ("ALTER TABLE `tabX` MODIFY `note` varchar(140) default 'a, b; c', ADD INDEX `creation`(`creation`), "
+        mixed = ("ALTER TABLE `tabX` MODIFY `note` varchar(140) default '#fff, -- b; c', ADD INDEX `creation`(`creation`), "
                  "ADD INDEX `unique_code_index`(`unique_code`)")
         sent, out = self._run_program({"X": [mixed]})
         rebuilt = "ALTER TABLE `tabX` ADD INDEX `creation`(`creation`), ADD INDEX `unique_code_index`(`unique_code`)"

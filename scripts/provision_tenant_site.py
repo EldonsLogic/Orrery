@@ -97,9 +97,10 @@ _NEW_SITE_POSIX_SH = (
 # (schema.py:78). A fresh site therefore lacks indexes that the engine's first schema sync of such a table adds next
 # to an approved ADD COLUMN, and the DDL gate refuses it. This program runs Frappe's own sync (frappe.db.updatedb)
 # on every table once. Frappe's alter() joins its clauses into one statement, so each statement is split into its
-# top-level clauses (outside parentheses, backticks and quotes): only ADD INDEX clauses run, rebuilt into one statement;
-# MODIFY clauses (Frappe's re-emits) are counted and not sent; a `;`, an unbalanced statement, any other clause kind or
-# any UNIQUE fails closed. Idempotent: a second run adds nothing (checked by hand on the pinned bench, BPL-046; the
+# top-level clauses (outside parentheses, backticks and quotes): only ADD INDEX clauses that match Frappe's exact index
+# shape run, rebuilt into one statement; MODIFY clauses (Frappe's re-emits) are counted and never sent; a `;`, an
+# unbalanced statement, any other clause kind, any UNIQUE in a MODIFY or any ADD INDEX clause with extra text (a comment
+# included) fails closed. Idempotent: a second run adds nothing (checked by hand on the pinned bench, BPL-046; the
 # stand-in frappe of the unit tests cannot show it). Run from the bench directory with the site as its one argument.
 INDEX_SYNC_PY = r'''
 import json, re, sys, frappe
@@ -132,9 +133,15 @@ try:
             return None
         parts.append(cur.strip())
         return parts
+    # The only clause ever sent: exactly what Frappe's alter() emits for an index, one plain name and one plain column
+    # (all 62 additions on a fresh pinned site have this shape). A comment, quote or anything else inside an ADD INDEX
+    # clause fails the full match, so no text can ride along with a sent clause (#381 re-review).
+    INDEX_CLAUSE = re.compile(r"ADD INDEX `[A-Za-z0-9_]+`\(`[A-Za-z0-9_]+`\)")
     def bad(part):
+        if part.startswith("ADD INDEX "):
+            return not INDEX_CLAUSE.fullmatch(part)
         bare = re.sub(r"`[^`]*`", "", part)
-        return not re.match(r"(ADD INDEX|MODIFY) \S", part) or re.search(r"\bUNIQUE\b", bare, re.I)
+        return not re.match(r"MODIFY \S", part) or re.search(r"\bUNIQUE\b", bare, re.I)
     def admit(query, debug=False):
         stmt = " ".join(str(query).split())
         m = re.fullmatch(r"ALTER TABLE (`[^`]+`) (.+)", stmt)

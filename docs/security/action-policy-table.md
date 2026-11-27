@@ -179,6 +179,10 @@ Roles from [../specs/golden-path-trading-sale.md](../specs/golden-path-trading-s
 | AP-FIN-02 | Cancel a posted invoice (correcting entries, never edited history) | Reversal of posted history | R4 | Yes | Finance | Owner | 1 | SOD-DIFF; no self-approval fallback (R4, Q-41) | Draft only | Invoice id and revision, reason, the correcting entries preview total | One hour | Not allowed |
 | AP-PERM-01 | Change a user's roles or permissions, or a tenant limit | Permission change | R4 | Yes | Owner | A second Owner or admin | 1 | SOD-DIFF, SOD-NOT-SELF; no fallback | Draft only (never even for its own role) | Target user, roles before and after, scopes, limits before and after | One hour | Not allowed |
 | AP-BPL-01 | Publish a Blueprint change to the live tenant | Configuration change | R4 | Yes | Owner | Owner (confirming the deterministic diff) and our review gate for first clients | 1 owner, plus platform review | SOD-NOT-AGENT-OWNER when agent-drafted; reviewer is not the author | Draft only | Blueprint id, from and to revision, diff hash | One hour | Not allowed |
+| AP-PAY-01 (proposed) | Create a hosted checkout for an invoice or order (`payment.create_checkout`) | Money movement | R3 | Yes (human submits) | Finance, Sales, Owner | None up to tenant limit; Finance or Owner above it | 0, or 1 above limit | SOD-NONE; SOD-DIFF above limit | Draft only | Link ids and revisions, amount, currency, connection id, expiry | Few hours | Not allowed |
+| AP-PAY-02 (proposed) | Refund a captured payment (`payment.refund`) | Money movement | R4 | Yes | Finance | Owner, or a second Finance holder | 1 | SOD-DIFF, SOD-NOT-AGENT-OWNER; no fallback | Draft only | Payment id, amount, currency, credit note id and revision, reason code | One hour | Not allowed |
+| AP-PAY-03 (proposed) | Void an authorised payment (`payment.void`) | Money movement | R4 | Yes | Finance | Owner, or a second Finance holder | 1 | SOD-DIFF, SOD-NOT-AGENT-OWNER; no fallback | Draft only | Payment id, authorised amount, currency, reason code | One hour | Not allowed |
+| AP-PAY-04 (proposed) | Connect or change a gateway account: keys, webhook secret, environment (`payment.connect_gateway`) | Configuration change (bank-detail class) | R4 | Yes | Owner | A second Owner or admin | 1 | SOD-DIFF; no fallback | Draft only | Connection id, provider, environment, merchant account ref, key fingerprint (never the key) | One hour | Not allowed |
 
 Notes on the rows:
 - **AP-SALES-01** has no ledger effect on this path, so no approval. A tenant may add a credit-limit approval later; that is a tenant tightening, not a new mandatory control.
@@ -187,6 +191,7 @@ Notes on the rows:
 - **AP-FIN-02** is a counter-action, not a cancellation of a request (section 7). It needs the Owner even when Finance initiates.
 - **AP-PERM-01** also covers changing an agent's limits or autonomy (ADR-0027); SEC-020 may split that into its own row.
 - **AP-BPL-01** keeps the human review gate for first clients (ADR-0005, RULES 23). The owner approves the deterministic diff, not a model summary (BPL-006).
+- **AP-PAY-01 to AP-PAY-04** are proposed by DSC-021 (2026-11-27, [connector-payments.md](../../contracts/connector-payments.md), [ADR-0077](../decisions/ADR-0077-payments-connector-bring-your-own-gateway.md)) for partner review on its PR; R4 rows are never agent-creatable.
 - The golden path roles table says Finance may not change permissions and Sales and Warehouse may not see cost or ledger; section 6 of that spec is checked by role views and QA-019, not by this table, which governs actions.
 
 ## 13. Open questions for the founders
@@ -199,4 +204,4 @@ Added to [../open-questions.md](../open-questions.md) as Q-41 to Q-44 (numbers c
 Also for review, not separate questions: the risk class of each starter row; the canonical-form and hash proposal (UNVERIFIED); whether break-glass for AP-STOCK-01 and AP-FIN-01 is acceptable.
 
 ## 14. What this spec does not cover
-Payments, tax returns, e-invoice clearance and submission, bank-detail changes and external sends get rows when their paths are specified. Agent role grants, cost caps and kill switch are SEC-020. The approval inbox screen is WEB-005. Retention of approval records follows OPR-012 and [data-classification.md](data-classification.md).
+Payments other than the proposed AP-PAY rows, tax returns, e-invoice clearance and submission, bank-detail changes and external sends get rows when their paths are specified. Agent role grants, cost caps and kill switch are SEC-020. The approval inbox screen is WEB-005. Retention of approval records follows OPR-012 and [data-classification.md](data-classification.md).

@@ -37,6 +37,7 @@ for path in (str(DOCKER_DIR), str(ENGINE_ROOT)):
         sys.path.insert(0, path)
 
 import run_real_bench_ci  # noqa: E402
+import provision_tenant_site  # noqa: E402  (importable once the runner is: it appends scripts/)
 from change_engine.tests import test_erp_014_accounting_properties as erp014  # noqa: E402
 
 
@@ -285,10 +286,22 @@ class TestRunnerRunsTheBpl027Class(unittest.TestCase):
         self.assertLess(pip, new_site)
         self.assertLess(new_site, tests)
         self.assertEqual(self.compose_timeouts[pip], run_real_bench_ci.BPL027_DEPS_TIMEOUT)
-        requirements = compose_calls[pip][-1]
-        self.assertEqual(requirements, "platform-repo/services/blueprint/requirements.txt")
-        pinned = (REPO_ROOT / requirements.removeprefix("platform-repo/")).read_text(encoding="utf-8")
-        self.assertRegex(pinned, r"(?m)^jsonschema==\d")
+        pins = list(compose_calls[pip][compose_calls[pip].index("-q") + 1:])
+        pinned = (REPO_ROOT / "services" / "blueprint" / "requirements.txt").read_text(encoding="utf-8")
+        self.assertEqual(pins, [p for p in pinned.split() if not p.startswith("pytest")], "every pin but pytest")
+        self.assertRegex(" ".join(pins), r"^jsonschema==\d")
+
+    def test_every_site_gets_the_provisioning_index_sync_after_new_site(self) -> None:
+        """BPL-046: the same program as scripts/provision_tenant_site.py, last in the same call (sh -e)."""
+        _, compose_calls, _ = self._run()
+        provisions = [args for args in compose_calls if "ce_sec_005_provision" in args]
+        self.assertEqual(len(provisions), 2 + len(run_real_bench_ci.VALUATION_LAYERS))
+        for args in provisions:
+            script = args[args.index("-ec") + 1]
+            self.assertTrue(script.endswith('cd sites && ../env/bin/python -c "$index_sync" "$site"'))
+            self.assertLess(script.index("bench new-site"), script.index("$index_sync\""))
+            self.assertIn(provision_tenant_site.INDEX_SYNC_PY, args)
+            self.assertEqual(self.compose_timeouts[compose_calls.index(args)], run_real_bench_ci.PROVISION_TIMEOUT)
 
     def test_a_failed_dependency_install_fails_the_run_privately_and_tears_down(self) -> None:
         out = io.StringIO()

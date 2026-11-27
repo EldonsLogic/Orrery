@@ -92,6 +92,43 @@ _NEW_SITE_POSIX_SH = (
     '--db-password "$DB_PASSWORD" "$@"'
 )
 
+# BPL-046: Frappe's MariaDBTable.create() never adds the `creation` index that alter() adds to every table whose
+# sort_field is creation (frappe/database/mariadb/schema.py:84 on the pinned bench), nor a missing search_index index
+# (schema.py:78). A fresh site therefore lacks indexes that the engine's first schema sync of such a table adds next
+# to an approved ADD COLUMN, and the DDL gate refuses it. This program runs Frappe's own sync (frappe.db.updatedb)
+# on every table once: index additions run, Frappe's MODIFY re-emits are not sent, any other DDL fails closed.
+# Idempotent: a second run adds nothing. Run from the bench directory with the site as its one argument.
+INDEX_SYNC_PY = r'''
+import json, re, sys, frappe
+frappe.init(site=sys.argv[1], sites_path=".")
+frappe.connect()
+try:
+    run_ddl, added, skipped = frappe.db.sql_ddl, [], [0]
+    def admit(query, debug=False):
+        stmt = " ".join(str(query).split())
+        m = re.fullmatch(r"ALTER TABLE `[^`]+` (ADD INDEX|MODIFY) .+", stmt)
+        if not m or "ADD UNIQUE" in stmt:
+            raise SystemExit("index sync refused DDL: " + stmt[:200])
+        if m.group(1) == "MODIFY":
+            skipped[0] += 1
+            return None
+        added.append(stmt)
+        return run_ddl(query, debug=debug)
+    frappe.db.sql_ddl = admit
+    doctypes = frappe.get_all("DocType", filters={"issingle": 0, "is_virtual": 0}, pluck="name", order_by="name")
+    for doctype in doctypes:
+        frappe.db.updatedb(doctype)
+    print(json.dumps({"tables": len(doctypes), "indexes_added": added, "modify_not_sent": skipped[0]}))
+finally:
+    frappe.destroy()
+'''
+
+
+def index_sync_command(site_name: str) -> List[str]:
+    """The in-container command that runs INDEX_SYNC_PY on one site (BPL-046)."""
+    return ["sh", "-ec", 'cd sites && exec ../env/bin/python -c "$1" "$2"', "provision_tenant_site",
+            INDEX_SYNC_PY, validate_site_name(site_name)]
+
 
 class ProvisioningError(Exception):
     """Raised when tenant site provisioning fails."""
@@ -382,6 +419,7 @@ class TenantProvisioner:
             "service": self.service_name if self.compose_project else None,
             "commands": {
                 "new_site": redacted_new_site,
+                "index_sync": index_sync_command(self.config.site_name),
                 "set_config": set_config_cmds,
                 "list_apps": list_apps_cmd,
             },
@@ -430,6 +468,17 @@ class TenantProvisioner:
         if rc != 0:
             detail = _redact_secrets(stderr or stdout, secrets_to_mask)
             raise ProvisioningError(f"bench new-site failed (code {rc}): {detail}")
+
+        # 1b. BPL-046: add the indexes the engine's own schema sync expects, before any apply (fail closed)
+        rc_idx, out_idx, err_idx = self._run(index_sync_command(self.config.site_name))
+        try:
+            index_sync = json.loads((out_idx or "").strip().splitlines()[-1])
+        except (IndexError, ValueError):
+            index_sync = None
+        if (rc_idx != 0 or not isinstance(index_sync, dict) or not isinstance(index_sync.get("tables"), int)
+                or index_sync["tables"] < 1 or not isinstance(index_sync.get("indexes_added"), list)):
+            detail = _redact_secrets(err_idx or out_idx or "", secrets_to_mask)[-500:]
+            raise ProvisioningError(f"Index sync failed (code {rc_idx}): {detail}")
 
         # 2. Apply site_config.json overrides via supported `bench set-config` (no python -c)
         for cfg_cmd in self._set_config_commands():
@@ -482,6 +531,7 @@ class TenantProvisioner:
             "db_user": self.config.db_name,
             "db_host": self.config.db_host,
             "installed_apps": installed,
+            "index_sync": index_sync,
             "developer_mode": self.config.developer_mode,
             "admin_user": "Administrator",
             "admin_password": admin_password,
@@ -648,14 +698,20 @@ def main(argv: Optional[List[str]] = None) -> int:
             if args.dry_run:
                 print("\n[Dry Run Plan - Secrets Redacted]")
                 print("New-site cmd  :", " ".join(result["plan"]["commands"]["new_site"]))
+                print("Index sync    : Frappe updatedb on every table, ADD INDEX only (BPL-046)")
                 for cfg_cmd in result["plan"]["commands"]["set_config"]:
                     print("Set-config cmd:", " ".join(cfg_cmd))
                 print("Verify cmd    :", " ".join(result["plan"]["commands"]["list_apps"]))
-            elif "credentials_file" in result:
-                print(f"Credentials   : written to {result['credentials_file']} (mode 0600)")
             else:
-                print(f"Admin User    : {result['admin_user']}")
-                print(f"Admin Password: {result['admin_password']}")
+                sync = result["index_sync"]
+                print(f"Index sync    : {sync['tables']} tables, {len(sync['indexes_added'])} indexes added")
+                for stmt in sync["indexes_added"]:
+                    print(f"  {stmt}")
+                if "credentials_file" in result:
+                    print(f"Credentials   : written to {result['credentials_file']} (mode 0600)")
+                else:
+                    print(f"Admin User    : {result['admin_user']}")
+                    print(f"Admin Password: {result['admin_password']}")
         return 0
     except ProvisioningError as pe:
         if args.json:

@@ -11,6 +11,9 @@ on:
       - "infra/dev/docker/**"
       - "components/**"
       - "scripts/provision_tenant_site.py"
+      - "services/blueprint/**"  # BPL-046: the BPL-027 class compiles the fixture with these
+      - "contracts/**"
+      - "docs/brand/**"
       - ".github/workflows/real-bench.yml"
   schedule:
     - cron: "30 2 * * 1"  # weekly full real-bench run, Monday UTC (CE-SEC-005)

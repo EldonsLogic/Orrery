@@ -5,9 +5,9 @@ Used by `.github/workflows/real-bench.yml` and local developers to verify the
 change engine against real Frappe v15 / ERPNext / HRMS / MariaDB 11.4 / Redis
 services instead of mocks. Keeps database, admin and internal credentials out of runner logs.
 
-Startup, provisioning and the CE-SEC-005 tests each have a five-minute limit. ERP-031 adds the ERP-014 and
-ERP-015 live valuation layers: each gets its own freshly provisioned site (with ``tenant_id``, as the probes
-refuse a used site), runs with its REQUIRE flag so a missing bench is a failure, and a layer that reports any
+Startup and the CE-SEC-005 tests each have a five-minute limit; provisioning, with its index sync, eight minutes.
+ERP-031 adds the ERP-014 and ERP-015 live valuation layers: each gets its own freshly provisioned site (with
+``tenant_id``, as the probes refuse a used site), runs with its REQUIRE flag so a missing bench is a failure, and a layer that reports any
 skip, or that ran fewer than its expected live tests (a vacuous run), fails the run. BPL-046 judges the BPL-027
 bench class by the same rules: it runs inside the engine container, which gets the BPL-027 read-only mounts from
 ``docker-compose.bpl027-test.yml`` and the compiler's pinned test dependency, on its own fresh site with
@@ -38,6 +38,9 @@ BPL027_COMPOSE_FILE = DOCKER_DIR / "docker-compose.bpl027-test.yml"
 SAFE_PROJECT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 REPO_ROOT = DOCKER_DIR.parents[2]
 ENGINE_PYTHONPATH = REPO_ROOT / "apps" / "engine" / "change_engine"
+# BPL-046: every site gets the tenant provisioning's index sync, so the bench sites match production ones.
+sys.path.append(str(REPO_ROOT / "scripts"))  # appended: nothing there shadows a module imported elsewhere
+from provision_tenant_site import INDEX_SYNC_PY  # noqa: E402
 # ERP-031: (site prefix, live test class, bench project var, bench site var, REQUIRE flag, minimum tests that must run)
 # of each live valuation layer. Only the live class is run, so a run that executed fewer tests proved nothing.
 VALUATION_LAYERS = (
@@ -51,11 +54,14 @@ BPL027_LIVE_CLASS = "change_engine.tests.test_bpl_027_fixture_real_adapter.TestB
 BPL027_MINIMUM_TESTS = 10
 STARTUP_TIMEOUT = 300
 ENGINE_READY_TIMEOUT = 120
-PROVISION_TIMEOUT = 300
+# BPL-046: bench new-site took 297 to 306 s on a local machine (well under that in CI), the index sync about 45 s.
+NEW_SITE_TIMEOUT = 360
+INDEX_SYNC_TIMEOUT = 120
+PROVISION_TIMEOUT = NEW_SITE_TIMEOUT + INDEX_SYNC_TIMEOUT
 HTTP_READY_TIMEOUT = 60
 VERIFIER_TIMEOUT = 120
 SEC005_TEST_TIMEOUT = 300
-VALUATION_TEST_TIMEOUT = 900
+VALUATION_TEST_TIMEOUT = 600  # BPL-046: the layers took 22 to 36 s in CI
 BPL027_DEPS_TIMEOUT = 120
 BPL027_TEST_TIMEOUT = 600
 TEARDOWN_TIMEOUT = 120
@@ -199,7 +205,7 @@ def _provision_site(
     tenant_slug = re.sub(r"[^A-Za-z0-9_]", "_", site_name.split(".", 1)[0])
     tenant_id = f"t_{tenant_slug}"[:64]
     script = (
-        'site="$1"; db_name="$2"; tenant_id="$3"; '
+        'index_sync="$1"; site="$2"; db_name="$3"; tenant_id="$4"; '
         'bench new-site "$site" '
         '--db-host mariadb '
         '--mariadb-user-host-login-scope=% '
@@ -208,7 +214,8 @@ def _provision_site(
         '--db-name "$db_name" '
         '--db-password "$ADMIN_PASSWORD" '
         '--install-app erpnext --install-app hrms --install-app change_engine && '
-        'bench --site "$site" set-config tenant_id "$tenant_id"'
+        'bench --site "$site" set-config tenant_id "$tenant_id" && '
+        'cd sites && ../env/bin/python -c "$index_sync" "$site"'
     )
     res = _run_compose(
         project,
@@ -225,6 +232,7 @@ def _provision_site(
         "-ec",
         script,
         "ce_sec_005_provision",
+        INDEX_SYNC_PY,
         site_name,
         db_name,
         tenant_id,
@@ -232,6 +240,8 @@ def _provision_site(
     )
     if res.returncode != 0:
         raise RuntimeError(f"Failed provisioning site {site_name} (exit {res.returncode}).")
+    report = (res.stdout or "").strip().splitlines()[-1:] or [""]
+    print(f"Index sync on {site_name}: {redact(report[0], env)}")
 
 
 def _drop_site(
@@ -325,7 +335,11 @@ def _run_valuation_layer(env: dict[str, str], project: str, site: str, layer: tu
 
 
 def _install_bpl027_dependencies(project: str, compose_file: Path, env: dict[str, str]) -> None:
-    """Install the Blueprint compiler's pinned requirements (test-only, not in the image) into the bench environment."""
+    """Install the Blueprint compiler's pinned requirements (test-only, not in the image) into the bench environment.
+    pytest is left out: the class runs under unittest."""
+    requirements = (REPO_ROOT / "services" / "blueprint" / "requirements.txt").read_text(encoding="utf-8")
+    pins = [line.strip() for line in requirements.splitlines()
+            if line.strip() and not line.startswith("#") and not re.match(r"pytest\b", line.strip())]
     res = _run_compose(
         project,
         compose_file,
@@ -336,8 +350,7 @@ def _install_bpl027_dependencies(project: str, compose_file: Path, env: dict[str
         "env/bin/pip",
         "install",
         "-q",
-        "-r",
-        "platform-repo/services/blueprint/requirements.txt",
+        *pins,
         timeout=BPL027_DEPS_TIMEOUT,
     )
     if res.returncode != 0:

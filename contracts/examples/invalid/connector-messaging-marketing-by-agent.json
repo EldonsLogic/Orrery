@@ -1,0 +1,1 @@
+{"kind": "send_request", "tenantId": "t_demo_trading", "idempotencyKey": "01J8ZK3QW5V6X7Y8Z9A0B1C2D4", "channel": "whatsapp", "contactRef": "ct_0042", "mode": "template", "template": {"templateId": "tpl_spring_offer", "category": "marketing", "language": "ar", "params": ["10%"]}, "consentRef": "cns_0042_mkt", "origin": "agent_draft", "riskClass": "R3", "approvalId": "apr_0007"}

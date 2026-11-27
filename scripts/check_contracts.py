@@ -22,11 +22,13 @@ PAIRS = [("examples/blueprint-*.json", "blueprint.schema.json"),
          ("examples/model-call-*.json", "model-call.schema.json"),
          ("examples/country-pack-record-*.json", "country-pack-record.schema.json"),
          ("examples/country-pack-index-*.json", "country-pack-index.schema.json"),
-         ("examples/country-pack-pin-*.json", "country-pack-pin.schema.json")]
+         ("examples/country-pack-pin-*.json", "country-pack-pin.schema.json"),
+         ("examples/connector-messaging-*.json", "connector-messaging.schema.json")]
 # invalid example glob -> schema file: every match must FAIL its schema (negative tests)
 INVALID_PAIRS = [("examples/invalid/country-pack-record-*.json", "country-pack-record.schema.json"),
                  ("examples/invalid/country-pack-index-*.json", "country-pack-index.schema.json"),
-                 ("examples/invalid/country-pack-pin-*.json", "country-pack-pin.schema.json")]
+                 ("examples/invalid/country-pack-pin-*.json", "country-pack-pin.schema.json"),
+                 ("examples/invalid/connector-messaging-*.json", "connector-messaging.schema.json")]
 
 
 def main():

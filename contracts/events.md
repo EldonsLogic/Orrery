@@ -1,6 +1,6 @@
 # Event stream
 
-Version: 0.1.0
+Version: 0.2.0
 Status: draft
 Owner: eldon
 
@@ -68,6 +68,16 @@ Naming `<domain>.<past_tense_verb>`.
 ### Agent events
 `agent.run_started`, `agent.tool_proposed`, `agent.run_completed`, `agent.run_failed`, `agent.budget_exceeded`, `agent.output_flagged` (injection or policy filter hit), `chat.turn_completed` (data: mode discover/ask/act/change, latency, token counts, no content), `memory.written`, `memory.expired`, `eval.regression_detected` (platform-level, not tenant).
 
+### Messaging events (0.2.0, additive; [connector-messaging](connector-messaging.md), ADR-0078)
+No message body, phone number or handle in any of them: `contentHash` and opaque refs only. `data_class: personal`.
+| Type | Data |
+|---|---|
+| `message.received` | message_id, conversation_id, channel, channel_account_ref, content_hash, flags, tainted |
+| `message.send_requested` | message_id, conversation_id, channel, mode, template_id, category, language, origin, risk_class, consent_ref, approval_id |
+| `message.status_changed` | message_id, provider status (`accepted` to `expired`), error_code |
+| `consent.recorded` | consent_id, contact_ref, channel, country, purpose, method, text_version |
+| `consent.revoked` | consent_id, revoked_by |
+
 ### Metering events
 Cheap, high-volume, aggregated by Part 5 into usage records.
 | Type | Data |
@@ -78,6 +88,7 @@ Cheap, high-volume, aggregated by Part 5 into usage records.
 | `meter.documents_issued` | doc type, count (for e-invoicing volumes) |
 | `meter.connector_run` | connector id, rows, bytes, tier |
 | `meter.simulation_run` | records replayed, duration |
+| `meter.message_sent` | channel, template category or `session`, country, provider, cost_micro_usd ([connector-messaging](connector-messaging.md)) |
 
 ### Platform events (no tenant data)
 `component.published`, `component.deprecated`, `component.request_created`, `component.request_reviewed`, `engine.upgrade_canary_started`, `engine.upgrade_promoted`, `engine.upgrade_rolled_back`. These carry `tenant_id: "platform"`.

@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:connector-messaging:0.1.0",
+  "version": "0.1.0",
+  "title": "Messaging and SMS connector objects",
+  "description": "Draft (ADR-0078 Proposed, DSC-022). The six objects of connector-messaging.md, told apart by kind. Unknown keys are refused. Rules JSON Schema cannot express are in x-validator-rules.",
+  "x-validator-rules": [
+    "tenantId is set by the platform from the verified channel account binding, never from webhook payload text (section 7)",
+    "a session_reply is refused unless now is before the conversation's windowOpenUntil (MSG-003)",
+    "a template send is refused unless the template is approved for that language and category and consentRef points at a granted consent record of the same tenant, contact, channel and a purpose covering the category (MSG-004, MSG-005)",
+    "an auto_reply send carries a text that equals the tenant-approved text for autoReplyIntent byte for byte; the model never writes it (section 5)",
+    "contactRef resolves to a verified contact field of the tenant record; the model never chooses a recipient (prompt-injection-defence 5.1)"
+  ],
+  "type": "object",
+  "required": ["kind", "tenantId"],
+  "properties": {"kind": {"enum": ["capability", "conversation", "inbound_message", "send_request", "delivery_status", "consent_record"]}},
+  "oneOf": [
+    {"$ref": "#/$defs/capability"}, {"$ref": "#/$defs/conversation"}, {"$ref": "#/$defs/inboundMessage"},
+    {"$ref": "#/$defs/sendRequest"}, {"$ref": "#/$defs/deliveryStatus"}, {"$ref": "#/$defs/consentRecord"}
+  ],
+  "$defs": {
+    "tenantId": {"type": "string", "pattern": "^t_[a-z0-9_]{1,40}$"},
+    "ref": {"type": "string", "pattern": "^[a-z]{2,4}_[A-Za-z0-9_-]{1,64}$"},
+    "providerId": {"type": "string", "pattern": "^[A-Za-z0-9_.:=+/-]{1,128}$"},
+    "channel": {"enum": ["whatsapp", "instagram", "messenger", "sms"]},
+    "time": {"type": "string", "format": "date-time"},
+    "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "capability": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "connectorId", "connectorVersion", "channel", "channelAccountRef", "credentialRef", "serviceWindowHours", "templatesRequiredOutsideWindow", "inboundContent", "maxTextLength", "sandbox"],
+      "properties": {
+        "kind": {"const": "capability"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "connectorId": {"enum": ["msg.meta_whatsapp", "msg.meta_instagram", "msg.meta_messenger", "msg.sms"]},
+        "connectorVersion": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+        "channel": {"$ref": "#/$defs/channel"},
+        "channelAccountRef": {"$ref": "#/$defs/ref"},
+        "credentialRef": {"type": "string", "pattern": "^secret://tenant/[a-z0-9_]+/msg/[a-z0-9_-]+$"},
+        "serviceWindowHours": {"type": ["integer", "null"], "minimum": 1, "maximum": 168},
+        "templatesRequiredOutsideWindow": {"type": "boolean"},
+        "inboundContent": {"type": "array", "items": {"enum": ["text"]}, "minItems": 1, "uniqueItems": true},
+        "maxTextLength": {"type": "integer", "minimum": 1, "maximum": 4096},
+        "readReceipts": {"type": "boolean"},
+        "sandbox": {"type": "boolean"}
+      }
+    },
+    "conversation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "conversationId", "channel", "channelAccountRef", "contactRef", "state", "windowOpenUntil"],
+      "properties": {
+        "kind": {"const": "conversation"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "conversationId": {"$ref": "#/$defs/ref"}, "channel": {"$ref": "#/$defs/channel"},
+        "channelAccountRef": {"$ref": "#/$defs/ref"}, "contactRef": {"$ref": "#/$defs/ref"},
+        "state": {"enum": ["open", "closed", "blocked"]},
+        "windowOpenUntil": {"oneOf": [{"$ref": "#/$defs/time"}, {"type": "null"}]},
+        "lastInboundAt": {"$ref": "#/$defs/time"},
+        "assignedTo": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]}
+      }
+    },
+    "inboundMessage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "messageId", "providerMessageId", "conversationId", "channel", "receivedAt", "trust", "content", "webhook"],
+      "properties": {
+        "kind": {"const": "inbound_message"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "messageId": {"$ref": "#/$defs/ref"}, "providerMessageId": {"$ref": "#/$defs/providerId"},
+        "conversationId": {"$ref": "#/$defs/ref"}, "channel": {"$ref": "#/$defs/channel"},
+        "receivedAt": {"$ref": "#/$defs/time"},
+        "trust": {"const": "untrusted"},
+        "content": {
+          "type": "object", "additionalProperties": false, "required": ["type", "contentHash"],
+          "properties": {
+            "type": {"enum": ["text", "unsupported"]},
+            "text": {"type": "string", "maxLength": 4096},
+            "contentHash": {"$ref": "#/$defs/hash"},
+            "flags": {"type": "array", "items": {"enum": ["instruction_like", "link", "bidi_override_stripped", "control_chars_stripped", "truncated"]}, "uniqueItems": true}
+          },
+          "if": {"properties": {"type": {"const": "text"}}}, "then": {"required": ["text"]}, "else": {"not": {"required": ["text"]}}
+        },
+        "webhook": {
+          "type": "object", "additionalProperties": false, "required": ["signatureVerified", "dedupKey", "receivedAt"],
+          "properties": {"signatureVerified": {"const": true}, "dedupKey": {"$ref": "#/$defs/hash"}, "receivedAt": {"$ref": "#/$defs/time"}}
+        }
+      }
+    },
+    "sendRequest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "idempotencyKey", "channel", "contactRef", "mode", "origin", "riskClass"],
+      "properties": {
+        "kind": {"const": "send_request"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "idempotencyKey": {"type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"},
+        "channel": {"$ref": "#/$defs/channel"}, "contactRef": {"$ref": "#/$defs/ref"},
+        "conversationId": {"$ref": "#/$defs/ref"},
+        "mode": {"enum": ["session_reply", "template"]},
+        "text": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "template": {
+          "type": "object", "additionalProperties": false, "required": ["templateId", "category", "language", "params"],
+          "properties": {
+            "templateId": {"$ref": "#/$defs/ref"},
+            "category": {"enum": ["utility", "marketing"]},
+            "language": {"enum": ["ar", "en"]},
+            "params": {"type": "array", "maxItems": 10, "items": {"type": "string", "maxLength": 200}}
+          }
+        },
+        "consentRef": {"$ref": "#/$defs/ref"},
+        "origin": {"enum": ["human", "agent_draft", "auto_reply"]},
+        "autoReplyIntent": {"enum": ["greeting_ack", "opening_hours", "location", "handoff_ack"]},
+        "riskClass": {"enum": ["R1", "R3"]},
+        "approvalId": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]}
+      },
+      "allOf": [
+        {"if": {"properties": {"mode": {"const": "session_reply"}}},
+         "then": {"required": ["text", "conversationId"], "not": {"anyOf": [{"required": ["template"]}, {"required": ["consentRef"]}]}},
+         "else": {"required": ["template", "consentRef"], "not": {"required": ["text"]}}},
+        {"if": {"properties": {"template": {"properties": {"category": {"const": "marketing"}}, "required": ["category"]}}, "required": ["template"]},
+         "then": {"properties": {"riskClass": {"const": "R3"}, "origin": {"const": "human"}}, "required": ["approvalId"]}},
+        {"if": {"properties": {"origin": {"const": "auto_reply"}}},
+         "then": {"required": ["autoReplyIntent"], "properties": {"mode": {"const": "session_reply"}, "riskClass": {"const": "R1"}}},
+         "else": {"not": {"required": ["autoReplyIntent"]}}}
+      ]
+    },
+    "deliveryStatus": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "messageId", "providerMessageId", "status", "occurredAt"],
+      "properties": {
+        "kind": {"const": "delivery_status"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "messageId": {"$ref": "#/$defs/ref"}, "providerMessageId": {"$ref": "#/$defs/providerId"},
+        "status": {"enum": ["accepted", "sent", "delivered", "read", "failed", "expired"]},
+        "occurredAt": {"$ref": "#/$defs/time"},
+        "errorCode": {"type": "string", "pattern": "^MSG-[0-9]{3}$"}
+      },
+      "if": {"properties": {"status": {"const": "failed"}}}, "then": {"required": ["errorCode"]}, "else": {"not": {"required": ["errorCode"]}}
+    },
+    "consentRecord": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "tenantId", "consentId", "contactRef", "channel", "country", "purpose", "state", "capturedAt", "method", "textVersion", "language", "evidenceHash"],
+      "properties": {
+        "kind": {"const": "consent_record"}, "tenantId": {"$ref": "#/$defs/tenantId"},
+        "consentId": {"$ref": "#/$defs/ref"}, "contactRef": {"$ref": "#/$defs/ref"},
+        "channel": {"$ref": "#/$defs/channel"},
+        "country": {"enum": ["SA", "AE", "EG", "QA"]},
+        "purpose": {"enum": ["utility", "marketing"]},
+        "state": {"enum": ["granted", "revoked"]},
+        "capturedAt": {"$ref": "#/$defs/time"},
+        "method": {"enum": ["web_form", "in_person", "chat_keyword", "sms_keyword", "phone"]},
+        "textVersion": {"type": "string", "pattern": "^[a-z0-9_.-]{1,40}$"},
+        "language": {"enum": ["ar", "en"]},
+        "evidenceHash": {"$ref": "#/$defs/hash"},
+        "revokedAt": {"$ref": "#/$defs/time"},
+        "revokedBy": {"enum": ["contact_keyword", "contact_request", "tenant_user", "provider_block"]}
+      },
+      "if": {"properties": {"state": {"const": "revoked"}}}, "then": {"required": ["revokedAt", "revokedBy"]}, "else": {"not": {"anyOf": [{"required": ["revokedAt"]}, {"required": ["revokedBy"]}]}}
+    }
+  }
+}

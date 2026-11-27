@@ -1,0 +1,1 @@
+{"kind": "send_request", "tenantId": "t_demo_trading", "idempotencyKey": "01J8ZK3QW5V6X7Y8Z9A0B1C2D3", "channel": "whatsapp", "contactRef": "ct_0042", "conversationId": "conv_0001", "mode": "session_reply", "text": "Thanks, a member of our team will reply shortly.", "origin": "auto_reply", "autoReplyIntent": "handoff_ack", "riskClass": "R1", "approvalId": null}

@@ -80,11 +80,16 @@ def test_classification_table(name):
     ("replace", "modules/crm/roles/work", "access"),
     ("remove", "modules/crm/roles/view", "access"),
     ("replace", "modules/crm/roles", "access"),
+    ("replace", "modules/crm", "access"),
+    ("remove", "modules/crm", "destructive"),
+    ("remove", "modules/projects", "destructive"),
+    ("remove", "modules", "destructive"),
     ("replace", "modules/crm/pipeline/stages/*/probabilityPercent", "config"),
     ("replace", "modules/manufacturing/warehouses/workInProgress", "compliance"),
     ("add", "modules/manufacturing/warehouses/scrap", "compliance"),
     ("replace", "modules/manufacturing/warehouses", "compliance"),
     ("replace", "modules/manufacturing", "compliance"),
+    ("remove", "modules/manufacturing", "destructive"),
     ("replace", "modules/manufacturing/roles/manage", "access"),
     ("replace", "modules/manufacturing/materialTransfer", "config"),
 ])
@@ -165,3 +170,14 @@ def test_manufacturing_warehouse_change_is_compliance():
     b["modules"]["manufacturing"]["warehouses"]["workInProgress"] = "fg_store"
     ops = diff(a, b)["ops"]
     assert ops and {o["impact"] for o in ops} == {"compliance"}
+
+
+def test_module_removal_is_destructive():
+    """Q-700 (#396 re-review): switching a module off is destructive, the stricter class than access."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    for key in ("projects", "manufacturing"):  # removal outranks the manufacturing compliance rule
+        b = json.loads(json.dumps(a))
+        del b["modules"][key]
+        ops = diff(a, b)["ops"]
+        assert ops and {o["impact"] for o in ops} == {"destructive"}, key

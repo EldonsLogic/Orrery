@@ -1,0 +1,13 @@
+{
+  "base": "blueprint-modules-minimal.json",
+  "note": "Negative cases (ADR-0079 item 5, AGENTS.md principle 3): a Blueprint field never carries computation, on any entity. Each case edits the valid base by JSON pointer; the result must fail the Blueprint schema at exactly the field path. Run by contracts/tests/test_blueprint_modules.py.",
+  "cases": [
+    { "name": "field-formula", "set": { "/entities/0/fields/0/formula": "qty * rate" }, "expect": "entities/0/fields/0", "exact": true },
+    { "name": "field-expression", "set": { "/entities/0/fields/0/expression": "qty * rate" }, "expect": "entities/0/fields/0", "exact": true },
+    { "name": "field-fetch-from", "set": { "/entities/0/fields/0/fetch_from": "item.valuation_rate" }, "expect": "entities/0/fields/0", "exact": true },
+    { "name": "field-depends-on", "set": { "/entities/0/fields/0/depends_on": "eval:doc.is_billable" }, "expect": "entities/0/fields/0", "exact": true },
+    { "name": "field-default-expression-key", "set": { "/entities/0/fields/0/default_expression": "today()" }, "expect": "entities/0/fields/0", "exact": true },
+    { "name": "field-default-eval", "set": { "/entities/0/fields/0/default": "eval:doc.qty * doc.rate" }, "expect": "entities/0/fields/0/default", "exact": true },
+    { "name": "field-default-equals", "set": { "/entities/0/fields/0/default": "=qty*rate" }, "expect": "entities/0/fields/0/default", "exact": true }
+  ]
+}

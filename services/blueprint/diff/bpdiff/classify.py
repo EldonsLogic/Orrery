@@ -45,6 +45,8 @@ def impact_of(kind: str, sp: SPath) -> str:
         if sp == STEPS:
             return "access"
         return "config" if sp in ORDER_SIGNIFICANT else "cosmetic"
+    if kind == "remove" and sp[:1] == ("modules",) and len(sp) <= 2:
+        return "destructive"  # a module switched off (Q-700): stricter than access, checked first
     head = sp[0] if sp else ""
     if head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE):
         return "compliance"
@@ -68,7 +70,7 @@ def impact_of(kind: str, sp: SPath) -> str:
 
 
 def _module_roles(sp: SPath) -> bool:
-    """modules/<key>/roles, or a whole module or the modules object (which carry role lists)."""
+    """modules/<key>/roles, or a whole module or the modules object replaced (they carry role lists)."""
     return sp[:1] == ("modules",) and (len(sp) <= 2 or sp[2] == "roles")
 
 

@@ -1,4 +1,4 @@
-"""Deterministic fake of the model-call contract (contracts/model-call.md 0.2.1, PLT-026) for tests.
+"""Deterministic fake of the model-call contract (contracts/model-call.md 0.3.0, PLT-026) for tests.
 
 Eldon-lane callers build against this until the real gateway (services/gateway/, PLT-009) implements the contract.
 It makes no network call and reads no key. Requests and replies are plain dicts in the contract's JSON shape;
@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-CONTRACT_VERSION = "0.2.1"
+CONTRACT_VERSION = "0.3.0"
 SCHEMA_PATH = Path(__file__).resolve().parents[3] / "contracts" / "model-call.schema.json"
 TIERS = ("small", "mid", "frontier")                    # weakest to strongest
 TRUST_ORDER = ("platform", "tenant_config", "user", "untrusted")
@@ -22,11 +22,13 @@ DATA_CLASSES = ("C0", "C1", "C2", "C3")
 RETRYABLE = frozenset({"model_unavailable"})
 FORBIDDEN_FIELDS = frozenset({"model", "model_id", "provider", "endpoint", "api_key", "authorization"})
 IDENTITY_FIELDS = ("tenant_id", "actor_kind", "actor_id", "session_id", "on_behalf_of", "agent_id", "run_id",
-                   "thread_id")
+                   "thread_id", "token_id")
+PRINCIPAL_FIELDS = ("service", "tenant_id", "actor_kind", "actor_id")
 LAYER_ID = {"tenant": "tenant_id", "session": "session_id", "agent": "agent_id", "run": "run_id"}
 ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 MAX_REQUEST_BYTES = 1_048_576
 MAX_ATTEMPTS = 3
+GATEWAY_LAYERS = ("platform",)   # shared across tenants: no id in the principal, one shared ledger
 FRAMING_TOKENS = 16      # per block and per tool: provider message framing allowance on top of the UTF-8 byte bound
 FIXED_TS = "2026-01-01T00:00:00.000Z"  # deterministic meter timestamps
 # micro-USD per 1M tokens (input, output): the PLT-025 default tier rates, UNVERIFIED
@@ -116,9 +118,27 @@ class FakeModelCallPort:
     actual_input: object = None                          # callable(estimate) -> provider-reported input tokens
     rates: dict = field(default_factory=lambda: dict(DEFAULT_RATES))
     idem_store: dict = field(default_factory=dict)
+    pd_may_leave: bool = True                            # the tenant's region policy: may PD-tagged content leave
+    response_cache: bool = False                         # platform-scoped cache for all-L0 calls (section 4)
+    cache_store: dict = field(default_factory=dict)
+    attempt_timeout: int = 30                            # seconds, the largest attempt timeout
+    ttl_margin: int = 10
+    reservation_ttl: object = None                       # seconds; None = the floor 3 x attempt_timeout + margin
+    late: set = field(default_factory=set)               # entries whose reply arrives after the hold was released
+    platform_ledger: object = None                       # {"spent", "overrun": {tenant: n}}, shared by tenants' ports
+    routing_version: str = "rt_1"                        # routing-table version, part of the response-cache key
 
     def __post_init__(self):
-        self.spent = {k: 0 for k in self.layers}
+        floor = 3 * self.attempt_timeout + self.ttl_margin
+        if self.reservation_ttl is None:
+            self.reservation_ttl = floor
+        if self.reservation_ttl < floor:                 # contract section 6.3: the TTL floor
+            raise ValueError("reservation_ttl below 3 x attempt_timeout + margin")
+        if self.platform_ledger is None:
+            self.platform_ledger = {"spent": 0, "overrun": {}}
+        self.alerts: list = []
+        self.security_events: list = []
+        self.spent = {k: 0 for k in self.layers if k not in GATEWAY_LAYERS}
         self.reservations: list = []
         self.events: list = []
         self.attempt_log: list = []
@@ -129,6 +149,11 @@ class FakeModelCallPort:
 
     # -- public -----------------------------------------------------------------------------------------------------
     def complete(self, request: dict) -> dict:
+        p = self.principal                    # Q-672(d): no verified principal is rejected before parsing
+        if not isinstance(p, dict) or any(not p.get(k) for k in PRINCIPAL_FIELDS):
+            self.security_events.append({"kind": "no_verified_principal",
+                                         "service": p.get("service") if isinstance(p, dict) else None})
+            raise PermissionError("no verified principal")
         cid = request.get("call_id") if isinstance(request, dict) else None
         call_id = cid if isinstance(cid, str) and ID_RE.match(cid) else None   # never echo other caller text
         self._validate(call_id, request)
@@ -142,12 +167,13 @@ class FakeModelCallPort:
             if prev_digest != digest:
                 raise ModelCallRefused(call_id, "invalid_request", "idempotency_conflict")
             return self._replay(call_id, prev)
-        prompt = self._assemble(request, self._resolve(call_id, request))
+        resolved = self._resolve(call_id, request)
+        prompt = self._assemble(request, resolved)
         self.last_prompt = prompt
         self._gate(call_id, request, prompt)
         self._inflight.add(ns)
         try:
-            reply = self._dispatch(call_id, request, prompt)
+            reply = self._cache_hit(request, prompt) or self._dispatch(call_id, request, prompt, resolved[2])
         finally:
             self._inflight.discard(ns)
         self.idem_store[ns] = (digest, reply)
@@ -182,6 +208,9 @@ class FakeModelCallPort:
         if ({k: c[k] for k in IDENTITY_FIELDS if k in c} != {k: p[k] for k in IDENTITY_FIELDS if p.get(k) is not None}
                 or sorted(c["role_ids"]) != sorted(p.get("role_ids", []))):
             raise bad("caller_mismatch")
+        ceiling = p.get("grant_max_data_class")                   # from the signed run token (ALP-016)
+        if ceiling and any(DATA_CLASSES.index(b["data_class"]) > DATA_CLASSES.index(ceiling) for b in r["blocks"]):
+            raise bad("data_class_above_grant")
 
     def _resolve(self, call_id, r):
         """Platform and tenant-config content and tool specs come from the registry, never from the body."""
@@ -220,11 +249,19 @@ class FakeModelCallPort:
             if t.get("content_hash", tool_hash(spec)) != tool_hash(spec):
                 raise refuse("ref_mismatch")
             tools.append(spec)
-        return texts, tools
+        schema = None
+        if "output_schema" in r:
+            ref = r["output_schema"]
+            schema = reg.get("output_schemas", {}).get((pv, ref["name"]))
+            if schema is None:
+                raise refuse("unknown_ref")
+            if ref.get("content_hash", tool_hash(schema)) != tool_hash(schema):
+                raise refuse("ref_mismatch")
+        return texts, tools, schema
 
     def _assemble(self, r, resolved):
         """The prompt as sent. The real gateway uses a per-call random delimiter; the fake derives one."""
-        texts, tools = resolved
+        texts, tools, schema = resolved
         delim = "DATA-" + _digest(r)[:12]
         parts = []
         for i, b in enumerate(r["blocks"]):
@@ -237,6 +274,8 @@ class FakeModelCallPort:
             else:
                 parts.append(f"[{b['role']} turn {b['turn']}]\n{b['text']}")
         parts.extend("[tool]\n" + _canon(s) for s in tools)
+        if schema is not None:
+            parts.append("[output_schema]\n" + _canon(schema))
         return "\n".join(parts)
 
     def _flagged(self, text: str) -> bool:
@@ -252,6 +291,8 @@ class FakeModelCallPort:
         top = DATA_CLASSES.index(self.region_max_class)
         if any(DATA_CLASSES.index(b["data_class"]) > top for b in r["blocks"]):
             raise ModelCallRefused(call_id, "region_policy_refused", "data_class_not_allowed")
+        if not self.pd_may_leave and any(self._is_pd(b) for b in r["blocks"]):
+            raise ModelCallRefused(call_id, "region_policy_refused", "pd_not_allowed")
         if not r["accepts_untrusted"] and any(b["trust"] == "untrusted" for b in r["blocks"]):
             raise ModelCallRefused(call_id, "injection_tainted", "untrusted_not_accepted")
         if not self.filter_up:
@@ -263,8 +304,19 @@ class FakeModelCallPort:
             raise ModelCallRefused(call_id, "budget_refused", "meter_unavailable")
         if any(self.budgets.get(k) is None for k in self.layers):
             raise ModelCallRefused(call_id, "budget_refused", "policy_missing")
-        if any(self.principal.get(LAYER_ID[k]) is None for k in self.layers):
+        if any(self.principal.get(LAYER_ID[k]) is None for k in self.layers if k in LAYER_ID):
             raise ModelCallRefused(call_id, "budget_refused", "layer_unbound")
+
+    def _is_pd(self, b) -> bool:
+        """Q-671: unreadable PD status counts as PD. Platform content is never PD; L1 takes its resolved Blueprint
+        entry's `pd`; a conversation item is PD unless its flags say `pd_none` (and not `pd`)."""
+        if b["trust"] == "platform":
+            return False
+        if b["trust"] == "tenant_config":
+            e = self.registry["tenant_config"].get((self.principal["tenant_id"], b["revision_id"], b["content_id"]), {})
+            return e.get("pd") is not False
+        flags = b.get("flags", [])
+        return "pd" in flags or "pd_none" not in flags
 
     def _replay(self, call_id, reply):
         """A stored reply is returned only if it would still pass the kill switch and the output filter."""
@@ -287,9 +339,30 @@ class FakeModelCallPort:
         ri, ro = self.rates[tier]
         return -(-(inp * ri + out * ro) // 1_000_000)
 
+    def _layer_spent(self, k):
+        """On the shared platform layer, tenant X is decided on all spend minus the overrun of every other tenant:
+        X still pays for its own overrun, and another tenant's overrun never blocks X (contract 6.4, Q-679)."""
+        if k in GATEWAY_LAYERS:
+            led, me = self.platform_ledger, self.principal["tenant_id"]
+            return led["spent"] - sum(n for t, n in led["overrun"].items() if t != me)
+        return self.spent[k]
+
     def _remaining(self):
         held = sum(x.amount for x in self.reservations if x.state == "reserved")
-        return min(self.budgets[k] - self.spent[k] for k in self.layers) - held
+        return min(self.budgets[k] - self._layer_spent(k) for k in self.layers) - held
+
+    def _add_spend(self, cost, overrun):
+        for k in self.layers:
+            if k in GATEWAY_LAYERS:
+                led, me = self.platform_ledger, self.principal["tenant_id"]
+                before = led["spent"]
+                led["spent"] += cost
+                if overrun:
+                    led["overrun"][me] = led["overrun"].get(me, 0) + overrun
+                if before <= self.budgets[k] < led["spent"]:   # only the commit that crosses the cap alerts
+                    self.alerts.append({"kind": "platform_over_cap", "overrun": overrun})
+            else:
+                self.spent[k] += cost
 
     def _reserve(self, call_id, entry, r, est_in):
         mx, mn = r["max_output_tokens"], r.get("min_output_tokens", r["max_output_tokens"])
@@ -305,12 +378,19 @@ class FakeModelCallPort:
     def _commit(self, res, cost):
         """Actual spend is real: commit it even above the hold, and record the overrun."""
         res.state, res.committed = "committed", cost
-        if cost > res.amount:
+        over = max(0, cost - res.amount)
+        if over:
             self.overruns.append((res.call_id, res.amount, cost))
-        for k in self.layers:
-            self.spent[k] += cost
+            self.alerts.append({"kind": "budget_overrun", "call_id": res.call_id, "overrun": over})
+        self._add_spend(cost, over)
 
-    def _dispatch(self, call_id, r, prompt):
+    def _commit_late(self, res, cost):
+        """A reply after the hold was released (TTL sweep): all of it is overrun (contract section 6.4)."""
+        self.overruns.append((res.call_id, 0, cost))
+        self.alerts.append({"kind": "late_reply_overrun", "call_id": res.call_id, "overrun": cost})
+        self._add_spend(cost, cost)
+
+    def _dispatch(self, call_id, r, prompt, schema=None):
         est_in = len(prompt.encode("utf-8")) + FRAMING_TOKENS * (len(r["blocks"]) + len(r.get("tools", [])))
         chain = self._chain(r["tier"])
         if not chain:
@@ -332,6 +412,14 @@ class FakeModelCallPort:
                 self._meter(r, entry, est_in, limit, res.amount)
                 charged = True
                 continue
+            if entry.name in self.late:                       # hold released at its TTL, reply comes after
+                self.attempt_log.append((call_id, entry.name, "late"))
+                res.state = "released"
+                cost = self._cost(entry.tier, est_in, limit)
+                self._commit_late(res, cost)
+                self._meter(r, entry, est_in, limit, cost)    # one event; the content is discarded
+                charged = True
+                continue
             self.attempt_log.append((call_id, entry.name, "ok"))
             text = self.reply_text(r) if callable(self.reply_text) else self.reply_text
             text = text if isinstance(text, str) else "fake:" + _digest(r)[:16]
@@ -343,24 +431,63 @@ class FakeModelCallPort:
             event_id = self._meter(r, entry, inp, out, cost)
             if self._flagged(text):                           # content withheld, cost already committed
                 raise ModelCallRefused(call_id, "filter_blocked", "flagged", reservation_released=False)
+            if schema is not None and not _conforms(text, schema):   # charged, content withheld
+                raise ModelCallRefused(call_id, "filter_blocked", "output_schema_mismatch",
+                                       reservation_released=False)
             keys = self._thread_keys()
             tainted = (r["thread_tainted"] or any(k in self._tainted_threads for k in keys)
                        or any(b["trust"] == "untrusted" for b in r["blocks"]))
             if tainted:
                 self._tainted_threads.update(keys)            # sticky per thread, session and run (SEC-003 2.4 rule 4)
-            return {"kind": "reply", "call_id": call_id, "idempotency_key": r["idempotency_key"],
+            reply = {"kind": "reply", "call_id": call_id, "idempotency_key": r["idempotency_key"],
                     "tier": entry.tier, "text": text, "tool_calls": [],
                     "stop_reason": "max_output" if wanted > limit else "end",
                     "trust": "untrusted", "tainted": tainted,
                     "usage": {"input_tokens": inp, "output_tokens": out, "cached_tokens": 0, "cost_micro_usd": cost},
-                    "attempts": attempt, "fallback_used": attempt > 1, "meter_event_id": event_id, "replayed": False}
+                    "attempts": attempt, "fallback_used": attempt > 1, "meter_event_id": event_id, "replayed": False, "cache_hit": False}
+            if self._cacheable(r) and reply["stop_reason"] == "end":    # a budget-truncated reply is never cached
+                self.cache_store[self._cache_key(r, prompt, entry.name)] = text
+            return reply
         raise ModelCallRefused(call_id, "model_unavailable", "chain_exhausted", reservation_released=not charged)
+
+    def _cacheable(self, r) -> bool:
+        """Only a call in which every block is L0, with no tool, no taint and no tool result (model-gateway 4)."""
+        return (self.response_cache and all(b["trust"] == "platform" for b in r["blocks"])
+                and not r.get("tools") and not r["thread_tainted"] and "output_schema" not in r
+                and not any(k in self._tainted_threads for k in self._thread_keys()))
+
+    def _cache_key(self, r, prompt, model_id=None):
+        """A lookup uses the current head of the routing chain, so a reply served by a fallback, by an older model
+        or under another routing-table version is never a hit."""
+        if model_id is None:
+            chain = self._chain(r["tier"])
+            model_id = chain[0].name if chain else None
+        return (r["tier"], r["prompt_version"], r.get("locale"), r["max_output_tokens"], model_id,
+                self.routing_version, content_hash(prompt))
+
+    def _cache_hit(self, r, prompt):
+        """A hit is not a dispatch (no reservation) but is metered and audited: zero usage, its own event.
+        A stored text the output filter now flags is evicted and refused, never re-dispatched."""
+        key = self._cache_key(r, prompt)
+        text = self.cache_store.get(key) if self._cacheable(r) else None
+        if text is None:
+            return None
+        if self._flagged(text):
+            del self.cache_store[key]
+            raise ModelCallRefused(r["call_id"], "filter_blocked", "flagged")
+        event_id = self._meter(r, Entry("response_cache", r["tier"]), 0, 0, 0, cache_hit=True)
+        return {"kind": "reply", "call_id": r["call_id"], "idempotency_key": r["idempotency_key"],
+                "tier": r["tier"], "text": text, "tool_calls": [], "stop_reason": "end", "trust": "untrusted",
+                "tainted": False,
+                "usage": {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0, "cost_micro_usd": 0},
+                "attempts": 1, "fallback_used": False, "meter_event_id": event_id, "replayed": False,
+                "cache_hit": True}
 
     def _thread_keys(self):
         p = self.principal
         return [(p["tenant_id"], kind, p[kind + "_id"]) for kind in ("thread", "session", "run") if p.get(kind + "_id")]
 
-    def _meter(self, r, entry, inp, out, cost):
+    def _meter(self, r, entry, inp, out, cost, cache_hit=False):
         p = self.principal
         event_id = "01HZZZZZZZZZZZZZZZZZ" + f"{len(self.events) + 1:06d}"
         self.events.append({
@@ -372,7 +499,7 @@ class FakeModelCallPort:
             "subject": None, "data_class": "operational",
             "data": {"model_id": entry.name, "tier": entry.tier, "input_tokens": inp, "output_tokens": out,
                      "cached_tokens": 0, "cost_micro_usd": cost, "purpose": r["purpose"],
-                     "agent_id": p.get("agent_id")},
+                     "agent_id": p.get("agent_id"), **({"cache_hit": True} if cache_hit else {})},
             "trace": {"model_id": entry.name, "prompt_version": r["prompt_version"]}})
         return event_id
 
@@ -392,7 +519,22 @@ def _classify(r: dict) -> str:
     if any(b.get("trust") in REF_TRUST and "text" in b for b in blocks) or any(
             isinstance(t, dict) and ({"description", "input_schema"} & set(t)) for t in tools):
         return "ref_required"
+    caller = r.get("caller")
+    if isinstance(caller, dict) and (caller.get("actor_kind") == "user") != ("token_id" in caller):
+        return "caller_mismatch"                                 # token_id iff a user actor (Q-672(a))
     return "schema"
+
+
+def _conforms(text: str, schema: dict) -> bool:
+    try:
+        return _validator_for(schema).is_valid(json.loads(text))
+    except ValueError:
+        return False
+
+
+def _validator_for(schema):
+    from jsonschema import Draft202012Validator
+    return Draft202012Validator(schema)
 
 
 def _strings(doc):

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:platform:contract:model-call:0.2.1",
-  "version": "0.2.1",
+  "$id": "urn:platform:contract:model-call:0.3.0",
+  "version": "0.3.0",
   "title": "Model call",
   "description": "One model call through the gateway: a request, a reply or a refusal (contracts/model-call.md). Callers name a tier and purpose, never a model. Platform and tenant-config content travels by reference only. Rules JSON Schema cannot express are in x-validator-rules.",
   "x-validator-rules": [
@@ -14,6 +14,12 @@
     "caller is compared with the verified principal and the signed run token; any difference is caller_mismatch; the gateway never reads identity from the body",
     "accepts_untrusted false with any untrusted block is refusal injection_tainted",
     "min_output_tokens <= max_output_tokens (limit)",
+    "token_id is required for a user actor and forbidden for any other actor_kind (the schema enforces it; the gateway reports a breach as caller_mismatch, not schema); for a user, actor_id is the per-tenant memberRef; both come from the verified claims and are compared like the rest of caller (caller_mismatch); actor_kind comes from the verified claims, never hard-coded",
+    "a conversation item is PD when its flags hold pd; it is not PD only when its flags hold pd_none; an item with neither counts as PD (unreadable is PD). A tenant_config block is PD per its resolved Blueprint entry, unreadable counts as PD. A platform block is never PD",
+    "a block whose data_class is above the run grant's data class is invalid_request data_class_above_grant; a PD block the region policy does not let leave is region_policy_refused pd_not_allowed",
+    "output_schema names a schema in the release manifest of prompt_version (unknown_ref; a differing content_hash is ref_mismatch); a reply that does not conform is filter_blocked output_schema_mismatch, charged, content withheld",
+    "a response-cache hit is a reply with cache_hit true, usage all zero, and its own meter_event_id; it is not a dispatch and has no reservation",
+    "the reservation TTL is at least 3 times the largest attempt timeout plus a margin; a provider reply after the hold was released is committed as an overrun with one meter.ai_usage event and an alert, its content discarded",
     "a reply tool_call's serialized arguments are at most 65536 UTF-8 bytes"
   ],
   "oneOf": [
@@ -30,11 +36,15 @@
       "description": "Compared only: must equal the verified principal (tenant, actor, roles, session) and the signed run token (agent_id, run_id).",
       "required": ["tenant_id", "actor_kind", "actor_id", "correlation_id", "role_ids"],
       "additionalProperties": false,
+      "if": { "properties": { "actor_kind": { "const": "user" } }, "required": ["actor_kind"] },
+      "then": { "required": ["token_id"] },
+      "else": { "not": { "required": ["token_id"] } },
       "properties": {
         "tenant_id": { "type": "string", "pattern": "^[A-Za-z0-9_]{1,64}$", "not": { "const": "platform" } },
         "actor_kind": { "enum": ["user", "agent", "system", "support"] },
         "actor_id": { "$ref": "#/$defs/id" },
-        "correlation_id": { "$ref": "#/$defs/id" },
+        "correlation_id": { "$ref": "#/$defs/id", "description": "The end-to-end audit id (the gateway's audit_id); the only caller field taken from the body." },
+        "token_id": { "$ref": "#/$defs/id", "description": "Required for a user actor, forbidden for any other kind: the verified token id; actor_id is then the per-tenant memberRef." },
         "role_ids": { "type": "array", "maxItems": 50, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
         "session_id": { "$ref": "#/$defs/id" },
         "on_behalf_of": { "$ref": "#/$defs/id" },
@@ -83,7 +93,7 @@
         "source": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9_.:/ -]+$" },
         "parents": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
         "transform": { "enum": ["ocr", "parse", "normalise", "summarise", "translate", "model_output", "memory_read"] },
-        "flags": { "type": "array", "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" } },
+        "flags": { "type": "array", "maxItems": 16, "uniqueItems": true, "description": "Reserved: pd (personal data), pd_none (caller asserts none). Neither means unreadable, which counts as PD.", "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" } },
         "content_hash": { "$ref": "#/$defs/hash" }
       },
       "allOf": [
@@ -108,6 +118,16 @@
         "content_hash": { "$ref": "#/$defs/hash" }
       }
     },
+    "output_schema_ref": {
+      "type": "object",
+      "description": "Structured-output schema by reference: name in the release manifest of prompt_version. No inline schema.",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_.]{0,63}$" },
+        "content_hash": { "$ref": "#/$defs/hash" }
+      }
+    },
     "metadata": {
       "type": "object",
       "description": "Allow-listed trace keys only; values are ids, never content.",
@@ -125,7 +145,7 @@
       "additionalProperties": false,
       "properties": {
         "kind": { "const": "request" },
-        "contract_version": { "const": "0.2.1" },
+        "contract_version": { "const": "0.3.0" },
         "call_id": { "$ref": "#/$defs/id" },
         "idempotency_key": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{8,128}$" },
         "caller": { "$ref": "#/$defs/caller" },
@@ -134,6 +154,7 @@
         "prompt_version": { "$ref": "#/$defs/id" },
         "blocks": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "$ref": "#/$defs/block" } },
         "tools": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "$ref": "#/$defs/tool_ref" } },
+        "output_schema": { "$ref": "#/$defs/output_schema_ref" },
         "max_output_tokens": { "type": "integer", "minimum": 1, "maximum": 32000 },
         "min_output_tokens": { "type": "integer", "minimum": 1, "maximum": 32000 },
         "accepts_untrusted": { "type": "boolean" },
@@ -144,7 +165,7 @@
     },
     "reply": {
       "type": "object",
-      "required": ["kind", "call_id", "idempotency_key", "tier", "text", "tool_calls", "stop_reason", "trust", "tainted", "usage", "attempts", "fallback_used", "meter_event_id", "replayed"],
+      "required": ["kind", "call_id", "idempotency_key", "tier", "text", "tool_calls", "stop_reason", "trust", "tainted", "usage", "attempts", "fallback_used", "meter_event_id", "replayed", "cache_hit"],
       "additionalProperties": false,
       "properties": {
         "kind": { "const": "reply" },
@@ -180,7 +201,8 @@
         "attempts": { "type": "integer", "minimum": 1, "maximum": 3 },
         "fallback_used": { "type": "boolean" },
         "meter_event_id": { "type": "string", "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" },
-        "replayed": { "type": "boolean" }
+        "replayed": { "type": "boolean" },
+        "cache_hit": { "type": "boolean", "description": "true: served from the platform response cache; usage is all zero and meter_event_id is its own event." }
       }
     },
     "refusal": {
@@ -198,11 +220,11 @@
       "allOf": [
         { "if": { "properties": { "code": { "const": "budget_refused" } } }, "then": { "properties": { "reason": { "enum": ["exceeded", "policy_missing", "meter_unavailable", "layer_unbound"] }, "retryable": { "const": false } } } },
         { "if": { "properties": { "code": { "const": "kill_switch_engaged" } } }, "then": { "properties": { "reason": { "enum": ["engaged", "unreachable"] }, "retryable": { "const": false }, "reservation_released": { "const": true } } } },
-        { "if": { "properties": { "code": { "const": "region_policy_refused" } } }, "then": { "properties": { "reason": { "enum": ["policy_missing", "data_class_not_allowed", "no_allowed_endpoint"] }, "retryable": { "const": false }, "reservation_released": { "const": true } } } },
+        { "if": { "properties": { "code": { "const": "region_policy_refused" } } }, "then": { "properties": { "reason": { "enum": ["policy_missing", "data_class_not_allowed", "pd_not_allowed", "no_allowed_endpoint"] }, "retryable": { "const": false }, "reservation_released": { "const": true } } } },
         { "if": { "properties": { "code": { "const": "model_unavailable" } } }, "then": { "properties": { "reason": { "enum": ["chain_exhausted"] }, "retryable": { "const": true } } } },
-        { "if": { "properties": { "code": { "const": "invalid_request" } } }, "then": { "properties": { "reason": { "enum": ["schema", "model_named", "caller_mismatch", "tenant_in_payload", "missing_trust_label", "block_order", "ref_required", "unknown_ref", "ref_mismatch", "idempotency_conflict", "idempotency_in_flight", "limit"] }, "retryable": { "const": false }, "reservation_released": { "const": true } } } },
+        { "if": { "properties": { "code": { "const": "invalid_request" } } }, "then": { "properties": { "reason": { "enum": ["schema", "model_named", "caller_mismatch", "tenant_in_payload", "missing_trust_label", "block_order", "ref_required", "unknown_ref", "ref_mismatch", "idempotency_conflict", "idempotency_in_flight", "limit", "data_class_above_grant"] }, "retryable": { "const": false }, "reservation_released": { "const": true } } } },
         { "if": { "properties": { "code": { "const": "injection_tainted" } } }, "then": { "properties": { "reason": { "enum": ["untrusted_not_accepted"] }, "retryable": { "const": false }, "reservation_released": { "const": true } } } },
-        { "if": { "properties": { "code": { "const": "filter_blocked" } } }, "then": { "properties": { "reason": { "enum": ["flagged", "filter_unavailable"] }, "retryable": { "const": false } } } }
+        { "if": { "properties": { "code": { "const": "filter_blocked" } } }, "then": { "properties": { "reason": { "enum": ["flagged", "filter_unavailable", "output_schema_mismatch"] }, "retryable": { "const": false } } } }
       ]
     }
   }

@@ -45,6 +45,9 @@
             "null"
           ],
           "maxLength": 256
+        },
+        "cache_hit": {
+          "type": "boolean"
         }
       },
       "required": [

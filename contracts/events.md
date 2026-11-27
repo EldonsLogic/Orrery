@@ -72,7 +72,7 @@ Naming `<domain>.<past_tense_verb>`.
 Cheap, high-volume, aggregated by Part 5 into usage records.
 | Type | Data |
 |---|---|
-| `meter.ai_usage` | model_id, tier, input_tokens, output_tokens, cached_tokens, cost_micro_usd, purpose (chat/agent/build/simulation), agent_id |
+| `meter.ai_usage` | model_id, tier, input_tokens, output_tokens, cached_tokens, cost_micro_usd, purpose (chat/agent/build/simulation), agent_id, cache_hit (optional boolean, true only on a model-call response-cache hit; absent means not a hit) |
 | `meter.active_user` | user_id, day |
 | `meter.storage` | bytes by class (records, files, backups) |
 | `meter.documents_issued` | doc type, count (for e-invoicing volumes) |

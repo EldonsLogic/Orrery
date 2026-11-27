@@ -2,7 +2,7 @@
 
 Status: draft. Owner: eldon. Plan row: GTM-004 (G1). Access date for every source below: 2026-11-21.
 Labels: VERIFIED = read on the official page today; REPORTED = press or aggregator only; UNVERIFIED = not found.
-Related: [../research/02-market-and-customer.md](../research/02-market-and-customer.md) section 5, [../research/05-investors.md](../research/05-investors.md) section 3, [../fundraising/investor-shortlist.md](../fundraising/investor-shortlist.md) row 13, decision 2026-11-04 in [../strategy/decisions.md](../strategy/decisions.md) (founder will enter; agent open).
+Related: [../research/02-market-and-customer.md](../research/02-market-and-customer.md) section 5, [../research/05-investors.md](../research/05-investors.md) section 3, the investor shortlist row 13 (kept outside the repo since FND-009), decision 2026-11-04 in [../strategy/decisions.md](../strategy/decisions.md) (founder will enter; agent open).
 
 ## 1. What the championship is
 | Item | Finding | Status | Source |

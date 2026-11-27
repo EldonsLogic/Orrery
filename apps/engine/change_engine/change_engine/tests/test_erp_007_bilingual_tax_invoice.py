@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 import json
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -16,6 +17,7 @@ from change_engine.print_formats import (
     DEFAULT_BRANDING_PRIMARY,
     InvoiceBranding,
     build_qr_matrix,
+    contrast_ratio,
     contrast_ratio_on_white,
     install_bilingual_tax_invoice_print_format,
     render_frappe_sales_invoice_html,
@@ -146,7 +148,7 @@ class TestBilingualTaxInvoiceHTML(unittest.TestCase):
         self.assertIn('<bdi dir="ltr">2026-11-17</bdi>', doc_html)
         self.assertIn('<bdi dir="ltr">1448-06-07</bdi>', doc_html)
         self.assertIn('<bdi dir="ltr">230.00 SAR</bdi>', doc_html)
-        self.assertIn('<bdi dir="ltr">Orrery</bdi>', doc_html)
+        self.assertIn('<bdi dir="ltr">Seshna</bdi>', doc_html)
         self.assertIn('class="qr-clear-zone"', doc_html)
         self.assertIn('data-zatca-tlv="', doc_html)
 
@@ -224,6 +226,131 @@ class TestBilingualTaxInvoiceHTML(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             render_tax_invoice_html(bad_neutral, mode="neutral")
         self.assertIn("Engine totals disagree", str(ctx.exception))
+
+
+class TestSeshnaTypographyAndName(unittest.TestCase):
+    """GOV-071 (#328 review): the Seshna font stack (Readex Pro body, Cairo titles and figures, ADR-0066, BRD-011,
+    WEB-028) and the product name kept in Latin letters inside the Arabic footer."""
+
+    def setUp(self):
+        self.doc_html = render_tax_invoice_html(_sample_zatca_standard(), mode="zatca_sa")
+
+    def test_retired_brand_fonts_are_gone(self):
+        for font in ("Alexandria", "Arial"):
+            with self.subTest(font=font):
+                self.assertNotIn(font, self.doc_html)
+
+    def test_font_stack_and_colours_come_from_the_document_tokens(self):
+        import re
+
+        from change_engine.print_formats.document_tokens import document_tokens
+
+        tokens = document_tokens()
+        self.assertEqual(re.findall(r"--font-doc:\s*([^;]+);", self.doc_html), [tokens.font_stack])
+        self.assertTrue(tokens.font_stack.startswith("'Readex Pro'"), tokens.font_stack)
+        stacks = re.findall(r"font-family:\s*([^;]+);", self.doc_html)
+        self.assertTrue(stacks and set(stacks) == {"var(--font-doc)", "var(--font-heading)"}, stacks)
+        self.assertIn("tabular-nums", self.doc_html)
+        self.assertEqual(DEFAULT_BRANDING_PRIMARY.lower(), tokens.primary.lower())
+        style = self.doc_html[self.doc_html.index("<style>"):self.doc_html.index("</style>")]  # the QR svg is black
+        for hex_value in set(re.findall(r"#[0-9a-fA-F]{6}\b", style)):
+            self.assertIn(hex_value.lower(),
+                          {tokens.primary.lower(), tokens.surface.lower(),
+                           tokens.background.lower(), tokens.text.lower()}, hex_value)
+
+    @staticmethod
+    def _css_rules(doc_html: str) -> dict[str, str]:
+        import re
+
+        style = doc_html[doc_html.index("<style>"):doc_html.index("</style>")]
+        return {sel.strip(): body for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", style)}
+
+    def test_heading_stack_comes_from_the_tokens_and_styles_titles_and_figures(self):
+        import re
+
+        from change_engine.print_formats.document_tokens import document_tokens
+
+        tokens = document_tokens()
+        self.assertEqual(re.findall(r"--font-heading:\s*([^;]+);", self.doc_html),
+                         [tokens.heading_font_stack])
+        self.assertTrue(tokens.heading_font_stack.startswith("'Cairo'"), tokens.heading_font_stack)
+        rules = self._css_rules(self.doc_html)
+        for selector in (".doc-title-ar, .doc-title-en", ".num-col"):
+            with self.subTest(selector):
+                self.assertIn("font-family: var(--font-heading);", rules[selector])
+        self.assertIn("font-variant-numeric: tabular-nums;", rules[".num-col"])
+
+    def test_muted_text_uses_opacity_not_a_literal_and_stays_wcag_aa(self):
+        import re
+
+        from change_engine.print_formats.document_tokens import document_tokens
+
+        tokens = document_tokens()
+        text = [int(tokens.text[i:i + 2], 16) for i in (1, 3, 5)]
+        rules = self._css_rules(self.doc_html)
+        muted = (".doc-badge-row", ".detail-row", ".muted", ".item-desc-en", ".item-exemption",
+                 ".qr-caption", ".notes-body", ".doc-footer")
+        for selector in muted:
+            with self.subTest(selector):
+                body = rules[selector]
+                self.assertIn("color: var(--doc-text);", body)
+                opacity = float(re.search(r"opacity:\s*([0-9.]+);", body).group(1))
+                self.assertTrue(0 < opacity < 1, opacity)
+                for bg_hex in (tokens.surface, tokens.background):  # cells sit on both
+                    bg = [int(bg_hex[i:i + 2], 16) for i in (1, 3, 5)]
+                    blended = "#" + "".join(f"{round(b - opacity * (b - c)):02x}" for c, b in zip(text, bg))
+                    self.assertGreaterEqual(contrast_ratio(blended, bg_hex), 4.5, (selector, blended, bg_hex))
+
+    def test_borders_use_a_hairline_on_the_token_not_a_literal(self):
+        import re
+
+        rules = self._css_rules(self.doc_html)
+        borders = [(sel, decl) for sel, body in rules.items()
+                   for decl in re.findall(r"(?<![\w-])border(?:-(?:top|bottom|left|right))?:[^;]+;",
+                                          body)]
+        self.assertGreater(len(borders), 10)
+        for selector, decl in borders:
+            with self.subTest(selector=selector, decl=decl):
+                self.assertIn("var(--", decl)
+                self.assertNotRegex(decl, r"#[0-9a-fA-F]{3,8}\b")
+                if "var(--doc-border)" in decl:
+                    self.assertIn("0.5pt solid", decl)
+        self.assertEqual(re.findall(r"--doc-border:\s*([^;]+);", self.doc_html),
+                         [self._tokens_text()])
+
+    @staticmethod
+    def _tokens_text() -> str:
+        from change_engine.print_formats.document_tokens import document_tokens
+
+        return document_tokens().text
+
+    def test_token_load_failure_fails_closed(self):
+        import os
+        from unittest import mock
+
+        from change_engine.print_formats import document_tokens as dt
+
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = os.path.join(tmp, "nope.json")
+            dt.document_tokens.cache_clear()
+            try:
+                with mock.patch.dict(os.environ, {dt.ENV_TOKENS_PATH: missing}):
+                    with self.assertRaises(dt.DocumentTokenError):
+                        render_tax_invoice_html(_sample_zatca_standard(), mode="zatca_sa")
+                    with self.assertRaises(dt.DocumentTokenError):
+                        resolve_invoice_branding(None)
+                    import change_engine.print_formats as pf
+                    from change_engine.print_formats import bilingual_tax_invoice as bti
+
+                    for mod in (pf, bti):  # the lazy default primary fails closed too
+                        with self.assertRaises(dt.DocumentTokenError):
+                            getattr(mod, "DEFAULT_BRANDING_PRIMARY")
+            finally:
+                dt.document_tokens.cache_clear()
+
+    def test_footer_keeps_seshna_in_a_latin_isolate(self):
+        self.assertIn('مدعوم من <bdi dir="ltr">Seshna</bdi>', self.doc_html)
+        self.assertNotIn("سيشنا", self.doc_html)
 
 
 class TestBrandingAndSecurity(unittest.TestCase):
@@ -505,3 +632,15 @@ class TestFrappeSalesInvoiceIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBrandPrimaryContrastOnEverySurface(unittest.TestCase):
+    """ERP-035 review: the brand primary is drawn on the panel background too, not only on white."""
+
+    def test_a_primary_that_passes_on_white_but_fails_on_the_panel_is_refused(self):
+        self.assertGreaterEqual(contrast_ratio_on_white("#757575"), 4.5)  # passes on white alone
+        with self.assertRaisesRegex(ValueError, "WCAG AA"):
+            resolve_invoice_branding({"primary_color": "#757575"})
+
+    def test_the_default_primary_passes_on_every_surface(self):
+        resolve_invoice_branding(None)

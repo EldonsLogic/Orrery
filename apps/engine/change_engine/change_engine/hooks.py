@@ -37,7 +37,7 @@ _RECORD_HOOK_METHODS = (
 
 app_name = "change_engine"
 app_title = "Change Engine"
-app_publisher = "Orrery"
+app_publisher = "Seshna"
 app_description = "Guarded configuration apply layer: DDL plan gate, audited deploy, rollback, runtime policies"
 app_email = "dev@example.invalid"
 app_license = "TBD"  # see docs/legal/checklist.md (licence decision pending)

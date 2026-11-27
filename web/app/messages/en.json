@@ -339,7 +339,8 @@
         "records": "Records"
       },
       "blueprint": "Business blueprint",
-      "chat": "Chat"
+      "chat": "Chat",
+      "branding": "Branding"
     },
     "workspace": {
       "label": "Workspace",
@@ -390,6 +391,95 @@
         "body": "You do not belong to an active workspace. Ask the workspace owner to invite you."
       }
     }
+  },
+  "branding": {
+    "title": "Branding",
+    "intro": "Choose your primary colour. We check it against the platform's accessibility rules in light and dark themes and adjust it where needed.",
+    "noAccess": {
+      "title": "Not available",
+      "body": "Only workspace administrators can change branding."
+    },
+    "colour": {
+      "label": "Primary colour",
+      "hint": "Pick a colour or type a hex code with 3 or 6 digits.",
+      "picker": "Colour picker"
+    },
+    "logo": {
+      "label": "Logo",
+      "hint": "PNG or JPEG, up to 2 MB. SVG is not accepted yet. A logo is used only after it passes the security check.",
+      "pending": "{name} was received and is waiting for the security check. It is not shown yet.",
+      "errType": "Only PNG or JPEG files are accepted.",
+      "errSize": "The file must be larger than 0 and at most 2 MB.",
+      "errFailed": "The logo could not be uploaded. Try again."
+    },
+    "preview": {
+      "title": "Live preview",
+      "light": "Light theme",
+      "dark": "Dark theme",
+      "card": "Sample card",
+      "button": "Primary action",
+      "link": "A sample link",
+      "adjusted": "Adjusted to {colour} so every pair meets the minimum."
+    },
+    "result": {
+      "title": "Contrast check",
+      "ok": "Your colour passes in both themes{adjusted, select, yes { after adjustment} other {}}.",
+      "rejected": "This colour cannot be used.",
+      "summary": "{pass} of {total} pairs pass in the {theme}",
+      "pair": "Pair",
+      "ratio": "Ratio",
+      "min": "Minimum",
+      "pass": "Pass",
+      "fail": "Fail",
+      "note": "AA minimums: 4.5 for text, 3 for focus rings. The same rules as the platform build.",
+      "result": "Result",
+      "ratioValue": "{value}:1",
+      "rawSummary": "(your colour as picked: {pass} of {total})",
+      "statusOk": "The colour passes in both themes.",
+      "failedTitle": "Where this colour fails as picked",
+      "failedPair": "{pair} in the {theme}: {fg} on {bg}, ratio {ratio}, minimum {min}."
+    },
+    "reject": {
+      "invalid": "Enter a valid hex code with 3 or 6 digits.",
+      "grey": "This colour reads as grey. Choose a colour with a visible hue.",
+      "danger": "This colour is too close to the error red. Choose a different hue.",
+      "tooLight": "This colour is too light for text and buttons. Choose a darker shade.",
+      "tooDark": "This colour is too close to the body text colour. Choose a lighter or more saturated shade.",
+      "darkNoAa": "No version of this colour passes in the dark theme.",
+      "darkGrey": "In the dark theme this colour would read as grey or as text.",
+      "internal": "A check failed internally. Try another colour."
+    },
+    "themeName": {
+      "light": "light theme",
+      "dark": "dark theme"
+    },
+    "pairs": {
+      "link": "Primary text and links on {surface}",
+      "visited": "Visited link on {surface}",
+      "secondary-hover": "Secondary button label on hover over {surface}",
+      "secondary-pressed": "Secondary button label pressed over {surface}",
+      "btn-primary": "Primary button label",
+      "btn-primary-hover": "Primary button label on hover",
+      "btn-primary-pressed": "Primary button label pressed",
+      "ring": "Focus ring on {surface}"
+    },
+    "surfaces": {
+      "background": "the page",
+      "surface": "a card",
+      "raised": "a raised panel",
+      "hover": "a hovered row",
+      "selected": "a selected row"
+    },
+    "save": "Save branding",
+    "saving": "Saving",
+    "saved": "Branding saved.",
+    "errForbidden": "You do not have permission to change branding.",
+    "errInvalid": "This colour was refused. Pick another one.",
+    "errFailed": "Saving failed. Try again.",
+    "fixBeforeSave": "Fix the colour before saving.",
+    "loading": "Loading your saved branding.",
+    "loadFailed": "Your saved branding could not be loaded, so saving is turned off to protect it. Reload the page to try again.",
+    "settings": "Colour and logo"
   },
   "blueprint": {
     "title": "Business blueprint",
@@ -1286,5 +1376,14 @@
       }
     },
     "loading": "Working"
+  },
+  "metrics": {
+    "sales": {
+      "revenue": "Revenue",
+      "order_count": "Invoices issued"
+    },
+    "finance": {
+      "receivables_outstanding": "Outstanding receivables"
+    }
   }
 }

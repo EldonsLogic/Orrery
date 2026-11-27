@@ -19,7 +19,14 @@ C = ROOT / "contracts"
 # example glob -> schema file
 PAIRS = [("examples/blueprint-*.json", "blueprint.schema.json"),
          ("examples/compiled-artifact-*.json", "compiled-artifact.schema.json"),
-         ("examples/model-call-*.json", "model-call.schema.json")]
+         ("examples/model-call-*.json", "model-call.schema.json"),
+         ("examples/country-pack-record-*.json", "country-pack-record.schema.json"),
+         ("examples/country-pack-index-*.json", "country-pack-index.schema.json"),
+         ("examples/country-pack-pin-*.json", "country-pack-pin.schema.json")]
+# invalid example glob -> schema file: every match must FAIL its schema (negative tests)
+INVALID_PAIRS = [("examples/invalid/country-pack-record-*.json", "country-pack-record.schema.json"),
+                 ("examples/invalid/country-pack-index-*.json", "country-pack-index.schema.json"),
+                 ("examples/invalid/country-pack-pin-*.json", "country-pack-pin.schema.json")]
 
 
 def main():
@@ -46,6 +53,14 @@ def main():
         for ex in sorted(C.glob(pattern)):
             for e in validator.iter_errors(json.loads(ex.read_text(encoding="utf-8"))):
                 errors.append(f"{ex.relative_to(ROOT)}: {'/'.join(map(str, e.absolute_path))}: {e.message[:160]}")
+    for pattern, schema_name in INVALID_PAIRS:
+        validator = Draft202012Validator(json.loads((C / schema_name).read_text(encoding="utf-8")), registry=registry)
+        matches = sorted(C.glob(pattern))
+        if not matches:
+            errors.append(f"no invalid examples for {schema_name}")
+        for ex in matches:
+            if validator.is_valid(json.loads(ex.read_text(encoding="utf-8"))):
+                errors.append(f"{ex.relative_to(ROOT)}: invalid example unexpectedly validates")
     for e in errors:
         print(e)
     print(f"Contracts OK ({len(schemas)} schemas)" if not errors else f"Contracts FAILED ({len(errors)})")

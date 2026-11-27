@@ -6,10 +6,13 @@
  *   --space-2 (16), --space-3 (24), --space-4 (32), --space-6 (48), --space-8 (64). Core steps are 8/12/16/24/48;
  *   4, 32 and 64 only where a layout needs them.
  * Breakpoints (media queries cannot read variables, so these are the reference values; mobile-first, min-width):
- *   phone 375, tablet 48rem (768), laptop 64rem (1024), desktop 90rem (1440).
+ *   phone 375, tablet from 768.01px (`width > 48rem`, so 768 is still phone chrome and the shell and spacing agree), laptop 64rem (1024), desktop 90rem (1440).
  * Radius: one per role. Cards and panels --radius-md, controls --radius-sm, badges --radius-pill. Border: 1px.
- * Glass: a material for chrome and overlays only (top bar, side navigation, the Ask Seshna dock, popovers), never for
- *   content cards, numbers, tables or forms, and never glass on glass. Solid surface unless backdrop-filter works,
+ * Glass: a material for chrome only (top bar, side navigation, the Ask Seshna dock), never for content cards, numbers,
+ *   tables or forms, and never glass on glass: popovers and panels open from the glass top bar and over the glass
+ *   side navigation, so they are solid. The fill is 88% of the surface so muted text stays at 4.5:1 or more over any
+ *   content scrolling beneath (checked in scripts/check-contrast.mjs against white and black backdrops, both themes).
+ *   No specular highlight or other decorative shadow (RULES 40). Solid surface unless backdrop-filter works,
  *   and solid again for reduced transparency or more contrast.
  */
 :root {
@@ -58,14 +61,13 @@
   --glass-fill: color-mix(in srgb, var(--color-surface) var(--glass-alpha), transparent);
   --glass-filter: none;
   --glass-edge: var(--color-border);
-  --glass-highlight: inset 0 1px 0 transparent;
 }
 
 [dir='rtl'] {
   --text-kpi-line: 48px;
 }
 
-@media (min-width: 48rem) {
+@media (width > 48rem) {
   :root {
     --page-pad: var(--space-3);
     --main-pad-block: var(--space-6);
@@ -86,22 +88,9 @@
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root {
-    --glass-alpha: 66%;
+    --glass-alpha: 88%;
     --glass-filter: blur(24px) saturate(160%);
     --glass-edge: color-mix(in srgb, var(--color-text) 10%, transparent);
-    --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-surface) 80%, transparent);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme='light']) {
-      --glass-alpha: 58%;
-      --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
-    }
-  }
-
-  :root[data-theme='dark'] {
-    --glass-alpha: 58%;
-    --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
   }
 }
 

@@ -69,7 +69,7 @@ export function UserMenu({ displayName, claims }: { displayName: string; claims:
       </button>
       {open ? (
         <div id={panelId} role="group" aria-label={t('panel')} className={styles.panel}>
-          <p className={styles.panelName}>{displayName}</p>
+          <p className={styles.panelName} dir="auto">{displayName}</p>
           {/* Placeholder: the real state comes from the MFA claim of the token. */}
           <Badge tone={claims.mfaSatisfied ? 'success' : 'warning'}>{claims.mfaSatisfied ? t('mfaOn') : t('mfaOff')}</Badge>
           <label className={styles.field}>

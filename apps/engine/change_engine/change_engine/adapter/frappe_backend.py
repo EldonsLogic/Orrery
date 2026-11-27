@@ -663,8 +663,13 @@ class FrappeRuntimeBackend:
                     fieldname = _sanitize_custom_fieldname(str(defn.get("id") or subject.get("id") or "field"))
                     if (defn.get("unique") or defn.get("indexed")) and not self._held_fields(f, doctype, [fieldname], set(), {}):
                         raise self._refuse("unique_or_index")  # before `_ensure_doctype_exists` writes; Q-603
+                    self._refuse_missing_link_targets(f, doctype, [defn], set())
+                    made_type = not (getattr(f.db, "table_exists", None) and f.db.table_exists(doctype))
                     self._ensure_doctype_exists(f, doctype, {})
-                    self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, defn)
+                    try:
+                        self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, defn)
+                    except FrappeBackendError as exc:
+                        raise (self._with_effects(exc) if made_type else exc) from None
 
                 elif kind in ("field.quarantine", "relation.quarantine"):
                     parents = subject.get("parents") or []
@@ -907,6 +912,8 @@ class FrappeRuntimeBackend:
                     raise self._refuse("unique_or_index")
                 self._project_new_type(f, doctype, made_types, made, [])
                 made[(doctype, fieldname)] = _NO_CONSTRAINT
+            link = {**defn, "type": "link"} if kind == "relation.add" else defn  # as execute reads a relation
+            self._refuse_missing_link_targets(f, doctype, [link], made_types)
 
     def _held_fields(self, f: Any, doctype: str, names: list[str], made_types: set[str], made: dict[tuple[str, str], Any]) -> list[Any]:
         """The fields of these names the type holds: on the engine now, or added by an earlier step of the plan."""
@@ -923,8 +930,9 @@ class FrappeRuntimeBackend:
         """Record the type `_ensure_doctype_exists` would create. It never carries a unique or index constraint (BPL-043)."""
         if doctype in made_types or self._doctype_exists(f, doctype):
             return
-        made_types.add(doctype)
         known = [fld for fld in fields if fld.get("type", "string") in BLUEPRINT_TO_FRAPPE_FIELDTYPE]
+        self._refuse_missing_link_targets(f, doctype, known, made_types)
+        made_types.add(doctype)
         for fld in known:
             made[(doctype, _sanitize_custom_fieldname(str(fld.get("id") or "field")))] = _NO_CONSTRAINT
         if not known:
@@ -946,6 +954,7 @@ class FrappeRuntimeBackend:
         if any(fld.get("type", "string") not in BLUEPRINT_TO_FRAPPE_FIELDTYPE for fld in fields):
             raise self._refuse("unsupported_value_type")
         added: dict[tuple[str, str], Any] = {}  # every field is judged against the state before this step, as execute does
+        new_fields: list[dict[str, Any]] = []
         for fld in fields:
             names = [_sanitize_custom_fieldname(str(fld.get("id") or "field")), str(fld.get("id"))]
             holders = self._held_fields(f, doctype, names, made_types, made)
@@ -956,6 +965,8 @@ class FrappeRuntimeBackend:
                 raise self._refuse("unique_or_index")
             else:
                 added[(doctype, names[0])] = _NO_CONSTRAINT
+                new_fields.append(fld)
+        self._refuse_missing_link_targets(f, doctype, new_fields, made_types)
         made.update(added)
 
     def _find_warehouse(
@@ -1055,15 +1066,27 @@ class FrappeRuntimeBackend:
                 # its constraint: refuse the entity before any write (Q-603).
                 raise self._refuse("unique_or_index")
             add.append((fieldname, fld))
+        self._refuse_missing_link_targets(f, doctype, [fld for _, fld in add], set())
         # Intent first, so a rollback finds every field this step may have created; a row becomes "created" only once this
         # call has created the field itself, and one whose field appeared without us is dropped, never adopted.
         if add or present:
             self._record_entity_fields(f, doctype, [name for name, _ in add], present)
-        for fieldname, fld in add:
-            if self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, fld):
-                self._confirm_entity_field(f, doctype, fieldname)
-        for fieldname, fld in restore:
-            self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, fld)
+        wrote = False
+        try:
+            for fieldname, fld in add:
+                if self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, fld):
+                    self._confirm_entity_field(f, doctype, fieldname)
+                wrote = True
+            for fieldname, fld in restore:
+                self._apply_or_restore_custom_field(f, dep, tenant_id, doctype, fieldname, fld)
+                wrote = True
+        except FrappeBackendError as exc:
+            # BPL-033: a clean refusal is side-effect free for the whole step only while no field of it was written; then
+            # the pending intent rows this call recorded are dropped, so the step leaves nothing behind.
+            if wrote or not exc.side_effect_free:
+                raise self._with_effects(exc) from None
+            self._drop_pending_entity_fields(f, doctype, [name for name, _ in add])
+            raise
 
     @staticmethod
     def _has_constraint(field: Any, prop_ptr: str) -> bool:
@@ -1118,6 +1141,38 @@ class FrappeRuntimeBackend:
         if hasattr(f.db, "commit"):
             f.db.commit()
 
+    def _drop_pending_entity_fields(self, f: Any, doctype: str, fieldnames: list[str]) -> None:
+        """Remove the pending intent rows of fields this call did not create (a failed delete raises, never clean)."""
+        if not fieldnames or not f.db.table_exists(self._ENTITY_FIELD_TABLE):
+            return
+        for fieldname in fieldnames:
+            f.db.sql(
+                f"DELETE FROM `tab{self._ENTITY_FIELD_TABLE}` WHERE doctype = %s AND fieldname = %s AND status = 'pending'",
+                (doctype, fieldname),
+            )
+        if hasattr(f.db, "commit"):
+            f.db.commit()
+
+    @staticmethod
+    def _with_effects(exc: FrappeBackendError) -> FrappeBackendError:
+        """The same error from a step that already wrote: compensation cannot assume it left nothing behind."""
+        return FrappeBackendError(exc.code, exc.details, exc.stage, side_effect_free=False)
+
+    def _refuse_missing_link_targets(self, f: Any, doctype: str, fields: list[dict[str, Any]], made_types: set[str]) -> None:
+        """BPL-033: a Link field whose target type is neither on the engine, nor made by an earlier step, nor the type
+        itself is refused before any write (the engine would raise on insert). `subject_missing` is the contract's code
+        (5.4); the pointer names the missing entity."""
+        for fld in fields:
+            target = fld.get("target")
+            if fld.get("type") != "link" or not isinstance(target, str) or not target:
+                continue
+            target_dt = entity_to_doctype(target)
+            if target_dt == doctype or target_dt in made_types or self._doctype_exists(f, target_dt):
+                continue
+            pointer = "/entities/" + target.replace("~", "~0").replace("/", "~1")
+            raise FrappeBackendError("plan_rejected", {"reasonCode": "subject_missing", "pointer": pointer},
+                                     stage="execute", side_effect_free=True)
+
     def _quarantine_entity_fields(self, f: Any, dep: FrappeDeploymentAdapter, tenant_id: str, doctype: str) -> None:
         """entity.quarantine on a built-in type: hide exactly the custom fields its entity.add created; data stays."""
         meta = f.get_meta(doctype)
@@ -1146,6 +1201,8 @@ class FrappeRuntimeBackend:
         self._refuse_constrained_fields(defn.get("fields") or [])
         if getattr(f.db, "table_exists", None) and f.db.table_exists(doctype):
             return
+        known = [fld for fld in defn.get("fields") or [] if isinstance(fld, dict) and fld.get("type", "string") in BLUEPRINT_TO_FRAPPE_FIELDTYPE]
+        self._refuse_missing_link_targets(f, doctype, known, set())
         fields = []
         for fld in defn.get("fields", []):
             if not isinstance(fld, dict):
@@ -1243,13 +1300,22 @@ class FrappeRuntimeBackend:
         status = outcome.get("status")
         if status == "RECOVERY_REQUIRED":
             raise FrappeBackendError("recovery_required", stage="execute")
+        # BPL-033: two clean refusals leave no field, column or index, so compensation may undo the earlier steps: the DDL
+        # gate refused the plan before any intent, or the engine refused the field and the reconciliation verified the
+        # baseline (ADR-001 row 1). Every other refusal (a failed lock, lookup, read or plan inspection) stays fail closed.
+        if (status == "REJECTED" and outcome.get("fallback_action") == "QUEUE_FOR_CONTROLLED_ADMIN_DEPLOYMENT"
+                and ddl_plan.inspectable):
+            raise FrappeBackendError("plan_rejected", {"reasonCode": "storage_not_additive"}, stage="execute", side_effect_free=True)
+        if status == "FAILED_CLEAN" and outcome.get("disposition") == "ABSENT_ABSENT_BASELINE_VERIFIED":
+            raise FrappeBackendError("engine_unavailable", stage="execute", side_effect_free=True)
         if status not in ("APPLIED", "ALREADY_APPLIED"):
             raise FrappeBackendError("engine_unavailable", stage="execute")
         return status == "APPLIED"
 
     def _quarantine_field(self, dep: FrappeDeploymentAdapter, tenant_id: str, doctype: str, fieldname: str) -> None:
-        self._apply_property_setter(dep, tenant_id, doctype, fieldname, "hidden", 1, "Check")
+        # BPL-033: not mandatory first; the engine refuses to hide a mandatory field without a default (bench, step 56).
         self._apply_property_setter(dep, tenant_id, doctype, fieldname, "reqd", 0, "Check")
+        self._apply_property_setter(dep, tenant_id, doctype, fieldname, "hidden", 1, "Check")
         dep.clear_doctype_cache(doctype)
 
     def _delete_property_setter(

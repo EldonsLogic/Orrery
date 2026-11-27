@@ -370,6 +370,7 @@ jobs:
           python3 -m pytest -q
           apps/engine/change_engine/change_engine/tests/test_bpl_033_engine_hardening.py
           apps/engine/change_engine/change_engine/tests/test_bpl_033_location_hardening.py
+          apps/engine/change_engine/change_engine/tests/test_bpl_033_slice1_rollback_and_link_target.py
 
       - name: Adapter role and state namespacing and mapped grants (SEC-022, BPL-032, offline)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

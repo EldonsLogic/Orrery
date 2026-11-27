@@ -67,7 +67,7 @@
         "format": "webauthn.get.v1",
         "credentialId": "gG2E3r6-XCBDi_1utpyeSRd4hO7andFpB5qMYuOFXDI",
         "authenticatorData": "eW6Ax-W_ikjLYD8inu7FeOxyRD2_43cQzIDeZyKMZxMFAAAABw",
-        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiTHI1c21yWFkxSTNpb094MlpMSFBuNmtJRHdYcGlfRDlBRlR5aDJ4dy1nWSIsIm9yaWdpbiI6Imh0dHBzOi8vc3RhZmYuZXhhbXBsZS50ZXN0In0",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSk5iblJacU5JOHlma1pNNmU3RnlsYUVfYXdjSDVJdW1SdmhvYWZaOUFvWSIsIm9yaWdpbiI6Imh0dHBzOi8vc3RhZmYuZXhhbXBsZS50ZXN0In0",
         "signature": "T8R-8C7vaQFOVFw0P0kaEvtis_XutQWNWFiKbFTTMUzHT1_h-XOLG7CAJmDQVE2gqdloj01oPvI3cjZVPn8SeA"
       }
     },
@@ -90,7 +90,7 @@
         "format": "webauthn.get.v1",
         "credentialId": "gzczIhmcgQQioMRjC1jwp9eV7I9KEyjYTtswyKzMvns",
         "authenticatorData": "eW6Ax-W_ikjLYD8inu7FeOxyRD2_43cQzIDeZyKMZxMFAAAABw",
-        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiTHI1c21yWFkxSTNpb094MlpMSFBuNmtJRHdYcGlfRDlBRlR5aDJ4dy1nWSIsIm9yaWdpbiI6Imh0dHBzOi8vc3RhZmYuZXhhbXBsZS50ZXN0In0",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiSk5iblJacU5JOHlma1pNNmU3RnlsYUVfYXdjSDVJdW1SdmhvYWZaOUFvWSIsIm9yaWdpbiI6Imh0dHBzOi8vc3RhZmYuZXhhbXBsZS50ZXN0In0",
         "signature": "CtnYoXX0HBBOFGoALvvpsXnOOO8_k0JtOB_1_moTYOJNW9Hb-Q4aIbW5iErcDNaLK9vm30VLURLu_3w7_8VJiA"
       }
     }

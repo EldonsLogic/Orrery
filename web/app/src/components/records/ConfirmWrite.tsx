@@ -65,7 +65,7 @@ export function ConfirmWrite({ actionLabel, entityLabel, recordId, risk, changes
     <div className={styles.dialog} ref={root} tabIndex={-1}>
       <Card as="section" role="dialog" aria-modal="true" aria-labelledby="confirm-title" className={styles.dialogBody}>
         <Stack gap={2}>
-          <h2 id="confirm-title" className={styles.title}>{t('title', { action: actionLabel })}</h2>
+          <h2 id="confirm-title" className={styles.dialogTitle}>{t('title', { action: actionLabel })}</h2>
           <p>{recordId ? t('intro', { action: actionLabel, entity: entityLabel, id: recordId }) : t('introNew', { action: actionLabel, entity: entityLabel })}</p>
           <p>{t('risk', { risk })}</p>
           {sensitive ? <p>{t('sensitive')}</p> : null}

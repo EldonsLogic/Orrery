@@ -1,0 +1,89 @@
+/* Settings layout (WEB-029): a section list beside the content from tablet width up, stacked above it on phones. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@container (min-width: 48rem) {
+  .layout {
+    grid-template-columns: calc(var(--space-8) * 3) minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .nav {
+    position: sticky;
+    inset-block-start: calc(var(--topbar-height) + var(--space-3));
+  }
+}
+
+.nav {
+  display: grid;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.navTitle {
+  margin: 0;
+  padding-inline: var(--space-1_5);
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-label-weight);
+}
+
+.navList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-0_5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@container (min-width: 48rem) {
+  .navList {
+    display: grid;
+  }
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--control-md);
+  padding-inline: var(--space-1_5);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.navLink:hover {
+  background: var(--state-hover);
+  color: var(--color-text);
+}
+
+.navLink[aria-current='page'] {
+  background: var(--state-selected);
+  color: var(--color-text);
+}
+
+.navLink:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (pointer: coarse) {
+  .navLink {
+    min-block-size: var(--touch-target);
+  }
+}
+
+.content {
+  min-inline-size: 0;
+}

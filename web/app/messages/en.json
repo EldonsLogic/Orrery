@@ -209,7 +209,18 @@
       "next": "Next",
       "pageOf": "Page {page} of {pageCount}",
       "import": "Import",
-      "export": "Export"
+      "export": "Export",
+      "searchPlaceholder": "Search by number or name",
+      "filterAll": "{column}: all",
+      "clearFilters": "Clear search and filters",
+      "emptyTitle": "No records match",
+      "emptyBody": "Try a different search or clear the filters.",
+      "noneTitle": "Nothing here yet",
+      "noneBody": "Records you create or import appear here.",
+      "loading": "Loading records",
+      "range": "<n>{from}–{to}</n> of {count}",
+      "toolbar": "Search and filters",
+      "pages": "Pages"
     },
     "form": {
       "noAccess": "You do not have access to this record.",
@@ -221,7 +232,20 @@
       "result": {
         "waiting_for_gateway": "Not connected yet: nothing was saved. Changes start working when the platform gateway is connected.",
         "refused": "This action cannot be run from here."
-      }
+      },
+      "details": "Details",
+      "totals": "Totals",
+      "linesEmpty": "No lines yet.",
+      "activity": "Activity",
+      "activityEmpty": "No activity yet.",
+      "event": {
+        "created": "{name} created this record",
+        "updated": "{name} changed this record",
+        "state": "{name} moved it to"
+      },
+      "actionsLabel": "Record actions",
+      "yes": "Yes",
+      "no": "No"
     },
     "actions": {
       "create": "Create",
@@ -236,7 +260,7 @@
       "title": "Confirm: {action}",
       "intro": "You are about to {action} for {entity} {id}. Check what will change.",
       "introNew": "You are about to {action} for a new {entity}. Check what will change.",
-      "risk": "Risk level: {risk}.",
+      "risk": "{risk, select, R0 {Risk: very low.} R1 {Risk: low.} R2 {Risk: medium. Check the change before you confirm.} other {Risk: high.}}",
       "sensitive": "This affects accounts, tax or something sent outside the company.",
       "changes": "Changes",
       "change": "{field}: {before} to {after}",
@@ -252,10 +276,10 @@
       "needsApproval": "Importing here needs approval and cannot be run from this screen.",
       "steps": "Import steps",
       "step": {
-        "upload": "1. Upload",
-        "map": "2. Map columns",
-        "preview": "3. Check",
-        "confirm": "4. Confirm"
+        "upload": "Upload",
+        "map": "Map columns",
+        "preview": "Check",
+        "confirm": "Confirm"
       },
       "next": "Next",
       "back": "Go back",
@@ -263,7 +287,10 @@
       "upload": {
         "intro": "Choose a CSV file with a header row (up to {max} rows). Nothing is saved until you confirm at the end.",
         "file": "CSV file",
-        "hint": "Excel files are not read here yet: save the sheet as CSV."
+        "hint": "Excel files are not read here yet: save the sheet as CSV.",
+        "drop": "Drop a CSV file here",
+        "or": "or",
+        "choose": "Choose a file"
       },
       "fileError": {
         "tooBig": "The file is too large.",
@@ -278,7 +305,10 @@
         "column": "File column: {header}",
         "skip": "Skip this column",
         "duplicate": "{field} is matched to more than one column.",
-        "missingRequired": "{field} is required: match a column to it."
+        "missingRequired": "{field} is required: match a column to it.",
+        "fileColumn": "Column in your file",
+        "field": "Field",
+        "fixTitle": "Fix the matching first"
       },
       "preview": {
         "line": "Line",
@@ -313,7 +343,9 @@
         "notLink": "No such linked record",
         "notEmail": "Not a valid email address",
         "notPhone": "Not a valid phone number"
-      }
+      },
+      "stepOf": "Step {n} of {total}",
+      "fileErrorTitle": "This file cannot be used"
     },
     "export": {
       "title": "Export {entity}",
@@ -324,7 +356,12 @@
       "empty": "No records to export.",
       "excelLater": "Excel files are not produced here yet. Open the CSV in your spreadsheet program.",
       "downloadCsv": "Download CSV",
-      "back": "Go back"
+      "back": "Go back",
+      "records": "Records",
+      "columns": "Columns",
+      "format": "Format",
+      "csv": "CSV",
+      "preview": "First rows of the file"
     }
   },
   "shell": {
@@ -413,7 +450,8 @@
     "colour": {
       "label": "Primary colour",
       "hint": "Pick a colour or type a hex code with 3 or 6 digits.",
-      "picker": "Colour picker"
+      "picker": "Colour picker",
+      "body": "Used for buttons, links and the focus ring in both themes."
     },
     "logo": {
       "label": "Logo",
@@ -421,7 +459,8 @@
       "pending": "{name} was received and is waiting for the security check. It is not shown yet.",
       "errType": "Only PNG or JPEG files are accepted.",
       "errSize": "The file must be larger than 0 and at most 2 MB.",
-      "errFailed": "The logo could not be uploaded. Try again."
+      "errFailed": "The logo could not be uploaded. Try again.",
+      "body": "Shown in the app header and on your documents."
     },
     "preview": {
       "title": "Live preview",
@@ -1484,6 +1523,11 @@
     "currency": {
       "SAR": "SAR"
     }
+  },
+  "settings": {
+    "title": "Settings",
+    "nav": "Settings sections",
+    "branding": "Branding"
   },
   "metrics": {
     "sales": {

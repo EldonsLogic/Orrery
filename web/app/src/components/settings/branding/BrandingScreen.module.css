@@ -1,15 +1,353 @@
-.page { display: grid; gap: calc(var(--space-unit) * 3); max-inline-size: 72rem; }
-.layout { display: grid; gap: calc(var(--space-unit) * 3); grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); align-items: start; }
-.row { display: flex; flex-wrap: wrap; gap: calc(var(--space-unit) * 2); align-items: end; }
-.picker { inline-size: calc(var(--space-unit) * 8); block-size: calc(var(--space-unit) * 6); padding: 0; border: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent); border-radius: var(--radius-control); background: var(--color-surface); cursor: pointer; }
-.picker:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-.swatch { display: inline-block; inline-size: calc(var(--space-unit) * 3); block-size: calc(var(--space-unit) * 3); border: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent); border-radius: var(--radius-control); vertical-align: middle; }
-.panel { display: grid; gap: calc(var(--space-unit) * 2); padding: calc(var(--space-unit) * 3); background: var(--color-background); color: var(--color-text); border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent); border-radius: var(--radius-control); }
-.panelCard { padding: calc(var(--space-unit) * 2); background: var(--color-surface); border-radius: var(--radius-control); display: grid; gap: var(--space-unit); }
-.pBtn { justify-self: start; padding: var(--space-unit) calc(var(--space-unit) * 2); border: 0; border-radius: var(--radius-control); background: var(--color-primary); color: var(--color-primary-label); font: inherit; }
-.pLink { color: var(--color-primary); text-decoration: underline; }
-.pairs { inline-size: 100%; border-collapse: collapse; }
-.pairs th, .pairs td { padding: var(--space-unit); text-align: start; border-block-end: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent); }
-.num { font-variant-numeric: tabular-nums; }
-.actions { display: flex; gap: calc(var(--space-unit) * 2); align-items: center; flex-wrap: wrap; }
-.failed { margin-block: var(--space-unit); padding-inline-start: calc(var(--space-unit) * 3); }
+/* Branding settings (WEB-029). Foundation roles only. Settings rows (text at the start, control at the end) in a card, the live
+   preview beside them on wide screens (sticky), the contrast check below. */
+.page {
+  display: grid;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.head {
+  display: grid;
+  gap: var(--space-0_5);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h2-size);
+  line-height: var(--text-h2-line);
+  font-weight: var(--text-h2-weight);
+}
+
+:lang(ar) .title {
+  line-height: var(--text-h2-line-ar);
+}
+
+.intro {
+  margin: 0;
+  max-inline-size: var(--measure);
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+@container (min-width: 64rem) {
+  .layout {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+
+  .side {
+    position: sticky;
+    inset-block-start: calc(var(--topbar-height) + var(--space-3));
+  }
+}
+
+.main,
+.side {
+  display: grid;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+/* One setting: what it is at the start, its control at the end; stacked when narrow. */
+.setting {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.setting + .setting {
+  padding-block-start: var(--space-3);
+  border-block-start: var(--hairline);
+}
+
+
+.settingText {
+  display: grid;
+  align-content: start;
+  gap: var(--space-0_5);
+}
+
+.settingTitle {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--text-h3-size);
+  line-height: var(--text-h3-line);
+  font-weight: var(--text-h3-weight);
+}
+
+:lang(ar) .settingTitle {
+  line-height: var(--text-h3-line-ar);
+}
+
+.settingBody {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+.control {
+  display: grid;
+  gap: var(--space-1_5);
+  min-inline-size: 0;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1_5);
+  min-inline-size: 0;
+}
+
+.hex {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+/* The picker lines up with the text field below its label. */
+.picker {
+  flex: none;
+  box-sizing: border-box;
+  inline-size: var(--control-lg);
+  block-size: var(--control-md);
+  margin-block-start: calc(var(--text-label-line) + var(--space-0_5));
+  padding: var(--space-0_5);
+  border: var(--border-width) solid var(--color-border-control);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.picker:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-block-start: var(--space-3);
+  border-block-start: var(--hairline);
+}
+
+.note {
+  color: var(--color-text-muted);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+/* ---- Live preview: each panel takes the theme's own variables (inline), so it renders that theme. ---- */
+.panels {
+  display: grid;
+  gap: var(--space-2);
+}
+
+@container (min-width: 40rem) and (max-width: 63.99rem) {
+  .panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-1_5);
+  padding: var(--space-1_5);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.panelBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-block-end: var(--space-1);
+  border-block-end: var(--border-width) solid var(--color-border);
+}
+
+.panelDot {
+  inline-size: var(--space-1_5);
+  block-size: var(--space-1_5);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+}
+
+.panelName {
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+}
+
+.panelCard {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.panelCardTitle {
+  font-weight: var(--text-label-weight);
+}
+
+.pBtn {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--control-sm);
+  padding-inline: var(--space-1_5);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-primary-label);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+}
+
+.pLink {
+  justify-self: start;
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: var(--space-0_5);
+  font-size: var(--text-label-size);
+}
+
+.panelHex {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.panelNote {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+.swatch {
+  display: inline-block;
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+  border: var(--border-width) solid var(--color-border-control);
+  border-radius: var(--radius-pill);
+}
+
+/* ---- Contrast tables ---- */
+.tables {
+  display: grid;
+}
+
+.pairs {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+.pairsCaption {
+  padding-block-end: var(--space-1);
+  text-align: start;
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+}
+
+.pairs th,
+.pairs td {
+  block-size: var(--row-compact);
+  padding-block: var(--space-0_5);
+  padding-inline: var(--space-1);
+  text-align: start;
+  border-block-end: var(--hairline);
+}
+
+.pairs thead th {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-label-weight);
+}
+
+.pairs tbody th {
+  font-weight: var(--text-body-weight);
+}
+
+.pairs th:first-child,
+.pairs td:first-child {
+  padding-inline-start: 0;
+}
+
+.num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pairs thead th:nth-child(2),
+.pairs thead th:nth-child(3) {
+  text-align: end;
+}
+
+.failed {
+  margin-block: var(--space-1);
+  padding-inline-start: var(--space-3);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+
+.fold {
+  border-block-start: var(--hairline);
+}
+
+.foldSummary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--control-md);
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  font-weight: var(--text-label-weight);
+  border-radius: var(--radius-sm);
+}
+
+.foldSummary::-webkit-details-marker {
+  display: none;
+}
+
+.foldSummary:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.foldIcon {
+  color: var(--color-text-muted);
+  transition: transform var(--motion-fast) var(--motion-ease);
+}
+
+.fold[open] .foldIcon {
+  transform: rotate(180deg);
+}

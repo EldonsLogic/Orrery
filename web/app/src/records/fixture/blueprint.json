@@ -1,5 +1,5 @@
 {
- "_note": "Fixture only: trimmed copy of contracts/examples/blueprint-trading-minimal.json. Synthetic.",
+ "_note": "Fixture only: trimmed copy of contracts/examples/blueprint-trading-minimal.json. Synthetic. Sales order line items (sales_order_item, a child table) added for the record screens (WEB-029).",
  "entities": [
   {
    "id": "customer",
@@ -193,7 +193,80 @@
      }
     }
    ],
-   "workflow": "sales_order_flow"
+   "workflow": "sales_order_flow",
+   "relations": [
+    {
+     "id": "items",
+     "target": "sales_order_item",
+     "cardinality": "many",
+     "kind": "child_table",
+     "labels": {
+      "ar": "الأصناف",
+      "en": "Items"
+     }
+    }
+   ]
+  },
+  {
+   "id": "sales_order_item",
+   "labels": {
+    "ar": "صنف أمر البيع",
+    "en": "Sales order item"
+   },
+   "pluralLabels": {
+    "ar": "أصناف أمر البيع",
+    "en": "Sales order items"
+   },
+   "kind": "child",
+   "fields": [
+    {
+     "id": "item",
+     "type": "link",
+     "target": "item",
+     "required": true,
+     "labels": {
+      "ar": "الصنف",
+      "en": "Item"
+     }
+    },
+    {
+     "id": "qty",
+     "type": "decimal",
+     "precision": 2,
+     "required": true,
+     "labels": {
+      "ar": "الكمية",
+      "en": "Quantity"
+     }
+    },
+    {
+     "id": "rate",
+     "type": "money",
+     "precision": 2,
+     "required": true,
+     "labels": {
+      "ar": "السعر",
+      "en": "Rate"
+     }
+    },
+    {
+     "id": "amount",
+     "type": "money",
+     "precision": 2,
+     "readOnly": true,
+     "labels": {
+      "ar": "المبلغ",
+      "en": "Amount"
+     },
+     "computed": {
+      "function": "core.sales.line_amount",
+      "inputs": [
+       "qty",
+       "rate"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "sales_invoice",

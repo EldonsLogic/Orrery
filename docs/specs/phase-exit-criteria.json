@@ -226,7 +226,7 @@
         },
         {
           "id": "G1-5",
-          "text": "Counsel has answered the GPL boundary and vendor-certification questions in writing."
+          "text": "The GPL boundary for SaaS-only delivery is answered in writing by gpl-saas-boundary.md and by counsel's written answer on ADR-0074 uncertainties 3 to 6, and its compliance rules are enforced as ADR-0074 defines; counsel has answered the vendor-certification questions in writing."
         },
         {
           "id": "G1-6",

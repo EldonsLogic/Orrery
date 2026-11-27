@@ -6,9 +6,17 @@
   "description": "Draft (ADR-0078 Proposed, DSC-022). The six objects of connector-messaging.md, told apart by kind. Unknown keys are refused. Rules JSON Schema cannot express are in x-validator-rules.",
   "x-validator-rules": [
     "tenantId is set by the platform from the verified channel account binding, never from webhook payload text (section 7)",
-    "a session_reply is refused unless now is before the conversation's windowOpenUntil (MSG-003)",
-    "a template send is refused unless the template is approved for that language and category and consentRef points at a granted consent record of the same tenant, contact, channel and a purpose covering the category (MSG-004, MSG-005)",
-    "an auto_reply send carries a text that equals the tenant-approved text for autoReplyIntent byte for byte; the model never writes it (section 5)",
+    "the tenant segment of credentialRef (secret://tenant/<tenant>/msg/...) equals tenantId; a capability whose credentialRef names another tenant is refused (MSG-014)",
+    "channelAccountRef, conversationId, contactRef, consentRef, templateId, autoReplyPolicyRef, approvedTextId and testAllowlistRef of a send all resolve inside the send's tenantId; a ref that resolves to another tenant is refused (MSG-014), never followed",
+    "a session_reply is refused unless the conversation's windowOpenUntil is set and now is before it; when windowOpenUntil is null (SMS, or no inbound yet) the session reply is refused and a template is required (MSG-003)",
+    "a template send is refused unless the template is approved for that language and category, and consentRef is the latest record by time for the same tenant, contactRef, channel, country and purpose covering the category, in state granted (MSG-004, MSG-005, MSG-006)",
+    "a granted consent record after a revoke carries afterRevocation copied by platform code from the superseded record; its capturedAt is after afterRevocation.revokedAt and its evidenceHash is new; a revoke by the contact or a provider block is lifted only by the contact's own opt-in (capturedBy contact), never by a tenant user",
+    "payloadHash is the sha256 of the canonical send_request (UTF-8 JSON, sorted keys, no whitespace) without payloadHash, confirmationId and approvalId, recomputed by platform code at confirmation and at execution; any mismatch voids the confirmation and the approval (action-policy section 5)",
+    "sentBy is the user who made the confirmation gesture over the rendering of that payloadHash; for agent_draft, draftedBy is the agent id and sentBy a different principal, a human user",
+    "an auto_reply send has no text field: the platform resolves approvedTextId to the tenant-approved text of autoReplyPolicyRef for classifiedIntent, byte for byte; it is refused unless confidence >= confidenceThreshold and the inbound message has no flags (section 5)",
+    "contentHash is the sha256 of the sanitised text, recomputed by platform code; never taken from the provider",
+    "a send under a capability with sandbox true is refused unless contactRef is on the tenant test allowlist named by testAllowlistRef (MSG-012); a capability with sandbox true is refused in a production site class",
+    "a webhook whose eventType is not in the schema's list is dropped, alerted and audited, and becomes no object (MSG-013)",
     "contactRef resolves to a verified contact field of the tenant record; the model never chooses a recipient (prompt-injection-defence 5.1)"
   ],
   "type": "object",
@@ -23,25 +31,44 @@
     "ref": {"type": "string", "pattern": "^[a-z]{2,4}_[A-Za-z0-9_-]{1,64}$"},
     "providerId": {"type": "string", "pattern": "^[A-Za-z0-9_.:=+/-]{1,128}$"},
     "channel": {"enum": ["whatsapp", "instagram", "messenger", "sms"]},
+    "metaChannel": {"enum": ["whatsapp", "instagram", "messenger"]},
+    "country": {"enum": ["SA", "AE", "EG", "QA"]},
     "time": {"type": "string", "format": "date-time"},
     "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "contactRevokedBy": {"enum": ["contact_keyword", "contact_request", "provider_block"]},
     "capability": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "tenantId", "connectorId", "connectorVersion", "channel", "channelAccountRef", "credentialRef", "serviceWindowHours", "templatesRequiredOutsideWindow", "inboundContent", "maxTextLength", "sandbox"],
+      "required": ["kind", "tenantId", "connectorId", "connectorVersion", "channel", "channelAccountRef", "credentialRef", "serviceWindowHours", "templatesRequiredOutsideWindow", "inboundContent", "maxTextLength", "sandbox", "siteClass", "webhook"],
       "properties": {
         "kind": {"const": "capability"}, "tenantId": {"$ref": "#/$defs/tenantId"},
         "connectorId": {"enum": ["msg.meta_whatsapp", "msg.meta_instagram", "msg.meta_messenger", "msg.sms"]},
         "connectorVersion": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
         "channel": {"$ref": "#/$defs/channel"},
         "channelAccountRef": {"$ref": "#/$defs/ref"},
-        "credentialRef": {"type": "string", "pattern": "^secret://tenant/[a-z0-9_]+/msg/[a-z0-9_-]+$"},
+        "credentialRef": {"type": "string", "pattern": "^secret://tenant/t_[a-z0-9_]{1,40}/msg/[a-z0-9_-]+$"},
         "serviceWindowHours": {"type": ["integer", "null"], "minimum": 1, "maximum": 168},
         "templatesRequiredOutsideWindow": {"type": "boolean"},
         "inboundContent": {"type": "array", "items": {"enum": ["text"]}, "minItems": 1, "uniqueItems": true},
         "maxTextLength": {"type": "integer", "minimum": 1, "maximum": 4096},
         "readReceipts": {"type": "boolean"},
-        "sandbox": {"type": "boolean"}
-      }
+        "sandbox": {"type": "boolean"},
+        "siteClass": {"enum": ["sandbox", "production"]},
+        "webhook": {
+          "type": "object", "additionalProperties": false, "required": ["signedTimestamp", "replayWindowSeconds", "dedupRetentionHours"],
+          "properties": {
+            "signedTimestamp": {"type": "boolean"},
+            "replayWindowSeconds": {"type": ["integer", "null"], "minimum": 60, "maximum": 3600},
+            "dedupRetentionHours": {"type": "integer", "minimum": 72, "maximum": 2160}
+          },
+          "if": {"properties": {"signedTimestamp": {"const": false}}}, "then": {"properties": {"replayWindowSeconds": {"type": "null"}}}, "else": {"properties": {"replayWindowSeconds": {"type": "integer"}}}
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"connectorId": {"enum": ["msg.meta_whatsapp", "msg.meta_instagram", "msg.meta_messenger"]}}},
+         "then": {"properties": {"channel": {"$ref": "#/$defs/metaChannel"}, "webhook": {"properties": {"signedTimestamp": {"const": false}}}}},
+         "else": {"properties": {"channel": {"const": "sms"}, "serviceWindowHours": {"type": "null"}}}},
+        {"if": {"properties": {"siteClass": {"const": "production"}}}, "then": {"properties": {"sandbox": {"const": false}}}}
+      ]
     },
     "conversation": {
       "type": "object", "additionalProperties": false,
@@ -54,40 +81,49 @@
         "windowOpenUntil": {"oneOf": [{"$ref": "#/$defs/time"}, {"type": "null"}]},
         "lastInboundAt": {"$ref": "#/$defs/time"},
         "assignedTo": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]}
-      }
+      },
+      "if": {"properties": {"channel": {"const": "sms"}}}, "then": {"properties": {"windowOpenUntil": {"type": "null"}}}
     },
     "inboundMessage": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "tenantId", "messageId", "providerMessageId", "conversationId", "channel", "receivedAt", "trust", "content", "webhook"],
+      "required": ["kind", "tenantId", "messageId", "providerMessageId", "conversationId", "channel", "receivedAt", "trust", "retentionClass", "content", "webhook"],
       "properties": {
         "kind": {"const": "inbound_message"}, "tenantId": {"$ref": "#/$defs/tenantId"},
         "messageId": {"$ref": "#/$defs/ref"}, "providerMessageId": {"$ref": "#/$defs/providerId"},
         "conversationId": {"$ref": "#/$defs/ref"}, "channel": {"$ref": "#/$defs/channel"},
         "receivedAt": {"$ref": "#/$defs/time"},
         "trust": {"const": "untrusted"},
+        "retentionClass": {"const": "transcript"},
         "content": {
-          "type": "object", "additionalProperties": false, "required": ["type", "contentHash"],
+          "type": "object", "additionalProperties": false, "required": ["type", "contentHash", "flags"],
           "properties": {
             "type": {"enum": ["text", "unsupported"]},
             "text": {"type": "string", "maxLength": 4096},
             "contentHash": {"$ref": "#/$defs/hash"},
-            "flags": {"type": "array", "items": {"enum": ["instruction_like", "link", "bidi_override_stripped", "control_chars_stripped", "truncated"]}, "uniqueItems": true}
+            "flags": {"type": "array", "items": {"enum": ["instruction_like", "link", "opt_out_keyword", "bidi_override_stripped", "control_chars_stripped", "truncated"]}, "uniqueItems": true}
           },
           "if": {"properties": {"type": {"const": "text"}}}, "then": {"required": ["text"]}, "else": {"not": {"required": ["text"]}}
         },
         "webhook": {
-          "type": "object", "additionalProperties": false, "required": ["signatureVerified", "dedupKey", "receivedAt"],
-          "properties": {"signatureVerified": {"const": true}, "dedupKey": {"$ref": "#/$defs/hash"}, "receivedAt": {"$ref": "#/$defs/time"}}
+          "type": "object", "additionalProperties": false, "required": ["signatureVerified", "eventType", "providerEventId", "dedupKey", "receivedAt"],
+          "properties": {
+            "signatureVerified": {"const": true},
+            "eventType": {"enum": ["message"]},
+            "providerEventId": {"$ref": "#/$defs/providerId"},
+            "dedupKey": {"$ref": "#/$defs/hash"},
+            "receivedAt": {"$ref": "#/$defs/time"}
+          }
         }
       }
     },
     "sendRequest": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "tenantId", "idempotencyKey", "channel", "contactRef", "mode", "origin", "riskClass"],
+      "required": ["kind", "tenantId", "idempotencyKey", "channel", "country", "contactRef", "mode", "origin", "payloadHash", "tainted", "sandbox", "riskClass"],
       "properties": {
         "kind": {"const": "send_request"}, "tenantId": {"$ref": "#/$defs/tenantId"},
         "idempotencyKey": {"type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"},
-        "channel": {"$ref": "#/$defs/channel"}, "contactRef": {"$ref": "#/$defs/ref"},
+        "channel": {"$ref": "#/$defs/channel"}, "country": {"$ref": "#/$defs/country"},
+        "contactRef": {"$ref": "#/$defs/ref"},
         "conversationId": {"$ref": "#/$defs/ref"},
         "mode": {"enum": ["session_reply", "template"]},
         "text": {"type": "string", "minLength": 1, "maxLength": 4096},
@@ -102,52 +138,83 @@
         },
         "consentRef": {"$ref": "#/$defs/ref"},
         "origin": {"enum": ["human", "agent_draft", "auto_reply"]},
-        "autoReplyIntent": {"enum": ["greeting_ack", "opening_hours", "location", "handoff_ack"]},
-        "riskClass": {"enum": ["R1", "R3"]},
+        "sentBy": {"$ref": "#/$defs/ref"},
+        "draftedBy": {"$ref": "#/$defs/ref"},
+        "confirmationId": {"$ref": "#/$defs/ref"},
+        "payloadHash": {"$ref": "#/$defs/hash"},
+        "tainted": {"type": "boolean"},
+        "sandbox": {"type": "boolean"},
+        "testAllowlistRef": {"$ref": "#/$defs/ref"},
+        "autoReplyPolicyRef": {"$ref": "#/$defs/ref"},
+        "approvedTextId": {"$ref": "#/$defs/ref"},
+        "classifiedIntent": {"enum": ["greeting_ack", "opening_hours", "location", "handoff_ack"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "confidenceThreshold": {"type": "number", "minimum": 0.8, "maximum": 1},
+        "riskClass": {"const": "R3", "description": "Proposed, SEC action-policy row pending (Q-702): every send is an external send, so not R1."},
         "approvalId": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]}
       },
       "allOf": [
         {"if": {"properties": {"mode": {"const": "session_reply"}}},
-         "then": {"required": ["text", "conversationId"], "not": {"anyOf": [{"required": ["template"]}, {"required": ["consentRef"]}]}},
-         "else": {"required": ["template", "consentRef"], "not": {"required": ["text"]}}},
+         "then": {"required": ["conversationId"], "properties": {"tainted": {"const": true}, "channel": {"$ref": "#/$defs/metaChannel"}}, "not": {"anyOf": [{"required": ["template"]}, {"required": ["consentRef"]}]}},
+         "else": {"required": ["template", "consentRef"], "not": {"anyOf": [{"required": ["text"]}, {"required": ["approvedTextId"]}]}}},
+        {"if": {"properties": {"channel": {"const": "sms"}}, "required": ["channel"]}, "then": {"properties": {"mode": {"const": "template"}}}},
         {"if": {"properties": {"template": {"properties": {"category": {"const": "marketing"}}, "required": ["category"]}}, "required": ["template"]},
-         "then": {"properties": {"riskClass": {"const": "R3"}, "origin": {"const": "human"}}, "required": ["approvalId"]}},
+         "then": {"properties": {"origin": {"const": "human"}, "approvalId": {"$ref": "#/$defs/ref"}}, "required": ["approvalId"]}},
         {"if": {"properties": {"origin": {"const": "auto_reply"}}},
-         "then": {"required": ["autoReplyIntent"], "properties": {"mode": {"const": "session_reply"}, "riskClass": {"const": "R1"}}},
-         "else": {"not": {"required": ["autoReplyIntent"]}}}
+         "then": {"required": ["autoReplyPolicyRef", "approvedTextId", "classifiedIntent", "confidence", "confidenceThreshold"],
+                  "properties": {"mode": {"const": "session_reply"}, "channel": {"$ref": "#/$defs/metaChannel"}},
+                  "not": {"anyOf": [{"required": ["text"]}, {"required": ["sentBy"]}, {"required": ["draftedBy"]}, {"required": ["confirmationId"]}]}},
+         "else": {"required": ["sentBy", "confirmationId"],
+                  "not": {"anyOf": [{"required": ["autoReplyPolicyRef"]}, {"required": ["approvedTextId"]}, {"required": ["classifiedIntent"]}, {"required": ["confidence"]}, {"required": ["confidenceThreshold"]}]},
+                  "if": {"properties": {"mode": {"const": "session_reply"}}}, "then": {"required": ["text"]}}},
+        {"if": {"properties": {"origin": {"const": "agent_draft"}}}, "then": {"required": ["draftedBy"]}, "else": {"not": {"required": ["draftedBy"]}}},
+        {"if": {"properties": {"sandbox": {"const": true}}}, "then": {"required": ["testAllowlistRef"]}, "else": {"not": {"required": ["testAllowlistRef"]}}}
       ]
     },
     "deliveryStatus": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "tenantId", "messageId", "providerMessageId", "status", "occurredAt"],
+      "required": ["kind", "tenantId", "messageId", "providerMessageId", "status", "occurredAt", "costMicroUsd"],
       "properties": {
         "kind": {"const": "delivery_status"}, "tenantId": {"$ref": "#/$defs/tenantId"},
         "messageId": {"$ref": "#/$defs/ref"}, "providerMessageId": {"$ref": "#/$defs/providerId"},
         "status": {"enum": ["accepted", "sent", "delivered", "read", "failed", "expired"]},
         "occurredAt": {"$ref": "#/$defs/time"},
-        "errorCode": {"type": "string", "pattern": "^MSG-[0-9]{3}$"}
+        "errorCode": {"type": "string", "pattern": "^MSG-[0-9]{3}$"},
+        "costMicroUsd": {"type": ["integer", "null"], "minimum": 0}
       },
       "if": {"properties": {"status": {"const": "failed"}}}, "then": {"required": ["errorCode"]}, "else": {"not": {"required": ["errorCode"]}}
     },
     "consentRecord": {
       "type": "object", "additionalProperties": false,
-      "required": ["kind", "tenantId", "consentId", "contactRef", "channel", "country", "purpose", "state", "capturedAt", "method", "textVersion", "language", "evidenceHash"],
+      "required": ["kind", "tenantId", "consentId", "contactRef", "channel", "country", "purpose", "state", "capturedAt", "capturedBy", "method", "textVersion", "language", "evidenceHash", "supersedes"],
       "properties": {
         "kind": {"const": "consent_record"}, "tenantId": {"$ref": "#/$defs/tenantId"},
         "consentId": {"$ref": "#/$defs/ref"}, "contactRef": {"$ref": "#/$defs/ref"},
         "channel": {"$ref": "#/$defs/channel"},
-        "country": {"enum": ["SA", "AE", "EG", "QA"]},
+        "country": {"$ref": "#/$defs/country"},
         "purpose": {"enum": ["utility", "marketing"]},
         "state": {"enum": ["granted", "revoked"]},
         "capturedAt": {"$ref": "#/$defs/time"},
+        "capturedBy": {"enum": ["contact", "tenant_user", "provider"]},
         "method": {"enum": ["web_form", "in_person", "chat_keyword", "sms_keyword", "phone"]},
         "textVersion": {"type": "string", "pattern": "^[a-z0-9_.-]{1,40}$"},
         "language": {"enum": ["ar", "en"]},
         "evidenceHash": {"$ref": "#/$defs/hash"},
+        "supersedes": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]},
+        "afterRevocation": {
+          "type": "object", "additionalProperties": false, "required": ["consentId", "revokedBy", "revokedAt"],
+          "properties": {"consentId": {"$ref": "#/$defs/ref"}, "revokedBy": {"enum": ["contact_keyword", "contact_request", "tenant_user", "provider_block"]}, "revokedAt": {"$ref": "#/$defs/time"}}
+        },
         "revokedAt": {"$ref": "#/$defs/time"},
         "revokedBy": {"enum": ["contact_keyword", "contact_request", "tenant_user", "provider_block"]}
       },
-      "if": {"properties": {"state": {"const": "revoked"}}}, "then": {"required": ["revokedAt", "revokedBy"]}, "else": {"not": {"anyOf": [{"required": ["revokedAt"]}, {"required": ["revokedBy"]}]}}
+      "allOf": [
+        {"if": {"properties": {"state": {"const": "revoked"}}},
+         "then": {"required": ["revokedAt", "revokedBy"], "properties": {"supersedes": {"$ref": "#/$defs/ref"}}, "not": {"required": ["afterRevocation"]}},
+         "else": {"not": {"anyOf": [{"required": ["revokedAt"]}, {"required": ["revokedBy"]}]}}},
+        {"if": {"required": ["afterRevocation"], "properties": {"afterRevocation": {"properties": {"revokedBy": {"$ref": "#/$defs/contactRevokedBy"}}}}},
+         "then": {"properties": {"capturedBy": {"const": "contact"}, "method": {"enum": ["web_form", "chat_keyword", "sms_keyword"]}}}}
+      ]
     }
   }
 }

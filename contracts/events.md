@@ -74,11 +74,11 @@ Naming `<domain>.<past_tense_verb>`.
 No message body, phone number or handle in any of them: `contentHash` and opaque refs only. `data_class: personal`.
 | Type | Data |
 |---|---|
-| `message.received` | message_id, conversation_id, channel, channel_account_ref, content_hash, flags, tainted |
-| `message.send_requested` | message_id, conversation_id, channel, mode, template_id, category, language, origin, risk_class, consent_ref, approval_id |
-| `message.status_changed` | message_id, provider status (`accepted` to `expired`), error_code |
-| `consent.recorded` | consent_id, contact_ref, channel, country, purpose, method, text_version |
-| `consent.revoked` | consent_id, revoked_by |
+| `message.received` | message_id, conversation_id, channel, channel_account_ref, provider_event_id, content_hash, flags, tainted |
+| `message.send_requested` | message_id, conversation_id, channel, country, mode, template_id, category, language, origin, sent_by, drafted_by, confirmation_id, payload_hash, tainted, sandbox, risk_class, consent_ref, approval_id; for auto-replies auto_reply_policy_ref, approved_text_id, classified_intent, confidence, confidence_threshold |
+| `message.status_changed` | message_id, provider status (`accepted` to `expired`), error_code, cost_micro_usd |
+| `consent.recorded` | consent_id, supersedes, contact_ref, channel, country, purpose, captured_by, method, text_version |
+| `consent.revoked` | consent_id, supersedes, contact_ref, channel, country, purpose, revoked_by |
 
 ### Metering events
 Cheap, high-volume, aggregated by Part 5 into usage records.

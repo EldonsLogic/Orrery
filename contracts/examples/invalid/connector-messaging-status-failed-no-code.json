@@ -1,1 +1,1 @@
-{"kind": "delivery_status", "tenantId": "t_demo_trading", "messageId": "msg_0002", "providerMessageId": "wamid.TEST0002", "status": "failed", "occurredAt": "2026-01-01T10:00:00Z"}
+{"kind": "delivery_status", "tenantId": "t_demo_trading", "messageId": "msg_0002", "providerMessageId": "wamid.TEST0002", "status": "failed", "occurredAt": "2026-01-01T10:00:00Z", "costMicroUsd": null}

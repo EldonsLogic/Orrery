@@ -25,3 +25,10 @@ Unknown.
 
 ## Next step
 Partner review of ADR-0078 and a security review by a different model; SEC action-policy row for `message.*`; DSC-024 build after acceptance; open points listed in the ADR Consequences.
+
+## Update: Tier 3 security review fixes (PR #394, verdict CHANGES: 2 High, 6 Medium, 4 Low)
+- Delegated by Eldon's orchestrating session to an implementation worker (opus-5.5); test first: 19 new invalid examples and the stricter tests failed before the schema change.
+- H1 marketing `approvalId` a required ref; H2 auto-reply has no `text`, needs `autoReplyPolicyRef`, `approvedTextId`, `classifiedIntent`, `confidence`, `confidenceThreshold` (floor 0.8), Meta channels only.
+- M1 `sentBy`, `draftedBy`, `confirmationId`, `payloadHash` (canonical sha256, checked by a test) and the section 10 audit field map; M2 every send proposed R3 (R1 has no external effect), session replies `tainted: true`, Q-702; M3 send `country`, append-only consent with `supersedes` and `afterRevocation`, a contact's STOP lifted only by the contact; M4 dedup by `providerEventId`, retention at least 72 hours, no age window for Meta, unknown `eventType` fails closed (MSG-013), Q-703; M5 `siteClass`, `testAllowlistRef`; M6 SMS sends are templates, a null window refuses a session reply.
+- Lows: credentialRef tenant rule and cross-tenant refs (MSG-014); real, unshared example hashes; inbound `flags` required and `retentionClass`; per-file expected keyword test; error codes over invalid examples; events test reads table rows.
+- Files: contracts/connector-messaging.md, .schema.json, examples, tests/test_messaging_contracts.py, contracts/events.md (messaging rows), ADR-0078 (Proposed, decisions 3 to 8), docs/open-questions.md (Q-702, Q-703).

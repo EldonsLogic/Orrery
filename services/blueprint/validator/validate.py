@@ -8,6 +8,7 @@ from .rules_assistants import rule_assistants
 from .rules_branding import rule_assets, rule_contrast, rule_einvoicing, rule_white_label
 from .rules_components import rule_components, rule_functions
 from .rules_locale import rule_country, rule_locale
+from .rules_modules import rule_modules
 from .rules_refs import rule_references
 from .rules_structure import rule_approvals, rule_i18n, rule_roles, rule_workflow
 from .schema_step import load_schema, run_schema
@@ -27,6 +28,7 @@ RULES: list[tuple[str, Callable]] = [
     ("white_label", rule_white_label),  # 12
     ("einvoicing", rule_einvoicing),    # 13
     ("assistants", rule_assistants),    # 14 (ADR-0043)
+    ("modules", rule_modules),          # module rules (ADR-0079): projects and module rigid zone
 ]
 
 

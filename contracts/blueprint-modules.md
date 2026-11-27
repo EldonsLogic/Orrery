@@ -13,7 +13,7 @@ Part of contract 1 ([blueprint.schema.json](blueprint.schema.json), `$defs/modul
 - **Workflow vocabulary.** Each module has a fixed-shape state list (pipeline stages, task statuses) mapped onto the engine's own status values. Generic `workflows[]` may still sit on a bound entity for approvals.
 - **Role vocabulary.** `roles.manage`, `roles.work`, `roles.view` list the Blueprint role ids that the module's screens treat as managers, workers and viewers. Listing grants nothing: `roles[].permissions` and scope decide everything. A change to a module role list is classed `access` by bpdiff.
 - **Report vocabulary.** Reports reference module metrics by id (below). Numbers come from code in the semantic layer; the Blueprint never holds a formula.
-- **Rigid zone.** Module settings carry configuration only. Posting, valuation, tax and costing stay deterministic engine or certified-component logic, never AI-written (AGENTS.md principle 3).
+- **Rigid zone.** Module settings carry configuration only, and no field on a module-bound entity may match the schema's `x-rigid-zone-terms` (validator `BP-MOD-001`). Posting, valuation, tax and costing stay deterministic engine or certified-component logic, never AI-written (AGENTS.md principle 3).
 
 Engine record names below are internal (ADR-0016): they never appear in anything a customer sees. Every one is UNVERIFIED until a bench run on the pinned set; names were read from the pinned ERPNext v15.124.5 source on 2026-11-27 (https://github.com/frappe/erpnext/tree/v15.124.5).
 
@@ -47,10 +47,11 @@ Projects and boards over core projects, tasks and timesheets. Board, timeline an
 
 - `taskStatuses`: the company's own statuses, in order, each mapped to one engine task status: `open` Open, `working` Working, `pending_review` Pending Review, `completed` Completed, `cancelled` Cancelled. At least one `open` and one `completed`. The engine sets Overdue itself from the end date, so it is never mapped; Template is not used. Several company statuses may share one engine status; the compiler keeps the company status in an adapter-owned field on the task (UNVERIFIED until BPL-057).
 - `views[]`: `board` (task only; columns in order, each listing statuses; dropping a card sets the column's first status; optional swimlanes), `timeline` (start and end date fields; dependencies from the task's depends-on rows), `calendar` (start and optional end field), `list`. Each view names the roles that see it; rows stay limited by each viewer's scope.
-- Ledger boundary: `timesheets.billable` only allows billing hours through a sales invoice. Costing and billing rates, amounts and the invoice posting come from the engine and the certified invoicing component, never from the Blueprint.
+- Ledger boundary: `timesheets.billable` only allows billing hours through a sales invoice; it needs `enabled: true` and `invoicingComponent`, the certified invoicing component listed in `components` (schema, plus validator `BP-MOD-003`). Costing and billing rates, amounts and the invoice posting come from the engine and that component, never from the Blueprint: no field on a module-bound entity, timesheet and activity_type included, may be named for a rigid-zone term (`billing_rate`, `costing_rate`, `amount` and every `x-rigid-zone-terms` match), and the bound timesheet and activity_type carry no money field (validator `BP-MOD-001`).
+- View fields: timeline `startField`, `endField` and calendar `startField`, `endField` are date or datetime fields of the view's concept entity (validator `BP-MOD-002`).
 
 Metrics: `projects.tasks_by_status`, `projects.overdue_tasks`, `projects.hours_logged`, `projects.billable_hours`, `projects.project_progress`
 
 ## Changelog
-- 0.6.0 (BPL-053): `modules.projects` with task statuses mapped to engine statuses, board, timeline, calendar and list views, and timesheets. Additive.
+- 0.6.0 (BPL-053): `modules.projects` with task statuses mapped to engine statuses, board, timeline, calendar and list views, and timesheets (`billable` needs `enabled` and `invoicingComponent`); root `x-rigid-zone-terms`. Additive.
 - 0.5.0 (BPL-052): optional `modules` with `crm`; shared `moduleRoles` and `moduleOption`. Additive: every 0.4.0 Blueprint stays valid; `meta.schemaVersion` stays `0.1.0` (Q-141).

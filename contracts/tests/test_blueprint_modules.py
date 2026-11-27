@@ -72,7 +72,10 @@ def test_invalid_case_fails_at_named_path(base, case):
     errors = list(V.iter_errors(apply(load(base), case)))
     assert errors, f"{case['name']} unexpectedly validates"
     paths = ["/".join(map(str, e.absolute_path)) for e in errors]
-    assert any(p.startswith(case["expect"]) for p in paths), (case["name"], paths)
+    if case.get("exact"):
+        assert case["expect"] in paths, (case["name"], paths)
+    else:
+        assert any(p.startswith(case["expect"]) for p in paths), (case["name"], paths)
 
 
 def test_versions_agree():
@@ -100,8 +103,9 @@ def test_example_module_metrics_are_in_the_vocabulary():
 
 # Rigid-zone terms (AGENTS.md principle 3): a key whose name holds one of these as a substring or as a
 # camelCase or snake_case token is a formula, posting, costing, tax, payroll or pricing knob.
-RIGID_SUBSTRINGS = ("formula", "expression", "posting", "valuation", "account", "ledger", "payroll")
-RIGID_TOKENS = ("cost", "tax", "rate", "price", "amount")
+# The terms live in the schema (x-rigid-zone-terms) so the validator's bound-entity field rule uses the same list.
+RIGID_SUBSTRINGS = tuple(SCHEMA["x-rigid-zone-terms"]["substrings"])
+RIGID_TOKENS = tuple(SCHEMA["x-rigid-zone-terms"]["tokens"])
 
 
 def _tokens(key):

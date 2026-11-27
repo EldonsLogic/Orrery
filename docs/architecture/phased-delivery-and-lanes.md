@@ -12,7 +12,7 @@ How the product is delivered in proven steps, what each step builds and must pro
 - Every user gets a simplified screen for their function and a chat limited to their role and scope. Customers create agents with an autonomy level per agent, always under the human floor ([ADR-0027](../decisions/ADR-0027-human-floor-action-policy-and-agent-authority.md)).
 - Deterministic finance on an engine the customer never sees; Arabic first; each market is a country pack ([ADR-0015](../decisions/ADR-0015-country-packs-calendars-locale.md), [ADR-0024](../decisions/ADR-0024-four-phase-1-markets.md)).
 - Flat monthly price per organisation is the commercial shape (HYPOTHESIS until measured; pricing lives in [../strategy/](../strategy/)).
-- Not in scope now: a general app builder, customer-written code, point of sale and offline use in version one (confirm with the pilot), payroll calculation (file export only), AI-written ledger or tax logic.
+- Not in scope now: a general app builder, customer-written code, offline use in version one (confirm with the pilot), point of sale until its ZATCA review (ADR-0076, Proposed, CMP-050), payroll calculation inside the engine (ADR-0076 adds a payroll module as our own service once ADR-0074 is Accepted; ADR-0080), AI-written ledger or tax logic.
 
 ## 2. The phases
 Each phase closes only after an exit run ([../GATES.md](../GATES.md), RULES 48). Evidence items are listed in [../specs/phase-exit-criteria.json](../specs/phase-exit-criteria.json).

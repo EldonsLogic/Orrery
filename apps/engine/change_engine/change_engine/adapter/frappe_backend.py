@@ -127,13 +127,23 @@ class FrappeSiteResolver:
         default_domain: str = "localhost",
     ) -> None:
         self.site_map = dict(site_map or {})
+        self.default_domain = default_domain
         seen_sites: dict[str, str] = {}
+        default = str(default_domain).strip().rstrip(".").lower()
         for tid, site in self.site_map.items():
+            # Every key is a tenant id and every value a site name no other tenant resolves to (CE-SEC-011): one
+            # that equals another, unmapped tenant's default ``<slug>.<default_domain>`` would put two tenants on
+            # one site.
+            if not isinstance(tid, str) or not _SAFE_TENANT_RE.fullmatch(tid) or not isinstance(site, str):
+                raise FrappeBackendError("invalid_request", {"fields": ["/site_map"]}, stage="validate")
             norm_site = site.strip().rstrip(".").lower()
             if not norm_site or norm_site in seen_sites and seen_sites[norm_site] != tid:
                 raise FrappeBackendError("invalid_request", {"fields": ["/site_map"]}, stage="validate")
+            label, _dot, domain = norm_site.partition(".")
+            other = label.replace("-", "_")
+            if domain == default and other != tid and other not in self.site_map and _SAFE_TENANT_RE.fullmatch(other):
+                raise FrappeBackendError("invalid_request", {"fields": ["/site_map"]}, stage="validate")
             seen_sites[norm_site] = tid
-        self.default_domain = default_domain
 
     def resolve(self, tenant_id: str) -> str:
         if not isinstance(tenant_id, str) or not _SAFE_TENANT_RE.fullmatch(tenant_id):
@@ -149,6 +159,22 @@ class FrappeSiteResolver:
         # so '_' -> '-' cannot collapse distinct tenant IDs onto the same site name.
         slug = tenant_id.replace("_", "-")
         return f"{slug}.{self.default_domain}"
+
+    def tenant_of(self, site: Any) -> str | None:
+        """The one tenant id whose site is exactly ``site`` (the inverse of ``resolve``), or ``None``.
+
+        A ``site_map`` entry is matched on the exact site name the backend binds; any other site must be the
+        default-domain name of a tenant that is NOT mapped elsewhere (``resolve`` of the candidate returns it back).
+        No other spelling of a site (case, trailing dot, another domain) maps to a tenant."""
+        if not isinstance(site, str) or not site:
+            return None
+        for tenant_id, mapped in self.site_map.items():
+            if mapped == site:
+                return tenant_id
+        candidate = site.partition(".")[0].replace("-", "_")
+        if not _SAFE_TENANT_RE.fullmatch(candidate) or candidate in self.site_map:
+            return None
+        return candidate if self.resolve(candidate) == site else None
 
 
 def shadow_user_email(member_ref: str) -> str:
@@ -291,7 +317,8 @@ class FrappeRuntimeBackend:
         # Offline mode is the explicit constructor flag only (simulated runtime, no real DDL);
         # an injected factory alone still gets Frappe's own inspection and fails closed.
         return FrappeDeploymentAdapter(
-            frappe_module=f, in_memory=False, offline_ddl_simulator=self._offline_ddl_simulator
+            frappe_module=f, in_memory=False, offline_ddl_simulator=self._offline_ddl_simulator,
+            site_resolver=self.site_resolver,
         )
 
     def _ensure_state_table(self, f: Any) -> None:
@@ -1321,11 +1348,7 @@ class FrappeRuntimeBackend:
         for t in transitions:
             action_labels = t.get("actionLabels") if isinstance(t.get("actionLabels"), dict) else {}
             action = str(action_labels.get("en") or t.get("id") or "Proceed")
-            if hasattr(f.db, "exists") and not f.db.exists("Workflow Action Master", action):
-                try:
-                    f.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action}).insert(ignore_permissions=True)
-                except Exception:
-                    pass
+            # The Workflow Action Master is created by the engine, after the intent and under the locks.
             for r in t["allowedRoles"]:
                 wf_transitions.append(
                     {

@@ -32,7 +32,7 @@ from typing import Any
 from ._deps import bpdiff
 from .components import touches_ledger_or_tax
 from .result import Issue
-from .steps import ADD_KIND, ADDITIVE, I18N_SETTINGS, PHASE, SETTINGS_SECTIONS, SKIP, _esc
+from .steps import ADD_KIND, ADDITIVE, I18N_SETTINGS, PHASE, SETTINGS_SECTIONS, SKIP, _esc, order_by_links
 
 MISSING = object()
 OP_KINDS = ("add", "remove", "replace", "reorder")
@@ -261,6 +261,8 @@ def steps_from_diff(d: dict, base: dict, target: dict, *, restores: bool = False
         s["ddlImpact"] = "additive" if kind in ADDITIVE else "semantic" if prop in SEMANTIC.get(kind, ()) else "none"
         s["reversible"] = irreversible_reason(s) is None
     steps = sorted(by_key.values(), key=lambda s: (s["phase"], s["pointer"], s["kind"], s["params"].get("property", "")))
+    steps, cycles = order_by_links(steps)  # BPL-051: Link targets added first, dependants quarantined first
+    issues += cycles
     for i, s in enumerate(steps, 1):
         s["seq"] = i
         s["sourceOps"].sort()

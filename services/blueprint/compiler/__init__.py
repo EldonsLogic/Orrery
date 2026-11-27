@@ -19,7 +19,8 @@ Open questions (conservative reading taken; to move to docs/open-questions.md):
    the sample artifacts use the engine's name (contract 16.12). The compiler passes meta.engineTarget through.
 5. Phase order versus references. Contract 9.4 says additions run before their users, but entity.add (phase 4)
    names its workflow (phase 8), workflow transitions name approvals (phase 9), and entities and locations reference
-   each other within one phase. plan_view reports these as forwardRefs; the adapter must resolve them.
+   each other within one phase. plan_view reports these as forwardRefs; the adapter must resolve them. Links
+   between entities added in phase 4 are no longer among them: entity.add runs in Link-target order (BPL-051, ADR-0075).
 6. The artifact has no field for the engine mapping id or version, so two different mappings that both pass give
    the same artifact (compiler identity rule in the schema). Record the mapping in the artifact?
 7. Draft mappings. A draft mapping is accepted only for sandbox and only when its versionSet equals the

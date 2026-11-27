@@ -7,6 +7,7 @@ rule covers refuses the compile.
 from __future__ import annotations
 
 import copy
+import heapq
 from typing import Any
 
 from .components import touches_ledger_or_tax
@@ -84,10 +85,81 @@ def steps_from_ops(ops: list[dict]) -> tuple[list[dict], list[dict], list[Issue]
     # property breaks the tie (ADR-0057 Q-51).
     steps.sort(key=lambda s: (s["phase"], s["pointer"], s["kind"],
                               s["params"]["property"] if s["kind"] == "settings.set" else ""))
+    steps, cycles = order_by_links(steps)
+    issues += cycles
     for i, s in enumerate(steps, 1):
         s["seq"] = i
     skipped.sort(key=lambda s: s["pointer"])
     return steps, skipped, issues
+
+
+def link_targets(definition: Any) -> set[str]:
+    """Entity ids an entity definition links to: every field or relation with a `target` (a link field, or a relation,
+    which the adapter creates as a Link)."""
+    if not isinstance(definition, dict):
+        return set()
+    return {el["target"] for key in ("fields", "relations") for el in definition.get(key) or []
+            if isinstance(el, dict) and isinstance(el.get("target"), str)}
+
+
+def _topo(group: list[dict], dependants_first: bool) -> tuple[list[dict], list[str]]:
+    """Kahn's algorithm over the Links among `group`, ties by pointer. A self-link and a link to an entity outside the
+    group add no edge. On a cycle the smallest remaining pointer is taken next; returns (order, cycle member pointers)."""
+    by_id = {s["subject"]["id"]: s for s in group}
+    if len(by_id) != len(group):  # a duplicate subject: leave the order alone, CMP-ART-006 refuses it
+        return group, []
+    after: dict[str, set[str]] = {e: set() for e in by_id}  # e -> entities that must come after e
+    for e, s in by_id.items():
+        for t in link_targets(s["params"]["definition"]) & set(by_id) - {e}:
+            after[e if dependants_first else t].add(t if dependants_first else e)
+    need = {e: sum(e in a for a in after.values()) for e in by_id}
+    ptr = {e: by_id[e]["pointer"] for e in by_id}
+    ready = [(ptr[e], e) for e in by_id if not need[e]]
+    heapq.heapify(ready)
+    order, left, forced = [], set(by_id), False
+    while left:
+        if not ready:
+            forced = True
+            heapq.heappush(ready, min((ptr[e], e) for e in left))
+        _, e = heapq.heappop(ready)
+        if e not in left:
+            continue
+        order.append(by_id[e])
+        left.discard(e)
+        for d in sorted(after[e]):
+            need[d] -= 1
+            if need[d] == 0 and d in left:
+                heapq.heappush(ready, (ptr[d], d))
+    return order, sorted(ptr[e] for e in _stuck(by_id, after)) if forced else []
+
+
+def _stuck(by_id: dict, after: dict) -> set[str]:
+    """Entities on a Link cycle (or between cycles): what is left after removing, from both ends, every entity with
+    no remaining predecessor or no remaining successor."""
+    left = set(by_id)
+    while True:
+        drop = {e for e in left if not after[e] & left or not any(e in after[p] for p in left)}
+        if not drop:
+            return left
+        left -= drop
+
+
+def order_by_links(steps: list[dict]) -> tuple[list[dict], list[Issue]]:
+    """BPL-051 (Q-691): reorder the entity.add steps (phase 4) so every Link target is created before the entities that
+    link to it, and the entity.quarantine steps (phase 16) so dependants go first. `steps` must already be in the
+    9.4 sort order; every other step keeps its place. A Link cycle among new entities refuses (CMP-ART-007); a
+    quarantine cycle is broken by pointer, as quarantine keeps the storage."""
+    out, issues = list(steps), []
+    for kind, dependants_first in (("entity.add", False), ("entity.quarantine", True)):
+        idx = [i for i, s in enumerate(out) if s["kind"] == kind]
+        order, cycle = _topo([out[i] for i in idx], dependants_first)
+        for i, s in zip(idx, order):
+            out[i] = s
+        if cycle and not dependants_first:
+            ids = ", ".join(p.rsplit("/", 1)[-1] for p in cycle)
+            issues += [Issue("CMP-ART-007", p, f"Link cycle among new entities ({ids}); add the closing Link as a "
+                             "field in a later revision") for p in cycle]
+    return out, issues
 
 
 def post_conditions(steps: list[dict], target: dict) -> list[dict]:

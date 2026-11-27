@@ -25,3 +25,6 @@ Unknown.
 
 ## Next step
 Partner view on Q-421; official replies to the legal queries; Q-214 research task.
+
+## Review fixes (2026-11-27)
+- Partner review at 15b43c45: "Partner to confirm." added to Q-44, Q-10, Q-198, Q-200, Q-215, Q-202, Q-205, Q-210, Q-211, Q-518; Q-10 restated to Q-680 scope; Q-14, Q-243, Q-420, Q-518, Q-211, Q-213 now PARTLY ANSWERED with the missing part open; Q-602 keeps LEG-008 counsel clearance (waiver needs both founders). GOV-075 fixes merged in.

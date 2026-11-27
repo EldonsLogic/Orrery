@@ -235,3 +235,31 @@ def test_trading_fixture_plus_manufacturing_validates():
     assert {"cost_price", "selling_price", "vat_rate"} <= {f["id"] for f in entity(bp, "item")["fields"]}
     rep = validate(bp)
     assert not {e.code for e in rep.errors} & (MOD_CODES | {"BP-SCHEMA-001"}), [str(e) for e in rep.errors]
+
+
+def _wh(bp):
+    return bp["modules"]["manufacturing"]["warehouses"]
+
+
+def _add_store(bp, ident, kind="warehouse"):
+    bp["locations"].append({"id": ident, "kind": kind, "parent": "hq", "labels": {"ar": "مخزن", "en": "Store"}})
+
+
+@pytest.mark.parametrize("update", [
+    {"finishedGoods": "wip_store"},                 # WIP and finished goods are the same warehouse
+    {"scrap": "wip_store"},                         # scrap equals WIP
+    {"scrap": "fg_store"},                          # scrap equals finished goods
+    {"workInProgress": "hq"},                       # a branch, not a warehouse
+    {"scrap": "no_such_store"},                     # does not resolve
+])
+def test_manufacturing_warehouses(update):
+    bp = example()
+    _wh(bp).update(update)
+    assert "BP-MOD-004" in codes(bp)
+
+
+def test_distinct_scrap_warehouse_passes():
+    bp = example()
+    _add_store(bp, "scrap_store")
+    _wh(bp)["scrap"] = "scrap_store"
+    assert codes(bp) == set()

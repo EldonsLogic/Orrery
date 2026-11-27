@@ -18,7 +18,7 @@ Approved by: Eldon 2026-11-27 (proposer); partner pending (review on this PR)
 8. **Amounts.** Integer minor units plus ISO 4217 currency, computed by deterministic code from the invoice or order; the model never computes or proposes an amount. A gateway amount that differs from the expected one is a mismatch, never a silent correction.
 9. **Untrusted content.** Everything a gateway returns (descriptions, payer names, error text, metadata) is untrusted data ([connector interface](../../contracts/connector-interface.md) section 3.3).
 10. **Fail closed.** A missing credential, unknown status, failed verification, currency or amount mismatch, or gateway timeout leaves the record unpaid and raises an error; no payment is assumed.
-11. **Reconciliation and posting.** A capture never posts to the ledger by itself; deterministic rigid-zone code drafts the receipt in the payment's own currency, and a human posts it (AP-PAY-05; whether a matched single-invoice receipt can be R3 is Q-695). Reconciliation of gateway payments, refunds and fees against the ledger is deterministic code in the rigid zone; it matches, it never guesses, and unmatched lines go to a human.
+11. **Reconciliation and posting.** A capture never posts to the ledger by itself; deterministic rigid-zone code drafts the receipt in the payment's own currency, and a human posts it (AP-PAY-05; whether a matched single-invoice receipt can be R3 is Q-723). Reconciliation of gateway payments, refunds and fees against the ledger is deterministic code in the rigid zone; it matches, it never guesses, and unmatched lines go to a human.
 12. **Go-live, not build.** Each customer's gateway account and merchant approval are that customer's go-live items. Builds and tests use gateway sandboxes and synthetic data only. The environment (sandbox or live) belongs to the connection, is proven against the key mode at connect and is never taken from a request; dev and preview hosts hold sandbox connections only.
 
 ## Alternatives rejected
@@ -35,7 +35,7 @@ Approved by: Eldon 2026-11-27 (proposer); partner pending (review on this PR)
 - Must do: DSC-023 builds the first adapter against this contract (sandbox only); a security review of the contract by a different model (Tier 3: money and tenancy).
 
 ## Open questions
-Q-692 (QSA scoping opinion), Q-693 (which gateway first), Q-694 (fees and payouts in reconciliation), Q-695 (posting row risk class).
+Q-692 (QSA scoping opinion), Q-693 (which gateway first), Q-694 (fees and payouts in reconciliation), Q-723 (posting row risk class).
 
 ## Supersedes
 none

@@ -243,6 +243,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | eldon | done |
 | BRD-013 | Pre-counsel name screening for candidate names (Seshna, Sesh): trademark, company, connotation and domain signals; input to LEG-008 and BRD-003 | Brand | G1 | - | eldon | done |
 | BRD-014 | Integrate the Seshna brand kit (Nuqta S mark, Cairo Bold wordmark, Cairo for headings with Readex Pro body): rewrite docs/brand guidelines, logo build tool and generated assets, heading-font tokens, web icons, manifest and self-hosted fonts | Brand | G1 | - | eldon | done |
+| BRD-015 | Record the names Seshat (platform engine) and Sesh (AI assistant) in brand.json and ADR-0082; include both in the LEG-008 trademark search | Brand | G0 | - | eldon | doing |
 | WEB-001 | Marketing website v1, bilingual | Web | G2 | BRD-009 | eldon | todo |
 | WEB-002 | Contact and waitlist form with PDPL consent | Web | G2 | WEB-001,LEG-012 | eldon | todo |
 | WEB-003 | App shell: sign-in, workspace switcher, navigation | Web | G2 | PLT-005,BRD-010 | eldon | done |

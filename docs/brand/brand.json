@@ -4,5 +4,14 @@
   "status": "final product name (ADR-0066); trademark search in Saudi Arabia, the UAE, Egypt and Qatar still pending",
   "mark": "Nuqta S",
   "latinNameAlways": true,
-  "arabicScriptNever": true
+  "arabicScriptNever": true,
+  "engine": {
+    "name": "Seshat",
+    "use": "the public name of Seshna's platform engine; the underlying open-source core stays unnamed (ADR-0016, ADR-0082)"
+  },
+  "assistant": {
+    "name": "Sesh",
+    "use": "the name of Seshna's AI assistant in the product and in marketing (ADR-0082)"
+  },
+  "productNamesStatus": "Seshat and Sesh adopted by Eldon 2026-11-27 (ADR-0082); trademark search pending, as for Seshna"
 }

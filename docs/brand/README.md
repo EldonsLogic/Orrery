@@ -1,6 +1,6 @@
 # Brand and design system: Seshna
 
-**Status.** The product name **Seshna** (seshna.com), the **Nuqta S** mark, the **Cairo Bold** outlined wordmark and **Cairo for headings with Readex Pro for body** are final founder decisions of 2026-11-23 (ADR-0066). The palette, type scale and components of Brand guidelines v1 (6 November 2026) are unchanged. Still open: the trademark search on the name and mark in Saudi Arabia, the UAE, Egypt and Qatar (see `10-open-items.md`).
+**Status.** The product name **Seshna** (seshna.com), the **Nuqta S** mark, the **Cairo Bold** outlined wordmark and **Cairo for headings with Readex Pro for body** are final founder decisions of 2026-11-23 (ADR-0066). The palette, type scale and components of Brand guidelines v1 (6 November 2026) are unchanged. Two product names were added on 2026-11-27 (ADR-0082): **Seshat** for the platform engine and **Sesh** for the AI assistant, both in Latin letters only, like Seshna. Still open: the trademark search on the name and mark in Saudi Arabia, the UAE, Egypt and Qatar (see `10-open-items.md`).
 
 Logo source: the Seshna logo kit "Nuqta S", draft v3, regenerated in this repo by `tools/build_logo.py` (provenance in `tools/PROVENANCE.md`).
 

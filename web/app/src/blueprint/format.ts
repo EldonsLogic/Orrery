@@ -17,7 +17,9 @@ export const dayName = (code: string, locale: string): string => {
 export const monthDay = (month: number, day: number, locale: string): string =>
   new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, month - 1, day)));
 
-export const regionName = (code: string, locale: string): string => new Intl.DisplayNames(locale, { type: 'region' }).of(code) ?? code;
+// Intl.DisplayNames throws RangeError on a malformed code, so only a two-letter upper-case code is looked up.
+export const regionName = (code: string, locale: string): string =>
+  /^[A-Z]{2}$/.test(code) ? new Intl.DisplayNames(locale, { type: 'region' }).of(code) ?? code : code;
 export const languageName = (code: string, locale: string): string => new Intl.DisplayNames(locale, { type: 'language' }).of(code) ?? code;
 
 export const numberText = (value: unknown, locale: string, system: string): string => {

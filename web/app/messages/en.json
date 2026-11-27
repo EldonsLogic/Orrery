@@ -1354,6 +1354,234 @@
       "reset-password": "Reset password"
     }
   },
+  "ownerApproval": {
+    "company": {
+      "legal_name": "Company name",
+      "trade_name": "Trading name"
+    },
+    "cost": {
+      "unpriced": "Some items have no price yet. They are not in the total.",
+      "incomplete": "This price is not complete.",
+      "placeholder": "These prices are examples, not our real prices.",
+      "not_binding": "This is a draft price, not a final offer. Please check it before you decide."
+    },
+    "notice": {
+      "not_order": "Approving is not an order. It does not commit you to pay anything.",
+      "not_live": "Approving does not start your business on the system. Our team still reviews and tests it."
+    },
+    "blocker": {
+      "changes_requested": "Changes were asked for on this version.",
+      "apply_pending": "The build is being set up or needs recovery. Wait until it finishes before you change your decision.",
+      "too_large": "The plan is too large to show in full here, so it cannot be approved yet.",
+      "approval_spent": "This version was approved once and sent back to draft. It needs a new version before it can be approved again.",
+      "tries": "You tried to approve this version too many times. Ask us for help.",
+      "quote": "The price is out of date or does not match the plan.",
+      "stale": "The plan changed. It must be saved as a new version first.",
+      "held": "The plan is on hold.",
+      "integrity": "The saved records failed a safety check.",
+      "rejected": "This version was rejected.",
+      "state": "The plan is already live.",
+      "already_decided": "You already decided on this version."
+    },
+    "kind": {
+      "approval": "Approval rule",
+      "integration": "Connection to another tool",
+      "assistant": "Assistant",
+      "location": "Location",
+      "entity": "Record",
+      "workflow": "Process",
+      "report": "Report",
+      "role": "Job role",
+      "component": "Module"
+    },
+    "state": {
+      "approval_spent": "The plan went back to draft. It needs a new version before it can be approved again.",
+      "awaiting": "Waiting for your decision.",
+      "approved": "This plan is approved.",
+      "changes_requested": "You asked for changes.",
+      "rejected": "This plan was rejected.",
+      "quote_changed": "The price changed after you approved. Please read it again.",
+      "pending": "An approval is being recorded.",
+      "out_of_sync": "This plan moved on without a current approval. Ask us for help.",
+      "integrity_error": "We cannot trust the saved records. Nothing is approved. Ask us for help."
+    },
+    "error": {
+      "OA-013": "The plan is on hold.",
+      "OA-014": "Please confirm that you read all three parts.",
+      "OA-015": "We saved your decision but the next step did not complete.",
+      "OA-016": "Changes were asked for on this version.",
+      "OA-017": "The plan is too large to show in full here. You cannot approve it until we can show all of it.",
+      "OA-018": "This version was already approved once and then sent back to draft. Change the plan to approve it again.",
+      "generic": "Something went wrong. Nothing was recorded.",
+      "OA-001": "This input is not valid.",
+      "OA-002": "The time is not valid.",
+      "OA-003": "You are not allowed to do this.",
+      "OA-004": "Something we need is missing. Try again later.",
+      "OA-005": "The plan is not at this step.",
+      "OA-006": "The plan or the price changed. Please read it again.",
+      "OA-007": "You already decided on this version.",
+      "OA-008": "This version was rejected.",
+      "OA-009": "The saved records failed a safety check.",
+      "OA-010": "A safety key is missing.",
+      "OA-011": "This is not your company.",
+      "OA-012": "The price cannot be used. Ask us for a new one."
+    },
+    "ui": {
+      "actions": "Your decision",
+      "reason": "Reason",
+      "reasonPick": "Choose a reason",
+      "note": "Note (optional)",
+      "noteHint": "Up to {limit} characters.",
+      "confirmHeading": "Before you decide, tick all three",
+      "submit": "Send: {decision}",
+      "done": "Your decision was recorded.",
+      "blockers": "Why you cannot decide",
+      "more": "{count} more items are not listed.",
+      "itemId": "ID",
+      "noItems": "Nothing listed.",
+      "recurring": "Monthly subscription",
+      "oneOff": "One-off charges",
+      "vat": "VAT {rate}%",
+      "subtotal": "Subtotal",
+      "total": "Total",
+      "quantity": "Qty {count}",
+      "validUntil": "Valid until",
+      "unpricedItem": "Not priced: {ref}",
+      "gapCounts": "Covered {covered}, partly covered {partial}, not covered {uncovered}",
+      "yes": "Yes",
+      "no": "No",
+      "unknownLabel": "Unavailable",
+      "cut": "(shortened)",
+      "country": "Country",
+      "vatRegistered": "VAT registered",
+      "eInvoicing": "E-invoicing mode",
+      "counts": "What the plan holds",
+      "sampleNotice": "Sample data. Nothing you do here is saved.",
+      "mode": {
+        "none": "None",
+        "zatca_phase1": "Saudi phase 1 (generation)",
+        "zatca_phase2": "Saudi phase 2 (integration)",
+        "uae_e_invoicing": "UAE e-invoicing",
+        "eg_e_invoice": "Egypt e-invoice"
+      }
+    },
+    "title": "Approve your plan",
+    "intro": "Read this page, then choose. Nothing goes live from here.",
+    "section": {
+      "summary": "What we will build",
+      "cost": "What it costs",
+      "gaps": "What is not covered",
+      "simulation": "What the test month will check"
+    },
+    "summary": {
+      "intro": "This is the business we drew from your answers.",
+      "not_shown": {
+        "branding": "Logo and colours",
+        "i18n": "Language settings"
+      },
+      "not_shown_notice": "Your approval covers the whole plan. We list every item by name. For job roles, approval rules, connections and assistants we also show what they allow and what limits or widens it: which records a role reaches, when a rule applies (its conditions), how long approvers have and who it passes to, and whether an assistant asks before each action. Other details, such as record fields, field limits, process steps, assistant usage caps and memory, are not listed here. These parts are also not listed:"
+    },
+    "gap": {
+      "kind": {
+        "compliance": "Tax or legal rule",
+        "component": "Module",
+        "entity": "Record",
+        "workflow": "Process",
+        "report": "Report",
+        "other": "Other"
+      },
+      "status": {
+        "partial": "Only partly covered",
+        "uncovered": "Not covered yet"
+      }
+    },
+    "gaps": {
+      "none": "Everything in your plan is covered."
+    },
+    "sim": {
+      "intro": "Before anything goes live, we run a test month on made-up data.",
+      "check": {
+        "numbers": "The numbers add up.",
+        "tax": "Tax is worked out by the rules of your country.",
+        "approvals": "Approvals reach the right people.",
+        "permissions": "Each person sees only what they should.",
+        "reports": "Reports match the records.",
+        "month_end": "The month can be closed."
+      },
+      "notice": "Our team reviews the test month before go-live."
+    },
+    "confirm": {
+      "summary": "I read what you will build.",
+      "quote": "I read the price.",
+      "gaps": "I read what is not covered."
+    },
+    "decision": {
+      "approve": "Approve",
+      "request_changes": "Ask for changes",
+      "reject": "Reject"
+    },
+    "reason": {
+      "approve": {
+        "agree": "This matches my business."
+      },
+      "request_changes": {
+        "wrong_details": "Some details are wrong.",
+        "wrong_price": "The price is not right.",
+        "missing_something": "Something is missing.",
+        "unclear": "I do not understand something."
+      },
+      "reject": {
+        "not_for_us": "This is not for us.",
+        "too_expensive": "It costs too much.",
+        "wrong_company": "This is not my company.",
+        "other": "Another reason."
+      }
+    },
+    "build": {
+      "draft": "Draft",
+      "owner_approved": "Approved by you",
+      "team_reviewed": "Reviewed by our team",
+      "built_in_sandbox": "Built for testing",
+      "simulated": "Test month done",
+      "live": "Live"
+    },
+    "step_up_notice": "We will ask you to confirm it is you.",
+    "detail": {
+      "admin": "Can change settings",
+      "chatActions": "The chat may act for this role",
+      "permissions": "What this role may do",
+      "entity": "Applies to",
+      "action": "When",
+      "selfApproval": "People may approve their own requests",
+      "steps": "Who approves, in order",
+      "connector": "Connects to",
+      "direction": "Data flow",
+      "roles": "Who may use it",
+      "tools": "What it may do",
+      "scope": "Which records this role reaches",
+      "conditional": "Applies only in some cases",
+      "conditions": "Only when",
+      "timeoutHours": "Hours to answer",
+      "escalateToRole": "If no answer, passes to",
+      "confirm": "Asks the user before each action",
+      "transitions": "Steps it may take"
+    },
+    "quote": {
+      "line": {
+        "base_platform": "Base platform fee (unlimited users)",
+        "module": "Module {component} version {version}",
+        "configuration": "Configuration of module {component}",
+        "build": {
+          "configurable": "Build new configurable component: {ref}",
+          "rigid": "Build new compliance-bound component: {ref}"
+        },
+        "discount": "{rate}% discount on one-off charges"
+      },
+      "warning": {
+        "placeholder_prices": "Prices are unverified placeholders and must not be shown to a customer"
+      }
+    }
+  },
   "marks": {
     "status": {
       "not_started": "Not started",

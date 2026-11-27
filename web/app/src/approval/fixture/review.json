@@ -1,0 +1,32 @@
+{
+ "schema": "owner_approval/1",
+ "titleKey": "oa.title",
+ "introKey": "oa.intro",
+ "tenantId": "tenant-fixture-b",
+ "blueprintId": "bp-fixture-1",
+ "revision": 1,
+ "blueprintDigest": "37cb1723421a4469a336ec8dec15d7e127b2cc3790d4f4c890776c40fe8ef11a",
+ "quoteDigest": "7bd08b2b3dcfc8bbdde900beabfc7fe3b632a2c004c14102ee5a7c29282dcf68",
+ "buildState": "draft",
+ "buildStateKey": "oa.build.draft",
+ "state": {"value": "awaiting", "labelKey": "oa.state.awaiting"},
+ "sections": [
+  {"id": "summary", "labelKey": "oa.section.summary", "introKey": "oa.summary.intro", "counts": {"entity": 1, "workflow": 1, "report": 0, "role": 1, "component": 0, "approval": 0, "integration": 0, "assistant": 0, "location": 0}, "compliance": {"country": "SA", "vatRegistered": true, "eInvoicingMode": "zatca_phase1"}, "notShown": [{"key": "branding", "labelKey": "oa.summary.not_shown.branding"}, {"key": "i18n", "labelKey": "oa.summary.not_shown.i18n"}], "notShownNoticeKey": "oa.summary.not_shown", "company": {"legalName": {"ar": "شركة العينة للتجارة", "en": "Sample Trading Co", "cut": false}, "legalNameKey": "oa.company.legal_name", "tradeName": {"ar": "عينة", "en": "Sample", "cut": false}, "tradeNameKey": "oa.company.trade_name", "country": "SA", "untrustedText": true}, "items": [{"kind": "entity", "kindKey": "oa.kind.entity", "id": "customer", "labels": {"ar": "عميل", "en": "Customer", "cut": false}, "untrustedText": true}, {"kind": "workflow", "kindKey": "oa.kind.workflow", "id": "sales_order", "labels": {"ar": "طلب", "en": "Sales order", "cut": false}, "untrustedText": true}, {"kind": "role", "kindKey": "oa.kind.role", "id": "sales_rep", "labels": {"ar": "مندوب مبيعات", "en": "Sales rep", "cut": false}, "untrustedText": true, "details": {"admin": false, "chatActions": true, "permissions": [{"entity": "customer", "actions": ["read", "create"]}], "scope": {"type": "branch", "values": ["riyadh"]}}}], "moreItems": 0},
+  {"id": "cost", "labelKey": "oa.section.cost", "currency": "SAR", "lines": {"recurring": [{"id": "base_platform", "labelKey": "quote.line.base_platform", "params": {}, "untrustedText": true, "quantity": 1, "unit": {"minor": 200000, "currency": "SAR", "exponent": 2, "text": "2000.00"}, "total": {"minor": 200000, "currency": "SAR", "exponent": 2, "text": "2000.00"}}, {"id": "module:core.crm", "labelKey": "quote.line.module", "params": {"component": "core.crm", "version": "1.0.0"}, "untrustedText": true, "quantity": 1, "unit": {"minor": 30000, "currency": "SAR", "exponent": 2, "text": "300.00"}, "total": {"minor": 30000, "currency": "SAR", "exponent": 2, "text": "300.00"}}], "one_off": [{"id": "build:k-aging", "labelKey": "quote.line.build.configurable", "params": {"ref": "aging"}, "untrustedText": true, "quantity": 1, "unit": {"minor": 800000, "currency": "SAR", "exponent": 2, "text": "8000.00"}, "total": {"minor": 800000, "currency": "SAR", "exponent": 2, "text": "8000.00"}}]}, "totals": {"recurring": {"subtotal": {"minor": 230000, "currency": "SAR", "exponent": 2, "text": "2300.00"}, "tax": {"minor": 34500, "currency": "SAR", "exponent": 2, "text": "345.00"}, "taxRateBp": 1500, "total": {"minor": 264500, "currency": "SAR", "exponent": 2, "text": "2645.00"}}, "one_off": {"subtotal": {"minor": 800000, "currency": "SAR", "exponent": 2, "text": "8000.00"}, "tax": {"minor": 120000, "currency": "SAR", "exponent": 2, "text": "1200.00"}, "taxRateBp": 1500, "total": {"minor": 920000, "currency": "SAR", "exponent": 2, "text": "9200.00"}}}, "unpriced": [], "unpricedCount": 0, "complete": true, "quoteState": "valid", "validUntil": "2026-12-20T09:30:00Z", "noticeKey": "oa.cost.not_binding", "placeholderPrices": true, "notes": ["oa.cost.placeholder"]},
+  {"id": "gaps", "labelKey": "oa.section.gaps", "counts": {"covered": 1, "partial": 1, "uncovered": 1}, "items": [{"kindKey": "oa.gap.kind.workflow", "status": "partial", "statusKey": "oa.gap.status.partial", "ref": "returns", "untrustedText": true}, {"kindKey": "oa.gap.kind.report", "status": "uncovered", "statusKey": "oa.gap.status.uncovered", "ref": "aging", "untrustedText": true}], "moreItems": 0, "noneKey": null},
+  {"id": "simulation", "labelKey": "oa.section.simulation", "introKey": "oa.sim.intro", "checks": [{"key": "numbers", "labelKey": "oa.sim.check.numbers"}, {"key": "tax", "labelKey": "oa.sim.check.tax"}, {"key": "approvals", "labelKey": "oa.sim.check.approvals"}, {"key": "permissions", "labelKey": "oa.sim.check.permissions"}, {"key": "reports", "labelKey": "oa.sim.check.reports"}, {"key": "month_end", "labelKey": "oa.sim.check.month_end"}], "noticeKey": "oa.sim.notice"}
+ ],
+ "confirmations": [{"key": "gaps", "labelKey": "oa.confirm.gaps"}, {"key": "quote", "labelKey": "oa.confirm.quote"}, {"key": "summary", "labelKey": "oa.confirm.summary"}],
+ "decisions": [
+  {"key": "approve", "labelKey": "oa.decision.approve", "noteRequired": false, "reasons": [{"value": "agree", "labelKey": "oa.reason.approve.agree"}], "allowed": true},
+  {"key": "request_changes", "labelKey": "oa.decision.request_changes", "noteRequired": false, "reasons": [{"value": "wrong_details", "labelKey": "oa.reason.request_changes.wrong_details"}, {"value": "wrong_price", "labelKey": "oa.reason.request_changes.wrong_price"}, {"value": "missing_something", "labelKey": "oa.reason.request_changes.missing_something"}, {"value": "unclear", "labelKey": "oa.reason.request_changes.unclear"}], "allowed": true},
+  {"key": "reject", "labelKey": "oa.decision.reject", "noteRequired": false, "reasons": [{"value": "not_for_us", "labelKey": "oa.reason.reject.not_for_us"}, {"value": "too_expensive", "labelKey": "oa.reason.reject.too_expensive"}, {"value": "wrong_company", "labelKey": "oa.reason.reject.wrong_company"}, {"value": "other", "labelKey": "oa.reason.reject.other"}], "allowed": true}
+ ],
+ "canDecide": true,
+ "blockers": [],
+ "noteLimit": 1000,
+ "stepUpNoticeKey": "oa.step_up_notice",
+ "evidenceNoticeKey": "oa.notice.not_live",
+ "commitNoticeKey": "oa.notice.not_order",
+ "history": []
+}

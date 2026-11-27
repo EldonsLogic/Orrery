@@ -1,0 +1,40 @@
+# Session log: web-027-owner-approval-screen
+
+Date: 2026-11-23
+Author: eldon
+Tool and model: claude-code (Sonnet-class)
+Plan IDs: WEB-027
+
+## Summary
+Built the owner approval screen over the DSC-009 view model as a port-based component with fixtures and no live wiring: summary (with item details), price, gaps, test month, Approve / Ask for changes / Reject emitted through `ApprovalPort`. Tokens only, Arabic and English, RTL, untrusted text as plain text, approve blocked where the model says so. Route `/approval/` shows the fixture with a fake port.
+
+## How to view
+`corepack enable && pnpm -C web install --frozen-lockfile && pnpm -C web/app dev`, then open `/approval/` (also `/ar` locale switch in the shell; the page uses the fixture in `web/app/src/approval/fixture/` and a fake port, so choosing a decision only shows the success message). Tests: `pnpm -C web test`.
+
+## Files touched
+- web/app/src/approval/: types (view model, port), decide.ts (send rules), labels.ts, fixture/ (review.json, variants, fake port)
+- web/app/src/components/approval/: OwnerApprovalView, CSS module, approval.test.tsx
+- web/app/src/app/(app)/approval/page.tsx: fixture route, no nav link
+- web/app/messages/{en,ar}.json: `ownerApproval` namespace (from owner_approval/labels.json and quote labels, plus new keys)
+- web/app/README.md, docs/PLAN.md (WEB-027 done), docs/open-questions.md (Q-585)
+
+## Decisions
+- None needing an ADR. Screen requires all three confirmations for every decision (Q-526); see Q-585. Not live until Q-544 and Q-505. Arabic unreviewed. Tier 2 proposed.
+
+## Tokens or cost
+Approximate, one Sonnet-class session.
+
+## Next step
+Q-544 and Q-505 adapters, then wire the port; add step-up prompt and history list (Q-585).
+
+## Review fixes (Fable review of 853663a)
+R1: the form is bound to the view digests (`Form.for`, `emptyForm`); a form made for another view never sends and the screen drops it. R2: tests for `percentText`, per-decision `allowed`, `nextStatus`, reason, note limit, `noteRequired`, `messagePath`, bdi. Lows: `ready` from `buildRequest`, form locked after OA-006, neutral label for unknown keys, compliance and counts shown, cut marker, isolates on params and requirement, blocked fixture now a state the model emits, unused ui keys removed, sample-data notice. Web tests 298 pass; lint, typecheck, build, check_docs and hygiene pass.
+
+## Q-585 applied
+Eldon decided Q-585 (2026-11-23): the three read confirmations are required only to approve. `buildRequest` sends reject and request changes without them (empty list) and the screen hides the ticks for those choices. Q-585 marked resolved.
+
+## Review fixes (partner review of PR #285)
+- Screen remounts per tenant, Blueprint and both digests (status and pending result can no longer carry over); decision controls disabled while sending.
+- Summary shows each item ID next to its name; valid-until shows localized date, time and timezone (Intl, ar and en).
+- Q-526 row updated (delivered on fixtures; confirmations for approvals only, Q-585).
+- Tests: `approvalLive.test.tsx` (jsdom, added as a web dev dependency), 5 new, red before and green after.

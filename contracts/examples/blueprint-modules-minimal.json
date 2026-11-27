@@ -175,7 +175,7 @@
     }
   ],
   "integrations": [
-    { "id": "whatsapp_marketing", "connector": "messaging.meta_business", "direction": "both", "schedule": "on_event", "mappings": [], "provenance": { "source": "template", "humanEdited": false } }
+    { "id": "whatsapp_marketing", "connector": "msg.meta_whatsapp", "direction": "both", "schedule": "on_event", "mappings": [], "provenance": { "source": "template", "humanEdited": false } }
   ],
   "compliance": {
     "country": "SA",

@@ -65,6 +65,7 @@
     "substrings": ["formula", "expression", "posting", "valuation", "account", "ledger", "payroll", "backflush"],
     "tokens": ["cost", "tax", "rate", "price", "amount"]
   },
+  "x-messaging-connectors": ["msg.meta_whatsapp", "msg.meta_instagram", "msg.meta_messenger", "msg.sms"],
   "x-validator-rules": [
     "company.locale fields are optional; each omitted field resolves from compliance.countryPack. The resolved locale is stored with the compiled artifact. workingHours.periods must not overlap and weekend days must not appear in workDays.",
     "compliance.country must equal company.country and the countryPack id must match the country.",
@@ -84,7 +85,7 @@
     "CRM (ADR-0079): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique.",
     "Projects (ADR-0079): task status and view ids are unique; every board column lists task status ids and each status sits in exactly one column of a board; timeline and calendar fields are date or datetime fields of the view's concept entity (BP-MOD-002); visibleToRoles resolve and hold read on that entity. timesheets.invoicingComponent is listed in components and, when the registry is known, is a rigid (certified) component (BP-MOD-003).",
     "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse, workInProgress differs from finishedGoods and scrap differs from both (BP-MOD-004); the warehouse-to-account link is set only by the certified component, never by the Blueprint; the work order, job card and subcontracting receipt transitions that move stock are stock-class (ADR-0037) and their submits keep the human floor (ADR-0027). Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint field may set them, neither in this module object nor as a field on item, bom or any other manufacturing-bound entity (valuation_rate, rm_cost_as_per, operating_cost and the like; BP-MOD-001).",
-    "Marketing (ADR-0079): entities.campaign equals modules.crm.entities.campaign when both are set; a segment's audience concept is bound in modules.crm.entities (lead, contact, customer) and its filter fields exist on that entity; segment ids are unique. channels.messaging.integration resolves to an integration whose connector is a messaging connector from the DSC-022 contract. A send goes only to recipients with a recorded opt-in for that channel and carries an unsubscribe route; messaging sends use approved templates only.",
+    "Marketing (ADR-0079): entities.campaign equals modules.crm.entities.campaign when both are set; a segment's audience concept is bound in modules.crm.entities (lead, contact, customer) and its filter fields exist on that entity; segment ids are unique. channels.messaging.integration resolves to an integration whose connector is in x-messaging-connectors (BP-MOD-005). A marketing send goes only to a contact with a granted consent for that contact, channel, country and purpose marketing (DSC-022 section 6, MSG-005) and carries an unsubscribe route; members without a contactRef are skipped; imports and segment membership never create consent; messaging sends use approved templates only. Every marketing send or campaign is R3, origin human with a required approvalId, and never agent-creatable (DSC-022 section 3, AP-MSG-03 proposed), so no assistant may list it (assistant tools are at most R2).",
     "Module rigid zone (ADR-0079, BP-MOD-001): no field on an entity bound by a module concept (every modules.<key>.entities value, timesheet and activity_type included) has an id matching x-rigid-zone-terms, for example billing_rate, costing_rate or amount; the bound timesheet and activity_type entities carry no money field. Rates, costs, amounts and postings are engine or certified-component fields, never mapped from the Blueprint."
   ],
   "$defs": {
@@ -417,9 +418,9 @@
             "properties": {
               "id": { "$ref": "#/$defs/id" },
               "labels": { "$ref": "#/$defs/localizedText" },
-              "audience": { "enum": ["lead", "contact", "customer"], "description": "CRM concept the segment selects from." },
+              "audience": { "enum": ["lead", "contact", "customer"], "description": "CRM concept the segment selects from. Consent and sends are keyed by contact (DSC-022 contactRef): a lead or customer member without a contact is skipped at send." },
               "filters": { "type": "array", "maxItems": 10, "items": { "$ref": "#/$defs/guard" } },
-              "visibleToRoles": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+              "visibleToRoles": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" }, "description": "Roles that see the segment. An empty list means nobody." }
             }
           }
         },
@@ -427,9 +428,9 @@
           "type": "object",
           "required": ["optInRequired", "unsubscribeRoute"],
           "additionalProperties": false,
-          "description": "PDPL and channel rules. The opt-in records themselves are tenant data kept by the component, never in the Blueprint.",
+          "description": "PDPL and channel rules. The consent records themselves are tenant data kept per DSC-022 section 6, never in the Blueprint; imports and segment membership never create consent.",
           "properties": {
-            "optInRequired": { "const": true, "description": "Only recipients with a recorded opt-in for the channel are sent to." },
+            "optInRequired": { "const": true, "description": "A marketing send goes only to a contact with a granted consent for that contact, channel, country and purpose marketing (DSC-022 section 6; refused as MSG-005 otherwise). A utility-purpose consent never covers a marketing send." },
             "unsubscribeRoute": { "const": true, "description": "Every message carries a way to opt out, honoured before the next send." },
             "doubleOptIn": { "type": "boolean", "default": false }
           }
@@ -438,6 +439,11 @@
           "type": "object",
           "additionalProperties": false,
           "minProperties": 1,
+          "description": "At least one channel is enabled while the module is on.",
+          "anyOf": [
+            { "required": ["email"], "properties": { "email": { "properties": { "enabled": { "const": true } } } } },
+            { "required": ["messaging"], "properties": { "messaging": { "properties": { "enabled": { "const": true } } } } }
+          ],
           "properties": {
             "email": {
               "type": "object",
@@ -451,7 +457,7 @@
               "additionalProperties": false,
               "properties": {
                 "enabled": { "type": "boolean" },
-                "integration": { "$ref": "#/$defs/id", "description": "Integration id whose connector is a messaging connector (DSC-022)." },
+                "integration": { "$ref": "#/$defs/id", "description": "Integration id whose connector is a DSC-022 messaging connector (x-messaging-connectors: msg.meta_whatsapp, msg.meta_instagram, msg.meta_messenger, msg.sms)." },
                 "templatesOnly": { "const": true, "default": true, "description": "Marketing messages use provider-approved templates only." }
               },
               "if": { "properties": { "enabled": { "const": true } } },

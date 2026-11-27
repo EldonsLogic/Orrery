@@ -163,3 +163,21 @@ def test_module_roles_description_grants_nothing():
     text = SCHEMA["$defs"]["moduleRoles"]["description"]
     assert "grants nothing" in text
     assert not re.search(r"\b(sees|see|reassign\w*|can|may|edit\w*|read\w*)\b", text, re.I), text
+
+
+def test_example_messaging_integration_uses_a_dsc022_connector():
+    """#398 review: channels.messaging.integration names an integration on a DSC-022 connector id."""
+    bp = load("blueprint-modules-minimal.json")
+    allowed = set(SCHEMA["x-messaging-connectors"])
+    assert allowed == {"msg.meta_whatsapp", "msg.meta_instagram", "msg.meta_messenger", "msg.sms"}
+    ref = bp["modules"]["marketing"]["channels"]["messaging"]["integration"]
+    assert next(i for i in bp["integrations"] if i["id"] == ref)["connector"] in allowed
+
+
+def test_marketing_consent_text_matches_dsc022():
+    """#398 review: consent per contact, channel, country and purpose marketing; R3 human sends; no consent from imports."""
+    section = DOC[DOC.index("## Module `marketing`"):DOC.index("## Changelog")]
+    for phrase in ("contact, channel, country and purpose `marketing`", "MSG-005", "R3", "`origin: human`", "`approvalId`",
+                   "never agent-creatable", "without a `contactRef` are skipped", "never create consent",
+                   "empty `visibleToRoles` means nobody"):
+        assert phrase in section, phrase

@@ -1,11 +1,13 @@
 {
   "base": "blueprint-modules-minimal.json",
-  "note": "Negative cases for modules.marketing (ADR-0079). Each case edits the valid base by JSON pointer; the result must fail the Blueprint schema at a path containing 'expect'. Run by contracts/tests/test_blueprint_modules.py.",
+  "note": "Negative cases for modules.marketing (ADR-0079). Each case edits the valid base by JSON pointer; the result must fail the Blueprint schema at a path starting with 'expect' (equal to it when 'exact' is true). Run by contracts/tests/test_blueprint_modules.py.",
   "cases": [
     { "name": "mkt-missing-consent", "remove": ["/modules/marketing/consent"], "expect": "modules/marketing" },
     { "name": "mkt-opt-in-off", "set": { "/modules/marketing/consent/optInRequired": false }, "expect": "modules/marketing/consent/optInRequired" },
     { "name": "mkt-no-unsubscribe", "set": { "/modules/marketing/consent/unsubscribeRoute": false }, "expect": "modules/marketing/consent/unsubscribeRoute" },
     { "name": "mkt-no-channels", "set": { "/modules/marketing/channels": {} }, "expect": "modules/marketing/channels" },
+    { "name": "mkt-all-channels-disabled", "set": { "/modules/marketing/channels": { "email": { "enabled": false }, "messaging": { "enabled": false } } }, "expect": "modules/marketing/channels", "exact": true },
+    { "name": "mkt-only-channel-disabled", "set": { "/modules/marketing/channels": { "email": { "enabled": false } } }, "expect": "modules/marketing/channels", "exact": true },
     { "name": "mkt-unknown-channel", "set": { "/modules/marketing/channels/sms_blast": { "enabled": true } }, "expect": "modules/marketing/channels" },
     { "name": "mkt-messaging-without-integration", "remove": ["/modules/marketing/channels/messaging/integration"], "expect": "modules/marketing/channels/messaging" },
     { "name": "mkt-messaging-free-text", "set": { "/modules/marketing/channels/messaging/templatesOnly": false }, "expect": "modules/marketing/channels/messaging/templatesOnly" },

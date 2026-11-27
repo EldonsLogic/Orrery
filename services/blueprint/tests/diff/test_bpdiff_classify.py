@@ -87,6 +87,12 @@ def test_classification_table(name):
     ("replace", "modules/manufacturing", "compliance"),
     ("replace", "modules/manufacturing/roles/manage", "access"),
     ("replace", "modules/manufacturing/materialTransfer", "config"),
+    ("replace", "modules/marketing/consent/doubleOptIn", "compliance"),
+    ("replace", "modules/marketing/consent", "compliance"),
+    ("replace", "modules/marketing/channels/messaging/integration", "compliance"),
+    ("add", "modules/marketing/channels/email", "compliance"),
+    ("replace", "modules/marketing/segments/*/audience", "config"),
+    ("replace", "modules/marketing/segments/*/visibleToRoles", "access"),
 ])
 def test_impact_rules(kind, path, expected):
     assert impact_of(kind, spath(path)) == expected
@@ -156,6 +162,17 @@ def test_module_role_change_is_access():
     b["modules"]["crm"]["roles"]["manage"].append("sales_rep")
     ops = diff(a, b)["ops"]
     assert ops and {o["impact"] for o in ops} == {"access"}
+
+
+def test_marketing_consent_and_channel_changes_are_compliance():
+    """#398 review: consent and channel settings decide who may be messaged (PDPL, DSC-022 section 6)."""
+    a = _modules_example()
+    for edit in (lambda m: m["consent"].update(doubleOptIn=True),
+                 lambda m: m["channels"]["messaging"].update(integration="other_messaging")):
+        b = json.loads(json.dumps(a))
+        edit(b["modules"]["marketing"])
+        ops = diff(a, b)["ops"]
+        assert ops and {o["impact"] for o in ops} == {"compliance"}
 
 
 def test_manufacturing_warehouse_change_is_compliance():

@@ -28,3 +28,13 @@ Unknown.
 
 ## Next step
 Partner reviews ADR-0079 and #395 to the BPL-055 PR in stack order; when DSC-022 lands, a patch names its connector ids (Q-703).
+
+## Review fixes (#398 RULES 42 review at 74c2e1bd)
+- Merged bpl-054-manufacturing-blueprint (the #395 to #397 fixes) first; conflicts in the changelog, x-validator-rules and Q-700 to Q-703 rows resolved by keeping both sides.
+- M1: consent covers contact, channel, country and purpose `marketing` (DSC-022 section 6, MSG-005); a utility consent never covers a campaign (schema text, blueprint-modules.md, x-validator-rule); contract test `test_marketing_consent_text_matches_dsc022`.
+- M2: marketing sends and campaigns are R3, `origin: human`, `approvalId` required, never agent-creatable (DSC-022 section 3, AP-MSG-03 proposed); no assistant may list them (tools at most R2).
+- M3: lead or customer members without a `contactRef` are skipped; imports and segments never create consent.
+- L4: example uses `msg.meta_whatsapp`; schema root `x-messaging-connectors` lists the four DSC-022 ids; validator `BP-MOD-005` checks the messaging integration's connector.
+- L5: at least one channel enabled (schema `anyOf`; cases `mkt-all-channels-disabled`, `mkt-only-channel-disabled`, exact path); empty `visibleToRoles` means nobody.
+- L6: merge order (#394 before #398) stated in Q-703. L7: bpdiff classes `modules/marketing/consent` and `channels` `compliance` (tests); role lists `access` from #395.
+- Q-703 rewritten in place on this branch (row added by this PR, unmerged).

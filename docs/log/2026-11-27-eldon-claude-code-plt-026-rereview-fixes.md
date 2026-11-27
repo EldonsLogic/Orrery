@@ -24,3 +24,12 @@ Unknown.
 
 ## Next step
 Partner: re-review PR 368, then PLT-033.
+
+## Round 2 fixes (partner re-review at 84713c10)
+Merged main first; tests written first for each item (7 new, 102 fake tests pass).
+- N1 (Medium): overrun is recorded per tenant in the platform ledger; tenant X's platform reservation is decided on total spend minus the overrun of all other tenants, so X pays for its own overrun and never blocks others (tests: A overrun to 99,498 and 99,999 under a 100,000 cap, 20 late replies from A; B gets a reply, A is refused). model-call.md 6.4 rewritten to match Q-679.
+- N2 (Low): `platform_over_cap` is raised once, by the commit that crosses the cap; code and 6.4 agree (test).
+- N3 (Low): cache key is "at least" and adds the serving model id and the routing-table version; lookups use the head of the current chain (test).
+- Q-672(d) nit: the fake records a `no_verified_principal` security event (test).
+- `redact`: not in 0.3.0 (schema refuses it as `invalid_request`, `schema`); PLT-033 designs it (test pins it).
+- ADR-0054 (Proposed): decision 4 counts one zero-cost metered event per cache hit; Context and Consequences updated to 0.3.0.

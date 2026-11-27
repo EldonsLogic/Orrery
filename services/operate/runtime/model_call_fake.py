@@ -125,7 +125,8 @@ class FakeModelCallPort:
     ttl_margin: int = 10
     reservation_ttl: object = None                       # seconds; None = the floor 3 x attempt_timeout + margin
     late: set = field(default_factory=set)               # entries whose reply arrives after the hold was released
-    platform_ledger: object = None                       # {"spent", "overrun"}, shared between ports of tenants
+    platform_ledger: object = None                       # {"spent", "overrun": {tenant: n}}, shared by tenants' ports
+    routing_version: str = "rt_1"                        # routing-table version, part of the response-cache key
 
     def __post_init__(self):
         floor = 3 * self.attempt_timeout + self.ttl_margin
@@ -134,8 +135,9 @@ class FakeModelCallPort:
         if self.reservation_ttl < floor:                 # contract section 6.3: the TTL floor
             raise ValueError("reservation_ttl below 3 x attempt_timeout + margin")
         if self.platform_ledger is None:
-            self.platform_ledger = {"spent": 0, "overrun": 0}
+            self.platform_ledger = {"spent": 0, "overrun": {}}
         self.alerts: list = []
+        self.security_events: list = []
         self.spent = {k: 0 for k in self.layers if k not in GATEWAY_LAYERS}
         self.reservations: list = []
         self.events: list = []
@@ -149,6 +151,8 @@ class FakeModelCallPort:
     def complete(self, request: dict) -> dict:
         p = self.principal                    # Q-672(d): no verified principal is rejected before parsing
         if not isinstance(p, dict) or any(not p.get(k) for k in PRINCIPAL_FIELDS):
+            self.security_events.append({"kind": "no_verified_principal",
+                                         "service": p.get("service") if isinstance(p, dict) else None})
             raise PermissionError("no verified principal")
         cid = request.get("call_id") if isinstance(request, dict) else None
         call_id = cid if isinstance(cid, str) and ID_RE.match(cid) else None   # never echo other caller text
@@ -336,11 +340,11 @@ class FakeModelCallPort:
         return -(-(inp * ri + out * ro) // 1_000_000)
 
     def _layer_spent(self, k):
-        """All spend counts on the shared platform layer while it is under its cap; once over it, the overrun part
-        is left out, so a tenant's overrun alerts but never blocks the layer for others (contract 6.4)."""
+        """On the shared platform layer, tenant X is decided on all spend minus the overrun of every other tenant:
+        X still pays for its own overrun, and another tenant's overrun never blocks X (contract 6.4, Q-679)."""
         if k in GATEWAY_LAYERS:
-            led = self.platform_ledger
-            return led["spent"] if led["spent"] <= self.budgets[k] else led["spent"] - led["overrun"]
+            led, me = self.platform_ledger, self.principal["tenant_id"]
+            return led["spent"] - sum(n for t, n in led["overrun"].items() if t != me)
         return self.spent[k]
 
     def _remaining(self):
@@ -350,9 +354,12 @@ class FakeModelCallPort:
     def _add_spend(self, cost, overrun):
         for k in self.layers:
             if k in GATEWAY_LAYERS:
-                self.platform_ledger["spent"] += cost
-                self.platform_ledger["overrun"] += overrun
-                if overrun and self.platform_ledger["spent"] > self.budgets[k]:   # this call's overrun, not others'
+                led, me = self.platform_ledger, self.principal["tenant_id"]
+                before = led["spent"]
+                led["spent"] += cost
+                if overrun:
+                    led["overrun"][me] = led["overrun"].get(me, 0) + overrun
+                if before <= self.budgets[k] < led["spent"]:   # only the commit that crosses the cap alerts
                     self.alerts.append({"kind": "platform_over_cap", "overrun": overrun})
             else:
                 self.spent[k] += cost
@@ -439,7 +446,7 @@ class FakeModelCallPort:
                     "usage": {"input_tokens": inp, "output_tokens": out, "cached_tokens": 0, "cost_micro_usd": cost},
                     "attempts": attempt, "fallback_used": attempt > 1, "meter_event_id": event_id, "replayed": False, "cache_hit": False}
             if self._cacheable(r) and reply["stop_reason"] == "end":    # a budget-truncated reply is never cached
-                self.cache_store[self._cache_key(r, prompt)] = text
+                self.cache_store[self._cache_key(r, prompt, entry.name)] = text
             return reply
         raise ModelCallRefused(call_id, "model_unavailable", "chain_exhausted", reservation_released=not charged)
 
@@ -449,8 +456,14 @@ class FakeModelCallPort:
                 and not r.get("tools") and not r["thread_tainted"] and "output_schema" not in r
                 and not any(k in self._tainted_threads for k in self._thread_keys()))
 
-    def _cache_key(self, r, prompt):
-        return (r["tier"], r["prompt_version"], r.get("locale"), r["max_output_tokens"], content_hash(prompt))
+    def _cache_key(self, r, prompt, model_id=None):
+        """A lookup uses the current head of the routing chain, so a reply served by a fallback, by an older model
+        or under another routing-table version is never a hit."""
+        if model_id is None:
+            chain = self._chain(r["tier"])
+            model_id = chain[0].name if chain else None
+        return (r["tier"], r["prompt_version"], r.get("locale"), r["max_output_tokens"], model_id,
+                self.routing_version, content_hash(prompt))
 
     def _cache_hit(self, r, prompt):
         """A hit is not a dispatch (no reservation) but is metered and audited: zero usage, its own event.

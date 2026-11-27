@@ -649,7 +649,7 @@ def tenant_req(tenant):
 
 
 def test_one_tenant_overrun_never_blocks_the_platform_layer_for_others():
-    shared = {"spent": 0, "overrun": 0}
+    shared = ledger()
     a = tenant_port("t_a", shared, 5_000, 5_000, actual_input=lambda e: 20_000)
     a.complete(tenant_req("t_a"))                           # actual cost far above both caps
     assert shared["spent"] > 5_000 and any(x["kind"] == "platform_over_cap" for x in a.alerts)
@@ -699,12 +699,12 @@ def test_medium2_token_id_is_required_for_a_user_and_forbidden_otherwise():
 
 
 def test_medium3_platform_overrun_under_cap_is_counted_and_alerts_only_on_overrun():
-    shared = {"spent": 0, "overrun": 0}
+    shared = ledger()
     a = tenant_port("t_a", shared, 10**9, 10**9, actual_input=lambda e: e * 50)
     a.complete(tenant_req("t_a"))
-    assert shared["overrun"] > 0 and a._layer_spent("platform") == shared["spent"]   # under cap: all spend counts
+    assert shared["overrun"]["t_a"] > 0 and a._layer_spent("platform") == shared["spent"]   # under cap: all spend counts
     assert not any(x["kind"] == "platform_over_cap" for x in a.alerts)
-    shared2 = {"spent": 0, "overrun": 0}
+    shared2 = ledger()
     big = tenant_port("t_a", shared2, 5_000, 10**9, actual_input=lambda e: 20_000)
     big.complete(tenant_req("t_a"))                          # this overrun pushes the platform layer over its cap
     assert any(x["kind"] == "platform_over_cap" for x in big.alerts)
@@ -754,3 +754,90 @@ def test_medium2_schema_ties_token_id_to_a_user_caller():
     valid(user_req())
     valid(req())
     assert any("token_id" in rule and "required" in rule for rule in SCHEMA["x-validator-rules"])
+
+
+# -- re-review round 2 of 84713c10 (partner) ----------------------------------------------------------------------------
+CAP = 100_000
+
+
+def ledger():
+    return {"spent": 0, "overrun": {}}
+
+
+def hold_of(tenant):
+    """The hold (equal to the normal cost) of one tenant_req: est_in is fixed by the prompt, output is 1 token."""
+    probe = tenant_port(tenant, ledger(), CAP, 10**9)
+    probe.complete(tenant_req(tenant))
+    return probe.reservations[0].amount
+
+
+@pytest.mark.parametrize("left_at", [99_498, 99_999])
+def test_n1_overrun_under_cap_never_blocks_another_tenant(left_at):
+    shared, hold = ledger(), hold_of("t_a")
+    assert hold > CAP - left_at                              # so A's own next call cannot fit
+    inp = (left_at - 15) // 3                                # mid rates: cost = 3 * input + 15 * 1 output token
+    assert 3 * inp + 15 == left_at
+    a = tenant_port("t_a", shared, CAP, 10**9, actual_input=lambda e: inp)
+    a.complete(tenant_req("t_a"))
+    assert shared["spent"] == left_at <= CAP and shared["overrun"] == {"t_a": left_at - hold}
+    b = tenant_port("t_b", shared, CAP, 10**9)
+    assert b.complete(tenant_req("t_b"))["kind"] == "reply"           # A's overrun is set aside for B
+    again = dict(tenant_req("t_a"), call_id="c_again", idempotency_key="idem_again_1")
+    assert refused(a, again) == ("budget_refused", "exceeded")        # A still pays for its own overrun
+
+
+def test_n1_twenty_late_replies_from_one_tenant_do_not_block_another():
+    shared, hold = ledger(), hold_of("t_a")
+    cap = 40 * hold + hold // 2                              # each A call: one late overrun plus one normal reply
+    a = tenant_port("t_a", shared, cap, 10**9, late={"mid-primary"})
+    for i in range(20):
+        a.complete(dict(tenant_req("t_a"), call_id=f"c_late_{i}", idempotency_key=f"idem_late_{i:02d}"))
+    assert shared["spent"] == 40 * hold <= cap and shared["overrun"] == {"t_a": 20 * hold}
+    b = tenant_port("t_b", shared, cap, 10**9)
+    assert b.complete(tenant_req("t_b"))["kind"] == "reply"
+    late_again = dict(tenant_req("t_a"), call_id="c_late_x", idempotency_key="idem_late_xx")
+    assert refused(a, late_again) == ("budget_refused", "exceeded")   # A's own view counts its overrun
+
+
+def test_n2_platform_over_cap_alerts_only_on_the_crossing_call():
+    shared, hold = ledger(), hold_of("t_a")
+    over = lambda p: [x for x in p.alerts if x["kind"] == "platform_over_cap"]  # noqa: E731
+    a = tenant_port("t_a", shared, 3 * hold, 10**9, actual_input=lambda e: e * 2)
+    a.complete(tenant_req("t_a"))                            # an overrun that leaves the layer under its cap
+    assert shared["spent"] <= 3 * hold and shared["overrun"]["t_a"] > 0 and not over(a)
+    c = tenant_port("t_c", shared, 3 * hold, 10**9, actual_input=lambda e: e * 4)
+    c.complete(tenant_req("t_c"))                            # this overrun crosses the cap: one alert
+    assert shared["spent"] > 3 * hold and len(over(c)) == 1
+    d = tenant_port("t_d", shared, 3 * hold, 10**9, actual_input=lambda e: e * 4)
+    d.complete(tenant_req("t_d"))                            # already over its cap: own overrun alert only
+    assert not over(d) and any(x["kind"] == "budget_overrun" for x in d.alerts)
+
+
+def test_n3_cache_key_covers_model_id_and_routing_table_version():
+    p = port(response_cache=True)
+    p.complete(l0_only(call_id="c_m1", idempotency_key="idem_model_1"))
+    assert p.complete(l0_only(call_id="c_m2", idempotency_key="idem_model_2"))["cache_hit"] is True
+    p.routing_version = "rt_2"                               # a new routing table: no stale hit
+    assert p.complete(l0_only(call_id="c_m3", idempotency_key="idem_model_3"))["cache_hit"] is False
+    mid = REQ["tier"]
+    p.chains[mid] = [Entry(f"{mid}-new", mid)] + p.chains[mid]     # a model change at the head of the chain
+    assert p.complete(l0_only(call_id="c_m4", idempotency_key="idem_model_4"))["cache_hit"] is False
+    assert len(p.cache_store) == 3 and any(f"{mid}-new" in k for k in p.cache_store)
+
+
+def test_q672d_no_verified_principal_records_a_security_event():
+    p = FakeModelCallPort(principal={"service": "operate", "tenant_id": "t_acme"}, registry=registry())
+    with pytest.raises(PermissionError):
+        p.complete(req())
+    assert p.security_events == [{"kind": "no_verified_principal", "service": "operate"}]
+    assert p.events == [] and p.reservations == []
+    q = FakeModelCallPort(principal=None, registry=registry())
+    with pytest.raises(PermissionError):
+        q.complete("x")
+    assert q.security_events == [{"kind": "no_verified_principal", "service": None}]
+
+
+def test_redact_is_not_a_transform_in_030():
+    assert "redact" not in SCHEMA["$defs"]["conversation_block"]["properties"]["transform"]["enum"]
+    r = req(blocks=REQ["blocks"][:2] + [conv(transform="redact")])
+    assert refused(port(), r) == ("invalid_request", "schema")

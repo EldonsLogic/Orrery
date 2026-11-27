@@ -32,7 +32,7 @@ Why (02 §Five implications, all hypotheses until interviews):
 
 Second niche (hold, do not build for yet): service firms with payroll-heavy operations (facility management, manpower supply), where WPS/GOSI/Saudization matter. It needs the payroll component, which is the weakest area of the seed (HRMS Arabic 33%).
 
-Rejected for now: retail/F&B (Foodics, Rewaa, Qoyod, POS-first vendors), clinics (regulatory interfaces), manufacturing (BOM/costing depth), e-commerce platforms as customers (Zid/Salla own that channel).
+Rejected for now: retail/F&B (Foodics, Rewaa, Qoyod, POS-first vendors), clinics (regulatory interfaces), manufacturing (BOM/costing depth), e-commerce platforms as customers (Zid/Salla own that channel). These stay rejected as segments; ADR-0076 (Proposed) adds point of sale (deferred), manufacturing and e-commerce only as modules for the trading niche.
 
 ## Kill criteria (set before interviews)
 Drop or change the niche if, after 25 interviews: fewer than 8 describe a current ERP/compliance pain they would pay to fix; fewer than 5 would pay at SAR 2K+/month; or the accountant veto appears in more than half.

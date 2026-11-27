@@ -2,6 +2,7 @@
 floats are refused so one content has one byte string. Nothing here computes or interprets a tax value."""
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import json
@@ -24,6 +25,17 @@ def canonical(obj) -> bytes:
 
 def digest(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+SIGNOFF_DOMAIN = b"country-pack-signoff-v1\n"
+
+
+def signoff_challenge(statement_digest: str) -> str:
+    """The WebAuthn challenge each signer's assertion must carry (ADR-0071 1.8, Eldon's #344 answer): base64url
+    without padding of SHA-256(`country-pack-signoff-v1\\n` + the ASCII statementDigest), so an assertion over a
+    sign-off cannot be replayed for anything else."""
+    raw = hashlib.sha256(SIGNOFF_DOMAIN + statement_digest.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
 def _plain(v, depth):

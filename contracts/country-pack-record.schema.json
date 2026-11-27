@@ -165,7 +165,7 @@
       }
     },
     "signerSignature": {
-      "description": "The signer's own WebAuthn assertion over statementDigest (Q-652). The challenge in clientDataJSON is the base64url of the 32 statementDigest bytes. All byte fields are base64url without padding.",
+      "description": "The signer's own WebAuthn assertion over statementDigest (Q-652). The challenge in clientDataJSON is the base64url (no padding) of SHA-256 over the ASCII bytes 'country-pack-signoff-v1' + LF + statementDigest (ADR-0071 1.8). All byte fields are base64url without padding.",
       "type": "object",
       "required": ["format", "credentialId", "authenticatorData", "clientDataJSON", "signature"],
       "additionalProperties": false,

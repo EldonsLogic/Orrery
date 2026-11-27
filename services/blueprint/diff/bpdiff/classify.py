@@ -16,6 +16,10 @@ LABEL_KEYS = {"labels", "pluralLabels", "actionLabels", "city", "note", "reason"
 ACCESS_KEYS = {"visibleToRoles", "allowedRoles", "hiddenFields", "readOnlyFields"}
 COMPLIANCE_COMPANY = [("company", "country"), ("company", "vatNumber"), ("company", "crNumber"),
                       ("company", "locale", "currency"), ("company", "locale", "fiscalYear")]
+# Module settings that move stock, ledger value or consent (ADR-0079): reviewed as compliance, the strictest
+# non-structural class. Ancestors match too, so replacing a whole module is compliance as well.
+MODULE_COMPLIANCE = [("modules", "manufacturing", k) for k in  # stock value and which materials move (#397 review)
+                     ("warehouses", "bom", "operations", "materialTransfer", "batchFromWorkOrder", "subcontracting")]
 META_COSMETIC = [("meta", "revision"), ("meta", "createdAt"), ("meta", "updatedAt")]
 DESTRUCTIVE_NODES = {spath(p) for p in (
     "locations/*", "components/*", "entities/*", "entities/*/fields/*", "entities/*/fields/*/options/*",
@@ -27,7 +31,7 @@ DESTRUCTIVE_NODES = {spath(p) for p in (
 # switching timesheets off, orphans records.
 DESTRUCTIVE_CHANGES = {spath("modules/crm/pipeline/stages/*/kind"), spath("modules/projects/timesheets/enabled")}
 # Billing hours through a sales invoice reaches the ledger (#396 review H2): any change is compliance.
-COMPLIANCE_MODULE = [spath("modules/projects/timesheets/billable"), spath("modules/projects/timesheets/invoicingComponent")]
+BILLING_PATHS = [spath("modules/projects/timesheets/billable"), spath("modules/projects/timesheets/invoicingComponent")]
 DATA_FIELD_PROPS = {"type", "required", "unique", "precision", "min", "max", "maxLength", "target", "computed"}
 SECTIONS = {"meta", "company", "compliance", "i18n", "branding"}
 STEPS = spath("approvals/*/steps")
@@ -53,8 +57,8 @@ def impact_of(kind: str, sp: SPath) -> str:
     if kind == "remove" and sp[:1] == ("modules",) and len(sp) <= 2:
         return "destructive"  # a module switched off (Q-700): stricter than access, checked first
     head = sp[0] if sp else ""
-    if (head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY)
-            or any(_starts(sp, p) for p in COMPLIANCE_MODULE)):
+    if (head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE)
+            or any(_starts(sp, p) for p in BILLING_PATHS)):
         return "compliance"
     if head == "branding":
         return "branding"

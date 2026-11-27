@@ -9,8 +9,8 @@ from bpdiff import diff
 from compiler.incremental import steps_from_diff
 from compiler.steps import skeleton, steps_from_ops
 
-CRM = json.loads((H.REPO / "contracts" / "examples" / "blueprint-modules-minimal.json").read_text(
-    encoding="utf-8"))["modules"]
+CRM = {"crm": json.loads((H.REPO / "contracts" / "examples" / "blueprint-modules-minimal.json").read_text(
+    encoding="utf-8"))["modules"]["crm"]}  # CRM only: later modules carry validator rules on fixture locations
 
 
 def _with_modules(bp):

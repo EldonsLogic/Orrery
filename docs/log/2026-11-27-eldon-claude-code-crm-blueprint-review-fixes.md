@@ -35,3 +35,12 @@ Partner re-review of #395; then the #396 review fixes and merge up through #397 
 - M4: BPL-053 row names its validator and bpdiff code; BPL-060 to BPL-062 cover projects; BPL-057 lists the partner-lane scope.
 - M5: ADR-0079 note states the 0.6.0 `default` break.
 - Low: the bench rows per module are named in the rigid list (the "BPL-056 to BPL-058" text was not found at 92696a33).
+
+## #397 review fixes (BPL-054, at a9ffd037: 1 High, 5 Medium, 3 Low)
+- H1: Stock Entry named component-only, Tier 3, human floor on submit and cancel; work order and job card wording corrected (schema rule, contract doc, test).
+- M2: eight valuation-shaping engine settings listed with pinned defaults read from the v15.124.5 doctype JSON (2026-11-27); component sets and locks them; Tier 3 with accountant sign-off in BPL-058; Q-702 updated.
+- M3: bpdiff: `bom`, `operations`, `materialTransfer`, `batchFromWorkOrder`, `subcontracting` are `compliance`; concept unbind or rebind `destructive` (generic since #395).
+- M4: rigid list gains Work Order `skip_transfer`, `from_wip_warehouse`, `use_multi_level_bom`, BOM `transfer_material_against`, `is_default`, `currency`, the subcontracting warehouses and Item `standard_rate`, with tests.
+- M5: Subcontracting Order needs a purchase order from a listed purchasing component (contract text; check in BPL-060).
+- M6: BPL-061 and BPL-062 cover manufacturing, the switch mappings and the rigid list in `compiler/mapping.py`.
+- Lows: `manufacturing.item` is a shared concept (`core.item.entities`); changelog corrected; sources cited.

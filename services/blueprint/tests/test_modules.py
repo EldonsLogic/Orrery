@@ -8,6 +8,7 @@ from fixture_registry import REPO
 from validator import validate
 
 EXAMPLE = REPO / "contracts" / "examples" / "blueprint-modules-minimal.json"
+TRADING = REPO / "services" / "blueprint" / "fixtures" / "trading-distribution.blueprint.json"
 MOD_CODES = {"BP-MOD-001", "BP-MOD-002", "BP-MOD-003", "BP-MOD-004"}
 
 
@@ -223,3 +224,91 @@ def test_invoicing_component_missing_from_known_registry_fails_closed():
     bp["components"].append({"id": "core.sales_invoice", "versionRange": "^0.1.0"})
     errs = [e for e in validate(bp, ValidationContext(registry={})).errors if e.code == "BP-MOD-003"]
     assert errs and "not in the component registry" in errs[0].message
+
+
+# Manufacturing (#397 re-review): the engine's own valuation, costing, tax and ledger fields on item, BOM and every
+# manufacturing-bound entity are refused; ordinary item master data is not.
+@pytest.mark.parametrize("eid,fid", [
+    ("item", "valuation_rate"), ("item", "valuation_method"), ("item", "item_tax_template"),  # Item Tax row
+    ("item", "income_account"),                                                              # Item Default row
+    ("bom", "rm_cost_as_per"), ("bom", "operating_cost"), ("bom", "rate"),                   # BOM Item row inline
+    ("work_order", "total_operating_cost"), ("work_order", "wip_warehouse"), ("job_card", "hour_rate"),
+    ("workstation", "hour_rate_electricity"), ("subcontracting_order", "service_cost_per_qty"),
+    ("subcontracting_receipt", "expense_account"),
+])
+def test_engine_rigid_field_on_manufacturing_entity(eid, fid):
+    bp = example()
+    entity(bp, eid)["fields"].append(field(fid, "money"))
+    assert "BP-MOD-001" in codes(bp)
+
+
+# #397 review M4: stock-shaping and warehouse fields (read from the pinned v15.124.5 doctypes, 2026-11-27).
+@pytest.mark.parametrize("eid,fid", [
+    ("work_order", "skip_transfer"), ("work_order", "from_wip_warehouse"), ("work_order", "use_multi_level_bom"),
+    ("bom", "transfer_material_against"), ("bom", "is_default"), ("bom", "currency"),
+    ("subcontracting_order", "set_warehouse"), ("subcontracting_order", "supplier_warehouse"),
+    ("subcontracting_receipt", "set_warehouse"), ("subcontracting_receipt", "supplier_warehouse"),
+    ("subcontracting_receipt", "rejected_warehouse"), ("item", "standard_rate"),
+])
+def test_stock_shaping_engine_field_on_manufacturing_entity(eid, fid):
+    bp = example()
+    entity(bp, eid)["fields"].append(field(fid, "string"))
+    assert "BP-MOD-001" in codes(bp)
+
+
+def test_bom_line_child_rows_are_followed():
+    """BOM lines are the real costing carrier: a child_table row entity of the bound BOM may not declare rate or amount."""
+    bp = example()
+    bind_child(bp, "bom", "bom_line", [field("component_item", "string"), field("qty"), field("rate", "money"),
+                                       field("base_amount", "money")], "items")
+    i = next(k for k, e in enumerate(bp["entities"]) if e["id"] == "bom_line")
+    paths = {e.path for e in validate(bp).errors if e.code == "BP-MOD-001"}
+    assert paths == {f"/entities/{i}/fields/2/id", f"/entities/{i}/fields/3/id"}
+
+
+def test_bom_line_with_plain_fields_passes():
+    bp = example()
+    bind_child(bp, "bom", "bom_line", [field("component_item", "string"), field("qty"), field("scrap_note", "text")], "items")
+    assert codes(bp) == set()
+
+
+def test_trading_fixture_plus_manufacturing_validates():
+    """The standard trading item keeps cost_price, selling_price and vat_rate (custom master data, never posting)."""
+    mods = example()
+    bp = json.loads(TRADING.read_text(encoding="utf-8"))
+    mfg = copy.deepcopy(mods["modules"]["manufacturing"])
+    mfg["warehouses"] = {"workInProgress": "wh_riyadh", "finishedGoods": "wh_jeddah"}
+    bp["modules"] = {"manufacturing": mfg}
+    bp["components"].append({"id": "manufacturing.core", "versionRange": "^0.1.0"})
+    bp["entities"] += [copy.deepcopy(e) for e in mods["entities"] if e["id"] in set(mfg["entities"].values()) - {"item"}]
+    assert {"cost_price", "selling_price", "vat_rate"} <= {f["id"] for f in entity(bp, "item")["fields"]}
+    rep = validate(bp)
+    assert not {e.code for e in rep.errors} & (MOD_CODES | {"BP-SCHEMA-001"}), [str(e) for e in rep.errors]
+
+
+def _wh(bp):
+    return bp["modules"]["manufacturing"]["warehouses"]
+
+
+def _add_store(bp, ident, kind="warehouse"):
+    bp["locations"].append({"id": ident, "kind": kind, "parent": "hq", "labels": {"ar": "مخزن", "en": "Store"}})
+
+
+@pytest.mark.parametrize("update", [
+    {"finishedGoods": "wip_store"},                 # WIP and finished goods are the same warehouse
+    {"scrap": "wip_store"},                         # scrap equals WIP
+    {"scrap": "fg_store"},                          # scrap equals finished goods
+    {"workInProgress": "hq"},                       # a branch, not a warehouse
+    {"scrap": "no_such_store"},                     # does not resolve
+])
+def test_manufacturing_warehouses(update):
+    bp = example()
+    _wh(bp).update(update)
+    assert "BP-MOD-004" in codes(bp)
+
+
+def test_distinct_scrap_warehouse_passes():
+    bp = example()
+    _add_store(bp, "scrap_store")
+    _wh(bp)["scrap"] = "scrap_store"
+    assert codes(bp) == set()

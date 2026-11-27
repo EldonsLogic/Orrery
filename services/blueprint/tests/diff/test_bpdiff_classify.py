@@ -85,6 +85,21 @@ def test_classification_table(name):
     ("remove", "modules/projects", "destructive"),
     ("remove", "modules", "destructive"),
     ("replace", "modules/crm/pipeline/stages/*/probabilityPercent", "config"),
+    ("replace", "modules/manufacturing/warehouses/workInProgress", "compliance"),
+    ("add", "modules/manufacturing/warehouses/scrap", "compliance"),
+    ("replace", "modules/manufacturing/warehouses", "compliance"),
+    ("replace", "modules/manufacturing", "compliance"),
+    ("remove", "modules/manufacturing", "destructive"),
+    ("replace", "modules/manufacturing/roles/manage", "access"),
+    ("replace", "modules/manufacturing/materialTransfer", "compliance"),
+    ("replace", "modules/manufacturing/bom/multiLevel", "compliance"),
+    ("replace", "modules/manufacturing/bom/withOperations", "compliance"),
+    ("replace", "modules/manufacturing/operations/enabled", "compliance"),
+    ("replace", "modules/manufacturing/operations/jobCards", "compliance"),
+    ("replace", "modules/manufacturing/subcontracting/enabled", "compliance"),
+    ("replace", "modules/manufacturing/batchFromWorkOrder", "compliance"),
+    ("remove", "modules/manufacturing/entities/routing", "destructive"),
+    ("replace", "modules/manufacturing/entities/bom", "destructive"),
     ("remove", "modules/crm/pipeline/stages/*", "destructive"),
     ("remove", "modules/crm/leadSources/*", "destructive"),
     ("remove", "modules/crm/lostReasons/*", "destructive"),
@@ -181,13 +196,24 @@ def test_module_role_change_is_access():
     assert ops and {o["impact"] for o in ops} == {"access"}
 
 
+def test_manufacturing_warehouse_change_is_compliance():
+    """#397 review: a warehouse choice moves stock and, through the warehouse account, ledger value."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    b["modules"]["manufacturing"]["warehouses"]["workInProgress"] = "fg_store"
+    ops = diff(a, b)["ops"]
+    assert ops and {o["impact"] for o in ops} == {"compliance"}
+
+
 def test_module_removal_is_destructive():
     """Q-700 (#396 re-review): switching a module off is destructive, the stricter class than access."""
     a = _modules_example()
     b = json.loads(json.dumps(a))
-    del b["modules"]["projects"]
-    ops = diff(a, b)["ops"]
-    assert ops and {o["impact"] for o in ops} == {"destructive"}
+    for key in ("projects", "manufacturing"):  # removal outranks the manufacturing compliance rule
+        b = json.loads(json.dumps(a))
+        del b["modules"][key]
+        ops = diff(a, b)["ops"]
+        assert ops and {o["impact"] for o in ops} == {"destructive"}, key
 
 
 @pytest.mark.parametrize("name,edit", [
@@ -225,3 +251,21 @@ def test_project_changes_that_lose_data_or_touch_billing(name, edit, impact):
     edit(b["modules"]["projects"])
     d = diff(a, b)
     assert impact in {o["impact"] for o in d["ops"]}, (name, [(o["pointer"], o["impact"]) for o in d["ops"]])
+
+
+@pytest.mark.parametrize("name,edit,impact", [
+    ("multi-level BOM off", lambda m: m["bom"].update(multiLevel=False), "compliance"),
+    ("transfer against work order", lambda m: m.__setitem__("materialTransfer", "work_order"), "compliance"),
+    ("operations off", lambda m: m["operations"].update(enabled=False), "compliance"),
+    ("job cards off", lambda m: m["operations"].update(jobCards=False), "compliance"),
+    ("subcontracting off", lambda m: m["subcontracting"].update(enabled=False), "compliance"),
+    ("routing unbound", lambda m: m["entities"].pop("routing"), "destructive"),
+    ("bom rebound", lambda m: m["entities"].__setitem__("bom", "routing"), "destructive"),
+])
+def test_stock_shaping_manufacturing_changes_need_review(name, edit, impact):
+    """#397 review M3: switches that change which materials move or how are never plain config."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    edit(b["modules"]["manufacturing"])
+    impacts = {o["impact"] for o in diff(a, b)["ops"]}
+    assert impact in impacts and "config" not in impacts, (name, impacts)

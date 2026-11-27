@@ -105,7 +105,7 @@ def test_example_module_metrics_are_in_the_vocabulary():
 # or as a camelCase or snake_case token would be a formula, posting, costing, tax, payroll or pricing knob. This lints
 # the contract's own module setting keys only. Blueprint entity fields are checked against the engine's explicit
 # rigid-zone field list instead (engine-rigid-fields.json, validator BP-MOD-001), never by name.
-RIGID_SUBSTRINGS = ("formula", "expression", "posting", "valuation", "account", "ledger", "payroll")
+RIGID_SUBSTRINGS = ("formula", "expression", "posting", "valuation", "account", "ledger", "payroll", "backflush")
 RIGID_TOKENS = ("cost", "tax", "rate", "price", "amount")
 
 
@@ -140,7 +140,8 @@ def _property_names(node, seen):
 
 @pytest.mark.parametrize("key", ["rmCostBasis", "taxTemplate", "valuationRate", "wipAccount", "billing_rate",
                                  "costing_rate", "priceList", "amount", "payrollPeriod", "ratePercent",
-                                 "postingDate", "rate_formula", "ledgerHead", "operating_cost"])
+                                 "postingDate", "rate_formula", "ledgerHead", "operating_cost", "valuation_rate",
+                                 "rm_cost_as_per", "backflushFrom"])
 def test_rigid_matcher_catches(key):
     assert is_rigid_key(key)
 
@@ -263,3 +264,32 @@ def test_adr_states_the_default_break():
     when the ADR says so."""
     adr = next((C.parent / "docs" / "decisions").glob("ADR-0079-*.md")).read_text(encoding="utf-8")
     assert re.search(r"0\.6\.0 is not purely additive.*`eval:`", adr, re.S)
+
+
+def test_stock_entry_is_component_only():
+    """#397 review H1: Stock Entry posts the stock (not the work order or job card); it is component-only, Tier 3,
+    human floor on submit and cancel, and offered to no Blueprint concept."""
+    rule = next(r for r in SCHEMA["x-validator-rules"] if r.startswith("Manufacturing ("))
+    assert "Stock Entry" in rule and "component-only" in rule
+    line = next(l for l in DOC.splitlines() if "Stock Entry" in l and "component-only" in l)
+    assert "Tier 3" in line and "submit and cancel" in line
+    concepts = SCHEMA["$defs"]["manufacturingModule"]["properties"]["entities"]["properties"]
+    assert "stock_entry" not in concepts
+
+
+@pytest.mark.parametrize("setting,value", [
+    ("rm_cost_as_per", "Valuation Rate"), ("backflush_raw_materials_based_on", "BOM"),
+    ("backflush_raw_materials_of_subcontract_based_on", "BOM"), ("material_consumption", "0"),
+    ("get_rm_cost_from_consumption_entry", "0"), ("add_corrective_operation_cost_in_finished_good_valuation", "0"),
+    ("set_op_cost_and_scrap_from_sub_assemblies", "0"), ("update_bom_costs_automatically", "0"),
+])
+def test_engine_manufacturing_settings_are_listed_with_value(setting, value):
+    """#397 review M2: every valuation-shaping engine setting is named with its pinned default, locked by the
+    component, Tier 3 with an accountant sign-off."""
+    row = next((l for l in DOC.splitlines() if l.startswith(f"| `{setting}`")), None)
+    assert row and f"`{value}`" in row, setting
+
+
+def test_subcontracting_names_its_purchase_order_source():
+    """#397 review M5: the engine's Subcontracting Order requires a purchase order."""
+    assert re.search(r"Subcontracting Order requires a `purchase_order`.*`purchasing\.purchase_order`", DOC)

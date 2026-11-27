@@ -2,7 +2,7 @@
 
 Status: draft
 Owner: eldon
-Version: 0.6.0
+Version: 0.7.0
 
 Part of contract 1 ([blueprint.schema.json](blueprint.schema.json), `$defs/modules`). How an engine-core module joins a tenant's Blueprint. Decision: [ADR-0079](../docs/decisions/ADR-0079-engine-core-modules-in-the-blueprint.md) (Proposed); scope: [ADR-0076](../docs/decisions/ADR-0076-phase-1-module-scope.md). Example: [examples/blueprint-modules-minimal.json](examples/blueprint-modules-minimal.json); negative cases: `examples/invalid/blueprint-modules-*-cases.json`, run by `tests/test_blueprint_modules.py`.
 
@@ -61,6 +61,41 @@ Projects and boards over core projects, tasks and timesheets. Board, timeline an
 
 Metrics: `projects.tasks_by_status`, `projects.overdue_tasks`, `projects.hours_logged`, `projects.billable_hours`, `projects.project_progress`
 
+## Module `manufacturing`
+Core BOM, work order, job card, routing and subcontracting records. This object only chooses which records and steps a company uses; it never sets a number.
+
+| Concept | Required | Engine record (internal) |
+|---|---|---|
+| `item` | yes | Item (the inventory item master, shared with stock). Shared concept: implemented by the core item component (`core.item.entities`) when the Blueprint lists one, else the manufacturing component (`manufacturing.item`) |
+| `bom` | yes | BOM with BOM Item, BOM Operation and BOM Scrap Item rows (submittable) |
+| `work_order` | yes | Work Order (submittable; status Draft to Completed, Stopped, Closed, Cancelled) |
+| `job_card` | when `operations.jobCards` | Job Card with time logs (submittable) |
+| `operation`, `workstation` | when `operations.enabled` | Operation, Workstation |
+| `routing` | no | Routing |
+| `subcontracting_order`, `subcontracting_receipt` | when `subcontracting.enabled` | Subcontracting Order, Subcontracting Receipt (submittable) |
+
+- **Stock Entry is component-only** (#397 review): no concept, entity, permission or field in the Blueprint; created and posted only by the certified manufacturing component (BPL-058), Tier 3, stock-class (ADR-0037), human floor on submit and cancel (ADR-0027). The same holds for the Subcontracting Receipt submit and cancel.
+- Subcontracting: the engine's Subcontracting Order requires a `purchase_order` (a Purchase Order with service items). The Blueprint supplies it through a listed purchasing component providing purchase orders (`purchasing.purchase_order` in the fixtures); a validator check is owed (BPL-060).
+- `bom.withOperations` needs `operations.enabled`; `operations.jobCards` needs `operations.enabled`; `materialTransfer: job_card` needs job cards. `batchFromWorkOrder` creates finished-goods batches from the work order for batch-tracked items.
+- Inventory touch points (rigid-zone boundary): `warehouses.workInProgress`, `finishedGoods` and optional `scrap` are location ids of kind warehouse (engine manufacturing settings defaults); WIP differs from finished goods and scrap differs from both (validator `BP-MOD-004`). Under perpetual inventory the warehouse's account decides which ledger account carries the value: that warehouse-to-account link stays with the certified component and is never set or drafted by the Blueprint. bpdiff classes a warehouse change `compliance`. The work order and job card post nothing themselves; stock moves are the engine's Stock Entry records (purposes Material Transfer for Manufacture, Material Consumption for Manufacture, Manufacture) and the Subcontracting Receipt (`stock_entry.py`, `work_order.py`, `job_card.py` at v15.124.5, https://github.com/frappe/erpnext/tree/v15.124.5, accessed 2026-11-27; UNVERIFIED on a bench).
+- Ledger touch points (rigid-zone boundary): stock valuation, BOM raw-material costing, operating cost, scrap value and every stock or ledger posting are deterministic engine or certified-component logic, never AI-written. The module schema offers no setting for any of them, and item, bom, their rows (BOM lines, operations, scrap rows, item defaults and item taxes, inline or as `child_table` entities) and every other manufacturing-bound entity may not declare the engine's own fields for them (`valuation_rate`, `valuation_method`, `item_tax_template`, `income_account`, `rm_cost_as_per`, `operating_cost`, BOM line `rate` and `amount` and the rest of `engine-rigid-fields.json`; validator `BP-MOD-001`). The backflush basis is an engine manufacturing setting, not a field of any bound record, so the Blueprint has no key for it. The engine settings that shape valuation are listed below with the pinned default; the certified component sets each explicitly, locks it and refuses runtime writes (Q-702). Setting and locking them is Tier 3 with an accountant's sign-off (ADR-0033), never a Blueprint key. The trading template's item fields `cost_price`, `selling_price` and `vat_rate` are custom master data: they stay valid when manufacturing is on and never feed valuation, posting or tax.
+
+| Engine setting (internal) | Where | Pinned default | Set by |
+|---|---|---|---|
+| `rm_cost_as_per` | each BOM (so per record, not once) | `Valuation Rate` | component on every BOM it writes; a runtime BOM write that changes it is refused |
+| `backflush_raw_materials_based_on` | Manufacturing Settings | `BOM` | component, locked |
+| `backflush_raw_materials_of_subcontract_based_on` | Buying Settings | `BOM` | component, locked |
+| `material_consumption` | Manufacturing Settings | `0` | component, locked |
+| `get_rm_cost_from_consumption_entry` | Manufacturing Settings | `0` | component, locked |
+| `add_corrective_operation_cost_in_finished_good_valuation` | Manufacturing Settings | `0` | component, locked |
+| `set_op_cost_and_scrap_from_sub_assemblies` | Manufacturing Settings | `0` | component, locked |
+| `update_bom_costs_automatically` | Manufacturing Settings | `0` | component, locked |
+
+Defaults read from the doctype JSON at v15.124.5 (https://github.com/frappe/erpnext/tree/v15.124.5, accessed 2026-11-27); UNVERIFIED on a bench. The values to set are the accountant's call per company (ADR-0033); the defaults are only the starting point.
+
+Metrics: `manufacturing.work_orders_by_status`, `manufacturing.planned_vs_produced`, `manufacturing.job_card_hours`, `manufacturing.material_shortages`, `manufacturing.open_subcontracting`
+
 ## Changelog
+- 0.7.0 (BPL-054): `modules.manufacturing` with BOM, work order, job card, routing and subcontracting concepts, warehouses as inventory touch points (three distinct warehouses), and no costing or valuation settings; `engine-rigid-fields.json` 0.1.0 already holds the manufacturing records (added on the BPL-053 base) and gains their stock-shaping and warehouse fields (#397 review; BP-MOD-001); Stock Entry is component-only; engine settings listed with pinned defaults, and the contract test's module-setting term list gains `backflush`. Additive.
 - 0.6.0 (BPL-053): `modules.projects` with task statuses mapped to engine statuses, board, timeline, calendar and list views, and timesheets (`billable` needs `enabled` and `invoicingComponent`); engine rigid-zone field list `engine-rigid-fields.json` 0.1.0 (BP-MOD-001); field computation keys and expression defaults refused. Additive for 0.5.0 Blueprints, except a string field default starting with `eval:`, `=` or `:`, now refused.
 - 0.5.0 (BPL-052): optional `modules` with `crm` (an empty `modules` is refused); shared `moduleRoles` and `moduleOption`; `x-module-shared-concepts` for concepts another component may implement (#395 review). Additive: every 0.4.0 Blueprint stays valid; `meta.schemaVersion` stays `0.1.0` (Q-141).

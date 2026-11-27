@@ -1814,8 +1814,10 @@ class ChangeEngineAdapter:
                 check_ready(site.tenant_id, artifact["steps"])
             except Exception as exc:
                 code = getattr(exc, "code", None)
+                details = getattr(exc, "details", None) if isinstance(code, str) else None  # the reason code, as on execute
                 stages.append({"stage": "prepare", "status": "failed"})
-                finish("failed_clean", AdapterError(code if isinstance(code, str) else "engine_unavailable", stage="prepare").to_error())
+                finish("failed_clean", AdapterError(code if isinstance(code, str) else "engine_unavailable",
+                                                    details if isinstance(details, dict) else None, stage="prepare").to_error())
                 return
 
         self.store.save_prepare_intent(

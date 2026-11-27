@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:platform:contract:blueprint:0.4.0",
-  "version": "0.4.0",
+  "$id": "urn:platform:contract:blueprint:0.5.0",
+  "version": "0.5.0",
   "title": "Blueprint",
   "description": "Contract 1. The typed, versioned description of one tenant's business: entities, workflows, roles, approvals, reports, integrations, compliance, i18n, branding. The Blueprint is configuration, never code. Cross-reference rules that JSON Schema cannot express (ids resolve, locales covered, contrast passes) are enforced by the Blueprint validator in Part 2 and listed in x-validator-rules.",
   "type": "object",
@@ -57,7 +57,8 @@
       "maxItems": 32,
       "description": "Optional (Blueprint 0.3.0; transition allowlist 0.4.0; ADR-0043). Department-scoped chat assistants: configuration of the one chat per department. An assistant has no identity or authority of its own; it acts only with the invoking user's role and scope.",
       "items": { "$ref": "#/$defs/assistant" }
-    }
+    },
+    "modules": { "$ref": "#/$defs/modules" }
   },
   "x-validator-rules": [
     "company.locale fields are optional; each omitted field resolves from compliance.countryPack. The resolved locale is stored with the compiled artifact. workingHours.periods must not overlap and weekend days must not appear in workDays.",
@@ -73,9 +74,116 @@
     "Branding assets: media type, size and sanitisation fields match the stored asset record.",
     "branding.poweredBy.show=false requires the white-label entitlement on the tenant plan.",
     "Compliance: when compliance.eInvoicing.mode is not 'none' for country SA, documentLanguages must contain 'ar' and company.vatNumber must be set.",
-    "Assistants (ADR-0043): roles resolve and belong to the department (or are owner or general manager); the department has at least one role; tools are in the tenant's generated tool set, agent-creatable, at most R2, and every R2 tool has confirm=true; at least one invoking role may call each tool; never approve, reject, submit, cancel, amend or delete verbs, approval.decide, blueprint tools, protected bank, contact or access tools, or writes other than create, update and export on ledger- or stock-class entities, with or without a tool set; a transition tool lists its allowed transitions, none an approve, reject or reversal move or one with its own approval rule; no tool is listed twice; memory tools need a memory scope; limits are within platform and plan caps; the instructions key resolves."
+    "Assistants (ADR-0043): roles resolve and belong to the department (or are owner or general manager); the department has at least one role; tools are in the tenant's generated tool set, agent-creatable, at most R2, and every R2 tool has confirm=true; at least one invoking role may call each tool; never approve, reject, submit, cancel, amend or delete verbs, approval.decide, blueprint tools, protected bank, contact or access tools, or writes other than create, update and export on ledger- or stock-class entities, with or without a tool set; a transition tool lists its allowed transitions, none an approve, reject or reversal move or one with its own approval rule; no tool is listed twice; memory tools need a memory scope; limits are within platform and plan caps; the instructions key resolves.",
+    "Modules (ADR-0079): a module is on for this company only when its key is present. Its component is listed in components and provides the capability <module>.module; every concept entity resolves and has exactly one implementing component for its concept: the module component (which provides <module>.<concept>) or, for a shared concept listed in x-module-shared-concepts, a component providing one of the listed capabilities, never both; two concepts of one module never name the same entity; every module role resolves and holds read on each required concept entity (listing a role grants nothing). A report metric whose id starts with a module prefix (crm., projects., manufacturing., marketing.) needs that module on and must be in the module's metric list in contracts/blueprint-modules.md.",
+    "CRM (ADR-0079): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique."
   ],
+  "x-module-shared-concepts": {
+    "crm.customer": ["core.customer.entities"],
+    "crm.campaign": ["marketing.campaign"]
+  },
   "$defs": {
+    "modules": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "description": "Optional (Blueprint 0.5.0, ADR-0079). Engine-core modules this company opts into. A module is on when its key is present; absent means off. An empty object is refused: omit modules when no module is on. Each module binds its concept vocabulary to Blueprint entities and roles and names the component that implements it; settings carry configuration only, never formulas, posting or valuation logic.",
+      "properties": {
+        "crm": { "$ref": "#/$defs/crmModule" }
+      }
+    },
+    "moduleRoles": {
+      "type": "object",
+      "required": ["manage"],
+      "additionalProperties": false,
+      "description": "Module role vocabulary. manage: the roles that the module's screens treat as managers; work: the roles they treat as workers; view: the roles they treat as viewers. Listing grants nothing: roles[].permissions and scope decide everything.",
+      "properties": {
+        "manage": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "work": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+        "view": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "moduleOption": {
+      "type": "object",
+      "required": ["id", "labels"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "labels": { "$ref": "#/$defs/localizedText" }
+      }
+    },
+    "crmModule": {
+      "type": "object",
+      "description": "CRM on the engine's core CRM records plus framework records (Contact, Event, ToDo, Communication) (ADR-0076 item 5): leads, opportunities, customers, contacts, activities and the campaign link. Never the separate CRM app.",
+      "required": ["component", "entities", "roles", "pipeline", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "component": { "$ref": "#/$defs/componentId" },
+        "entities": {
+          "type": "object",
+          "required": ["opportunity", "customer"],
+          "additionalProperties": false,
+          "description": "Concept to Blueprint entity id: one entity per concept, by design. Shared concepts (x-module-shared-concepts) may be implemented by the owning component instead of the module component.",
+          "properties": {
+            "lead": { "$ref": "#/$defs/id" },
+            "opportunity": { "$ref": "#/$defs/id" },
+            "customer": { "$ref": "#/$defs/id" },
+            "contact": { "$ref": "#/$defs/id" },
+            "activity": { "$ref": "#/$defs/id" },
+            "campaign": { "$ref": "#/$defs/id" }
+          }
+        },
+        "roles": { "$ref": "#/$defs/moduleRoles" },
+        "pipeline": {
+          "type": "object",
+          "required": ["stages"],
+          "additionalProperties": false,
+          "properties": {
+            "stages": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 20,
+              "description": "Opportunity stages in pipeline order. At least one open stage, exactly one won and exactly one lost stage. An open stage has probabilityPercent strictly between 0 and 100.",
+              "items": {
+                "type": "object",
+                "required": ["id", "labels", "kind", "probabilityPercent"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "$ref": "#/$defs/id" },
+                  "labels": { "$ref": "#/$defs/localizedText" },
+                  "kind": { "enum": ["open", "won", "lost"] },
+                  "probabilityPercent": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Owner's estimate for weighted pipeline metrics; the metric itself is computed by code." }
+                },
+                "allOf": [
+                  { "if": { "properties": { "kind": { "const": "won" } } }, "then": { "properties": { "probabilityPercent": { "const": 100 } } } },
+                  { "if": { "properties": { "kind": { "const": "lost" } } }, "then": { "properties": { "probabilityPercent": { "const": 0 } } } },
+                  { "if": { "properties": { "kind": { "const": "open" } } }, "then": { "properties": { "probabilityPercent": { "minimum": 1, "maximum": 99 } } } }
+                ]
+              },
+              "allOf": [
+                { "contains": { "properties": { "kind": { "const": "open" } } } },
+                { "contains": { "properties": { "kind": { "const": "won" } } }, "maxContains": 1 },
+                { "contains": { "properties": { "kind": { "const": "lost" } } }, "maxContains": 1 }
+              ]
+            }
+          }
+        },
+        "leadSources": { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/moduleOption" } },
+        "lostReasons": { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/moduleOption" } },
+        "activityTypes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["call", "meeting", "visit", "email", "message", "note", "follow_up"] },
+          "description": "Activity kinds offered on leads and opportunities. message is sent only through a messaging connector integration."
+        },
+        "campaignLink": { "type": "boolean", "default": false, "description": "Leads and opportunities carry a campaign link. Needs entities.campaign." },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      },
+      "allOf": [
+        { "if": { "properties": { "campaignLink": { "const": true } }, "required": ["campaignLink"] }, "then": { "properties": { "entities": { "required": ["campaign"] } } } },
+        { "if": { "properties": { "activityTypes": { "minItems": 1 } }, "required": ["activityTypes"] }, "then": { "properties": { "entities": { "required": ["activity"] } } } }
+      ]
+    },
     "assistant": {
       "type": "object",
       "description": "ADR-0043. One department assistant. It never carries a role, scope, grant, approver or service identity: every call runs with the invoking user's own permissions, intersected with this tool list.",

@@ -43,6 +43,9 @@ _ROWS: list[tuple[str, tuple[str, ...], str]] = [
     ("assistants/*/tools", ("tool",), "assistant_tool"),
     ("company/locale/workingTime/reducedPeriods", ("id",), "reduced_period"),
     ("company/locale/holidays/overrides", ("date", "action"), "holiday_override"),
+    ("modules/crm/pipeline/stages", ("id",), "pipeline_stage"),
+    ("modules/crm/leadSources", ("id",), "lead_source"),
+    ("modules/crm/lostReasons", ("id",), "lost_reason"),
 ]
 
 SPath = tuple  # tuple of str; "*" marks an array element
@@ -62,6 +65,7 @@ ORDER_SIGNIFICANT: set[SPath] = {
     spath("entities/*/fields/*/options"),
     spath("workflows/*/states"),
     spath("reports/*/metrics"),
+    spath("modules/crm/pipeline/stages"),
 }
 
 _JSON_SCALARS = (str, int, float, bool, type(None))

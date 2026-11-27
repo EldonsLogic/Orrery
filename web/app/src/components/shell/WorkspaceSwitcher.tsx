@@ -128,7 +128,7 @@ export function WorkspaceSwitcher({ claims, memberships }: { claims: SessionClai
             <span aria-hidden="true" className={styles.orgAvatar}>
               {initial(m.name)}
             </span>
-            <span>{m.status === 'active' ? m.name : t('suspended', { name: m.name })}</span>
+            <span>{m.status === 'active' ? <bdi>{m.name}</bdi> : t('suspended', { name: `\u2068${m.name}\u2069` })}</span>
           </li>
         ))}
       </ul>

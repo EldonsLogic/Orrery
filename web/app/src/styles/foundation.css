@@ -5,13 +5,16 @@
  * Spacing: the steps come from tokens.proposed (Q-70): --space-0_5 (4), --space-1 (8), --space-1_5 (12),
  *   --space-2 (16), --space-3 (24), --space-4 (32), --space-6 (48), --space-8 (64). Core steps are 8/12/16/24/48;
  *   4, 32 and 64 only where a layout needs them.
- * Breakpoints (media queries cannot read variables, so these are the reference values; mobile-first, min-width):
- *   phone 375, tablet 48rem (768), laptop 64rem (1024), desktop 90rem (1440).
+ * Breakpoints (media queries cannot read variables, so these are the reference values; mobile-first):
+ *   phone 375, tablet 48rem (768; phone chrome is below it, so spacing and chrome agree), laptop 64rem (1024), desktop 90rem (1440).
  * Type: every size and line height is in rem on the 16 px root (the generated tokens and the roles below), so text follows
  *   the reader's browser text size; spacing, controls and borders stay in px.
  * Radius: one per role. Cards and panels --radius-md, controls --radius-sm, badges --radius-pill. Border: 1px.
- * Glass: a material for chrome and overlays only (top bar, side navigation, the Ask Seshna dock, popovers), never for
- *   content cards, numbers, tables or forms, and never glass on glass. Solid surface unless backdrop-filter works,
+ * Glass: a material for chrome only (top bar, side navigation, the Ask Seshna dock), never for content cards, numbers,
+ *   tables or forms, and never glass on glass: popovers and panels open from the glass top bar and over the glass
+ *   side navigation, so they are solid. The fill is 88% of the surface so muted text stays at 4.5:1 or more over any
+ *   content scrolling beneath (checked in scripts/check-contrast.mjs against white and black backdrops, both themes).
+ *   No specular highlight or other decorative shadow (RULES 40). Solid surface unless backdrop-filter works,
  *   and solid again for reduced transparency or more contrast.
  */
 :root {
@@ -62,7 +65,6 @@
   --glass-fill-tinted: color-mix(in srgb, var(--page-band) var(--glass-alpha), transparent);
   --glass-filter: none;
   --glass-edge: var(--color-border);
-  --glass-highlight: inset 0 1px 0 transparent;
 }
 
 [dir='rtl'] {
@@ -90,22 +92,9 @@
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root {
-    --glass-alpha: 66%;
+    --glass-alpha: 88%;
     --glass-filter: blur(24px) saturate(160%);
     --glass-edge: color-mix(in srgb, var(--color-text) 10%, transparent);
-    --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-surface) 80%, transparent);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme='light']) {
-      --glass-alpha: 58%;
-      --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
-    }
-  }
-
-  :root[data-theme='dark'] {
-    --glass-alpha: 58%;
-    --glass-highlight: inset 0 1px 0 color-mix(in srgb, var(--color-text) 8%, transparent);
   }
 }
 

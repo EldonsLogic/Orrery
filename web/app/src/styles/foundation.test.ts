@@ -16,7 +16,7 @@ describe('design foundation', () => {
       '--text-strong-weight', '--text-label-size', '--text-label-weight', '--text-kpi-size', '--text-kpi-line', '--text-kpi-weight',
       '--text-display-fluid', '--text-h1-fluid', '--measure',
       '--control-sm', '--control-md', '--control-lg', '--icon-sm', '--icon-md', '--icon-lg', '--control-gap',
-      '--page-max', '--page-pad', '--page-band', '--main-pad-block', '--glass-fill', '--glass-filter', '--glass-edge', '--glass-highlight',
+      '--page-max', '--page-pad', '--page-band', '--main-pad-block', '--glass-fill', '--glass-filter', '--glass-edge',
       '--bp-phone', '--bp-tablet', '--bp-laptop', '--bp-desktop',
     ];
     for (const r of roles) expect(root.split(`${r}:`)).toHaveLength(2);
@@ -42,7 +42,39 @@ describe('design foundation', () => {
     expect(reduced).toContain('--glass-alpha: 100% !important');
   });
   it('has no shadows, gradients or decorative shapes', () => {
-    expect(css).not.toMatch(/box-shadow|gradient\(|border-radius:\s*50%/);
+    expect(css).not.toMatch(/box-shadow|gradient\(|border-radius:\s*50%|glass-highlight/);
+  });
+  it('keeps muted text readable on glass: 88% fill, no per-theme alpha', () => {
+    expect(css).toContain('--glass-alpha: 88%');
+    expect(css.match(/--glass-alpha:/g)).toHaveLength(3); // solid default, the @supports value, the accessibility reset
+  });
+});
+
+describe('shell chrome', () => {
+  const shell = read('../components/shell/Shell.module.css');
+  const block = (sel: string) => shell.match(new RegExp(`(?:^|\\n)${sel.replace(/[.[\]()]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+  it('uses glass only on the top bar, side navigation and dock; popovers and panels are solid', () => {
+    const withGlass = [...shell.matchAll(/(?:^|\n)([^\n{}]+) \{[^}]*backdrop-filter/g)].map((m) => m[1]);
+    expect(withGlass).toEqual(['.topBar', '.navWrap', '.dock']);
+    for (const sel of ['.popover', '.panel']) expect(block(sel)).toContain('background: var(--color-surface)');
+  });
+  it('has no decorative shadow: only the overlay token on popovers', () => {
+    expect(shell).not.toContain('glass-highlight');
+    expect([...shell.matchAll(/box-shadow:\s*([^;]+);/g)].map((m) => m[1])).toEqual(['var(--shadow-overlay)', 'var(--shadow-overlay)', 'var(--shadow-overlay)']) // popover, panel, expanded rail;
+  });
+  it('derives the nav offset from the same height as the top bar', () => {
+    expect(shell).not.toContain('--topbar-height');
+    expect(block('.topBar')).toContain('min-block-size: var(--shell-bar-height)');
+    expect(block('.navInner')).toContain('var(--shell-bar-height)');
+  });
+  it('keeps both languages reachable on phones and a 44px touch target', () => {
+    expect(shell).not.toMatch(/langButton\[aria-pressed='true'\]\s*\{\s*display:\s*none/);
+    expect(shell).toContain('min-block-size: calc(var(--touch-target) - var(--border-width) * 2)');
+  });
+  it('splits phone and tablet chrome at one point (no overlap at 768)', () => {
+    expect(shell).not.toContain('48.0625rem');
+    expect(shell).toContain('@media (max-width: 47.9375rem)');
+    expect(shell).toContain('@media (min-width: 48rem)');
   });
 });
 

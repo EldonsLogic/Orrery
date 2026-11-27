@@ -28,7 +28,7 @@ Every gate, and every delivery phase described in [architecture/](architecture/)
 - Compliance for the first pilot market is proven in its own sandbox or checklist. For Saudi Arabia that is a ZATCA Phase 2 invoice passing the ZATCA sandbox, a Saudi release criterion that does not block a pilot in another market (ADR-0026).
 - Arabic bilingual tax invoice PDF reviewed by an Arabic-speaking accountant.
 - Tenant creation is one scripted command; the 50-tenant spike has a written result.
-- Counsel has answered the GPL boundary and vendor-certification questions in writing.
+- The GPL boundary is answered in writing ([gpl-saas-boundary.md](research/gpl-saas-boundary.md), [ADR-0074](decisions/ADR-0074-gpl-boundary-settled-by-research.md)) and its compliance rules are enforced; counsel has answered the vendor-certification questions in writing.
 - Arabic eval set v0 and the model bake-off are done; a model tier list exists.
 
 ## G2 Pilot-ready

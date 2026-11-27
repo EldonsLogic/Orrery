@@ -101,3 +101,42 @@ def test_billable_needs_listed_invoicing_component():
     assert "BP-MOD-003" in codes(bp)
     bp["components"].append({"id": "core.sales_invoice", "versionRange": "^0.1.0"})
     assert "BP-MOD-003" not in codes(bp)
+
+
+# Manufacturing (#397 review): rigid-zone fields on item, BOM and every manufacturing-bound entity.
+@pytest.mark.parametrize("eid,fid", [("item", "valuation_rate"), ("bom", "rm_cost_as_per"), ("bom", "operating_cost"),
+                                     ("bom", "backflush_raw_materials_based_on"), ("work_order", "total_operating_cost"),
+                                     ("job_card", "hour_rate"), ("workstation", "hour_rate_electricity"),
+                                     ("item", "standardRate"), ("subcontracting_order", "service_cost_per_qty")])
+def test_rigid_zone_field_on_manufacturing_entity(eid, fid):
+    bp = example()
+    entity(bp, eid)["fields"].append(field(fid))
+    assert "BP-MOD-001" in codes(bp)
+
+
+def _wh(bp):
+    return bp["modules"]["manufacturing"]["warehouses"]
+
+
+def _add_store(bp, ident, kind="warehouse"):
+    bp["locations"].append({"id": ident, "kind": kind, "parent": "hq", "labels": {"ar": "مخزن", "en": "Store"}})
+
+
+@pytest.mark.parametrize("update", [
+    {"finishedGoods": "wip_store"},                 # WIP and finished goods are the same warehouse
+    {"scrap": "wip_store"},                         # scrap equals WIP
+    {"scrap": "fg_store"},                          # scrap equals finished goods
+    {"workInProgress": "hq"},                       # a branch, not a warehouse
+    {"scrap": "no_such_store"},                     # does not resolve
+])
+def test_manufacturing_warehouses(update):
+    bp = example()
+    _wh(bp).update(update)
+    assert "BP-MOD-004" in codes(bp)
+
+
+def test_distinct_scrap_warehouse_passes():
+    bp = example()
+    _add_store(bp, "scrap_store")
+    _wh(bp)["scrap"] = "scrap_store"
+    assert codes(bp) == set()

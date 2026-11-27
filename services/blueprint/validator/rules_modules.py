@@ -1,5 +1,5 @@
 """Module rules (ADR-0079, contracts/blueprint-modules.md): rigid-zone fields on bound entities, view date fields,
-the timesheet invoicing component. The other module cross-reference rules are contract text for now (Q-700)."""
+the timesheet invoicing component, manufacturing warehouses. The other module cross-reference rules are contract text for now (Q-700)."""
 from __future__ import annotations
 
 import re
@@ -34,6 +34,7 @@ def rule_modules(bp: dict, ctx: ValidationContext | None, rep: Report) -> None:
     _rigid_fields(modules, ents, terms, rep)
     _view_dates(as_dict(modules.get("projects")), ents, rep)
     _invoicing(bp, as_dict(modules.get("projects")), ctx, rep)
+    _warehouses(bp, as_dict(modules.get("manufacturing")), rep)
 
 
 def _rigid_fields(modules: dict, ents: dict, terms: dict, rep: Report) -> None:
@@ -83,3 +84,20 @@ def _invoicing(bp: dict, projects: dict, ctx: ValidationContext | None, rep: Rep
         kinds = {m.get("kind") for m in as_list(ctx.registry.get(comp)) if isinstance(m, dict)}
         if kinds and kinds != {"rigid"}:
             rep.error("BP-MOD-003", path, f"invoicing component '{comp}' is not a rigid (certified) component")
+
+
+def _warehouses(bp: dict, mfg: dict, rep: Report) -> None:
+    """BP-MOD-004: WIP, finished goods and scrap are locations of kind warehouse and three different ones."""
+    wh = as_dict(mfg.get("warehouses"))
+    kinds = {l.get("id"): l.get("kind") for _, l in items(bp.get("locations"))}
+    seen: dict[str, str] = {}
+    for key in ("workInProgress", "finishedGoods", "scrap"):
+        lid = sid(wh.get(key))
+        if not lid:
+            continue
+        path = ptr("modules", "manufacturing", "warehouses", key)
+        if kinds.get(lid) != "warehouse":
+            rep.error("BP-MOD-004", path, f"'{lid}' is not a location of kind warehouse")
+        if lid in seen:
+            rep.error("BP-MOD-004", path, f"{key} uses the same warehouse '{lid}' as {seen[lid]}")
+        seen.setdefault(lid, key)

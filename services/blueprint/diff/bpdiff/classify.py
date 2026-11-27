@@ -16,6 +16,9 @@ LABEL_KEYS = {"labels", "pluralLabels", "actionLabels", "city", "note", "reason"
 ACCESS_KEYS = {"visibleToRoles", "allowedRoles", "hiddenFields", "readOnlyFields"}
 COMPLIANCE_COMPANY = [("company", "country"), ("company", "vatNumber"), ("company", "crNumber"),
                       ("company", "locale", "currency"), ("company", "locale", "fiscalYear")]
+# Module settings that move stock, ledger value or consent (ADR-0079): reviewed as compliance, the strictest
+# non-structural class. Ancestors match too, so replacing a whole module is compliance as well.
+MODULE_COMPLIANCE = [("modules", "manufacturing", "warehouses")]
 META_COSMETIC = [("meta", "revision"), ("meta", "createdAt"), ("meta", "updatedAt")]
 DESTRUCTIVE_NODES = {spath(p) for p in (
     "locations/*", "components/*", "entities/*", "entities/*/fields/*", "entities/*/fields/*/options/*",
@@ -43,7 +46,7 @@ def impact_of(kind: str, sp: SPath) -> str:
             return "access"
         return "config" if sp in ORDER_SIGNIFICANT else "cosmetic"
     head = sp[0] if sp else ""
-    if head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY):
+    if head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE):
         return "compliance"
     if head == "branding":
         return "branding"

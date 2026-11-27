@@ -81,6 +81,12 @@ def test_classification_table(name):
     ("remove", "modules/crm/roles/view", "access"),
     ("replace", "modules/crm/roles", "access"),
     ("replace", "modules/crm/pipeline/stages/*/probabilityPercent", "config"),
+    ("replace", "modules/manufacturing/warehouses/workInProgress", "compliance"),
+    ("add", "modules/manufacturing/warehouses/scrap", "compliance"),
+    ("replace", "modules/manufacturing/warehouses", "compliance"),
+    ("replace", "modules/manufacturing", "compliance"),
+    ("replace", "modules/manufacturing/roles/manage", "access"),
+    ("replace", "modules/manufacturing/materialTransfer", "config"),
 ])
 def test_impact_rules(kind, path, expected):
     assert impact_of(kind, spath(path)) == expected
@@ -150,3 +156,12 @@ def test_module_role_change_is_access():
     b["modules"]["crm"]["roles"]["manage"].append("sales_rep")
     ops = diff(a, b)["ops"]
     assert ops and {o["impact"] for o in ops} == {"access"}
+
+
+def test_manufacturing_warehouse_change_is_compliance():
+    """#397 review: a warehouse choice moves stock and, through the warehouse account, ledger value."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    b["modules"]["manufacturing"]["warehouses"]["workInProgress"] = "fg_store"
+    ops = diff(a, b)["ops"]
+    assert ops and {o["impact"] for o in ops} == {"compliance"}

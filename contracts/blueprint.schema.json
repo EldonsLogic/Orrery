@@ -62,7 +62,7 @@
   },
   "x-rigid-zone-terms": {
     "description": "Rigid zone (AGENTS.md principle 3). A module setting key, or a field id on an entity bound by a module concept, that holds one of these substrings, or a camelCase or snake_case token starting with one of these tokens, is a formula, posting, costing, tax, payroll, pricing or amount knob. Those stay engine or certified-component logic; the Blueprint never declares them. Used by contracts/tests/test_blueprint_modules.py and the validator rule BP-MOD-001.",
-    "substrings": ["formula", "expression", "posting", "valuation", "account", "ledger", "payroll"],
+    "substrings": ["formula", "expression", "posting", "valuation", "account", "ledger", "payroll", "backflush"],
     "tokens": ["cost", "tax", "rate", "price", "amount"]
   },
   "x-validator-rules": [
@@ -83,7 +83,7 @@
     "Modules (ADR-0079): a module is on for this company only when its key is present. Its component is listed in components and provides the capability <module>.module; every concept entity resolves and has an implements binding to a component providing <module>.<concept>; every module role resolves and holds read on each required concept entity (listing a role grants nothing). A report metric whose id starts with a module prefix (crm., projects., manufacturing., marketing.) needs that module on and must be in the module's metric list in contracts/blueprint-modules.md.",
     "CRM (ADR-0079): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique.",
     "Projects (ADR-0079): task status and view ids are unique; every board column lists task status ids and each status sits in exactly one column of a board; timeline and calendar fields are date or datetime fields of the view's concept entity (BP-MOD-002); visibleToRoles resolve and hold read on that entity. timesheets.invoicingComponent is listed in components and, when the registry is known, is a rigid (certified) component (BP-MOD-003).",
-    "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse; the work order, job card and subcontracting receipt transitions that move stock are stock-class (ADR-0037) and their submits keep the human floor (ADR-0027). Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint field may set them.",
+    "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse, workInProgress differs from finishedGoods and scrap differs from both (BP-MOD-004); the warehouse-to-account link is set only by the certified component, never by the Blueprint; the work order, job card and subcontracting receipt transitions that move stock are stock-class (ADR-0037) and their submits keep the human floor (ADR-0027). Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint field may set them, neither in this module object nor as a field on item, bom or any other manufacturing-bound entity (valuation_rate, rm_cost_as_per, operating_cost and the like; BP-MOD-001).",
     "Module rigid zone (ADR-0079, BP-MOD-001): no field on an entity bound by a module concept (every modules.<key>.entities value, timesheet and activity_type included) has an id matching x-rigid-zone-terms, for example billing_rate, costing_rate or amount; the bound timesheet and activity_type entities carry no money field. Rates, costs, amounts and postings are engine or certified-component fields, never mapped from the Blueprint."
   ],
   "$defs": {
@@ -362,7 +362,7 @@
           "type": "object",
           "required": ["workInProgress", "finishedGoods"],
           "additionalProperties": false,
-          "description": "Inventory touch points: location ids of kind warehouse.",
+          "description": "Inventory touch points: location ids of kind warehouse; workInProgress, finishedGoods and scrap are three different warehouses. Each warehouse's ledger account is set only by the certified component.",
           "properties": {
             "workInProgress": { "$ref": "#/$defs/id" },
             "finishedGoods": { "$ref": "#/$defs/id" },

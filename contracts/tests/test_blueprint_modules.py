@@ -139,7 +139,8 @@ def _property_names(node, seen):
 
 @pytest.mark.parametrize("key", ["rmCostBasis", "taxTemplate", "valuationRate", "wipAccount", "billing_rate",
                                  "costing_rate", "priceList", "amount", "payrollPeriod", "ratePercent",
-                                 "postingDate", "rate_formula", "ledgerHead", "operating_cost"])
+                                 "postingDate", "rate_formula", "ledgerHead", "operating_cost", "valuation_rate",
+                                 "rm_cost_as_per", "backflushFrom"])
 def test_rigid_matcher_catches(key):
     assert is_rigid_key(key)
 

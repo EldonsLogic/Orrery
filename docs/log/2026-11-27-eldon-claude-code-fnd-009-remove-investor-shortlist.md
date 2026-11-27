@@ -21,3 +21,6 @@ Unknown.
 
 ## Next step
 The founders decide whether docs/fundraising/accelerator-evaluation.md and docs/research/05-investors.md should also leave the repo.
+
+## Follow-up
+- docs/gtm/dubai-ai-agents-championship.md: the link to the removed shortlist becomes plain text (a check_docs warning).

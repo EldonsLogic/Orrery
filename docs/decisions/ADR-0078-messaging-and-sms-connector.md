@@ -26,7 +26,7 @@ Platform facts (Meta developer docs, accessed 2026-11-27):
 8. **Webhooks verified** (signature before parsing, fail closed), **idempotent** (dedup key per provider event) and **replay-protected** (seen keys and a timestamp window where the provider sends one).
 9. **Minimise personal data**: sealed numbers plus keyed hash, opaque refs in objects, no bodies in events; retention per market from the country pack, shortest placeholder until counsel sets it.
 10. **Customer go-live items, not build items**: each customer's Meta business verification, display name, template approvals per language, and SMS sender registrations (ADR-0076 decision 11). Build and tests use provider test numbers and synthetic data only.
-11. Events 0.2.0 adds `message.*`, `consent.*` and `meter.message_sent` (additive).
+11. Events 0.3.0 (following the 0.2.0 payment types of ADR-0077) adds `message.*`, `consent.*` and `meter.message_sent` (additive).
 
 ## Alternatives rejected
 - A separate model per channel: duplicates consent, audit and inbox logic three times and lets rules drift.
@@ -39,7 +39,7 @@ Platform facts (Meta developer docs, accessed 2026-11-27):
 - Easier: one inbox screen (WEB-035) and marketing contract (BPL-055) build on one set of objects; contract tests guard the rules JSON Schema can express.
 - Harder: auto-reply needs an action-policy row first; marketing waits on counsel per market; Meta adds a sub-processor and cost line.
 - Must do: DSC-024 (build, test numbers only); a SEC action-policy row for `message.*` and auto-reply; LEG-003 per-market transfer and marketing-consent answers; country packs carry the messaging retention period.
-- Open points (founders): may the tenant use its own Meta app or must it use ours (who owns the app secret)? Direct Cloud API or a BSP (OPR-015 Q3)? Do Instagram and Messenger tags (Human Agent) enter v1? Default replay window and caps (Q-156)?
+- Open points: Q-695 (own Meta app or ours), Q-696 (Cloud API or BSP, SMS provider per market), Q-697 (Messenger and Instagram tags in v1), Q-698 (replay window, auto-reply caps with Q-156, owner of the action-policy row).
 
 ## Supersedes
 none

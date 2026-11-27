@@ -1,0 +1,1 @@
+{"kind": "refund_request", "idempotency_key": "ref_01J9B1", "payment_id": "pay_01J9A8", "action": "refund", "links": [{"entity": "credit_note", "id": "CN-00007"}], "reason_code": "customer_request", "approval_id": "ap_912"}

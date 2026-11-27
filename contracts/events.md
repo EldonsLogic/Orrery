@@ -1,8 +1,10 @@
 # Event stream
 
-Version: 0.2.0
+Version: 0.3.0
 Status: draft
 Owner: eldon
+
+Changelog: 0.2.0 adds the proposed `payment.*` types (ADR-0077, PR #393). 0.3.0 adds the messaging types `message.*`, `consent.*` and `meter.message_sent` (ADR-0078, DSC-022); additive, follows 0.2.0.
 
 Contract 4. What happened in a tenant, in a form that agents, the audit trail and metering can all consume. Events are facts, append-only, ordered per tenant. Business records live in the engine; events describe changes to them and everything the platform did.
 
@@ -68,7 +70,7 @@ Naming `<domain>.<past_tense_verb>`.
 ### Agent events
 `agent.run_started`, `agent.tool_proposed`, `agent.run_completed`, `agent.run_failed`, `agent.budget_exceeded`, `agent.output_flagged` (injection or policy filter hit), `chat.turn_completed` (data: mode discover/ask/act/change, latency, token counts, no content), `memory.written`, `memory.expired`, `eval.regression_detected` (platform-level, not tenant).
 
-### Messaging events (0.2.0, additive; [connector-messaging](connector-messaging.md), ADR-0078)
+### Messaging events (0.3.0, additive, follows the 0.2.0 payment types; [connector-messaging](connector-messaging.md), ADR-0078)
 No message body, phone number or handle in any of them: `contentHash` and opaque refs only. `data_class: personal`.
 | Type | Data |
 |---|---|
@@ -89,6 +91,17 @@ Cheap, high-volume, aggregated by Part 5 into usage records.
 | `meter.connector_run` | connector id, rows, bytes, tier |
 | `meter.simulation_run` | records replayed, duration |
 | `meter.message_sent` | channel, template category or `session`, country, provider, cost_micro_usd ([connector-messaging](connector-messaging.md)) |
+
+### Payment events (proposed, [ADR-0077](../docs/decisions/ADR-0077-payments-connector-bring-your-own-gateway.md); additive, since 0.2.0)
+Emitted by the payments gateway service only after webhook verification and a status re-read ([connector-payments.md](connector-payments.md) sections 5 and 6). `data_class: "financial"`; `subject` is the payment record. `data`: `payment_id`, `checkout_id`, `links` (invoices or orders), `amount` (`minor` integer, ISO 4217 `currency`), `provider`, `environment` (`sandbox` or `live`), `gateway_payment_ref`; never card data, payer names or gateway free text.
+| Type | When |
+|---|---|
+| `payment.checkout_created` | A hosted checkout session or token charge was created |
+| `payment.authorised`, `payment.captured` | Verified status from the gateway |
+| `payment.failed` (data adds `failure_code`), `payment.expired` | Declined, gateway error, mismatch, or the session expired |
+| `payment.refund_requested`, `payment.refunded`, `payment.voided` | R4 refund or void path |
+| `payment.webhook_rejected` | Audit: an inbound webhook failed verification (endpoint id and error code, no body) |
+| `payment.reconciliation_mismatch` | A settlement line did not match a payment or ledger entry |
 
 ### Platform events (no tenant data)
 `component.published`, `component.deprecated`, `component.request_created`, `component.request_reviewed`, `engine.upgrade_canary_started`, `engine.upgrade_promoted`, `engine.upgrade_rolled_back`. These carry `tenant_id: "platform"`.

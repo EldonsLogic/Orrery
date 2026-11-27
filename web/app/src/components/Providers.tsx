@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { NextIntlClientProvider } from 'next-intl';
 import { RouteTitle } from './RouteTitle';
+import { PENDING_TIMEOUT_MS, releaseLocalePending } from '../lib/firstPaint';
 import { defaultLocale, directionOf, isLocale, messages, type Direction, type Locale } from '../i18n';
 
 const STORAGE_KEY = 'platform.locale.v1'; // the user's language setting (fixture until settings exist)
@@ -19,6 +20,7 @@ export function useSettings(): Settings {
 export function Providers({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(defaultLocale);
   const [override, setOverride] = useState<Direction | null>(null);
+  const [restored, setRestored] = useState(false); // the saved locale has been read and applied
   const direction = override ?? directionOf(locale);
 
   useEffect(() => {
@@ -28,7 +30,15 @@ export function Providers({ children }: { children: ReactNode }) {
     } catch {
       /* storage unavailable: keep default */
     }
+    setRestored(true);
+    // Safety net: the first-paint script hides the body while the saved locale differs; never leave it hidden.
+    const t = setTimeout(() => releaseLocalePending(document.documentElement), PENDING_TIMEOUT_MS);
+    return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (restored) releaseLocalePending(document.documentElement);
+  }, [restored, locale]);
 
   useEffect(() => {
     document.documentElement.lang = locale;

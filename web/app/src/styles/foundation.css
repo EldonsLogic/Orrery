@@ -129,3 +129,8 @@ body {
   font-weight: var(--text-body-weight);
   font-synthesis: none;
 }
+
+/* WEB-029: the saved language differs from the prerendered Arabic text; hidden until the provider switches (see lib/firstPaint.ts). */
+html.locale-pending body {
+  visibility: hidden;
+}

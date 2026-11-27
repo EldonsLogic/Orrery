@@ -26,6 +26,9 @@ Both Redis services require a password, and only engine services can reach them.
 - **Checks.** `verify_dev_bench.py` proves each Redis answers an authenticated PING and refuses an unauthenticated one with `NOAUTH` (an exec error, DNS miss or empty reply fails the check). `smoke_headless_engine.py` proves a container on `engine_internal` cannot reach `redis-cache:6379` or `redis-queue:6379` (DNS miss or connection refused), while the same probe reaches the engine and the engine answers an authenticated PING. `tests/test_inf_015_redis_auth.py` and `tests/test_inf_015_redis_hardening.py` check every Compose stack, the start scripts and the runners offline. To use `redis-cli` by hand: `docker compose ... exec redis-cache sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping'`.
 - **Residual risk (INF-005).** Code running inside the engine or a worker holds the password and can still read every tenant's keys (key-prefix isolation only). The password sits in the Redis and engine containers' environment, readable through `docker inspect` and `/proc/*/environ` by anyone with Docker or container access. Both Redis services use one shared password on the built-in `default` user, which keeps full admin rights. Production Redis is INF-005's scope: a file-mounted secret and per-service ACL users without `@admin` and `@dangerous`.
 
+### Index sync on provisioned sites (BPL-046)
+Every site the runner provisions gets the index sync of `scripts/provision_tenant_site.py` (BPL-046): Frappe's own `updatedb` on every table, sending only the `ADD INDEX` statements (the `creation` index of `sort_field = creation` tables, missing `search_index` indexes) and failing on any other DDL, so the engine's first schema sync of a table adds nothing the DDL gate has not approved.
+
 ---
 
 ## 2. Pinned Version Set

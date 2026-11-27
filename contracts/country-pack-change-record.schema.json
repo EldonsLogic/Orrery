@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:country-pack-change-record:0.1.0",
+  "version": "0.1.0",
+  "title": "Country pack change record",
+  "description": "Draft. The decoded body of one withdrawal, floor raise or follow-up closure of a country's pack index. CMP-038 writes it and lists it in the next index's changeRecords by id, kind and sha256 (the digest of its RFC 8785 canonical JSON); CMP-039 (the loader) must read it and check it. Per market only: a change names a country and a version or publish id, never a tenant. Unknown keys are refused. Rules JSON Schema cannot express are in x-validator-rules.",
+  "x-validator-rules": [
+    "the two signOffs carry different signerId values and different mfa.assertionRef values, and each mfa.boundTo equals its own entry's signerId and statementDigest (signoff_same_person, signoff_mfa)",
+    "requestedBy equals one of the two signOffs' signerId",
+    "every signOff statementDigest equals this record's statementDigest, which is the digest of the RFC 8785 canonical JSON of {op: pack_change, countryCode, kind, target, reasonRef, baseIndexDigest} (signoff_statement_mismatch)",
+    "0 <= signedAt - mfa.authTime <= 300 seconds; every signedAt <= recordedAt; the accountant market equals countryCode; the signerSignature challenge is the domain-separated one of the publish record (country-pack-store.md assumption 4); roster and signerSignature checks are the publish record's (country-pack-record.schema.json)",
+    "baseIndexDigest is the digest of the exact payload bytes of the index with indexSeq equal to baseIndexSeq, and the index that lists this record has indexSeq baseIndexSeq plus 1 and that digest as predecessorDigest",
+    "withdrawal: target.version is published in the base index and is not its only published version; the version moves to withdrawn with reasonRef and any open follow-up for it is dropped. floor_raise: target.version is published and above the base floor. follow_up_closure: target.publishId is in the base followUpOpen"
+  ],
+  "type": "object",
+  "required": [
+    "v", "typ", "id", "kind", "countryCode", "target", "reasonRef", "baseIndexSeq", "baseIndexDigest",
+    "statementDigest", "requestedBy", "recordedAt", "signOffs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "const": 1 },
+    "typ": { "const": "country_pack_change_record" },
+    "id": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref" },
+    "kind": { "enum": ["withdrawal", "floor_raise", "follow_up_closure"] },
+    "countryCode": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/countryCode" },
+    "target": {
+      "oneOf": [
+        { "type": "object", "required": ["version"], "additionalProperties": false,
+          "properties": { "version": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/semver" } } },
+        { "type": "object", "required": ["publishId"], "additionalProperties": false,
+          "properties": { "publishId": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/publishId" } } }
+      ]
+    },
+    "reasonRef": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref" },
+    "baseIndexSeq": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/posInt" },
+    "baseIndexDigest": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" },
+    "statementDigest": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest" },
+    "requestedBy": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/staffSubject" },
+    "recordedAt": { "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/utcTime" },
+    "signOffs": {
+      "description": "Exactly two sign-offs, one market_accountant and one founder, in the publish record's format. Distinct people is an x-validator-rule.",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "oneOf": [
+          { "$ref": "urn:platform:contract:country-pack-record:0.1.0#/$defs/accountantSignOff" },
+          { "$ref": "urn:platform:contract:country-pack-record:0.1.0#/$defs/founderSignOff" }
+        ]
+      },
+      "allOf": [
+        { "contains": { "properties": { "role": { "const": "market_accountant" } } }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "role": { "const": "founder" } } }, "minContains": 1, "maxContains": 1 }
+      ]
+    }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "follow_up_closure" } } },
+      "then": { "properties": { "target": { "required": ["publishId"] } } },
+      "else": { "properties": { "target": { "required": ["version"] } } } }
+  ]
+}

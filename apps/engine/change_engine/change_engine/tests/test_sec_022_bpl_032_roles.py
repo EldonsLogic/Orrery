@@ -254,7 +254,8 @@ class TestWorkflowEngineStateCollisionGate(unittest.TestCase):
         db = self._db({"approved": "Approved"})
         out = execute_workflow_deployment(db, "dep2", TENANT, "Sales Order", self._wf("Draft", "Approved"), user_roles=["System Manager"])
         self.assertNotEqual(out.get("disposition"), "WORKFLOW_STATE_NAME_COLLISION")
-        db.acquire_advisory_lock.assert_called_once()
+        # CE-SEC-011: the idempotency lock, then the target lock.
+        self.assertEqual(db.acquire_advisory_lock.call_count, 2)
 
 
 class TestBpl032RoleGrants(_Base):

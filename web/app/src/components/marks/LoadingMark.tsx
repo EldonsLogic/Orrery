@@ -5,7 +5,7 @@ import { Mark } from '../../ui';
 import styles from './Marks.module.css';
 
 /**
- * "Seshna is working" (PROPOSED, docs/brand/09-applications.md): the fill cycles outline, upper half, both halves
+ * "Seshna is working" (approved 2026-11-26, docs/brand/09-applications.md): the fill cycles outline, upper half, both halves
  * on a calm loop. Only fill opacity changes; the halves never rotate, scale or move. Under prefers-reduced-motion
  * it shows the static drafted state. The text label is always visible.
  */

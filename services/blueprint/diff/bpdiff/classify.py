@@ -19,7 +19,10 @@ COMPLIANCE_COMPANY = [("company", "country"), ("company", "vatNumber"), ("compan
 META_COSMETIC = [("meta", "revision"), ("meta", "createdAt"), ("meta", "updatedAt")]
 DESTRUCTIVE_NODES = {spath(p) for p in (
     "locations/*", "components/*", "entities/*", "entities/*/fields/*", "entities/*/fields/*/options/*",
-    "entities/*/relations/*", "entities/*/components/*", "workflows/*", "workflows/*/states/*")}
+    "entities/*/relations/*", "entities/*/components/*", "workflows/*", "workflows/*/states/*",
+    "modules/crm/pipeline/stages/*", "modules/crm/leadSources/*", "modules/crm/lostReasons/*")}
+# ADR-0079 (#395 review M2): repointing what a module record is or which stage outcome it has orphans records.
+DESTRUCTIVE_CHANGES = {spath("modules/crm/pipeline/stages/*/kind")}
 DATA_FIELD_PROPS = {"type", "required", "unique", "precision", "min", "max", "maxLength", "target", "computed"}
 SECTIONS = {"meta", "company", "compliance", "i18n", "branding"}
 STEPS = spath("approvals/*/steps")
@@ -57,7 +60,7 @@ def impact_of(kind: str, sp: SPath) -> str:
             or (head == "workflows" and len(sp) >= 4 and sp[2] == "transitions"
                 and (len(sp) == 4 or sp[4] == "approval"))):
         return "access"
-    if kind == "remove" and sp in DESTRUCTIVE_NODES:
+    if (kind == "remove" and sp in DESTRUCTIVE_NODES) or (kind != "add" and _module_rebind(sp)):
         return "destructive"
     if _data_shape(sp):
         return "data_shape"
@@ -67,6 +70,15 @@ def impact_of(kind: str, sp: SPath) -> str:
 def _module_roles(sp: SPath) -> bool:
     """modules/<key>/roles, or a whole module or the modules object (which carry role lists)."""
     return sp[:1] == ("modules",) and (len(sp) <= 2 or sp[2] == "roles")
+
+
+def _module_rebind(sp: SPath) -> bool:
+    """A module's component swapped, a concept binding (or the whole binding map) rebound or removed, or a CRM stage's
+    kind changed. Adding a binding is not destructive."""
+    if sp[:1] != ("modules",) or len(sp) < 3:
+        return False
+    return ((len(sp) == 3 and sp[2] in ("component", "entities"))
+            or (len(sp) == 4 and sp[2] == "entities") or sp in DESTRUCTIVE_CHANGES)
 
 
 def _data_shape(sp: SPath) -> bool:

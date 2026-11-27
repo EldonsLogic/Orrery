@@ -158,3 +158,52 @@ def test_module_roles_description_grants_nothing():
     text = SCHEMA["$defs"]["moduleRoles"]["description"]
     assert "grants nothing" in text
     assert not re.search(r"\b(sees|see|reassign\w*|can|may|edit\w*|read\w*)\b", text, re.I), text
+
+
+# Shared concepts (#395 review M1): a concept another part also owns may be implemented by that part's component.
+FIXTURE_REGISTRY = C.parent / "services" / "blueprint" / "fixtures" / "registry"
+
+
+def _capabilities(component_id):
+    f = FIXTURE_REGISTRY / f"{component_id}.json"
+    if not f.exists():
+        return set()
+    return {p["capability"] for p in json.loads(f.read_text(encoding="utf-8"))["provides"]}
+
+
+def test_shared_concepts_are_declared_and_documented():
+    shared = SCHEMA["x-module-shared-concepts"]
+    assert {"crm.customer", "crm.campaign"} <= set(shared)
+    for concept, caps in shared.items():
+        module, name = concept.split(".")
+        assert module in SCHEMA["$defs"]["modules"]["properties"], concept
+        assert name in SCHEMA["$defs"][f"{module}Module"]["properties"]["entities"]["properties"], concept
+        assert caps and all("." in c and not c.startswith(module + ".") for c in caps), concept
+        for c in caps:
+            assert f"`{c}`" in DOC, (concept, c)
+
+
+def test_example_concept_bindings_follow_the_shared_concept_rule():
+    """Every concept entity implements the module component, or (shared concept) a component providing a listed
+    capability, never both. The fixture manifest for core.customer provides core.customer.entities, not crm.customer."""
+    bp = load("blueprint-modules-minimal.json")
+    shared = SCHEMA["x-module-shared-concepts"]
+    ents = {e["id"]: e for e in bp["entities"]}
+    for key, mod in bp["modules"].items():
+        for concept, eid in mod["entities"].items():
+            impl = {b["component"] for b in ents[eid].get("components", []) if b["mode"] == "implements"}
+            via_module = mod["component"] in impl
+            via_shared = any(set(shared.get(f"{key}.{concept}", [])) & _capabilities(c) for c in impl)
+            assert via_module or via_shared, (key, concept, eid, impl)
+            assert not (via_module and via_shared), ("one implementer per concept", concept)
+    customer = ents[bp["modules"]["crm"]["entities"]["customer"]]
+    assert [b["component"] for b in customer["components"]] == ["core.customer"]
+
+
+def test_one_concept_binds_one_entity():
+    """Intended (#395 review Low): a concept names exactly one Blueprint entity; two concepts never name the same
+    entity (that half is a validator cross-rule, BPL-060)."""
+    for module in SCHEMA["$defs"]["modules"]["properties"]:
+        for concept, ref in SCHEMA["$defs"][f"{module}Module"]["properties"]["entities"]["properties"].items():
+            assert ref == {"$ref": "#/$defs/id"}, (module, concept)
+    assert any("never name the same entity" in r for r in SCHEMA["x-validator-rules"])

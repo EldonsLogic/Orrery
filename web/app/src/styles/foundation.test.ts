@@ -65,11 +65,39 @@ describe('shell chrome', () => {
   it('derives the nav offset from the same height as the top bar', () => {
     expect(shell).not.toContain('--topbar-height');
     expect(block('.topBar')).toContain('min-block-size: var(--shell-bar-height)');
-    expect(block('.navInner')).toContain('var(--shell-bar-height)');
+    expect(block('.navInner')).toContain('var(--shell-bar-offset)'); // the bar height plus any extra safe area
+    expect(block('.root')).toMatch(/--shell-bar-offset: calc\(var\(--shell-bar-height\)/);
   });
-  it('keeps both languages reachable on phones and a 44px touch target', () => {
+  const media = (q: string) => {
+    const at = shell.indexOf(`@media ${q} {`);
+    return at < 0 ? '' : shell.slice(at, shell.indexOf('\n}\n', at));
+  };
+  it('gives the language buttons a full 44px touch target, not 44 minus the borders', () => {
+    expect(shell).not.toContain('calc(var(--touch-target) - var(--border-width) * 2)');
+    expect(media('(pointer: coarse)')).toMatch(/\.langButton \{[^}]*min-block-size: var\(--touch-target\)/);
+  });
+  it('on phones shows one language button that flips to the other language; the current one stays in the tree', () => {
+    const phone = media('(max-width: 48rem)');
     expect(shell).not.toMatch(/langButton\[aria-pressed='true'\]\s*\{\s*display:\s*none/);
-    expect(shell).toContain('min-block-size: calc(var(--touch-target) - var(--border-width) * 2)');
+    expect(phone).toMatch(/\.langButton\[aria-pressed='true'\] \{[^}]*position: absolute[^}]*clip-path: inset\(50%\)/);
+    expect(phone).toMatch(/\.lang \{[^}]*border: 0/);
+    expect(phone).toMatch(/\.langButton \{[^}]*border-color: var\(--glass-edge\)/);
+  });
+  it('keeps the company name visible on phones: it never shrinks below a minimum width', () => {
+    expect(block('.switchName')).toMatch(/min-inline-size: var\(--space-/);
+    expect(media('(max-width: 48rem)')).toMatch(/\.topBar \{[^}]*gap: var\(--space-1\)/);
+    expect(media('(max-width: 48rem)')).toMatch(/\.langButton \{[^}]*min-inline-size: var\(--touch-target\)[^}]*padding-inline: var\(--space-1\)/);
+    // 320px phones: the decorative chevron gives way so the name keeps its minimum without overflowing the button.
+    expect(media('(max-width: 22.5rem)')).toMatch(/\.chevron \{\s*display: none/);
+  });
+  it('offsets the sticky navigation by the safe area as the top bar does', () => {
+    expect(block('.root')).toContain('--shell-bar-offset: calc(var(--shell-bar-height) + max(0px, var(--safe-block-start) - var(--space-1)))');
+    expect(block('.navInner')).toContain('inset-block-start: var(--shell-bar-offset)');
+    expect(block('.navInner')).toContain('block-size: calc(100dvh - var(--shell-bar-offset))');
+  });
+  it('describes glass as chrome only in the file header (popovers and panels are solid)', () => {
+    const head = readFileSync(join(__dirname, '../components/shell/Shell.module.css'), 'utf8').split('\n')[0]!;
+    expect(head).toMatch(/popovers and panels are solid/);
   });
   it('splits phone and tablet chrome at one point (no overlap at 768)', () => {
     expect(shell).not.toContain('48.0625rem');

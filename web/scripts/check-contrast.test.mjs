@@ -46,3 +46,7 @@ test('the CLI exits 0 and says ok when every pair passes', () => {
 test('every var(--color-*) pair in the user bubble label is on the contrast list', () => {
   assert.ok(PAIRS_ALL.some((p) => p.id === 'user-bubble-meta'));
 });
+
+test('the current nav icon and its start-edge indicator (primary on the 14% tint over glass) are on the contrast list', () => {
+  for (const bn of ['white', 'black']) assert.ok(PAIRS_ALL.some((p) => p.id === `glass-current-nav-icon/${bn}` && p.min === 3), bn);
+});

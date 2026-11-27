@@ -3,7 +3,7 @@
 Status: draft
 Owner: eldon
 
-MVP = trading and distribution firms, 10-100 staff ([../strategy/02-niche-and-launch-country.md](../strategy/02-niche-and-launch-country.md)). Modules are delivered as engine core plus certified components; none are written per client. Phase 1 adds ten modules on top of the core ([ADR-0075](../decisions/ADR-0075-phase-1-module-scope.md), Proposed); each is a Blueprint component behind our own UI, with the engine invisible (ADR-0016).
+MVP = trading and distribution firms, 10-100 staff ([../strategy/02-niche-and-launch-country.md](../strategy/02-niche-and-launch-country.md)). Modules are delivered as engine core plus certified components; none are written per client. Phase 1 adds ten modules on top of the core ([ADR-0076](../decisions/ADR-0076-phase-1-module-scope.md), Proposed); each is a Blueprint component behind our own UI, with the engine invisible (ADR-0016).
 
 Status key for the phase-1 additions: **contracts now** (Blueprint or connector contract and ADR may start; builds wait for G2); **build after GPL** (no add-on engine app is pinned or installed until ADR-0074, PR #388, is answered); **deferred** (no contract or build yet); **rigid zone** (deterministic code, Tier 3, accountant sign-off before real use, never AI-written).
 
@@ -19,10 +19,10 @@ Status key for the phase-1 additions: **contracts now** (Blueprint or connector 
 | Reports library and basic builder | MVP | Operate | Numbers from code via semantic layer |
 | Tenant branding, light/dark themes | MVP | Platform | [theming-and-tenant-branding.md](theming-and-tenant-branding.md) |
 | Document intake (Arabic OCR) for supplier invoices and receipts | MVP (basic), later (depth) | Discovery/Operate | Content is untrusted input |
-| CRM (leads, opportunities, contacts, pipeline) | Phase 1: contracts now | ERPNext core CRM doctypes | Never the AGPL CRM, Helpdesk, Insights or Gameplan apps. BPL-051, BPL-055, WEB-031 |
-| Projects and boards (board, timeline and calendar views) | Phase 1: contracts now | ERPNext core Task and Timesheet | Job costing follows; contracting is the second niche candidate. BPL-052, BPL-056, WEB-032 |
-| Manufacturing (BOM, work orders, batches) | Phase 1: contracts now | ERPNext core | BPL-053, BPL-057, WEB-033 |
-| Marketing (campaigns, segments, consent) | Phase 1: contracts now | ERPNext core plus messaging connector | Sends need opt-in. BPL-054, BPL-058, WEB-034 |
+| CRM (leads, opportunities, contacts, pipeline) | Phase 1: contracts now | ERPNext core CRM doctypes | Never the AGPL CRM, Helpdesk, Insights or Gameplan apps. BPL-052, BPL-056, WEB-031 |
+| Projects and boards (board, timeline and calendar views) | Phase 1: contracts now | ERPNext core Task and Timesheet | Job costing follows; contracting is the second niche candidate. BPL-053, BPL-057, WEB-032 |
+| Manufacturing (BOM, work orders, batches) | Phase 1: contracts now | ERPNext core | BPL-054, BPL-058, WEB-033 |
+| Marketing (campaigns, segments, consent) | Phase 1: contracts now | ERPNext core plus messaging connector | Sends need opt-in. BPL-055, BPL-059, WEB-034 |
 | Omnichannel inbox (WhatsApp, Instagram, Facebook) | Phase 1: contracts now | Messaging connector (Meta's business platform), SMS | Inbound text is untrusted; Meta verification and templates are the customer's go-live items. Separate from the chat channel [opr-015-messaging-channel.md](opr-015-messaging-channel.md). DSC-022, DSC-024, WEB-035 |
 | Payments (bring your own gateway) | Phase 1: contracts now | Payments connector | Hosted checkout or tokens, no card data, no Seshna merchant account; the gateway account is the customer's go-live item. DSC-021, DSC-023 |
 | HR basics (employee records, leave) | Phase 1: build after GPL | HRMS functions | HRMS is in the pinned image but unused for this until ADR-0074; Arabic coverage of HRMS is low (UNVERIFIED, [../strategy/04-architecture-and-seed.md](../strategy/04-architecture-and-seed.md)). ERP-043 |
@@ -38,7 +38,7 @@ Status key for the phase-1 additions: **contracts now** (Blueprint or connector 
 ## Explicit not-doing list (v1)
 - No custom ledger, tax engine or payroll maths written or altered by AI.
 - No per-client code or forks; a need no component covers becomes a candidate component.
-- No clinics or F&B as customers (rejected for now). POS-first retail stays deferred until the POS ZATCA review (CMP-050); manufacturing and e-commerce moved into phase 1 scope by ADR-0075.
+- No clinics or F&B as customers (rejected for now). POS-first retail stays deferred until the POS ZATCA review (CMP-050); manufacturing and e-commerce moved into phase 1 scope by ADR-0076.
 - No on-premise or hybrid delivery; no VPS per client.
 - No tax or zakat filing on the customer's behalf; we provide data and worksheets only.
 - No native mobile apps; responsive web only.
@@ -46,7 +46,7 @@ Status key for the phase-1 additions: **contracts now** (Blueprint or connector 
 - No selling model tokens; customers see AI actions.
 - No custom domains per tenant in v1.
 - No third-party marketplace for components in v1.
-- No AGPL engine apps (CRM, Helpdesk, Insights, Gameplan and others), ever (ADR-0075).
+- No AGPL engine apps (CRM, Helpdesk, Insights, Gameplan and others), ever (ADR-0076).
 - No card data and no Seshna merchant account; payments go through the customer's own gateway.
 
 ## Country packs and per-company calendars (added)

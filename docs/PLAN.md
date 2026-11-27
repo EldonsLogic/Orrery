@@ -462,27 +462,27 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | ERP-038 | Pinned-bench run of the ERP-010 HRMS skeleton (Q-475 to Q-477); the skeleton stays sandbox-only until it passes | Runtime | G2 | ERP-010 | partner | todo |
 | ERP-039 | Resolve Q-311 so provisioning and the ERP-009 event emitter accept the same tenant ids; lands before the app is installed on any tenant | Runtime | G1 | ERP-009 | partner | todo |
 | INF-016 | Enable the `deploy-staging` job from INF-003 (now `if: false`): a protected `staging` environment, its secrets outside the repo, and a deploy to a synthetic-data host | Infrastructure | G1 | INF-003,INF-004 | partner | todo |
-| GOV-078 | Phase-1 module scope PR (ADR-0075): ten modules as Blueprint components, contracts and ADRs only; module map, PRD not-doing list and the follow-up rows below | Governance | G0 | - | eldon | doing |
-| DSC-021 | Payments connector contract and ADR (ADR-0075 item 10): bring your own gateway, hosted checkout or tokens only, no card data, no Seshna merchant account; the customer's gateway account is a go-live item; Tier 3 (money), security review by a different model | Discovery | G1 | GOV-078 | eldon | todo |
+| GOV-078 | Phase-1 module scope PR (ADR-0076): ten modules as Blueprint components, contracts and ADRs only; module map, PRD not-doing list and the follow-up rows below | Governance | G0 | - | eldon | doing |
+| DSC-021 | Payments connector contract and ADR (ADR-0076 item 10): bring your own gateway, hosted checkout or tokens only, no card data, no Seshna merchant account; the customer's gateway account is a go-live item; Tier 3 (money), security review by a different model | Discovery | G1 | GOV-078 | eldon | todo |
 | DSC-022 | Messaging and SMS connector contract and ADR: WhatsApp, Instagram and Facebook through Meta's business platform, plus SMS; inbound content untrusted, opt-in and PDPL processor terms, Meta verification, templates and sender approvals as customer go-live items; reuses the OPR-015 channel facts, distinct from the chat channel | Discovery | G1 | GOV-078 | eldon | todo |
-| BPL-051 | Blueprint contract additions for CRM on the engine's core CRM doctypes (lead, opportunity, customer, contact, pipeline stages); no AGPL apps (ADR-0075 item 5); ADR for the contract change | Blueprint | G1 | GOV-078 | eldon | todo |
-| BPL-052 | Blueprint contract additions for projects and boards: board, timeline and calendar views over the engine's Task and Timesheet, view config per role; ADR for the contract change | Blueprint | G1 | GOV-078 | eldon | todo |
-| BPL-053 | Blueprint contract additions for manufacturing on engine core (BOM, work order, routing, batches); ADR for the contract change | Blueprint | G1 | GOV-078 | eldon | todo |
-| BPL-054 | Blueprint contract additions for marketing (campaigns, segments, consent and opt-in, send through the DSC-022 connector); ADR for the contract change | Blueprint | G1 | GOV-078,DSC-022 | eldon | todo |
-| BPL-055 | CRM component under `components/` from the BPL-051 contract, behind our UI, engine invisible | Blueprint | G2 | BPL-051 | partner | todo |
-| BPL-056 | Projects and boards component under `components/` from the BPL-052 contract | Blueprint | G2 | BPL-052 | partner | todo |
-| BPL-057 | Manufacturing component under `components/` from the BPL-053 contract | Blueprint | G2 | BPL-053 | partner | todo |
-| BPL-058 | Marketing component under `components/` from the BPL-054 contract | Blueprint | G2 | BPL-054 | partner | todo |
+| BPL-052 | Blueprint contract additions for CRM on the engine's core CRM doctypes (lead, opportunity, customer, contact, pipeline stages); no AGPL apps (ADR-0076 item 5); ADR for the contract change | Blueprint | G1 | GOV-078 | eldon | todo |
+| BPL-053 | Blueprint contract additions for projects and boards: board, timeline and calendar views over the engine's Task and Timesheet, view config per role; ADR for the contract change | Blueprint | G1 | GOV-078 | eldon | todo |
+| BPL-054 | Blueprint contract additions for manufacturing on engine core (BOM, work order, routing, batches); ADR for the contract change | Blueprint | G1 | GOV-078 | eldon | todo |
+| BPL-055 | Blueprint contract additions for marketing (campaigns, segments, consent and opt-in, send through the DSC-022 connector); ADR for the contract change | Blueprint | G1 | GOV-078,DSC-022 | eldon | todo |
+| BPL-056 | CRM component under `components/` from the BPL-052 contract, behind our UI, engine invisible | Blueprint | G2 | BPL-052 | partner | todo |
+| BPL-057 | Projects and boards component under `components/` from the BPL-053 contract | Blueprint | G2 | BPL-053 | partner | todo |
+| BPL-058 | Manufacturing component under `components/` from the BPL-054 contract | Blueprint | G2 | BPL-054 | partner | todo |
+| BPL-059 | Marketing component under `components/` from the BPL-055 contract | Blueprint | G2 | BPL-055 | partner | todo |
 | DSC-023 | Payments connector build from the DSC-021 contract (sandbox gateway, synthetic data only) | Discovery | G2 | DSC-021 | eldon | todo |
 | DSC-024 | Messaging and SMS connector build from the DSC-022 contract (test numbers and synthetic data only) | Discovery | G2 | DSC-022 | eldon | todo |
-| WEB-031 | CRM screens (pipeline, lead and opportunity records) on fixtures from the BPL-051 contract; Tier 1 if screen-only | Web | G2 | BPL-051 | eldon | todo |
-| WEB-032 | Projects and boards screens: board, timeline and calendar views on fixtures from the BPL-052 contract | Web | G2 | BPL-052 | eldon | todo |
-| WEB-033 | Manufacturing screens (BOM, work orders) on fixtures from the BPL-053 contract | Web | G2 | BPL-053 | eldon | todo |
-| WEB-034 | Marketing screens (campaigns, segments, consent) on fixtures from the BPL-054 contract | Web | G2 | BPL-054 | eldon | todo |
+| WEB-031 | CRM screens (pipeline, lead and opportunity records) on fixtures from the BPL-052 contract; Tier 1 if screen-only | Web | G2 | BPL-052 | eldon | todo |
+| WEB-032 | Projects and boards screens: board, timeline and calendar views on fixtures from the BPL-053 contract | Web | G2 | BPL-053 | eldon | todo |
+| WEB-033 | Manufacturing screens (BOM, work orders) on fixtures from the BPL-054 contract | Web | G2 | BPL-054 | eldon | todo |
+| WEB-034 | Marketing screens (campaigns, segments, consent) on fixtures from the BPL-055 contract | Web | G2 | BPL-055 | eldon | todo |
 | WEB-035 | Omnichannel inbox screen (WhatsApp, Instagram, Facebook threads) on fixtures from the DSC-022 contract | Web | G2 | DSC-022 | eldon | todo |
-| ERP-042 | E-commerce on the engine's Webshop app: pin and install only after ADR-0074 is accepted (ADR-0075 item 4) | Runtime | G2 | LEG-006 | partner | blocked |
+| ERP-042 | E-commerce on the engine's Webshop app: pin and install only after ADR-0074 is accepted (ADR-0076 item 4) | Runtime | G2 | LEG-006 | partner | blocked |
 | ERP-043 | HR basics (employee records, leave) on HRMS functions behind our UI; HRMS is in the pinned image but unused for this until ADR-0074 is accepted | Runtime | G2 | LEG-006,ERP-038 | partner | blocked |
 | CMP-048 | Payroll module (rigid zone, Tier 3, accountant sign-off before real use) on HRMS functions and country packs; blocked until ADR-0074 is accepted; CMP-015 is its WPS file slice | Compliance | G3 | LEG-006,CMP-015 | partner | blocked |
-| CMP-049 | Zakat module (rigid zone, Tier 3, accountant sign-off): Seshna prepares the base and worksheet, the company files; held until the non-rigid modules ship (ADR-0075 item 8); CMP-013 is its report slice | Compliance | G3 | CMP-013 | partner | blocked |
+| CMP-049 | Zakat module (rigid zone, Tier 3, accountant sign-off): Seshna prepares the base and worksheet, the company files; held until the non-rigid modules ship (ADR-0076 item 8); CMP-013 is its report slice | Compliance | G3 | CMP-013 | partner | blocked |
 | CMP-050 | Review the Saudi POS app's ZATCA claim (licence, simplified-invoice Phase 2 evidence, maintainer) before point of sale enters any contract or build | Compliance | G2 | GOV-078 | eldon | todo |
 | CMP-051 | Point of sale module (receipts rigid zone, Tier 3): deferred entirely until CMP-050 passes and ADR-0074 is answered | Compliance | G3 | CMP-050,LEG-006 | partner | blocked |

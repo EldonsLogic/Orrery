@@ -80,19 +80,30 @@ def test_classification_table(name):
     ("replace", "modules/crm/roles/work", "access"),
     ("remove", "modules/crm/roles/view", "access"),
     ("replace", "modules/crm/roles", "access"),
+    ("replace", "modules/crm", "access"),
+    ("remove", "modules/crm", "destructive"),
+    ("remove", "modules/projects", "destructive"),
+    ("remove", "modules", "destructive"),
     ("replace", "modules/crm/pipeline/stages/*/probabilityPercent", "config"),
     ("replace", "modules/manufacturing/warehouses/workInProgress", "compliance"),
     ("add", "modules/manufacturing/warehouses/scrap", "compliance"),
     ("replace", "modules/manufacturing/warehouses", "compliance"),
     ("replace", "modules/manufacturing", "compliance"),
+    ("remove", "modules/manufacturing", "destructive"),
     ("replace", "modules/manufacturing/roles/manage", "access"),
     ("replace", "modules/manufacturing/materialTransfer", "config"),
     ("replace", "modules/marketing/consent/doubleOptIn", "compliance"),
     ("replace", "modules/marketing/consent", "compliance"),
     ("replace", "modules/marketing/channels/messaging/integration", "compliance"),
     ("add", "modules/marketing/channels/email", "compliance"),
-    ("replace", "modules/marketing/segments/*/audience", "config"),
-    ("replace", "modules/marketing/segments/*/visibleToRoles", "access"),
+    ("replace", "modules/marketing/segments/*/audience", "compliance"),
+    ("replace", "modules/marketing/segments/*/visibleToRoles", "compliance"),
+    ("add", "modules/marketing/segments/*", "compliance"),
+    ("remove", "modules/marketing/segments/*", "compliance"),
+    ("add", "modules/marketing/segments/*/filters/*", "compliance"),
+    ("replace", "modules/marketing/segments/*/filters/*/value", "compliance"),
+    ("replace", "modules/marketing/segments/*/labels/en", "cosmetic"),
+    ("remove", "modules/marketing", "destructive"),
 ])
 def test_impact_rules(kind, path, expected):
     assert impact_of(kind, spath(path)) == expected
@@ -182,3 +193,27 @@ def test_manufacturing_warehouse_change_is_compliance():
     b["modules"]["manufacturing"]["warehouses"]["workInProgress"] = "fg_store"
     ops = diff(a, b)["ops"]
     assert ops and {o["impact"] for o in ops} == {"compliance"}
+
+
+def test_module_removal_is_destructive():
+    """Q-700 (#396 re-review): switching a module off is destructive, the stricter class than access."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    for key in ("projects", "manufacturing"):  # removal outranks the manufacturing compliance rule
+        b = json.loads(json.dumps(a))
+        del b["modules"][key]
+        ops = diff(a, b)["ops"]
+        assert ops and {o["impact"] for o in ops} == {"destructive"}, key
+
+
+def test_marketing_segment_audience_change_is_compliance():
+    """#398 re-review: a segment decides who is messaged, so adding one or editing its filters is compliance."""
+    a = _modules_example()
+    seg = a["modules"]["marketing"]["segments"][0]
+    for edit in (lambda m: m["segments"].append(dict(json.loads(json.dumps(seg)), id="second_segment")),
+                 lambda m: m["segments"][0]["filters"].pop(),
+                 lambda m: m["segments"].pop()):
+        b = json.loads(json.dumps(a))
+        edit(b["modules"]["marketing"])
+        ops = diff(a, b)["ops"]
+        assert ops and {o["impact"] for o in ops} == {"compliance"}, ops

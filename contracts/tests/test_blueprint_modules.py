@@ -101,11 +101,12 @@ def test_example_module_metrics_are_in_the_vocabulary():
     assert refs and set(refs) <= vocab, set(refs) - vocab
 
 
-# Rigid-zone terms (AGENTS.md principle 3): a key whose name holds one of these as a substring or as a
-# camelCase or snake_case token is a formula, posting, costing, tax, payroll or pricing knob.
-# The terms live in the schema (x-rigid-zone-terms) so the validator's bound-entity field rule uses the same list.
-RIGID_SUBSTRINGS = tuple(SCHEMA["x-rigid-zone-terms"]["substrings"])
-RIGID_TOKENS = tuple(SCHEMA["x-rigid-zone-terms"]["tokens"])
+# Module settings guard (AGENTS.md principle 3): a module settings key whose name holds one of these as a substring
+# or as a camelCase or snake_case token would be a formula, posting, costing, tax, payroll or pricing knob. This lints
+# the contract's own module setting keys only. Blueprint entity fields are checked against the engine's explicit
+# rigid-zone field list instead (engine-rigid-fields.json, validator BP-MOD-001), never by name.
+RIGID_SUBSTRINGS = ("formula", "expression", "posting", "valuation", "account", "ledger", "payroll", "backflush")
+RIGID_TOKENS = ("cost", "tax", "rate", "price", "amount")
 
 
 def _tokens(key):
@@ -181,3 +182,35 @@ def test_marketing_consent_text_matches_dsc022():
                    "never agent-creatable", "without a `contactRef` are skipped", "never create consent",
                    "empty `visibleToRoles` means nobody"):
         assert phrase in section, phrase
+
+
+RIGID = json.loads((C / "engine-rigid-fields.json").read_text(encoding="utf-8"))
+POLICY = (C.parent / "docs" / "architecture" / "engine-version-policy.md").read_text(encoding="utf-8")
+
+
+def test_rigid_field_list_is_internal_unverified_and_pinned():
+    """The list is data from the pinned engine source, internal (ADR-0016) and UNVERIFIED until a bench run."""
+    assert RIGID["status"] == "UNVERIFIED" and RIGID["visibility"] == "internal"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", RIGID["version"]) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", RIGID["source"]["accessed"])
+    for eng in RIGID["source"]["engines"]:
+        assert f"`{eng['tag']}`" in POLICY and re.fullmatch(r"[0-9a-f]{40}", eng["commit"]), eng
+
+
+def test_every_module_concept_has_an_engine_rigid_field_entry():
+    """BP-MOD-001 fails closed on a concept with no entry, so every concept the schema offers must have one."""
+    for module, ref in SCHEMA["$defs"]["modules"]["properties"].items():
+        concepts = SCHEMA["$defs"][ref["$ref"].split("/")[-1]]["properties"]["entities"]["properties"]
+        for concept in concepts:
+            records = RIGID["concepts"].get(f"{module}.{concept}")
+            assert isinstance(records, list), f"{module}.{concept}"
+            assert all(r in RIGID["recordTypes"] for r in records), (module, concept, records)
+
+
+def test_rigid_field_names_are_engine_field_names():
+    cats = set(RIGID["categories"])
+    for name, rec in RIGID["recordTypes"].items():
+        groups = [rec["fields"], *rec.get("rows", {}).values()]
+        for g in groups:
+            assert set(g) <= cats, (name, set(g) - cats)
+            for fields in g.values():
+                assert fields and all(re.fullmatch(r"[a-z][a-z0-9_]*", f) for f in fields), (name, fields)

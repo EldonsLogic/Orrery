@@ -38,3 +38,9 @@ Partner reviews ADR-0079 and #395 to the BPL-055 PR in stack order; when DSC-022
 - L5: at least one channel enabled (schema `anyOf`; cases `mkt-all-channels-disabled`, `mkt-only-channel-disabled`, exact path); empty `visibleToRoles` means nobody.
 - L6: merge order (#394 before #398) stated in Q-703. L7: bpdiff classes `modules/marketing/consent` and `channels` `compliance` (tests); role lists `access` from #395.
 - Q-703 rewritten in place on this branch (row added by this PR, unmerged).
+
+## Re-review fixes (#398 RULES 42 contract re-review at 0c9d3e2e)
+- Merged bpl-054-manufacturing-blueprint (the #396 and #397 re-review redesign: `BP-MOD-001` checks the explicit engine list `contracts/engine-rigid-fields.json` and follows `child_table` rows; no field computation keys; `BP-MOD-003` fails closed; removing a module is `destructive`); conflicts resolved by hand. `x-messaging-connectors` and `BP-MOD-005` kept; the marketing concepts (campaign, email campaign, messaging campaign) have entries in the list (no rigid fields; the messaging campaign has no engine record).
+- L2: bpdiff classes every change under `modules/marketing/segments` other than labels and provenance `compliance` (a segment decides who is messaged), including adds, removals, filters and `visibleToRoles` (tests); removing the whole marketing module is `destructive`.
+- L1 (#394 coupling) unchanged: Q-703 still records it.
+- Checks: contracts tests and services/blueprint tests pass (venv Python 3.11).

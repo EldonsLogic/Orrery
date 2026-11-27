@@ -20,6 +20,8 @@ COMPLIANCE_COMPANY = [("company", "country"), ("company", "vatNumber"), ("compan
 # non-structural class. Ancestors match too, so replacing a whole module is compliance as well.
 MODULE_COMPLIANCE = [("modules", "manufacturing", "warehouses"), ("modules", "marketing", "consent"),
                      ("modules", "marketing", "channels")]
+# A segment decides who is messaged (#398 re-review): any change to it, other than its labels, is compliance.
+SEGMENTS = ("modules", "marketing", "segments")
 META_COSMETIC = [("meta", "revision"), ("meta", "createdAt"), ("meta", "updatedAt")]
 DESTRUCTIVE_NODES = {spath(p) for p in (
     "locations/*", "components/*", "entities/*", "entities/*/fields/*", "entities/*/fields/*/options/*",
@@ -46,6 +48,8 @@ def impact_of(kind: str, sp: SPath) -> str:
         if sp == STEPS:
             return "access"
         return "config" if sp in ORDER_SIGNIFICANT else "cosmetic"
+    if kind == "remove" and sp[:1] == ("modules",) and len(sp) <= 2:
+        return "destructive"  # a module switched off (Q-700): stricter than access, checked first
     head = sp[0] if sp else ""
     if head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE):
         return "compliance"
@@ -57,6 +61,8 @@ def impact_of(kind: str, sp: SPath) -> str:
     if ("provenance" in sp or LABEL_KEYS & set(sp) or (head == "i18n" and not _starts(sp, ("i18n", "defaultLocale")))
             or any(_starts(sp, p) for p in META_COSMETIC)):
         return "cosmetic"
+    if _related(sp, SEGMENTS):
+        return "compliance"
     if (head in ("roles", "approvals", "assistants") or ACCESS_KEYS & set(sp) or _module_roles(sp)
             or (head == "workflows" and len(sp) >= 4 and sp[2] == "transitions"
                 and (len(sp) == 4 or sp[4] == "approval"))):
@@ -69,7 +75,7 @@ def impact_of(kind: str, sp: SPath) -> str:
 
 
 def _module_roles(sp: SPath) -> bool:
-    """modules/<key>/roles, or a whole module or the modules object (which carry role lists)."""
+    """modules/<key>/roles, or a whole module or the modules object replaced (they carry role lists)."""
     return sp[:1] == ("modules",) and (len(sp) <= 2 or sp[2] == "roles")
 
 

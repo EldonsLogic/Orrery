@@ -31,5 +31,8 @@ Approved by: pending (Eldon's agent proposed it on the BPL-052 PR; partner revie
 - Harder: the bpdiff key table must list every new keyed array (done in each PR); the validator rules in item 6 are owed before a module goes to a customer (open question Q-700).
 - Must do: BPL-053, BPL-054 and BPL-055 extend `modules` in their own PRs (0.6.0, 0.7.0, 0.8.0); BPL-056 to BPL-059 build the components; WEB-031 to WEB-034 build screens on fixtures from these contracts.
 
+## Note (BPL-053, #396 re-review)
+Item 5 is enforced by the engine's own field list, not by name: [contracts/engine-rigid-fields.json](../../contracts/engine-rigid-fields.json) lists the pinned engine's valuation, costing, posting, tax and ledger fields per record type, and a Blueprint may not declare or override them on a module-bound entity or its `child_table` rows (`BP-MOD-001`). Blueprint fields never carry computation; custom fields of any name stay plain data and never feed posting, valuation or tax. The name-based term list was dropped because it refused ordinary master data (`tax_id`, `account_manager`, an item `cost_price`) and missed real money names.
+
 ## Supersedes
 none

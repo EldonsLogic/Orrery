@@ -34,3 +34,12 @@ BPL-055 (marketing, 0.8.0) stacked on this branch.
 - M2: warehouse-to-account link stays with the certified component (schema text and blueprint-modules.md); validator `BP-MOD-004`: WIP, finished goods and scrap are warehouse locations and three different ones.
 - L3: denylist widened in #395. L4: role changes `access` (from #395); bpdiff classes `modules/manufacturing/warehouses` (and its parents) `compliance`, the strictest non-structural class; README rule 2; tests.
 - Open question: Q-702 extended to the bound-entity gap.
+
+## Re-review fixes (#397 RULES 42 contract re-review at d52d9d3b)
+- Merged bpl-053-boards-blueprint (the #396 re-review redesign) with `git merge`; conflicts resolved by hand.
+- M1, M2: `BP-MOD-001` checks the explicit engine list `contracts/engine-rigid-fields.json` (Item with Item Default and Item Tax rows, BOM with BOM Item, BOM Operation, BOM Scrap Item and BOM Explosion Item rows, Work Order, Job Card, Workstation, Routing, Subcontracting Order and Receipt with their rows; ERPNext v15.124.5, UNVERIFIED until a bench run), not names. The trading template fixture plus manufacturing now validates with `cost_price`, `selling_price` and `vat_rate` on its item (test); `valuation_rate`, `valuation_method`, `item_tax_template`, `income_account` on item and `rm_cost_as_per`, `operating_cost`, `rate` on bom are refused (tests).
+- M3: BOM lines: a `child_table` row entity of the bound BOM is checked against the BOM row fields; `rate` and `base_amount` on a BOM line are refused at their exact paths, plain fields pass (tests).
+- Backflush: dropped from the bound-entity cases; the backflush basis is an engine manufacturing setting, not a field of any bound record, and the module schema has no key for it (the contract test's module-setting term list keeps `backflush`).
+- L4: Q-702 now records the trading-item false positives and BOM lines.
+- bpdiff: removing `modules.manufacturing` is `destructive` (checked before the warehouse compliance rule, test); replacing it stays `compliance`.
+- Checks: contracts tests and services/blueprint tests pass (venv Python 3.11).

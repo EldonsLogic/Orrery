@@ -60,11 +60,6 @@
     },
     "modules": { "$ref": "#/$defs/modules" }
   },
-  "x-rigid-zone-terms": {
-    "description": "Rigid zone (AGENTS.md principle 3). A module setting key, or a field id on an entity bound by a module concept, that holds one of these substrings, or a camelCase or snake_case token starting with one of these tokens, is a formula, posting, costing, tax, payroll, pricing or amount knob. Those stay engine or certified-component logic; the Blueprint never declares them. Used by contracts/tests/test_blueprint_modules.py and the validator rule BP-MOD-001.",
-    "substrings": ["formula", "expression", "posting", "valuation", "account", "ledger", "payroll", "backflush"],
-    "tokens": ["cost", "tax", "rate", "price", "amount"]
-  },
   "x-messaging-connectors": ["msg.meta_whatsapp", "msg.meta_instagram", "msg.meta_messenger", "msg.sms"],
   "x-validator-rules": [
     "company.locale fields are optional; each omitted field resolves from compliance.countryPack. The resolved locale is stored with the compiled artifact. workingHours.periods must not overlap and weekend days must not appear in workDays.",
@@ -84,9 +79,9 @@
     "Modules (ADR-0079): a module is on for this company only when its key is present. Its component is listed in components and provides the capability <module>.module; every concept entity resolves and has an implements binding to a component providing <module>.<concept>; every module role resolves and holds read on each required concept entity (listing a role grants nothing). A report metric whose id starts with a module prefix (crm., projects., manufacturing., marketing.) needs that module on and must be in the module's metric list in contracts/blueprint-modules.md.",
     "CRM (ADR-0079): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique.",
     "Projects (ADR-0079): task status and view ids are unique; every board column lists task status ids and each status sits in exactly one column of a board; timeline and calendar fields are date or datetime fields of the view's concept entity (BP-MOD-002); visibleToRoles resolve and hold read on that entity. timesheets.invoicingComponent is listed in components and, when the registry is known, is a rigid (certified) component (BP-MOD-003).",
-    "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse, workInProgress differs from finishedGoods and scrap differs from both (BP-MOD-004); the warehouse-to-account link is set only by the certified component, never by the Blueprint; the work order, job card and subcontracting receipt transitions that move stock are stock-class (ADR-0037) and their submits keep the human floor (ADR-0027). Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint field may set them, neither in this module object nor as a field on item, bom or any other manufacturing-bound entity (valuation_rate, rm_cost_as_per, operating_cost and the like; BP-MOD-001).",
+    "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse, workInProgress differs from finishedGoods and scrap differs from both (BP-MOD-004); the warehouse-to-account link is set only by the certified component, never by the Blueprint; the work order, job card and subcontracting receipt transitions that move stock are stock-class (ADR-0037) and their submits keep the human floor (ADR-0027). Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint setting in this module object offers them, and no field on item, bom, their child_table rows or any other manufacturing-bound entity may declare the engine's own fields for them (valuation_rate, rm_cost_as_per, operating_cost, BOM line rate and amount; contracts/engine-rigid-fields.json, BP-MOD-001).",
     "Marketing (ADR-0079): entities.campaign equals modules.crm.entities.campaign when both are set; a segment's audience concept is bound in modules.crm.entities (lead, contact, customer) and its filter fields exist on that entity; segment ids are unique. channels.messaging.integration resolves to an integration whose connector is in x-messaging-connectors (BP-MOD-005). A marketing send goes only to a contact with a granted consent for that contact, channel, country and purpose marketing (DSC-022 section 6, MSG-005) and carries an unsubscribe route; members without a contactRef are skipped; imports and segment membership never create consent; messaging sends use approved templates only. Every marketing send or campaign is R3, origin human with a required approvalId, and never agent-creatable (DSC-022 section 3, AP-MSG-03 proposed), so no assistant may list it (assistant tools are at most R2).",
-    "Module rigid zone (ADR-0079, BP-MOD-001): no field on an entity bound by a module concept (every modules.<key>.entities value, timesheet and activity_type included) has an id matching x-rigid-zone-terms, for example billing_rate, costing_rate or amount; the bound timesheet and activity_type entities carry no money field. Rates, costs, amounts and postings are engine or certified-component fields, never mapped from the Blueprint."
+    "Module rigid zone (ADR-0079, BP-MOD-001): on an entity bound by a module concept (every modules.<key>.entities value), and on every entity reached from it through child_table relations at any depth, no field id and no component parameter key equals an engine rigid-zone field of that concept's engine record or its rows, listed in contracts/engine-rigid-fields.json (for example valuation_rate, rm_cost_as_per, billing_rate, tax_category, cost_center). A Blueprint never declares, overrides, renames or sets a default or options on those fields; the list is missing or a bound concept is not in it: refused (fail closed). Custom fields with any other name, money and percent included, are plain data: they never feed posting, valuation or tax."
   ],
   "$defs": {
     "modules": {
@@ -882,7 +877,10 @@
         "required": { "type": "boolean", "default": false },
         "unique": { "type": "boolean", "default": false },
         "readOnly": { "type": "boolean", "default": false },
-        "default": {},
+        "default": {
+          "description": "A value, never an expression: a string default may not start with eval:, = or : (the engine would evaluate it). Non-string defaults stay open as before (the compiler's secret scan tests rely on that).",
+          "not": { "type": "string", "pattern": "^\\s*(eval:|=|:)" }
+        },
         "options": {
           "type": "array",
           "description": "For type select.",
@@ -913,6 +911,10 @@
           }
         },
         "visibleToRoles": { "type": "array", "items": { "$ref": "#/$defs/id" }, "description": "Empty or absent means every role with read access to the entity." }
+      },
+      "propertyNames": {
+        "description": "A Blueprint field never carries computation (AGENTS.md principle 3): no formula, expression, fetch-from, depends-on or default-expression key. additionalProperties already refuses them; this names them. computed only names a certified function and holds no formula.",
+        "not": { "enum": ["formula", "expression", "fetch_from", "fetchFrom", "fetch_if_empty", "depends_on", "dependsOn", "mandatory_depends_on", "read_only_depends_on", "default_expression", "defaultExpression", "eval", "script"] }
       },
       "allOf": [
         { "if": { "properties": { "type": { "const": "select" } }, "required": ["type"] }, "then": { "required": ["options"] } },

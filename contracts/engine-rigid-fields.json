@@ -2,7 +2,7 @@
   "version": "0.1.0",
   "status": "UNVERIFIED",
   "visibility": "internal",
-  "description": "Engine rigid-zone fields per engine record type (AGENTS.md principle 3, ADR-0079 item 5, contracts/blueprint-modules.md). These are the pinned engine's own valuation, costing, posting, tax and ledger fields. A Blueprint may not declare, override, rename, or set a default or options on any of them on an entity it binds through a module concept, on that entity's child_table rows, or through that entity's component parameters (validator BP-MOD-001). Internal only (ADR-0016): never shown to a customer. UNVERIFIED until a bench run on the pinned set confirms the names.",
+  "description": "Engine rigid-zone fields per engine record type (AGENTS.md principle 3, ADR-0079 item 5, contracts/blueprint-modules.md). These are the pinned engine's own valuation, costing, posting, tax and ledger fields. A Blueprint may not declare, override, rename, or set a default or options on any of them on an entity it binds through a module concept, on that entity's child_table rows, or through that entity's component parameters (validator BP-MOD-001). Internal only (ADR-0016): never shown to a customer. UNVERIFIED until a bench run on the pinned set confirms the names, in each module's component build: CRM BPL-056, projects BPL-057, manufacturing BPL-058, marketing BPL-059. Billing selectors count as posting fields: Timesheet Detail is_billable and the Timesheet and Project customer pick what goes onto a sales invoice (erpnext/projects/doctype/timesheet/timesheet.py at the tag), and the Timesheet currency and company are ledger fields.",
   "source": {
     "engines": [
       { "app": "erpnext", "tag": "v15.124.5", "commit": "e5cde8c4b9e3f7f567a92ca3e65fd411402b89ce", "url": "https://github.com/frappe/erpnext/tree/v15.124.5" },
@@ -57,6 +57,7 @@
     "Project": {
       "fields": {
         "costing": ["estimated_costing", "total_costing_amount", "total_purchase_cost", "total_sales_amount", "total_billable_amount", "total_billed_amount", "total_consumed_material_cost", "gross_margin", "per_gross_margin"],
+        "posting": ["customer"],
         "ledger": ["cost_center"]
       }
     },
@@ -64,12 +65,13 @@
     "Timesheet": {
       "fields": {
         "costing": ["total_costing_amount", "total_billable_amount", "total_billed_amount", "base_total_costing_amount", "base_total_billable_amount", "base_total_billed_amount", "per_billed", "exchange_rate"],
-        "posting": ["sales_invoice"]
+        "posting": ["sales_invoice", "customer"],
+        "ledger": ["currency", "company"]
       },
       "rows": {
         "Timesheet Detail": {
           "costing": ["billing_rate", "billing_amount", "costing_rate", "costing_amount", "base_billing_rate", "base_billing_amount", "base_costing_rate", "base_costing_amount"],
-          "posting": ["sales_invoice"]
+          "posting": ["sales_invoice", "is_billable"]
         }
       }
     },

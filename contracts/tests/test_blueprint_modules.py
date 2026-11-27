@@ -244,3 +244,22 @@ def test_one_concept_binds_one_entity():
         for concept, ref in SCHEMA["$defs"][f"{module}Module"]["properties"]["entities"]["properties"].items():
             assert ref == {"$ref": "#/$defs/id"}, (module, concept)
     assert any("never name the same entity" in r for r in SCHEMA["x-validator-rules"])
+
+
+def test_module_validator_rules_say_what_is_implemented():
+    """#396 review M3: a module entry in x-validator-rules either names its validator code or says it is contract
+    text until BPL-060, so the schema never promises a check the validator lacks."""
+    names = ("Modules (", "CRM (", "Projects (", "Manufacturing (", "Marketing (")
+    entries = [r for r in SCHEMA["x-validator-rules"] if r.startswith(names)]
+    assert entries
+    for r in entries:
+        assert "BP-MOD-" in r or "contract text until BPL-060" in r, r[:60]
+    projects = next(r for r in entries if r.startswith("Projects ("))
+    assert "contract text until BPL-060" in projects and "BP-MOD-002" in projects and "BP-MOD-003" in projects
+
+
+def test_adr_states_the_default_break():
+    """#396 review M5: 0.6.0 refuses expression-like string defaults; contracts/README lets a 0.x minor break only
+    when the ADR says so."""
+    adr = next((C.parent / "docs" / "decisions").glob("ADR-0079-*.md")).read_text(encoding="utf-8")
+    assert re.search(r"0\.6\.0 is not purely additive.*`eval:`", adr, re.S)

@@ -34,5 +34,8 @@ Approved by: pending (Eldon's agent proposed it on the BPL-052 PR; partner revie
 ## Note (BPL-053, #396 re-review)
 Item 5 is enforced by the engine's own field list, not by name: [contracts/engine-rigid-fields.json](../../contracts/engine-rigid-fields.json) lists the pinned engine's valuation, costing, posting, tax and ledger fields per record type, and a Blueprint may not declare or override them on a module-bound entity or its `child_table` rows (`BP-MOD-001`). Blueprint fields never carry computation; custom fields of any name stay plain data and never feed posting, valuation or tax. The name-based term list was dropped because it refused ordinary master data (`tax_id`, `account_manager`, an item `cost_price`) and missed real money names.
 
+## Note (BPL-053, #396 review: the 0.6.0 break)
+0.6.0 is not purely additive. The field `default` rule refuses a string default that starts with `eval:`, `=` or `:` (an engine expression, not a literal), so a 0.5.0 Blueprint carrying one no longer validates. [contracts/README.md](../../contracts/README.md) rule 1 allows a 0.x minor to break only when the ADR says so; this note says so. Such a Blueprint drops the default or replaces it with a literal; no tenant Blueprint exists yet, so nothing migrates.
+
 ## Supersedes
 none

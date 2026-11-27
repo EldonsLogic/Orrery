@@ -61,7 +61,7 @@
     {
       "id": "project", "kind": "master",
       "labels": { "ar": "مشروع", "en": "Project" },
-      "fields": [{ "id": "project_name", "type": "string", "required": true, "labels": { "ar": "اسم المشروع", "en": "Project name" } }, { "id": "customer", "type": "link", "target": "customer", "labels": { "ar": "العميل", "en": "Customer" } }],
+      "fields": [{ "id": "project_name", "type": "string", "required": true, "labels": { "ar": "اسم المشروع", "en": "Project name" } }],
       "components": [{ "component": "projects.core", "mode": "implements" }],
       "provenance": { "source": "template", "humanEdited": false }
     },

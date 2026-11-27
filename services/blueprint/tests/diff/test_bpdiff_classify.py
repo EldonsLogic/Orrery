@@ -97,6 +97,19 @@ def test_classification_table(name):
     ("add", "modules/crm/leadSources/*", "config"),
     ("add", "modules/crm/entities/lead", "config"),
     ("replace", "modules/crm/pipeline/stages/*/labels/en", "cosmetic"),
+    ("remove", "modules/projects/taskStatuses/*", "destructive"),
+    ("remove", "modules/projects/views/*", "destructive"),
+    ("remove", "modules/projects/views/*/board/columns/*", "destructive"),
+    ("remove", "modules/projects/timesheets", "destructive"),
+    ("remove", "modules/projects/entities/timesheet", "destructive"),
+    ("replace", "modules/projects/timesheets/enabled", "destructive"),
+    ("replace", "modules/projects/timesheets/billable", "compliance"),
+    ("add", "modules/projects/timesheets/billable", "compliance"),
+    ("remove", "modules/projects/timesheets/billable", "compliance"),
+    ("replace", "modules/projects/timesheets/invoicingComponent", "compliance"),
+    ("add", "modules/projects/taskStatuses/*", "config"),
+    ("add", "modules/projects/views/*", "config"),
+    ("add", "modules/projects/timesheets", "config"),
 ])
 def test_impact_rules(kind, path, expected):
     assert impact_of(kind, spath(path)) == expected
@@ -193,3 +206,22 @@ def test_destructive_crm_changes_take_the_ddl_gate(name, edit):
     d = diff(a, b)
     assert "destructive" in {o["impact"] for o in d["ops"]}, (name, [(o["pointer"], o["impact"]) for o in d["ops"]])
     assert d["risk"]["needsDdlPlanGate"]
+
+
+@pytest.mark.parametrize("name,edit,impact", [
+    ("status removed", lambda p: p["taskStatuses"].pop(1), "destructive"),
+    ("view removed", lambda p: p["views"].pop(2), "destructive"),
+    ("column removed", lambda p: p["views"][0]["board"]["columns"].pop(1), "destructive"),
+    ("timesheets block removed", lambda p: p.pop("timesheets"), "destructive"),
+    ("timesheet binding removed", lambda p: p["entities"].pop("timesheet"), "destructive"),
+    ("timesheets switched off", lambda p: p["timesheets"].update(enabled=False), "destructive"),
+    ("billing switched on", lambda p: p["timesheets"].update(billable=True, invoicingComponent="core.sales_invoice"),
+     "compliance"),
+])
+def test_project_changes_that_lose_data_or_touch_billing(name, edit, impact):
+    """#396 review H2: removals that orphan tasks or hours are destructive; billing on or off is compliance."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    edit(b["modules"]["projects"])
+    d = diff(a, b)
+    assert impact in {o["impact"] for o in d["ops"]}, (name, [(o["pointer"], o["impact"]) for o in d["ops"]])

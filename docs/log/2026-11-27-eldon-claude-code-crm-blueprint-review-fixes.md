@@ -27,3 +27,11 @@ Unknown.
 
 ## Next step
 Partner re-review of #395; then the #396 review fixes and merge up through #397 and #398.
+
+## #396 review fixes (BPL-053, at 92696a33: 2 High, 3 Medium, 1 Low)
+- H1: `engine-rigid-fields.json` adds Timesheet Detail `is_billable`, Timesheet `customer`, `currency`, `company` and Project `customer`; child-row negative case in `tests/test_modules.py`. The example project drops its `customer` field (now engine-owned; founder read of the list still asked for).
+- H2: bpdiff: removing a task status, view, board column, the `timesheets` block or a concept binding, and replacing `timesheets/enabled`, are `destructive`; `timesheets/billable` and `invoicingComponent` are `compliance`.
+- M3: module `x-validator-rules` entries say which parts run (`BP-MOD-001` to 003) and which are contract text until BPL-060; contract test pins it.
+- M4: BPL-053 row names its validator and bpdiff code; BPL-060 to BPL-062 cover projects; BPL-057 lists the partner-lane scope.
+- M5: ADR-0079 note states the 0.6.0 `default` break.
+- Low: the bench rows per module are named in the rigid list (the "BPL-056 to BPL-058" text was not found at 92696a33).

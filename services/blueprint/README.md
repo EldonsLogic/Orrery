@@ -14,7 +14,7 @@ validate(blueprint: dict, ctx: ValidationContext | None = None) -> Report
 ```
 
 - Step 1: JSON Schema draft 2020-12 (`BP-SCHEMA-001`). The contract's custom `version` and `x-validator-rules` keywords are unknown keywords and are ignored. `date` and `date-time` formats are checked.
-- Step 2: one function per `x-validator-rules` entry, except the Modules and CRM entries (ADR-0079), which are contract text only until BPL-060. Cross-checks still run when the schema step found errors, and are defensive about shapes. The validator never raises for bad input: it returns errors (fail closed). A rule that cannot run on a malformed shape reports `BP-INTERNAL-001`.
+- Step 2: one function per `x-validator-rules` entry, except the module entries (ADR-0079) marked "contract text until BPL-060"; of those, only `BP-MOD-001` to `BP-MOD-003` run today. Cross-checks still run when the schema step found errors, and are defensive about shapes. The validator never raises for bad input: it returns errors (fail closed). A rule that cannot run on a malformed shape reports `BP-INTERNAL-001`.
 - `Report`: `ok`, `errors`, `warnings` (each an `Issue` with `code`, JSON-pointer `path`, `message`) and `adjustments` (colour proposals).
 - `ValidationContext` (all optional): `registry` (component id -> list of manifests), `metrics`, `connectors` (id sets), `assets` (assetId -> record), `entitlements`, `pack_locales`, `schema_path`. Anything that needs a registry that was not supplied gives a "not checked" warning, except rule 12 (fails closed).
 - `resolve_locale(blueprint, ctx)` returns `company.locale` with omitted fields filled from `DEFAULT_PACK_LOCALES` (sa, ae, eg, qa; qa is UNVERIFIED). Those values are placeholder defaults; the country pack (CMP-021) is authoritative.

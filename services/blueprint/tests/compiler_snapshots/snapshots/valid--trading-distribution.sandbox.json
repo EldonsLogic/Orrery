@@ -1,6 +1,6 @@
 {
   "artifact": {
-    "artifactId": "art_e61c15860aa4e441ec823f50dc96a68a",
+    "artifactId": "art_e211deb74693523b532a6c27fc033ddb",
     "artifactSchema": "0.1.0",
     "blueprint": {
       "base": null,
@@ -87,7 +87,7 @@
     },
     "integrity": {
       "algorithm": "sha256-canonical-json-v1",
-      "contentHash": "sha256:e61c15860aa4e441ec823f50dc96a68a5ad94211a2f425eb62dc0f1645e94df9",
+      "contentHash": "sha256:e211deb74693523b532a6c27fc033ddba4624ca559fd10acdbd3855caa45441c",
       "signature": null
     },
     "inverse": null,
@@ -2020,6 +2020,118 @@
               {
                 "component": "sales.credit_note",
                 "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "item",
+                "labels": {
+                  "ar": "الصنف",
+                  "en": "Item"
+                },
+                "required": true,
+                "target": "item",
+                "type": "link"
+              },
+              {
+                "id": "description",
+                "labels": {
+                  "ar": "الوصف",
+                  "en": "Description"
+                },
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "id": "quantity",
+                "labels": {
+                  "ar": "الكمية",
+                  "en": "Quantity"
+                },
+                "min": 0,
+                "precision": 3,
+                "required": true,
+                "type": "decimal"
+              },
+              {
+                "id": "unit_price",
+                "labels": {
+                  "ar": "سعر الوحدة",
+                  "en": "Unit price"
+                },
+                "min": 0,
+                "precision": 2,
+                "required": true,
+                "type": "money"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "sales.credit_note.line_total",
+                  "inputs": [
+                    "quantity",
+                    "unit_price",
+                    "discount_percent"
+                  ]
+                },
+                "id": "line_total",
+                "labels": {
+                  "ar": "إجمالي البند",
+                  "en": "Line total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              }
+            ],
+            "id": "credit_note_line",
+            "kind": "child",
+            "labels": {
+              "ar": "بند الإشعار",
+              "en": "Credit note line"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            }
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/credit_note_line",
+        "reversible": true,
+        "seq": 40,
+        "sourceOps": [
+          "/entities/credit_note_line"
+        ],
+        "subject": {
+          "id": "credit_note_line",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "sales.credit_note",
+                "mode": "implements"
               },
               {
                 "component": "compliance.zatca_sa",
@@ -2274,124 +2386,12 @@
         "phase": 4,
         "pointer": "/entities/credit_note",
         "reversible": true,
-        "seq": 40,
+        "seq": 41,
         "sourceOps": [
           "/entities/credit_note"
         ],
         "subject": {
           "id": "credit_note",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "sales.credit_note",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "item",
-                "labels": {
-                  "ar": "الصنف",
-                  "en": "Item"
-                },
-                "required": true,
-                "target": "item",
-                "type": "link"
-              },
-              {
-                "id": "description",
-                "labels": {
-                  "ar": "الوصف",
-                  "en": "Description"
-                },
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "id": "quantity",
-                "labels": {
-                  "ar": "الكمية",
-                  "en": "Quantity"
-                },
-                "min": 0,
-                "precision": 3,
-                "required": true,
-                "type": "decimal"
-              },
-              {
-                "id": "unit_price",
-                "labels": {
-                  "ar": "سعر الوحدة",
-                  "en": "Unit price"
-                },
-                "min": 0,
-                "precision": 2,
-                "required": true,
-                "type": "money"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "sales.credit_note.line_total",
-                  "inputs": [
-                    "quantity",
-                    "unit_price",
-                    "discount_percent"
-                  ]
-                },
-                "id": "line_total",
-                "labels": {
-                  "ar": "إجمالي البند",
-                  "en": "Line total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              }
-            ],
-            "id": "credit_note_line",
-            "kind": "child",
-            "labels": {
-              "ar": "بند الإشعار",
-              "en": "Credit note line"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            }
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/credit_note_line",
-        "reversible": true,
-        "seq": 41,
-        "sourceOps": [
-          "/entities/credit_note_line"
-        ],
-        "subject": {
-          "id": "credit_note_line",
           "kind": "entity",
           "parents": []
         }
@@ -4769,239 +4769,6 @@
             ],
             "fields": [
               {
-                "id": "customer",
-                "labels": {
-                  "ar": "العميل",
-                  "en": "Customer"
-                },
-                "required": true,
-                "target": "customer",
-                "type": "link"
-              },
-              {
-                "id": "sales_quote",
-                "labels": {
-                  "ar": "عرض السعر",
-                  "en": "Sales quote"
-                },
-                "target": "sales_quote",
-                "type": "link"
-              },
-              {
-                "id": "order_date",
-                "labels": {
-                  "ar": "تاريخ الطلب",
-                  "en": "Order date"
-                },
-                "required": true,
-                "type": "date"
-              },
-              {
-                "id": "delivery_date",
-                "labels": {
-                  "ar": "تاريخ التسليم المطلوب",
-                  "en": "Requested delivery date"
-                },
-                "type": "date"
-              },
-              {
-                "id": "branch",
-                "labels": {
-                  "ar": "الفرع",
-                  "en": "Branch"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "المقر الرئيسي - الرياض",
-                      "en": "Head office - Riyadh"
-                    },
-                    "value": "hq_riyadh"
-                  },
-                  {
-                    "labels": {
-                      "ar": "فرع جدة",
-                      "en": "Jeddah branch"
-                    },
-                    "value": "branch_jeddah"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "id": "warehouse",
-                "labels": {
-                  "ar": "المستودع",
-                  "en": "Warehouse"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "مستودع الرياض",
-                      "en": "Riyadh warehouse"
-                    },
-                    "value": "wh_riyadh"
-                  },
-                  {
-                    "labels": {
-                      "ar": "مستودع جدة",
-                      "en": "Jeddah warehouse"
-                    },
-                    "value": "wh_jeddah"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "id": "price_list",
-                "labels": {
-                  "ar": "قائمة الأسعار",
-                  "en": "Price list"
-                },
-                "target": "price_list",
-                "type": "link"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "sales.order.subtotal",
-                  "inputs": [
-                    "discount_percent"
-                  ]
-                },
-                "id": "subtotal",
-                "labels": {
-                  "ar": "المجموع قبل الضريبة",
-                  "en": "Subtotal"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "sales.order.vat_amount",
-                  "inputs": [
-                    "subtotal"
-                  ]
-                },
-                "id": "vat_amount",
-                "labels": {
-                  "ar": "ضريبة القيمة المضافة",
-                  "en": "VAT"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "sales.order.total",
-                  "inputs": [
-                    "subtotal",
-                    "vat_amount"
-                  ]
-                },
-                "id": "total_amount",
-                "labels": {
-                  "ar": "الإجمالي",
-                  "en": "Total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "id": "notes",
-                "labels": {
-                  "ar": "ملاحظات",
-                  "en": "Notes"
-                },
-                "maxLength": 1000,
-                "type": "text"
-              }
-            ],
-            "id": "sales_order",
-            "kind": "document",
-            "labels": {
-              "ar": "أمر بيع",
-              "en": "Sales order"
-            },
-            "numbering": {
-              "padding": 5,
-              "prefix": "SO-",
-              "resetPerFiscalYear": true
-            },
-            "pluralLabels": {
-              "ar": "أوامر البيع",
-              "en": "Sales orders"
-            },
-            "provenance": {
-              "confidence": 0.88,
-              "humanEdited": false,
-              "ref": "turn-009",
-              "source": "interview"
-            },
-            "relations": [
-              {
-                "cardinality": "many",
-                "id": "lines",
-                "kind": "child_table",
-                "labels": {
-                  "ar": "البنود",
-                  "en": "Lines"
-                },
-                "onDelete": "cascade",
-                "required": true,
-                "target": "sales_order_line"
-              }
-            ],
-            "workflow": "sales_order_flow"
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/sales_order",
-        "reversible": true,
-        "seq": 57,
-        "sourceOps": [
-          "/entities/sales_order"
-        ],
-        "subject": {
-          "id": "sales_order",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "core.sales_order",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
                 "id": "item",
                 "labels": {
                   "ar": "الصنف",
@@ -5090,12 +4857,124 @@
         "phase": 4,
         "pointer": "/entities/sales_order_line",
         "reversible": true,
-        "seq": 58,
+        "seq": 57,
         "sourceOps": [
           "/entities/sales_order_line"
         ],
         "subject": {
           "id": "sales_order_line",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "sales.quote",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "item",
+                "labels": {
+                  "ar": "الصنف",
+                  "en": "Item"
+                },
+                "required": true,
+                "target": "item",
+                "type": "link"
+              },
+              {
+                "id": "description",
+                "labels": {
+                  "ar": "الوصف",
+                  "en": "Description"
+                },
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "id": "quantity",
+                "labels": {
+                  "ar": "الكمية",
+                  "en": "Quantity"
+                },
+                "min": 0,
+                "precision": 3,
+                "required": true,
+                "type": "decimal"
+              },
+              {
+                "id": "unit_price",
+                "labels": {
+                  "ar": "سعر الوحدة",
+                  "en": "Unit price"
+                },
+                "min": 0,
+                "precision": 2,
+                "required": true,
+                "type": "money"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "sales.quote.line_total",
+                  "inputs": [
+                    "quantity",
+                    "unit_price",
+                    "discount_percent"
+                  ]
+                },
+                "id": "line_total",
+                "labels": {
+                  "ar": "إجمالي البند",
+                  "en": "Line total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              }
+            ],
+            "id": "sales_quote_line",
+            "kind": "child",
+            "labels": {
+              "ar": "بند عرض السعر",
+              "en": "Quote line"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            }
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/sales_quote_line",
+        "reversible": true,
+        "seq": 58,
+        "sourceOps": [
+          "/entities/sales_quote_line"
+        ],
+        "subject": {
+          "id": "sales_quote_line",
           "kind": "entity",
           "parents": []
         }
@@ -5305,7 +5184,240 @@
           "definition": {
             "components": [
               {
-                "component": "sales.quote",
+                "component": "core.sales_order",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "customer",
+                "labels": {
+                  "ar": "العميل",
+                  "en": "Customer"
+                },
+                "required": true,
+                "target": "customer",
+                "type": "link"
+              },
+              {
+                "id": "sales_quote",
+                "labels": {
+                  "ar": "عرض السعر",
+                  "en": "Sales quote"
+                },
+                "target": "sales_quote",
+                "type": "link"
+              },
+              {
+                "id": "order_date",
+                "labels": {
+                  "ar": "تاريخ الطلب",
+                  "en": "Order date"
+                },
+                "required": true,
+                "type": "date"
+              },
+              {
+                "id": "delivery_date",
+                "labels": {
+                  "ar": "تاريخ التسليم المطلوب",
+                  "en": "Requested delivery date"
+                },
+                "type": "date"
+              },
+              {
+                "id": "branch",
+                "labels": {
+                  "ar": "الفرع",
+                  "en": "Branch"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "المقر الرئيسي - الرياض",
+                      "en": "Head office - Riyadh"
+                    },
+                    "value": "hq_riyadh"
+                  },
+                  {
+                    "labels": {
+                      "ar": "فرع جدة",
+                      "en": "Jeddah branch"
+                    },
+                    "value": "branch_jeddah"
+                  }
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "id": "warehouse",
+                "labels": {
+                  "ar": "المستودع",
+                  "en": "Warehouse"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "مستودع الرياض",
+                      "en": "Riyadh warehouse"
+                    },
+                    "value": "wh_riyadh"
+                  },
+                  {
+                    "labels": {
+                      "ar": "مستودع جدة",
+                      "en": "Jeddah warehouse"
+                    },
+                    "value": "wh_jeddah"
+                  }
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "id": "price_list",
+                "labels": {
+                  "ar": "قائمة الأسعار",
+                  "en": "Price list"
+                },
+                "target": "price_list",
+                "type": "link"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "sales.order.subtotal",
+                  "inputs": [
+                    "discount_percent"
+                  ]
+                },
+                "id": "subtotal",
+                "labels": {
+                  "ar": "المجموع قبل الضريبة",
+                  "en": "Subtotal"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "sales.order.vat_amount",
+                  "inputs": [
+                    "subtotal"
+                  ]
+                },
+                "id": "vat_amount",
+                "labels": {
+                  "ar": "ضريبة القيمة المضافة",
+                  "en": "VAT"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "sales.order.total",
+                  "inputs": [
+                    "subtotal",
+                    "vat_amount"
+                  ]
+                },
+                "id": "total_amount",
+                "labels": {
+                  "ar": "الإجمالي",
+                  "en": "Total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "id": "notes",
+                "labels": {
+                  "ar": "ملاحظات",
+                  "en": "Notes"
+                },
+                "maxLength": 1000,
+                "type": "text"
+              }
+            ],
+            "id": "sales_order",
+            "kind": "document",
+            "labels": {
+              "ar": "أمر بيع",
+              "en": "Sales order"
+            },
+            "numbering": {
+              "padding": 5,
+              "prefix": "SO-",
+              "resetPerFiscalYear": true
+            },
+            "pluralLabels": {
+              "ar": "أوامر البيع",
+              "en": "Sales orders"
+            },
+            "provenance": {
+              "confidence": 0.88,
+              "humanEdited": false,
+              "ref": "turn-009",
+              "source": "interview"
+            },
+            "relations": [
+              {
+                "cardinality": "many",
+                "id": "lines",
+                "kind": "child_table",
+                "labels": {
+                  "ar": "البنود",
+                  "en": "Lines"
+                },
+                "onDelete": "cascade",
+                "required": true,
+                "target": "sales_order_line"
+              }
+            ],
+            "workflow": "sales_order_flow"
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/sales_order",
+        "reversible": true,
+        "seq": 60,
+        "sourceOps": [
+          "/entities/sales_order"
+        ],
+        "subject": {
+          "id": "sales_order",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "stock.transfer",
                 "mode": "implements"
               }
             ],
@@ -5339,55 +5451,13 @@
                 "precision": 3,
                 "required": true,
                 "type": "decimal"
-              },
-              {
-                "id": "unit_price",
-                "labels": {
-                  "ar": "سعر الوحدة",
-                  "en": "Unit price"
-                },
-                "min": 0,
-                "precision": 2,
-                "required": true,
-                "type": "money"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "sales.quote.line_total",
-                  "inputs": [
-                    "quantity",
-                    "unit_price",
-                    "discount_percent"
-                  ]
-                },
-                "id": "line_total",
-                "labels": {
-                  "ar": "إجمالي البند",
-                  "en": "Line total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
               }
             ],
-            "id": "sales_quote_line",
+            "id": "stock_transfer_line",
             "kind": "child",
             "labels": {
-              "ar": "بند عرض السعر",
-              "en": "Quote line"
+              "ar": "بند التحويل المخزني",
+              "en": "Stock transfer line"
             },
             "provenance": {
               "humanEdited": false,
@@ -5397,14 +5467,14 @@
           }
         },
         "phase": 4,
-        "pointer": "/entities/sales_quote_line",
+        "pointer": "/entities/stock_transfer_line",
         "reversible": true,
-        "seq": 60,
+        "seq": 61,
         "sourceOps": [
-          "/entities/sales_quote_line"
+          "/entities/stock_transfer_line"
         ],
         "subject": {
-          "id": "sales_quote_line",
+          "id": "stock_transfer_line",
           "kind": "entity",
           "parents": []
         }
@@ -5562,82 +5632,12 @@
         "phase": 4,
         "pointer": "/entities/stock_transfer",
         "reversible": true,
-        "seq": 61,
+        "seq": 62,
         "sourceOps": [
           "/entities/stock_transfer"
         ],
         "subject": {
           "id": "stock_transfer",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "stock.transfer",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "item",
-                "labels": {
-                  "ar": "الصنف",
-                  "en": "Item"
-                },
-                "required": true,
-                "target": "item",
-                "type": "link"
-              },
-              {
-                "id": "description",
-                "labels": {
-                  "ar": "الوصف",
-                  "en": "Description"
-                },
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "id": "quantity",
-                "labels": {
-                  "ar": "الكمية",
-                  "en": "Quantity"
-                },
-                "min": 0,
-                "precision": 3,
-                "required": true,
-                "type": "decimal"
-              }
-            ],
-            "id": "stock_transfer_line",
-            "kind": "child",
-            "labels": {
-              "ar": "بند التحويل المخزني",
-              "en": "Stock transfer line"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            }
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/stock_transfer_line",
-        "reversible": true,
-        "seq": 62,
-        "sourceOps": [
-          "/entities/stock_transfer_line"
-        ],
-        "subject": {
-          "id": "stock_transfer_line",
           "kind": "entity",
           "parents": []
         }
@@ -8683,24 +8683,6 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        19,
-        29
-      ],
-      "forwardRefs": [
-        41,
-        42,
-        55
-      ],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/credit_note",
-      "reversible": true,
-      "seq": 40,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
         29
       ],
       "forwardRefs": [
@@ -8709,6 +8691,24 @@
       "kind": "entity.add",
       "phase": 4,
       "pointer": "/entities/credit_note_line",
+      "reversible": true,
+      "seq": 40,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
+        19,
+        29,
+        40
+      ],
+      "forwardRefs": [
+        42,
+        55
+      ],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/credit_note",
       "reversible": true,
       "seq": 41,
       "unresolved": []
@@ -8735,7 +8735,7 @@
       ],
       "forwardRefs": [
         44,
-        57
+        60
       ],
       "kind": "entity.add",
       "phase": 4,
@@ -8923,7 +8923,7 @@
       ],
       "forwardRefs": [
         56,
-        57,
+        60,
         73
       ],
       "kind": "entity.add",
@@ -8951,25 +8951,6 @@
       "ddlImpact": "additive",
       "dependsOn": [
         23,
-        42,
-        47
-      ],
-      "forwardRefs": [
-        58,
-        59,
-        74
-      ],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/sales_order",
-      "reversible": true,
-      "seq": 57,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        23,
         45
       ],
       "forwardRefs": [],
@@ -8977,24 +8958,7 @@
       "phase": 4,
       "pointer": "/entities/sales_order_line",
       "reversible": true,
-      "seq": 58,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        32,
-        42,
-        47
-      ],
-      "forwardRefs": [
-        60
-      ],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/sales_quote",
-      "reversible": true,
-      "seq": 59,
+      "seq": 57,
       "unresolved": []
     },
     {
@@ -9008,24 +8972,42 @@
       "phase": 4,
       "pointer": "/entities/sales_quote_line",
       "reversible": true,
-      "seq": 60,
+      "seq": 58,
       "unresolved": []
     },
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        33,
-        34
+        32,
+        42,
+        47,
+        58
+      ],
+      "forwardRefs": [],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/sales_quote",
+      "reversible": true,
+      "seq": 59,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
+        23,
+        42,
+        47,
+        57,
+        59
       ],
       "forwardRefs": [
-        62,
-        75
+        74
       ],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/stock_transfer",
+      "pointer": "/entities/sales_order",
       "reversible": true,
-      "seq": 61,
+      "seq": 60,
       "unresolved": []
     },
     {
@@ -9038,6 +9020,23 @@
       "kind": "entity.add",
       "phase": 4,
       "pointer": "/entities/stock_transfer_line",
+      "reversible": true,
+      "seq": 61,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
+        33,
+        34,
+        61
+      ],
+      "forwardRefs": [
+        75
+      ],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/stock_transfer",
       "reversible": true,
       "seq": 62,
       "unresolved": []
@@ -9058,7 +9057,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
+        41,
         42,
         43,
         45,
@@ -9068,9 +9067,9 @@
         51,
         53,
         55,
-        57,
         59,
-        61,
+        60,
+        62,
         63
       ],
       "forwardRefs": [],
@@ -9084,7 +9083,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
+        41,
         42,
         43,
         45,
@@ -9094,9 +9093,9 @@
         51,
         53,
         55,
-        57,
         59,
-        61,
+        60,
+        62,
         63
       ],
       "forwardRefs": [],
@@ -9111,14 +9110,14 @@
       "ddlImpact": "none",
       "dependsOn": [
         35,
-        40,
+        41,
         42,
         43,
         45,
         47,
         55,
-        57,
-        59
+        59,
+        60
       ],
       "forwardRefs": [],
       "kind": "role.upsert",
@@ -9131,7 +9130,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
+        41,
         42,
         43,
         45,
@@ -9141,9 +9140,9 @@
         51,
         53,
         55,
-        57,
         59,
-        61,
+        60,
+        62,
         63
       ],
       "forwardRefs": [],
@@ -9157,7 +9156,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
+        41,
         42,
         43,
         45,
@@ -9167,9 +9166,9 @@
         51,
         53,
         55,
-        57,
         59,
-        61,
+        60,
+        62,
         63
       ],
       "forwardRefs": [],
@@ -9187,7 +9186,7 @@
         49,
         51,
         53,
-        61,
+        62,
         63
       ],
       "forwardRefs": [],
@@ -9201,14 +9200,14 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
+        41,
         42,
         43,
         45,
         47,
         55,
-        57,
-        59
+        59,
+        60
       ],
       "forwardRefs": [],
       "kind": "role.upsert",
@@ -9227,8 +9226,8 @@
         45,
         51,
         53,
-        57,
-        61
+        60,
+        62
       ],
       "forwardRefs": [],
       "kind": "role.upsert",
@@ -9278,7 +9277,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        57,
+        60,
         64,
         66,
         67,
@@ -9300,7 +9299,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        61,
+        62,
         69,
         71
       ],
@@ -9315,7 +9314,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
+        41,
         64,
         67
       ],
@@ -9330,7 +9329,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        57,
+        60,
         67,
         68
       ],
@@ -9345,7 +9344,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        57,
+        60,
         67,
         68
       ],
@@ -9375,7 +9374,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        57,
+        60,
         70
       ],
       "forwardRefs": [],
@@ -9424,7 +9423,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        57,
+        60,
         65,
         66,
         67,

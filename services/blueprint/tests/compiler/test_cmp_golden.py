@@ -9,7 +9,7 @@ separate script written from the contract, without importing the compiler, then 
 - components: one per fixture binding, sorted by id, version = the only fixture manifest version (0.1.0).
 - steps: contract 9.3 (one settings.set per company, compliance and i18n.defaultLocale/labelOverrides property;
   *.add/upsert/enable per top-level element with the Blueprint node verbatim, "$fromBlueprint" pointers here),
-  9.4 phases and order, 9.5 ddlImpact (entity.add additive, the rest none), impacts from the bpdiff classification
+  9.4 phases and order (entity.add in Link-target order, BPL-051), 9.5 ddlImpact (entity.add additive, the rest none), impacts from the bpdiff classification
   table in services/blueprint/diff/README.md (entities data_shape; roles, approvals access; company country, crNumber,
   vatNumber, locale and all of compliance: compliance; i18n except defaultLocale cosmetic; the rest config).
 - skippedOps: 9.3 Skipped list (meta, branding, i18n glossary, each integration).
@@ -70,8 +70,9 @@ def test_ordering_rules_of_x_validator_rules():
     a = _art()
     steps = a["steps"]
     assert [s["seq"] for s in steps] == list(range(1, len(steps) + 1))
-    keys = [(s["phase"], s["pointer"], s["kind"]) for s in steps]
+    keys = [(s["phase"], s["pointer"], s["kind"]) for s in steps if s["phase"] != 4]
     assert keys == sorted(keys)
+    assert [s["phase"] for s in steps] == sorted(s["phase"] for s in steps)  # phase 4: Link order (BPL-051)
     ids = [c["id"] for c in a["components"]]
     assert ids == sorted(set(ids))
     assert [s["pointer"] for s in a["skippedOps"]] == sorted(s["pointer"] for s in a["skippedOps"])

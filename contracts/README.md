@@ -14,7 +14,8 @@ The contracts are the source of truth for how the five parts of the platform tal
 | 4 | Event stream | [events.md](events.md) | 0.1.0 |
 | - | Connector interface | [connector-interface.md](connector-interface.md) | 0.1.0 |
 | - | Build states | [build-states.md](build-states.md) | 0.1.0 |
-| - | Engine adapter (operations, errors, conformance; schemas in [engine-adapter/](engine-adapter/)) | [engine-adapter.md](engine-adapter.md) | 0.1.2 |
+| - | Engine adapter (operations, errors, conformance; schemas in [engine-adapter/](engine-adapter/)) | [engine-adapter.md](engine-adapter.md) | 0.1.4 |
+| - | Engine built-in entities (draft, ADR-0075, Q-722; Blueprint entities whose engine type exists before any step) | [engine-builtin-entities.json](engine-builtin-entities.json) | 0.1.0 |
 | - | Compiled artifact | [compiled-artifact.schema.json](compiled-artifact.schema.json) | 0.1.0 |
 | - | Model-call interface (draft, ADR-0054 Proposed; examples `examples/model-call-*.json`) | [model-call.md](model-call.md), [schema](model-call.schema.json) | 0.2.0 |
 | - | Blueprint-to-engine mapping (draft, ADR-0030 and ADR-0055 Proposed) | [engine-mapping.md](engine-mapping.md), [schema](engine-mapping.schema.json) | 0.2.0 |

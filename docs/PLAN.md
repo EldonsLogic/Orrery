@@ -239,7 +239,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | BRD-008 | Favicon generation from the tenant logo | Brand | G2 | BRD-007 | eldon | todo |
 | BRD-009 | Design system rollout: generate all logo files, sizes, favicons, social sizes, the product design system and brand guidelines from the Nuqta S kit, with Cairo headings and Readex Pro body (ADR-0066) | Brand | G2 | BRD-003,LEG-008 | eldon | todo |
 | BRD-010 | UI component library built from tokens | Brand | G2 | BRD-005 | eldon | done |
-| BRD-011 | Font licence and Arabic typography verification | Brand | G1 | BRD-001 | eldon | doing |
+| BRD-011 | Font licence and Arabic typography verification | Brand | G1 | BRD-001 | eldon | done |
 | BRD-012 | Icon set licence check | Brand | G1 | BRD-001 | eldon | done |
 | BRD-013 | Pre-counsel name screening for candidate names (Seshna, Sesh): trademark, company, connotation and domain signals; input to LEG-008 and BRD-003 | Brand | G1 | - | eldon | done |
 | BRD-014 | Integrate the Seshna brand kit (Nuqta S mark, Cairo Bold wordmark, Cairo for headings with Readex Pro body): rewrite docs/brand guidelines, logo build tool and generated assets, heading-font tokens, web icons, manifest and self-hosted fonts | Brand | G1 | - | eldon | done |
@@ -409,7 +409,9 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | GOV-060 | Design-confirmation batch 2: settle open questions answered by code (ADR-0058) | Governance | G1 | - | eldon | done |
 | BPL-039 | Incremental compile: base-to-target artifact with an embedded inverse; Studio uses it to show a real rollback (Q-61, Q-76, ADR-0058); split when picked | Blueprint | G1 | BPL-004 | eldon | doing |
 | SEC-023 | Name contact-detail changes (email, phone, notify-to, webhook) in the R4 row of docs/security/action-policy-table.md and in prompt-injection-defence.md 5.1, matching the Tool API (Q-139, ADR-0058) | Security | G2 | GOV-060 | eldon | doing |
-| WEB-028 | Self-host Cairo and Readex Pro (subset WOFF2 with OFL text and PROVENANCE.md, @font-face, font-display swap) in web/app, and remove the Studio's runtime Google Fonts link and CSP allowance (Q-119, ADR-0058) | Web | G1 | BRD-011 | eldon | todo |
+| WEB-028 | Self-host Cairo and Readex Pro (subset WOFF2 with OFL text and provenance note, @font-face, font-display swap) in web/app, and remove the Studio's runtime Google Fonts link and CSP allowance (Q-119, ADR-0058) | Web | G1 | BRD-011 | eldon | done |
+| WEB-029 | Product design pass on the Seshna design system: layout, hierarchy, type and spacing for every app screen, one reference screen first (owner home), then one PR per screen; tokens only, RTL, no shadows (Eldon, 2026-11-26) | Web | G1 | BRD-010 | eldon | doing |
+| WEB-036 | Make web/marketing load the self-hosted fonts (fonts.css and the /fonts/ files) so the marketing site does not fall back to system fonts; found in the WEB-028 partner re-review | Web | G1 | WEB-028 | eldon | todo |
 | GOV-061 | Record founder answers given in chat (16 questions: Q-560, Q-70, Q-312, Q-23, Q-25, Q-29, Q-123, Q-43, Q-42, Q-41, Q-128, Q-294, Q-296, Q-291, Q-292, Q-293) and accept ADR-0027 with the three Q-294 checks | Governance | G1 | - | eldon | done |
 | GOV-062 | Supersede ADR-0034's sandbox rule so draft country packs may run in sandbox (Eldon's Q-560 answer) | Governance | G1 | GOV-061 | eldon | done |
 | GOV-063 | Apply Eldon's Q-292 and Q-293 answers: ADR superseding ADR-0007 item 9 (regional role store), align the phase table, GOV-039 wording and `phase-exit-criteria.json` with readiness order | Governance | G1 | GOV-061 | eldon | done |

@@ -1,8 +1,14 @@
 .root {
   box-sizing: border-box;
-  padding: calc(var(--space-unit) * 2);
+  padding: var(--space-2);
   background: var(--color-surface);
   color: var(--color-text);
-  border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
-  border-radius: var(--radius-card);
+  border: var(--hairline);
+  border-radius: var(--radius-md);
+}
+
+@media (width > 48rem) {
+  .root {
+    padding: var(--space-3);
+  }
 }

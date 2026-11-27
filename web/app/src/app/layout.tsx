@@ -3,11 +3,14 @@ import { join } from 'node:path';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { Providers } from '../components/Providers';
+import { firstPaintScript } from '../lib/firstPaint';
 import { defaultLocale, directionOf, messages } from '../i18n';
 import { themeColorsFromTokens } from '../pwa/manifest';
+import '../styles/fonts.css';
 import '../styles/tokens.generated.css';
 import '../styles/tokens.proposed.generated.css';
 import '../styles/mobile.css';
+import '../styles/foundation.css';
 
 export const metadata: Metadata = {
   title: messages[defaultLocale].pwa.name,
@@ -40,6 +43,9 @@ export function generateViewport(): Viewport {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang={defaultLocale} dir={directionOf(defaultLocale)} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: firstPaintScript() }} />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>

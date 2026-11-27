@@ -2,16 +2,23 @@
 .control {
   box-sizing: border-box;
   inline-size: 100%;
-  min-block-size: max(var(--button-height), var(--touch-target));
-  padding-inline: calc(var(--space-unit) * 1.5);
-  border: 1px solid color-mix(in srgb, var(--color-text) 50%, transparent);
-  border-radius: var(--radius-control);
+  min-block-size: var(--control-md);
+  padding-inline: var(--space-1_5);
+  border: var(--border-width) solid color-mix(in srgb, var(--color-text) 50%, transparent);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
   font-family: var(--font-body);
   font-size: var(--text-body-size);
   line-height: var(--text-body-line);
   transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+/* Inputs match the md button; on touch they grow to the touch target. */
+@media (pointer: coarse) {
+  .control {
+    min-block-size: var(--touch-target);
+  }
 }
 
 :lang(ar) .control {

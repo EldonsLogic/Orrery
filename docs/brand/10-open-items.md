@@ -19,7 +19,6 @@ What the Seshna brand system (ADR-0066) still leaves undone, unverified or in dr
 - **Seshna storytelling device for social and slides:** not specified.
 
 ## Code outside `docs/brand` and `web/` that still uses the old system
-- `services/studio/static/index.html` loads Alexandria from Google Fonts.
 - `apps/engine/change_engine/change_engine/print_formats/bilingual_tax_invoice.py` lists Alexandria in its font stack (and its test lists it as an allowed font).
 Each needs its owner's plan row.
 

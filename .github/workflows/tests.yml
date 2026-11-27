@@ -16,6 +16,9 @@ on:
       - "!**.md"
       - "!.github/ISSUE_TEMPLATE/**"
       - "!web/**"
+      # Shared brand fonts (WEB-028) are served by the Studio and tested by services/studio/tests.
+      - "web/app/public/fonts/**"
+      - "web/app/src/styles/fonts.css"
   push:
     branches:
       - main
@@ -28,6 +31,9 @@ on:
       - "!**.md"
       - "!.github/ISSUE_TEMPLATE/**"
       - "!web/**"
+      # Shared brand fonts (WEB-028) are served by the Studio and tested by services/studio/tests.
+      - "web/app/public/fonts/**"
+      - "web/app/src/styles/fonts.css"
   workflow_dispatch:
 
 permissions:
@@ -139,7 +145,7 @@ jobs:
           echo "discovery=$(check_path '^(services/(discovery|blueprint)/|components/)')" >> "$GITHUB_OUTPUT"
           echo "gateway=$(check_path '^(services/gateway/|services/blueprint/)')" >> "$GITHUB_OUTPUT"
           echo "operate=$(check_path '^(services/(operate|blueprint|control-plane|gateway)/)')" >> "$GITHUB_OUTPUT"
-          echo "studio=$(check_path '^(services/studio/|services/blueprint/|services/datasets/|components/)')" >> "$GITHUB_OUTPUT"
+          echo "studio=$(check_path '^(services/studio/|services/blueprint/|services/datasets/|components/|web/app/public/fonts/|web/app/src/styles/fonts\.css$)')" >> "$GITHUB_OUTPUT"
           echo "engine=$(check_path '^(apps/engine/|services/blueprint/|services/discovery/(prevalidate|connectors)/|components/|infra/dev/docker/|docs/brand/tokens/tokens\.json$)')" >> "$GITHUB_OUTPUT"
           echo "evals=$(check_path '^(evals/|services/(blueprint|discovery|operate)/)')" >> "$GITHUB_OUTPUT"
           echo "scripts=$(check_path '^scripts/')" >> "$GITHUB_OUTPUT"

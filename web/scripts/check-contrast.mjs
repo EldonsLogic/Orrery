@@ -7,18 +7,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const tokensFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'brand', 'tokens', 'tokens.css');
+const proposedFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'brand', 'tokens', 'tokens.proposed.css');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'app', 'src');
 
-export function readThemes(css) {
-  const grab = (re) => {
-    const m = css.match(re);
+export function readThemes(css, extra = fs.readFileSync(proposedFile, 'utf8')) {
+  const grab = (re, src = css) => {
+    const m = src.match(re);
     if (!m) throw new Error(`token block not found: ${re}`);
     return Object.fromEntries([...m[1].matchAll(/--(color-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g)].map((x) => [x[1], x[2]]));
   };
-  return {
-    light: grab(/:root\s*\{([^}]*)\}/),
-    dark: grab(/:root\[data-theme="dark"\]\s*\{([^}]*)\}/),
-  };
+  const grab2 = (src, re) => grab(re, src);
+  const light = /:root\s*\{([^}]*)\}/, dark = /:root\[data-theme="dark"\]\s*\{([^}]*)\}/;
+  // tokens.css first, then the v1.1 additions (text-muted, border-control) from tokens.proposed.css.
+  return { light: { ...grab(light), ...grab2(extra, light) }, dark: { ...grab(dark), ...grab2(extra, dark) } };
 }
 
 const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -52,7 +53,21 @@ for (const [bn, base] of [['surface', S], ['background', B]]) {
   add(`focus-danger/${bn}`, `focus ring (danger) on ${bn}`, 'ui/Checkbox.module.css', 'solid var(--color-danger)', (c) => c.danger, base, UI);
   add(`border50/${bn}`, `control border (text 50%) on ${bn}`, 'ui/control.module.css', 'var(--color-text) 50%', dimOn(0.5, base), base, UI);
 }
-add('navHeading/surface', 'nav heading (opacity .75) on surface', 'components/shell/Shell.module.css', 'opacity: 0.75', dimOn(0.75, S), S, N);
+// Glass chrome (top bar, side navigation, dock): the fill is --glass-alpha of the surface over whatever scrolls beneath, so the
+// worst case is a white or a black backdrop. WCAG 2.2 SC 1.4.3. The alpha is read from foundation.css so a change is re-checked.
+const glassAlpha = Number(fs.readFileSync(path.join(root, 'styles', 'foundation.css'), 'utf8').match(/@supports[\s\S]*?--glass-alpha:\s*(\d+)%/)[1]) / 100;
+for (const [bn, backdrop] of [['white', '#ffffff'], ['black', '#000000']]) {
+  const glass = (c) => mix(c.surface, glassAlpha, backdrop);
+  add(`glass-text/${bn}`, `text on glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', 'var(--glass-fill)', (c) => c.text, glass, N);
+  add(`glass-muted/${bn}`, `muted text (nav heading, footer label, language) on glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', 'color: var(--color-text-muted)', (c) => c['text-muted'], glass, N);
+  add(`glass-icon/${bn}`, `muted icon (nav icon, chevron) on glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', '.navIcon', (c) => c['text-muted'], glass, UI);
+  add(`glass-on-primary-nav/${bn}`, `current nav link text on 14% primary tint over glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', 'var(--color-primary) 14%', (c) => c.text, (c) => mix(c.primary, 0.14, glass(c)), N);
+  // WCAG 2.2 SC 1.4.11: the current item's icon and its start-edge indicator are primary graphics on that same tint.
+  add(`glass-current-nav-icon/${bn}`, `current nav icon and indicator (primary) on 14% primary tint over glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', ".navLink[aria-current='page'] .navIcon", (c) => c.primary, (c) => mix(c.primary, 0.14, glass(c)), UI);
+}
+add('muted/surface', 'muted text on surface (popover, panel, footer)', 'components/shell/Shell.module.css', 'color: var(--color-text-muted)', (c) => c['text-muted'], S, N);
+add('border-control/surface', 'control border (select, active language) on surface', 'components/shell/Shell.module.css', 'var(--color-border-control)', (c) => c['border-control'], S, UI);
+add('option-active-ring/hover', 'active option ring (primary) on hover tint over surface', 'components/shell/Shell.module.css', ".option[data-active='true']", (c) => c.primary, (c) => mix(c.text, 0.06, c.surface), UI);
 add('onboarding-progress/background', 'onboarding progress (opacity .75) on background', 'components/onboarding/Onboarding.module.css', 'opacity: 0.75', dimOn(0.75, B), B, N);
 add('on-primary', 'background on primary (button, user bubble, skip link, badge)', 'ui/Button.module.css', 'color: var(--color-background)', (c) => c.background, (c) => c.primary, N);
 add('on-danger', 'background on danger button', 'ui/Button.module.css', 'color: var(--color-background)', (c) => c.background, (c) => c.danger, N);

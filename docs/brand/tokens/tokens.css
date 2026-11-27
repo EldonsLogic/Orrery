@@ -10,8 +10,8 @@
   --color-danger: #C21F3A;
   --seshna-mark: #2443D0;
   --seshna-mark-accent: #E0552C;
-  --font-heading: "Cairo", system-ui, sans-serif;
-  --font-body: "Readex Pro", system-ui, sans-serif;
+  --font-heading: "Cairo", "Geeza Pro", "Noto Naskh Arabic", "Segoe UI", Tahoma, system-ui, sans-serif;
+  --font-body: "Readex Pro", "Geeza Pro", "Noto Naskh Arabic", "Segoe UI", Tahoma, system-ui, sans-serif;
   --text-display-size: 40px;
   --text-display-line: 48px;
   --text-display-weight: 600;
@@ -42,7 +42,7 @@
   --text-caption-line-ar: 20px;
   --space-unit: 8px;
   --radius-control: 8px;
-  --radius-card: 12px;
+  --radius-card: 14px;
   --radius-brand-graphic: 0px;
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;

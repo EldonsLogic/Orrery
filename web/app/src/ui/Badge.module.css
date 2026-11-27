@@ -6,7 +6,7 @@
   padding-block: calc(var(--space-unit) / 4);
   padding-inline: var(--space-unit);
   border: 1px solid var(--badge-tone);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--badge-tone) calc(var(--status-tint-opacity) * 100%), transparent);
   color: var(--color-text);
   font-size: var(--text-caption-size);

@@ -1,19 +1,27 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Menu as MenuIcon } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Alert, Button } from '../../ui';
 import { LoadingMark } from '../marks/LoadingMark';
 import { SideNav } from './SideNav';
 import { UserMenu } from './UserMenu';
+import { LanguageSwitch } from './LanguageSwitch';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { useSession } from './SessionProvider';
 import { usesDrawer } from '../../lib/viewport';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 import styles from './Shell.module.css';
 
-/** Top bar, side navigation (a drawer on narrow screens), skip link and the single main landmark. Pages inside render no <main>. */
-export function AppShell({ children }: { children: ReactNode }) {
+/**
+ * Top bar, side navigation (a drawer on narrow screens), skip link and the single main landmark. Pages inside render no <main>.
+ * The top bar, navigation and the phone "Ask Seshna" dock are glass chrome (styles/foundation.css); content stays solid.
+ */
+export function AppShell({ children, brand }: { children: ReactNode; brand?: ReactNode }) {
   const t = useTranslations('shell');
+  const pathname = usePathname() ?? '';
   const { session, switchFailed, dismissError, retry } = useSession();
   const [drawer, setDrawer] = useState(false);
   const toggle = useRef<HTMLButtonElement>(null);
@@ -84,14 +92,27 @@ export function AppShell({ children }: { children: ReactNode }) {
           aria-controls="app-nav"
           onClick={() => setDrawer((v) => !v)}
         >
-          {t('nav.toggle')}
+          <MenuIcon aria-hidden="true" className={styles.menuIcon} strokeWidth={1.75} />
+          <span className={styles.switcherLabel}>{t('nav.toggle')}</span>
         </button>
+        {brand ? (
+          <Link href="/home/" className={styles.brand} aria-label={t('nav.home')}>
+            {brand}
+          </Link>
+        ) : null}
         <WorkspaceSwitcher claims={claims} memberships={memberships} />
+        <LanguageSwitch />
         <UserMenu displayName={displayName} claims={claims} />
       </header>
       <div className={styles.body}>
         <div id="app-nav" className={styles.navWrap} data-open={drawer ? 'true' : 'false'}>
-          <SideNav claims={claims} onNavigate={() => setDrawer(false)} />
+          <div className={styles.navInner}>
+            <SideNav
+              claims={claims}
+              buildState={memberships.find((m) => m.tenantId === claims.tenantId)?.buildState}
+              onNavigate={() => setDrawer(false)}
+            />
+          </div>
         </div>
         <main id="main" tabIndex={-1} className={styles.main} inert={drawer}>
           {switchFailed ? (
@@ -107,10 +128,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               {t('state.noWorkspace.body')}
             </Alert>
           ) : (
-            children
+            <div className={styles.content}>{children}</div>
           )}
         </main>
       </div>
+      {pathname.startsWith('/chat/') ? null : (
+        <nav aria-label={t('dock.label')} className={styles.dock} inert={drawer}>
+          <Link href="/chat/" className={styles.dockLink}>
+            <span>{t.rich('dock.ask', { brand: (c) => <bdi>{c}</bdi> })}</span>
+          </Link>
+        </nav>
+      )}
     </div>
   );
 }

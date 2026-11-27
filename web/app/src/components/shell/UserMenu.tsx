@@ -11,8 +11,15 @@ import { useSession } from './SessionProvider';
 import styles from './Shell.module.css';
 
 const MODES = ['system', 'light', 'dark'] as const;
+const initials = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => [...w][0]?.toUpperCase() ?? '')
+    .join('');
 
-/** Disclosure panel (not an ARIA menu, so ordinary Tab order works): language, theme, MFA badge, sign-out. Escape closes and returns focus. */
+/** A round avatar opens a disclosure panel (not an ARIA menu, so ordinary Tab order works): language, theme, MFA badge, sign-out. Escape closes and returns focus. */
 export function UserMenu({ displayName, claims }: { displayName: string; claims: SessionClaims }) {
   const t = useTranslations('shell.user');
   const { locale, setLocale } = useSettings();
@@ -55,13 +62,14 @@ export function UserMenu({ displayName, claims }: { displayName: string; claims:
         className={styles.userButton}
         aria-expanded={open}
         aria-controls={panelId}
+        aria-label={t('open', { name: `\u2068${displayName}\u2069` })}
         onClick={() => setOpen((v) => !v)}
       >
-        {t('open', { name: displayName })}
+        <span aria-hidden="true">{initials(displayName)}</span>
       </button>
       {open ? (
         <div id={panelId} role="group" aria-label={t('panel')} className={styles.panel}>
-          <p className={styles.panelName}>{displayName}</p>
+          <p className={styles.panelName} dir="auto">{displayName}</p>
           {/* Placeholder: the real state comes from the MFA claim of the token. */}
           <Badge tone={claims.mfaSatisfied ? 'success' : 'warning'}>{claims.mfaSatisfied ? t('mfaOn') : t('mfaOff')}</Badge>
           <label className={styles.field}>

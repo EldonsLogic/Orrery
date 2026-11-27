@@ -6,28 +6,90 @@
 }
 
 .progress {
+  --progress-mark: var(--space-3);
+  container-type: inline-size;
   display: flex;
   flex-wrap: wrap;
-  gap: calc(var(--space-unit) * 2);
+  row-gap: var(--space-1);
+  inline-size: 100%;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* Steps follow the reading direction; the marks themselves never mirror. Each step after the first draws the line from
+   the step before it: solid Cobalt up to the current step, a muted dashed line after it. */
 .stage {
-  display: inline-flex;
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
   flex-direction: column;
   align-items: center;
-  gap: calc(var(--space-unit) / 2);
+  gap: var(--space-0_5);
+  min-inline-size: 0;
+  text-align: center;
   font-size: var(--text-small-size);
+  line-height: var(--text-small-line);
+}
+
+.stage + .stage::before {
+  content: '';
+  position: absolute;
+  inset-block-start: calc(var(--progress-mark) / 2 - var(--border-width));
+  inset-inline-start: calc(-50% + var(--progress-mark) / 2 + var(--space-1));
+  inset-inline-end: calc(50% + var(--progress-mark) / 2 + var(--space-1));
+  border-block-start: calc(var(--border-width) * 2) solid var(--color-primary);
+}
+
+.stage[data-state='upcoming']::before {
+  border-block-start-style: dashed;
+  border-block-start-color: var(--color-border-control);
+}
+
+.stageState {
+  color: var(--color-text-muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--text-body-weight);
 }
 
 .stage[data-state='upcoming'] {
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
 
+.stage[data-state='current'] .stageState {
+  color: var(--color-primary);
+  font-weight: var(--text-label-weight);
+}
+
 .stage[data-state='current'] {
-  font-weight: 600;
+  font-weight: var(--text-h3-weight);
+}
+
+/* Narrow containers (phones, a side column): five columns would leave about 62px a stage and break the names, so the
+   stages stack as a vertical list, one row each (mark, name, state), joined by a vertical line on the start side. */
+@container (inline-size < 28rem) {
+  .stage {
+    flex-basis: 100%;
+    flex-direction: row;
+    gap: var(--space-1);
+    min-block-size: var(--progress-mark);
+    text-align: start;
+  }
+
+  .stage + .stage::before {
+    inset-block-start: calc(var(--space-1) * -1);
+    inset-inline-start: calc(var(--progress-mark) / 2 - var(--border-width));
+    inset-inline-end: auto;
+    block-size: var(--space-1);
+    border-block-start: 0;
+    border-inline-start: calc(var(--border-width) * 2) solid var(--color-primary);
+  }
+
+  .stage[data-state='upcoming']::before {
+    border-inline-start-style: dashed;
+    border-inline-start-color: var(--color-border-control);
+  }
 }
 
 /* PROPOSED loading loop: outline, then the upper half, then both halves, about 0.8 s each. */

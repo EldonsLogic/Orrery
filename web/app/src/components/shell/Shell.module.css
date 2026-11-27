@@ -4,6 +4,8 @@
   flex-direction: column;
   min-block-size: 100vh;
   min-block-size: 100dvh;
+  /* One height for the top bar, the sticky side navigation and the drawer: the 44px touch target, the bar padding and its border. */
+  --shell-bar-height: calc(var(--touch-target) + var(--space-2) + var(--border-width));
   background: var(--color-background);
   color: var(--color-text);
   font-family: var(--font-body);
@@ -38,7 +40,7 @@
   align-items: center;
   gap: var(--space-2);
   box-sizing: border-box;
-  min-block-size: var(--topbar-height);
+  min-block-size: var(--shell-bar-height);
   padding-block: var(--space-1);
   padding-inline: max(var(--page-pad), var(--safe-inline));
   padding-block-start: max(var(--space-1), var(--safe-block-start));
@@ -47,7 +49,6 @@
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
   border-block-end: var(--border-width) solid var(--glass-edge);
-  box-shadow: var(--glass-highlight);
 }
 
 .brand {
@@ -103,7 +104,7 @@
   outline-offset: var(--focus-ring-offset);
 }
 
-/* Company switcher: initial, name, chevron; a listbox in a glass popover. */
+/* Company switcher: initial, name, chevron; a listbox in a solid popover (never glass on glass: it opens over the glass bar and side navigation). */
 .switcher {
   position: relative;
   display: flex;
@@ -187,13 +188,10 @@
   margin: 0;
   padding: var(--space-1);
   list-style: none;
-  background: var(--glass-fill);
-  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
-  -webkit-backdrop-filter: var(--glass-filter);
-  backdrop-filter: var(--glass-filter);
-  border: var(--border-width) solid var(--glass-edge);
+  background: var(--color-surface);
+  border: var(--hairline);
   border-radius: var(--radius-md);
-  box-shadow: var(--glass-highlight), var(--shadow-overlay);
+  box-shadow: var(--shadow-overlay);
 }
 
 .popover[hidden] {
@@ -213,6 +211,8 @@
 
 .option[data-active='true'] {
   background: var(--state-hover);
+  outline: var(--focus-ring-width) solid var(--color-primary);
+  outline-offset: calc(var(--focus-ring-width) * -1);
 }
 
 .option[aria-selected='true'] {
@@ -224,7 +224,7 @@
   cursor: not-allowed;
 }
 
-/* Language: a small segmented switch beside the avatar; on phones only the other language shows. */
+/* Language: a small segmented switch beside the avatar; both languages stay in the tree and reachable on phones. */
 .lang {
   display: inline-flex;
   flex: none;
@@ -254,7 +254,7 @@
 .langButton[aria-pressed='true'] {
   background: var(--color-surface);
   color: var(--color-text);
-  border-color: var(--color-border);
+  border-color: var(--color-border-control);
 }
 
 .langButton:focus-visible {
@@ -288,7 +288,7 @@
   min-inline-size: 0;
   max-inline-size: 100%;
   padding-inline: var(--space-1);
-  border: var(--border-width) solid color-mix(in srgb, var(--color-text) 25%, transparent);
+  border: var(--border-width) solid var(--color-border-control);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
@@ -310,13 +310,10 @@
   box-sizing: border-box;
   margin-block-start: var(--space-1);
   padding: var(--space-2);
-  background: var(--glass-fill);
-  /* Prefixed first: the minifier keeps only the last of the pair, and Chrome reads only the unprefixed one. */
-  -webkit-backdrop-filter: var(--glass-filter);
-  backdrop-filter: var(--glass-filter);
-  border: var(--border-width) solid var(--glass-edge);
+  background: var(--color-surface);
+  border: var(--hairline);
   border-radius: var(--radius-md);
-  box-shadow: var(--glass-highlight), var(--shadow-overlay);
+  box-shadow: var(--shadow-overlay);
 }
 
 .panelName {
@@ -352,9 +349,9 @@
 
 .navInner {
   position: sticky;
-  inset-block-start: var(--topbar-height);
+  inset-block-start: var(--shell-bar-height);
   box-sizing: border-box;
-  block-size: calc(100dvh - var(--topbar-height));
+  block-size: calc(100dvh - var(--shell-bar-height));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--space-3) var(--space-2) var(--space-2);
@@ -379,7 +376,7 @@
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line);
   font-weight: var(--text-label-weight);
-  opacity: 0.75;
+  color: var(--color-text-muted);
 }
 
 .navList {
@@ -552,8 +549,12 @@
     block-size: var(--touch-target);
   }
 
+  .lang {
+    padding: 0;
+  }
+
   .langButton {
-    min-block-size: calc(var(--touch-target) - var(--space-1) - var(--border-width) * 2);
+    min-block-size: calc(var(--touch-target) - var(--border-width) * 2);
   }
 }
 
@@ -595,7 +596,7 @@
     inset-inline-start: 0;
     z-index: 10;
     inline-size: min(18rem, 85vw);
-    padding-block-start: calc(var(--topbar-height) + var(--safe-block-start));
+    padding-block-start: calc(var(--shell-bar-height) + var(--safe-block-start));
     padding-block-end: var(--safe-block-end);
     background: var(--color-surface);
   }

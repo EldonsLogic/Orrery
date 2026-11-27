@@ -150,7 +150,7 @@
         "classifiedIntent": {"enum": ["greeting_ack", "opening_hours", "location", "handoff_ack"]},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "confidenceThreshold": {"type": "number", "minimum": 0.8, "maximum": 1},
-        "riskClass": {"const": "R3", "description": "Proposed, SEC action-policy row pending (Q-702): every send is an external send, so not R1."},
+        "riskClass": {"const": "R3", "description": "Proposed, SEC action-policy row pending (Q-720): every send is an external send, so not R1."},
         "approvalId": {"oneOf": [{"$ref": "#/$defs/ref"}, {"type": "null"}]}
       },
       "allOf": [

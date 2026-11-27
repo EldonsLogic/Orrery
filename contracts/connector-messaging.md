@@ -32,7 +32,7 @@ These sit beside the Tool API section 8 envelope (`user_id`, `agent_id`, `argume
 
 **Tainted threads (prompt-injection-defence 4.5).** A session reply always has `tainted: true`, since the thread holds inbound text. A tainted send is a saved draft that executes only on a human's confirmation gesture over the canonical payload; that is why `human` and `agent_draft` both need `confirmationId`. `auto_reply` is the one path with no gesture, so it stays off until a SEC row allows it (section 5).
 
-**Risk classes: proposed, SEC row pending (Q-702).** Action-policy section 4 defines R1 as a change with no external effect, and every send reaches a person outside the tenant, so no send is R1. R3 is the only class whose meaning includes an external send, so until SEC sets a row every send is `riskClass: R3` (fail closed; the row may be stricter, never looser):
+**Risk classes: proposed, SEC row pending (Q-720).** Action-policy section 4 defines R1 as a change with no external effect, and every send reaches a person outside the tenant, so no send is R1. R3 is the only class whose meaning includes an external send, so until SEC sets a row every send is `riskClass: R3` (fail closed; the row may be stricter, never looser):
 - `message.send_reply` and utility `message.send_template` to one contact: R3 proposed, recipient selected by `contactRef` only (prompt-injection-defence 5.1).
 - `message.send_template` with category `marketing`, any batch or campaign: R3, `origin: human`, `approvalId` a required ref (never null), step-up per the row; never agent-creatable.
 - `auto_reply`: R3 proposed, `session_reply` on a Meta channel only; see section 5.

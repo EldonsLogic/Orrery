@@ -93,7 +93,7 @@
       "type": "object",
       "required": ["manage"],
       "additionalProperties": false,
-      "description": "Module role vocabulary. manage: runs the module (sees the team's records, reassigns); work: works its own or assigned records; view: read only. Listing grants nothing: roles[].permissions and scope still decide every action.",
+      "description": "Module role vocabulary. manage: the roles that the module's screens treat as managers; work: the roles they treat as workers; view: the roles they treat as viewers. Listing grants nothing: roles[].permissions and scope decide everything.",
       "properties": {
         "manage": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
         "work": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
@@ -140,7 +140,7 @@
               "type": "array",
               "minItems": 3,
               "maxItems": 20,
-              "description": "Opportunity stages in pipeline order. At least one open stage, exactly one won and exactly one lost stage.",
+              "description": "Opportunity stages in pipeline order. At least one open stage, exactly one won and exactly one lost stage. An open stage has probabilityPercent strictly between 0 and 100.",
               "items": {
                 "type": "object",
                 "required": ["id", "labels", "kind", "probabilityPercent"],
@@ -153,7 +153,8 @@
                 },
                 "allOf": [
                   { "if": { "properties": { "kind": { "const": "won" } } }, "then": { "properties": { "probabilityPercent": { "const": 100 } } } },
-                  { "if": { "properties": { "kind": { "const": "lost" } } }, "then": { "properties": { "probabilityPercent": { "const": 0 } } } }
+                  { "if": { "properties": { "kind": { "const": "lost" } } }, "then": { "properties": { "probabilityPercent": { "const": 0 } } } },
+                  { "if": { "properties": { "kind": { "const": "open" } } }, "then": { "properties": { "probabilityPercent": { "minimum": 1, "maximum": 99 } } } }
                 ]
               },
               "allOf": [

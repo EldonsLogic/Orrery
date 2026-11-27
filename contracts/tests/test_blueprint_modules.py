@@ -98,10 +98,63 @@ def test_example_module_metrics_are_in_the_vocabulary():
     assert refs and set(refs) <= vocab, set(refs) - vocab
 
 
+# Rigid-zone terms (AGENTS.md principle 3): a key whose name holds one of these as a substring or as a
+# camelCase or snake_case token is a formula, posting, costing, tax, payroll or pricing knob.
+RIGID_SUBSTRINGS = ("formula", "expression", "posting", "valuation", "account", "ledger", "payroll")
+RIGID_TOKENS = ("cost", "tax", "rate", "price", "amount")
+
+
+def _tokens(key):
+    return [t.lower() for t in re.findall(r"[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])", key)]
+
+
+def is_rigid_key(key):
+    low = key.lower()
+    return (any(t in low for t in RIGID_SUBSTRINGS)
+            or any(tok.startswith(t) for tok in _tokens(key) for t in RIGID_TOKENS))
+
+
+def _property_names(node, seen):
+    """Every property name reachable from a schema node, following local $refs once each."""
+    if isinstance(node, list):
+        for n in node:
+            yield from _property_names(n, seen)
+        return
+    if not isinstance(node, dict):
+        return
+    ref = node.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/") and ref not in seen:
+        seen.add(ref)
+        yield from _property_names(SCHEMA["$defs"][ref.split("/")[-1]], seen)
+    for key, value in node.items():
+        if key == "properties" and isinstance(value, dict):
+            yield from value
+        if key not in ("description", "enum", "const", "examples"):
+            yield from _property_names(value, seen)
+
+
+@pytest.mark.parametrize("key", ["rmCostBasis", "taxTemplate", "valuationRate", "wipAccount", "billing_rate",
+                                 "costing_rate", "priceList", "amount", "payrollPeriod", "ratePercent",
+                                 "postingDate", "rate_formula", "ledgerHead", "operating_cost"])
+def test_rigid_matcher_catches(key):
+    assert is_rigid_key(key)
+
+
+@pytest.mark.parametrize("key", ["integration", "probabilityPercent", "separate", "accurate", "stages", "labels"])
+def test_rigid_matcher_spares(key):
+    assert not is_rigid_key(key)
+
+
 def test_module_settings_carry_no_formula_or_posting_keys():
-    """Rigid zone (AGENTS.md principle 3): no module definition offers a formula, posting or valuation knob."""
-    banned = re.compile(r"formula|expression|posting|valuation|account|ledger|rate_formula", re.I)
+    """Rigid zone (AGENTS.md principle 3): no module definition offers a formula, posting, costing, tax,
+    payroll, rate, price or amount knob, at any depth (shared module defs included)."""
     for module, ref in SCHEMA["$defs"]["modules"]["properties"].items():
-        text = json.dumps(SCHEMA["$defs"][ref["$ref"].split("/")[-1]]["properties"])
-        keys = re.findall(r'"([A-Za-z_]+)": \{', text)
-        assert not [k for k in keys if banned.search(k)], module
+        keys = set(_property_names(ref, set()))
+        assert keys and not sorted(k for k in keys if is_rigid_key(k)), (module, sorted(k for k in keys if is_rigid_key(k)))
+
+
+def test_module_roles_description_grants_nothing():
+    """ADR-0079 item 2: role lists name who the module screens treat as manager, worker or viewer; they grant nothing."""
+    text = SCHEMA["$defs"]["moduleRoles"]["description"]
+    assert "grants nothing" in text
+    assert not re.search(r"\b(sees|see|reassign\w*|can|may|edit\w*|read\w*)\b", text, re.I), text

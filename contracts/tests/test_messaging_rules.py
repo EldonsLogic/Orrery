@@ -230,3 +230,97 @@ def test_l13_batch_manifest_binds_each_send():
     assert b["manifestHash"] == sha("\n".join(sorted([MKT["payloadHash"]]))) and b["size"] == 1
     assert MKT["approvalId"]
     assert "manifestHash" in RULES and "step-up" in DOC
+
+
+# Q-725 (Eldon, 2026-11-27; partner to confirm): STOP scope across channels.
+CROSS_STOP = load(C / "examples/connector-messaging-consent-cross-channel-stop.json")
+SMS_UTILITY = load(C / "examples/connector-messaging-send-sms-utility-template.json")
+SMS_MARKETING = load(C / "examples/connector-messaging-send-sms-marketing-template.json")
+FUTURE_CHANNELS = ("email",)  # the DSC-025 email connector must honour the cross-channel marketing revoke
+
+
+def stop_revokes(channel):
+    """Keys one STOP or provider opt-out revokes: (a) every purpose on its own channel, (b) marketing on every other
+    channel of the contact, current and future, in all four countries. Utility on other channels is untouched."""
+    countries = SCHEMA["$defs"]["country"]["enum"]
+    others = [c for c in SCHEMA["$defs"]["channel"]["enum"] + list(FUTURE_CHANNELS) if c != channel]
+    return set(stop_keys(channel)) | {(c, country, "marketing") for c in others for country in countries}
+
+
+def sms_grant(purpose, consent_id):
+    return {**GRANT, "consentId": consent_id, "contactRef": "ct_0044", "channel": "sms", "purpose": purpose,
+            "evidenceHash": sha(consent_id)}
+
+
+def consent_refusal(send, records):
+    """MSG-005 / MSG-006 reference: the latest record for the send's key must be its consentRef, granted."""
+    key = (send["tenantId"], send["contactRef"], send["channel"], send["country"], send["template"]["category"])
+    same = [r for r in records if (r["tenantId"], r["contactRef"], r["channel"], r["country"], r["purpose"]) == key]
+    if not same:
+        return "MSG-005"
+    head = max(same, key=lambda r: r["recordedAt"])
+    if head["state"] == "revoked":
+        return "MSG-006"
+    return None if head["consentId"] == send["consentRef"] else "MSG-005"
+
+
+def test_q725_stop_scope_covers_marketing_on_every_other_channel():
+    keys = stop_revokes("whatsapp")
+    for country in SCHEMA["$defs"]["country"]["enum"]:
+        assert ("whatsapp", country, "utility") in keys and ("whatsapp", country, "marketing") in keys
+        for other in ("instagram", "messenger", "sms", "email"):
+            assert (other, country, "marketing") in keys
+            assert (other, country, "utility") not in keys
+    assert len(keys) == 8 + 4 * 4
+
+
+def test_q725_whatsapp_stop_blocks_sms_marketing_and_allows_sms_utility():
+    mkt_grant = sms_grant("marketing", "cns_0044_sms_mkt_g1")
+    utl_grant = sms_grant("utility", "cns_0044_sms_utl_g1")
+    assert V.is_valid(mkt_grant) and V.is_valid(utl_grant)
+    # the WhatsApp STOP (msg_0008) appends the SMS marketing revoke as the next record of that key
+    assert ("sms", CROSS_STOP["country"], "marketing") in stop_revokes(FIRST_STOP["channel"])
+    assert CROSS_STOP["sourceMessageId"] == FIRST_STOP["sourceMessageId"]
+    assert CROSS_STOP["providerSentAt"] == FIRST_STOP["providerSentAt"]
+    assert chain_refusal([mkt_grant], CROSS_STOP) is None
+    records = [mkt_grant, utl_grant, FIRST_STOP, CROSS_STOP]
+    assert V.is_valid(SMS_MARKETING) and V.is_valid(SMS_UTILITY)
+    assert consent_refusal(SMS_MARKETING, records) == "MSG-006"
+    assert consent_refusal(SMS_UTILITY, records) is None
+    assert standing_revoke([mkt_grant, CROSS_STOP])["consentId"] == CROSS_STOP["consentId"]
+
+
+def test_q725_is_recorded():
+    section = DOC.split("## 6. Consent records", 1)[1].split("\n## ", 1)[0]
+    assert "every other channel" in section and "DSC-025" in section and "Q-725" in section
+    assert "Whether a STOP should also cover" not in section
+    assert "marketing purpose on every other channel" in RULES
+    oq = (C.parent / "docs/open-questions.md").read_text(encoding="utf-8")
+    row = next(l for l in oq.splitlines() if l.startswith("| Q-725 "))
+    assert "ANSWERED (Eldon, 2026-11-27)" in row and "Partner to confirm." in row
+
+
+# Q-720 (Eldon, 2026-11-27; partner to confirm): interim step-up rule, fail closed until the AP-MSG rows are accepted.
+def test_q720_interim_step_up_is_eldons_decision():
+    oq = (C.parent / "docs/open-questions.md").read_text(encoding="utf-8")
+    row = next(l for l in oq.splitlines() if l.startswith("| Q-720 "))
+    assert "Eldon, 2026-11-27" in row and "Partner to confirm." in row
+    assert "no step-up" in row and "fail-closed" in row
+    assert "Eldon, 2026-11-27" in DOC.split("**Step-up while R3 is interim", 1)[1].split("\n", 1)[0]
+
+
+# Production hold (Eldon, 2026-11-27): the schema needs an explicit legalClearanceRef; the validator still refuses.
+def capability_refusal(cap, open_legal=("LEG-003", "LEG-012")):
+    if not V.is_valid(cap):
+        return "schema"
+    if cap["siteClass"] == "production" and open_legal:
+        return "production hold"
+    return None
+
+
+def test_production_needs_legal_clearance_ref_and_stays_held():
+    prod = {**CAP, "sandbox": False, "siteClass": "production"}
+    assert capability_refusal(prod) == "schema"
+    assert capability_refusal({**prod, "legalClearanceRef": "lgc_t_demo_wa_1"}) == "production hold"
+    assert capability_refusal(CAP) is None
+    assert "legalClearanceRef" in RULES and "Eldon, 2026-11-27" in DOC.split("**Production hold:**", 1)[1].split("\n", 1)[0]

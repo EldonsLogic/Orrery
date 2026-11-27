@@ -81,6 +81,8 @@ EXPECTED = {
     "consent-keyword-no-source": ("required", "sourceMessageId", None),
     "consent-stop-no-provider-time": ("required", "providerSentAt", None),
     "batch-send-no-approval": ("required", "approvalId", None),
+    # founder decision (Eldon, 2026-11-27): a production capability needs an explicit legal clearance ref
+    "capability-production-no-legal-clearance": ("required", "legalClearanceRef", None),
 }
 HASH_EXCLUDED = ("payloadHash", "confirmationId", "approvalId", "sentBy", "batch")
 

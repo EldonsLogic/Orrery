@@ -1,6 +1,6 @@
 # Accelerator evaluation (FND-002)
 
-Status: draft. Owner: eldon. All sources accessed 2026-11-21. Builds on [investor-shortlist.md](investor-shortlist.md) and [../research/05-investors.md](../research/05-investors.md).
+Status: draft. Owner: eldon. All sources accessed 2026-11-21. Builds on the investor shortlist (kept outside the repo since FND-009) and [../research/05-investors.md](../research/05-investors.md).
 Method: web search plus fetches of official pages. The Hub71 site returned HTTP 403 to our fetcher, so Hub71 terms rest on research/05 (fetched 2026-11-04) and secondary pages. Anything not read on an official page is UNVERIFIED. No gate has opened fundraising (see [README.md](README.md)); this is for sequencing, not a go-ahead to apply.
 
 ## Summary

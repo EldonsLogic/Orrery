@@ -2,10 +2,11 @@
 
 Valid examples must pass; every file in examples/invalid/ must fail. The record-local x-validator-rules that
 JSON Schema cannot express (distinct signers and assertion refs, MFA binding, publishedBy, statement and
-content digests, time order) are checked by `record_rule_errors`, a reference for CMP-038 and CMP-039; the
+content digests, time order, the domain-separated signer challenge) are checked by `record_rule_errors`, a reference for CMP-038 and CMP-039; the
 loader's own checks stay authoritative. Run: uv run --with jsonschema --with referencing --with pytest
 python3 -m pytest contracts/tests -q
 """
+import base64
 import copy
 import hashlib
 import json
@@ -17,7 +18,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 C = Path(__file__).resolve().parent.parent
-KINDS = ("record", "index", "pin")
+KINDS = ("record", "index", "pin", "change-record")
 
 
 def _registry():
@@ -36,6 +37,12 @@ def validator(kind):
     return Draft202012Validator(schema, registry=REG)
 
 
+def kind_of(path):
+    """country-pack-<kind>-<name>.json; the longest kind wins (change-record before record)."""
+    rest = path.name[len("country-pack-"):]
+    return max((k for k in KINDS if rest.startswith(k + "-")), key=len)
+
+
 def load(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -47,6 +54,19 @@ def digest(data: bytes) -> str:
 def canonical(obj) -> bytes:
     # RFC 8785 for the ASCII-only, integer-only objects used here; the shared vectors (CMP39-T07, T42) bind.
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+SIGNOFF_DOMAIN = b"country-pack-signoff-v1\n"
+
+
+def signoff_challenge(statement_digest):
+    """Contract 0.3.0 assumption 4: base64url (no padding) of SHA-256(domain + LF + ASCII statementDigest)."""
+    raw = hashlib.sha256(SIGNOFF_DOMAIN + statement_digest.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _client_data(sig):
+    return json.loads(base64.urlsafe_b64decode(sig["clientDataJSON"] + "=" * (-len(sig["clientDataJSON"]) % 4)))
 
 
 def _t(s):
@@ -80,12 +100,15 @@ def record_rule_errors(rec):
             errs.append("signedAt after publishedAt")
         if s["role"] == "market_accountant" and s["market"] != rec["countryCode"]:
             errs.append("signoff_certification_mismatch: market")
+        sig = s.get("signerSignature")
+        if sig and _client_data(sig).get("challenge") != signoff_challenge(s["statementDigest"]):
+            errs.append("signer_signature: challenge")
     return errs
 
 
 def examples(kind, invalid=False):
     base = C / "examples" / ("invalid" if invalid else "")
-    return sorted(base.glob(f"country-pack-{kind}-*.json"))
+    return sorted(p for p in base.glob(f"country-pack-{kind}-*.json") if kind_of(p) == kind)
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -95,21 +118,36 @@ def test_schema_is_valid(kind):
 
 @pytest.mark.parametrize("path", [p for k in KINDS for p in examples(k)], ids=lambda p: p.name)
 def test_valid_examples_pass(path):
-    kind = path.name.split("-")[2]
+    kind = kind_of(path)
     errors = [e.message for e in validator(kind).iter_errors(load(path))]
     assert errors == []
     if kind == "record":
         assert record_rule_errors(load(path)) == []
+    if kind == "change-record":  # same domain-separated challenge as a publish (assumption 4)
+        for s in load(path)["signOffs"]:
+            if "signerSignature" in s:
+                assert _client_data(s["signerSignature"])["challenge"] == signoff_challenge(s["statementDigest"])
 
 
 @pytest.mark.parametrize("path", [p for k in KINDS for p in examples(k, invalid=True)], ids=lambda p: p.name)
 def test_invalid_examples_fail(path):
-    assert not validator(path.name.split("-")[2]).is_valid(load(path))
+    assert not validator(kind_of(path)).is_valid(load(path))
 
 
 def test_every_kind_has_valid_and_invalid_examples():
     for kind in KINDS:
         assert examples(kind) and examples(kind, invalid=True), kind
+
+
+def test_raw_digest_challenge_refused():
+    """A signerSignature over the raw statementDigest (pre-0.3.0) is refused; the domain-separated one passes."""
+    rec = load(C / "examples" / "country-pack-record-sa-urgent-production.json")
+    s = rec["signOffs"][0]
+    raw = base64.urlsafe_b64encode(bytes.fromhex(s["statementDigest"][7:])).rstrip(b"=").decode("ascii")
+    cd = {**_client_data(s["signerSignature"]), "challenge": raw}
+    s["signerSignature"]["clientDataJSON"] = base64.urlsafe_b64encode(
+        json.dumps(cd, separators=(",", ":")).encode()).rstrip(b"=").decode("ascii")
+    assert "signer_signature: challenge" in record_rule_errors(rec)
 
 
 def _dev_record():

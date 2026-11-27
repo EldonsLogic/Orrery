@@ -73,4 +73,4 @@ accessed 2026-11-19. No source is copied into this repository.
 
 1. Version pins are tested in `infra/dev/docker` (ERP-001) before promotion to production.
 2. Any newly adopted Frappe app or Python/Node library must be added to this register before merging to `main`.
-3. GPL boundaries are reviewed by counsel under LEG-006 to ensure SaaS API boundaries remain clean and non-derivative.
+3. GPL boundaries: for SaaS-only delivery they are answered by [gpl-saas-boundary.md](../research/gpl-saas-boundary.md) and [ADR-0074](../decisions/ADR-0074-gpl-boundary-settled-by-research.md) (LEG-006), with its rules enforced. ADR-0074 rule 7 makes this register the allowlist for apps, pip and npm packages and container images, beside a blocklist (AGPL, unknown licences), checked by QA-027 and QA-028. Counsel reviews before anything that conveys a copy (LEG-017).

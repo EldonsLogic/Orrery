@@ -27,7 +27,7 @@ Tags: `[row | Q | gate]`. M = every market; KSA, UAE, EG, QA = market-specific.
 7. Founders' agreement and cap-table terms: scope only, quote separately. [FND-007 | checklist 1 | G3] M
 
 ### 3.2 Open-source licence boundary and notices
-8. Our engine is GPL-3 software (ERPNext, HRMS) run headless on our servers behind our own gateway and web app, reached only by API, never given to customers. Does that architecture avoid distribution and derivative-work issues in your market's law? State the facts and assumptions your opinion rests on. [LEG-006 | checklist 4 | G1] M
+8. Our engine is GPL-3 software (ERPNext, HRMS) run headless on our servers behind our own gateway and web app, reached only by API, never given to customers. Does that architecture avoid distribution and derivative-work issues in your market's law? State the facts and assumptions your opinion rests on. Under ADR-0074 this is no longer a G1 requirement for SaaS-only delivery: ask it only if the founders want a signed opinion, and before anything that conveys a copy; [gpl-saas-boundary.md](../research/gpl-saas-boundary.md) is the briefing. [LEG-006, LEG-017 | checklist 4 | optional; LEG-017 before conveying] M
 9. Is any customer-visible open-source notice required for the engine in a SaaS? ADR-0016 allows one notices page only if you confirm it is required. [LEG-018 | - | G1] M
 10. Trademark policy of the engine's owners: what may we say about compatibility, and what must we avoid in product name, ads and documentation? [LEG-009 | checklist 16 | G1] M
 11. Later, if we ship a hybrid or on-premises build: what changes? Scope as an optional second phase. [LEG-017 | - | G5] M

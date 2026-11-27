@@ -1,6 +1,6 @@
 # NOTICE: third-party licences and provenance
 
-This repository is proprietary. This file summarizes what we use or plan to use and under what licence. The full register is in [docs/legal/licence-register.md](docs/legal/licence-register.md) (LEG-004). Licence facts below come from the project research ([docs/research/04-open-source.md](docs/research/04-open-source.md)) and the partner's verified bench installation, to be re-verified by counsel (LEG-006).
+This repository is proprietary. This file summarizes what we use or plan to use and under what licence. The full register is in [docs/legal/licence-register.md](docs/legal/licence-register.md) (LEG-004). Licence facts below come from the project research ([docs/research/04-open-source.md](docs/research/04-open-source.md)) and the partner's verified bench installation, re-checked against the GitHub licence API on 2026-11-27 ([docs/research/gpl-saas-boundary.md](docs/research/gpl-saas-boundary.md)). For SaaS-only delivery the GPL boundary is answered by that note and ADR-0074 (LEG-006); counsel reviews before anything that conveys a copy (LEG-017).
 
 | Component | Pinned version | Licence | Use | Notes |
 |---|---|---|---|---|

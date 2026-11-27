@@ -60,6 +60,11 @@
     },
     "modules": { "$ref": "#/$defs/modules" }
   },
+  "x-rigid-zone-terms": {
+    "description": "Rigid zone (AGENTS.md principle 3). A module setting key, or a field id on an entity bound by a module concept, that holds one of these substrings, or a camelCase or snake_case token starting with one of these tokens, is a formula, posting, costing, tax, payroll, pricing or amount knob. Those stay engine or certified-component logic; the Blueprint never declares them. Used by contracts/tests/test_blueprint_modules.py and the validator rule BP-MOD-001.",
+    "substrings": ["formula", "expression", "posting", "valuation", "account", "ledger", "payroll"],
+    "tokens": ["cost", "tax", "rate", "price", "amount"]
+  },
   "x-validator-rules": [
     "company.locale fields are optional; each omitted field resolves from compliance.countryPack. The resolved locale is stored with the compiled artifact. workingHours.periods must not overlap and weekend days must not appear in workDays.",
     "compliance.country must equal company.country and the countryPack id must match the country.",
@@ -77,8 +82,9 @@
     "Assistants (ADR-0043): roles resolve and belong to the department (or are owner or general manager); the department has at least one role; tools are in the tenant's generated tool set, agent-creatable, at most R2, and every R2 tool has confirm=true; at least one invoking role may call each tool; never approve, reject, submit, cancel, amend or delete verbs, approval.decide, blueprint tools, protected bank, contact or access tools, or writes other than create, update and export on ledger- or stock-class entities, with or without a tool set; a transition tool lists its allowed transitions, none an approve, reject or reversal move or one with its own approval rule; no tool is listed twice; memory tools need a memory scope; limits are within platform and plan caps; the instructions key resolves.",
     "Modules (ADR-0079): a module is on for this company only when its key is present. Its component is listed in components and provides the capability <module>.module; every concept entity resolves and has an implements binding to a component providing <module>.<concept>; every module role resolves and holds read on each required concept entity (listing a role grants nothing). A report metric whose id starts with a module prefix (crm., projects., manufacturing., marketing.) needs that module on and must be in the module's metric list in contracts/blueprint-modules.md.",
     "CRM (ADR-0079): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique.",
-    "Projects (ADR-0079): task status and view ids are unique; every board column lists task status ids and each status sits in exactly one column of a board; timeline and calendar fields are date or datetime fields of the view's concept entity; visibleToRoles resolve and hold read on that entity.",
-    "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse; the work order, job card and subcontracting receipt transitions that move stock are stock-class (ADR-0037) and their submits keep the human floor (ADR-0027). Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint field may set them."
+    "Projects (ADR-0079): task status and view ids are unique; every board column lists task status ids and each status sits in exactly one column of a board; timeline and calendar fields are date or datetime fields of the view's concept entity (BP-MOD-002); visibleToRoles resolve and hold read on that entity. timesheets.invoicingComponent is listed in components and, when the registry is known, is a rigid (certified) component (BP-MOD-003).",
+    "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse; the work order, job card and subcontracting receipt transitions that move stock are stock-class (ADR-0037) and their submits keep the human floor (ADR-0027). Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint field may set them.",
+    "Module rigid zone (ADR-0079, BP-MOD-001): no field on an entity bound by a module concept (every modules.<key>.entities value, timesheet and activity_type included) has an id matching x-rigid-zone-terms, for example billing_rate, costing_rate or amount; the bound timesheet and activity_type entities carry no money field. Rates, costs, amounts and postings are engine or certified-component fields, never mapped from the Blueprint."
   ],
   "$defs": {
     "modules": {
@@ -95,7 +101,7 @@
       "type": "object",
       "required": ["manage"],
       "additionalProperties": false,
-      "description": "Module role vocabulary. manage: runs the module (sees the team's records, reassigns); work: works its own or assigned records; view: read only. Listing grants nothing: roles[].permissions and scope still decide every action.",
+      "description": "Module role vocabulary. manage: the roles that the module's screens treat as managers; work: the roles they treat as workers; view: the roles they treat as viewers. Listing grants nothing: roles[].permissions and scope decide everything.",
       "properties": {
         "manage": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
         "work": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
@@ -142,7 +148,7 @@
               "type": "array",
               "minItems": 3,
               "maxItems": 20,
-              "description": "Opportunity stages in pipeline order. At least one open stage, exactly one won and exactly one lost stage.",
+              "description": "Opportunity stages in pipeline order. At least one open stage, exactly one won and exactly one lost stage. An open stage has probabilityPercent strictly between 0 and 100.",
               "items": {
                 "type": "object",
                 "required": ["id", "labels", "kind", "probabilityPercent"],
@@ -155,7 +161,8 @@
                 },
                 "allOf": [
                   { "if": { "properties": { "kind": { "const": "won" } } }, "then": { "properties": { "probabilityPercent": { "const": 100 } } } },
-                  { "if": { "properties": { "kind": { "const": "lost" } } }, "then": { "properties": { "probabilityPercent": { "const": 0 } } } }
+                  { "if": { "properties": { "kind": { "const": "lost" } } }, "then": { "properties": { "probabilityPercent": { "const": 0 } } } },
+                  { "if": { "properties": { "kind": { "const": "open" } } }, "then": { "properties": { "probabilityPercent": { "minimum": 1, "maximum": 99 } } } }
                 ]
               },
               "allOf": [
@@ -234,8 +241,12 @@
           "additionalProperties": false,
           "properties": {
             "enabled": { "type": "boolean" },
-            "billable": { "type": "boolean", "default": false, "description": "Hours may be billed through a sales invoice. Rates and invoice amounts come from the engine and the certified invoicing component, never from the Blueprint." }
-          }
+            "billable": { "type": "boolean", "default": false, "description": "Hours may be billed through a sales invoice. Needs enabled true and invoicingComponent. Rates and invoice amounts come from the engine and the certified invoicing component, never from the Blueprint." },
+            "invoicingComponent": { "$ref": "#/$defs/componentId", "description": "The certified invoicing component that bills the hours. Required when billable is true." }
+          },
+          "allOf": [
+            { "if": { "properties": { "billable": { "const": true } }, "required": ["billable"] }, "then": { "required": ["invoicingComponent"], "properties": { "enabled": { "const": true } } } }
+          ]
         },
         "provenance": { "$ref": "#/$defs/provenance" }
       },

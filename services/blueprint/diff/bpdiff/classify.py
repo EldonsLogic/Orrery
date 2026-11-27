@@ -53,7 +53,7 @@ def impact_of(kind: str, sp: SPath) -> str:
     if ("provenance" in sp or LABEL_KEYS & set(sp) or (head == "i18n" and not _starts(sp, ("i18n", "defaultLocale")))
             or any(_starts(sp, p) for p in META_COSMETIC)):
         return "cosmetic"
-    if (head in ("roles", "approvals", "assistants") or ACCESS_KEYS & set(sp)
+    if (head in ("roles", "approvals", "assistants") or ACCESS_KEYS & set(sp) or _module_roles(sp)
             or (head == "workflows" and len(sp) >= 4 and sp[2] == "transitions"
                 and (len(sp) == 4 or sp[4] == "approval"))):
         return "access"
@@ -62,6 +62,11 @@ def impact_of(kind: str, sp: SPath) -> str:
     if _data_shape(sp):
         return "data_shape"
     return "config"
+
+
+def _module_roles(sp: SPath) -> bool:
+    """modules/<key>/roles, or a whole module or the modules object (which carry role lists)."""
+    return sp[:1] == ("modules",) and (len(sp) <= 2 or sp[2] == "roles")
 
 
 def _data_shape(sp: SPath) -> bool:

@@ -8,12 +8,16 @@
     "sizeBand": "25-49"
   },
   "locations": [
-    { "id": "hq", "kind": "branch", "labels": { "ar": "المقر الرئيسي", "en": "Head office" } }
+    { "id": "hq", "kind": "branch", "labels": { "ar": "المقر الرئيسي", "en": "Head office" } },
+    { "id": "wip_store", "kind": "warehouse", "parent": "hq", "labels": { "ar": "مخزن تحت التشغيل", "en": "Work in progress store" } },
+    { "id": "fg_store", "kind": "warehouse", "parent": "hq", "labels": { "ar": "مخزن المنتج التام", "en": "Finished goods store" } }
   ],
   "components": [
     { "id": "core.customer", "versionRange": "^0.1.0" },
     { "id": "crm.core", "versionRange": "^0.1.0" },
-    { "id": "projects.core", "versionRange": "^0.1.0" }
+    { "id": "projects.core", "versionRange": "^0.1.0" },
+    { "id": "core.item", "versionRange": "^0.1.0" },
+    { "id": "manufacturing.core", "versionRange": "^0.1.0" }
   ],
   "entities": [
     {
@@ -78,7 +82,16 @@
       "fields": [{ "id": "hours", "type": "decimal", "precision": 2, "min": 0, "labels": { "ar": "الساعات", "en": "Hours" } }],
       "components": [{ "component": "projects.core", "mode": "implements" }],
       "provenance": { "source": "template", "humanEdited": false }
-    }
+    },
+    { "id": "item", "kind": "master", "labels": { "ar": "صنف", "en": "Item" }, "fields": [{ "id": "item_name", "type": "string", "required": true, "labels": { "ar": "اسم الصنف", "en": "Item name" } }], "components": [{ "component": "core.item", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "bom", "kind": "document", "labels": { "ar": "قائمة المواد", "en": "Bill of materials" }, "fields": [{ "id": "bom_item", "type": "string", "required": true, "labels": { "ar": "الصنف", "en": "Item" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "work_order", "kind": "document", "labels": { "ar": "أمر تشغيل", "en": "Work order" }, "fields": [{ "id": "qty", "type": "decimal", "required": true, "labels": { "ar": "الكمية", "en": "Quantity" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "job_card", "kind": "document", "labels": { "ar": "بطاقة عمل", "en": "Job card" }, "fields": [{ "id": "for_quantity", "type": "decimal", "required": true, "labels": { "ar": "الكمية", "en": "Quantity" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "operation", "kind": "master", "labels": { "ar": "عملية", "en": "Operation" }, "fields": [{ "id": "operation_name", "type": "string", "required": true, "labels": { "ar": "الاسم", "en": "Name" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "workstation", "kind": "master", "labels": { "ar": "محطة عمل", "en": "Workstation" }, "fields": [{ "id": "workstation_name", "type": "string", "required": true, "labels": { "ar": "الاسم", "en": "Name" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "routing", "kind": "master", "labels": { "ar": "مسار التشغيل", "en": "Routing" }, "fields": [{ "id": "routing_name", "type": "string", "required": true, "labels": { "ar": "الاسم", "en": "Name" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "subcontracting_order", "kind": "document", "labels": { "ar": "أمر تصنيع خارجي", "en": "Subcontracting order" }, "fields": [{ "id": "supplier_name", "type": "string", "required": true, "labels": { "ar": "المورد", "en": "Supplier" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "subcontracting_receipt", "kind": "document", "labels": { "ar": "استلام تصنيع خارجي", "en": "Subcontracting receipt" }, "fields": [{ "id": "supplier_name", "type": "string", "required": true, "labels": { "ar": "المورد", "en": "Supplier" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } }
   ],
   "roles": [
     {
@@ -94,7 +107,16 @@
         { "entity": "campaign", "actions": ["read", "create", "update"] },
         { "entity": "project", "actions": ["read", "create", "update"] },
         { "entity": "task", "actions": ["read", "create", "update"] },
-        { "entity": "timesheet", "actions": ["read", "submit"] }
+        { "entity": "timesheet", "actions": ["read", "submit"] },
+        { "entity": "item", "actions": ["read", "create", "update"] },
+        { "entity": "operation", "actions": ["read", "create", "update"] },
+        { "entity": "workstation", "actions": ["read", "create", "update"] },
+        { "entity": "routing", "actions": ["read", "create", "update"] },
+        { "entity": "bom", "actions": ["read", "create", "update", "submit"] },
+        { "entity": "work_order", "actions": ["read", "create", "update", "submit"] },
+        { "entity": "job_card", "actions": ["read", "create", "update", "submit"] },
+        { "entity": "subcontracting_order", "actions": ["read", "create", "update", "submit"] },
+        { "entity": "subcontracting_receipt", "actions": ["read", "create", "update", "submit"] }
       ],
       "homeView": { "layout": "owner_overview", "reports": ["pipeline_overview", "project_status"] },
       "provenance": { "source": "template", "humanEdited": false }
@@ -132,6 +154,12 @@
       "entity": "task",
       "metrics": [{ "ref": "projects.tasks_by_status", "display": "bar" }, { "ref": "projects.overdue_tasks", "display": "kpi" }, { "ref": "projects.hours_logged", "display": "kpi" }],
       "visibleToRoles": ["owner"],
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "production_status", "kind": "dashboard", "entity": "work_order", "visibleToRoles": ["owner"],
+      "labels": { "ar": "حالة الإنتاج", "en": "Production status" },
+      "metrics": [{ "ref": "manufacturing.work_orders_by_status", "display": "bar" }, { "ref": "manufacturing.planned_vs_produced", "display": "line" }],
       "provenance": { "source": "template", "humanEdited": false }
     }
   ],
@@ -201,6 +229,18 @@
       ],
       "timesheets": { "enabled": true, "billable": false },
       "provenance": { "source": "template", "ref": "projects_starter@0.1.0", "humanEdited": false }
+    },
+    "manufacturing": {
+      "component": "manufacturing.core",
+      "entities": { "item": "item", "bom": "bom", "work_order": "work_order", "job_card": "job_card", "operation": "operation", "workstation": "workstation", "routing": "routing", "subcontracting_order": "subcontracting_order", "subcontracting_receipt": "subcontracting_receipt" },
+      "roles": { "manage": ["owner"] },
+      "bom": { "multiLevel": true, "withOperations": true },
+      "operations": { "enabled": true, "jobCards": true },
+      "materialTransfer": "job_card",
+      "batchFromWorkOrder": false,
+      "warehouses": { "workInProgress": "wip_store", "finishedGoods": "fg_store" },
+      "subcontracting": { "enabled": true },
+      "provenance": { "source": "template", "ref": "manufacturing_starter@0.1.0", "humanEdited": false }
     }
   }
 }

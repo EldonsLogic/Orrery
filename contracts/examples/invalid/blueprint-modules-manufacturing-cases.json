@@ -1,0 +1,19 @@
+{
+  "base": "blueprint-modules-minimal.json",
+  "note": "Negative cases for modules.manufacturing (ADR-0079). Each case edits the valid base by JSON pointer; the result must fail the Blueprint schema at a path containing 'expect'. Run by contracts/tests/test_blueprint_modules.py.",
+  "cases": [
+    { "name": "mfg-missing-bom-concept", "remove": ["/modules/manufacturing/entities/bom"], "expect": "modules/manufacturing/entities" },
+    { "name": "mfg-missing-warehouses", "remove": ["/modules/manufacturing/warehouses"], "expect": "modules/manufacturing" },
+    { "name": "mfg-missing-wip-warehouse", "remove": ["/modules/manufacturing/warehouses/workInProgress"], "expect": "modules/manufacturing/warehouses" },
+    { "name": "mfg-valuation-method", "set": { "/modules/manufacturing/valuationMethod": "fifo" }, "expect": "modules/manufacturing" },
+    { "name": "mfg-bom-cost-basis", "set": { "/modules/manufacturing/bom/rawMaterialCostBasis": "price_list" }, "expect": "modules/manufacturing/bom" },
+    { "name": "mfg-wip-account", "set": { "/modules/manufacturing/warehouses/wipAccount": "1410" }, "expect": "modules/manufacturing/warehouses" },
+    { "name": "mfg-job-cards-without-operations", "set": { "/modules/manufacturing/operations/enabled": false }, "expect": "modules/manufacturing/operations/enabled" },
+    { "name": "mfg-operations-without-workstation", "remove": ["/modules/manufacturing/entities/workstation"], "expect": "modules/manufacturing/entities" },
+    { "name": "mfg-job-cards-without-entity", "remove": ["/modules/manufacturing/entities/job_card"], "expect": "modules/manufacturing/entities" },
+    { "name": "mfg-job-card-transfer-without-job-cards", "set": { "/modules/manufacturing/operations/jobCards": false }, "expect": "modules/manufacturing/operations/jobCards" },
+    { "name": "mfg-unknown-transfer", "set": { "/modules/manufacturing/materialTransfer": "manual" }, "expect": "modules/manufacturing/materialTransfer" },
+    { "name": "mfg-subcontracting-without-receipt", "remove": ["/modules/manufacturing/entities/subcontracting_receipt"], "expect": "modules/manufacturing/entities" },
+    { "name": "mfg-unknown-concept", "set": { "/modules/manufacturing/entities/production_plan": "work_order" }, "expect": "modules/manufacturing/entities" }
+  ]
+}

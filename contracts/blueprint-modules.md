@@ -2,7 +2,7 @@
 
 Status: draft
 Owner: eldon
-Version: 0.6.0
+Version: 0.7.0
 
 Part of contract 1 ([blueprint.schema.json](blueprint.schema.json), `$defs/modules`). How an engine-core module joins a tenant's Blueprint. Decision: [ADR-0079](../docs/decisions/ADR-0079-engine-core-modules-in-the-blueprint.md) (Proposed); scope: [ADR-0076](../docs/decisions/ADR-0076-phase-1-module-scope.md). Example: [examples/blueprint-modules-minimal.json](examples/blueprint-modules-minimal.json); negative cases: `examples/invalid/blueprint-modules-*-cases.json`, run by `tests/test_blueprint_modules.py`.
 
@@ -51,6 +51,26 @@ Projects and boards over core projects, tasks and timesheets. Board, timeline an
 
 Metrics: `projects.tasks_by_status`, `projects.overdue_tasks`, `projects.hours_logged`, `projects.billable_hours`, `projects.project_progress`
 
+## Module `manufacturing`
+Core BOM, work order, job card, routing and subcontracting records. This object only chooses which records and steps a company uses; it never sets a number.
+
+| Concept | Required | Engine record (internal) |
+|---|---|---|
+| `item` | yes | Item (the inventory item master, shared with stock) |
+| `bom` | yes | BOM with BOM Item, BOM Operation and BOM Scrap Item rows (submittable) |
+| `work_order` | yes | Work Order (submittable; status Draft to Completed, Stopped, Closed, Cancelled) |
+| `job_card` | when `operations.jobCards` | Job Card with time logs (submittable) |
+| `operation`, `workstation` | when `operations.enabled` | Operation, Workstation |
+| `routing` | no | Routing |
+| `subcontracting_order`, `subcontracting_receipt` | when `subcontracting.enabled` | Subcontracting Order, Subcontracting Receipt (submittable) |
+
+- `bom.withOperations` needs `operations.enabled`; `operations.jobCards` needs `operations.enabled`; `materialTransfer: job_card` needs job cards. `batchFromWorkOrder` creates finished-goods batches from the work order for batch-tracked items.
+- Inventory touch points (rigid-zone boundary): `warehouses.workInProgress`, `finishedGoods` and optional `scrap` are location ids of kind warehouse (engine manufacturing settings defaults). Material transfer, manufacture and subcontracting receipt are engine stock entries: stock-class (ADR-0037), human floor on submit (ADR-0027).
+- Ledger touch points (rigid-zone boundary): stock valuation, BOM raw-material costing, operating cost, scrap value and every stock or ledger posting are deterministic engine or certified-component logic, never AI-written. The schema offers no field for any of them; the BOM cost basis and backflush basis stay engine defaults set by the certified component (Q-702).
+
+Metrics: `manufacturing.work_orders_by_status`, `manufacturing.planned_vs_produced`, `manufacturing.job_card_hours`, `manufacturing.material_shortages`, `manufacturing.open_subcontracting`
+
 ## Changelog
+- 0.7.0 (BPL-054): `modules.manufacturing` with BOM, work order, job card, routing and subcontracting concepts, warehouses as inventory touch points, and no costing or valuation fields. Additive.
 - 0.6.0 (BPL-053): `modules.projects` with task statuses mapped to engine statuses, board, timeline, calendar and list views, and timesheets. Additive.
 - 0.5.0 (BPL-052): optional `modules` with `crm`; shared `moduleRoles` and `moduleOption`. Additive: every 0.4.0 Blueprint stays valid; `meta.schemaVersion` stays `0.1.0` (Q-141).

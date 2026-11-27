@@ -352,11 +352,11 @@ jobs:
           apps/engine/change_engine/change_engine/tests/test_erp_026_review_fixes.py
           apps/engine/change_engine/change_engine/tests/test_erp_026_pr126_review_fixes.py
 
-      - name: Trading fixture real-adapter offline tests (BPL-027; bench tests skip without a bench)
+      - name: Trading fixture real-adapter offline tests (BPL-027, BPL-044; bench tests skip without a bench)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_027_fixture_real_adapter.py apps/engine/change_engine/change_engine/tests/test_bpl_031_entity_add_existing_doctype.py apps/engine/change_engine/change_engine/tests/test_bpl_031_review_fixes.py apps/engine/change_engine/change_engine/tests/test_bpl_041_check_ready_refusals.py apps/engine/change_engine/change_engine/tests/test_bpl_043_unmapped_constraint_refusal.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_027_fixture_real_adapter.py apps/engine/change_engine/change_engine/tests/test_bpl_031_entity_add_existing_doctype.py apps/engine/change_engine/change_engine/tests/test_bpl_031_review_fixes.py apps/engine/change_engine/change_engine/tests/test_bpl_041_check_ready_refusals.py apps/engine/change_engine/change_engine/tests/test_bpl_043_unmapped_constraint_refusal.py apps/engine/change_engine/change_engine/tests/test_bpl_044_docfield_snapshot.py -q
 
       - name: Real-adapter hardening, journal order and state persistence (BPL-033, offline)
         if: steps.filter.outputs.engine == 'true' && !cancelled()

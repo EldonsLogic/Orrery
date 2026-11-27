@@ -2,7 +2,6 @@
 
 from .bilingual_tax_invoice import (
     BILINGUAL_LABELS,
-    DEFAULT_BRANDING_PRIMARY,
     InvoiceBranding,
     contrast_ratio_on_white,
     install_bilingual_tax_invoice_print_format,
@@ -36,11 +35,15 @@ from .document_layout import (
 from .qr_svg import build_qr_matrix, render_qr_svg
 
 
-def __getattr__(name: str):  # LOCKED_DOCUMENT_CSS reads the token file, so it loads on first use
+def __getattr__(name: str):  # these read the token file, so they load on first use
     if name == "LOCKED_DOCUMENT_CSS":
         from . import document_layout
 
         return document_layout.LOCKED_DOCUMENT_CSS
+    if name == "DEFAULT_BRANDING_PRIMARY":
+        from . import bilingual_tax_invoice
+
+        return bilingual_tax_invoice.DEFAULT_BRANDING_PRIMARY
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

@@ -1,0 +1,83 @@
+{
+  "v": 1,
+  "typ": "country_pack_version",
+  "kid": "cpk-dev-01",
+  "keyEnv": "dev",
+  "publishId": "01JD0000000000000000000001",
+  "publishedAt": "2026-11-20T10:00:00Z",
+  "publishedBy": "staff:founder-a",
+  "packId": "sa",
+  "countryCode": "SA",
+  "componentId": "country.sa",
+  "version": "0.2.0",
+  "contentDigest": "sha256:7a7ba2a723e7c22b238142f0b706b672fc17c7f8661bdaeb3882776237fb54dc",
+  "files": [
+    {
+      "path": "evidence.json",
+      "sha256": "sha256:4101aed665fd96a00f4e71392c2d7c6dca77c1703fff54104eda9a361f5c39f0",
+      "size": 9120
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "sha256:884ffec9dac77407433477f09f39173867dd2dc402864e89be50e57f1b9276ae",
+      "size": 1388
+    },
+    {
+      "path": "pack.json",
+      "sha256": "sha256:68c81fd3e49b29f19d90e7a965959d5c99fd033dcf4816c6d653281cf563ddd5",
+      "size": 4210
+    }
+  ],
+  "predecessor": {
+    "version": "0.1.0",
+    "contentDigest": "sha256:e9571a5f88cacd1c0dcd1ba9ad6d8a36bfaa6ffe1cdc1292617011a58d2ac86c"
+  },
+  "supersedes": null,
+  "changeKind": "scheduled",
+  "followUp": {
+    "required": false
+  },
+  "diffDigest": "fba5514b3edac6b2d75cad31f214b841f7c31b652488862eceb14f4150da83bd",
+  "evidenceRefs": [
+    {
+      "id": "evidence:sa:0.2.0:01",
+      "sha256": "sha256:9e7334a07576c40978ac5abceac15d4f7c7f9f23bfcc3d7fe22b94db2c893ba5"
+    }
+  ],
+  "signOffs": [
+    {
+      "role": "market_accountant",
+      "signerId": "staff:acct-sa-01",
+      "signedAt": "2026-11-20T09:15:00Z",
+      "statementDigest": "sha256:b0374a48199afdc7cf5ab4fa9152466f94e28d06157220afa232141ddb417f5c",
+      "mfa": {
+        "assertionRef": "stepup:staff:acct-sa-01:01",
+        "method": "totp",
+        "authTime": "2026-11-20T09:13:30Z",
+        "boundTo": {
+          "signerId": "staff:acct-sa-01",
+          "statementDigest": "sha256:b0374a48199afdc7cf5ab4fa9152466f94e28d06157220afa232141ddb417f5c"
+        }
+      },
+      "name": "Fictional Accountant One",
+      "market": "SA",
+      "signOffRef": "cert:sa:0.2.0:acct"
+    },
+    {
+      "role": "founder",
+      "signerId": "staff:founder-a",
+      "signedAt": "2026-11-20T09:25:00Z",
+      "statementDigest": "sha256:b0374a48199afdc7cf5ab4fa9152466f94e28d06157220afa232141ddb417f5c",
+      "mfa": {
+        "assertionRef": "stepup:staff:founder-a:02",
+        "method": "totp",
+        "authTime": "2026-11-20T09:23:30Z",
+        "boundTo": {
+          "signerId": "staff:founder-a",
+          "statementDigest": "sha256:b0374a48199afdc7cf5ab4fa9152466f94e28d06157220afa232141ddb417f5c"
+        }
+      },
+      "founderLogin": "EldonsLogic"
+    }
+  ]
+}

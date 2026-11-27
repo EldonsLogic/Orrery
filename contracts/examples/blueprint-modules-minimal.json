@@ -12,7 +12,8 @@
   ],
   "components": [
     { "id": "core.customer", "versionRange": "^0.1.0" },
-    { "id": "crm.core", "versionRange": "^0.1.0" }
+    { "id": "crm.core", "versionRange": "^0.1.0" },
+    { "id": "projects.core", "versionRange": "^0.1.0" }
   ],
   "entities": [
     {
@@ -56,6 +57,27 @@
       "fields": [{ "id": "campaign_name", "type": "string", "required": true, "labels": { "ar": "اسم الحملة", "en": "Campaign name" } }],
       "components": [{ "component": "crm.core", "mode": "implements" }],
       "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "project", "kind": "master",
+      "labels": { "ar": "مشروع", "en": "Project" },
+      "fields": [{ "id": "project_name", "type": "string", "required": true, "labels": { "ar": "اسم المشروع", "en": "Project name" } }, { "id": "customer", "type": "link", "target": "customer", "labels": { "ar": "العميل", "en": "Customer" } }],
+      "components": [{ "component": "projects.core", "mode": "implements" }],
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "task", "kind": "master",
+      "labels": { "ar": "مهمة", "en": "Task" },
+      "fields": [{ "id": "subject", "type": "string", "required": true, "labels": { "ar": "المهمة", "en": "Task" } }, { "id": "project", "type": "link", "target": "project", "labels": { "ar": "المشروع", "en": "Project" } }, { "id": "start_date", "type": "date", "labels": { "ar": "البداية", "en": "Start" } }, { "id": "end_date", "type": "date", "labels": { "ar": "النهاية", "en": "End" } }],
+      "components": [{ "component": "projects.core", "mode": "implements" }],
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "timesheet", "kind": "document",
+      "labels": { "ar": "سجل الساعات", "en": "Timesheet" },
+      "fields": [{ "id": "hours", "type": "decimal", "precision": 2, "min": 0, "labels": { "ar": "الساعات", "en": "Hours" } }],
+      "components": [{ "component": "projects.core", "mode": "implements" }],
+      "provenance": { "source": "template", "humanEdited": false }
     }
   ],
   "roles": [
@@ -69,9 +91,12 @@
         { "entity": "lead", "actions": ["read", "create", "update", "export"] },
         { "entity": "opportunity", "actions": ["read", "create", "update", "export"] },
         { "entity": "crm_activity", "actions": ["read", "create", "update"] },
-        { "entity": "campaign", "actions": ["read", "create", "update"] }
+        { "entity": "campaign", "actions": ["read", "create", "update"] },
+        { "entity": "project", "actions": ["read", "create", "update"] },
+        { "entity": "task", "actions": ["read", "create", "update"] },
+        { "entity": "timesheet", "actions": ["read", "submit"] }
       ],
-      "homeView": { "layout": "owner_overview", "reports": ["pipeline_overview"] },
+      "homeView": { "layout": "owner_overview", "reports": ["pipeline_overview", "project_status"] },
       "provenance": { "source": "template", "humanEdited": false }
     },
     {
@@ -83,7 +108,10 @@
         { "entity": "contact", "actions": ["read", "create", "update"] },
         { "entity": "lead", "actions": ["read", "create", "update"] },
         { "entity": "opportunity", "actions": ["read", "create", "update"] },
-        { "entity": "crm_activity", "actions": ["read", "create", "update"] }
+        { "entity": "crm_activity", "actions": ["read", "create", "update"] },
+        { "entity": "project", "actions": ["read"] },
+        { "entity": "task", "actions": ["read", "update"] },
+        { "entity": "timesheet", "actions": ["read", "create", "update"] }
       ],
       "homeView": { "layout": "task_list" },
       "provenance": { "source": "template", "humanEdited": false }
@@ -95,6 +123,14 @@
       "labels": { "ar": "خط المبيعات", "en": "Pipeline overview" },
       "entity": "opportunity",
       "metrics": [{ "ref": "crm.weighted_pipeline_value", "display": "kpi" }, { "ref": "crm.win_rate", "display": "kpi" }, { "ref": "crm.leads_by_source", "display": "bar" }],
+      "visibleToRoles": ["owner"],
+      "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "project_status", "kind": "dashboard",
+      "labels": { "ar": "حالة المشاريع", "en": "Project status" },
+      "entity": "task",
+      "metrics": [{ "ref": "projects.tasks_by_status", "display": "bar" }, { "ref": "projects.overdue_tasks", "display": "kpi" }, { "ref": "projects.hours_logged", "display": "kpi" }],
       "visibleToRoles": ["owner"],
       "provenance": { "source": "template", "humanEdited": false }
     }
@@ -136,6 +172,35 @@
       "activityTypes": ["call", "meeting", "visit", "note", "follow_up"],
       "campaignLink": true,
       "provenance": { "source": "template", "ref": "crm_starter@0.1.0", "humanEdited": false }
+    },
+    "projects": {
+      "component": "projects.core",
+      "entities": { "project": "project", "task": "task", "timesheet": "timesheet" },
+      "roles": { "manage": ["owner"], "work": ["sales_rep"] },
+      "taskStatuses": [
+        { "id": "to_do", "engineStatus": "open", "labels": { "ar": "للتنفيذ", "en": "To do" } },
+        { "id": "in_progress", "engineStatus": "working", "labels": { "ar": "قيد التنفيذ", "en": "In progress" } },
+        { "id": "client_review", "engineStatus": "pending_review", "labels": { "ar": "مراجعة العميل", "en": "Client review" } },
+        { "id": "done", "engineStatus": "completed", "labels": { "ar": "منجز", "en": "Done" } }
+      ],
+      "views": [
+        {
+          "id": "task_board", "kind": "board", "concept": "task", "visibleToRoles": ["owner", "sales_rep"],
+          "labels": { "ar": "لوحة المهام", "en": "Task board" },
+          "board": {
+            "columns": [
+              { "id": "col_to_do", "statuses": ["to_do"], "labels": { "ar": "للتنفيذ", "en": "To do" } },
+              { "id": "col_doing", "statuses": ["in_progress", "client_review"], "labels": { "ar": "جارٍ", "en": "Doing" } },
+              { "id": "col_done", "statuses": ["done"], "labels": { "ar": "منجز", "en": "Done" } }
+            ],
+            "swimlanes": "project"
+          }
+        },
+        { "id": "task_timeline", "kind": "timeline", "concept": "task", "visibleToRoles": ["owner"], "labels": { "ar": "الجدول الزمني", "en": "Timeline" }, "timeline": { "startField": "start_date", "endField": "end_date", "showDependencies": true } },
+        { "id": "task_calendar", "kind": "calendar", "concept": "task", "visibleToRoles": ["owner", "sales_rep"], "labels": { "ar": "التقويم", "en": "Calendar" }, "calendar": { "startField": "start_date", "endField": "end_date" } }
+      ],
+      "timesheets": { "enabled": true, "billable": false },
+      "provenance": { "source": "template", "ref": "projects_starter@0.1.0", "humanEdited": false }
     }
   }
 }

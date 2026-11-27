@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:platform:contract:blueprint:0.5.0",
-  "version": "0.5.0",
+  "$id": "urn:platform:contract:blueprint:0.6.0",
+  "version": "0.6.0",
   "title": "Blueprint",
   "description": "Contract 1. The typed, versioned description of one tenant's business: entities, workflows, roles, approvals, reports, integrations, compliance, i18n, branding. The Blueprint is configuration, never code. Cross-reference rules that JSON Schema cannot express (ids resolve, locales covered, contrast passes) are enforced by the Blueprint validator in Part 2 and listed in x-validator-rules.",
   "type": "object",
@@ -76,7 +76,8 @@
     "Compliance: when compliance.eInvoicing.mode is not 'none' for country SA, documentLanguages must contain 'ar' and company.vatNumber must be set.",
     "Assistants (ADR-0043): roles resolve and belong to the department (or are owner or general manager); the department has at least one role; tools are in the tenant's generated tool set, agent-creatable, at most R2, and every R2 tool has confirm=true; at least one invoking role may call each tool; never approve, reject, submit, cancel, amend or delete verbs, approval.decide, blueprint tools, protected bank, contact or access tools, or writes other than create, update and export on ledger- or stock-class entities, with or without a tool set; a transition tool lists its allowed transitions, none an approve, reject or reversal move or one with its own approval rule; no tool is listed twice; memory tools need a memory scope; limits are within platform and plan caps; the instructions key resolves.",
     "Modules (ADR-0079): a module is on for this company only when its key is present. Its component is listed in components and provides the capability <module>.module; every concept entity resolves and has an implements binding to a component providing <module>.<concept>; every module role resolves and holds read on each required concept entity (listing a role grants nothing). A report metric whose id starts with a module prefix (crm., projects., manufacturing., marketing.) needs that module on and must be in the module's metric list in contracts/blueprint-modules.md.",
-    "CRM (ADR-0079): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique."
+    "CRM (ADR-0079): pipeline stage ids are unique and the order is the pipeline order; open stages have strictly increasing probabilityPercent; leadSources and lostReasons ids are unique.",
+    "Projects (ADR-0079): task status and view ids are unique; every board column lists task status ids and each status sits in exactly one column of a board; timeline and calendar fields are date or datetime fields of the view's concept entity; visibleToRoles resolve and hold read on that entity."
   ],
   "$defs": {
     "modules": {
@@ -84,7 +85,8 @@
       "additionalProperties": false,
       "description": "Optional (Blueprint 0.5.0, ADR-0079). Engine-core modules this company opts into. A module is on when its key is present; absent means off. Each module binds its concept vocabulary to Blueprint entities and roles and names the component that implements it; settings carry configuration only, never formulas, posting or valuation logic.",
       "properties": {
-        "crm": { "$ref": "#/$defs/crmModule" }
+        "crm": { "$ref": "#/$defs/crmModule" },
+        "projects": { "$ref": "#/$defs/projectsModule" }
       }
     },
     "moduleRoles": {
@@ -176,6 +178,127 @@
       "allOf": [
         { "if": { "properties": { "campaignLink": { "const": true } }, "required": ["campaignLink"] }, "then": { "properties": { "entities": { "required": ["campaign"] } } } },
         { "if": { "properties": { "activityTypes": { "minItems": 1 } }, "required": ["activityTypes"] }, "then": { "properties": { "entities": { "required": ["activity"] } } } }
+      ]
+    },
+    "projectsModule": {
+      "type": "object",
+      "description": "Projects and boards (Blueprint 0.6.0) over the engine's core projects, tasks and timesheets. Board, timeline and calendar are view declarations over the same task records, not separate data.",
+      "required": ["component", "entities", "roles", "taskStatuses", "views", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "component": { "$ref": "#/$defs/componentId" },
+        "entities": {
+          "type": "object",
+          "required": ["project", "task"],
+          "additionalProperties": false,
+          "description": "Concept to Blueprint entity id.",
+          "properties": {
+            "project": { "$ref": "#/$defs/id" },
+            "task": { "$ref": "#/$defs/id" },
+            "timesheet": { "$ref": "#/$defs/id" },
+            "activity_type": { "$ref": "#/$defs/id" }
+          }
+        },
+        "roles": { "$ref": "#/$defs/moduleRoles" },
+        "taskStatuses": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 20,
+          "description": "The company's task statuses in order, each mapped to one engine task status. Overdue is derived by the engine from the end date and is never mapped.",
+          "items": {
+            "type": "object",
+            "required": ["id", "labels", "engineStatus"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "labels": { "$ref": "#/$defs/localizedText" },
+              "engineStatus": { "enum": ["open", "working", "pending_review", "completed", "cancelled"] }
+            }
+          },
+          "allOf": [
+            { "contains": { "properties": { "engineStatus": { "const": "open" } } } },
+            { "contains": { "properties": { "engineStatus": { "const": "completed" } } } }
+          ]
+        },
+        "views": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/projectsView" }
+        },
+        "timesheets": {
+          "type": "object",
+          "required": ["enabled"],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "billable": { "type": "boolean", "default": false, "description": "Hours may be billed through a sales invoice. Rates and invoice amounts come from the engine and the certified invoicing component, never from the Blueprint." }
+          }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      },
+      "allOf": [
+        { "if": { "properties": { "timesheets": { "properties": { "enabled": { "const": true } } } }, "required": ["timesheets"] }, "then": { "properties": { "entities": { "required": ["timesheet"] } } } }
+      ]
+    },
+    "projectsView": {
+      "type": "object",
+      "required": ["id", "kind", "concept", "labels", "visibleToRoles"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "enum": ["board", "timeline", "calendar", "list"] },
+        "concept": { "enum": ["task", "project"], "description": "Which module concept the view shows." },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "visibleToRoles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" }, "description": "Rows are still limited by each viewer's scope." },
+        "board": {
+          "type": "object",
+          "required": ["columns"],
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "description": "Columns in order. Moving a card to a column sets the card's task status to the column's first status.",
+              "items": {
+                "type": "object",
+                "required": ["id", "labels", "statuses"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "$ref": "#/$defs/id" },
+                  "labels": { "$ref": "#/$defs/localizedText" },
+                  "statuses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+                }
+              }
+            },
+            "swimlanes": { "enum": ["none", "project", "assignee", "priority"], "default": "none" }
+          }
+        },
+        "timeline": {
+          "type": "object",
+          "required": ["startField", "endField"],
+          "additionalProperties": false,
+          "properties": {
+            "startField": { "$ref": "#/$defs/id" },
+            "endField": { "$ref": "#/$defs/id" },
+            "showDependencies": { "type": "boolean", "default": false }
+          }
+        },
+        "calendar": {
+          "type": "object",
+          "required": ["startField"],
+          "additionalProperties": false,
+          "properties": {
+            "startField": { "$ref": "#/$defs/id" },
+            "endField": { "$ref": "#/$defs/id" }
+          }
+        }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "board" } } }, "then": { "required": ["board"], "properties": { "concept": { "const": "task" } } }, "else": { "not": { "required": ["board"] } } },
+        { "if": { "properties": { "kind": { "const": "timeline" } } }, "then": { "required": ["timeline"] }, "else": { "not": { "required": ["timeline"] } } },
+        { "if": { "properties": { "kind": { "const": "calendar" } } }, "then": { "required": ["calendar"] }, "else": { "not": { "required": ["calendar"] } } }
       ]
     },
     "assistant": {

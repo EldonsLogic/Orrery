@@ -23,6 +23,7 @@ RETRYABLE = frozenset({"model_unavailable"})
 FORBIDDEN_FIELDS = frozenset({"model", "model_id", "provider", "endpoint", "api_key", "authorization"})
 IDENTITY_FIELDS = ("tenant_id", "actor_kind", "actor_id", "session_id", "on_behalf_of", "agent_id", "run_id",
                    "thread_id", "token_id")
+PRINCIPAL_FIELDS = ("service", "tenant_id", "actor_kind", "actor_id")
 LAYER_ID = {"tenant": "tenant_id", "session": "session_id", "agent": "agent_id", "run": "run_id"}
 ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 MAX_REQUEST_BYTES = 1_048_576
@@ -146,6 +147,9 @@ class FakeModelCallPort:
 
     # -- public -----------------------------------------------------------------------------------------------------
     def complete(self, request: dict) -> dict:
+        p = self.principal                    # Q-672(d): no verified principal is rejected before parsing
+        if not isinstance(p, dict) or any(not p.get(k) for k in PRINCIPAL_FIELDS):
+            raise PermissionError("no verified principal")
         cid = request.get("call_id") if isinstance(request, dict) else None
         call_id = cid if isinstance(cid, str) and ID_RE.match(cid) else None   # never echo other caller text
         self._validate(call_id, request)
@@ -195,6 +199,8 @@ class FakeModelCallPort:
                 raise bad("block_order")
             last_rank, last_turn = rank, b.get("turn", last_turn)
         c, p = r["caller"], self.principal
+        if (c["actor_kind"] == "user") != ("token_id" in c):    # token_id iff a user actor (Q-672(a))
+            raise bad("caller_mismatch")
         if any(b["trust"] == "user" for b in r["blocks"]) and p["actor_kind"] != "user" and not p.get("on_behalf_of"):
             raise bad("caller_mismatch")                          # a user-trust label needs a user principal
         if ({k: c[k] for k in IDENTITY_FIELDS if k in c} != {k: p[k] for k in IDENTITY_FIELDS if p.get(k) is not None}
@@ -332,9 +338,11 @@ class FakeModelCallPort:
         return -(-(inp * ri + out * ro) // 1_000_000)
 
     def _layer_spent(self, k):
-        """The shared platform layer ignores overrun spend: a tenant's overrun alerts, it never blocks others."""
+        """All spend counts on the shared platform layer while it is under its cap; once over it, the overrun part
+        is left out, so a tenant's overrun alerts but never blocks the layer for others (contract 6.4)."""
         if k in GATEWAY_LAYERS:
-            return self.platform_ledger["spent"] - self.platform_ledger["overrun"]
+            led = self.platform_ledger
+            return led["spent"] if led["spent"] <= self.budgets[k] else led["spent"] - led["overrun"]
         return self.spent[k]
 
     def _remaining(self):
@@ -346,7 +354,7 @@ class FakeModelCallPort:
             if k in GATEWAY_LAYERS:
                 self.platform_ledger["spent"] += cost
                 self.platform_ledger["overrun"] += overrun
-                if self.platform_ledger["spent"] > self.budgets[k]:
+                if overrun and self.platform_ledger["spent"] > self.budgets[k]:   # this call's overrun, not others'
                     self.alerts.append({"kind": "platform_over_cap", "overrun": overrun})
             else:
                 self.spent[k] += cost
@@ -432,7 +440,7 @@ class FakeModelCallPort:
                     "trust": "untrusted", "tainted": tainted,
                     "usage": {"input_tokens": inp, "output_tokens": out, "cached_tokens": 0, "cost_micro_usd": cost},
                     "attempts": attempt, "fallback_used": attempt > 1, "meter_event_id": event_id, "replayed": False, "cache_hit": False}
-            if self._cacheable(r):
+            if self._cacheable(r) and reply["stop_reason"] == "end":    # a budget-truncated reply is never cached
                 self.cache_store[self._cache_key(r, prompt)] = text
             return reply
         raise ModelCallRefused(call_id, "model_unavailable", "chain_exhausted", reservation_released=not charged)
@@ -444,13 +452,18 @@ class FakeModelCallPort:
                 and not any(k in self._tainted_threads for k in self._thread_keys()))
 
     def _cache_key(self, r, prompt):
-        return (r["tier"], r["max_output_tokens"], content_hash(prompt))
+        return (r["tier"], r["prompt_version"], r.get("locale"), r["max_output_tokens"], content_hash(prompt))
 
     def _cache_hit(self, r, prompt):
-        """A hit is not a dispatch (no reservation) but is metered and audited: zero usage, its own event."""
-        text = self.cache_store.get(self._cache_key(r, prompt)) if self._cacheable(r) else None
-        if text is None or self._flagged(text):
+        """A hit is not a dispatch (no reservation) but is metered and audited: zero usage, its own event.
+        A stored text the output filter now flags is evicted and refused, never re-dispatched."""
+        key = self._cache_key(r, prompt)
+        text = self.cache_store.get(key) if self._cacheable(r) else None
+        if text is None:
             return None
+        if self._flagged(text):
+            del self.cache_store[key]
+            raise ModelCallRefused(r["call_id"], "filter_blocked", "flagged")
         event_id = self._meter(r, Entry("response_cache", r["tier"]), 0, 0, 0, cache_hit=True)
         return {"kind": "reply", "call_id": r["call_id"], "idempotency_key": r["idempotency_key"],
                 "tier": r["tier"], "text": text, "tool_calls": [], "stop_reason": "end", "trust": "untrusted",
@@ -475,9 +488,8 @@ class FakeModelCallPort:
             "subject": None, "data_class": "operational",
             "data": {"model_id": entry.name, "tier": entry.tier, "input_tokens": inp, "output_tokens": out,
                      "cached_tokens": 0, "cost_micro_usd": cost, "purpose": r["purpose"],
-                     "agent_id": p.get("agent_id")},
-            "trace": {"model_id": entry.name, "prompt_version": r["prompt_version"],
-                      **({"cache_hit": True} if cache_hit else {})}})
+                     "agent_id": p.get("agent_id"), **({"cache_hit": True} if cache_hit else {})},
+            "trace": {"model_id": entry.name, "prompt_version": r["prompt_version"]}})
         return event_id
 
 

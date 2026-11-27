@@ -457,8 +457,9 @@ def test_low4_user_trust_needs_a_user_principal():
     assert refused(port(agent_only), req(caller=caller)) == ("invalid_request", "caller_mismatch")
     only_untrusted = req(caller=caller, blocks=[REQ["blocks"][0], REQ["blocks"][1], REQ["blocks"][3]])
     assert port(agent_only).complete(only_untrusted)["kind"] == "reply"
-    user = dict(agent_only, actor_kind="user", actor_id="u_1")
-    assert port(user).complete(req(caller=dict(caller, actor_kind="user", actor_id="u_1")))["kind"] == "reply"
+    user = dict(agent_only, actor_kind="user", actor_id="u_1", token_id="tok_1")
+    assert port(user).complete(req(caller=dict(caller, actor_kind="user", actor_id="u_1",
+                                               token_id="tok_1")))["kind"] == "reply"
 
 
 def test_low5_size_cap_is_on_the_unescaped_utf8_form():
@@ -597,7 +598,7 @@ def test_response_cache_hit_is_metered_with_zero_usage_and_its_own_event():
     assert hit["usage"] == {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0, "cost_micro_usd": 0}
     assert hit["text"] == first["text"] and hit["meter_event_id"] != first["meter_event_id"]
     assert len(p.events) == 2 and p.events[1]["data"]["cost_micro_usd"] == 0
-    assert p.events[1]["trace"]["cache_hit"] is True and len(p.attempt_log) == 1      # one dispatch only
+    assert p.events[1]["data"]["cache_hit"] is True and len(p.attempt_log) == 1       # one dispatch only
 
 
 def test_cache_is_bypassed_for_non_l0_calls():
@@ -656,3 +657,89 @@ def test_one_tenant_overrun_never_blocks_the_platform_layer_for_others():
     assert refused(a, again)[0] == "budget_refused"         # tenant A's own cap still holds for A
     b = tenant_port("t_b", shared, 5_000, 1_000_000)
     assert b.complete(tenant_req("t_b"))["kind"] == "reply"
+
+
+# -- re-review of 22a671f7 (partner, Gemini) ----------------------------------------------------------------------------
+def events_valid(p):
+    for ev in p.events:
+        res = evstream.validate_event(ev, stamped=False)
+        assert res.ok, res.as_dict()
+
+
+def test_high1_every_emitted_event_passes_contract_4():
+    p = port(response_cache=True)
+    p.complete(l0_only(call_id="c_first", idempotency_key="idem_cache_1"))
+    p.complete(l0_only(call_id="c_second", idempotency_key="idem_cache_2"))
+    assert len(p.events) == 2
+    events_valid(p)                                          # includes p.events[1], the cache hit
+    assert p.events[1]["data"]["cache_hit"] is True and "cache_hit" not in p.events[1]["trace"]
+    assert "cache_hit" not in p.events[0]["data"]            # absent means not a cache hit
+    bad = copy.deepcopy(p.events[1])
+    bad["data"]["cache_hit"] = "yes"
+    assert not evstream.validate_event(bad, stamped=False).ok   # typed in the meter payload schema
+    for kw in ({"timeouts": {"mid-primary"}}, {"late": {"mid-primary"}}, {"reply_text": SECRET},
+               {"actual_input": lambda e: e * 50}):
+        q = port(**kw)
+        try:
+            q.complete(req())
+        except ModelCallRefused:
+            pass
+        assert q.events
+        events_valid(q)
+
+
+def test_medium2_token_id_is_required_for_a_user_and_forbidden_otherwise():
+    no_tok = {k: v for k, v in USER_PRINCIPAL.items() if k != "token_id"}
+    r = user_req()
+    del r["caller"]["token_id"]
+    assert refused(port(no_tok, layers=("tenant", "session")), r) == ("invalid_request", "caller_mismatch")
+    agent_tok = dict(PRINCIPAL, token_id="tok_9")
+    assert refused(port(agent_tok), req(caller=dict(REQ["caller"], token_id="tok_9"))) == (
+        "invalid_request", "caller_mismatch")
+
+
+def test_medium3_platform_overrun_under_cap_is_counted_and_alerts_only_on_overrun():
+    shared = {"spent": 0, "overrun": 0}
+    a = tenant_port("t_a", shared, 10**9, 10**9, actual_input=lambda e: e * 50)
+    a.complete(tenant_req("t_a"))
+    assert shared["overrun"] > 0 and a._layer_spent("platform") == shared["spent"]   # under cap: all spend counts
+    assert not any(x["kind"] == "platform_over_cap" for x in a.alerts)
+    shared2 = {"spent": 0, "overrun": 0}
+    big = tenant_port("t_a", shared2, 5_000, 10**9, actual_input=lambda e: 20_000)
+    big.complete(tenant_req("t_a"))                          # this overrun pushes the platform layer over its cap
+    assert any(x["kind"] == "platform_over_cap" for x in big.alerts)
+    b = tenant_port("t_b", shared2, 5_000, 10**9)
+    assert b.complete(tenant_req("t_b"))["kind"] == "reply"
+    assert not any(x["kind"] == "platform_over_cap" for x in b.alerts)   # no overrun of its own, no alert
+
+
+def test_low4_cache_key_covers_locale_and_prompt_version_and_skips_truncated_replies():
+    p = port(response_cache=True)
+    p.complete(l0_only(call_id="c_1", idempotency_key="idem_cache_l1", locale="en"))
+    assert p.complete(l0_only(call_id="c_2", idempotency_key="idem_cache_l2", locale="ar"))["cache_hit"] is False
+    assert p._cache_key(l0_only(), "x") != p._cache_key(l0_only(prompt_version="other_pv"), "x")
+    q = port(response_cache=True, reply_text="w" * 3000)
+    first = q.complete(l0_only(call_id="c_t1", idempotency_key="idem_trunc_1", max_output_tokens=200,
+                               min_output_tokens=1))
+    assert first["stop_reason"] == "max_output"
+    again = q.complete(l0_only(call_id="c_t2", idempotency_key="idem_trunc_2", max_output_tokens=200,
+                               min_output_tokens=1))
+    assert again["cache_hit"] is False                       # a truncated reply is never served from the cache
+
+
+def test_low4_flagged_cached_text_is_refused_not_redispatched():
+    p = port(response_cache=True)
+    p.complete(l0_only(call_id="c_f1", idempotency_key="idem_flag_1"))
+    [key] = p.cache_store
+    p.cache_store[key] = "leak " + SECRET                     # fingerprints changed after the text was stored
+    assert refused(p, l0_only(call_id="c_f2", idempotency_key="idem_flag_2")) == ("filter_blocked", "flagged")
+    assert len(p.attempt_log) == 1 and key not in p.cache_store
+
+
+def test_low5_no_verified_principal_is_rejected_before_parsing():
+    p = FakeModelCallPort(principal=None, registry=registry())
+    with pytest.raises(PermissionError):
+        p.complete("not even a dict")
+    with pytest.raises(PermissionError):
+        FakeModelCallPort(principal={"tenant_id": "t_acme"}, registry=registry()).complete(req())
+    assert p.events == [] and p.reservations == []

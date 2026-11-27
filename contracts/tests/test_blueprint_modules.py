@@ -72,7 +72,10 @@ def test_invalid_case_fails_at_named_path(base, case):
     errors = list(V.iter_errors(apply(load(base), case)))
     assert errors, f"{case['name']} unexpectedly validates"
     paths = ["/".join(map(str, e.absolute_path)) for e in errors]
-    assert any(p.startswith(case["expect"]) for p in paths), (case["name"], paths)
+    if case.get("exact"):
+        assert case["expect"] in paths, (case["name"], paths)
+    else:
+        assert any(p.startswith(case["expect"]) for p in paths), (case["name"], paths)
 
 
 def test_versions_agree():
@@ -98,8 +101,10 @@ def test_example_module_metrics_are_in_the_vocabulary():
     assert refs and set(refs) <= vocab, set(refs) - vocab
 
 
-# Rigid-zone terms (AGENTS.md principle 3): a key whose name holds one of these as a substring or as a
-# camelCase or snake_case token is a formula, posting, costing, tax, payroll or pricing knob.
+# Module settings guard (AGENTS.md principle 3): a module settings key whose name holds one of these as a substring
+# or as a camelCase or snake_case token would be a formula, posting, costing, tax, payroll or pricing knob. This lints
+# the contract's own module setting keys only. Blueprint entity fields are checked against the engine's explicit
+# rigid-zone field list instead (engine-rigid-fields.json, validator BP-MOD-001), never by name.
 RIGID_SUBSTRINGS = ("formula", "expression", "posting", "valuation", "account", "ledger", "payroll")
 RIGID_TOKENS = ("cost", "tax", "rate", "price", "amount")
 
@@ -160,6 +165,38 @@ def test_module_roles_description_grants_nothing():
     assert not re.search(r"\b(sees|see|reassign\w*|can|may|edit\w*|read\w*)\b", text, re.I), text
 
 
+RIGID = json.loads((C / "engine-rigid-fields.json").read_text(encoding="utf-8"))
+POLICY = (C.parent / "docs" / "architecture" / "engine-version-policy.md").read_text(encoding="utf-8")
+
+
+def test_rigid_field_list_is_internal_unverified_and_pinned():
+    """The list is data from the pinned engine source, internal (ADR-0016) and UNVERIFIED until a bench run."""
+    assert RIGID["status"] == "UNVERIFIED" and RIGID["visibility"] == "internal"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", RIGID["version"]) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", RIGID["source"]["accessed"])
+    for eng in RIGID["source"]["engines"]:
+        assert f"`{eng['tag']}`" in POLICY and re.fullmatch(r"[0-9a-f]{40}", eng["commit"]), eng
+
+
+def test_every_module_concept_has_an_engine_rigid_field_entry():
+    """BP-MOD-001 fails closed on a concept with no entry, so every concept the schema offers must have one."""
+    for module, ref in SCHEMA["$defs"]["modules"]["properties"].items():
+        concepts = SCHEMA["$defs"][ref["$ref"].split("/")[-1]]["properties"]["entities"]["properties"]
+        for concept in concepts:
+            records = RIGID["concepts"].get(f"{module}.{concept}")
+            assert isinstance(records, list), f"{module}.{concept}"
+            assert all(r in RIGID["recordTypes"] for r in records), (module, concept, records)
+
+
+def test_rigid_field_names_are_engine_field_names():
+    cats = set(RIGID["categories"])
+    for name, rec in RIGID["recordTypes"].items():
+        groups = [rec["fields"], *rec.get("rows", {}).values()]
+        for g in groups:
+            assert set(g) <= cats, (name, set(g) - cats)
+            for fields in g.values():
+                assert fields and all(re.fullmatch(r"[a-z][a-z0-9_]*", f) for f in fields), (name, fields)
+
+
 # Shared concepts (#395 review M1): a concept another part also owns may be implemented by that part's component.
 FIXTURE_REGISTRY = C.parent / "services" / "blueprint" / "fixtures" / "registry"
 
@@ -207,3 +244,22 @@ def test_one_concept_binds_one_entity():
         for concept, ref in SCHEMA["$defs"][f"{module}Module"]["properties"]["entities"]["properties"].items():
             assert ref == {"$ref": "#/$defs/id"}, (module, concept)
     assert any("never name the same entity" in r for r in SCHEMA["x-validator-rules"])
+
+
+def test_module_validator_rules_say_what_is_implemented():
+    """#396 review M3: a module entry in x-validator-rules either names its validator code or says it is contract
+    text until BPL-060, so the schema never promises a check the validator lacks."""
+    names = ("Modules (", "CRM (", "Projects (", "Manufacturing (", "Marketing (")
+    entries = [r for r in SCHEMA["x-validator-rules"] if r.startswith(names)]
+    assert entries
+    for r in entries:
+        assert "BP-MOD-" in r or "contract text until BPL-060" in r, r[:60]
+    projects = next(r for r in entries if r.startswith("Projects ("))
+    assert "contract text until BPL-060" in projects and "BP-MOD-002" in projects and "BP-MOD-003" in projects
+
+
+def test_adr_states_the_default_break():
+    """#396 review M5: 0.6.0 refuses expression-like string defaults; contracts/README lets a 0.x minor break only
+    when the ADR says so."""
+    adr = next((C.parent / "docs" / "decisions").glob("ADR-0079-*.md")).read_text(encoding="utf-8")
+    assert re.search(r"0\.6\.0 is not purely additive.*`eval:`", adr, re.S)

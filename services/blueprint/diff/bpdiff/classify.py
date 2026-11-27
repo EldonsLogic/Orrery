@@ -20,9 +20,14 @@ META_COSMETIC = [("meta", "revision"), ("meta", "createdAt"), ("meta", "updatedA
 DESTRUCTIVE_NODES = {spath(p) for p in (
     "locations/*", "components/*", "entities/*", "entities/*/fields/*", "entities/*/fields/*/options/*",
     "entities/*/relations/*", "entities/*/components/*", "workflows/*", "workflows/*/states/*",
-    "modules/crm/pipeline/stages/*", "modules/crm/leadSources/*", "modules/crm/lostReasons/*")}
-# ADR-0079 (#395 review M2): repointing what a module record is or which stage outcome it has orphans records.
-DESTRUCTIVE_CHANGES = {spath("modules/crm/pipeline/stages/*/kind")}
+    "modules/crm/pipeline/stages/*", "modules/crm/leadSources/*", "modules/crm/lostReasons/*",
+    "modules/projects/taskStatuses/*", "modules/projects/views/*", "modules/projects/views/*/board/columns/*",
+    "modules/projects/timesheets")}
+# ADR-0079 (#395 review M2, #396 review H2): repointing what a module record is or which stage outcome it has, or
+# switching timesheets off, orphans records.
+DESTRUCTIVE_CHANGES = {spath("modules/crm/pipeline/stages/*/kind"), spath("modules/projects/timesheets/enabled")}
+# Billing hours through a sales invoice reaches the ledger (#396 review H2): any change is compliance.
+COMPLIANCE_MODULE = [spath("modules/projects/timesheets/billable"), spath("modules/projects/timesheets/invoicingComponent")]
 DATA_FIELD_PROPS = {"type", "required", "unique", "precision", "min", "max", "maxLength", "target", "computed"}
 SECTIONS = {"meta", "company", "compliance", "i18n", "branding"}
 STEPS = spath("approvals/*/steps")
@@ -45,8 +50,11 @@ def impact_of(kind: str, sp: SPath) -> str:
         if sp == STEPS:
             return "access"
         return "config" if sp in ORDER_SIGNIFICANT else "cosmetic"
+    if kind == "remove" and sp[:1] == ("modules",) and len(sp) <= 2:
+        return "destructive"  # a module switched off (Q-700): stricter than access, checked first
     head = sp[0] if sp else ""
-    if head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY):
+    if (head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY)
+            or any(_starts(sp, p) for p in COMPLIANCE_MODULE)):
         return "compliance"
     if head == "branding":
         return "branding"
@@ -68,7 +76,7 @@ def impact_of(kind: str, sp: SPath) -> str:
 
 
 def _module_roles(sp: SPath) -> bool:
-    """modules/<key>/roles, or a whole module or the modules object (which carry role lists)."""
+    """modules/<key>/roles, or a whole module or the modules object replaced (they carry role lists)."""
     return sp[:1] == ("modules",) and (len(sp) <= 2 or sp[2] == "roles")
 
 

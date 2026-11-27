@@ -1,0 +1,22 @@
+{
+  "base": "blueprint-modules-minimal.json",
+  "note": "Negative cases for modules.projects (ADR-0079). Each case edits the valid base by JSON pointer; the result must fail the Blueprint schema at a path starting with 'expect' (equal to it when 'exact' is true). Run by contracts/tests/test_blueprint_modules.py.",
+  "cases": [
+    { "name": "projects-missing-task-concept", "remove": ["/modules/projects/entities/task"], "expect": "modules/projects/entities" },
+    { "name": "projects-missing-views", "remove": ["/modules/projects/views"], "expect": "modules/projects" },
+    { "name": "projects-no-views", "set": { "/modules/projects/views": [] }, "expect": "modules/projects/views" },
+    { "name": "projects-overdue-mapped", "set": { "/modules/projects/taskStatuses/1/engineStatus": "overdue" }, "expect": "modules/projects/taskStatuses/1/engineStatus" },
+    { "name": "projects-no-completed-status", "remove": ["/modules/projects/taskStatuses/3"], "expect": "modules/projects/taskStatuses" },
+    { "name": "projects-board-without-columns", "remove": ["/modules/projects/views/0/board"], "expect": "modules/projects/views/0" },
+    { "name": "projects-board-empty-column", "set": { "/modules/projects/views/0/board/columns/0/statuses": [] }, "expect": "modules/projects/views/0/board/columns/0/statuses" },
+    { "name": "projects-board-over-projects", "set": { "/modules/projects/views/0/concept": "project" }, "expect": "modules/projects/views/0/concept" },
+    { "name": "projects-timeline-without-end", "remove": ["/modules/projects/views/1/timeline/endField"], "expect": "modules/projects/views/1/timeline" },
+    { "name": "projects-calendar-with-board", "set": { "/modules/projects/views/2/board": { "columns": [{ "id": "col_extra", "statuses": ["to_do"], "labels": { "ar": "أ", "en": "A" } }] } }, "expect": "modules/projects/views/2", "exact": true },
+    { "name": "projects-unknown-view-kind", "set": { "/modules/projects/views/2/kind": "gantt" }, "expect": "modules/projects/views/2/kind", "exact": true },
+    { "name": "projects-view-no-roles", "set": { "/modules/projects/views/1/visibleToRoles": [] }, "expect": "modules/projects/views/1/visibleToRoles" },
+    { "name": "projects-timesheets-without-entity", "remove": ["/modules/projects/entities/timesheet"], "expect": "modules/projects/entities" },
+    { "name": "projects-billable-while-disabled", "set": { "/modules/projects/timesheets": { "enabled": false, "billable": true, "invoicingComponent": "core.sales_invoice" } }, "expect": "modules/projects/timesheets/enabled", "exact": true },
+    { "name": "projects-billable-without-invoicing-component", "set": { "/modules/projects/timesheets/billable": true }, "expect": "modules/projects/timesheets", "exact": true },
+    { "name": "projects-timesheet-rate", "set": { "/modules/projects/timesheets/hourlyRate": 150 }, "expect": "modules/projects/timesheets" }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "version": "0.1.0",
+  "status": "UNVERIFIED",
+  "visibility": "internal",
+  "description": "Engine rigid-zone fields per engine record type (AGENTS.md principle 3, ADR-0079 item 5, contracts/blueprint-modules.md). These are the pinned engine's own valuation, costing, posting, tax and ledger fields. A Blueprint may not declare, override, rename, or set a default or options on any of them on an entity it binds through a module concept, on that entity's child_table rows, or through that entity's component parameters (validator BP-MOD-001). Internal only (ADR-0016): never shown to a customer. UNVERIFIED until a bench run on the pinned set confirms the names, in each module's component build: CRM BPL-056, projects BPL-057, manufacturing BPL-058, marketing BPL-059. Billing selectors count as posting fields: Timesheet Detail is_billable and the Timesheet and Project customer pick what goes onto a sales invoice (erpnext/projects/doctype/timesheet/timesheet.py at the tag), and the Timesheet currency and company are ledger fields.",
+  "source": {
+    "engines": [
+      { "app": "erpnext", "tag": "v15.124.5", "commit": "e5cde8c4b9e3f7f567a92ca3e65fd411402b89ce", "url": "https://github.com/frappe/erpnext/tree/v15.124.5" },
+      { "app": "frappe", "tag": "v15.126.0", "commit": "53bae3ef2550ca96320f036f581446783cd11b72", "url": "https://github.com/frappe/frappe/tree/v15.126.0" }
+    ],
+    "pinnedSet": "docs/architecture/engine-version-policy.md section 1",
+    "method": "Each record type's <doctype>.json read through the GitHub contents API at the tag; fields chosen by hand from the Currency, Account, Cost Center, tax, warehouse and costing-method fields.",
+    "accessed": "2026-11-27"
+  },
+  "categories": ["valuation", "costing", "posting", "tax", "ledger"],
+  "concepts": {
+    "crm.lead": ["Lead"],
+    "crm.opportunity": ["Opportunity"],
+    "crm.customer": ["Customer"],
+    "crm.contact": ["Contact"],
+    "crm.activity": ["CRM Note", "Event", "ToDo", "Communication"],
+    "crm.campaign": ["Campaign"],
+    "projects.project": ["Project"],
+    "projects.task": ["Task"],
+    "projects.timesheet": ["Timesheet"],
+    "projects.activity_type": ["Activity Type"],
+    "manufacturing.item": ["Item"],
+    "manufacturing.bom": ["BOM"],
+    "manufacturing.work_order": ["Work Order"],
+    "manufacturing.job_card": ["Job Card"],
+    "manufacturing.operation": ["Operation"],
+    "manufacturing.workstation": ["Workstation"],
+    "manufacturing.routing": ["Routing"],
+    "manufacturing.subcontracting_order": ["Subcontracting Order"],
+    "manufacturing.subcontracting_receipt": ["Subcontracting Receipt"],
+    "marketing.campaign": ["Campaign"],
+    "marketing.email_campaign": ["Email Campaign"],
+    "marketing.messaging_campaign": []
+  },
+  "recordTypes": {
+    "Lead": { "fields": {} },
+    "Opportunity": { "fields": {}, "rows": { "Opportunity Item": {} } },
+    "Customer": {
+      "fields": {
+        "tax": ["tax_category", "tax_withholding_category"],
+        "ledger": ["accounts", "default_currency", "is_internal_customer", "represents_company"]
+      },
+      "rows": { "Party Account": { "ledger": ["account", "advance_account"] } }
+    },
+    "Contact": { "app": "frappe", "fields": {} },
+    "CRM Note": { "fields": {} },
+    "Event": { "app": "frappe", "fields": {} },
+    "ToDo": { "app": "frappe", "fields": {} },
+    "Communication": { "app": "frappe", "fields": {} },
+    "Campaign": { "fields": {}, "rows": { "Campaign Email Schedule": {} } },
+    "Email Campaign": { "fields": {} },
+    "Project": {
+      "fields": {
+        "costing": ["estimated_costing", "total_costing_amount", "total_purchase_cost", "total_sales_amount", "total_billable_amount", "total_billed_amount", "total_consumed_material_cost", "gross_margin", "per_gross_margin"],
+        "posting": ["customer"],
+        "ledger": ["cost_center"]
+      }
+    },
+    "Task": { "fields": { "costing": ["total_costing_amount", "total_billing_amount"] } },
+    "Timesheet": {
+      "fields": {
+        "costing": ["total_costing_amount", "total_billable_amount", "total_billed_amount", "base_total_costing_amount", "base_total_billable_amount", "base_total_billed_amount", "per_billed", "exchange_rate"],
+        "posting": ["sales_invoice", "customer"],
+        "ledger": ["currency", "company"]
+      },
+      "rows": {
+        "Timesheet Detail": {
+          "costing": ["billing_rate", "billing_amount", "costing_rate", "costing_amount", "base_billing_rate", "base_billing_amount", "base_costing_rate", "base_costing_amount"],
+          "posting": ["sales_invoice", "is_billable"]
+        }
+      }
+    },
+    "Activity Type": { "fields": { "costing": ["costing_rate", "billing_rate"] } },
+    "Item": {
+      "fields": {
+        "valuation": ["valuation_rate", "valuation_method", "last_purchase_rate", "allow_negative_stock"],
+        "posting": ["opening_stock", "is_fixed_asset", "asset_category", "auto_create_assets", "enable_deferred_revenue", "no_of_months", "enable_deferred_expense", "no_of_months_exp"],
+        "tax": ["taxes"],
+        "ledger": ["item_defaults"]
+      },
+      "rows": {
+        "Item Default": { "ledger": ["expense_account", "income_account", "default_discount_account", "default_provisional_account", "deferred_expense_account", "deferred_revenue_account", "buying_cost_center", "selling_cost_center"] },
+        "Item Tax": { "tax": ["item_tax_template", "tax_category", "maximum_net_rate", "minimum_net_rate"] }
+      }
+    },
+    "BOM": {
+      "fields": {
+        "costing": ["rm_cost_as_per", "buying_price_list", "price_list_currency", "plc_conversion_rate", "conversion_rate", "set_rate_of_sub_assembly_item_based_on_bom", "operating_cost", "raw_material_cost", "scrap_material_cost", "base_operating_cost", "base_raw_material_cost", "base_scrap_material_cost", "total_cost", "base_total_cost", "fg_based_operating_cost", "operating_cost_per_bom_quantity", "process_loss_percentage"]
+      },
+      "rows": {
+        "BOM Item": { "costing": ["rate", "base_rate", "amount", "base_amount"] },
+        "BOM Operation": { "costing": ["hour_rate", "base_hour_rate", "operating_cost", "base_operating_cost", "cost_per_unit", "base_cost_per_unit", "set_cost_based_on_bom_qty"] },
+        "BOM Scrap Item": { "costing": ["rate", "base_rate", "amount", "base_amount"] },
+        "BOM Explosion Item": { "costing": ["rate", "amount"] }
+      }
+    },
+    "Work Order": {
+      "fields": {
+        "costing": ["planned_operating_cost", "actual_operating_cost", "additional_operating_cost", "total_operating_cost", "corrective_operation_cost", "update_consumed_material_cost_in_project"],
+        "posting": ["source_warehouse", "wip_warehouse", "fg_warehouse", "scrap_warehouse"]
+      },
+      "rows": {
+        "Work Order Item": { "costing": ["rate", "amount"] },
+        "Work Order Operation": { "costing": ["hour_rate", "planned_operating_cost", "actual_operating_cost"] }
+      }
+    },
+    "Job Card": { "fields": { "costing": ["hour_rate"], "posting": ["wip_warehouse"] } },
+    "Operation": { "fields": {} },
+    "Workstation": { "fields": { "costing": ["hour_rate", "hour_rate_electricity", "hour_rate_consumable", "hour_rate_rent", "hour_rate_labour"] } },
+    "Routing": {
+      "fields": {},
+      "rows": { "BOM Operation": { "costing": ["hour_rate", "base_hour_rate", "operating_cost", "base_operating_cost", "cost_per_unit", "base_cost_per_unit", "set_cost_based_on_bom_qty"] } }
+    },
+    "Subcontracting Order": {
+      "fields": {
+        "costing": ["total", "additional_costs", "total_additional_costs", "distribute_additional_costs_based_on"],
+        "ledger": ["cost_center"]
+      },
+      "rows": {
+        "Subcontracting Order Item": { "costing": ["rate", "amount", "service_cost_per_qty", "additional_cost_per_qty", "rm_cost_per_qty"], "ledger": ["expense_account", "cost_center"] },
+        "Subcontracting Order Service Item": { "costing": ["rate", "amount"] },
+        "Subcontracting Order Supplied Item": { "costing": ["rate", "amount"] }
+      }
+    },
+    "Subcontracting Receipt": {
+      "fields": {
+        "costing": ["total", "additional_costs", "total_additional_costs", "distribute_additional_costs_based_on"],
+        "posting": ["posting_date", "posting_time", "set_posting_time"],
+        "ledger": ["cost_center"]
+      },
+      "rows": {
+        "Subcontracting Receipt Item": { "costing": ["rate", "amount", "rm_cost_per_qty", "service_cost_per_qty", "additional_cost_per_qty", "rm_supp_cost", "scrap_cost_per_qty"], "ledger": ["expense_account", "service_expense_account", "cost_center"] },
+        "Subcontracting Receipt Supplied Item": { "costing": ["rate", "amount"], "ledger": ["expense_account", "cost_center"] }
+      }
+    }
+  },
+  "notInRecords": "Engine settings that are not fields of a bound record (for example the manufacturing settings' backflush basis) have no Blueprint key at all; the modules schema offers none (contracts/tests/test_blueprint_modules.py)."
+}

@@ -38,6 +38,11 @@ DESTRUCTIVE_NODES = {spath(p) for p in (
 DESTRUCTIVE_CHANGES = {spath("modules/crm/pipeline/stages/*/kind"), spath("modules/projects/timesheets/enabled")}
 # Billing hours through a sales invoice reaches the ledger (#396 review H2): any change is compliance.
 BILLING_PATHS = [spath("modules/projects/timesheets/billable"), spath("modules/projects/timesheets/invoicingComponent")]
+# Marketing email (BPL-066): the unsubscribe and footer blocks of a template variant, and whether a human approves
+# the A/B winner send, are compliance; other template content is config. Only the op at or inside them matches.
+EMAIL_COMPLIANCE = [spath("modules/marketing/emailTemplates/*/variants/*/unsubscribe"),
+                    spath("modules/marketing/emailTemplates/*/variants/*/footer"),
+                    spath("modules/marketing/abTests/*/winnerRule/release")]
 DATA_FIELD_PROPS = {"type", "required", "unique", "precision", "min", "max", "maxLength", "target", "computed"}
 SECTIONS = {"meta", "company", "compliance", "i18n", "branding"}
 STEPS = spath("approvals/*/steps")
@@ -64,7 +69,7 @@ def impact_of(kind: str, sp: SPath) -> str:
         return "destructive"  # a module switched off (Q-700): stricter than access, checked first
     head = sp[0] if sp else ""
     if (head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE)
-            or any(_starts(sp, p) for p in BILLING_PATHS)
+            or any(_starts(sp, p) for p in BILLING_PATHS + EMAIL_COMPLIANCE)
             or (kind != "add" and sp in INTEGRATION_ROUTE)):
         return "compliance"
     if head == "branding":

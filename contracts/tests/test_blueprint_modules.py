@@ -323,13 +323,51 @@ def _marketing_doc():
     return DOC[DOC.index("## Module `marketing`"):DOC.index("## Changelog")]
 
 
-def test_marketing_email_waits_for_its_own_contract():
-    """#398 review H1: email has no consent or approval path yet, and the engine's scheduler sends without approval.
-    Email is not in 0.8.0; BPL-066 adds it after DSC-025."""
+EMAIL_CONNECTORS = {"email.ses", "email.postmark", "email.sendgrid", "email.mailgun"}
+
+
+def test_marketing_email_follows_dsc025():
+    """BPL-066: email is back in 0.9.0 on a DSC-025 connector; the engine's Email Campaign scheduler never sends."""
     props = SCHEMA["$defs"]["marketingModule"]["properties"]
-    assert "email" not in props["channels"]["properties"] and "email_campaign" not in props["entities"]["properties"]
+    assert "email" in props["channels"]["properties"] and "email_campaign" in props["entities"]["properties"]
+    assert set(SCHEMA["x-email-connectors"]) == EMAIL_CONNECTORS
+    connector = json.loads((C / "connector-email.schema.json").read_text(encoding="utf-8"))
+    assert EMAIL_CONNECTORS <= set(re.findall(r"email\.[a-z_]+", json.dumps(connector)))
+    bp = load("blueprint-modules-minimal.json")
+    ref = bp["modules"]["marketing"]["channels"]["email"]["integration"]
+    assert next(i for i in bp["integrations"] if i["id"] == ref)["connector"] in EMAIL_CONNECTORS
     text = _marketing_doc()
-    assert "BPL-066" in text and "DSC-025" in text and "scheduler" in text
+    for phrase in ("channel `email`", "cross-channel", "EML-004", "EML-006", "RFC 8058", "never sends a marketing email",
+                   "LEG-012", "UNVERIFIED", "No model picks the winner", "quiet hours", "no AI timing"):
+        assert phrase in text, phrase
+
+
+def _email_defs():
+    names = ("emailBlock", "emailTemplate", "emailTemplateVariant", "emailAbTest")
+    return [SCHEMA["$defs"][n] for n in names]
+
+
+def test_email_templates_use_brand_tokens_only():
+    """BPL-066: no colour, font or CSS value in a template, only token roles from docs/brand/tokens."""
+    keys = {k.lower() for d in _email_defs() for k in _property_names(d, set())}
+    assert not {k for k in keys if any(t in k for t in ("color", "colour", "font", "css", "style_", "hex", "html"))}
+    tokens = json.loads((C.parent / "docs" / "brand" / "tokens" / "tokens.json").read_text(encoding="utf-8"))
+    css = (C.parent / "docs" / "brand" / "tokens" / "tokens.css").read_text(encoding="utf-8")
+    assert set(SCHEMA["$defs"]["emailTone"]["enum"]) <= set(tokens["color"]["light"])
+    for style in SCHEMA["$defs"]["emailTextStyle"]["enum"]:
+        assert f"--text-{style}-size" in css, style
+
+
+def test_email_block_types():
+    """Saved reusable blocks: text, image, button, product, divider; a template may also reference a saved block."""
+    types = {b["properties"]["type"]["const"] for b in SCHEMA["$defs"]["emailBlock"]["oneOf"]}
+    assert types == {"text", "image", "button", "product", "divider", "saved"}
+
+
+def test_email_tracking_is_off_by_default():
+    tracking = SCHEMA["$defs"]["marketingModule"]["properties"]["channels"]["properties"]["email"]["properties"]["tracking"]
+    assert all(v["default"] is False for v in tracking["properties"].values())
+    assert set(tracking["properties"]) == {"opens", "clicks"}
 
 
 def test_marketing_send_rules_are_stated():

@@ -51,6 +51,13 @@ _ROWS: list[tuple[str, tuple[str, ...], str]] = [
     ("modules/projects/views/*/board/columns", ("id",), "board_column"),
     ("modules/marketing/segments", ("id",), "segment"),
     ("modules/marketing/segments/*/filters", ("field", "op"), "segment_filter"),
+    ("modules/marketing/channels/email/sendWindows", ("country",), "send_window"),
+    ("modules/marketing/emailBlocks", ("id",), "email_block"),
+    ("modules/marketing/emailTemplates", ("id",), "email_template"),
+    ("modules/marketing/emailTemplates/*/variants", ("locale",), "template_variant"),
+    ("modules/marketing/emailTemplates/*/variants/*/blocks", ("id",), "template_block"),
+    ("modules/marketing/abTests", ("id",), "ab_test"),
+    ("modules/marketing/abTests/*/variants", ("id",), "ab_variant"),
 ]
 
 SPath = tuple  # tuple of str; "*" marks an array element
@@ -73,6 +80,8 @@ ORDER_SIGNIFICANT: set[SPath] = {
     spath("modules/crm/pipeline/stages"),
     spath("modules/projects/taskStatuses"),
     spath("modules/projects/views/*/board/columns"),
+    spath("modules/marketing/emailTemplates/*/variants/*/blocks"),  # block order is the email layout
+    spath("modules/marketing/abTests/*/variants"),  # the first variant is the first_variant fallback
 }
 
 _JSON_SCALARS = (str, int, float, bool, type(None))

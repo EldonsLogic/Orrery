@@ -109,6 +109,25 @@ def test_classification_table(name):
     ("replace", "modules/marketing/segments/*/filters/*/value", "compliance"),
     ("replace", "modules/marketing/segments/*/labels/en", "cosmetic"),
     ("remove", "modules/marketing", "destructive"),
+    ("replace", "modules/marketing/channels/email/tracking/opens", "compliance"),
+    ("replace", "modules/marketing/channels/email/sender/fromDomain", "compliance"),
+    ("replace", "modules/marketing/channels/email/unsubscribe/oneClick", "compliance"),
+    ("replace", "modules/marketing/channels/email/sendWindows/*/to", "compliance"),
+    ("replace", "modules/marketing/emailTemplates/*/variants/*/unsubscribe/tone", "compliance"),
+    ("add", "modules/marketing/emailTemplates/*/variants/*/unsubscribe", "compliance"),
+    ("replace", "modules/marketing/emailTemplates/*/variants/*/footer/textStyle", "compliance"),
+    ("replace", "modules/marketing/emailTemplates/*/variants/*/subject", "config"),
+    ("replace", "modules/marketing/emailTemplates/*/variants/*/plainText", "config"),
+    ("replace", "modules/marketing/emailTemplates/*/variants/*/blocks/*/text", "config"),
+    ("add", "modules/marketing/emailTemplates/*/variants/*/blocks/*", "config"),
+    ("remove", "modules/marketing/emailTemplates/*/variants/*/blocks/*", "config"),
+    ("reorder", "modules/marketing/emailTemplates/*/variants/*/blocks", "config"),
+    ("add", "modules/marketing/emailTemplates/*", "config"),
+    ("replace", "modules/marketing/emailBlocks/*/block/text", "config"),
+    ("replace", "modules/marketing/abTests/*/variants/*/sharePercent", "config"),
+    ("replace", "modules/marketing/abTests/*/winnerRule/metric", "config"),
+    ("replace", "modules/marketing/abTests/*/winnerRule/release", "compliance"),
+    ("replace", "modules/marketing/entities/email_campaign", "destructive"),
     ("replace", "modules/manufacturing/materialTransfer", "compliance"),
     ("replace", "modules/manufacturing/bom/multiLevel", "compliance"),
     ("replace", "modules/manufacturing/bom/withOperations", "compliance"),
@@ -223,6 +242,26 @@ def test_marketing_consent_and_channel_changes_are_compliance():
         edit(b["modules"]["marketing"])
         ops = diff(a, b)["ops"]
         assert ops and {o["impact"] for o in ops} == {"compliance"}
+
+
+def test_email_compliance_and_template_content_changes():
+    """BPL-066: email consent, the unsubscribe block, the tracking opt-in and sender identity are compliance;
+    template content edits are config."""
+    a = _modules_example()
+    mkt = lambda b: b["modules"]["marketing"]
+    compliance = (lambda b: mkt(b)["channels"]["email"]["tracking"].update(opens=True),
+                  lambda b: mkt(b)["channels"]["email"]["sender"].update(fromLocalPart="offers"),
+                  lambda b: mkt(b)["emailTemplates"][0]["variants"][0]["unsubscribe"].update(tone="accent"),
+                  lambda b: mkt(b)["emailTemplates"][0]["variants"][0]["footer"].update(tone="accent"))
+    config = (lambda b: mkt(b)["emailTemplates"][0]["variants"][0].update(subject="New subject"),
+              lambda b: mkt(b)["emailTemplates"][0]["variants"][1]["blocks"].pop(),
+              lambda b: mkt(b)["emailBlocks"][0]["block"].update(text="New header"))
+    for impact, edits in (("compliance", compliance), ("config", config)):
+        for edit in edits:
+            b = json.loads(json.dumps(a))
+            edit(b)
+            ops = diff(a, b)["ops"]
+            assert ops and {o["impact"] for o in ops} == {impact}, ops
 
 
 def test_manufacturing_warehouse_change_is_compliance():

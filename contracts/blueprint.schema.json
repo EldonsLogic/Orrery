@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:platform:contract:blueprint:0.8.0",
-  "version": "0.8.0",
+  "$id": "urn:platform:contract:blueprint:0.9.0",
+  "version": "0.9.0",
   "title": "Blueprint",
   "description": "Contract 1. The typed, versioned description of one tenant's business: entities, workflows, roles, approvals, reports, integrations, compliance, i18n, branding. The Blueprint is configuration, never code. Cross-reference rules that JSON Schema cannot express (ids resolve, locales covered, contrast passes) are enforced by the Blueprint validator in Part 2 and listed in x-validator-rules.",
   "type": "object",
@@ -61,6 +61,7 @@
     "modules": { "$ref": "#/$defs/modules" }
   },
   "x-messaging-connectors": ["msg.meta_whatsapp", "msg.meta_instagram", "msg.meta_messenger", "msg.sms"],
+  "x-email-connectors": ["email.ses", "email.postmark", "email.sendgrid", "email.mailgun"],
   "x-validator-rules": [
     "company.locale fields are optional; each omitted field resolves from compliance.countryPack. The resolved locale is stored with the compiled artifact. workingHours.periods must not overlap and weekend days must not appear in workDays.",
     "compliance.country must equal company.country and the countryPack id must match the country.",
@@ -81,6 +82,7 @@
     "Projects (ADR-0079): timeline and calendar fields are date or datetime fields of the view's concept entity (BP-MOD-002). The rest is contract text until BPL-060 (#396 review): task status and view ids are unique; every board column lists task status ids that resolve and each status sits in exactly one column of a board; visibleToRoles resolve and hold read on that entity. timesheets.invoicingComponent is listed in components and, when the registry is known, is a rigid (certified) component (BP-MOD-003).",
     "Manufacturing (ADR-0079): warehouses reference locations of kind warehouse, workInProgress differs from finishedGoods and scrap differs from both (BP-MOD-004); the warehouse-to-account link is set only by the certified component, never by the Blueprint. Stock moves are posted by the engine's Stock Entry (material transfer, material consumption, manufacture) and the subcontracting receipt, not by the work order or job card: Stock Entry is component-only (no concept, entity or permission in the Blueprint), Tier 3, stock-class (ADR-0037), human floor on submit and cancel (ADR-0027); the subcontracting receipt is the same. Contract text until BPL-060: no Blueprint entity implements the manufacturing component outside its concepts, the rigid fields stay refused on an entity that still implements the component after its concept is unbound, and subcontracting needs a listed component providing purchase orders. Valuation, BOM costing, operating cost, scrap value and every posting are engine or certified-component logic: no Blueprint setting in this module object offers them, and no field on item, bom, their child_table rows or any other manufacturing-bound entity may declare the engine's own fields for them (valuation_rate, rm_cost_as_per, operating_cost, BOM line rate and amount; contracts/engine-rigid-fields.json, BP-MOD-001).",
     "Marketing (ADR-0079): channels.messaging.integration resolves to an integration whose connector is in x-messaging-connectors (BP-MOD-005). The rest is contract text until BPL-060 (#398 review): modules.crm is on; entities.campaign equals modules.crm.entities.campaign when both are set; a segment's audience concept is bound in modules.crm.entities (lead, contact, customer), its filter fields exist on that entity and are never contact identifier fields (phone, email, identity numbers); segment ids are unique; visibleToRoles resolve; no assistant lists a create, update or send tool on campaign or messaging_campaign records. A marketing send goes only to a contact with a granted consent for that contact, channel, country and purpose marketing (DSC-022 section 6, MSG-005) and carries an unsubscribe route; a contact's own revoke (STOP) stays binding through every later tenant record until the contact's own opt-in; members without a contactRef are skipped; imports and segment membership never create consent; messaging sends use approved templates only. Campaign records are draft-only; a send is released only by an R3 approval, origin human with a required approvalId, bound to the frozen recipient list, the content hash and the schedule (any change voids it), and never agent-creatable (DSC-022 section 3, AP-MSG-03 proposed).",
+    "Marketing email (ADR-0079, BPL-066): channels.email.integration resolves to an integration whose connector is in x-email-connectors (DSC-025 ids; BP-MOD-006). Email templates: one variant per locale and every meta.locales locale covered; a saved block reference resolves to an emailBlocks entry of the same locale; a product block entity resolves and its fields exist on it (BP-MOD-007). A/B tests: variant sharePercent values sum to 100; templateId and every variant templateId resolve to an email template; winner metric opens needs channels.email.tracking.opens true and clicks needs channels.email.tracking.clicks true (BP-MOD-008). Send windows: from is earlier than to, and one window per country (BP-MOD-009). The rest is contract text until BPL-060: no assistant lists a create, update or send tool on email_campaign records; product block fields are never contact identifier fields. A marketing email goes only to a contact with a granted consent for that contact, channel email, country and purpose marketing (DSC-025 section 6, EML-004), honouring a cross-channel STOP (DSC-022 section 6); it carries the RFC 8058 headers and the body unsubscribe link (EML-006); a send, and every A/B winner send, is released only by an R3 approval, origin human with a required approvalId, never agent-creatable; the engine's Email Campaign scheduler never sends a marketing email.",
     "Module rigid zone (ADR-0079, BP-MOD-001): on an entity bound by a module concept (every modules.<key>.entities value), and on every entity reached from it through child_table relations at any depth, no field id and no component parameter key equals an engine rigid-zone field of that concept's engine record or its rows, listed in contracts/engine-rigid-fields.json (for example valuation_rate, rm_cost_as_per, billing_rate, tax_category, cost_center). A Blueprint never declares, overrides, renames or sets a default or options on those fields; the list is missing or a bound concept is not in it: refused (fail closed). Custom fields with any other name, money and percent included, are plain data: they never feed posting, valuation or tax."
   ],
   "x-module-shared-concepts": {
@@ -391,7 +393,7 @@
     },
     "marketingModule": {
       "type": "object",
-      "description": "Marketing (Blueprint 0.8.0): segments, campaigns on the engine's core records, and messaging campaigns sent only through the messaging connector (DSC-022). Consent is not optional. Email is not in 0.8.0: it joins with BPL-066 once the email sending connector contract (DSC-025) defines email consent, unsubscribe and the human release (#398 review).",
+      "description": "Marketing (Blueprint 0.8.0; email 0.9.0): segments, campaigns on the engine's core records, messaging campaigns sent only through the messaging connector (DSC-022) and email campaigns sent only through the email sending connector (DSC-025, BPL-066), with an email template library and A/B tests. Consent is not optional. The engine's Email Campaign scheduler never sends.",
       "required": ["component", "entities", "roles", "consent", "channels", "provenance"],
       "additionalProperties": false,
       "properties": {
@@ -403,7 +405,8 @@
           "description": "Concept to Blueprint entity id. campaign is shared with the CRM campaign link.",
           "properties": {
             "campaign": { "$ref": "#/$defs/id" },
-            "messaging_campaign": { "$ref": "#/$defs/id" }
+            "messaging_campaign": { "$ref": "#/$defs/id" },
+            "email_campaign": { "$ref": "#/$defs/id" }
           }
         },
         "roles": { "$ref": "#/$defs/moduleRoles" },
@@ -428,7 +431,7 @@
           "type": "object",
           "required": ["optInRequired", "unsubscribeRoute"],
           "additionalProperties": false,
-          "description": "PDPL and channel rules. The consent records themselves are tenant data kept per DSC-022 section 6, never in the Blueprint; imports and segment membership never create consent.",
+          "description": "PDPL and channel rules. The consent records themselves are tenant data kept per DSC-022 section 6 (email: channel email, DSC-025 section 6), never in the Blueprint; imports and segment membership never create consent. A STOP or provider-reported opt-out on any channel also revokes purpose marketing on every other channel, email included (DSC-022 section 6, Q-725).",
           "properties": {
             "optInRequired": { "const": true, "description": "A marketing send goes only to a contact with a granted consent for that contact, channel, country and purpose marketing (DSC-022 section 6; refused as MSG-005 otherwise). A utility-purpose consent never covers a marketing send." },
             "unsubscribeRoute": { "const": true, "description": "Every message carries a way to opt out, honoured before the next send." }
@@ -438,9 +441,10 @@
           "type": "object",
           "additionalProperties": false,
           "minProperties": 1,
-          "description": "At least one channel is enabled while the module is on. 0.8.0 has messaging only; email joins with BPL-066 (DSC-025).",
+          "description": "At least one channel is enabled while the module is on: messaging (DSC-022) or email (DSC-025, Blueprint 0.9.0).",
           "anyOf": [
-            { "required": ["messaging"], "properties": { "messaging": { "properties": { "enabled": { "const": true } } } } }
+            { "required": ["messaging"], "properties": { "messaging": { "properties": { "enabled": { "const": true } } } } },
+            { "required": ["email"], "properties": { "email": { "properties": { "enabled": { "const": true } } } } }
           ],
           "properties": {
             "messaging": {
@@ -454,14 +458,209 @@
               },
               "if": { "properties": { "enabled": { "const": true } } },
               "then": { "required": ["integration", "templatesOnly"] }
+            },
+            "email": {
+              "type": "object",
+              "required": ["enabled"],
+              "additionalProperties": false,
+              "description": "Blueprint 0.9.0 (BPL-066). Marketing email sent only through a DSC-025 connector. Every change here is compliance in bpdiff.",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "integration": { "$ref": "#/$defs/id", "description": "Integration id whose connector is a DSC-025 email connector (x-email-connectors: email.ses, email.postmark, email.sendgrid, email.mailgun; BP-MOD-006)." },
+                "sender": {
+                  "type": "object",
+                  "required": ["fromName", "fromLocalPart", "fromDomain", "postalAddress"],
+                  "additionalProperties": false,
+                  "description": "Sender identity. fromDomain must be the connection's verified sender domain at send (DSC-025 section 4, EML-003); a dedicated marketing subdomain is recommended.",
+                  "properties": {
+                    "fromName": { "$ref": "#/$defs/localizedText" },
+                    "fromLocalPart": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+                    "fromDomain": { "type": "string", "maxLength": 253, "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$" },
+                    "postalAddress": { "$ref": "#/$defs/localizedText", "description": "The sender's physical address, rendered in every template footer. Required on every marketing email (fail closed): whether each phase-1 market's law or each provider requires it is UNVERIFIED (Q-731)." }
+                  }
+                },
+                "unsubscribe": {
+                  "type": "object",
+                  "required": ["oneClick", "bodyLink"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "oneClick": { "const": true, "description": "RFC 8058 List-Unsubscribe and List-Unsubscribe-Post headers on every marketing email (DSC-025 section 8, EML-006)." },
+                    "bodyLink": { "const": true, "description": "A visible unsubscribe link in the body: the template unsubscribe block." }
+                  }
+                },
+                "tracking": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Per-tenant opt-in, off by default. Also needs the connection's trackingEnabled and trackingPolicyRef (DSC-025 section 9, AP-EML-04 proposed). No open pixel for a recipient in a consent-required country without a granted tracking consent; all four phase-1 countries count as consent-required until LEG-012 answers (UNVERIFIED, EML-010).",
+                  "properties": {
+                    "opens": { "type": "boolean", "default": false },
+                    "clicks": { "type": "boolean", "default": false }
+                  }
+                },
+                "sendWindows": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 4,
+                  "description": "Allowed send times per recipient country, local time in the tenant calendar (company.locale timezone and holidays), on working days only (weekend from company.locale.week or the country pack), never in quiet hours. Fixed times only: no AI timing. A recipient whose consent country has no window is skipped and counted.",
+                  "items": {
+                    "type": "object",
+                    "required": ["country", "from", "to"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "country": { "enum": ["SA", "AE", "EG", "QA"] },
+                      "from": { "$ref": "#/$defs/timeOfDay" },
+                      "to": { "$ref": "#/$defs/timeOfDay" }
+                    }
+                  }
+                }
+              },
+              "if": { "properties": { "enabled": { "const": true } } },
+              "then": { "required": ["integration", "sender", "unsubscribe", "sendWindows"] }
             }
           }
+        },
+        "emailBlocks": {
+          "type": "array",
+          "maxItems": 100,
+          "description": "Saved reusable blocks (text, image, button, product, divider) that email template variants reference. Content, not a send.",
+          "items": {
+            "type": "object",
+            "required": ["id", "labels", "locale", "block"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "labels": { "$ref": "#/$defs/localizedText" },
+              "locale": { "$ref": "#/$defs/locale" },
+              "block": { "$ref": "#/$defs/emailBlock", "not": { "properties": { "type": { "const": "saved" } }, "required": ["type"] } }
+            }
+          }
+        },
+        "emailTemplates": {
+          "type": "array",
+          "maxItems": 100,
+          "description": "Marketing email template library. Brand tokens only: no colour, font or CSS value.",
+          "items": { "$ref": "#/$defs/emailTemplate" }
+        },
+        "abTests": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "A/B test plans an email campaign may use. The winner is computed by code from the declared rule; no model picks it.",
+          "items": { "$ref": "#/$defs/emailAbTest" }
         },
         "provenance": { "$ref": "#/$defs/provenance" }
       },
       "allOf": [
-        { "if": { "properties": { "channels": { "properties": { "messaging": { "properties": { "enabled": { "const": true } } } }, "required": ["messaging"] } }, "required": ["channels"] }, "then": { "properties": { "entities": { "required": ["messaging_campaign"] } } } }
+        { "if": { "properties": { "channels": { "properties": { "messaging": { "properties": { "enabled": { "const": true } } } }, "required": ["messaging"] } }, "required": ["channels"] }, "then": { "properties": { "entities": { "required": ["messaging_campaign"] } } } },
+        { "if": { "properties": { "channels": { "properties": { "email": { "properties": { "enabled": { "const": true } } } }, "required": ["email"] } }, "required": ["channels"] }, "then": { "properties": { "entities": { "required": ["email_campaign"] } } } },
+        { "if": { "anyOf": [{ "required": ["emailBlocks"] }, { "required": ["emailTemplates"] }, { "required": ["abTests"] }] }, "then": { "properties": { "channels": { "required": ["email"], "properties": { "email": { "properties": { "enabled": { "const": true } } } } } } } }
       ]
+    },
+    "emailTone": { "enum": ["primary", "accent", "text", "surface", "background"], "description": "Brand colour token role (docs/brand/tokens, --color-<role>), resolved with tenant branding in both themes. Never a colour value." },
+    "emailTextStyle": { "enum": ["display", "h1", "h2", "body", "caption"], "description": "Brand type token (docs/brand/tokens, --text-<style>-*). Never a font name or size." },
+    "httpsLink": { "type": "string", "maxLength": 2000, "pattern": "^https://[^\\s]+$" },
+    "emailBlock": {
+      "type": "object",
+      "required": ["id", "type"],
+      "description": "One block of an email template variant. Brand tokens only. Text is tenant content, untrusted for models; placeholders resolve from the marketing component's closed list (BPL-059).",
+      "oneOf": [
+        { "type": "object", "required": ["id", "type", "text"], "additionalProperties": false, "properties": { "id": { "$ref": "#/$defs/id" }, "type": { "const": "text" }, "text": { "type": "string", "minLength": 1, "maxLength": 2000 }, "textStyle": { "$ref": "#/$defs/emailTextStyle" }, "tone": { "$ref": "#/$defs/emailTone" } } },
+        { "type": "object", "required": ["id", "type", "asset", "alt"], "additionalProperties": false, "properties": { "id": { "$ref": "#/$defs/id" }, "type": { "const": "image" }, "asset": { "$ref": "#/$defs/assetRef" }, "alt": { "type": "string", "minLength": 1, "maxLength": 200 }, "href": { "$ref": "#/$defs/httpsLink" } } },
+        { "type": "object", "required": ["id", "type", "label", "href"], "additionalProperties": false, "properties": { "id": { "$ref": "#/$defs/id" }, "type": { "const": "button" }, "label": { "type": "string", "minLength": 1, "maxLength": 60 }, "href": { "$ref": "#/$defs/httpsLink" }, "tone": { "$ref": "#/$defs/emailTone" } } },
+        { "type": "object", "required": ["id", "type", "entity", "fields"], "additionalProperties": false, "description": "Shows one record of the entity, picked by a human on the campaign draft; values are rendered by code.", "properties": { "id": { "$ref": "#/$defs/id" }, "type": { "const": "product" }, "entity": { "$ref": "#/$defs/id" }, "fields": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }, "tone": { "$ref": "#/$defs/emailTone" } } },
+        { "type": "object", "required": ["id", "type"], "additionalProperties": false, "properties": { "id": { "$ref": "#/$defs/id" }, "type": { "const": "divider" }, "tone": { "$ref": "#/$defs/emailTone" } } },
+        { "type": "object", "required": ["id", "type", "ref"], "additionalProperties": false, "properties": { "id": { "$ref": "#/$defs/id" }, "type": { "const": "saved" }, "ref": { "$ref": "#/$defs/id", "description": "An emailBlocks id of the same locale (BP-MOD-007)." } } }
+      ]
+    },
+    "emailFixedBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "textStyle": { "$ref": "#/$defs/emailTextStyle" }, "tone": { "$ref": "#/$defs/emailTone" } }
+    },
+    "emailTemplateVariant": {
+      "type": "object",
+      "required": ["locale", "direction", "subject", "blocks", "plainText", "unsubscribe", "footer"],
+      "additionalProperties": false,
+      "properties": {
+        "locale": { "$ref": "#/$defs/locale" },
+        "direction": { "enum": ["rtl", "ltr"], "description": "Arabic is rtl, every other locale ltr." },
+        "subject": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "preheader": { "type": "string", "maxLength": 150 },
+        "blocks": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/$defs/emailBlock" } },
+        "plainText": { "type": "string", "minLength": 1, "maxLength": 20000, "description": "Required plain-text part. Code appends the unsubscribe link and the footer to it." },
+        "unsubscribe": { "$ref": "#/$defs/emailFixedBlock", "description": "Required unsubscribe block. Its wording and link come from the platform (i18n), never from tenant text, so it cannot be hidden or reworded; code places it after the last block. Compliance in bpdiff." },
+        "footer": { "$ref": "#/$defs/emailFixedBlock", "description": "Required footer with the sender's name and channels.email.sender.postalAddress, rendered by code. Compliance in bpdiff." }
+      },
+      "if": { "properties": { "locale": { "pattern": "^ar(-|$)" } }, "required": ["locale"] },
+      "then": { "properties": { "direction": { "const": "rtl" } } },
+      "else": { "properties": { "direction": { "const": "ltr" } } }
+    },
+    "emailTemplate": {
+      "type": "object",
+      "required": ["id", "labels", "category", "variants", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "category": { "const": "marketing", "description": "Transactional templates belong to the documents that send them, never to this library (DSC-025 section 1)." },
+        "variants": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "description": "An Arabic (rtl) and an English (ltr) variant at least; one per locale (BP-MOD-007).",
+          "items": { "$ref": "#/$defs/emailTemplateVariant" },
+          "allOf": [
+            { "contains": { "properties": { "locale": { "const": "ar" } }, "required": ["locale"] } },
+            { "contains": { "properties": { "locale": { "const": "en" } }, "required": ["locale"] } }
+          ]
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      }
+    },
+    "emailAbTest": {
+      "type": "object",
+      "required": ["id", "labels", "on", "testAudiencePercent", "variants", "winnerRule", "provenance"],
+      "additionalProperties": false,
+      "description": "A subject or content test. testAudiencePercent of the approved recipients get the variants by sharePercent (sum 100, BP-MOD-008); the rest get the winner. No model picks the winner.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "labels": { "$ref": "#/$defs/localizedText" },
+        "on": { "enum": ["subject", "content"] },
+        "templateId": { "$ref": "#/$defs/id", "description": "Subject tests: the one template whose subject the variants replace." },
+        "testAudiencePercent": { "type": "integer", "minimum": 10, "maximum": 50, "description": "Fixed share of the recipients in the test (placeholder bounds, Q-732)." },
+        "variants": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["id", "sharePercent"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "sharePercent": { "type": "integer", "minimum": 1, "maximum": 99 },
+              "subject": { "$ref": "#/$defs/localizedText" },
+              "templateId": { "$ref": "#/$defs/id" }
+            }
+          }
+        },
+        "winnerRule": {
+          "type": "object",
+          "required": ["metric", "minSamplePerVariant", "decideAfterHours", "fallback", "release"],
+          "additionalProperties": false,
+          "description": "Deterministic: decideAfterHours after the test send, code compares the metric per delivered message; the highest wins when every variant has minSamplePerVariant delivered; otherwise, or on a tie, the fallback applies.",
+          "properties": {
+            "metric": { "enum": ["opens", "clicks", "conversions"], "description": "opens needs open tracking, clicks needs click tracking (BP-MOD-008). conversions are leads or orders linked to the campaign, counted by code." },
+            "minSamplePerVariant": { "type": "integer", "minimum": 100, "maximum": 100000, "description": "Placeholder floor (Q-732)." },
+            "decideAfterHours": { "type": "integer", "minimum": 1, "maximum": 72 },
+            "fallback": { "enum": ["first_variant", "hold_for_human"], "description": "first_variant: the first listed variant wins. hold_for_human: no winner send until a human picks one and approves it." },
+            "release": { "enum": ["human_approval", "preapproved_rule"], "description": "human_approval: the winner send needs its own R3 approval. preapproved_rule: the campaign's R3 approval names this rule and covers the winner send it computes; any change to the rule voids that approval." }
+          }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" }
+      },
+      "if": { "properties": { "on": { "const": "subject" } }, "required": ["on"] },
+      "then": { "required": ["templateId"], "properties": { "variants": { "items": { "required": ["subject"], "not": { "required": ["templateId"] } } } } },
+      "else": { "not": { "required": ["templateId"] }, "properties": { "variants": { "items": { "required": ["templateId"], "not": { "required": ["subject"] } } } } }
     },
     "assistant": {
       "type": "object",

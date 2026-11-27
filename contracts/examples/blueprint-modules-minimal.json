@@ -93,7 +93,8 @@
     { "id": "routing", "kind": "master", "labels": { "ar": "مسار التشغيل", "en": "Routing" }, "fields": [{ "id": "routing_name", "type": "string", "required": true, "labels": { "ar": "الاسم", "en": "Name" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
     { "id": "subcontracting_order", "kind": "document", "labels": { "ar": "أمر تصنيع خارجي", "en": "Subcontracting order" }, "fields": [{ "id": "supplier_name", "type": "string", "required": true, "labels": { "ar": "المورد", "en": "Supplier" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
     { "id": "subcontracting_receipt", "kind": "document", "labels": { "ar": "استلام تصنيع خارجي", "en": "Subcontracting receipt" }, "fields": [{ "id": "supplier_name", "type": "string", "required": true, "labels": { "ar": "المورد", "en": "Supplier" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
-    { "id": "messaging_campaign", "kind": "master", "labels": { "ar": "حملة رسائل", "en": "Messaging campaign" }, "fields": [{ "id": "campaign", "type": "link", "target": "campaign", "required": true, "labels": { "ar": "الحملة", "en": "Campaign" } }, { "id": "template_name", "type": "string", "required": true, "labels": { "ar": "القالب المعتمد", "en": "Approved template" } }], "components": [{ "component": "marketing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } }
+    { "id": "messaging_campaign", "kind": "master", "labels": { "ar": "حملة رسائل", "en": "Messaging campaign" }, "fields": [{ "id": "campaign", "type": "link", "target": "campaign", "required": true, "labels": { "ar": "الحملة", "en": "Campaign" } }, { "id": "template_name", "type": "string", "required": true, "labels": { "ar": "القالب المعتمد", "en": "Approved template" } }], "components": [{ "component": "marketing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "email_campaign", "kind": "master", "labels": { "ar": "حملة بريد", "en": "Email campaign" }, "fields": [{ "id": "campaign", "type": "link", "target": "campaign", "required": true, "labels": { "ar": "الحملة", "en": "Campaign" } }, { "id": "template_id", "type": "string", "required": true, "labels": { "ar": "القالب", "en": "Template" } }], "components": [{ "component": "marketing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } }
   ],
   "roles": [
     {
@@ -108,6 +109,7 @@
         { "entity": "crm_activity", "actions": ["read", "create", "update"] },
         { "entity": "campaign", "actions": ["read", "create", "update"] },
         { "entity": "messaging_campaign", "actions": ["read", "create", "update"] },
+        { "entity": "email_campaign", "actions": ["read", "create", "update"] },
         { "entity": "project", "actions": ["read", "create", "update"] },
         { "entity": "task", "actions": ["read", "create", "update"] },
         { "entity": "timesheet", "actions": ["read", "submit"] },
@@ -173,7 +175,8 @@
     }
   ],
   "integrations": [
-    { "id": "whatsapp_marketing", "connector": "msg.meta_whatsapp", "direction": "both", "schedule": "on_event", "mappings": [], "provenance": { "source": "template", "humanEdited": false } }
+    { "id": "whatsapp_marketing", "connector": "msg.meta_whatsapp", "direction": "both", "schedule": "on_event", "mappings": [], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "email_marketing", "connector": "email.postmark", "direction": "out", "schedule": "on_event", "mappings": [], "provenance": { "source": "template", "humanEdited": false } }
   ],
   "compliance": {
     "country": "SA",
@@ -256,14 +259,81 @@
     },
     "marketing": {
       "component": "marketing.core",
-      "entities": { "campaign": "campaign", "messaging_campaign": "messaging_campaign" },
+      "entities": { "campaign": "campaign", "messaging_campaign": "messaging_campaign", "email_campaign": "email_campaign" },
       "roles": { "manage": ["owner"] },
       "segments": [
         { "id": "contacts_with_mobile", "audience": "contact", "filters": [{ "field": "mobile", "op": "is_set" }], "labels": { "ar": "جهات لديها جوال", "en": "Contacts with a mobile" } },
         { "id": "campaign_leads", "audience": "lead", "filters": [{ "field": "campaign", "op": "is_set" }], "visibleToRoles": ["owner"], "labels": { "ar": "عملاء محتملون من حملات", "en": "Leads from campaigns" } }
       ],
       "consent": { "optInRequired": true, "unsubscribeRoute": true },
-      "channels": { "messaging": { "enabled": true, "integration": "whatsapp_marketing", "templatesOnly": true } },
+      "channels": {
+        "messaging": { "enabled": true, "integration": "whatsapp_marketing", "templatesOnly": true },
+        "email": {
+          "enabled": true,
+          "integration": "email_marketing",
+          "sender": {
+            "fromName": { "ar": "شركة المثال", "en": "Example Services" },
+            "fromLocalPart": "news",
+            "fromDomain": "news.example.com",
+            "postalAddress": { "ar": "ص.ب. 0000، الرياض، المملكة العربية السعودية", "en": "PO Box 0000, Riyadh, Saudi Arabia" }
+          },
+          "unsubscribe": { "oneClick": true, "bodyLink": true },
+          "tracking": { "opens": false, "clicks": true },
+          "sendWindows": [{ "country": "SA", "from": "10:00", "to": "20:00" }]
+        }
+      },
+      "emailBlocks": [
+        { "id": "brand_header", "labels": { "ar": "ترويسة", "en": "Header" }, "locale": "ar", "block": { "id": "header_text", "type": "text", "text": "أهلاً من شركة المثال", "textStyle": "h1", "tone": "primary" } }
+      ],
+      "emailTemplates": [
+        {
+          "id": "monthly_offer",
+          "labels": { "ar": "عرض الشهر", "en": "Monthly offer" },
+          "category": "marketing",
+          "variants": [
+            {
+              "locale": "ar", "direction": "rtl", "subject": "عرض هذا الشهر", "preheader": "خصم لعملائنا",
+              "blocks": [
+                { "id": "header", "type": "saved", "ref": "brand_header" },
+                { "id": "body", "type": "text", "text": "نقدم لكم عرض هذا الشهر.", "textStyle": "body", "tone": "text" },
+                { "id": "featured", "type": "product", "entity": "item", "fields": ["item_name"] },
+                { "id": "rule", "type": "divider" },
+                { "id": "cta", "type": "button", "label": "اطلب الآن", "href": "https://example.com/offer", "tone": "accent" }
+              ],
+              "plainText": "نقدم لكم عرض هذا الشهر. اطلب الآن: https://example.com/offer",
+              "unsubscribe": { "textStyle": "caption", "tone": "text" },
+              "footer": { "textStyle": "caption", "tone": "text" }
+            },
+            {
+              "locale": "en", "direction": "ltr", "subject": "This month's offer",
+              "blocks": [
+                { "id": "body", "type": "text", "text": "Here is this month's offer.", "textStyle": "body" },
+                { "id": "featured", "type": "product", "entity": "item", "fields": ["item_name"] },
+                { "id": "cta", "type": "button", "label": "Order now", "href": "https://example.com/offer", "tone": "accent" }
+              ],
+              "plainText": "Here is this month's offer. Order now: https://example.com/offer",
+              "unsubscribe": {},
+              "footer": {}
+            }
+          ],
+          "provenance": { "source": "template", "ref": "marketing_starter@0.1.0", "humanEdited": false }
+        }
+      ],
+      "abTests": [
+        {
+          "id": "subject_test",
+          "labels": { "ar": "اختبار العنوان", "en": "Subject test" },
+          "on": "subject",
+          "templateId": "monthly_offer",
+          "testAudiencePercent": 20,
+          "variants": [
+            { "id": "variant_a", "sharePercent": 50, "subject": { "ar": "عرض هذا الشهر", "en": "This month's offer" } },
+            { "id": "variant_b", "sharePercent": 50, "subject": { "ar": "خصم لك وحدك", "en": "A discount just for you" } }
+          ],
+          "winnerRule": { "metric": "clicks", "minSamplePerVariant": 200, "decideAfterHours": 24, "fallback": "first_variant", "release": "human_approval" },
+          "provenance": { "source": "template", "ref": "marketing_starter@0.1.0", "humanEdited": false }
+        }
+      ],
       "provenance": { "source": "template", "ref": "marketing_starter@0.1.0", "humanEdited": false }
     }
   }

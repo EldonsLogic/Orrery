@@ -60,6 +60,7 @@ for (const [bn, backdrop] of [['white', '#ffffff'], ['black', '#000000']]) {
   const glass = (c) => mix(c.surface, glassAlpha, backdrop);
   add(`glass-text/${bn}`, `text on glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', 'var(--glass-fill)', (c) => c.text, glass, N);
   add(`glass-muted/${bn}`, `muted text (nav heading, footer label, language) on glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', 'color: var(--color-text-muted)', (c) => c['text-muted'], glass, N);
+  add(`glass-placeholder/${bn}`, `Ask Seshna placeholder (muted) on glass over a ${bn} backdrop`, 'components/home/Home.module.css', 'var(--glass-fill)', (c) => c['text-muted'], glass, N);
   add(`glass-icon/${bn}`, `muted icon (nav icon, chevron) on glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', '.navIcon', (c) => c['text-muted'], glass, UI);
   add(`glass-on-primary-nav/${bn}`, `current nav link text on 14% primary tint over glass over a ${bn} backdrop`, 'components/shell/Shell.module.css', 'var(--color-primary) 14%', (c) => c.text, (c) => mix(c.primary, 0.14, glass(c)), N);
 }

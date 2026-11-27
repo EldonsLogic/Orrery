@@ -102,7 +102,6 @@
   background: var(--glass-fill);
   backdrop-filter: var(--glass-filter);
   -webkit-backdrop-filter: var(--glass-filter);
-  box-shadow: var(--glass-highlight);
   transition: border-color var(--motion-fast) var(--motion-ease);
 }
 

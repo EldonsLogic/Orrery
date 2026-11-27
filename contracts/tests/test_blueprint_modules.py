@@ -166,6 +166,24 @@ def test_module_roles_description_grants_nothing():
     assert not re.search(r"\b(sees|see|reassign\w*|can|may|edit\w*|read\w*)\b", text, re.I), text
 
 
+def test_example_messaging_integration_uses_a_dsc022_connector():
+    """#398 review: channels.messaging.integration names an integration on a DSC-022 connector id."""
+    bp = load("blueprint-modules-minimal.json")
+    allowed = set(SCHEMA["x-messaging-connectors"])
+    assert allowed == {"msg.meta_whatsapp", "msg.meta_instagram", "msg.meta_messenger", "msg.sms"}
+    ref = bp["modules"]["marketing"]["channels"]["messaging"]["integration"]
+    assert next(i for i in bp["integrations"] if i["id"] == ref)["connector"] in allowed
+
+
+def test_marketing_consent_text_matches_dsc022():
+    """#398 review: consent per contact, channel, country and purpose marketing; R3 human sends; no consent from imports."""
+    section = DOC[DOC.index("## Module `marketing`"):DOC.index("## Changelog")]
+    for phrase in ("contact, channel, country and purpose `marketing`", "MSG-005", "R3", "`origin: human`", "`approvalId`",
+                   "never agent-creatable", "without a `contactRef` are skipped", "never create consent",
+                   "empty `visibleToRoles` means nobody"):
+        assert phrase in section, phrase
+
+
 RIGID = json.loads((C / "engine-rigid-fields.json").read_text(encoding="utf-8"))
 POLICY = (C.parent / "docs" / "architecture" / "engine-version-policy.md").read_text(encoding="utf-8")
 
@@ -202,11 +220,17 @@ def test_rigid_field_names_are_engine_field_names():
 FIXTURE_REGISTRY = C.parent / "services" / "blueprint" / "fixtures" / "registry"
 
 
-def _capabilities(component_id):
+def _capabilities(component_id, bp=None):
+    """Fixture manifest capabilities, plus <module>.<concept> for every concept of a module this component implements
+    in `bp` (the contract makes the module component provide them; module components have no fixture manifest)."""
     f = FIXTURE_REGISTRY / f"{component_id}.json"
-    if not f.exists():
-        return set()
-    return {p["capability"] for p in json.loads(f.read_text(encoding="utf-8"))["provides"]}
+    caps = set()
+    if f.exists():
+        caps = {p["capability"] for p in json.loads(f.read_text(encoding="utf-8"))["provides"]}
+    for key, mod in (bp or {}).get("modules", {}).items():
+        if mod.get("component") == component_id:
+            caps |= {f"{key}.{c}" for c in SCHEMA["$defs"][f"{key}Module"]["properties"]["entities"]["properties"]}
+    return caps
 
 
 def test_shared_concepts_are_declared_and_documented():
@@ -231,7 +255,7 @@ def test_example_concept_bindings_follow_the_shared_concept_rule():
         for concept, eid in mod["entities"].items():
             impl = {b["component"] for b in ents[eid].get("components", []) if b["mode"] == "implements"}
             via_module = mod["component"] in impl
-            via_shared = any(set(shared.get(f"{key}.{concept}", [])) & _capabilities(c) for c in impl)
+            via_shared = any(set(shared.get(f"{key}.{concept}", [])) & _capabilities(c, bp) for c in impl)
             assert via_module or via_shared, (key, concept, eid, impl)
             assert not (via_module and via_shared), ("one implementer per concept", concept)
     customer = ents[bp["modules"]["crm"]["entities"]["customer"]]
@@ -293,3 +317,27 @@ def test_engine_manufacturing_settings_are_listed_with_value(setting, value):
 def test_subcontracting_names_its_purchase_order_source():
     """#397 review M5: the engine's Subcontracting Order requires a purchase order."""
     assert re.search(r"Subcontracting Order requires a `purchase_order`.*`purchasing\.purchase_order`", DOC)
+
+
+def _marketing_doc():
+    return DOC[DOC.index("## Module `marketing`"):DOC.index("## Changelog")]
+
+
+def test_marketing_email_waits_for_its_own_contract():
+    """#398 review H1: email has no consent or approval path yet, and the engine's scheduler sends without approval.
+    Email is not in 0.8.0; BPL-066 adds it after DSC-025."""
+    props = SCHEMA["$defs"]["marketingModule"]["properties"]
+    assert "email" not in props["channels"]["properties"] and "email_campaign" not in props["entities"]["properties"]
+    text = _marketing_doc()
+    assert "BPL-066" in text and "DSC-025" in text and "scheduler" in text
+
+
+def test_marketing_send_rules_are_stated():
+    """#398 review M3, M4, H2 and Low 10: draft-only records and a human release bound to audience, content and
+    schedule; a contact's STOP stays binding; segment membership is computed by code and untrusted for models."""
+    text = _marketing_doc()
+    for phrase in ("draft-only", "frozen recipient list", "content hash", "voids the approval",
+                   "stays binding", "computed by code", "data_class", "never agent-creatable"):
+        assert phrase in text, phrase
+    rule = next(r for r in SCHEMA["x-validator-rules"] if r.startswith("Marketing ("))
+    assert "contract text until BPL-060" in rule and "BP-MOD-005" in rule

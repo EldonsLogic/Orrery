@@ -69,7 +69,13 @@ def test_classification_table(name):
     ("replace", "locations/*/city", "cosmetic"),
     ("remove", "components/*", "destructive"),
     ("replace", "components/*/versionRange", "config"),
-    ("remove", "integrations/*", "config"),
+    ("remove", "integrations/*", "compliance"),
+    ("remove", "integrations", "compliance"),
+    ("replace", "integrations/*/connector", "compliance"),
+    ("replace", "integrations/*/direction", "compliance"),
+    ("add", "integrations/*", "config"),
+    ("replace", "integrations/*/schedule", "config"),
+    ("replace", "modules/marketing/component", "destructive"),
     ("remove", "reports/*", "config"),
     ("reorder", "approvals/*/steps", "access"),
     ("reorder", "entities/*/fields", "config"),
@@ -91,6 +97,18 @@ def test_classification_table(name):
     ("replace", "modules/manufacturing", "compliance"),
     ("remove", "modules/manufacturing", "destructive"),
     ("replace", "modules/manufacturing/roles/manage", "access"),
+    ("replace", "modules/marketing/consent/doubleOptIn", "compliance"),
+    ("replace", "modules/marketing/consent", "compliance"),
+    ("replace", "modules/marketing/channels/messaging/integration", "compliance"),
+    ("add", "modules/marketing/channels/email", "compliance"),
+    ("replace", "modules/marketing/segments/*/audience", "compliance"),
+    ("replace", "modules/marketing/segments/*/visibleToRoles", "compliance"),
+    ("add", "modules/marketing/segments/*", "compliance"),
+    ("remove", "modules/marketing/segments/*", "compliance"),
+    ("add", "modules/marketing/segments/*/filters/*", "compliance"),
+    ("replace", "modules/marketing/segments/*/filters/*/value", "compliance"),
+    ("replace", "modules/marketing/segments/*/labels/en", "cosmetic"),
+    ("remove", "modules/marketing", "destructive"),
     ("replace", "modules/manufacturing/materialTransfer", "compliance"),
     ("replace", "modules/manufacturing/bom/multiLevel", "compliance"),
     ("replace", "modules/manufacturing/bom/withOperations", "compliance"),
@@ -196,6 +214,17 @@ def test_module_role_change_is_access():
     assert ops and {o["impact"] for o in ops} == {"access"}
 
 
+def test_marketing_consent_and_channel_changes_are_compliance():
+    """#398 review: consent and channel settings decide who may be messaged (PDPL, DSC-022 section 6)."""
+    a = _modules_example()
+    for edit in (lambda m: m["consent"].update(doubleOptIn=True),
+                 lambda m: m["channels"]["messaging"].update(integration="other_messaging")):
+        b = json.loads(json.dumps(a))
+        edit(b["modules"]["marketing"])
+        ops = diff(a, b)["ops"]
+        assert ops and {o["impact"] for o in ops} == {"compliance"}
+
+
 def test_manufacturing_warehouse_change_is_compliance():
     """#397 review: a warehouse choice moves stock and, through the warehouse account, ledger value."""
     a = _modules_example()
@@ -216,6 +245,17 @@ def test_module_removal_is_destructive():
         assert ops and {o["impact"] for o in ops} == {"destructive"}, key
 
 
+def test_marketing_segment_audience_change_is_compliance():
+    """#398 re-review: a segment decides who is messaged, so adding one or editing its filters is compliance."""
+    a = _modules_example()
+    seg = a["modules"]["marketing"]["segments"][0]
+    for edit in (lambda m: m["segments"].append(dict(json.loads(json.dumps(seg)), id="second_segment")),
+                 lambda m: m["segments"][0]["filters"].pop(),
+                 lambda m: m["segments"].pop()):
+        b = json.loads(json.dumps(a))
+        edit(b["modules"]["marketing"])
+        ops = diff(a, b)["ops"]
+        assert ops and {o["impact"] for o in ops} == {"compliance"}, ops
 @pytest.mark.parametrize("name,edit", [
     ("stage removed", lambda c: c["pipeline"]["stages"].pop(1)),
     ("lead source removed", lambda c: c["leadSources"].pop(0)),

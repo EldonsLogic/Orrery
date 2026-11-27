@@ -9,7 +9,7 @@ from validator import validate
 
 EXAMPLE = REPO / "contracts" / "examples" / "blueprint-modules-minimal.json"
 TRADING = REPO / "services" / "blueprint" / "fixtures" / "trading-distribution.blueprint.json"
-MOD_CODES = {"BP-MOD-001", "BP-MOD-002", "BP-MOD-003", "BP-MOD-004"}
+MOD_CODES = {"BP-MOD-001", "BP-MOD-002", "BP-MOD-003", "BP-MOD-004", "BP-MOD-005"}
 
 
 def example():
@@ -305,6 +305,21 @@ def test_manufacturing_warehouses(update):
     bp = example()
     _wh(bp).update(update)
     assert "BP-MOD-004" in codes(bp)
+
+
+@pytest.mark.parametrize("connector", ["messaging.meta_business", "msg.telegram", "file.excel_upload"])
+def test_marketing_messaging_needs_a_dsc022_connector(connector):
+    """#398 review: channels.messaging.integration resolves to an integration on a DSC-022 connector id."""
+    bp = example()
+    ref = bp["modules"]["marketing"]["channels"]["messaging"]["integration"]
+    next(i for i in bp["integrations"] if i["id"] == ref)["connector"] = connector
+    assert "BP-MOD-005" in codes(bp)
+
+
+def test_marketing_messaging_integration_must_resolve():
+    bp = example()
+    bp["modules"]["marketing"]["channels"]["messaging"]["integration"] = "no_such_integration"
+    assert "BP-MOD-005" in codes(bp)
 
 
 def test_distinct_scrap_warehouse_passes():

@@ -16,10 +16,16 @@ LABEL_KEYS = {"labels", "pluralLabels", "actionLabels", "city", "note", "reason"
 ACCESS_KEYS = {"visibleToRoles", "allowedRoles", "hiddenFields", "readOnlyFields"}
 COMPLIANCE_COMPANY = [("company", "country"), ("company", "vatNumber"), ("company", "crNumber"),
                       ("company", "locale", "currency"), ("company", "locale", "fiscalYear")]
-# Module settings that move stock, ledger value or consent (ADR-0079): reviewed as compliance, the strictest
+# Module settings that move stock or ledger value, or decide who may be messaged (ADR-0079, DSC-022): reviewed as compliance, the strictest
 # non-structural class. Ancestors match too, so replacing a whole module is compliance as well.
-MODULE_COMPLIANCE = [("modules", "manufacturing", k) for k in  # stock value and which materials move (#397 review)
-                     ("warehouses", "bom", "operations", "materialTransfer", "batchFromWorkOrder", "subcontracting")]
+MODULE_COMPLIANCE = ([("modules", "manufacturing", k) for k in  # stock value and which materials move (#397 review)
+                      ("warehouses", "bom", "operations", "materialTransfer", "batchFromWorkOrder", "subcontracting")]
+                     + [("modules", "marketing", "consent"), ("modules", "marketing", "channels")])
+# A segment decides who is messaged (#398 re-review): any change to it, other than its labels, is compliance.
+SEGMENTS = ("modules", "marketing", "segments")
+# Which external party receives data, and in which direction (#398 review M6): reviewed as compliance (PDPL).
+INTEGRATION_ROUTE = {spath("integrations"), spath("integrations/*"), spath("integrations/*/connector"),
+                     spath("integrations/*/direction")}
 META_COSMETIC = [("meta", "revision"), ("meta", "createdAt"), ("meta", "updatedAt")]
 DESTRUCTIVE_NODES = {spath(p) for p in (
     "locations/*", "components/*", "entities/*", "entities/*/fields/*", "entities/*/fields/*/options/*",
@@ -58,7 +64,8 @@ def impact_of(kind: str, sp: SPath) -> str:
         return "destructive"  # a module switched off (Q-700): stricter than access, checked first
     head = sp[0] if sp else ""
     if (head == "compliance" or any(_related(sp, p) for p in COMPLIANCE_COMPANY + MODULE_COMPLIANCE)
-            or any(_starts(sp, p) for p in BILLING_PATHS)):
+            or any(_starts(sp, p) for p in BILLING_PATHS)
+            or (kind != "add" and sp in INTEGRATION_ROUTE)):
         return "compliance"
     if head == "branding":
         return "branding"
@@ -68,6 +75,8 @@ def impact_of(kind: str, sp: SPath) -> str:
     if ("provenance" in sp or LABEL_KEYS & set(sp) or (head == "i18n" and not _starts(sp, ("i18n", "defaultLocale")))
             or any(_starts(sp, p) for p in META_COSMETIC)):
         return "cosmetic"
+    if _related(sp, SEGMENTS):
+        return "compliance"
     if (head in ("roles", "approvals", "assistants") or ACCESS_KEYS & set(sp) or _module_roles(sp)
             or (head == "workflows" and len(sp) >= 4 and sp[2] == "transitions"
                 and (len(sp) == 4 or sp[4] == "approval"))):

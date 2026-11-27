@@ -49,6 +49,8 @@ _ROWS: list[tuple[str, tuple[str, ...], str]] = [
     ("modules/projects/taskStatuses", ("id",), "task_status"),
     ("modules/projects/views", ("id",), "module_view"),
     ("modules/projects/views/*/board/columns", ("id",), "board_column"),
+    ("modules/marketing/segments", ("id",), "segment"),
+    ("modules/marketing/segments/*/filters", ("field", "op"), "segment_filter"),
 ]
 
 SPath = tuple  # tuple of str; "*" marks an array element

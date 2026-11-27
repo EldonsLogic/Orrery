@@ -17,7 +17,8 @@
     { "id": "crm.core", "versionRange": "^0.1.0" },
     { "id": "projects.core", "versionRange": "^0.1.0" },
     { "id": "core.item", "versionRange": "^0.1.0" },
-    { "id": "manufacturing.core", "versionRange": "^0.1.0" }
+    { "id": "manufacturing.core", "versionRange": "^0.1.0" },
+    { "id": "marketing.core", "versionRange": "^0.1.0" }
   ],
   "entities": [
     {
@@ -59,7 +60,7 @@
       "id": "campaign", "kind": "master",
       "labels": { "ar": "حملة", "en": "Campaign" },
       "fields": [{ "id": "campaign_name", "type": "string", "required": true, "labels": { "ar": "اسم الحملة", "en": "Campaign name" } }],
-      "components": [{ "component": "crm.core", "mode": "implements" }],
+      "components": [{ "component": "marketing.core", "mode": "implements" }],
       "provenance": { "source": "template", "humanEdited": false }
     },
     {
@@ -91,7 +92,8 @@
     { "id": "workstation", "kind": "master", "labels": { "ar": "محطة عمل", "en": "Workstation" }, "fields": [{ "id": "workstation_name", "type": "string", "required": true, "labels": { "ar": "الاسم", "en": "Name" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
     { "id": "routing", "kind": "master", "labels": { "ar": "مسار التشغيل", "en": "Routing" }, "fields": [{ "id": "routing_name", "type": "string", "required": true, "labels": { "ar": "الاسم", "en": "Name" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
     { "id": "subcontracting_order", "kind": "document", "labels": { "ar": "أمر تصنيع خارجي", "en": "Subcontracting order" }, "fields": [{ "id": "supplier_name", "type": "string", "required": true, "labels": { "ar": "المورد", "en": "Supplier" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
-    { "id": "subcontracting_receipt", "kind": "document", "labels": { "ar": "استلام تصنيع خارجي", "en": "Subcontracting receipt" }, "fields": [{ "id": "supplier_name", "type": "string", "required": true, "labels": { "ar": "المورد", "en": "Supplier" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } }
+    { "id": "subcontracting_receipt", "kind": "document", "labels": { "ar": "استلام تصنيع خارجي", "en": "Subcontracting receipt" }, "fields": [{ "id": "supplier_name", "type": "string", "required": true, "labels": { "ar": "المورد", "en": "Supplier" } }], "components": [{ "component": "manufacturing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } },
+    { "id": "messaging_campaign", "kind": "master", "labels": { "ar": "حملة رسائل", "en": "Messaging campaign" }, "fields": [{ "id": "campaign", "type": "link", "target": "campaign", "required": true, "labels": { "ar": "الحملة", "en": "Campaign" } }, { "id": "template_name", "type": "string", "required": true, "labels": { "ar": "القالب المعتمد", "en": "Approved template" } }], "components": [{ "component": "marketing.core", "mode": "implements" }], "provenance": { "source": "template", "humanEdited": false } }
   ],
   "roles": [
     {
@@ -105,6 +107,7 @@
         { "entity": "opportunity", "actions": ["read", "create", "update", "export"] },
         { "entity": "crm_activity", "actions": ["read", "create", "update"] },
         { "entity": "campaign", "actions": ["read", "create", "update"] },
+        { "entity": "messaging_campaign", "actions": ["read", "create", "update"] },
         { "entity": "project", "actions": ["read", "create", "update"] },
         { "entity": "task", "actions": ["read", "create", "update"] },
         { "entity": "timesheet", "actions": ["read", "submit"] },
@@ -161,7 +164,16 @@
       "labels": { "ar": "حالة الإنتاج", "en": "Production status" },
       "metrics": [{ "ref": "manufacturing.work_orders_by_status", "display": "bar" }, { "ref": "manufacturing.planned_vs_produced", "display": "line" }],
       "provenance": { "source": "template", "humanEdited": false }
+    },
+    {
+      "id": "campaign_results", "kind": "dashboard", "entity": "campaign", "visibleToRoles": ["owner"],
+      "labels": { "ar": "نتائج الحملات", "en": "Campaign results" },
+      "metrics": [{ "ref": "marketing.campaign_reach", "display": "kpi" }, { "ref": "marketing.opt_in_rate", "display": "kpi" }, { "ref": "marketing.unsubscribes", "display": "line" }],
+      "provenance": { "source": "template", "humanEdited": false }
     }
+  ],
+  "integrations": [
+    { "id": "whatsapp_marketing", "connector": "msg.meta_whatsapp", "direction": "both", "schedule": "on_event", "mappings": [], "provenance": { "source": "template", "humanEdited": false } }
   ],
   "compliance": {
     "country": "SA",
@@ -241,6 +253,18 @@
       "warehouses": { "workInProgress": "wip_store", "finishedGoods": "fg_store" },
       "subcontracting": { "enabled": true },
       "provenance": { "source": "template", "ref": "manufacturing_starter@0.1.0", "humanEdited": false }
+    },
+    "marketing": {
+      "component": "marketing.core",
+      "entities": { "campaign": "campaign", "messaging_campaign": "messaging_campaign" },
+      "roles": { "manage": ["owner"] },
+      "segments": [
+        { "id": "contacts_with_mobile", "audience": "contact", "filters": [{ "field": "mobile", "op": "is_set" }], "labels": { "ar": "جهات لديها جوال", "en": "Contacts with a mobile" } },
+        { "id": "campaign_leads", "audience": "lead", "filters": [{ "field": "campaign", "op": "is_set" }], "visibleToRoles": ["owner"], "labels": { "ar": "عملاء محتملون من حملات", "en": "Leads from campaigns" } }
+      ],
+      "consent": { "optInRequired": true, "unsubscribeRoute": true },
+      "channels": { "messaging": { "enabled": true, "integration": "whatsapp_marketing", "templatesOnly": true } },
+      "provenance": { "source": "template", "ref": "marketing_starter@0.1.0", "humanEdited": false }
     }
   }
 }

@@ -1,0 +1,25 @@
+{
+  "base": "blueprint-modules-minimal.json",
+  "note": "Negative cases for modules.marketing (ADR-0079). Each case edits the valid base by JSON pointer; the result must fail the Blueprint schema at a path starting with 'expect' (equal to it when 'exact' is true). Run by contracts/tests/test_blueprint_modules.py.",
+  "cases": [
+    { "name": "mkt-missing-consent", "remove": ["/modules/marketing/consent"], "expect": "modules/marketing" },
+    { "name": "mkt-opt-in-off", "set": { "/modules/marketing/consent/optInRequired": false }, "expect": "modules/marketing/consent/optInRequired" },
+    { "name": "mkt-no-unsubscribe", "set": { "/modules/marketing/consent/unsubscribeRoute": false }, "expect": "modules/marketing/consent/unsubscribeRoute" },
+    { "name": "mkt-no-channels", "set": { "/modules/marketing/channels": {} }, "expect": "modules/marketing/channels" },
+    { "name": "mkt-all-channels-disabled", "set": { "/modules/marketing/channels": { "messaging": { "enabled": false } } }, "expect": "modules/marketing/channels", "exact": true },
+    { "name": "mkt-only-channel-disabled", "set": { "/modules/marketing/channels/messaging/enabled": false }, "expect": "modules/marketing/channels", "exact": true },
+    { "name": "mkt-unknown-channel", "set": { "/modules/marketing/channels/sms_blast": { "enabled": true } }, "expect": "modules/marketing/channels" },
+    { "name": "mkt-messaging-without-integration", "remove": ["/modules/marketing/channels/messaging/integration"], "expect": "modules/marketing/channels/messaging" },
+    { "name": "mkt-messaging-free-text", "set": { "/modules/marketing/channels/messaging/templatesOnly": false }, "expect": "modules/marketing/channels/messaging/templatesOnly" },
+    { "name": "mkt-messaging-without-entity", "remove": ["/modules/marketing/entities/messaging_campaign"], "expect": "modules/marketing/entities" },
+    { "name": "mkt-missing-campaign-concept", "remove": ["/modules/marketing/entities/campaign"], "expect": "modules/marketing/entities" },
+    { "name": "mkt-segment-unknown-audience", "set": { "/modules/marketing/segments/0/audience": "supplier" }, "expect": "modules/marketing/segments/0/audience" },
+    { "name": "mkt-segment-sql", "set": { "/modules/marketing/segments/0/query": "select * from contact" }, "expect": "modules/marketing/segments/0" },
+    { "name": "mkt-segment-bad-op", "set": { "/modules/marketing/segments/0/filters/0/op": "like" }, "expect": "modules/marketing/segments/0/filters/0/op" },
+    { "name": "mkt-email-channel-not-in-0.8.0", "set": { "/modules/marketing/channels/email": { "enabled": true } }, "expect": "modules/marketing/channels" },
+    { "name": "mkt-email-campaign-concept-not-in-0.8.0", "set": { "/modules/marketing/entities/email_campaign": "campaign" }, "expect": "modules/marketing/entities" },
+    { "name": "mkt-double-opt-in-undefined", "set": { "/modules/marketing/consent/doubleOptIn": false }, "expect": "modules/marketing/consent" },
+    { "name": "mkt-segment-without-filters", "set": { "/modules/marketing/segments/0/filters": [] }, "expect": "modules/marketing/segments/0/filters" },
+    { "name": "mkt-segment-recipient-list", "set": { "/modules/marketing/segments/0/filters/0": { "field": "mobile", "op": "in", "value": ["+966500000000", "+966500000001", "+966500000002", "+966500000003", "+966500000004", "+966500000005", "+966500000006", "+966500000007", "+966500000008", "+966500000009", "+966500000010", "+966500000011", "+966500000012", "+966500000013", "+966500000014", "+966500000015", "+966500000016", "+966500000017", "+966500000018", "+966500000019", "+966500000020"] } }, "expect": "modules/marketing/segments/0/filters/0" }
+  ]
+}

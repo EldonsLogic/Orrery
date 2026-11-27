@@ -1,5 +1,6 @@
 """Module rules (ADR-0079, contracts/blueprint-modules.md): engine rigid-zone fields on bound entities, view date
-fields, the timesheet invoicing component, manufacturing warehouses. The other module cross-reference rules are contract text for now (Q-700)."""
+fields, the timesheet invoicing component, manufacturing warehouses, the marketing messaging connector. The other
+module cross-reference rules are contract text for now (Q-700)."""
 from __future__ import annotations
 
 import json
@@ -8,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .report import Report, ValidationContext, as_dict, as_list, items, ptr, sid
-from .schema_step import DEFAULT_SCHEMA_PATH
+from .schema_step import DEFAULT_SCHEMA_PATH, load_schema
 
 RIGID_FIELDS_PATH = DEFAULT_SCHEMA_PATH.parent / "engine-rigid-fields.json"
 _DATE_TYPES = {"date", "datetime"}
@@ -69,6 +70,7 @@ def rule_modules(bp: dict, ctx: ValidationContext | None, rep: Report) -> None:
     _view_dates(as_dict(modules.get("projects")), ents, rep)
     _invoicing(bp, as_dict(modules.get("projects")), ctx, rep)
     _warehouses(bp, as_dict(modules.get("manufacturing")), rep)
+    _messaging(bp, as_dict(modules.get("marketing")), load_schema(ctx).get("x-messaging-connectors"), rep)
 
 
 def _rows(eid: str, ents: dict) -> list[str]:
@@ -163,3 +165,16 @@ def _warehouses(bp: dict, mfg: dict, rep: Report) -> None:
         if lid in seen:
             rep.error("BP-MOD-004", path, f"{key} uses the same warehouse '{lid}' as {seen[lid]}")
         seen.setdefault(lid, key)
+
+
+def _messaging(bp: dict, mkt: dict, allowed, rep: Report) -> None:
+    """BP-MOD-005: channels.messaging.integration resolves to an integration on a DSC-022 messaging connector."""
+    ref = sid(as_dict(as_dict(mkt.get("channels")).get("messaging")).get("integration"))
+    if not ref:
+        return
+    path = ptr("modules", "marketing", "channels", "messaging", "integration")
+    conn = next((sid(it.get("connector")) for _, it in items(bp.get("integrations")) if it.get("id") == ref), None)
+    if conn is None:
+        rep.error("BP-MOD-005", path, f"integration '{ref}' does not resolve to an integration with a connector")
+    elif conn not in {c for c in as_list(allowed) if isinstance(c, str)}:
+        rep.error("BP-MOD-005", path, f"integration '{ref}' uses connector '{conn}', not a DSC-022 messaging connector")

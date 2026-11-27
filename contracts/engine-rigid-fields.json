@@ -34,7 +34,6 @@
     "manufacturing.subcontracting_order": ["Subcontracting Order"],
     "manufacturing.subcontracting_receipt": ["Subcontracting Receipt"],
     "marketing.campaign": ["Campaign"],
-    "marketing.email_campaign": ["Email Campaign"],
     "marketing.messaging_campaign": []
   },
   "recordTypes": {

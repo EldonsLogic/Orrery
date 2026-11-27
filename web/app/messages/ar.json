@@ -1453,5 +1453,14 @@
     "currency": {
       "SAR": "ر.س"
     }
+  },
+  "metrics": {
+    "sales": {
+      "revenue": "الإيرادات",
+      "order_count": "الفواتير الصادرة"
+    },
+    "finance": {
+      "receivables_outstanding": "الذمم المدينة المستحقة"
+    }
   }
 }

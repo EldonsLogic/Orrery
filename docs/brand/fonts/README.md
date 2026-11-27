@@ -1,6 +1,6 @@
 # Fonts
 
-The only font files in the repo are the two subset WOFF2 files in `web/app/public/fonts/` (WEB-028), with their OFL.txt and PROVENANCE.md. Cairo replaces Alexandria for headings (ADR-0066, 2026-11-23); Readex Pro stays for body.
+The only font files in the repo are the two subset WOFF2 files in `web/app/public/fonts/` (WEB-028), with their OFL.txt; provenance is in [font-provenance.md](../font-provenance.md). Cairo replaces Alexandria for headings (ADR-0066, 2026-11-23); Readex Pro stays for body.
 
 | Font | Use | Source | Licence |
 |---|---|---|---|

@@ -209,6 +209,9 @@ Deterministic code matches gateway settlement lines (payments, refunds, fees, ch
 ## 11. Ledger posting (rigid zone)
 - **A capture never posts to the ledger by itself.** No webhook, re-read, sweep or reconciliation run posts anything (human floor, [ADR-0027](../docs/decisions/ADR-0027-human-floor-action-policy-and-agent-authority.md)).
 - **Draft.** After `payment.captured`, deterministic rigid-zone code (ledger, RULES 21 and 30; never model-written) prepares a draft receipt that allocates the captured amount to the links' outstanding balances. The model never computes or proposes an allocation.
-- **Approval.** A human posts it under `AP-PAY-05` (proposed, R4: a second, different human approver, step-up, one hour). Whether a receipt that exactly matches one open invoice may instead be R3 (human submits) is a founder question (Q-723).
+- **Approval.** A human posts it under `AP-PAY-05` (proposed); the risk class is set by deterministic code from the draft (Q-723, Eldon 2026-11-27, partner to confirm):
+  - **R3, exact match.** A receipt that exactly matches one open invoice: same tenant, same currency, one sales invoice, allocated in full (not partial), and the allocated amount equals the net captured amount. A human submits it, the same class as posting a sales invoice (`AP-FIN-01`), and it stays human-originated (an agent may not draft it).
+  - **R4, anything else.** A partial allocation, several invoices or an order, an over or under payment, an `unallocated` or held payment, or any currency difference: a second, different human approver, step-up, one hour.
+  - In both classes a capture never posts by itself; only a human submit posts.
 - **Currency.** The payment currency must equal each linked document's currency; any difference refuses the draft (`PAY-AMT-001`). There is no currency conversion in v1. The allocated total equals captured minus refunded, in minor units (section 1.3).
 - **Manual allocation.** The same row allocates an `unallocated` payment, or one held by `PAY-DATA-001`, to open links chosen by a human.

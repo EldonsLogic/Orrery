@@ -88,7 +88,7 @@ jobs:
             case "$path" in
               */test_*.py|*/tests.py|*/tests/*_test.py)
                 case "$path" in
-                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/core/hrms_skeleton/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*|components/compliance/company_calendar/tests/*) continue ;;
+                  docs/brand/tools/*|services/blueprint/tests/*|services/control-plane/tests/*|services/datasets/tests/*|services/discovery/tests/*|services/gateway/tests/*|services/operate/tests/*|services/studio/tests/*|evals/tests/*|scripts/tests/*|contracts/tests/*|infra/dev/docker/tests/*|infra/invisibility/tests/*|components/core/trading_ar/tests/*|components/core/hrms_skeleton/tests/*|components/compliance/zatca_sa/tests/*|components/compliance/country_pack/tests/*|components/compliance/company_calendar/tests/*) continue ;;
                   components/sales/trading/tests/*) continue ;;
                   services/discovery/accountant_view/tests/*|services/discovery/gap_analysis/tests/*|services/discovery/quote/tests/*|services/discovery/template_flow/tests/*|services/operate/memory/tests/*) continue ;;
                 esac
@@ -179,6 +179,10 @@ jobs:
       - name: Lint (services/control-plane)
         if: steps.filter.outputs.control_plane == 'true' && !cancelled()
         run: python3 -m compileall services/control-plane
+
+      - name: Install dependencies (services/control-plane)
+        if: steps.filter.outputs.control_plane == 'true' && !cancelled()
+        run: pip install pytest jsonschema referencing
 
       - name: Control-plane identity and support tests
         if: steps.filter.outputs.control_plane == 'true' && !cancelled()
@@ -277,7 +281,7 @@ jobs:
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_ce_sec_008_deploy_path_durability.py apps/engine/change_engine/change_engine/tests/test_ce_sec_008_review_fixes.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_ce_sec_008_deploy_path_durability.py apps/engine/change_engine/change_engine/tests/test_ce_sec_008_review_fixes.py apps/engine/change_engine/change_engine/tests/test_ce_sec_011_non_ddl_lock_discipline.py apps/engine/change_engine/change_engine/tests/test_ce_sec_011_review_fixes.py -q
 
       # Live-only CE-SEC-005 suites run in real-bench.yml:
       # apps/engine/change_engine/change_engine/tests/test_ce_sec_005_real_bench.py
@@ -352,11 +356,11 @@ jobs:
           apps/engine/change_engine/change_engine/tests/test_erp_026_review_fixes.py
           apps/engine/change_engine/change_engine/tests/test_erp_026_pr126_review_fixes.py
 
-      - name: Trading fixture real-adapter offline tests (BPL-027; bench tests skip without a bench)
+      - name: Trading fixture real-adapter offline tests (BPL-027, BPL-044; bench tests skip without a bench)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
         env:
           PYTHONPATH: apps/engine/change_engine
-        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_027_fixture_real_adapter.py apps/engine/change_engine/change_engine/tests/test_bpl_031_entity_add_existing_doctype.py apps/engine/change_engine/change_engine/tests/test_bpl_031_review_fixes.py apps/engine/change_engine/change_engine/tests/test_bpl_041_check_ready_refusals.py apps/engine/change_engine/change_engine/tests/test_bpl_043_unmapped_constraint_refusal.py -q
+        run: python3 -m pytest apps/engine/change_engine/change_engine/tests/test_bpl_027_fixture_real_adapter.py apps/engine/change_engine/change_engine/tests/test_bpl_031_entity_add_existing_doctype.py apps/engine/change_engine/change_engine/tests/test_bpl_031_review_fixes.py apps/engine/change_engine/change_engine/tests/test_bpl_041_check_ready_refusals.py apps/engine/change_engine/change_engine/tests/test_bpl_043_unmapped_constraint_refusal.py apps/engine/change_engine/change_engine/tests/test_bpl_044_docfield_snapshot.py -q
 
       - name: Real-adapter hardening, journal order and state persistence (BPL-033, offline)
         if: steps.filter.outputs.engine == 'true' && !cancelled()
@@ -468,6 +472,14 @@ jobs:
       - name: Script tests (phase exit check)
         if: steps.filter.outputs.scripts == 'true' && !cancelled()
         run: python3 -m pytest scripts/tests -q
+
+      # --- contracts ---
+      - name: Country pack store contract tests (CMP-038)
+        # Any contracts/ change selects every suite, so the scripts flag is true here.
+        if: steps.filter.outputs.scripts == 'true' && !cancelled()
+        run: |
+          pip install jsonschema referencing pytest
+          python3 -m pytest contracts/tests -q
 
       # --- infra ---
       # Dev bench discovery loads apps/engine/change_engine/change_engine/tests/test_erp_014_accounting_properties.py.

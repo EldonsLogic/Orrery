@@ -20,7 +20,7 @@ def test_catalog_valid_and_schema(cat):
     schema = json.loads((CONTRACTS / "tool-api-error-catalog.schema.json").read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     assert list(Draft202012Validator(schema).iter_errors(cat)) == []
-    assert len(cat["entries"]) == 14
+    assert len(cat["entries"]) == 21 and cat["version"] == "0.2.0"
 
 
 def _bad(cat, fn):

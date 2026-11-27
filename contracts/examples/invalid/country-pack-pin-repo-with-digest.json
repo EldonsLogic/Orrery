@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "typ": "country_pack_pin",
+  "tenantId": "sandbox-fictional-01",
+  "source": "repo",
+  "countryCode": "SA",
+  "packId": "sa",
+  "version": "0.1.0",
+  "pinSeq": 1,
+  "changeKind": "initial",
+  "changedBy": {
+    "actorKind": "service",
+    "subject": "svc:sandbox-provisioner",
+    "tokenId": "tok:01JD00000000000000000000AE"
+  },
+  "approval": {
+    "kind": "repo_draft",
+    "ref": "provision:sandbox-fictional-01"
+  },
+  "changedAt": "2026-11-20T12:00:00Z",
+  "auditId": "audit:01JD00000000000000000000AF",
+  "contentDigest": "sha256:2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+}

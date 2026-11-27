@@ -33,6 +33,10 @@ class PackStore(Protocol):
     def commit_publish(self, country: str, expected_seq: int, record: dict, index_bytes: bytes,
                        request_id: str, fingerprint: str, result: dict) -> None:
         """Atomic: raise if the stored index is not at `expected_seq`; else store record and index and the request."""
+    def commit_change(self, country: str, expected_seq: int, change_record: dict, index_bytes: bytes,
+                      request_id: str, fingerprint: str, result: dict) -> None:
+        """Atomic: raise if the stored index is not at `expected_seq`; else store the change record, the index
+        and the request."""
     def commit_pin(self, tenant_id: str, country: str, expected_pin_seq: int, pin: dict,
                    request_id: str, fingerprint: str, result: dict) -> None:
         """Atomic compare-and-set on the pin sequence."""

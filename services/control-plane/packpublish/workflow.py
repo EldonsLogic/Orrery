@@ -46,6 +46,27 @@ class Draft:
     statement_digest: str
 
 
+@dataclass(frozen=True)
+class Change:
+    """A withdrawal, floor raise or follow-up closure, bound to the exact index it was proposed against."""
+    country: str
+    kind: str
+    target: dict
+    reason_ref: str
+    base_seq: int
+    base_index_digest: str
+    statement_digest: str
+
+
+KINDS = ("withdrawal", "floor_raise", "follow_up_closure")
+TARGET_KEYS = {"withdrawal": "version", "floor_raise": "version", "follow_up_closure": "publishId"}
+
+
+def _change_statement(country, kind, target, reason_ref, base_index_digest) -> str:
+    return digest(canonical({"op": "pack_change", "countryCode": country, "kind": kind, "target": target,
+                             "reasonRef": reason_ref, "baseIndexDigest": base_index_digest}))
+
+
 def _t(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
@@ -152,24 +173,28 @@ class PackPublisher:
     def sign_off(self, draft: Draft, *, role: str, signer_id: str, mfa: dict, signature: dict | None = None) -> dict:
         """One sign-off in the record's format. mfa: {assertionRef, method, authTime} from the step-up."""
         self._recheck_draft(draft)
+        return self._signoff(draft, f"signoff:{draft.pack_id}:{draft.version}:{signer_id}", role, signer_id, mfa, signature)
+
+    def _signoff(self, d, ref: str, role: str, signer_id: str, mfa: dict, signature: dict | None) -> dict:
+        """`d` is a Draft or a Change: both carry `country` and `statement_digest`."""
         _check(role in ROLES and isinstance(signer_id, str) and SUBJECT_RE.match(signer_id), "PP-001")
         _check(isinstance(mfa, dict) and set(mfa) == {"assertionRef", "method", "authTime"}
                and isinstance(mfa["assertionRef"], str) and REF_RE.match(mfa["assertionRef"])
                and mfa["method"] in ("totp", "webauthn") and isinstance(mfa["authTime"], str), "PP-013")
         so = {"role": role, "signerId": signer_id, "signedAt": _stamp(self.clock()),
-              "statementDigest": draft.statement_digest,
-              "mfa": {**mfa, "boundTo": {"signerId": signer_id, "statementDigest": draft.statement_digest}}}
+              "statementDigest": d.statement_digest,
+              "mfa": {**mfa, "boundTo": {"signerId": signer_id, "statementDigest": d.statement_digest}}}
         if role == "market_accountant":
-            name = _port("PP-031", self.trusted.accountant_name, draft.country, signer_id)
+            name = _port("PP-031", self.trusted.accountant_name, d.country, signer_id)
             _check(isinstance(name, str) and name.strip(), "PP-010")
-            so.update(name=name, market=draft.country, signOffRef=f"signoff:{draft.pack_id}:{draft.version}:{signer_id}")
+            so.update(name=name, market=d.country, signOffRef=ref)
         else:
             login = _port("PP-031", self.trusted.founder_login, signer_id)
             _check(isinstance(login, str) and login, "PP-010")
             so["founderLogin"] = login
         if signature is not None:
             so["signerSignature"] = copy.deepcopy(signature)
-        self._check_signoff(draft, so)
+        self._check_signoff(d, so)
         return so
 
     def _check_signoff(self, d: Draft, so: dict) -> None:
@@ -202,15 +227,7 @@ class PackPublisher:
         if done:
             return done
         self._recheck_draft(draft)
-        _check(isinstance(sign_offs, list) and len(sign_offs) == 2 and all(isinstance(s, dict) for s in sign_offs)
-               and sorted(s.get("role") for s in sign_offs) == sorted(ROLES), "PP-012")
-        _check(len({s["signerId"] for s in sign_offs}) == 2, "PP-011")
-        _check(len({s["mfa"]["assertionRef"] for s in sign_offs}) == 2, "PP-013")
-        _check(actor.subject in {s["signerId"] for s in sign_offs}, "PP-012")
-        for s in sign_offs:
-            self._check_signoff(draft, s)
-        now = self.clock()
-        _check(all(_t(s["signedAt"]) <= _t(_stamp(now)) for s in sign_offs), "PP-013")
+        now = self._check_pair(draft, sign_offs, actor)
         raw = _port("PP-031", self.store.latest_index, draft.country)
         prev = json.loads(raw) if raw else None
         publish_id, audit_id = _derive_id(request_id, "publish"), "audit:" + _derive_id(request_id, "audit")
@@ -235,6 +252,19 @@ class PackPublisher:
         _port("PP-031", self.store.commit_publish, draft.country, index["indexSeq"] - 1, record,
               canonical(index), request_id, fp, result)
         return copy.deepcopy(result)
+
+    def _check_pair(self, d, sign_offs, actor) -> int:
+        """Exactly one accountant and one founder, two people, two step-ups, the actor one of them. Returns now."""
+        _check(isinstance(sign_offs, list) and len(sign_offs) == 2 and all(isinstance(s, dict) for s in sign_offs)
+               and sorted(s.get("role") for s in sign_offs) == sorted(ROLES), "PP-012")
+        _check(len({s["signerId"] for s in sign_offs}) == 2, "PP-011")
+        _check(len({s["mfa"]["assertionRef"] for s in sign_offs}) == 2, "PP-013")
+        _check(actor.subject in {s["signerId"] for s in sign_offs}, "PP-012")
+        for s in sign_offs:
+            self._check_signoff(d, s)
+        now = self.clock()
+        _check(all(_t(s["signedAt"]) <= _t(_stamp(now)) for s in sign_offs), "PP-013")
+        return now
 
     def _check_request_actor(self, request_id, actor):
         _check(isinstance(request_id, str) and REF_RE.match(request_id) and isinstance(actor, Actor)
@@ -314,4 +344,87 @@ class PackPublisher:
             "actor": {"kind": "staff", "subject": actor.subject, "tokenId": actor.token_id}})
         result = {"pin": pin, "auditId": audit_id, "replayed": False}
         _port("PP-031", self.store.commit_pin, tenant_id, country, cur["pinSeq"], pin, request_id, fp, result)
+        return copy.deepcopy(result)
+
+    # 6. change records: withdrawal, floor raise, follow-up closure ----------------------------------------------
+    @_closed
+    def propose_change(self, *, kind: str, country: str, target: dict, reason_ref: str) -> Change:
+        """Validates the change against the latest index and binds it to that index. Per-market only: a change
+        names a country and a version or publish id, never a tenant."""
+        key = TARGET_KEYS.get(kind)
+        _check(key is not None and country in ("SA", "AE", "EG", "QA") and isinstance(target, dict)
+               and set(target) == {key} and isinstance(target[key], str)
+               and isinstance(reason_ref, str) and REF_RE.match(reason_ref), "PP-001")
+        raw = _port("PP-031", self.store.latest_index, country)
+        _check(raw is not None, "PP-060")
+        self._apply_to_index(json.loads(raw), kind, dict(target), reason_ref)  # refuses a target that is not allowed
+        base = digest(raw)
+        return Change(country, kind, dict(target), reason_ref, json.loads(raw)["indexSeq"], base,
+                      _change_statement(country, kind, target, reason_ref, base))
+
+    @staticmethod
+    def _apply_to_index(idx: dict, kind: str, target: dict, reason_ref: str) -> dict:
+        """The next index body (without seq, digest or change records). Withdrawals stay forever, the floor only
+        goes up, and an open follow-up is closed only by its own change."""
+        pub, wd = list(idx["published"]), list(idx["withdrawn"])
+        floor, open_fu = idx["floor"], list(idx["followUpOpen"])
+        if kind == "follow_up_closure":
+            _check(target["publishId"] in open_fu, "PP-060")
+            open_fu.remove(target["publishId"])
+        else:
+            hit = next((e for e in pub if e["version"] == target["version"]), None)
+            _check(hit is not None, "PP-060")  # unpublished, unknown or already withdrawn
+            if kind == "withdrawal":
+                _check(len(pub) > 1, "PP-060")  # never leave a market with nothing to pin to
+                pub.remove(hit)
+                wd.append({"version": hit["version"], "contentDigest": hit["contentDigest"], "reasonRef": reason_ref})
+                open_fu = [p for p in open_fu if p != hit["publishId"]]  # a withdrawn version is no longer reviewable
+            else:
+                _check(canon.semver(target["version"]) > canon.semver(floor), "PP-060")
+                floor = target["version"]
+        return {**idx, "published": pub, "withdrawn": wd, "floor": floor, "followUpOpen": open_fu}
+
+    @_closed
+    def sign_change(self, change: Change, *, role: str, signer_id: str, mfa: dict, signature: dict | None = None) -> dict:
+        self._recheck_change(change)
+        return self._signoff(change, f"signoff:{change.statement_digest[7:39]}:{signer_id}", role, signer_id, mfa, signature)
+
+    def _recheck_change(self, c: Change) -> None:
+        ok = (isinstance(c, Change) and c.kind in KINDS and c.country in ("SA", "AE", "EG", "QA")
+              and isinstance(c.target, dict) and set(c.target) == {TARGET_KEYS[c.kind]}
+              and c.statement_digest == _change_statement(c.country, c.kind, c.target, c.reason_ref, c.base_index_digest))
+        _check(ok, "PP-020")
+
+    @_closed
+    def apply_change(self, request_id: str, change: Change, sign_offs: list, actor: Actor) -> dict:
+        """Same two-person rule as a publish. Returns {changeRecord, index, auditId, replayed}; audit first."""
+        self._check_request_actor(request_id, actor)
+        _check(isinstance(change, Change), "PP-001")
+        fp = digest(canonical({"op": "change", "statement": change.statement_digest,
+                               "actor": [actor.subject, actor.token_id], "signOffs": list(sign_offs)}))
+        done = self._replay(request_id, fp)
+        if done:
+            return done
+        self._recheck_change(change)
+        now = self._check_pair(change, sign_offs, actor)
+        raw = _port("PP-031", self.store.latest_index, change.country)
+        _check(raw is not None and digest(raw) == change.base_index_digest, "PP-061")
+        idx = json.loads(raw)
+        new = self._apply_to_index(idx, change.kind, change.target, change.reason_ref)
+        change_id, audit_id = "change:" + _derive_id(request_id, "change"), "audit:" + _derive_id(request_id, "audit")
+        rec = {"v": 1, "typ": "country_pack_change_record", "id": change_id, "kind": change.kind,
+               "countryCode": change.country, "target": dict(change.target), "reasonRef": change.reason_ref,
+               "baseIndexSeq": idx["indexSeq"], "baseIndexDigest": change.base_index_digest,
+               "statementDigest": change.statement_digest, "requestedBy": actor.subject, "recordedAt": _stamp(now),
+               "signOffs": sorted((copy.deepcopy(s) for s in sign_offs), key=lambda s: s["role"])}
+        index = {**new, "indexSeq": idx["indexSeq"] + 1, "predecessorDigest": change.base_index_digest,
+                 "issuedAt": _stamp(now), "kid": self.kid, "keyEnv": self.key_env,
+                 "changeRecords": [{"id": change_id, "kind": change.kind, "sha256": digest(canonical(rec))}]}
+        _port("PP-030", self.audit.write, audit_id, {
+            "action": f"country_pack.change.{change.kind}", "at": rec["recordedAt"], "countryCode": change.country,
+            "changeId": change_id, "target": dict(change.target), "indexSeq": index["indexSeq"],
+            "actor": {"kind": "staff", "subject": actor.subject, "tokenId": actor.token_id}})
+        result = {"changeRecord": rec, "index": index, "auditId": audit_id, "replayed": False}
+        _port("PP-031", self.store.commit_change, change.country, idx["indexSeq"], rec, canonical(index),
+              request_id, fp, result)
         return copy.deepcopy(result)

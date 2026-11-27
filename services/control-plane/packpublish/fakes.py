@@ -41,6 +41,7 @@ class FakeAuditStore:
 class FakePackStore:
     def __init__(self):
         self.indexes, self.records, self.pins, self.requests, self.pin_log = {}, {}, {}, {}, []
+        self.change_records = {}
 
     def latest_index(self, country):
         return self.indexes.get(country)
@@ -59,6 +60,14 @@ class FakePackStore:
             raise RuntimeError("conflict")
         self.indexes[country] = index_bytes
         self.records[record["publishId"]] = copy.deepcopy(record)
+        self.requests[request_id] = (fingerprint, copy.deepcopy(result))
+
+    def commit_change(self, country, expected_seq, change_record, index_bytes, request_id, fingerprint, result):
+        cur = self.indexes.get(country)
+        if (json.loads(cur)["indexSeq"] if cur else 0) != expected_seq or request_id in self.requests:
+            raise RuntimeError("conflict")
+        self.indexes[country] = index_bytes
+        self.change_records[change_record["id"]] = copy.deepcopy(change_record)
         self.requests[request_id] = (fingerprint, copy.deepcopy(result))
 
     def commit_pin(self, tenant_id, country, expected_pin_seq, pin, request_id, fingerprint, result):

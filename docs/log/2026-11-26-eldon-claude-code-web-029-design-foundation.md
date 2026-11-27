@@ -36,3 +36,6 @@ Not measured.
 
 ## Next step
 WEB-029 part 2 (owner home, stacked PR), then one PR per screen on this foundation.
+
+## Addendum: no flash on refresh (Eldon bug report 2026-11-26)
+- web/app/src/lib/firstPaint.ts: a blocking inline script in the root layout head sets data-theme (engine bootScript), lang and dir from localStorage before paint; when the saved locale is not Arabic it adds `locale-pending` (CSS hides the body) and the provider removes it once the locale is applied, with a 1.5 s safety timeout in script and provider. No CSP exists in web/app/vercel.json, so nothing was weakened; a future CSP needs the hash of firstPaintScript(). Playwright on the static export (dark OS, saved English and light): at 50 ms body hidden with light theme, at 500 ms English ltr light, no dark or Arabic frame. lint, tsc, vitest and next build pass.

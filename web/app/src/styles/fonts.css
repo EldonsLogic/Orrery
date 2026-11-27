@@ -1,5 +1,5 @@
 /* Self-hosted brand fonts (WEB-028, BRD-011, ADR-0066). Subset variable WOFF2 files in public/fonts; provenance and
-   licence in public/fonts/PROVENANCE.md. The family names match the --font-heading and --font-body tokens. The Studio
+   licence in docs/brand/font-provenance.md. The family names match the --font-heading and --font-body tokens. The Studio
    serves this same file at /fonts/fonts.css. Never load Google Fonts at runtime. */
 @font-face {
   font-family: "Cairo";

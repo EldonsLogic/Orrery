@@ -13,7 +13,7 @@ This repository is proprietary. This file summarizes what we use or plan to use 
 
 ## Provenance
 - The change engine is a prototype written by the partner. It was adapted into `apps/engine/change_engine/` (see its `PROVENANCE.md`; source repository `sayegh9/EXRP`, commit `f0ce226dd8d050fbc947caf50657e651e01792b8`). Licence and IP assignment are to be confirmed in the founders' agreement (LEG-001). It has no LICENSE file yet (LEG-002).
-- Fonts and icons used in `docs/brand`: licences recorded in [docs/legal/licence-register.md](docs/legal/licence-register.md) (fonts: SIL OFL 1.1 and Bitstream Vera, BRD-011; icons: Lucide ISC and MIT, BRD-012). Glyph coverage checks are still open (BRD-011).
+- Fonts and icons used in `docs/brand` and `web/app`: licences recorded in [docs/legal/licence-register.md](docs/legal/licence-register.md) (fonts: SIL OFL 1.1 and Bitstream Vera, BRD-011; icons: Lucide ISC and MIT, BRD-012). The two subset WOFF2 files and their OFL texts are bundled at `web/app/public/fonts/` (WEB-028; provenance in `docs/brand/font-provenance.md`). Still open: Arabic shaping is unverified in a browser, the glyph gaps (U+063B to U+063F, Readex Pro U+06F0 to U+06F9, no riyal sign) are accepted but not closed, and the subset build script is not in the repo.
 
 ## Reference material (ideas only, nothing copied)
 - `multica-ai/andrej-karpathy-skills` (`CLAUDE.md`, read 2026-11-11): coding-agent guidelines. GitHub shows no licence for it, so we copy none of its text; [agents/working-principles.md](agents/working-principles.md) restates the ideas in our own words. Re-check the licence before any future copy.

@@ -11,7 +11,7 @@ Part of contract 1 ([blueprint.schema.json](blueprint.schema.json), `$defs/modul
 - **Component.** `component` names the component that implements the module; it is listed in top-level `components` and its manifest provides `<module>.module`.
 - **Entity vocabulary.** `entities` maps each module concept to a Blueprint entity id. Fields, labels and relations stay on the entity as today; the concept tells the compiler and the engine mapping which engine record it is.
 - **Workflow vocabulary.** Each module has a fixed-shape state list (pipeline stages, task statuses) mapped onto the engine's own status values. Generic `workflows[]` may still sit on a bound entity for approvals.
-- **Role vocabulary.** `roles.manage`, `roles.work`, `roles.view` list Blueprint role ids. Listing grants nothing: `roles[].permissions` and scope decide every action.
+- **Role vocabulary.** `roles.manage`, `roles.work`, `roles.view` list the Blueprint role ids that the module's screens treat as managers, workers and viewers. Listing grants nothing: `roles[].permissions` and scope decide everything. A change to a module role list is classed `access` by bpdiff.
 - **Report vocabulary.** Reports reference module metrics by id (below). Numbers come from code in the semantic layer; the Blueprint never holds a formula.
 - **Rigid zone.** Module settings carry configuration only. Posting, valuation, tax and costing stay deterministic engine or certified-component logic, never AI-written (AGENTS.md principle 3).
 
@@ -29,7 +29,7 @@ Core CRM records only (ADR-0076 item 5). Never the separate CRM app or its integ
 | `activity` | when `activityTypes` is set | note: CRM Note rows; call, meeting, visit: Event; follow_up: ToDo; email, message: Communication |
 | `campaign` | when `campaignLink` is true | Campaign (shared with the marketing module) |
 
-- `pipeline.stages`: in order; at least one `open`, exactly one `won` (probability 100) and one `lost` (probability 0). Open stages map to Sales Stage records and the opportunity probability; `won` maps to status Converted and `lost` to status Lost with a lost reason.
+- `pipeline.stages`: in order; at least one `open` (probability strictly between 0 and 100), exactly one `won` (probability 100) and one `lost` (probability 0). Open stages map to Sales Stage records and the opportunity probability; `won` maps to status Converted and `lost` to status Lost with a lost reason. UNVERIFIED: in the pinned engine Converted may be derived from the quotation to order flow rather than settable from a stage (Q-701).
 - `leadSources` map to Lead Source records; `lostReasons` to Opportunity Lost Reason records.
 - `activityTypes`: `message` is only sent through a messaging connector integration (DSC-022); inbound text is untrusted.
 

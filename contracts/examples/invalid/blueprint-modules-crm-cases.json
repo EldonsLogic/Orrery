@@ -10,6 +10,8 @@
     { "name": "crm-two-won-stages", "set": { "/modules/crm/pipeline/stages/2/kind": "won", "/modules/crm/pipeline/stages/2/probabilityPercent": 100 }, "expect": "modules/crm/pipeline/stages" },
     { "name": "crm-no-lost-stage", "remove": ["/modules/crm/pipeline/stages/4"], "expect": "modules/crm/pipeline/stages" },
     { "name": "crm-won-not-100", "set": { "/modules/crm/pipeline/stages/3/probabilityPercent": 90 }, "expect": "modules/crm/pipeline/stages/3/probabilityPercent" },
+    { "name": "crm-open-stage-zero", "set": { "/modules/crm/pipeline/stages/0/probabilityPercent": 0 }, "expect": "modules/crm/pipeline/stages/0/probabilityPercent" },
+    { "name": "crm-open-stage-100", "set": { "/modules/crm/pipeline/stages/2/probabilityPercent": 100 }, "expect": "modules/crm/pipeline/stages/2/probabilityPercent" },
     { "name": "crm-probability-over-100", "set": { "/modules/crm/pipeline/stages/0/probabilityPercent": 120 }, "expect": "modules/crm/pipeline/stages/0/probabilityPercent" },
     { "name": "crm-stage-formula", "set": { "/modules/crm/pipeline/stages/0/formula": "value * 0.1" }, "expect": "modules/crm/pipeline/stages/0" },
     { "name": "crm-stage-label-missing-ar", "set": { "/modules/crm/pipeline/stages/0/labels": { "en": "Qualify" } }, "expect": "modules/crm/pipeline/stages/0/labels" },

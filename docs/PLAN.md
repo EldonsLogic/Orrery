@@ -295,6 +295,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | FND-005 | Data room | Fundraising | G2 | LEG-010 | eldon | todo |
 | FND-006 | Autonomy and reuse chart for investors | Fundraising | G3 | BPL-022,GTM-006 | eldon | todo |
 | FND-007 | Cap table and funding terms with counsel | Fundraising | G3 | LEG-010 | eldon | todo |
+| FND-009 | Remove the investor shortlist from the public repo (AGENTS.md: no investor documents; ADR-0021): delete `docs/fundraising/investor-shortlist.md` and keep it in the founders' private notes. Git history still holds the earlier versions | Fundraising | G1 | - | eldon | done |
 | CMP-021 | Country pack framework: pack contents, selection by company profile, allowed overrides (ADR-0015) | Compliance | G1 | BPL-002,BPL-009 | partner | done |
 | CMP-022 | Calendar and Hijri (Umm al-Qura) conversion library choice, licence and tests | Compliance | G1 | CMP-005 | partner | done |
 | CMP-023 | Per-company calendar and week settings (week start, weekend, working days and hours, Ramadan hours, number system) | Compliance | G2 | CMP-021,CMP-022 | partner | doing |

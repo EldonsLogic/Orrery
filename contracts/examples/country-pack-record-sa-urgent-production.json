@@ -1,0 +1,98 @@
+{
+  "v": 1,
+  "typ": "country_pack_version",
+  "kid": "cpk-production-01",
+  "keyEnv": "production",
+  "publishId": "01JD0000000000000000000002",
+  "publishedAt": "2026-11-20T10:00:00Z",
+  "publishedBy": "staff:founder-a",
+  "packId": "sa",
+  "countryCode": "SA",
+  "componentId": "country.sa",
+  "version": "0.3.0",
+  "contentDigest": "sha256:4727ded989943c32ca3c12d93cc70b489a4c36d3f98c9d40fefe37e1d3bc1ddf",
+  "files": [
+    {
+      "path": "evidence.json",
+      "sha256": "sha256:dd28c73a4ca870262b866f880193325de575d44ba132c116f148a698f1ca9b4f",
+      "size": 9120
+    },
+    {
+      "path": "manifest.json",
+      "sha256": "sha256:a433db690bd06a8e68bda8360b3946dfada0e44458ad6414764c0e7a0c58a90d",
+      "size": 1388
+    },
+    {
+      "path": "pack.json",
+      "sha256": "sha256:34f7ae4c3d2df0d848d5e763b1810aa41be599e883a0f67a93f1f8be92e10f5e",
+      "size": 4210
+    }
+  ],
+  "predecessor": {
+    "version": "0.2.0",
+    "contentDigest": "sha256:7a7ba2a723e7c22b238142f0b706b672fc17c7f8661bdaeb3882776237fb54dc"
+  },
+  "supersedes": null,
+  "changeKind": "urgent",
+  "followUp": {
+    "required": true,
+    "reviewRef": "review:sa:urgent-01"
+  },
+  "diffDigest": "sha256:1c9244f89134d9a49e967fd8b6207ea2f2f92acdfe2d1c9fbde2cf02267f4ccc",
+  "evidenceRefs": [
+    {
+      "id": "evidence:sa:0.3.0:01",
+      "sha256": "sha256:3ecccbdcab915634605726cc9c1061cbd820bd798285cd29793640bbb5f826b7"
+    }
+  ],
+  "signOffs": [
+    {
+      "role": "market_accountant",
+      "signerId": "staff:acct-sa-01",
+      "signedAt": "2026-11-20T09:15:00Z",
+      "statementDigest": "sha256:2ebe6c9ab5d8d48de2a0ec7664b1cf9fa9080f05e98bf0fd0054f2876c70fa06",
+      "mfa": {
+        "assertionRef": "stepup:staff:acct-sa-01:01",
+        "method": "webauthn",
+        "authTime": "2026-11-20T09:13:30Z",
+        "boundTo": {
+          "signerId": "staff:acct-sa-01",
+          "statementDigest": "sha256:2ebe6c9ab5d8d48de2a0ec7664b1cf9fa9080f05e98bf0fd0054f2876c70fa06"
+        }
+      },
+      "name": "Fictional Accountant One",
+      "market": "SA",
+      "signOffRef": "cert:sa:0.3.0:acct",
+      "signerSignature": {
+        "format": "webauthn.get.v1",
+        "credentialId": "gG2E3r6-XCBDi_1utpyeSRd4hO7andFpB5qMYuOFXDI",
+        "authenticatorData": "eW6Ax-W_ikjLYD8inu7FeOxyRD2_43cQzIDeZyKMZxMFAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiTHI1c21yWFkxSTNpb094MlpMSFBuNmtJRHdYcGlfRDlBRlR5aDJ4dy1nWSIsIm9yaWdpbiI6Imh0dHBzOi8vc3RhZmYuZXhhbXBsZS50ZXN0In0",
+        "signature": "T8R-8C7vaQFOVFw0P0kaEvtis_XutQWNWFiKbFTTMUzHT1_h-XOLG7CAJmDQVE2gqdloj01oPvI3cjZVPn8SeA"
+      }
+    },
+    {
+      "role": "founder",
+      "signerId": "staff:founder-a",
+      "signedAt": "2026-11-20T09:25:00Z",
+      "statementDigest": "sha256:2ebe6c9ab5d8d48de2a0ec7664b1cf9fa9080f05e98bf0fd0054f2876c70fa06",
+      "mfa": {
+        "assertionRef": "stepup:staff:founder-a:02",
+        "method": "webauthn",
+        "authTime": "2026-11-20T09:23:30Z",
+        "boundTo": {
+          "signerId": "staff:founder-a",
+          "statementDigest": "sha256:2ebe6c9ab5d8d48de2a0ec7664b1cf9fa9080f05e98bf0fd0054f2876c70fa06"
+        }
+      },
+      "founderLogin": "EldonsLogic",
+      "signerSignature": {
+        "format": "webauthn.get.v1",
+        "credentialId": "gzczIhmcgQQioMRjC1jwp9eV7I9KEyjYTtswyKzMvns",
+        "authenticatorData": "eW6Ax-W_ikjLYD8inu7FeOxyRD2_43cQzIDeZyKMZxMFAAAABw",
+        "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiTHI1c21yWFkxSTNpb094MlpMSFBuNmtJRHdYcGlfRDlBRlR5aDJ4dy1nWSIsIm9yaWdpbiI6Imh0dHBzOi8vc3RhZmYuZXhhbXBsZS50ZXN0In0",
+        "signature": "CtnYoXX0HBBOFGoALvvpsXnOOO8_k0JtOB_1_moTYOJNW9Hb-Q4aIbW5iErcDNaLK9vm30VLURLu_3w7_8VJiA"
+      }
+    }
+  ]
+}

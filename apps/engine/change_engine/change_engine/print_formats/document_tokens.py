@@ -1,9 +1,11 @@
 """Light-theme brand token loader for printed documents (ERP-016, ADR-0014).
 
 Printed documents take every colour and the font from ``docs/brand/tokens/tokens.json`` (the
-generated token source, read-only here); nothing in the layout module is a literal. The file is
-read on first use, not at import, and a missing or malformed file raises ``DocumentTokenError``,
-so a branded document is never rendered with invented values.
+generated token source, read-only here); nothing in the layout module is a literal. The one
+addition made here is the Arabic print fallback in every font stack
+(``_ARABIC_PRINT_FALLBACKS``). The file is read on first use, not at import, and a missing or
+malformed file raises ``DocumentTokenError``, so a branded document is never rendered with
+invented values.
 
 Where the tokens come from, first match wins:
 
@@ -48,6 +50,9 @@ _GENERIC_FONT_NAMES = frozenset({"serif", "sans-serif", "system-ui", "monospace"
                                  "ui-rounded", "math", "emoji", "fangsong"})
 _MAX_FONT_NAME = 64
 _MAX_FALLBACKS = 6
+# Placed right after the token family, ahead of any generic: a PDF renderer without the brand
+# families must not fall to a generic that may have no Arabic glyphs on a legal document.
+_ARABIC_PRINT_FALLBACKS = ("Noto Sans Arabic", "DejaVu Sans")
 _COLOUR_KEYS = ("surface", "background", "text", "primary", "success", "warning", "danger")
 
 
@@ -65,6 +70,7 @@ class DocumentTokens:
     warning: str
     danger: str
     font_stack: str  # CSS ``font-family`` value built from the body family token
+    heading_font_stack: str  # the same, built from the heading family token (titles, figures)
 
 
 def load_document_tokens(path: Path) -> DocumentTokens:
@@ -72,41 +78,55 @@ def load_document_tokens(path: Path) -> DocumentTokens:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         light = data["color"]["light"]
         colours = {key: light[key]["hex"] for key in _COLOUR_KEYS}
-        body = data["typography"]["families"]["body"]
+        families = data["typography"]["families"]
+        body, heading = families["body"], families["heading"]
         family, fallback = body["family"], body["fallback"]
+        heading_family, heading_fallback = heading["family"], heading["fallback"]
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise DocumentTokenError(f"brand tokens unreadable at '{path}': {exc!r}") from exc
     for key, value in colours.items():
         if not isinstance(value, str) or not _HEX_RE.fullmatch(value):
             raise DocumentTokenError(f"brand token color.light.{key} is not #RRGGBB")
-    names = _font_names(family, fallback)
-    return DocumentTokens(font_stack=f"'{names[0]}', {', '.join(names[1:])}", **colours)
+    return DocumentTokens(font_stack=_font_stack(family, fallback, "body"),
+                          heading_font_stack=_font_stack(heading_family, heading_fallback,
+                                                         "heading"), **colours)
 
 
-def _font_names(family: object, fallback: object) -> list[str]:
-    """The body family, then each fallback name, all validated (fail closed)."""
+def _font_stack(family: object, fallback: object, role: str) -> str:
+    primary, *fallbacks = _font_names(family, fallback, role)
+    named = [primary] + [name for name in _ARABIC_PRINT_FALLBACKS
+                         if name.lower() != primary.lower()]
+    seen = {name.lower() for name in named}
+    rest = [name for name in fallbacks if name.lower() not in seen]
+    return ", ".join([f"'{name}'" for name in named] + rest)
+
+
+def _font_names(family: object, fallback: object, role: str = "body") -> list[str]:
+    """The family, then each fallback name, all validated (fail closed)."""
     if not isinstance(family, str) or not isinstance(fallback, str):
-        raise DocumentTokenError("brand token body font family is not a plain font name")
+        raise DocumentTokenError(f"brand token {role} font family is not a plain font name")
     names = [family.strip()] + [part.strip() for part in fallback.split(",")]
     if len(names) < 2 or len(names) > _MAX_FALLBACKS + 1 or any(
             len(name) > _MAX_FONT_NAME or not _FONT_NAME_RE.fullmatch(name)
             or name.lower() in _RESERVED_FONT_NAMES for name in names):
-        raise DocumentTokenError("brand token body font family is not a plain font name")
+        raise DocumentTokenError(f"brand token {role} font family is not a plain font name")
     if names[0].lower() in _GENERIC_FONT_NAMES:
-        raise DocumentTokenError("brand token body font family cannot be a generic family name")
+        raise DocumentTokenError(
+            f"brand token {role} font family cannot be a generic family name")
     return names
 
 
 def snapshot_of(tokens: Mapping) -> dict:
     """The part of the token source the layout reads, in the same shape (the packaged snapshot)."""
     light = tokens["color"]["light"]
-    body = tokens["typography"]["families"]["body"]
+    families = tokens["typography"]["families"]
     return {
         "_generated": (f"Generated from {_RELATIVE.as_posix()} by: {SNAPSHOT_COMMAND}. "
                        "Never hand-edit (ADR-0014)."),
         "color": {"light": {key: {"hex": light[key]["hex"]} for key in _COLOUR_KEYS}},
-        "typography": {"families": {"body": {"family": body["family"],
-                                             "fallback": body["fallback"]}}},
+        "typography": {"families": {
+            role: {"family": families[role]["family"], "fallback": families[role]["fallback"]}
+            for role in ("body", "heading")}},
     }
 
 

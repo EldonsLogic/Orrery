@@ -20,5 +20,7 @@ Fixed the partner's cross-model review of PR 368 at 22a671f7 (1 High, 2 Medium, 
 ## Tokens or cost
 Unknown.
 
+- Follow-up commit: contracts/model-call.schema.json `caller` if/then (token_id required for a user, forbidden otherwise) and x-validator-rule reworded, reported as `caller_mismatch` by the fake; ADR-0054 (Proposed) names 0.3.0; contracts/events.md `meter.ai_usage` row lists `cache_hit`.
+
 ## Next step
-Open: `contracts/model-call.schema.json` should encode the token_id rule (if/then) and its x-validator-rule wording; ADR-0054 still says 0.2.1; contracts/events.md table should list `cache_hit`. Partner: re-review PR 368, then PLT-033.
+Partner: re-review PR 368, then PLT-033.

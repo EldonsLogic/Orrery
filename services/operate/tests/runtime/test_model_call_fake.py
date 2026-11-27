@@ -743,3 +743,14 @@ def test_low5_no_verified_principal_is_rejected_before_parsing():
     with pytest.raises(PermissionError):
         FakeModelCallPort(principal={"tenant_id": "t_acme"}, registry=registry()).complete(req())
     assert p.events == [] and p.reservations == []
+
+
+def test_medium2_schema_ties_token_id_to_a_user_caller():
+    user_no_tok = user_req()
+    del user_no_tok["caller"]["token_id"]
+    agent_tok = req(caller=dict(REQ["caller"], token_id="tok_9"))
+    for doc in (user_no_tok, agent_tok):
+        assert list(VALIDATOR.iter_errors(doc)), doc["caller"]
+    valid(user_req())
+    valid(req())
+    assert any("token_id" in rule and "required" in rule for rule in SCHEMA["x-validator-rules"])

@@ -199,8 +199,6 @@ class FakeModelCallPort:
                 raise bad("block_order")
             last_rank, last_turn = rank, b.get("turn", last_turn)
         c, p = r["caller"], self.principal
-        if (c["actor_kind"] == "user") != ("token_id" in c):    # token_id iff a user actor (Q-672(a))
-            raise bad("caller_mismatch")
         if any(b["trust"] == "user" for b in r["blocks"]) and p["actor_kind"] != "user" and not p.get("on_behalf_of"):
             raise bad("caller_mismatch")                          # a user-trust label needs a user principal
         if ({k: c[k] for k in IDENTITY_FIELDS if k in c} != {k: p[k] for k in IDENTITY_FIELDS if p.get(k) is not None}
@@ -508,6 +506,9 @@ def _classify(r: dict) -> str:
     if any(b.get("trust") in REF_TRUST and "text" in b for b in blocks) or any(
             isinstance(t, dict) and ({"description", "input_schema"} & set(t)) for t in tools):
         return "ref_required"
+    caller = r.get("caller")
+    if isinstance(caller, dict) and (caller.get("actor_kind") == "user") != ("token_id" in caller):
+        return "caller_mismatch"                                 # token_id iff a user actor (Q-672(a))
     return "schema"
 
 

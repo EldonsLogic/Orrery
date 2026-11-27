@@ -45,6 +45,8 @@ jobs:
       - run: python3 scripts/check_repo_hygiene.py
       - name: Component reviewer check (ADR-0034, owner is not a reviewer)
         run: python3 scripts/check_component_reviewers.py
+      - name: No engine imports under services/ (QA-022, ADR-0080)
+        run: python3 scripts/check_no_engine_imports.py
 
   pr-log-gate:
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'

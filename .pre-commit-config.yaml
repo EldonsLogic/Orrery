@@ -25,6 +25,11 @@ repos:
         entry: python3 scripts/check_repo_hygiene.py
         language: system
         pass_filenames: false
+      - id: no-engine-imports
+        name: no engine imports under services/
+        entry: python3 scripts/check_no_engine_imports.py
+        language: system
+        pass_filenames: false
       - id: commit-message-plan-id
         name: commit message names a plan ID
         entry: python3 scripts/check_commit_msg.py

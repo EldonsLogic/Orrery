@@ -82,9 +82,11 @@ Live coordinator log for the partner lane's G1 finishing sprint (RULES 51), cont
 - Partner decisions, 2026-11-27 ("for Q-421, yes i object; for Q-602 ok; for ADR-0073 accept both; step 56, go with A"): Q-421 objected (AGENTS.md principle 3 and the hard don't stand); Q-602 the counsel opinion stays before BRD-009 or launch, the self-run search and filings may proceed; ADR-0073 residuals 3.2 and 3.6 accepted (recorded on #380, into the ADR text when it moves to Accepted); step 56 option A (provisioning creates the engine's expected indexes on every tenant site; the DDL gate stays exact). Q-421 and Q-602 posted on #372.
 - Dispatched A3: Claude Opus 5.5 high in the #381 worktree: root cause of the missing indexes, option A in `scripts/provision_tenant_site.py` (generic, from the engine's own sync, idempotent, fail closed), bench re-run, and Eldon's three #381 Lows (unneeded pytest install, provision timeout, path filters). Allowed: the provisioning script and its tests, `infra/dev/docker/`, `real-bench.yml`, one `tests.yml` line, the branch log. Stops at the BPL-032 gap, any gate, lock or tenancy change, a persisting compensate failure (BPL-033), or about 400 lines.
 
+- R19 result (#348 BPL-045, Claude Sonnet 5.5, same-family): CHANGES at 0fb152e4: High (pre-existing): a re-add after a quarantine is restored at the old index, so no derived reorder is emitted and options silently apply in the wrong order; the engine adapter keys options by `id` or `order` and `frappe_backend.py` has no reorder or option branch and no final `else` (UNVERIFIED on a bench: a live engine could report success without acting); a new MUST shipped as a patch. Posted; new partner row BPL-050 (G1, Depends `-`) for the adapter side (BPL-049 is taken by Eldon's #386).
+
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-g1-sprint.md: this live log.
-- docs/PLAN.md: BPL-046 and BPL-044 claimed (#378); BPL-048 added (coordination-22); BPL-044 and ERP-035 done, CE-SEC-020 and CE-SEC-011 text (coordination-24).
+- docs/PLAN.md: BPL-046 and BPL-044 claimed (#378); BPL-048 added (coordination-22); BPL-044 and ERP-035 done, CE-SEC-020 and CE-SEC-011 text (coordination-24); BPL-050 added (coordination-25).
 - docs/open-questions.md: Q-684 to Q-688 partner agreement (coordination-24).
 
 ## Decisions

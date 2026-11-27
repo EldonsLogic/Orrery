@@ -1,6 +1,6 @@
 """Blueprint compiler (BPL-004): Blueprint + component registry + engine mapping -> compiled artifact.
 
-Contracts: compiled-artifact.schema.json 0.1.0, engine-adapter.md 0.1.3 section 9, engine-mapping.schema.json 0.1.0.
+Contracts: compiled-artifact.schema.json 0.2.0 (0.1.0 when no derived step), engine-adapter.md 0.2.0 section 9, engine-mapping.schema.json 0.1.0.
 Deterministic and pure. It emits configuration only: no ledger, tax, e-invoice or payroll figure, rate or rule is
 computed or chosen here; every value in a step is copied verbatim from the Blueprint (ADR-0030, ADR-0033).
 

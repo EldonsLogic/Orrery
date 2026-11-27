@@ -16,6 +16,7 @@ ARTIFACT_SCHEMA = "0.1.0"
 DERIVED_SCHEMA = "0.2.0"  # an artifact with a derived reorder step (ADR-0072); every other one stays 0.1.0
 COMPILER = {"name": "bpl-compiler", "version": "0.1.0"}
 ALGORITHM = "sha256-canonical-json-v1"
+MEMBERSHIP_KINDS = {"field.add", "option.add", "field.quarantine", "option.quarantine"}  # what a derived reorder follows
 MAX_BYTES = 1_048_576
 MAX_STEPS = 500
 MAX_POST_CONDITIONS = 1000
@@ -111,16 +112,25 @@ def _derived_issues(artifact: dict) -> list[Issue]:
     """x-validator-rules for a derived reorder (ADR-0072): each derivedFrom op sits directly under the step's collection
     and is implemented by another step; an embedded inverse has the same artifactSchema."""
     issues = []
-    implemented = {p for s in artifact["steps"] for p in s["sourceOps"]}
+    implemented = {p: s["kind"] for s in artifact["steps"] for p in s["sourceOps"]}
     for s in artifact["steps"]:
         for i, p in enumerate(s.get("derivedFrom", ())):
             child = p.startswith(s["pointer"] + "/") and "/" not in p[len(s["pointer"]) + 1:]
             if not child or p not in implemented:
                 issues.append(Issue("CMP-ART-004", ptr("steps", s["seq"] - 1, "derivedFrom", i),
                                     "derivedFrom names no add or remove op of this collection that a step implements"))
+            elif implemented[p] not in MEMBERSHIP_KINDS:
+                issues.append(Issue("CMP-ART-004", ptr("steps", s["seq"] - 1, "derivedFrom", i),
+                                    "derivedFrom must name an add or remove op, not " + implemented[p]))
     inv = artifact.get("inverse")
     if isinstance(inv, dict) and inv.get("artifactSchema") != artifact["artifactSchema"]:
         issues.append(Issue("CMP-ART-004", "/inverse/artifactSchema", "inverse and forward artifact schemas differ"))
+    if isinstance(inv, dict):
+        back = {s.get("pointer") for s in inv.get("steps", ()) if isinstance(s, dict) and "derivedFrom" in s}
+        for s in artifact["steps"]:
+            if "derivedFrom" in s and s["pointer"] not in back:
+                issues.append(Issue("CMP-ART-004", ptr("steps", s["seq"] - 1),
+                                    "derived reorder has no inverse derived reorder at the same pointer"))
     return issues
 
 

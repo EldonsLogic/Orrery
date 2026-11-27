@@ -323,3 +323,39 @@ def test_an_order_change_with_no_reorder_or_membership_op_is_refused():
     issues = steps_from_diff(d, base, t)[2]
     assert [(i.code, i.path) for i in issues] == [("CMP-ART-001", "/entities/supplier/fields")]
     assert "no reorder or membership op" in issues[0].message
+
+
+# ---------------------------------------------------------------- RULES 42 review of #348 (Low 3)
+
+
+def test_a_forward_derived_reorder_needs_an_inverse_derived_reorder_at_the_same_pointer():
+    a = _sample()
+    (step,) = _derived(a)
+    assert art.check(a) == []
+    assert any(s["pointer"] == step["pointer"] for s in a["inverse"]["steps"] if "derivedFrom" in s)
+    a["inverse"]["steps"] = [s for s in a["inverse"]["steps"] if "derivedFrom" not in s]
+    for i, s in enumerate(a["inverse"]["steps"], 1):
+        s["seq"] = i
+    issues = [i for i in art.check(art.seal(a)) if i.code == "CMP-ART-004" and "inverse" in i.message]
+    assert issues and issues[0].path == ptr_steps(step)
+
+
+def test_the_schema_refuses_a_reorder_that_names_a_key_twice():
+    for key in ("order", "previousOrder"):
+        a = _sample()
+        (step,) = _derived(a)
+        step["params"][key] = step["params"][key] + step["params"][key][:1]
+        assert any(e.validator == "uniqueItems" for e in _errors(a)), key
+
+
+def ptr_steps(step):
+    return f"/steps/{step['seq'] - 1}"
+
+
+def test_derived_from_must_name_add_or_remove_ops_not_other_kinds():
+    a = _sample()
+    (step,) = _derived(a)
+    impl = next(s for s in a["steps"] if s["kind"] == "field.add" and s["sourceOps"][0] in step["derivedFrom"])
+    impl["kind"] = "field.set_property"  # the op the derived step names is now implemented by a property change
+    issues = art.check(art.seal(a))
+    assert any(i.code == "CMP-ART-004" and "add or remove" in i.message for i in issues), issues

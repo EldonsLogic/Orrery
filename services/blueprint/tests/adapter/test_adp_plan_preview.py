@@ -184,12 +184,23 @@ def test_adp_c_072_reorder_lists_exactly_the_active_keys(h):
         assert t.code_of(t.plan(h, t.seal(art))) == "unsupported_contract_version"
         assert_no_effect(h, "t_alpha", before, ev)
         return
+    # a request must state a contract minor that matches the artifact's schema minor, in both directions
+    old, new = t.variant([t.field_step("customer", "x1")]), t.variant([t.field_step("customer", "x1")])
+    new["artifactSchema"] = new["inverse"]["artifactSchema"] = "0.2.0"
+    before, ev = t.snapshot(h), len(h.events())
+    for art, version in ((old, "0.2.0"), (new, "0.1.3")):
+        resp = h.call("plan", t.ctx("t_alpha", version=version), {"artifact": t.seal(art)})
+        assert t.code_of(resp) == "unsupported_contract_version", (version, art["artifactSchema"])
+    assert_no_effect(h, "t_alpha", before, ev)
     cust = next(e for e in t.export(h)["export"]["sections"]["entities"] if e["id"] == "customer")
     keys = [f["id"] for f in cust["fields"]]
     good = planned(h, t.variant([_reorder(keys[::-1], keys)]))
     assert good["steps"][0]["disposition"] != "blocked", good
-    for order in (keys[1:], keys + ["not_there"], keys + keys[:1], keys[1:] + keys[:1] * 2):
+    for order in (keys[1:], keys + ["not_there"]):
         result = planned(h, t.variant([_reorder(order, keys)]))
         (step,) = result["steps"]
         assert result["verdict"] == "rejected" and step["disposition"] == "blocked", order
         assert step["reasonCode"] == "definition_conflict"
+    # a key named twice never reaches the check: `uniqueItems` on order and previousOrder refuses it at validation
+    for order in (keys + keys[:1], keys[1:] + keys[:1] * 2):
+        assert t.code_of(t.plan(h, t.variant([_reorder(order, keys)]))) == "invalid_request", order

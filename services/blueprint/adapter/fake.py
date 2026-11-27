@@ -368,7 +368,7 @@ class FakeAdapter:
         site = self.sites.get(tenant)
         self._authorize(op, context, site)
         self._check_contract_version(context["contractVersion"])
-        self._prechecks(op, inp)
+        self._prechecks(op, inp, context["contractVersion"])
         schema = SCHEMA_OF[op]
         errors = list(validator_for(schema_urn(schema[0]) + "#/$defs/" + schema[1]).iter_errors({"context": context, "input": inp}))
         if errors:
@@ -405,11 +405,14 @@ class FakeAdapter:
         if mm not in {".".join(v.split(".")[:2]) for v in CONTRACT_VERSIONS}:
             raise AdapterError("unsupported_contract_version", {"supported": list(CONTRACT_VERSIONS)})
 
-    def _prechecks(self, op, inp):
-        """Limits and artifact schema version are checked before the schema, which would otherwise mask them."""
+    def _prechecks(self, op, inp, contract_version):
+        """Limits and artifact schema version are checked before the schema, which would otherwise mask them.
+        The request's contract minor and the artifact's schema minor must match (4.3, ADR-0072): 0.1.x with 0.1.0,
+        0.2.x with 0.2.0, never mixed."""
         art = inp.get("artifact") if op in ("plan", "preview", "apply") else inp.get("forwardArtifact") if op == "rollback" else None
         if isinstance(art, dict):
-            if art.get("artifactSchema") not in ARTIFACT_SCHEMA_VERSIONS:
+            schema = art.get("artifactSchema")
+            if schema not in ARTIFACT_SCHEMA_VERSIONS or schema.split(".")[1] != contract_version.split(".")[1]:
                 raise AdapterError("unsupported_contract_version", {"supported": list(ARTIFACT_SCHEMA_VERSIONS)})
             steps = art.get("steps")
             if isinstance(steps, list) and len(steps) > MAX_STEPS:
@@ -539,6 +542,11 @@ class FakeAdapter:
                 try:
                     self._exec(trial, step)
                 except Exception:  # noqa: BLE001 (a step the plan blocks anyway): stop predicting later steps
+                    # Skipping the key check for later reorders is safe only because a step whose trial run raises
+                    # is also blocked by _judge, so the verdict is already `rejected` and apply never runs it or
+                    # any later step. It would become unsafe if a step could fail here yet be judged ok or gated
+                    # (verdict not rejected), or if apply could continue past a failing step: a later reorder
+                    # would then run unchecked against a site this trial no longer models.
                     trial = None
             if ddl == "additive":
                 additive += 1

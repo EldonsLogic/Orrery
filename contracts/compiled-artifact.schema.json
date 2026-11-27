@@ -148,8 +148,8 @@
         "property": { "type": "string", "maxLength": 256, "pattern": "^(/[^/]+)+$", "description": "Pointer below the subject, for example /required or /parameters/max_discount." },
         "before": { "description": "Value in the base revision; absent when the property was absent." },
         "after": { "description": "Value in the target revision; absent when the property is removed." },
-        "order": { "type": "array", "maxItems": 500, "items": { "type": "string", "maxLength": 128 }, "description": "reorder: full key list in target order." },
-        "previousOrder": { "type": "array", "maxItems": 500, "items": { "type": "string", "maxLength": 128 } }
+        "order": { "type": "array", "maxItems": 500, "uniqueItems": true, "items": { "type": "string", "maxLength": 128 }, "description": "reorder: full key list in target order." },
+        "previousOrder": { "type": "array", "maxItems": 500, "uniqueItems": true, "items": { "type": "string", "maxLength": 128 } }
       },
       "additionalProperties": false
     },

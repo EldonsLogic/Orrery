@@ -27,3 +27,10 @@ Unknown.
 
 ## Next step
 Partner re-review of #348; BPL-050 (partner, #387) implements the adapter side against contract 0.2.0 and ADP-C-072.
+
+## RULES 42 review fixes (M1, M2, L3 to L6)
+- M1: ADR-0072 point 5 and the engine-adapter 0.2.0 changelog say option steps carry `order_equals` even in 0.1.0 artifacts (postConditions, contentHash, artifactId change; "byte for byte" covers steps only).
+- M2: engine-adapter.md 4.3 and ADP-C-072 require refusing a mixed contract minor and artifact schema minor. Fake refuses it (`_prechecks`); testkit states 0.2.0 for 0.2.0 artifacts. Test first in ADP-C-072. Note: this refuses 0.2.x requests with 0.1.0 artifacts too.
+- L3: `_derived_issues` requires an inverse derived reorder at the same pointer and add or remove kinds in `derivedFrom`. Tests first.
+- L4: comment in fake.py `_evaluate` on why dropping the trial is safe. L5: `uniqueItems` on `order` and `previousOrder` (test). L6: compiler `__init__` docstring versions.
+- BPL-050 acceptance items added to the PR comment.

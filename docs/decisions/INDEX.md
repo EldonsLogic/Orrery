@@ -8,7 +8,7 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | ADR | Title | Status |
 |---|---|---|
 | [ADR-0001-working-codename.md](ADR-0001-working-codename.md) | Working codename Orrery, not cleared | Accepted; superseded by ADR-0066 (working-name rule) |
-| [ADR-0002-seed-engine-frappe-erpnext.md](ADR-0002-seed-engine-frappe-erpnext.md) | Seed engine is Frappe + ERPNext, behind an adapter | Accepted; line 19 (counsel reviews the GPL boundary) to be superseded by ADR-0074 once accepted |
+| [ADR-0002-seed-engine-frappe-erpnext.md](ADR-0002-seed-engine-frappe-erpnext.md) | Seed engine is Frappe + ERPNext, behind an adapter | Accepted; line 19 (counsel reviews the GPL boundary) to be superseded by ADR-0074 (research plus narrow counsel opinion) once accepted |
 | [ADR-0003-five-parts-four-contracts.md](ADR-0003-five-parts-four-contracts.md) | Five parts and four contracts | Accepted |
 | [ADR-0004-one-chat-role-based-views.md](ADR-0004-one-chat-role-based-views.md) | One chat, anyone chats, role-based views | Accepted |
 | [ADR-0005-human-review-gate-free-first.md](ADR-0005-human-review-gate-free-first.md) | Human review gate for first clients; free-first with entitlements built in | Accepted |
@@ -75,4 +75,4 @@ One file per architecture, security, contract or product-shaping decision. Copy 
 | [ADR-0070-change-engine-deployment-journal-and-recovery.md](ADR-0070-change-engine-deployment-journal-and-recovery.md) | Change engine deployment journal tables, keyed evidence MAC, legacy-row migration and the locked recovery entry point (CE-SEC-009, CE-SEC-010) | Proposed |
 | [ADR-0071-country-pack-store-and-signed-loader.md](ADR-0071-country-pack-store-and-signed-loader.md) | Country pack loader reads signed, published pack versions from the pack store, pinned per tenant, fail closed (CMP-039); interface with CMP-038; proposes the production path that ADR-0059, ADR-0063 and ADR-0067 lead to | Proposed |
 | [ADR-0073-change-engine-tenant-identity-from-durable-config.md](ADR-0073-change-engine-tenant-identity-from-durable-config.md) | Change engine tenant identity from a durable site binding, and a dedicated deployment connection (CE-SEC-011 slice 2) | Proposed |
-| [ADR-0074-gpl-boundary-settled-by-research.md](ADR-0074-gpl-boundary-settled-by-research.md) | GPL boundary answered by research for SaaS-only delivery, with its rules enforced and a RULES 33 exception; counsel before anything that conveys a copy (LEG-006) | Proposed |
+| [ADR-0074-gpl-boundary-research-and-narrow-counsel.md](ADR-0074-gpl-boundary-research-and-narrow-counsel.md) | GPL boundary for SaaS-only delivery answered by research plus a narrow counsel opinion on uncertainties 3 to 6 and the cited statute texts (option C), with its rules enforced; counsel before anything that conveys a copy (LEG-006) | Proposed |

@@ -48,7 +48,7 @@ Prefixes: GOV governance and workflow, LEG legal and company, SEC security, DAT 
 | LEG-003 | Engage counsel in KSA, UAE, Egypt and Qatar; scope of work | Legal | G0 | - | eldon | doing |
 | LEG-004 | Third-party licence register (every adopted OSS component, version, licence; partner first lists every Frappe or ERPNext app and add-on used locally) | Legal | G0 | GOV-004 | partner | done |
 | LEG-005 | Register seshna.com and the @seshna handles (ADR-0066). seshna.com bought by Eldon 2026-11-27; the @seshna handles are still open | Legal | G0 | - | eldon | doing |
-| LEG-006 | GPL licence-boundary answer for SaaS-only delivery: research note (docs/research/gpl-saas-boundary.md, #388) and ADR-0074 (both founders accept A, B, C or D); counsel only before anything that conveys a copy (LEG-017) | Legal | G1 | - | eldon | doing |
+| LEG-006 | GPL licence-boundary answer for SaaS-only delivery (ADR-0074, option C): research note (docs/research/gpl-saas-boundary.md, #388) plus counsel's written answer on ADR-0074 uncertainties 3 to 6 and the cited statute texts (counsel-scope Q8); counsel before anything that conveys a copy (LEG-017) | Legal | G1 | LEG-003 | eldon | doing |
 | LEG-007 | Counsel opinion: vendor certification needed to sell ZATCA-compliant software | Legal | G1 | LEG-003 | eldon | todo |
 | LEG-008 | Name clearance: trademark search and counsel opinion (KSA, UAE, Egypt, Qatar, international) | Legal | G1 | LEG-003 | eldon | todo |
 | LEG-009 | Trademark policy check: no ERPNext or Frappe in product name or ads | Legal | G1 | LEG-006 | eldon | todo |

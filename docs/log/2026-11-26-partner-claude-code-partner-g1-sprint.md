@@ -108,9 +108,14 @@ Live coordinator log for the partner lane's G1 finishing sprint (RULES 51), cont
 - Eldon removed `docs/fundraising/investor-shortlist.md` from the public repo (FND-009, fb82b50a), which settles the partner's question 5.
 - This branch: BPL-050 text extended with the adapter steps the #348 re-review listed (contract and artifact 0.2.0 only once the rest works, mixed-version refusal, plan-time reorder checks, options keyed by `value`, ADP-C-072, bench proof).
 
+- Reviews posted after coordination-30 (same-family, with the partner's permission): #396 projects CHANGES (High: the rigid-field list misses `is_billable` and the Timesheet and Project billing fields; destructive project changes classed as `config`); #397 manufacturing CHANGES, recommended Tier 3 (High: Stock Entry, the record that posts stock, has no concept, permission or BP-MOD-001 coverage); #398 marketing CHANGES (High: marketing email has no consent or approval path; #394's STOP defects reach campaigns, so #398 waits for #394's fix).
+- Partner decisions, 2026-11-28: #388 option C; BPL-032 "yes" (drop its dependency on BPL-046); #392 and Q-720 "hold on that for now, don't change anything".
+- #407 (LEG-006, ADR-0074 gate proposal, split from #388; Eldon accepted B on it): the partner's written choice of option C posted on #407 (a narrowed counsel opinion on uncertainties 3 to 6 on top of the corrected note), with rework notes: one gate text naming counsel's answer on 3 to 6; keep LEG-006's dependency on LEG-003; drop the RULES 33 exception by having counsel confirm the official Arabic texts of the cited articles; Q8 narrowed and tagged G1; B becomes the rejected alternative; rename the ADR file while Proposed; keep the enforcement definition, the 13 rules and the new rows (the partner to confirm QA-028 and QA-029). The add-on pinning line is not agreed while #392 is on hold. #388 (research only, fixes at cba02ff7 and 2ec9f6d8) still owes its round-2 re-review.
+- This branch: BPL-032 Depends now BPL-004, BPL-007, ERP-012 (BPL-046 dropped on the partner's word), so it can start.
+
 ## Files touched
 - docs/log/2026-11-26-partner-claude-code-partner-g1-sprint.md: this live log.
-- docs/PLAN.md: BPL-046 and BPL-044 claimed (#378); BPL-048 added (coordination-22); BPL-044 and ERP-035 done, CE-SEC-020 and CE-SEC-011 text (coordination-24); BPL-050 added (coordination-25); CMP-039 done and CMP-043 text (coordination-28); PLT-037 added and BPL-033 text (coordination-29); BPL-050 text (coordination-30).
+- docs/PLAN.md: BPL-046 and BPL-044 claimed (#378); BPL-048 added (coordination-22); BPL-044 and ERP-035 done, CE-SEC-020 and CE-SEC-011 text (coordination-24); BPL-050 added (coordination-25); CMP-039 done and CMP-043 text (coordination-28); PLT-037 added and BPL-033 text (coordination-29); BPL-050 text (coordination-30); BPL-032 Depends (coordination-31).
 - docs/open-questions.md: Q-684 to Q-688 partner agreement (coordination-24).
 
 ## Decisions

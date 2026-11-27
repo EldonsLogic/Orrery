@@ -1,0 +1,66 @@
+{
+  "v": 1,
+  "typ": "country_pack_change_record",
+  "id": "change:4STYVXBR3MBED2WQBY67RKQ4WH",
+  "kind": "withdrawal",
+  "countryCode": "SA",
+  "target": {
+    "version": "0.2.0"
+  },
+  "reasonRef": "reason:sa:w1",
+  "baseIndexSeq": 2,
+  "baseIndexDigest": "sha256:f3cd47d248fe0a40c61e86b89e29a7e16c056719c8208f7789229d5f38ed4be7",
+  "statementDigest": "sha256:cfb02bf442656842cda3b68a4c310fa516587a7b289db5a62d622ab0aa3ddf87",
+  "requestedBy": "staff:founder-a",
+  "recordedAt": "2030-03-17T17:46:40Z",
+  "signOffs": [
+    {
+      "role": "founder",
+      "signerId": "staff:founder-a",
+      "signedAt": "2030-03-17T17:46:40Z",
+      "statementDigest": "sha256:cfb02bf442656842cda3b68a4c310fa516587a7b289db5a62d622ab0aa3ddf87",
+      "mfa": {
+        "assertionRef": "stepup:staff:founder-a:1",
+        "method": "webauthn",
+        "authTime": "2030-03-17T17:45:40Z",
+        "boundTo": {
+          "signerId": "staff:founder-a",
+          "statementDigest": "sha256:cfb02bf442656842cda3b68a4c310fa516587a7b289db5a62d622ab0aa3ddf87"
+        }
+      },
+      "founderLogin": "EldonsLogic",
+      "signerSignature": {
+        "format": "webauthn.get.v1",
+        "credentialId": "cred-staff-founder-ax",
+        "authenticatorData": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "clientDataJSON": "eyJjaGFsbGVuZ2UiOiAiNU5rTGwzcVpYNmVOcWxYNF9hR1Fxd2JwWHFRZzAzazdOZ0F4b2JyVzJoOCIsICJvcmlnaW4iOiAiaHR0cHM6Ly9zdGFmZi5leGFtcGxlLnRlc3QiLCAidHlwZSI6ICJ3ZWJhdXRobi5nZXQifQ",
+        "signature": "fakestaff-founder-acfb02bf442656842cda3b68a4c310fa516587a7b289db5a62d622ab0aa3ddf87"
+      }
+    },
+    {
+      "role": "market_accountant",
+      "signerId": "staff:acct-sa-01",
+      "signedAt": "2030-03-17T17:46:40Z",
+      "statementDigest": "sha256:cfb02bf442656842cda3b68a4c310fa516587a7b289db5a62d622ab0aa3ddf87",
+      "mfa": {
+        "assertionRef": "stepup:staff:acct-sa-01:1",
+        "method": "webauthn",
+        "authTime": "2030-03-17T17:45:40Z",
+        "boundTo": {
+          "signerId": "staff:acct-sa-01",
+          "statementDigest": "sha256:cfb02bf442656842cda3b68a4c310fa516587a7b289db5a62d622ab0aa3ddf87"
+        }
+      },
+      "name": "Fictional Accountant",
+      "market": "SA",
+      "signOffRef": "signoff:cfb02bf442656842cda3b68a4c310fa5:staff:acct-sa-01",
+      "signerSignature": {
+        "format": "webauthn.get.v1",
+        "credentialId": "cred-staff-acct-sa-01",
+        "authenticatorData": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "clientDataJSON": "eyJjaGFsbGVuZ2UiOiAiNU5rTGwzcVpYNmVOcWxYNF9hR1Fxd2JwWHFRZzAzazdOZ0F4b2JyVzJoOCIsICJvcmlnaW4iOiAiaHR0cHM6Ly9zdGFmZi5leGFtcGxlLnRlc3QiLCAidHlwZSI6ICJ3ZWJhdXRobi5nZXQifQ",
+        "signature": "fakestaff-acct-sa-01cfb02bf442656842cda3b68a4c310fa516587a7b289db5a62d622ab0aa3ddf87"
+      }
+    }
+  ]
+}

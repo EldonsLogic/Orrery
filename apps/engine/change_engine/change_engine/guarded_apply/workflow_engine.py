@@ -11,6 +11,7 @@ Implements ADR-001 (Rev 2.3) Section 10, ADR-006, and PRD-001:
 
 import hashlib
 import json
+import logging
 import re
 import time
 from typing import Any, Dict, List, Optional, Set, Union
@@ -28,10 +29,22 @@ from .safety_guardrails import (
     is_locked_doctype,
 )
 from .schema_reconciler import (
+    TIMEOUT_NOT_EFFECTIVE,
     IdempotencyConflictError,
+    acquire_scoped_locks,
+    begin_fresh_read_view_checked,
+    blocked_response,
     compute_canonical_payload_hash,
-    make_bounded_lock_key,
+    engine_refusal,
+    read_apply_target,
+    release_scoped_locks,
+    session_discarded_response,
+    set_lock_wait_timeout_checked,
+    settle_apply,
+    target_unchanged,
 )
+
+logger = logging.getLogger(__name__)
 
 # DocTypes prohibited from workflow creation under ADR-001 Rev 2.3 §10
 TIER_0_PROHIBITED_WORKFLOW_DOCTYPES: Set[str] = set(ZONE_2_LOCKED_DOCTYPES).union({
@@ -217,10 +230,12 @@ def validate_workflow_state_machine(
     if isinstance(wf, dict):
         try:
             wf_obj = WorkflowDefinition(**wf)
-        except Exception as exc:
+        except Exception:
+            # The validator's own text carries the caller's input and library details: fixed text only.
+            logger.exception("workflow definition failed schema validation")
             return WorkflowValidationResult(
                 is_valid=False,
-                errors=[f"Schema validation error in workflow definition: {exc}"],
+                errors=["The workflow definition did not pass schema validation."],
                 warnings=[],
                 mermaid_graph="",
             )
@@ -466,7 +481,8 @@ def execute_workflow_deployment(
             wf_data["document_type"] = doctype
         try:
             wf = WorkflowDefinition(**wf_data)
-        except Exception as exc:
+        except Exception:
+            logger.exception("workflow definition failed schema validation for %s", deployment_id)
             execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return {
                 "deployment_id": deployment_id,
@@ -474,7 +490,8 @@ def execute_workflow_deployment(
                 "success": False,
                 "stage": "VALIDATE",
                 "disposition": "INVALID_WORKFLOW_PAYLOAD",
-                "reason": f"Workflow definition schema validation failed: {exc}",
+                "reason_code": "invalid_workflow_payload",
+                "reason": "The workflow definition did not pass schema validation.",
                 "doctype": doctype,
                 "execution_time_ms": execution_time_ms,
             }
@@ -491,6 +508,7 @@ def execute_workflow_deployment(
             "success": False,
             "stage": "VALIDATE",
             "disposition": "INVALID_WORKFLOW_STATE_MACHINE",
+            "reason_code": "invalid_workflow_state_machine",
             "reason": "; ".join(val_result.errors),
             "errors": val_result.errors,
             "warnings": val_result.warnings,
@@ -515,33 +533,47 @@ def execute_workflow_deployment(
             "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
         }
 
-    # Step 3: Bounded advisory lock GET_LOCK <= 64 chars (§7.2)
-    lock_key = make_bounded_lock_key(site_id, doctype)
+    # Step 3: Site-scoped idempotency lock, then the target lock (both <= 64 chars, §7.2), a fresh read view
+    # after them, and a lookup that fails blocks (CE-SEC-011: the single-field path's discipline).
     lock_wait_seconds = int(kwargs.get("lock_wait_seconds", 5))
-    lock_result = db.acquire_advisory_lock(lock_key, wait_seconds=lock_wait_seconds)
-
-    if lock_result != 1:
-        reason = "Lock wait timeout (0)" if lock_result == 0 else "Database lock error (NULL)"
-        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "deployment_id": deployment_id,
-            "status": "REJECTED",
-            "success": False,
-            "stage": "ACQUIRE",
-            "disposition": "LOCK_CONTENTION_OR_TIMEOUT",
-            "reason": f"Could not acquire MariaDB GET_LOCK ({reason})",
-            "doctype": doctype,
-            "workflow_name": wf.workflow_name,
-            "execution_time_ms": execution_time_ms,
-        }
-
+    idempotency_key = kwargs.get("idempotency_key") or f"idemp-{deployment_id}"
+    held: List[str] = []
     try:
+        locked = acquire_scoped_locks(db, held, site_id, doctype, idempotency_key, lock_wait_seconds)
+        if locked is not None:
+            code, reason = locked
+            return {
+                "deployment_id": deployment_id,
+                "status": "REJECTED",
+                "success": False,
+                "stage": "ACQUIRE",
+                "disposition": "LOCK_CONTENTION_OR_TIMEOUT",
+                "reason_code": code,
+                "reason": reason,
+                "doctype": doctype,
+                "workflow_name": wf.workflow_name,
+                "execution_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
+            }
+
+        failed_view = begin_fresh_read_view_checked(db)
+        if failed_view:
+            return engine_refusal(blocked_response(failed_view), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype)
+
         # Step 4: Idempotency Binding Check (§7.1)
-        idempotency_key = kwargs.get("idempotency_key") or f"idemp-{deployment_id}"
         payload_hash = compute_canonical_payload_hash(site_id, doctype, wf.model_dump())
 
-        existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        try:
+            existing = db.get_existing_deployment_by_idempotency(site_id, idempotency_key)
+        except Exception:
+            logger.exception("durable idempotency lookup failed for %s", deployment_id)
+            return engine_refusal(blocked_response("idempotency"), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype)
         if existing is not None:
+            if not isinstance(existing, dict) or not isinstance(existing.get("outcome"), dict):
+                logger.error("the stored outcome for %s is not the expected shape", deployment_id)
+                return engine_refusal(blocked_response("idempotency"), deployment_id, "ENGINE_UNAVAILABLE",
+                                      start_time, doctype=doctype)
             if existing.get("payload_hash") != payload_hash:
                 raise IdempotencyConflictError(
                     f"IDEMPOTENCY_CONFLICT: Key '{idempotency_key}' was already used with a different payload."
@@ -551,7 +583,14 @@ def execute_workflow_deployment(
             return cached_outcome
 
         # Step 4.5: Target DocType recovery state gate (§8.1)
-        if hasattr(db, "is_target_in_recovery_required") and db.is_target_in_recovery_required(site_id, doctype):
+        try:
+            target_blocked = bool(
+                hasattr(db, "is_target_in_recovery_required") and db.is_target_in_recovery_required(site_id, doctype))
+        except Exception:
+            logger.exception("durable recovery lookup failed for %s", deployment_id)
+            return engine_refusal(blocked_response("recovery"), deployment_id, "ENGINE_UNAVAILABLE", start_time,
+                                  doctype=doctype)
+        if target_blocked:
             execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return {
                 "deployment_id": deployment_id,
@@ -597,10 +636,21 @@ def execute_workflow_deployment(
             "status": "PREPARED",
         }
 
+        # What the apply will write, as committed now (under the locks): a failed apply is clean only if it reads
+        # the same afterwards.
+        target_before = read_apply_target(db, "workflow", doctype, wf.workflow_name)
+
+        # The session lock-wait timeout is set and read back BEFORE any intent exists: if it is not effective
+        # nothing is written and nothing runs (CE-SEC-008).
+        if not set_lock_wait_timeout_checked(db, lock_wait_seconds):
+            return engine_refusal(TIMEOUT_NOT_EFFECTIVE, deployment_id, "LOCK_TIMEOUT_NOT_EFFECTIVE", start_time,
+                                  doctype=doctype)
+
         # Fail-closed prepare audit
         try:
             db.persist_prepare_and_audit_intent(prepare_record)
-        except Exception as prep_exc:
+        except Exception:
+            logger.exception("could not persist the deployment intent for %s", deployment_id)
             execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
             return {
                 "deployment_id": deployment_id,
@@ -608,34 +658,11 @@ def execute_workflow_deployment(
                 "success": False,
                 "stage": "PREPARE",
                 "disposition": "AUDIT_PREPARE_FAILED",
-                "reason": f"Fail-closed: Could not persist audit intent: {prep_exc}",
+                "reason_code": "audit_prepare_failed",
+                "reason": "Fail-closed: Could not persist deployment/audit intent.",
                 "doctype": doctype,
                 "execution_time_ms": execution_time_ms,
             }
-
-        # Step 6: Ensure all Workflow State records exist (idempotently)
-        for s in wf.states:
-            if hasattr(db, "ensure_workflow_state") and callable(getattr(db, "ensure_workflow_state", None)):
-                db.ensure_workflow_state(s.state, style=s.style)
-            elif frappe and hasattr(frappe, "db") and hasattr(frappe, "get_doc"):
-                if not frappe.db.exists("Workflow State", s.state):
-                    ws = frappe.get_doc({
-                        "doctype": "Workflow State",
-                        "workflow_state_name": s.state,
-                        "style": s.style or "Primary",
-                    })
-                    ws.insert(ignore_permissions=True)
-                    if hasattr(frappe.db, "commit"):
-                        frappe.db.commit()
-
-        # Step 7: Deactivate pre-existing active workflow if it differs from the new one
-        if prev_wf and prev_wf_name and prev_wf_name != wf.workflow_name:
-            if hasattr(db, "set_workflow_active") and callable(getattr(db, "set_workflow_active", None)):
-                db.set_workflow_active(prev_wf_name, 0)
-            elif frappe and hasattr(frappe, "db") and hasattr(frappe.db, "set_value"):
-                frappe.db.set_value("Workflow", prev_wf_name, "is_active", 0)
-                if hasattr(frappe.db, "commit"):
-                    frappe.db.commit()
 
         # Step 8: Create or update Workflow document
         wf_dict = {
@@ -669,7 +696,38 @@ def execute_workflow_deployment(
         }
 
         apply_error = None
+        deactivated_prev = False  # a committed step: a later failure is a hold, never "clean"
         try:
+            # Step 6: Ensure all Workflow State records and transition Action Masters exist (idempotently),
+            # after the intent and under the locks (CE-SEC-011)
+            for s in wf.states:
+                if hasattr(db, "ensure_workflow_state") and callable(getattr(db, "ensure_workflow_state", None)):
+                    db.ensure_workflow_state(s.state, style=s.style)
+                elif frappe and hasattr(frappe, "db") and hasattr(frappe, "get_doc"):
+                    if not frappe.db.exists("Workflow State", s.state):
+                        ws = frappe.get_doc({
+                            "doctype": "Workflow State",
+                            "workflow_state_name": s.state,
+                            "style": s.style or "Primary",
+                        })
+                        ws.insert(ignore_permissions=True)
+                        if hasattr(frappe.db, "commit"):
+                            frappe.db.commit()
+
+            for action in sorted({t.action for t in wf.transitions if t.action}):
+                if hasattr(db, "ensure_workflow_action") and callable(getattr(db, "ensure_workflow_action", None)):
+                    db.ensure_workflow_action(action)
+
+            # Step 7: Deactivate pre-existing active workflow if it differs from the new one
+            if prev_wf and prev_wf_name and prev_wf_name != wf.workflow_name:
+                if hasattr(db, "set_workflow_active") and callable(getattr(db, "set_workflow_active", None)):
+                    db.set_workflow_active(prev_wf_name, 0)
+                elif frappe and hasattr(frappe, "db") and hasattr(frappe.db, "set_value"):
+                    frappe.db.set_value("Workflow", prev_wf_name, "is_active", 0)
+                    if hasattr(frappe.db, "commit"):
+                        frappe.db.commit()
+                deactivated_prev = True
+
             if hasattr(db, "apply_workflow") and callable(getattr(db, "apply_workflow", None)):
                 db.apply_workflow(doctype, wf_dict)
             elif frappe and hasattr(frappe, "get_doc"):
@@ -683,8 +741,16 @@ def execute_workflow_deployment(
                     w_doc.insert(ignore_permissions=True)
                 if hasattr(frappe.db, "commit"):
                     frappe.db.commit()
-        except Exception as exc:
-            apply_error = str(exc)
+        except Exception:
+            # The raw error stays in the log.
+            logger.exception("Workflow apply for %s raised", deployment_id)
+            apply_error = "apply_failed"
+
+        # A failed apply leaves uncommitted writes: they are rolled back before any outcome is recorded, and a
+        # session that cannot be relied on is never finalized (the intent stays as the hold).
+        if not settle_apply(db, failed=bool(apply_error)):
+            return engine_refusal(session_discarded_response(), deployment_id, "SESSION_DISCARDED", start_time,
+                                  doctype=doctype, workflow_name=wf.workflow_name)
 
         # Step 9: Clear DocType cache
         try:
@@ -698,13 +764,23 @@ def execute_workflow_deployment(
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
         if apply_error:
+            # The previous workflow's deactivation is already committed: the target is not in a known-clean state.
+            # Otherwise a failure is clean only when the target reads back as it was before the intent.
+            clean = not deactivated_prev and target_unchanged(
+                target_before, read_apply_target(db, "workflow", doctype, wf.workflow_name))
             outcome = {
                 "deployment_id": deployment_id,
-                "status": "FAILED_CLEAN",
+                "status": "FAILED_CLEAN" if clean else "RECOVERY_REQUIRED",
                 "success": False,
                 "stage": "APPLY",
                 "disposition": "WORKFLOW_APPLY_FAILED",
-                "reason": apply_error,
+                "reason_code": apply_error,
+                "reason": (
+                    "The workflow could not be applied after the previous workflow was deactivated; the deployment "
+                    "is held for recovery." if deactivated_prev
+                    else "The workflow could not be applied; the details are in the server log." if clean
+                    else "The workflow apply failed and its effect could not be ruled out; the deployment is held "
+                         "for recovery."),
                 "doctype": doctype,
                 "workflow_name": wf.workflow_name,
                 "execution_time_ms": execution_time_ms,
@@ -732,14 +808,15 @@ def execute_workflow_deployment(
                 deployment_id,
                 {"payload_hash": payload_hash, "outcome": outcome, "baseline_snapshot": baseline_snapshot},
             )
-        except Exception as fin_exc:
+        except Exception:
+            logger.exception("finalization of %s failed after the apply ran", deployment_id)
             outcome = {
                 **outcome,
                 "status": "RECOVERY_REQUIRED",
-                "finalization_error": str(fin_exc),
+                "finalization_error": "finalization_failed",
             }
 
         return outcome
 
     finally:
-        db.release_advisory_lock(lock_key)
+        release_scoped_locks(db, held)

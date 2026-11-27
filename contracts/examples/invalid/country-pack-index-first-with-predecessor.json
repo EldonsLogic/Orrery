@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "typ": "country_pack_index",
+  "kid": "cpk-production-01",
+  "keyEnv": "production",
+  "countryCode": "SA",
+  "indexSeq": 1,
+  "predecessorDigest": "sha256:2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881",
+  "issuedAt": "2026-11-01T10:00:00Z",
+  "published": [
+    {
+      "version": "0.1.0",
+      "contentDigest": "sha256:e9571a5f88cacd1c0dcd1ba9ad6d8a36bfaa6ffe1cdc1292617011a58d2ac86c",
+      "publishId": "01JD0000000000000000000000"
+    }
+  ],
+  "withdrawn": [],
+  "floor": "0.1.0",
+  "followUpOpen": [],
+  "changeRecords": []
+}

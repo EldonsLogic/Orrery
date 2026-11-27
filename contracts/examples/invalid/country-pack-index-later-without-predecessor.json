@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "typ": "country_pack_index",
+  "kid": "cpk-production-01",
+  "keyEnv": "production",
+  "countryCode": "SA",
+  "indexSeq": 3,
+  "predecessorDigest": null,
+  "issuedAt": "2026-11-20T10:00:05Z",
+  "published": [
+    {
+      "version": "0.2.0",
+      "contentDigest": "sha256:7a7ba2a723e7c22b238142f0b706b672fc17c7f8661bdaeb3882776237fb54dc",
+      "publishId": "01JD0000000000000000000001"
+    },
+    {
+      "version": "0.3.0",
+      "contentDigest": "sha256:4727ded989943c32ca3c12d93cc70b489a4c36d3f98c9d40fefe37e1d3bc1ddf",
+      "publishId": "01JD0000000000000000000002"
+    }
+  ],
+  "withdrawn": [
+    {
+      "version": "0.1.0",
+      "contentDigest": "sha256:e9571a5f88cacd1c0dcd1ba9ad6d8a36bfaa6ffe1cdc1292617011a58d2ac86c",
+      "reasonRef": "withdrawal:sa:0.1.0"
+    }
+  ],
+  "floor": "0.2.0",
+  "followUpOpen": [
+    "01JD0000000000000000000002"
+  ],
+  "changeRecords": [
+    {
+      "id": "change:sa:0001",
+      "kind": "withdrawal",
+      "sha256": "sha256:bafe281b4de670767d46b25899fc9d15c69d4badf23036af4ae2f427aa5d7c4e"
+    },
+    {
+      "id": "change:sa:0002",
+      "kind": "floor_raise",
+      "sha256": "sha256:4e69b9e056b45b42b0d0c2ece95f8fc481bafda9d6b662f50c13dcd2674346c9"
+    }
+  ]
+}

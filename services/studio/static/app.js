@@ -170,11 +170,17 @@
   function renderCompile() {
     var r = data.compile, st = $('compileStatus');
     if (!r) { st.textContent = t('compile.running'); return; }
-    if (r.ok) {
+    if (r.ok && r.unchanged) {
       st.className = 'status ok';
+      fill(st, el('b', { text: t('compile.unchanged') }));
+      $('refusals').replaceChildren();
+    } else if (r.ok) {
+      st.className = 'status ok';
+      var undo = r.reversible ? t('compile.reversible') : r.irreversibleCount ? t('compile.notReversibleSteps', { n: r.irreversibleCount }) : t('compile.notReversibleInitial');
       fill(st, el('b', { text: t('compile.ok', { n: r.stepCount }) }), el('span', { class: 'mono', text: r.artifactId, dir: 'ltr' }),
         el('span', { class: 'hint', text: t('compile.summary', { pc: r.postConditionCount, impact: r.risk.maxImpact, env: r.environment }) }),
-        r.risk.touchesLedgerOrTax ? el('span', { class: 'tag', text: t('compile.ledger') }) : null);
+        r.risk.touchesLedgerOrTax ? el('span', { class: 'tag', text: t('compile.ledger') }) : null,
+        el('span', { class: r.irreversibleCount ? 'err' : 'hint', text: undo }));
       $('refusals').replaceChildren();
     } else if (r.refusals) {
       st.className = 'status bad';
@@ -186,8 +192,9 @@
     } else {
       st.className = 'status bad'; st.textContent = hint(r.error && r.error.code);
     }
-    var steps = r.ok ? r.steps : [];
-    var kinds = ['all'].concat(r.ok ? Object.keys(r.kinds) : []);
+    var steps = r.ok && !r.unchanged ? r.steps : [];
+    $('incNote').textContent = r.ok && r.incremental ? t('compile.incremental') : '';
+    var kinds = ['all'].concat(steps.length ? Object.keys(r.kinds) : []);
     if (kinds.indexOf(ui.kind) < 0) ui.kind = 'all';
     $('kinds').replaceChildren.apply($('kinds'), kinds.map(function (k) {
       var n = k === 'all' ? steps.length : r.kinds[k];
@@ -199,7 +206,8 @@
       return el('tr', {}, [el('td', { class: 'num', text: s.seq }), el('td', { class: 'num', text: s.phase }),
         el('td', { class: 'mono', text: s.kind, dir: 'ltr' }),
         el('td', { class: 'mono', dir: 'ltr', text: s.subject.kind + (s.subject.id ? ' ' + s.subject.id : '') + (s.property ? ' ' + s.property : '') }),
-        el('td', { text: s.impact }), el('td', { text: s.ddlImpact })]);
+        el('td', { text: s.impact }), el('td', { text: s.ddlImpact }),
+        el('td', { class: s.irreversibleReason ? 'err' : 'hint', text: s.irreversibleReason ? t('reason.' + s.irreversibleReason) : t('steps.reversible') })]);
     }));
   }
 
@@ -213,7 +221,7 @@
     busy(true);
     api('POST', '/api/rollback').then(function (r) { r.isRollback = true; data.apply = r; afterSite(); });
   }
-  function afterSite() { busy(false); renderApply(); loadExport(); api('GET', '/api/state').then(function (s) { if (s.ok) { data.state = s; renderState(); } }); }
+  function afterSite() { busy(false); renderApply(); loadExport(); runCompile(); api('GET', '/api/state').then(function (s) { if (s.ok) { data.state = s; renderState(); } }); }
   function kv(pairs) {
     return el('dl', { class: 'kv' }, [].concat.apply([], pairs.filter(Boolean).map(function (p) {
       return [el('dt', { text: p[0] }), el('dd', { class: p[2] || '', text: p[1], dir: p[2] ? 'ltr' : null })];
@@ -254,16 +262,21 @@
       r.error ? el('span', { text: hint(r.error.code) }) : null,
       r.error ? el('span', { class: 'mono', dir: 'ltr', text: r.error.code + ' ' + r.error.path + (r.error.reasonCode ? ' · ' + r.error.reasonCode : '') }) : null]);
     var rows = r.isRollback ? [
+      r.ok ? [t('apply.history'), String(r.site.historyDepth)] : null,
       [t('apply.siteChanged'), r.siteChanged ? t('yes') : t('no')],
+      [t('apply.approvals'), (r.approvalsGranted || []).join(', ')],
       [t('apply.hashBefore'), r.exportHashBefore, 'mono'], [t('apply.hashAfter'), r.exportHashAfter, 'mono']
     ] : [
+      [t('apply.kind'), r.incremental ? t('apply.incremental') : t('apply.full')],
       [t('apply.compiledId'), r.compiledArtifactId, 'mono'], [t('apply.appliedId'), r.artifactId, 'mono'],
       r.droppedFields ? [t('apply.dropped'), t('apply.droppedText', { n: r.droppedFields })] : null,
       [t('apply.verdict'), r.verdict], [t('apply.approvals'), r.approvalsGranted.join(', ')],
       [t('apply.predicted'), r.predictedExportHash, 'mono'], [t('apply.hashAfter'), r.exportHashAfter, 'mono'],
       [t('apply.hashMatch'), r.status === 'compensated' ? (r.exportHashAfter === r.exportHashBefore ? t('apply.restored') : t('no')) : (r.exportHashMatches ? t('yes') : t('no'))]
     ];
-    out.replaceChildren(head, kv(rows));
+    var why = r.isRollback && !r.ok && r.error && has('reason.' + r.error.reasonCode) ? el('p', { class: 'err', text: t('reason.' + r.error.reasonCode) }) : null;
+    var done = r.isRollback && r.ok ? el('p', { class: 'hint', text: t('apply.rolledBack') }) : null;
+    fill(out, head, why, done, kv(rows));
   }
   function loadExport() { api('GET', '/api/export').then(function (r) { data.exp = r; renderExport(); }); }
   function renderExport() {

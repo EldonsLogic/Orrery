@@ -2,7 +2,7 @@
 
 Status: Proposed
 Owner: eldon
-Approved by: pending. Eldon proposes option B (founder, 2026-11-27, in session). This ADR takes effect only on both founders' written acceptance on its PR; it changes an accepted G1 criterion (RULES preamble, rule 48).
+Approved by: Eldon, written acceptance as written (option B), 2026-11-27, on PR #407. Partner: pending. This ADR takes effect only on both founders' written acceptance on its PR; it changes an accepted G1 criterion (RULES preamble, rule 48).
 
 ## Context
 G1 requires "Counsel has answered the GPL boundary and vendor-certification questions in writing" ([GATES.md](../GATES.md), [phase-exit-criteria.json](../specs/phase-exit-criteria.json) G1-5). LEG-003, engaging counsel, is still in progress, and LEG-006 depends on it. The partner noted on the module amendment that the GPL point was being treated as settled when it was not, and reviewed the research on #388.

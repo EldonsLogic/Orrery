@@ -16,6 +16,7 @@
   "eval",
   "memory",
   "meter",
+  "payment",
   "permission",
   "role",
   "support",
@@ -541,6 +542,118 @@
    "requires_trace": false,
    "data_schema": "data.platform.schema.json#/$defs/engine_event",
    "assumed": "kind platform added; not one of the four kinds in the brief"
+  },
+  "payment.checkout_created": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/checkout_event"
+  },
+  "payment.checkout_cancelled": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/checkout_event"
+  },
+  "payment.authorised": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/payment_status"
+  },
+  "payment.captured": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/payment_status"
+  },
+  "payment.expired": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/payment_status"
+  },
+  "payment.failed": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/payment_failed"
+  },
+  "payment.held_unallocated": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/payment_held_unallocated"
+  },
+  "payment.refund_requested": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/refund_requested"
+  },
+  "payment.refunded": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/refunded"
+  },
+  "payment.refund_failed": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/refund_failed"
+  },
+  "payment.voided": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/voided"
+  },
+  "payment.disputed": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/disputed"
+  },
+  "payment.webhook_rejected": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/webhook_rejected"
+  },
+  "payment.reconciliation_mismatch": {
+   "schema_version": 1,
+   "data_class": "financial",
+   "kind": "audit",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.payment.schema.json#/$defs/reconciliation_mismatch"
   }
  }
 }

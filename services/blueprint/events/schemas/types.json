@@ -10,11 +10,13 @@
   "build",
   "chat",
   "component",
+  "consent",
   "data",
   "document",
   "engine",
   "eval",
   "memory",
+  "message",
   "meter",
   "payment",
   "permission",
@@ -654,6 +656,54 @@
    "scope": "tenant",
    "requires_trace": false,
    "data_schema": "data.payment.schema.json#/$defs/reconciliation_mismatch"
+  },
+  "message.received": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.message.schema.json#/$defs/received"
+  },
+  "message.send_requested": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.message.schema.json#/$defs/send_requested"
+  },
+  "message.status_changed": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.message.schema.json#/$defs/status_changed"
+  },
+  "consent.recorded": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.message.schema.json#/$defs/consent_recorded"
+  },
+  "consent.revoked": {
+   "schema_version": 1,
+   "data_class": "personal",
+   "kind": "record",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.message.schema.json#/$defs/consent_revoked"
+  },
+  "meter.message_sent": {
+   "schema_version": 1,
+   "data_class": "operational",
+   "kind": "meter",
+   "scope": "tenant",
+   "requires_trace": false,
+   "data_schema": "data.meter.schema.json#/$defs/message_sent"
   }
  }
 }

@@ -49,7 +49,6 @@ EXPECTED = {
     "session-reply-untainted": ("const", "tainted", None),
     "send-no-country": ("required", "country", None),
     "regrant-by-tenant-after-stop": ("const", "capturedBy", None),
-    "consent-revoked-no-supersedes": ("type", "supersedes", None),
     "capability-meta-replay-window": ("type", "replayWindowSeconds", None),
     "capability-dedup-retention-short": ("minimum", "dedupRetentionHours", None),
     "capability-sandbox-in-production": ("const", "sandbox", None),
@@ -68,8 +67,22 @@ EXPECTED = {
     "inbound-meta-bad-timestamp-format": ("pattern", "providerTimestampRaw", None),
     "inbound-meta-timestamp-not-string": ("type", "providerTimestampRaw", None),
     "capability-dedup-retention-no-margin": ("minimum", "dedupRetentionHours", None),
+    # #394 review 3 (b872370e)
+    "send-no-channel-account": ("required", "channelAccountRef", None),
+    "auto-reply-no-inbound": ("required", "inboundMessageId", None),
+    "capability-instagram-blocked": ("enum", "connectorId", None),
+    "capability-whatsapp-short-age": ("const", "maxEventAgeHours", None),
+    "capability-whatsapp-window-168": ("const", "serviceWindowHours", None),
+    "capability-one-credential": ("required", "webhookSecretRef", None),
+    "inbound-messenger-timestamp-string": ("type", "providerTimestampRaw", None),
+    "inbound-path-secret-as-signed": ("const", "signatureVerified", "MSG-001"),
+    "inbound-no-data-class": ("required", "dataClass", None),
+    "status-no-webhook": ("required", "webhook", None),
+    "consent-keyword-no-source": ("required", "sourceMessageId", None),
+    "consent-stop-no-provider-time": ("required", "providerSentAt", None),
+    "batch-send-no-approval": ("required", "approvalId", None),
 }
-HASH_EXCLUDED = ("payloadHash", "confirmationId", "approvalId", "sentBy")
+HASH_EXCLUDED = ("payloadHash", "confirmationId", "approvalId", "sentBy", "batch")
 
 
 def load(p):
@@ -161,11 +174,18 @@ def test_hashes_are_real_and_not_reused():
             assert seen.setdefault(v, p.name) == p.name, f"{v} reused in {p.name} and {seen[v]}"
 
 
-def test_credential_ref_tenant_segment_matches_tenant():
+def test_credential_refs_are_split_and_tenant_bound():
+    """L14 (S13, Q-695): the send token and the webhook secret are two refs with different readers."""
+    props = SCHEMA["$defs"]["capability"]["properties"]
+    assert "credentialRef" not in props and {"tokenRef", "webhookSecretRef"} <= set(props)
     for p in VALID + INVALID:
         o = load(p)
-        if "credentialRef" in o:
-            assert o["credentialRef"].split("/")[3] == o["tenantId"], p.name
+        if "tokenRef" in o:
+            assert o["tokenRef"].split("/")[3] == o["tenantId"], p.name
+        if "webhookSecretRef" in o and o["webhookSecretRef"].startswith("secret://tenant/"):
+            assert o["webhookSecretRef"].split("/")[3] == o["tenantId"], p.name
+        if "tokenRef" in o and "webhookSecretRef" in o:
+            assert o["tokenRef"] != o["webhookSecretRef"], p.name
 
 
 def test_regrant_after_contact_stop_needs_contact_opt_in_after_revoke():
@@ -183,10 +203,12 @@ def test_regrant_after_contact_stop_needs_contact_opt_in_after_revoke():
 
 def test_validator_rules_cover_review_findings():
     rules = " ".join(SCHEMA["x-validator-rules"])
-    for needle in ("credentialRef", "another tenant", "windowOpenUntil is null", "latest record", "test allowlist",
+    for needle in ("tokenRef", "webhookSecretRef", "another tenant", "windowOpenUntil is null", "latest record", "test allowlist",
                    "production", "confidenceThreshold", "approvedTextId", "payloadHash", "eventType", "recordedAt",
                    "supersedes names the latest", "providerSentAt", "durable", "dedupRetentionHours is at least maxEventAgeHours", "10 or 13 digits", "riskClass null", "sentBy differs",
-                   "tainted is set by platform code"):
+                   "tainted is set by platform code", "contactRef, channel and channelAccountRef equal", "blocked",
+                   "inboundMessageId", "standing", "providerSentAt is earlier", "first record", "verification",
+                   "maxEventAgeHours plus 1", "first receipt", "manifestHash", "unknown counts as C3", "LEG-012"):
         assert needle in rules, needle
 
 
@@ -230,11 +252,32 @@ def chain_refusal(history, new):
         return "supersedes is not the latest record"
     if new["recordedAt"] <= head["recordedAt"]:
         return "recordedAt not after the latest record"
-    if new["state"] == "granted" and head["state"] == "revoked":
-        copied = {"consentId": head["consentId"], "revokedBy": head["revokedBy"], "revokedAt": head["revokedAt"]}
+    if new["state"] == "revoked":
+        if head["state"] == "revoked" and new["revokedBy"] == "tenant_user":
+            return "a tenant revoke cannot supersede a revoke"
+        if (new["revokedBy"] == "contact_keyword" and head["state"] == "granted"
+                and new["providerSentAt"] < head["recordedAt"]):
+            return "stop older than the grant"
+        return None
+    standing = standing_revoke(same_key)
+    target = standing or (head if head["state"] == "revoked" else None)
+    if target is not None:
+        copied = {"consentId": target["consentId"], "revokedBy": target["revokedBy"], "revokedAt": target["revokedAt"]}
         if new.get("afterRevocation") != copied:
-            return "afterRevocation is not the superseded revoke"
+            return "afterRevocation is not the standing revoke" if standing else "afterRevocation is not the superseded revoke"
     return None
+
+
+def standing_revoke(records):
+    """The latest contact or provider revoke not yet lifted by the contact's own opt-in (H1, #394 review 3)."""
+    standing = None
+    for r in sorted(records, key=lambda r: r["recordedAt"]):
+        if r["state"] == "revoked" and r["revokedBy"] in CONTACT_REVOKE:
+            standing = r
+        elif (r["state"] == "granted" and standing is not None and r["capturedBy"] == "contact"
+              and (r.get("afterRevocation") or {}).get("consentId") == standing["consentId"]):
+            standing = None
+    return standing
 
 
 GRANT = {"kind": "consent_record", "tenantId": "t_demo_trading", "consentId": "cns_0042_mkt", "contactRef": "ct_0042",
@@ -264,7 +307,7 @@ def test_consent_chain_accepts_the_example_history():
     # pointing at the old grant, skipping the STOP
     ([GRANT, STOP], tenant_grant(supersedes="cns_0042_mkt"), "supersedes is not the latest record"),
     # chaining to the STOP without the platform-copied afterRevocation
-    ([GRANT, STOP], tenant_grant(supersedes="cns_0042_mkt_r1"), "afterRevocation is not the superseded revoke"),
+    ([GRANT, STOP], tenant_grant(supersedes="cns_0042_mkt_r1"), "afterRevocation is not the standing revoke"),
     # backdating capturedAt before the STOP does not move the record in the order: recordedAt decides
     ([GRANT, STOP], tenant_grant(supersedes="cns_0042_mkt", capturedAt="2025-12-15T10:00:00Z"),
      "supersedes is not the latest record"),
@@ -297,7 +340,7 @@ def test_window_is_computed_from_provider_time():
 
 def webhook_refusal(wh):
     """Reference for the validator rule JSON Schema cannot express: retention covers the age limit."""
-    if wh["maxEventAgeHours"] is not None and wh["dedupRetentionHours"] < wh["maxEventAgeHours"]:
+    if wh["maxEventAgeHours"] is not None and wh["dedupRetentionHours"] < wh["maxEventAgeHours"] + 1:
         return "retention-below-age"
     return None
 
@@ -305,28 +348,29 @@ def webhook_refusal(wh):
 def test_event_age_limit_sits_inside_dedup_retention():
     wh = SCHEMA["$defs"]["capability"]["properties"]["webhook"]["properties"]
     assert wh["maxEventAgeHours"]["minimum"] > 36  # above the generic Graph API retry period (UNVERIFIED, Q-721)
-    # WhatsApp retries for up to 7 days (Meta, 2026-11-27): minimum is 7 days plus a 24 h margin
-    assert wh["dedupRetentionHours"]["minimum"] == 192
+    # WhatsApp retries for up to 7 days (Meta, 2026-11-27): age 7 days plus a 24 h margin, retention one hour more
+    # than the age limit so the 300 s future skew cannot land a replay just after eviction (L11)
+    assert wh["dedupRetentionHours"]["minimum"] == 193
     assert wh["maxEventAgeHours"]["maximum"] == 192
-    assert wh["maxEventAgeHours"]["maximum"] <= wh["dedupRetentionHours"]["minimum"]
+    assert wh["maxEventAgeHours"]["maximum"] + 1 <= wh["dedupRetentionHours"]["minimum"]
     assert wh["dedupStore"]["const"] == "durable"
 
 
 def test_whatsapp_example_uses_the_192_hour_default():
     wh = load(C / "examples/connector-messaging-capability-whatsapp.json")["webhook"]
-    assert wh["maxEventAgeHours"] == 192 and wh["dedupRetentionHours"] >= 192
+    assert wh["maxEventAgeHours"] == 192 and wh["dedupRetentionHours"] >= 193
     assert webhook_refusal(wh) is None
 
 
 def test_retention_shorter_than_event_age_is_refused_by_the_validator():
     wh = dict(load(C / "examples/connector-messaging-capability-whatsapp.json")["webhook"])
-    wh["dedupRetentionHours"] = 192
+    wh["dedupRetentionHours"] = 193
     wh["maxEventAgeHours"] = 192
     assert webhook_refusal(wh) is None
-    for age, ret in ((192, 191), (100, 99)):
+    for age, ret in ((192, 192), (192, 191), (100, 100)):
         wh.update(maxEventAgeHours=age, dedupRetentionHours=ret)
         assert webhook_refusal(wh) == "retention-below-age"
-    assert "dedupRetentionHours is at least maxEventAgeHours" in " ".join(SCHEMA["x-validator-rules"])
+    assert "dedupRetentionHours is at least maxEventAgeHours plus 1" in " ".join(SCHEMA["x-validator-rules"])
 
 
 def test_meta_timestamp_is_a_string_of_10_or_13_digits():

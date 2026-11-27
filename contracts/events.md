@@ -71,14 +71,14 @@ Naming `<domain>.<past_tense_verb>`.
 `agent.run_started`, `agent.tool_proposed`, `agent.run_completed`, `agent.run_failed`, `agent.budget_exceeded`, `agent.output_flagged` (injection or policy filter hit), `chat.turn_completed` (data: mode discover/ask/act/change, latency, token counts, no content), `memory.written`, `memory.expired`, `eval.regression_detected` (platform-level, not tenant).
 
 ### Messaging events (0.3.0, additive, follows the 0.2.0 payment types; [connector-messaging](connector-messaging.md), ADR-0078)
-No message body, phone number or handle in any of them: `contentHash` and opaque refs only. `data_class: personal`.
+No message body, phone number or handle in any of them: `contentHash` and opaque refs only, in closed data objects (an unknown field is refused). `data_class: personal`, `kind: record` (subject: the conversation or the consent record). Hashes are bare 64-character hex. The `message` and `consent` domains are reserved: record events of an engine entity never use them. Data schemas: `services/blueprint/events/schemas/data.message.schema.json`.
 | Type | Data |
 |---|---|
-| `message.received` | message_id, conversation_id, channel, channel_account_ref, provider_event_id, content_hash, flags, tainted |
-| `message.send_requested` | message_id, conversation_id, channel, country, mode, template_id, category, language, origin, sent_by, drafted_by, confirmation_id, payload_hash, tainted, sandbox, risk_class, consent_ref, approval_id; for auto-replies auto_reply_policy_ref, approved_text_id, classified_intent, confidence, confidence_threshold |
-| `message.status_changed` | message_id, provider status (`accepted` to `expired`), error_code, cost_micro_usd |
-| `consent.recorded` | consent_id, supersedes, contact_ref, channel, country, purpose, captured_by, method, text_version |
-| `consent.revoked` | consent_id, supersedes, contact_ref, channel, country, purpose, revoked_by |
+| `message.received` | message_id, conversation_id, channel, channel_account_ref, provider_event_id, content_hash, verification, flags, tainted |
+| `message.send_requested` | message_id, conversation_id, channel, channel_account_ref, country, mode, template_id, category, language, origin, sent_by, drafted_by, confirmation_id, payload_hash, tainted, sandbox, risk_class, consent_ref, approval_id, batch_id; for auto-replies inbound_message_id, auto_reply_policy_ref, approved_text_id, classified_intent, confidence, confidence_threshold |
+| `message.status_changed` | message_id, channel, channel_account_ref, provider status (`accepted` to `expired`), error_code, cost_micro_usd, provider_event_id, dedup_key |
+| `consent.recorded` | consent_id, supersedes, contact_ref, channel, country, purpose, captured_by, method, text_version, source_message_id (keyword opt-ins) |
+| `consent.revoked` | consent_id, supersedes (null for a first-record STOP), contact_ref, channel, country, purpose, revoked_by, source_message_id (keyword STOP) |
 
 ### Metering events
 Cheap, high-volume, aggregated by Part 5 into usage records.
@@ -90,7 +90,7 @@ Cheap, high-volume, aggregated by Part 5 into usage records.
 | `meter.documents_issued` | doc type, count (for e-invoicing volumes) |
 | `meter.connector_run` | connector id, rows, bytes, tier |
 | `meter.simulation_run` | records replayed, duration |
-| `meter.message_sent` | channel, template category or `session`, country, provider, cost_micro_usd ([connector-messaging](connector-messaging.md)) |
+| `meter.message_sent` | channel, template category or `session`, country, provider, cost_micro_usd; once per message ([connector-messaging](connector-messaging.md) section 4) |
 
 ### Payment events (proposed, [ADR-0077](../docs/decisions/ADR-0077-payments-connector-bring-your-own-gateway.md); additive, since 0.2.0)
 Emitted by the payments gateway service only after webhook verification and a status re-read ([connector-payments.md](connector-payments.md) sections 5 and 6). `data_class: "financial"` (`operational` for the rejected-webhook audit); `subject` is the payment record. `data`: `payment_id`, `checkout_id`, `links` (invoices or orders; credit notes on refund events), `amount` (`minor` integer, ISO 4217 `currency`), `provider`, `environment` (`sandbox` or `live`), `gateway_payment_ref` (`<provider>:<id>`, optional only on the two checkout events); never card data, payer names or gateway free text. The `payment` domain is reserved: record events of an engine entity never use it. Extra fields and allowed error codes per type: connector-payments section 6.

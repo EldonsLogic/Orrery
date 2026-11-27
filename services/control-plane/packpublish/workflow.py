@@ -15,6 +15,7 @@ from typing import Callable
 
 from . import canon
 from .canon import DIGEST_RE, REF_RE, SUBJECT_RE, canonical, digest
+from .changerecord import validate_change_record
 from .errors import PublishError
 
 STEP_UP_SECONDS = 300
@@ -281,6 +282,11 @@ class PackPublisher:
         pub, wd = (prev["published"], prev["withdrawn"]) if prev else ([], [])
         known = sorted(pub + wd, key=lambda e: canon.semver(e["version"]))
         top = known[-1] if known else None
+        open_ids = set(prev["followUpOpen"]) if prev else set()
+        # PP-063 first: an open urgent follow-up blocks a republish. After its closure the same version still fails
+        # PP-021 below, since there is no supersedes or republish path yet; intended until that path lands
+        # (country-pack-store.md assumption 12).
+        _check(not any(e["version"] == d.version and e["publishId"] in open_ids for e in pub), "PP-063")
         _check(top is None or canon.semver(d.version) > canon.semver(top["version"]), "PP-021")
         _check(top is None or (top["version"], top["contentDigest"]) == (d.base_version, d.base_digest), "PP-021")
         index = {
@@ -420,6 +426,7 @@ class PackPublisher:
         index = {**new, "indexSeq": idx["indexSeq"] + 1, "predecessorDigest": change.base_index_digest,
                  "issuedAt": _stamp(now), "kid": self.kid, "keyEnv": self.key_env,
                  "changeRecords": [{"id": change_id, "kind": change.kind, "sha256": digest(canonical(rec))}]}
+        validate_change_record(rec)  # fail closed before audit or store change
         _port("PP-030", self.audit.write, audit_id, {
             "action": f"country_pack.change.{change.kind}", "at": rec["recordedAt"], "countryCode": change.country,
             "changeId": change_id, "target": dict(change.target), "indexSeq": index["indexSeq"],

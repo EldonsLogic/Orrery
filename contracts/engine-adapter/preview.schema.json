@@ -12,7 +12,7 @@
         "input": {
           "type": "object", "required": ["artifact"], "additionalProperties": false,
           "properties": {
-            "artifact": { "$ref": "urn:platform:contract:compiled-artifact:0.1.0" },
+            "artifact": { "$ref": "urn:platform:contract:compiled-artifact:0.2.0" },
             "includeExport": { "type": "boolean", "default": false, "description": "Return the predicted export document as well as its hash." }
           }
         }

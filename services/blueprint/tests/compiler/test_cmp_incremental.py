@@ -437,23 +437,6 @@ def test_a_reorder_lists_exactly_the_keys_active_when_it_runs():
         assert sorted(step["params"]["previousOrder"]) == sorted(order)
 
 
-@pytest.mark.parametrize("edit", [
-    lambda t: _entity(t, "supplier")["fields"].insert(0, {"id": "aa_first", "type": "string",
-                                                          "labels": {"ar": "أول", "en": "First"}}),
-    lambda t: _field(t, "supplier", "email").update(id="email_address"),  # rename in the middle
-    lambda t: _entity(t, "supplier").update(fields=[f for f in _entity(t, "supplier")["fields"]
-                                                    if f["id"] not in ("email", "bank_iban")]),  # two removals
-])
-def test_a_position_change_with_no_reorder_op_is_refused_not_applied_out_of_order(edit):
-    """Fix 1: an added or restored field has no position in the step schema; without a reorder op from the diff the
-    adapter cannot reach the target order, so the compile refuses instead of failing order_equals on apply or
-    rollback."""
-    base, reg, mp = _inputs()
-    errors = _refused(_rev2(base, edit), base, reg, mp)
-    assert {i.code for i in errors} == {"CMP-ART-001"}
-    assert all(i.path == "/entities/supplier/fields" for i in errors)
-
-
 def test_a_precision_change_is_refused_until_the_adapter_supports_it():
     """Fix 2: the engine backend applies precision changes wrongly (partner follow-up), so none is compiled."""
     base, reg, mp = _inputs()

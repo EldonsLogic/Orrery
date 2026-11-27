@@ -140,21 +140,26 @@ def approvals_for(plan_result: dict, artifact: dict) -> dict:
     return ap
 
 
+def _version(artifact) -> str:
+    """The contract version a caller states for this artifact: its schema minor must match (4.3, ADR-0072)."""
+    return "0.2.0" if artifact.get("artifactSchema") == "0.2.0" else "0.1.2"
+
+
 def plan(h, artifact, tenant="t_alpha", op="plan", **extra):
-    return h.call(op, ctx(tenant), {"artifact": artifact, **extra})
+    return h.call(op, ctx(tenant, version=_version(artifact)), {"artifact": artifact, **extra})
 
 
 def apply_artifact(h, artifact, tenant="t_alpha", k=None, approvals=None, token=None, who=USER):
     """plan then apply with the approvals the plan asks for; returns the apply response."""
     p = plan(h, artifact, tenant)
     assert p["ok"], p
-    return h.call("apply", ctx(tenant, who=who), {
+    return h.call("apply", ctx(tenant, who=who, version=_version(artifact)), {
         "idempotencyKey": k or key(), "artifact": artifact, "planToken": token or p["result"]["planToken"],
         "approvals": approvals or approvals_for(p["result"], artifact)})
 
 
 def rollback(h, forward, tenant="t_alpha", k=None, approvals=None, reason="owner_request", who=USER):
-    return h.call("rollback", ctx(tenant, who=who), {
+    return h.call("rollback", ctx(tenant, who=who, version=_version(forward)), {
         "idempotencyKey": k or key(), "forwardArtifact": forward, "reason": reason,
         "approvals": approvals or {"rollbackApproved": ulid()}})
 

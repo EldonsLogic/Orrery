@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "diff"))
 
 
 def artifact_validator():
-    return Draft202012Validator({"$ref": "urn:platform:contract:compiled-artifact:0.1.0"}, registry=_REGISTRY)
+    return Draft202012Validator({"$ref": "urn:platform:contract:compiled-artifact:0.2.0"}, registry=_REGISTRY)
 
 
 def test_canonical_json_matches_bpdiff():

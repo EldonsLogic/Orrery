@@ -1,4 +1,4 @@
-"""Assemble, seal and check the compiled artifact (contracts/compiled-artifact.schema.json 0.1.0, engine-adapter.md 9)."""
+"""Assemble, seal and check the compiled artifact (contracts/compiled-artifact.schema.json 0.2.0, engine-adapter.md 9)."""
 from __future__ import annotations
 
 import hashlib
@@ -13,8 +13,10 @@ from ._deps import CONTRACTS, canonical
 from .result import Issue, ptr
 
 ARTIFACT_SCHEMA = "0.1.0"
+DERIVED_SCHEMA = "0.2.0"  # an artifact with a derived reorder step (ADR-0072); every other one stays 0.1.0
 COMPILER = {"name": "bpl-compiler", "version": "0.1.0"}
 ALGORITHM = "sha256-canonical-json-v1"
+MEMBERSHIP_KINDS = {"field.add", "option.add", "field.quarantine", "option.quarantine"}  # what a derived reorder follows
 MAX_BYTES = 1_048_576
 MAX_STEPS = 500
 MAX_POST_CONDITIONS = 1000
@@ -47,7 +49,8 @@ def assemble(*, blueprint_ref: dict, engine_target: dict, components: list[dict]
              skipped: list[dict], post_conditions: list[dict], risk: dict, kind: str = "forward",
              inverse: dict | None = None) -> dict:
     """The sealed artifact. An embedded `inverse` must already be sealed: it is hashed as it stands (9.1)."""
-    art = {"artifactSchema": ARTIFACT_SCHEMA, "artifactId": "", "kind": kind, "compiler": dict(COMPILER),
+    derived = any("derivedFrom" in s for s in steps)
+    art = {"artifactSchema": DERIVED_SCHEMA if derived else ARTIFACT_SCHEMA, "artifactId": "", "kind": kind, "compiler": dict(COMPILER),
            "blueprint": blueprint_ref, "engineTarget": engine_target, "components": components, "steps": steps,
            "skippedOps": skipped, "postConditions": post_conditions, "risk": risk, "inverse": inverse, "integrity": {}}
     return seal(art)
@@ -95,12 +98,39 @@ def check(artifact: dict) -> list[Issue]:
             issues.append(Issue("CMP-ART-002", where + "/property", "secret-like key in a step property pointer"))
         if _depth(s["params"]) > MAX_PARAMS_DEPTH:
             issues.append(Issue("CMP-ART-003", where, f"params nesting deeper than {MAX_PARAMS_DEPTH}"))
+    issues += _derived_issues(artifact)
     neutral = canonical({"steps": artifact["steps"], "postConditions": artifact["postConditions"]}).decode("utf-8")
     if ENGINE_NAME.search(neutral):
         issues.append(Issue("CMP-ART-005", "/steps", "an engine product name appears in steps or post-conditions"))
     if artifact["artifactId"] != "art_" + artifact["integrity"]["contentHash"][7:39] or \
             artifact["integrity"]["contentHash"] != content_hash(artifact):
         issues.append(Issue("CMP-ART-004", "/integrity", "content hash or artifact id does not match"))
+    return issues
+
+
+def _derived_issues(artifact: dict) -> list[Issue]:
+    """x-validator-rules for a derived reorder (ADR-0072): each derivedFrom op sits directly under the step's collection
+    and is implemented by another step; an embedded inverse has the same artifactSchema."""
+    issues = []
+    implemented = {p: s["kind"] for s in artifact["steps"] for p in s["sourceOps"]}
+    for s in artifact["steps"]:
+        for i, p in enumerate(s.get("derivedFrom", ())):
+            child = p.startswith(s["pointer"] + "/") and "/" not in p[len(s["pointer"]) + 1:]
+            if not child or p not in implemented:
+                issues.append(Issue("CMP-ART-004", ptr("steps", s["seq"] - 1, "derivedFrom", i),
+                                    "derivedFrom names no add or remove op of this collection that a step implements"))
+            elif implemented[p] not in MEMBERSHIP_KINDS:
+                issues.append(Issue("CMP-ART-004", ptr("steps", s["seq"] - 1, "derivedFrom", i),
+                                    "derivedFrom must name an add or remove op, not " + implemented[p]))
+    inv = artifact.get("inverse")
+    if isinstance(inv, dict) and inv.get("artifactSchema") != artifact["artifactSchema"]:
+        issues.append(Issue("CMP-ART-004", "/inverse/artifactSchema", "inverse and forward artifact schemas differ"))
+    if isinstance(inv, dict):
+        back = {s.get("pointer") for s in inv.get("steps", ()) if isinstance(s, dict) and "derivedFrom" in s}
+        for s in artifact["steps"]:
+            if "derivedFrom" in s and s["pointer"] not in back:
+                issues.append(Issue("CMP-ART-004", ptr("steps", s["seq"] - 1),
+                                    "derived reorder has no inverse derived reorder at the same pointer"))
     return issues
 
 

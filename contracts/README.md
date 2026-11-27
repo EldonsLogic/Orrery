@@ -14,8 +14,8 @@ The contracts are the source of truth for how the five parts of the platform tal
 | 4 | Event stream | [events.md](events.md) | 0.1.0 |
 | - | Connector interface | [connector-interface.md](connector-interface.md) | 0.1.0 |
 | - | Build states | [build-states.md](build-states.md) | 0.1.0 |
-| - | Engine adapter (operations, errors, conformance; schemas in [engine-adapter/](engine-adapter/)) | [engine-adapter.md](engine-adapter.md) | 0.1.2 |
-| - | Compiled artifact | [compiled-artifact.schema.json](compiled-artifact.schema.json) | 0.1.0 |
+| - | Engine adapter (operations, errors, conformance; schemas in [engine-adapter/](engine-adapter/)) | [engine-adapter.md](engine-adapter.md) | 0.2.0 |
+| - | Compiled artifact | [compiled-artifact.schema.json](compiled-artifact.schema.json) | 0.2.0 |
 | - | Model-call interface (draft, ADR-0054 Proposed; examples `examples/model-call-*.json`) | [model-call.md](model-call.md), [schema](model-call.schema.json) | 0.2.0 |
 | - | Blueprint-to-engine mapping (draft, ADR-0030 and ADR-0055 Proposed) | [engine-mapping.md](engine-mapping.md), [schema](engine-mapping.schema.json) | 0.2.0 |
 | - | Country pack store: publish record, index and tenant pin (draft, ADR-0071 Proposed, Q-656; examples `examples/country-pack-*.json`, negative examples `examples/invalid/`) | [country-pack-store.md](country-pack-store.md), schemas [record](country-pack-record.schema.json), [index](country-pack-index.schema.json), [pin](country-pack-pin.schema.json), [change record](country-pack-change-record.schema.json), [common](country-pack-common.schema.json) | 0.4.0 |

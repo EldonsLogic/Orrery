@@ -19,8 +19,8 @@ from .contract import CONTRACTS, artifact_hashes, canon, response_validator, sch
 
 ADAPTER_ID = "frappe"  # internal id; the sample artifacts name it in engineTarget.adapter (contract open question 12)
 ADAPTER_VERSION = "0.1.0"
-CONTRACT_VERSIONS = ["0.1.3"]
-ARTIFACT_SCHEMA_VERSIONS = ["0.1.0"]
+CONTRACT_VERSIONS = ["0.1.3", "0.2.0"]  # 0.2: derived reorder and the active-key check (ADR-0072)
+ARTIFACT_SCHEMA_VERSIONS = ["0.1.0", "0.2.0"]  # 0.2.0: derived reorder steps (ADR-0072)
 VERSION_SETS = ["set-example", "set-example-2"]
 PLAN_TOKEN_TTL = 900
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
@@ -368,7 +368,7 @@ class FakeAdapter:
         site = self.sites.get(tenant)
         self._authorize(op, context, site)
         self._check_contract_version(context["contractVersion"])
-        self._prechecks(op, inp)
+        self._prechecks(op, inp, context["contractVersion"])
         schema = SCHEMA_OF[op]
         errors = list(validator_for(schema_urn(schema[0]) + "#/$defs/" + schema[1]).iter_errors({"context": context, "input": inp}))
         if errors:
@@ -405,11 +405,14 @@ class FakeAdapter:
         if mm not in {".".join(v.split(".")[:2]) for v in CONTRACT_VERSIONS}:
             raise AdapterError("unsupported_contract_version", {"supported": list(CONTRACT_VERSIONS)})
 
-    def _prechecks(self, op, inp):
-        """Limits and artifact schema version are checked before the schema, which would otherwise mask them."""
+    def _prechecks(self, op, inp, contract_version):
+        """Limits and artifact schema version are checked before the schema, which would otherwise mask them.
+        The request's contract minor and the artifact's schema minor must match (4.3, ADR-0072): 0.1.x with 0.1.0,
+        0.2.x with 0.2.0, never mixed."""
         art = inp.get("artifact") if op in ("plan", "preview", "apply") else inp.get("forwardArtifact") if op == "rollback" else None
         if isinstance(art, dict):
-            if art.get("artifactSchema") not in ARTIFACT_SCHEMA_VERSIONS:
+            schema = art.get("artifactSchema")
+            if schema not in ARTIFACT_SCHEMA_VERSIONS or schema.split(".")[1] != contract_version.split(".")[1]:
                 raise AdapterError("unsupported_contract_version", {"supported": list(ARTIFACT_SCHEMA_VERSIONS)})
             steps = art.get("steps")
             if isinstance(steps, list) and len(steps) > MAX_STEPS:
@@ -529,8 +532,22 @@ class FakeAdapter:
 
     def _evaluate(self, site: _Site, artifact: dict) -> dict:
         steps, additive, semantic = [], 0, 0
+        trial: _Site | None = copy.deepcopy(site)  # the site as each step will find it, for the reorder key check
         for step in artifact["steps"]:
             disp, reason, ddl = self._judge(site, step)
+            if trial is not None and step["kind"].endswith(".reorder") and disp in ("ok", "gated") \
+                    and not self._order_matches(trial, step):
+                disp, reason = "blocked", "definition_conflict"  # order must list exactly the active keys (ADR-0072)
+            if trial is not None:
+                try:
+                    self._exec(trial, step)
+                except Exception:  # noqa: BLE001 (a step the plan blocks anyway): stop predicting later steps
+                    # Skipping the key check for later reorders is safe only because a step whose trial run raises
+                    # is also blocked by _judge, so the verdict is already `rejected` and apply never runs it or
+                    # any later step. It would become unsafe if a step could fail here yet be judged ok or gated
+                    # (verdict not rejected), or if apply could continue past a failing step: a later reorder
+                    # would then run unchecked against a site this trial no longer models.
+                    trial = None
             if ddl == "additive":
                 additive += 1
             elif ddl == "semantic":
@@ -587,6 +604,13 @@ class FakeAdapter:
         if support == "gated":
             return "gated", "protected_subject", ddl
         return "ok", None, ddl
+
+    @staticmethod
+    def _order_matches(trial: "_Site", step: dict) -> bool:
+        node = _walk(trial.config, _segs(step["pointer"]))
+        node = node if isinstance(node, list) else node.get("fields", node.get("options")) if isinstance(node, dict) else None
+        order = step["params"]["order"]
+        return isinstance(node, list) and len(order) == len(set(order)) and sorted(order) == sorted(_key(e) for e in node)
 
     @staticmethod
     def _storage_reason(defn: Any) -> tuple[str, str] | None:

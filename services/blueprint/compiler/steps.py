@@ -93,7 +93,8 @@ def steps_from_ops(ops: list[dict]) -> tuple[list[dict], list[dict], list[Issue]
 def post_conditions(steps: list[dict], target: dict) -> list[dict]:
     """At least one check per step subject (9.7), using only ids and counts, never properties the adapter may not
     export (15.2): `exists` per subject (`quarantined` or `disabled` for a removal), `count_equals` per top-level
-    collection, `order_equals` for the fields and states of entities and workflows a step touches."""
+    collection, `order_equals` for the fields and states of entities and workflows a step touches, and for the options
+    of a field an option step touches."""
     rows: dict[tuple, dict] = {}
     for s in steps:
         check = "quarantined" if s["kind"].endswith(".quarantine") else "disabled" if s["kind"].endswith(".disable") \
@@ -110,10 +111,28 @@ def post_conditions(steps: list[dict], target: dict) -> list[dict]:
             if keys and any(s["pointer"] == own or s["pointer"].startswith(own + "/") for s in steps):
                 pointer = f"/{section}/{_esc(node['id'])}/{child}"
                 rows[(pointer, "order_equals")] = {"check": "order_equals", "pointer": pointer, "expected": keys}
+    for s in steps:  # option order (keyed by `value`) for every option list an option step touches
+        if s["kind"].startswith("option."):
+            pointer = s["pointer"] if s["kind"] == "option.reorder" else s["pointer"].rsplit("/", 1)[0]
+            node = _options(target, pointer)
+            if node is not None:
+                rows[(pointer, "order_equals")] = {"check": "order_equals", "pointer": pointer,
+                                                   "expected": [o["value"] for o in node]}
     out = []
     for i, key in enumerate(sorted(rows), 1):
         out.append({"id": f"pc_{i:03d}", **rows[key]})
     return out
+
+
+def _options(doc: dict, pointer: str) -> list | None:
+    """The option list at /entities/{e}/fields/{f}/options in `doc`, or None."""
+    segs = [p.replace("~1", "/").replace("~0", "~") for p in pointer.split("/")[1:]]
+    if len(segs) != 5 or segs[0] != "entities" or segs[2] != "fields" or segs[4] != "options":
+        return None
+    ent = next((e for e in doc.get("entities", []) if e.get("id") == segs[1]), {})
+    fld = next((f for f in ent.get("fields", []) if f.get("id") == segs[3]), {})
+    opts = fld.get("options")
+    return opts if isinstance(opts, list) else None
 
 
 def ledger_or_tax_subjects(steps: list[dict], resolved: dict[str, dict]) -> bool:

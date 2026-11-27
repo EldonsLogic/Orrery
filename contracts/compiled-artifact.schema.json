@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:platform:contract:compiled-artifact:0.1.0",
-  "version": "0.1.0",
+  "$id": "urn:platform:contract:compiled-artifact:0.2.0",
+  "version": "0.2.0",
   "title": "Compiled artifact",
   "description": "What the Blueprint compiler produces and the engine adapter's plan, preview, apply and rollback consume. One artifact moves one tenant from one Blueprint revision (base) to another (target). Steps are engine-neutral; the adapter maps them to engine objects. Rules that JSON Schema cannot express are listed in x-validator-rules and in contracts/engine-adapter.md section 9. Tenant identity is never carried here: it comes from the platform context of the adapter call.",
   "type": "object",
   "required": ["artifactSchema", "artifactId", "kind", "compiler", "blueprint", "engineTarget", "components", "steps", "postConditions", "risk", "inverse", "integrity"],
   "additionalProperties": false,
   "properties": {
-    "artifactSchema": { "const": "0.1.0", "description": "Version of this schema the artifact follows." },
+    "artifactSchema": { "enum": ["0.1.0", "0.2.0"], "description": "Version of this schema the artifact follows. 0.2.0 only when a step is a derived reorder (derivedFrom, ADR-0072); every other artifact stays 0.1.0, so an adapter that supports only 0.1.0 refuses a derived reorder with unsupported_contract_version instead of misreading it." },
     "artifactId": { "type": "string", "pattern": "^art_[a-f0-9]{32}$", "description": "'art_' plus the first 32 hex characters of integrity.contentHash. Deterministic: the same content always has the same id." },
     "kind": { "enum": ["forward", "inverse"], "description": "forward: compiled from diff(base, target). inverse: compiled from invert(diff); stored inside its forward artifact." },
     "compiler": {
@@ -95,7 +95,10 @@
   "allOf": [
     { "if": { "properties": { "kind": { "const": "inverse" } } }, "then": { "properties": { "inverse": { "type": "null" }, "blueprint": { "properties": { "base": { "$ref": "#/$defs/revisionRef" } } } } } },
     { "if": { "properties": { "kind": { "const": "forward" }, "blueprint": { "properties": { "base": { "type": "object" } } } } }, "then": { "properties": { "inverse": { "type": "object", "properties": { "kind": { "const": "inverse" } } } } } },
-    { "if": { "properties": { "blueprint": { "properties": { "base": { "type": "null" } } } } }, "then": { "properties": { "inverse": { "type": "null" }, "kind": { "const": "forward" } } } }
+    { "if": { "properties": { "blueprint": { "properties": { "base": { "type": "null" } } } } }, "then": { "properties": { "inverse": { "type": "null" }, "kind": { "const": "forward" } } } },
+    { "if": { "required": ["steps"], "properties": { "steps": { "contains": { "required": ["derivedFrom"] } } } }, "then": { "properties": { "artifactSchema": { "const": "0.2.0" } } } },
+    { "if": { "required": ["artifactSchema"], "properties": { "artifactSchema": { "const": "0.1.0" } } }, "then": { "properties": { "inverse": { "if": { "type": "object" }, "then": { "properties": { "artifactSchema": { "const": "0.1.0" } } } } } } },
+    { "if": { "required": ["artifactSchema"], "properties": { "artifactSchema": { "const": "0.2.0" } } }, "then": { "properties": { "inverse": { "if": { "type": "object" }, "then": { "properties": { "artifactSchema": { "const": "0.2.0" } } } } } } }
   ],
   "$defs": {
     "semver": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$" },
@@ -145,8 +148,8 @@
         "property": { "type": "string", "maxLength": 256, "pattern": "^(/[^/]+)+$", "description": "Pointer below the subject, for example /required or /parameters/max_discount." },
         "before": { "description": "Value in the base revision; absent when the property was absent." },
         "after": { "description": "Value in the target revision; absent when the property is removed." },
-        "order": { "type": "array", "maxItems": 500, "items": { "type": "string", "maxLength": 128 }, "description": "reorder: full key list in target order." },
-        "previousOrder": { "type": "array", "maxItems": 500, "items": { "type": "string", "maxLength": 128 } }
+        "order": { "type": "array", "maxItems": 500, "uniqueItems": true, "items": { "type": "string", "maxLength": 128 }, "description": "reorder: full key list in target order." },
+        "previousOrder": { "type": "array", "maxItems": 500, "uniqueItems": true, "items": { "type": "string", "maxLength": 128 } }
       },
       "additionalProperties": false
     },
@@ -160,13 +163,15 @@
         "kind": { "$ref": "#/$defs/stepKind" },
         "subject": { "$ref": "#/$defs/subject" },
         "pointer": { "$ref": "#/$defs/pointer", "description": "Pointer of the subject in the Blueprint." },
-        "impact": { "$ref": "#/$defs/impact", "description": "Highest impact (bpdiff order) of the source ops." },
+        "impact": { "$ref": "#/$defs/impact", "description": "Highest impact (bpdiff order) of the source ops; for a derived reorder, of the derivedFrom ops." },
         "ddlImpact": { "enum": ["none", "additive", "semantic"], "description": "Storage impact. none: metadata only. additive: new nullable storage (entity, field, relation). semantic: changes how stored values are typed or constrained. Destructive storage changes (dropping storage) cannot be expressed in 0.1.0: removal is quarantine." },
         "reversible": { "type": "boolean", "description": "true when the inverse step restores the exact prior state, data included. false steps are refused by automatic rollback (adapter error rollback_not_possible)." },
         "params": { "$ref": "#/$defs/params" },
-        "sourceOps": { "type": "array", "minItems": 1, "maxItems": 500, "items": { "$ref": "#/$defs/pointer" }, "description": "Pointers of the diff ops this step implements, sorted." }
+        "sourceOps": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/pointer" }, "description": "Pointers of the diff ops this step implements, sorted. At least one, except on a derived reorder, where it is empty." },
+        "derivedFrom": { "type": "array", "minItems": 1, "maxItems": 500, "uniqueItems": true, "items": { "$ref": "#/$defs/pointer" }, "description": "Derived reorder only (ADR-0072): pointers of the add and remove ops of this collection whose position this step reconciles, sorted. Each is implemented by another step of the same artifact; derivedFrom does not count toward the exactly-once rule." }
       },
       "allOf": [
+        { "if": { "required": ["derivedFrom"] }, "then": { "properties": { "kind": { "enum": ["field.reorder", "option.reorder"] }, "sourceOps": { "maxItems": 0 } } }, "else": { "properties": { "sourceOps": { "minItems": 1 } } } },
         { "if": { "properties": { "kind": { "enum": ["entity.add", "field.add", "option.add", "relation.add", "binding.add", "location.upsert", "component.enable", "role.upsert", "workflow.upsert", "approval.upsert", "report.upsert", "entity.quarantine", "field.quarantine", "option.quarantine", "relation.quarantine", "binding.disable", "location.disable", "component.disable", "role.disable", "workflow.disable", "approval.disable", "report.disable"] } } }, "then": { "properties": { "params": { "required": ["definition"], "maxProperties": 1 } } } },
         { "if": { "properties": { "kind": { "enum": ["settings.set", "entity.set_property", "field.set_property", "relation.set_property", "binding.set_property", "component.configure"] } } }, "then": { "properties": { "params": { "required": ["property"], "anyOf": [{ "required": ["before"] }, { "required": ["after"] }], "not": { "anyOf": [{ "required": ["definition"] }, { "required": ["order"] }] } } } } },
         { "if": { "properties": { "kind": { "enum": ["field.reorder", "option.reorder"] } } }, "then": { "properties": { "params": { "required": ["order", "previousOrder"], "maxProperties": 2 } } } },
@@ -234,7 +239,9 @@
     "integrity.contentHash equals sha256 of the canonical JSON of the artifact without artifactId and integrity; artifactId equals 'art_' + the first 32 hex characters of that hash.",
     "steps[].seq is 1..n in array order; steps are sorted by (phase, pointer, kind), then for settings.set by params.property; no two steps share (kind, pointer), except that settings.set is keyed on (kind, pointer, params.property): several settings.set steps may share a section pointer if their properties differ (ADR-0057, Q-51).",
     "components are sorted by id with unique ids; skippedOps by pointer; postConditions by id; sourceOps within a step by pointer.",
-    "Every op of the source diff appears exactly once, either in some step's sourceOps or in skippedOps.",
+    "Every op of the source diff appears exactly once, either in some step's sourceOps or in skippedOps; derivedFrom does not count.",
+    "A derived reorder (a step with derivedFrom): every derivedFrom pointer is an add or remove op of the source diff on a direct child of the step's pointer, and is in the sourceOps of another step of the same artifact; the step's params.order lists exactly the keys active when it runs (phase 6: the target keys in target order, then the removed keys) (ADR-0072).",
+    "An embedded inverse has the same artifactSchema as its forward artifact (the schema enforces this through allOf): the compiler emits a derived reorder for a collection in both directions or in neither.",
     "blueprint.target.hash equals the bpdiff target hash of the source diff; blueprint.base.hash equals its base hash; diffHash equals sha256 of the canonical diff.",
     "For an embedded inverse: inverse.blueprint.base equals this artifact's blueprint.target, inverse.blueprint.target equals this artifact's blueprint.base, and inverse.engineTarget equals engineTarget.",
     "No key anywhere in params (at any depth) matches the secret-key pattern of $defs.noSecretKeys; no value is a credential, URL with userinfo, or engine object name.",

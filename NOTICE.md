@@ -9,6 +9,7 @@ This repository is proprietary. This file summarizes what we use or plan to use 
 | Change engine module | 0.1.0 | Proprietary / Founder contribution | Engine app | Guarded apply, DDL gate, rollback, audit, runtime policies (`apps/engine/change_engine/`). |
 | Frappe HRMS | v15 (planned) | GPL-3.0 | Engine skeleton only | Not bundled here. Same SaaS-only rule. |
 | ERPGulf ZATCA app | Planned | MIT | ZATCA e-invoicing | Planned; evaluated in the G1 spike (CMP-002). |
+| psycopg2 (`psycopg2-binary`) | 2.9.x (Frappe pin) | LGPL-3.0-or-later with OpenSSL exception | PostgreSQL driver, Frappe dependency | Unmodified, inside the engine image only, never conveyed. Conveying the image would need the LGPL text and source for it. See the register. |
 | lavaloon ZATCA app | - | AGPL-3.0 | NOT used | Rejected because of the AGPL. |
 
 ## Provenance

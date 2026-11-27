@@ -96,24 +96,58 @@ _NEW_SITE_POSIX_SH = (
 # sort_field is creation (frappe/database/mariadb/schema.py:84 on the pinned bench), nor a missing search_index index
 # (schema.py:78). A fresh site therefore lacks indexes that the engine's first schema sync of such a table adds next
 # to an approved ADD COLUMN, and the DDL gate refuses it. This program runs Frappe's own sync (frappe.db.updatedb)
-# on every table once: index additions run, Frappe's MODIFY re-emits are not sent, any other DDL fails closed.
-# Idempotent: a second run adds nothing. Run from the bench directory with the site as its one argument.
+# on every table once. Frappe's alter() joins its clauses into one statement, so each statement is split into its
+# top-level clauses (outside parentheses, backticks and quotes): only ADD INDEX clauses run, rebuilt into one statement;
+# MODIFY clauses (Frappe's re-emits) are counted and not sent; a `;`, an unbalanced statement, any other clause kind or
+# any UNIQUE fails closed. Idempotent: a second run adds nothing (checked by hand on the pinned bench, BPL-046; the
+# stand-in frappe of the unit tests cannot show it). Run from the bench directory with the site as its one argument.
 INDEX_SYNC_PY = r'''
 import json, re, sys, frappe
 frappe.init(site=sys.argv[1], sites_path=".")
 frappe.connect()
 try:
     run_ddl, added, skipped = frappe.db.sql_ddl, [], [0]
+    def clauses(body):
+        parts, cur, depth, tick, quote = [], "", 0, False, False
+        for ch in body:
+            if ch == "`" and not quote:
+                tick = not tick
+            elif ch == "'" and not tick:
+                quote = not quote
+            elif not tick and not quote:
+                if ch == ";":
+                    return None
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if depth < 0:
+                        return None
+                elif ch == "," and depth == 0:
+                    parts.append(cur.strip())
+                    cur = ""
+                    continue
+            cur += ch
+        if tick or quote or depth:
+            return None
+        parts.append(cur.strip())
+        return parts
+    def bad(part):
+        bare = re.sub(r"`[^`]*`", "", part)
+        return not re.match(r"(ADD INDEX|MODIFY) \S", part) or re.search(r"\bUNIQUE\b", bare, re.I)
     def admit(query, debug=False):
         stmt = " ".join(str(query).split())
-        m = re.fullmatch(r"ALTER TABLE `[^`]+` (ADD INDEX|MODIFY) .+", stmt)
-        if not m or "ADD UNIQUE" in stmt:
+        m = re.fullmatch(r"ALTER TABLE (`[^`]+`) (.+)", stmt)
+        parts = clauses(m.group(2)) if m else None
+        if not parts or any(bad(p) for p in parts):
             raise SystemExit("index sync refused DDL: " + stmt[:200])
-        if m.group(1) == "MODIFY":
-            skipped[0] += 1
+        adds = [p for p in parts if p.startswith("ADD INDEX ")]
+        skipped[0] += len(parts) - len(adds)
+        if not adds:
             return None
-        added.append(stmt)
-        return run_ddl(query, debug=debug)
+        rebuilt = "ALTER TABLE " + m.group(1) + " " + ", ".join(adds)
+        added.append(rebuilt)
+        return run_ddl(rebuilt, debug=debug)
     frappe.db.sql_ddl = admit
     doctypes = frappe.get_all("DocType", filters={"issingle": 0, "is_virtual": 0}, pluck="name", order_by="name")
     for doctype in doctypes:

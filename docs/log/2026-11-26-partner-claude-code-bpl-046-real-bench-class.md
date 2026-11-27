@@ -46,6 +46,7 @@ BPL-046 (BPL-041 slice 2): real-bench CI gets a BPL-027 phase that runs the trad
   - test_06 of the provisioning tests now checks only the set-config commands for `python` (the index sync is a python program).
   - Branch diff 583 added, 48 removed lines against the merge base: over the 400-line guide.
   - Cleanup: the `bpl046a-bench` stack, volumes, network, image and scratch env file removed.
+- Eldon's review at 68a964cc (Sonnet 5.5 for him): the three Lows closed; one Medium: the index sync checked only how a statement starts, so `ADD INDEX a, DROP INDEX b` or `ADD INDEX a; DROP TABLE x` would be sent, and `MODIFY x, ADD INDEX y` was skipped whole. Fixed by the coordinator: each statement is split into top-level clauses (outside parentheses, backticks and quotes); a `;`, an unbalanced statement, any clause other than ADD INDEX or MODIFY, or any UNIQUE outside backticked names fails closed; only the ADD INDEX clauses run, rebuilt into one statement; MODIFY clauses are counted. Tests for the review's cases plus a quoted comma and a `unique_code` column; two mutants (check only the first clause; no clause split) each fail 4 tests. Idempotence stays a manual bench check (stated in the comment); `INDEX_SYNC_TIMEOUT` is a budget only (stated).
 
 ## Files touched
 - apps/engine/change_engine/change_engine/api/endpoints.py (pass `length` and `precision`), apps/engine/change_engine/change_engine/tests/test_bpl_046_field_length_ddl.py (new), .github/workflows/tests.yml (one step line).

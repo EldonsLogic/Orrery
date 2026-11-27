@@ -591,10 +591,26 @@ class TestBPL046IndexSync(unittest.TestCase):
     def test_any_other_ddl_fails_closed(self):
         for stmt in ("ALTER TABLE `tabX` ADD COLUMN `y` int(11)", "ALTER TABLE `tabX` DROP INDEX `y_index`",
                      "ALTER TABLE `tabX` MODIFY `y` int(11), ADD UNIQUE INDEX IF NOT EXISTS y (`y`)",
-                     "create table `tabX` (name varchar(140) primary key)"):
+                     "create table `tabX` (name varchar(140) primary key)",
+                     # #381 review: a statement that starts with ADD INDEX may carry more clauses or a second statement
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`), DROP INDEX `b`",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`), DROP COLUMN `c`",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`), CHANGE `c` `d` int(11)",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`); DROP TABLE `tabX`",
+                     "ALTER TABLE `tabX` ADD INDEX `a`(`a`",
+                     "ALTER TABLE `tabX` MODIFY `y` varchar(140) unique"):
             with self.subTest(stmt):
                 with self.assertRaisesRegex(SystemExit, "index sync refused DDL"):
                     self._run_program({"X": [stmt]})
+
+    def test_a_mixed_statement_sends_only_its_index_clauses(self):
+        """Frappe's alter() joins clauses: MODIFY plus ADD INDEX sends the ADD INDEX part, never skips it (#381)."""
+        mixed = ("ALTER TABLE `tabX` MODIFY `note` varchar(140) default 'a, b; c', ADD INDEX `creation`(`creation`), "
+                 "ADD INDEX `unique_code_index`(`unique_code`)")
+        sent, out = self._run_program({"X": [mixed]})
+        rebuilt = "ALTER TABLE `tabX` ADD INDEX `creation`(`creation`), ADD INDEX `unique_code_index`(`unique_code`)"
+        self.assertEqual(sent, [rebuilt])
+        self.assertEqual(json.loads(out), {"tables": 1, "indexes_added": [rebuilt], "modify_not_sent": 1})
 
 
 if __name__ == "__main__":

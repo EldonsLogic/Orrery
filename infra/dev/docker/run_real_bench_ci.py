@@ -56,7 +56,7 @@ STARTUP_TIMEOUT = 300
 ENGINE_READY_TIMEOUT = 120
 # BPL-046: bench new-site took 297 to 306 s on a local machine (well under that in CI), the index sync about 45 s.
 NEW_SITE_TIMEOUT = 360
-INDEX_SYNC_TIMEOUT = 120
+INDEX_SYNC_TIMEOUT = 120  # budget only: the sync has no timeout of its own; PROVISION_TIMEOUT bounds both steps together
 PROVISION_TIMEOUT = NEW_SITE_TIMEOUT + INDEX_SYNC_TIMEOUT
 HTTP_READY_TIMEOUT = 60
 VERIFIER_TIMEOUT = 120

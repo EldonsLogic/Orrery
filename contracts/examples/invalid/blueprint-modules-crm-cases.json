@@ -3,6 +3,7 @@
   "note": "Negative cases for modules.crm (ADR-0079). Each case edits the valid base by JSON pointer; the result must fail the Blueprint schema at a path containing 'expect'. Run by contracts/tests/test_blueprint_modules.py.",
   "cases": [
     { "name": "unknown-module", "set": { "/modules/sales_crm": {} }, "expect": "modules" },
+    { "name": "empty-modules", "set": { "/modules": {} }, "expect": "modules" },
     { "name": "crm-missing-pipeline", "remove": ["/modules/crm/pipeline"], "expect": "modules/crm" },
     { "name": "crm-missing-customer-concept", "remove": ["/modules/crm/entities/customer"], "expect": "modules/crm/entities" },
     { "name": "crm-unknown-concept", "set": { "/modules/crm/entities/ticket": "lead" }, "expect": "modules/crm/entities" },

@@ -91,7 +91,40 @@ def test_classification_table(name):
     ("replace", "modules/manufacturing", "compliance"),
     ("remove", "modules/manufacturing", "destructive"),
     ("replace", "modules/manufacturing/roles/manage", "access"),
-    ("replace", "modules/manufacturing/materialTransfer", "config"),
+    ("replace", "modules/manufacturing/materialTransfer", "compliance"),
+    ("replace", "modules/manufacturing/bom/multiLevel", "compliance"),
+    ("replace", "modules/manufacturing/bom/withOperations", "compliance"),
+    ("replace", "modules/manufacturing/operations/enabled", "compliance"),
+    ("replace", "modules/manufacturing/operations/jobCards", "compliance"),
+    ("replace", "modules/manufacturing/subcontracting/enabled", "compliance"),
+    ("replace", "modules/manufacturing/batchFromWorkOrder", "compliance"),
+    ("remove", "modules/manufacturing/entities/routing", "destructive"),
+    ("replace", "modules/manufacturing/entities/bom", "destructive"),
+    ("remove", "modules/crm/pipeline/stages/*", "destructive"),
+    ("remove", "modules/crm/leadSources/*", "destructive"),
+    ("remove", "modules/crm/lostReasons/*", "destructive"),
+    ("replace", "modules/crm/entities/opportunity", "destructive"),
+    ("remove", "modules/crm/entities/lead", "destructive"),
+    ("replace", "modules/crm/entities", "destructive"),
+    ("replace", "modules/crm/pipeline/stages/*/kind", "destructive"),
+    ("replace", "modules/crm/component", "destructive"),
+    ("add", "modules/crm/pipeline/stages/*", "config"),
+    ("add", "modules/crm/leadSources/*", "config"),
+    ("add", "modules/crm/entities/lead", "config"),
+    ("replace", "modules/crm/pipeline/stages/*/labels/en", "cosmetic"),
+    ("remove", "modules/projects/taskStatuses/*", "destructive"),
+    ("remove", "modules/projects/views/*", "destructive"),
+    ("remove", "modules/projects/views/*/board/columns/*", "destructive"),
+    ("remove", "modules/projects/timesheets", "destructive"),
+    ("remove", "modules/projects/entities/timesheet", "destructive"),
+    ("replace", "modules/projects/timesheets/enabled", "destructive"),
+    ("replace", "modules/projects/timesheets/billable", "compliance"),
+    ("add", "modules/projects/timesheets/billable", "compliance"),
+    ("remove", "modules/projects/timesheets/billable", "compliance"),
+    ("replace", "modules/projects/timesheets/invoicingComponent", "compliance"),
+    ("add", "modules/projects/taskStatuses/*", "config"),
+    ("add", "modules/projects/views/*", "config"),
+    ("add", "modules/projects/timesheets", "config"),
 ])
 def test_impact_rules(kind, path, expected):
     assert impact_of(kind, spath(path)) == expected
@@ -181,3 +214,58 @@ def test_module_removal_is_destructive():
         del b["modules"][key]
         ops = diff(a, b)["ops"]
         assert ops and {o["impact"] for o in ops} == {"destructive"}, key
+
+
+@pytest.mark.parametrize("name,edit", [
+    ("stage removed", lambda c: c["pipeline"]["stages"].pop(1)),
+    ("lead source removed", lambda c: c["leadSources"].pop(0)),
+    ("lost reason removed", lambda c: c["lostReasons"].pop(0)),
+    ("opportunity rebound", lambda c: c["entities"].__setitem__("opportunity", "lead")),
+    ("stage kind changed", lambda c: c["pipeline"]["stages"][2].update(kind="won", probabilityPercent=100)),
+    ("component swapped", lambda c: c.__setitem__("component", "crm.other")),
+])
+def test_destructive_crm_changes_take_the_ddl_gate(name, edit):
+    """#395 review M2: a change that orphans opportunities or repoints a concept is destructive (rule 6)."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    edit(b["modules"]["crm"])
+    d = diff(a, b)
+    assert "destructive" in {o["impact"] for o in d["ops"]}, (name, [(o["pointer"], o["impact"]) for o in d["ops"]])
+    assert d["risk"]["needsDdlPlanGate"]
+
+
+@pytest.mark.parametrize("name,edit,impact", [
+    ("status removed", lambda p: p["taskStatuses"].pop(1), "destructive"),
+    ("view removed", lambda p: p["views"].pop(2), "destructive"),
+    ("column removed", lambda p: p["views"][0]["board"]["columns"].pop(1), "destructive"),
+    ("timesheets block removed", lambda p: p.pop("timesheets"), "destructive"),
+    ("timesheet binding removed", lambda p: p["entities"].pop("timesheet"), "destructive"),
+    ("timesheets switched off", lambda p: p["timesheets"].update(enabled=False), "destructive"),
+    ("billing switched on", lambda p: p["timesheets"].update(billable=True, invoicingComponent="core.sales_invoice"),
+     "compliance"),
+])
+def test_project_changes_that_lose_data_or_touch_billing(name, edit, impact):
+    """#396 review H2: removals that orphan tasks or hours are destructive; billing on or off is compliance."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    edit(b["modules"]["projects"])
+    d = diff(a, b)
+    assert impact in {o["impact"] for o in d["ops"]}, (name, [(o["pointer"], o["impact"]) for o in d["ops"]])
+
+
+@pytest.mark.parametrize("name,edit,impact", [
+    ("multi-level BOM off", lambda m: m["bom"].update(multiLevel=False), "compliance"),
+    ("transfer against work order", lambda m: m.__setitem__("materialTransfer", "work_order"), "compliance"),
+    ("operations off", lambda m: m["operations"].update(enabled=False), "compliance"),
+    ("job cards off", lambda m: m["operations"].update(jobCards=False), "compliance"),
+    ("subcontracting off", lambda m: m["subcontracting"].update(enabled=False), "compliance"),
+    ("routing unbound", lambda m: m["entities"].pop("routing"), "destructive"),
+    ("bom rebound", lambda m: m["entities"].__setitem__("bom", "routing"), "destructive"),
+])
+def test_stock_shaping_manufacturing_changes_need_review(name, edit, impact):
+    """#397 review M3: switches that change which materials move or how are never plain config."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    edit(b["modules"]["manufacturing"])
+    impacts = {o["impact"] for o in diff(a, b)["ops"]}
+    assert impact in impacts and "config" not in impacts, (name, impacts)

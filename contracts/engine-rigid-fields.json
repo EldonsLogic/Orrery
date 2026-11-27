@@ -2,7 +2,7 @@
   "version": "0.1.0",
   "status": "UNVERIFIED",
   "visibility": "internal",
-  "description": "Engine rigid-zone fields per engine record type (AGENTS.md principle 3, ADR-0079 item 5, contracts/blueprint-modules.md). These are the pinned engine's own valuation, costing, posting, tax and ledger fields. A Blueprint may not declare, override, rename, or set a default or options on any of them on an entity it binds through a module concept, on that entity's child_table rows, or through that entity's component parameters (validator BP-MOD-001). Internal only (ADR-0016): never shown to a customer. UNVERIFIED until a bench run on the pinned set confirms the names.",
+  "description": "Engine rigid-zone fields per engine record type (AGENTS.md principle 3, ADR-0079 item 5, contracts/blueprint-modules.md). These are the pinned engine's own valuation, costing, posting, tax and ledger fields. A Blueprint may not declare, override, rename, or set a default or options on any of them on an entity it binds through a module concept, on that entity's child_table rows, or through that entity's component parameters (validator BP-MOD-001). Internal only (ADR-0016): never shown to a customer. UNVERIFIED until a bench run on the pinned set confirms the names, in each module's component build: CRM BPL-056, projects BPL-057, manufacturing BPL-058, marketing BPL-059. Billing selectors count as posting fields: Timesheet Detail is_billable and the Timesheet and Project customer pick what goes onto a sales invoice (erpnext/projects/doctype/timesheet/timesheet.py at the tag), and the Timesheet currency and company are ledger fields. Stock-shaping fields count as posting fields (#397 review): Work Order skip_transfer, from_wip_warehouse and use_multi_level_bom, BOM transfer_material_against and is_default, and the subcontracting warehouses decide which materials move and from where (stock_entry.py at the tag).",
   "source": {
     "engines": [
       { "app": "erpnext", "tag": "v15.124.5", "commit": "e5cde8c4b9e3f7f567a92ca3e65fd411402b89ce", "url": "https://github.com/frappe/erpnext/tree/v15.124.5" },
@@ -57,6 +57,7 @@
     "Project": {
       "fields": {
         "costing": ["estimated_costing", "total_costing_amount", "total_purchase_cost", "total_sales_amount", "total_billable_amount", "total_billed_amount", "total_consumed_material_cost", "gross_margin", "per_gross_margin"],
+        "posting": ["customer"],
         "ledger": ["cost_center"]
       }
     },
@@ -64,12 +65,13 @@
     "Timesheet": {
       "fields": {
         "costing": ["total_costing_amount", "total_billable_amount", "total_billed_amount", "base_total_costing_amount", "base_total_billable_amount", "base_total_billed_amount", "per_billed", "exchange_rate"],
-        "posting": ["sales_invoice"]
+        "posting": ["sales_invoice", "customer"],
+        "ledger": ["currency", "company"]
       },
       "rows": {
         "Timesheet Detail": {
           "costing": ["billing_rate", "billing_amount", "costing_rate", "costing_amount", "base_billing_rate", "base_billing_amount", "base_costing_rate", "base_costing_amount"],
-          "posting": ["sales_invoice"]
+          "posting": ["sales_invoice", "is_billable"]
         }
       }
     },
@@ -77,6 +79,7 @@
     "Item": {
       "fields": {
         "valuation": ["valuation_rate", "valuation_method", "last_purchase_rate", "allow_negative_stock"],
+        "costing": ["standard_rate"],
         "posting": ["opening_stock", "is_fixed_asset", "asset_category", "auto_create_assets", "enable_deferred_revenue", "no_of_months", "enable_deferred_expense", "no_of_months_exp"],
         "tax": ["taxes"],
         "ledger": ["item_defaults"]
@@ -88,7 +91,9 @@
     },
     "BOM": {
       "fields": {
-        "costing": ["rm_cost_as_per", "buying_price_list", "price_list_currency", "plc_conversion_rate", "conversion_rate", "set_rate_of_sub_assembly_item_based_on_bom", "operating_cost", "raw_material_cost", "scrap_material_cost", "base_operating_cost", "base_raw_material_cost", "base_scrap_material_cost", "total_cost", "base_total_cost", "fg_based_operating_cost", "operating_cost_per_bom_quantity", "process_loss_percentage"]
+        "costing": ["rm_cost_as_per", "buying_price_list", "price_list_currency", "plc_conversion_rate", "conversion_rate", "set_rate_of_sub_assembly_item_based_on_bom", "operating_cost", "raw_material_cost", "scrap_material_cost", "base_operating_cost", "base_raw_material_cost", "base_scrap_material_cost", "total_cost", "base_total_cost", "fg_based_operating_cost", "operating_cost_per_bom_quantity", "process_loss_percentage"],
+        "posting": ["transfer_material_against", "is_default"],
+        "ledger": ["currency"]
       },
       "rows": {
         "BOM Item": { "costing": ["rate", "base_rate", "amount", "base_amount"] },
@@ -100,7 +105,7 @@
     "Work Order": {
       "fields": {
         "costing": ["planned_operating_cost", "actual_operating_cost", "additional_operating_cost", "total_operating_cost", "corrective_operation_cost", "update_consumed_material_cost_in_project"],
-        "posting": ["source_warehouse", "wip_warehouse", "fg_warehouse", "scrap_warehouse"]
+        "posting": ["source_warehouse", "wip_warehouse", "fg_warehouse", "scrap_warehouse", "skip_transfer", "from_wip_warehouse", "use_multi_level_bom"]
       },
       "rows": {
         "Work Order Item": { "costing": ["rate", "amount"] },
@@ -117,6 +122,7 @@
     "Subcontracting Order": {
       "fields": {
         "costing": ["total", "additional_costs", "total_additional_costs", "distribute_additional_costs_based_on"],
+        "posting": ["set_warehouse", "supplier_warehouse"],
         "ledger": ["cost_center"]
       },
       "rows": {
@@ -128,7 +134,7 @@
     "Subcontracting Receipt": {
       "fields": {
         "costing": ["total", "additional_costs", "total_additional_costs", "distribute_additional_costs_based_on"],
-        "posting": ["posting_date", "posting_time", "set_posting_time"],
+        "posting": ["posting_date", "posting_time", "set_posting_time", "set_warehouse", "supplier_warehouse", "rejected_warehouse"],
         "ledger": ["cost_center"]
       },
       "rows": {

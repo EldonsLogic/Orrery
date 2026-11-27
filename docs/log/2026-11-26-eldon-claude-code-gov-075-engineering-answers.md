@@ -34,3 +34,6 @@ Partner review of PR #371 (sayegh9), especially answers ending "Partner to confi
 
 ## Totals
 248 of 252 answered; 4 left open as founder decisions (Q-214, Q-287, Q-404, Q-540).
+
+## Review fixes (2026-11-27)
+- Partner review at 247bff83: Q-141 aligned to the 0.4.0 schema; source URLs and access dates added to Q-93, Q-117, Q-146, Q-222, Q-230 (Q-144 stays UNVERIFIED, no official source fetched); "Partner to confirm." added to 13 partner-component answers; Q-297, Q-298, Q-299, Q-301 now PROPOSED; Q-472 route is a partner row; PLT-036, OPR-021, OPR-022 and QA-021 cite the right questions.

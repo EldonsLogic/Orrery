@@ -80,6 +80,10 @@ def test_classification_table(name):
     ("replace", "modules/crm/roles/work", "access"),
     ("remove", "modules/crm/roles/view", "access"),
     ("replace", "modules/crm/roles", "access"),
+    ("replace", "modules/crm", "access"),
+    ("remove", "modules/crm", "destructive"),
+    ("remove", "modules/projects", "destructive"),
+    ("remove", "modules", "destructive"),
     ("replace", "modules/crm/pipeline/stages/*/probabilityPercent", "config"),
 ])
 def test_impact_rules(kind, path, expected):
@@ -150,3 +154,12 @@ def test_module_role_change_is_access():
     b["modules"]["crm"]["roles"]["manage"].append("sales_rep")
     ops = diff(a, b)["ops"]
     assert ops and {o["impact"] for o in ops} == {"access"}
+
+
+def test_module_removal_is_destructive():
+    """Q-700 (#396 re-review): switching a module off is destructive, the stricter class than access."""
+    a = _modules_example()
+    b = json.loads(json.dumps(a))
+    del b["modules"]["projects"]
+    ops = diff(a, b)["ops"]
+    assert ops and {o["impact"] for o in ops} == {"destructive"}

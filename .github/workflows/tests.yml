@@ -180,6 +180,10 @@ jobs:
         if: steps.filter.outputs.control_plane == 'true' && !cancelled()
         run: python3 -m compileall services/control-plane
 
+      - name: Install dependencies (services/control-plane)
+        if: steps.filter.outputs.control_plane == 'true' && !cancelled()
+        run: pip install pytest jsonschema referencing
+
       - name: Control-plane identity and support tests
         if: steps.filter.outputs.control_plane == 'true' && !cancelled()
         run: python3 -m pytest services/control-plane/tests -q

@@ -1,0 +1,1 @@
+{"kind": "sender_domain", "tenantId": "t_demo_trading", "domainId": "dom_shop_1", "domain": "shop.demo-trading.example", "dedicatedSubdomain": true, "state": "pending", "checks": {"spf": "pass", "dkim": "pending", "dmarc": {"record": "missing", "policy": null, "aligned": false}}, "checkedAt": "2026-11-27T08:00:00Z", "goLiveItem": true}

@@ -1,0 +1,1 @@
+{"kind": "suppression_entry", "tenantId": "t_demo_trading", "suppressionId": "sup_0001", "addressHash": "hmac-sha256:0fff6122a86e3e5b275a73df6197a83d4097e09bccffd464a09c080206d44283", "contactRef": "ct_0043", "reason": "hard_bounce", "scope": "all", "state": "active", "sourceEventId": "eev_b1", "createdAt": "2026-11-27T08:05:02Z", "supersedes": null, "providerSync": "synced"}

@@ -81,6 +81,27 @@ for _t in ("published", "deprecated", "request_created", "request_reviewed"):
     DATA[f"component.{_t}"] = {"component_id": "core.x"}
 for _t in ("upgrade_canary_started", "upgrade_promoted", "upgrade_rolled_back"):
     DATA[f"engine.{_t}"] = {"canary_id": "k1"}
+# email events (contracts/connector-email.md section 12; fictional sandbox data, bare hex hashes)
+_EML = {"send_id": "snd_1", "connection_ref": "ecn_1", "provider": "email.mailgun", "contact_ref": "ct_1",
+        "provider_event_id": "mgev_1", "dedup_key": "a" * 64, "scheme": "hmac_sha256_timestamp_token"}
+DATA["email.send_requested"] = {"send_id": "snd_1", "connection_ref": "ecn_1", "provider": "email.mailgun", "purpose": "marketing",
+                                "mode": "campaign_batch", "country": "AE", "batch_id": "bat_1", "segment_ref": "seg_1",
+                                "recipient_count": 10, "template_id": "etp_1", "language": "en", "origin": "human",
+                                "sent_by": "usr_1", "confirmation_id": "cnf_1", "approval_id": "apr_1", "payload_hash": "b" * 64,
+                                "risk_class": "R3", "tracking_opens": False, "tracking_clicks": True, "sandbox": True}
+DATA["email.delivered"] = DATA["email.opened"] = _EML
+DATA["email.clicked"] = {**_EML, "link_id": "lnk_1"}
+DATA["email.bounced"] = {**_EML, "bounce_type": "hard", "smtp_status": "5.1.1", "suppression_id": "sup_1"}
+DATA["email.complained"] = {**_EML, "suppression_id": "sup_2", "consent_revocation_ref": "cns_1"}
+DATA["email.unsubscribed"] = {**_EML, "suppression_id": "sup_3", "consent_revocation_ref": "cns_2",
+                              "unsubscribe_source": "one_click_post", "scheme": "one_click_token"}
+DATA["email.suppressed"] = {"suppression_id": "sup_1", "supersedes": None, "contact_ref": "ct_1", "address_hash": "c" * 64,
+                            "reason": "hard_bounce", "scope": "all", "source_event_id": "eev_1"}
+DATA["email.suppression_lifted"] = {"suppression_id": "sup_4", "supersedes": "sup_3", "contact_ref": "ct_1", "address_hash": "d" * 64,
+                                    "reason": "unsubscribe", "scope": "marketing", "lift_basis": "contact_opt_in",
+                                    "lift_consent_ref": "cns_3"}
+DATA["email.webhook_rejected"] = {"provider": "email.postmark", "endpoint_id": "whk_3QpZr8LmXv2NcTyBa7KdQe",
+                                  "scheme": "basic_auth_ip_allowlist", "error_code": "EML-001"}
 
 
 def concrete_type(key: str) -> str:

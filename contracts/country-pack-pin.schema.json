@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:platform:contract:country-pack-pin:0.1.0",
+  "version": "0.1.0",
+  "title": "Tenant country pack pin",
+  "description": "Draft. One tenant's pinned country pack version in the tenant registry (control plane), as the loader reads it through PinSource (ADR-0071 items 1.10 and 3, Proposed; Q-655 and Q-657 answers). A store pin binds the exact record; a repo pin is for sandbox and test site classes only. The registry writes it; the loader never does. Unknown keys are refused. Rules JSON Schema cannot express are in x-validator-rules.",
+  "x-validator-rules": [
+    "pinSeq goes up by one on every change for the tenant and country",
+    "a store pin's (version, contentDigest, publishId) is a published entry of a verified index whose indexSeq is indexSeqAtPin; indexSeqAtPin is at or above the registry's minIndexSeq for the country when the pin is written",
+    "a repo pin is refused on a production site class (unsigned_repo_pack)",
+    "upgrade, republish and initial pins move only at a boundary the market accountant approved for that change (Q-657); approval.ref names that approval",
+    "a rollback targets an already-signed, non-withdrawn version at or above the floor and is approved by one founder with a fresh step-up and a written reason (Q-655); approval.approvedBy is a founder signerId in trusted_signers.json",
+    "changedBy and approval.approvedBy are staff subjects: they go to the platform security stream, never to a tenant audit; the tenant audit entry for the change carries auditId only (#316 decisions 2 and 6)",
+    "auditId is the one audit id of the pin change, the same in the registry, the SEC-008 AuditStore entry and the country_pack.pin_changed event; the write is refused when the audit write fails"
+  ],
+  "type": "object",
+  "required": [
+    "v",
+    "typ",
+    "tenantId",
+    "source",
+    "countryCode",
+    "packId",
+    "version",
+    "pinSeq",
+    "changeKind",
+    "changedBy",
+    "approval",
+    "changedAt",
+    "auditId"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "typ": {
+      "const": "country_pack_pin"
+    },
+    "tenantId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}(?![\\s\\S])"
+    },
+    "source": {
+      "enum": [
+        "store",
+        "repo"
+      ]
+    },
+    "countryCode": {
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/countryCode"
+    },
+    "packId": {
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/packId"
+    },
+    "version": {
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/semver"
+    },
+    "contentDigest": {
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/digest"
+    },
+    "publishId": {
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/publishId"
+    },
+    "indexSeqAtPin": {
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/posInt"
+    },
+    "pinSeq": {
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/posInt"
+    },
+    "changeKind": {
+      "enum": [
+        "initial",
+        "upgrade",
+        "rollback",
+        "republish"
+      ]
+    },
+    "changedBy": {
+      "type": "object",
+      "required": [
+        "actorKind",
+        "subject",
+        "tokenId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "actorKind": {
+          "enum": [
+            "staff",
+            "service"
+          ]
+        },
+        "subject": {
+          "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/staffSubject"
+        },
+        "tokenId": {
+          "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref"
+        }
+      }
+    },
+    "approval": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/accountantBoundary"
+        },
+        {
+          "$ref": "#/$defs/founderRollback"
+        },
+        {
+          "$ref": "#/$defs/repoDraft"
+        }
+      ]
+    },
+    "changedAt": {
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/utcTime"
+    },
+    "auditId": {
+      "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "const": "store"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "contentDigest",
+          "publishId",
+          "indexSeqAtPin"
+        ],
+        "if": {
+          "properties": {
+            "changeKind": {
+              "const": "rollback"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "approval": {
+              "properties": {
+                "kind": {
+                  "const": "founder_rollback"
+                }
+              }
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "approval": {
+              "properties": {
+                "kind": {
+                  "const": "accountant_boundary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "contentDigest"
+              ]
+            },
+            {
+              "required": [
+                "publishId"
+              ]
+            },
+            {
+              "required": [
+                "indexSeqAtPin"
+              ]
+            }
+          ]
+        },
+        "properties": {
+          "changeKind": {
+            "enum": [
+              "initial",
+              "upgrade",
+              "rollback"
+            ]
+          },
+          "approval": {
+            "properties": {
+              "kind": {
+                "const": "repo_draft"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "accountantBoundary": {
+      "description": "Initial, upgrade and republish pins: the accountant-approved boundary for this change (Q-657) and the CMP-038 schedule that moved the pin.",
+      "type": "object",
+      "required": [
+        "kind",
+        "ref",
+        "scheduleRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "accountant_boundary"
+        },
+        "ref": {
+          "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref"
+        },
+        "scheduleRef": {
+          "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref"
+        }
+      }
+    },
+    "founderRollback": {
+      "description": "Rollback to an already-signed version: one founder, fresh step-up, written reason (Q-655).",
+      "type": "object",
+      "required": [
+        "kind",
+        "ref",
+        "approvedBy",
+        "stepUpRef",
+        "reasonRef"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "founder_rollback"
+        },
+        "ref": {
+          "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref"
+        },
+        "approvedBy": {
+          "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/staffSubject"
+        },
+        "stepUpRef": {
+          "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref"
+        },
+        "reasonRef": {
+          "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref"
+        }
+      }
+    },
+    "repoDraft": {
+      "description": "Sandbox and test repo pins only (ADR-0059, ADR-0071 1.10): the staff or service action that chose the draft repo pack. No accountant approval applies.",
+      "type": "object",
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "repo_draft"
+        },
+        "ref": {
+          "$ref": "urn:platform:contract:country-pack-common:0.1.0#/$defs/ref"
+        }
+      }
+    }
+  }
+}

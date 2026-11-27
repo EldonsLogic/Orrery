@@ -1,6 +1,6 @@
 {
   "artifact": {
-    "artifactId": "art_028eba8229bc8a564c26cb7b65b43b00",
+    "artifactId": "art_e211deb74693523b532a6c27fc033ddb",
     "artifactSchema": "0.1.0",
     "blueprint": {
       "base": null,
@@ -87,7 +87,7 @@
     },
     "integrity": {
       "algorithm": "sha256-canonical-json-v1",
-      "contentHash": "sha256:028eba8229bc8a564c26cb7b65b43b007823b880ccf7ab68440496c67ab59427",
+      "contentHash": "sha256:e211deb74693523b532a6c27fc033ddba4624ca559fd10acdbd3855caa45441c",
       "signature": null
     },
     "inverse": null,
@@ -2018,6 +2018,392 @@
           "definition": {
             "components": [
               {
+                "component": "sales.credit_note",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "item",
+                "labels": {
+                  "ar": "الصنف",
+                  "en": "Item"
+                },
+                "required": true,
+                "target": "item",
+                "type": "link"
+              },
+              {
+                "id": "description",
+                "labels": {
+                  "ar": "الوصف",
+                  "en": "Description"
+                },
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "id": "quantity",
+                "labels": {
+                  "ar": "الكمية",
+                  "en": "Quantity"
+                },
+                "min": 0,
+                "precision": 3,
+                "required": true,
+                "type": "decimal"
+              },
+              {
+                "id": "unit_price",
+                "labels": {
+                  "ar": "سعر الوحدة",
+                  "en": "Unit price"
+                },
+                "min": 0,
+                "precision": 2,
+                "required": true,
+                "type": "money"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "sales.credit_note.line_total",
+                  "inputs": [
+                    "quantity",
+                    "unit_price",
+                    "discount_percent"
+                  ]
+                },
+                "id": "line_total",
+                "labels": {
+                  "ar": "إجمالي البند",
+                  "en": "Line total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              }
+            ],
+            "id": "credit_note_line",
+            "kind": "child",
+            "labels": {
+              "ar": "بند الإشعار",
+              "en": "Credit note line"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            }
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/credit_note_line",
+        "reversible": true,
+        "seq": 40,
+        "sourceOps": [
+          "/entities/credit_note_line"
+        ],
+        "subject": {
+          "id": "credit_note_line",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "sales.credit_note",
+                "mode": "implements"
+              },
+              {
+                "component": "compliance.zatca_sa",
+                "mode": "extends"
+              }
+            ],
+            "fields": [
+              {
+                "id": "sales_invoice",
+                "labels": {
+                  "ar": "الفاتورة الأصلية",
+                  "en": "Original invoice"
+                },
+                "required": true,
+                "target": "sales_invoice",
+                "type": "link"
+              },
+              {
+                "id": "customer",
+                "labels": {
+                  "ar": "العميل",
+                  "en": "Customer"
+                },
+                "required": true,
+                "target": "customer",
+                "type": "link"
+              },
+              {
+                "id": "credit_date",
+                "labels": {
+                  "ar": "تاريخ الإشعار",
+                  "en": "Credit date"
+                },
+                "required": true,
+                "type": "date"
+              },
+              {
+                "id": "reason",
+                "labels": {
+                  "ar": "السبب",
+                  "en": "Reason"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "مرتجعات",
+                      "en": "Returned goods"
+                    },
+                    "value": "returned_goods"
+                  },
+                  {
+                    "labels": {
+                      "ar": "تصحيح سعر",
+                      "en": "Price correction"
+                    },
+                    "value": "price_correction"
+                  },
+                  {
+                    "labels": {
+                      "ar": "بضاعة تالفة",
+                      "en": "Damaged goods"
+                    },
+                    "value": "damaged_goods"
+                  },
+                  {
+                    "labels": {
+                      "ar": "أخرى",
+                      "en": "Other"
+                    },
+                    "value": "other"
+                  }
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "id": "branch",
+                "labels": {
+                  "ar": "الفرع",
+                  "en": "Branch"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "المقر الرئيسي - الرياض",
+                      "en": "Head office - Riyadh"
+                    },
+                    "value": "hq_riyadh"
+                  },
+                  {
+                    "labels": {
+                      "ar": "فرع جدة",
+                      "en": "Jeddah branch"
+                    },
+                    "value": "branch_jeddah"
+                  }
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "sales.credit_note.subtotal",
+                  "inputs": [
+                    "discount_percent"
+                  ]
+                },
+                "id": "subtotal",
+                "labels": {
+                  "ar": "المجموع قبل الضريبة",
+                  "en": "Subtotal"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "sales.credit_note.vat_amount",
+                  "inputs": [
+                    "subtotal"
+                  ]
+                },
+                "id": "vat_amount",
+                "labels": {
+                  "ar": "ضريبة القيمة المضافة",
+                  "en": "VAT"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "sales.credit_note.total",
+                  "inputs": [
+                    "subtotal",
+                    "vat_amount"
+                  ]
+                },
+                "id": "total_amount",
+                "labels": {
+                  "ar": "الإجمالي",
+                  "en": "Total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "default": "not_sent",
+                "id": "zatca_status",
+                "labels": {
+                  "ar": "حالة هيئة الزكاة",
+                  "en": "ZATCA status"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "لم تُرسل",
+                      "en": "Not sent"
+                    },
+                    "value": "not_sent"
+                  },
+                  {
+                    "labels": {
+                      "ar": "تم الاعتماد",
+                      "en": "Cleared"
+                    },
+                    "value": "cleared"
+                  },
+                  {
+                    "labels": {
+                      "ar": "تم الإبلاغ",
+                      "en": "Reported"
+                    },
+                    "value": "reported"
+                  },
+                  {
+                    "labels": {
+                      "ar": "مرفوضة",
+                      "en": "Rejected"
+                    },
+                    "value": "rejected"
+                  }
+                ],
+                "readOnly": true,
+                "type": "select"
+              },
+              {
+                "id": "notes",
+                "labels": {
+                  "ar": "ملاحظات",
+                  "en": "Notes"
+                },
+                "maxLength": 1000,
+                "type": "text"
+              }
+            ],
+            "id": "credit_note",
+            "kind": "document",
+            "labels": {
+              "ar": "إشعار دائن",
+              "en": "Credit note"
+            },
+            "numbering": {
+              "padding": 5,
+              "prefix": "CN-",
+              "resetPerFiscalYear": true
+            },
+            "pluralLabels": {
+              "ar": "إشعارات الدائن",
+              "en": "Credit notes"
+            },
+            "provenance": {
+              "confidence": 0.9,
+              "humanEdited": false,
+              "ref": "turn-013",
+              "source": "interview"
+            },
+            "relations": [
+              {
+                "cardinality": "many",
+                "id": "lines",
+                "kind": "child_table",
+                "labels": {
+                  "ar": "البنود",
+                  "en": "Lines"
+                },
+                "onDelete": "cascade",
+                "required": true,
+                "target": "credit_note_line"
+              }
+            ]
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/credit_note",
+        "reversible": true,
+        "seq": 41,
+        "sourceOps": [
+          "/entities/credit_note"
+        ],
+        "subject": {
+          "id": "credit_note",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
                 "component": "core.customer",
                 "mode": "implements"
               }
@@ -2210,12 +2596,230 @@
         "phase": 4,
         "pointer": "/entities/customer",
         "reversible": true,
-        "seq": 40,
+        "seq": 42,
         "sourceOps": [
           "/entities/customer"
         ],
         "subject": {
           "id": "customer",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "sales.delivery_note",
+                "mode": "implements"
+              },
+              {
+                "component": "stock.ledger",
+                "mode": "extends"
+              }
+            ],
+            "fields": [
+              {
+                "id": "sales_order",
+                "labels": {
+                  "ar": "أمر البيع",
+                  "en": "Sales order"
+                },
+                "required": true,
+                "target": "sales_order",
+                "type": "link"
+              },
+              {
+                "id": "customer",
+                "labels": {
+                  "ar": "العميل",
+                  "en": "Customer"
+                },
+                "required": true,
+                "target": "customer",
+                "type": "link"
+              },
+              {
+                "id": "delivery_date",
+                "labels": {
+                  "ar": "تاريخ التسليم",
+                  "en": "Delivery date"
+                },
+                "required": true,
+                "type": "date"
+              },
+              {
+                "id": "warehouse",
+                "labels": {
+                  "ar": "المستودع",
+                  "en": "Warehouse"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "مستودع الرياض",
+                      "en": "Riyadh warehouse"
+                    },
+                    "value": "wh_riyadh"
+                  },
+                  {
+                    "labels": {
+                      "ar": "مستودع جدة",
+                      "en": "Jeddah warehouse"
+                    },
+                    "value": "wh_jeddah"
+                  }
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "id": "driver_name",
+                "labels": {
+                  "ar": "اسم السائق",
+                  "en": "Driver name"
+                },
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "id": "vehicle_plate",
+                "labels": {
+                  "ar": "لوحة المركبة",
+                  "en": "Vehicle plate"
+                },
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "id": "notes",
+                "labels": {
+                  "ar": "ملاحظات",
+                  "en": "Notes"
+                },
+                "maxLength": 1000,
+                "type": "text"
+              }
+            ],
+            "id": "delivery_note",
+            "kind": "document",
+            "labels": {
+              "ar": "إذن تسليم",
+              "en": "Delivery note"
+            },
+            "numbering": {
+              "padding": 5,
+              "prefix": "DN-",
+              "resetPerFiscalYear": true
+            },
+            "pluralLabels": {
+              "ar": "أذونات التسليم",
+              "en": "Delivery notes"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            },
+            "relations": [
+              {
+                "cardinality": "many",
+                "id": "lines",
+                "kind": "child_table",
+                "labels": {
+                  "ar": "البنود",
+                  "en": "Lines"
+                },
+                "onDelete": "cascade",
+                "required": true,
+                "target": "delivery_note_line"
+              }
+            ]
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/delivery_note",
+        "reversible": true,
+        "seq": 43,
+        "sourceOps": [
+          "/entities/delivery_note"
+        ],
+        "subject": {
+          "id": "delivery_note",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "sales.delivery_note",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "item",
+                "labels": {
+                  "ar": "الصنف",
+                  "en": "Item"
+                },
+                "required": true,
+                "target": "item",
+                "type": "link"
+              },
+              {
+                "id": "description",
+                "labels": {
+                  "ar": "الوصف",
+                  "en": "Description"
+                },
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "id": "quantity",
+                "labels": {
+                  "ar": "الكمية",
+                  "en": "Quantity"
+                },
+                "min": 0,
+                "precision": 3,
+                "required": true,
+                "type": "decimal"
+              }
+            ],
+            "id": "delivery_note_line",
+            "kind": "child",
+            "labels": {
+              "ar": "بند إذن التسليم",
+              "en": "Delivery line"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            }
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/delivery_note_line",
+        "reversible": true,
+        "seq": 44,
+        "sourceOps": [
+          "/entities/delivery_note_line"
+        ],
+        "subject": {
+          "id": "delivery_note_line",
           "kind": "entity",
           "parents": []
         }
@@ -2453,7 +3057,7 @@
         "phase": 4,
         "pointer": "/entities/item",
         "reversible": true,
-        "seq": 41,
+        "seq": 45,
         "sourceOps": [
           "/entities/item"
         ],
@@ -2471,89 +3075,164 @@
           "definition": {
             "components": [
               {
-                "component": "sales.credit_note",
+                "component": "finance.payment_entry",
                 "mode": "implements"
               }
             ],
             "fields": [
               {
-                "id": "item",
+                "id": "payment_type",
                 "labels": {
-                  "ar": "الصنف",
-                  "en": "Item"
+                  "ar": "نوع الدفعة",
+                  "en": "Payment type"
                 },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "قبض من عميل",
+                      "en": "Receive from customer"
+                    },
+                    "value": "receive"
+                  },
+                  {
+                    "labels": {
+                      "ar": "سداد لمورد",
+                      "en": "Pay supplier"
+                    },
+                    "value": "pay"
+                  }
+                ],
                 "required": true,
-                "target": "item",
+                "type": "select"
+              },
+              {
+                "id": "customer",
+                "labels": {
+                  "ar": "العميل",
+                  "en": "Customer"
+                },
+                "target": "customer",
                 "type": "link"
               },
               {
-                "id": "description",
+                "id": "supplier",
                 "labels": {
-                  "ar": "الوصف",
-                  "en": "Description"
+                  "ar": "المورد",
+                  "en": "Supplier"
                 },
-                "maxLength": 200,
+                "target": "supplier",
+                "type": "link"
+              },
+              {
+                "id": "sales_invoice",
+                "labels": {
+                  "ar": "الفاتورة الضريبية",
+                  "en": "Tax invoice"
+                },
+                "target": "sales_invoice",
+                "type": "link"
+              },
+              {
+                "id": "purchase_invoice",
+                "labels": {
+                  "ar": "فاتورة المورد",
+                  "en": "Supplier invoice"
+                },
+                "target": "purchase_invoice",
+                "type": "link"
+              },
+              {
+                "id": "posting_date",
+                "labels": {
+                  "ar": "تاريخ الدفعة",
+                  "en": "Payment date"
+                },
+                "required": true,
+                "type": "date"
+              },
+              {
+                "id": "amount",
+                "labels": {
+                  "ar": "المبلغ",
+                  "en": "Amount"
+                },
+                "min": 0,
+                "precision": 2,
+                "required": true,
+                "type": "money"
+              },
+              {
+                "id": "method",
+                "labels": {
+                  "ar": "طريقة الدفع",
+                  "en": "Payment method"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "حوالة بنكية",
+                      "en": "Bank transfer"
+                    },
+                    "value": "bank_transfer"
+                  },
+                  {
+                    "labels": {
+                      "ar": "نقداً",
+                      "en": "Cash"
+                    },
+                    "value": "cash"
+                  },
+                  {
+                    "labels": {
+                      "ar": "شيك",
+                      "en": "Cheque"
+                    },
+                    "value": "cheque"
+                  },
+                  {
+                    "labels": {
+                      "ar": "مدى",
+                      "en": "Mada card"
+                    },
+                    "value": "mada"
+                  }
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "id": "bank_reference",
+                "labels": {
+                  "ar": "مرجع العملية البنكية",
+                  "en": "Bank reference"
+                },
+                "maxLength": 60,
                 "type": "string"
               },
               {
-                "id": "quantity",
+                "id": "notes",
                 "labels": {
-                  "ar": "الكمية",
-                  "en": "Quantity"
+                  "ar": "ملاحظات",
+                  "en": "Notes"
                 },
-                "min": 0,
-                "precision": 3,
-                "required": true,
-                "type": "decimal"
-              },
-              {
-                "id": "unit_price",
-                "labels": {
-                  "ar": "سعر الوحدة",
-                  "en": "Unit price"
-                },
-                "min": 0,
-                "precision": 2,
-                "required": true,
-                "type": "money"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "sales.credit_note.line_total",
-                  "inputs": [
-                    "quantity",
-                    "unit_price",
-                    "discount_percent"
-                  ]
-                },
-                "id": "line_total",
-                "labels": {
-                  "ar": "إجمالي البند",
-                  "en": "Line total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
+                "maxLength": 1000,
+                "type": "text"
               }
             ],
-            "id": "credit_note_line",
-            "kind": "child",
+            "id": "payment",
+            "kind": "document",
             "labels": {
-              "ar": "بند الإشعار",
-              "en": "Credit note line"
+              "ar": "دفعة",
+              "en": "Payment"
+            },
+            "numbering": {
+              "padding": 5,
+              "prefix": "PAY-",
+              "resetPerFiscalYear": true
+            },
+            "pluralLabels": {
+              "ar": "الدفعات",
+              "en": "Payments"
             },
             "provenance": {
               "humanEdited": false,
@@ -2563,156 +3242,14 @@
           }
         },
         "phase": 4,
-        "pointer": "/entities/credit_note_line",
+        "pointer": "/entities/payment",
         "reversible": true,
-        "seq": 42,
+        "seq": 46,
         "sourceOps": [
-          "/entities/credit_note_line"
+          "/entities/payment"
         ],
         "subject": {
-          "id": "credit_note_line",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "sales.delivery_note",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "item",
-                "labels": {
-                  "ar": "الصنف",
-                  "en": "Item"
-                },
-                "required": true,
-                "target": "item",
-                "type": "link"
-              },
-              {
-                "id": "description",
-                "labels": {
-                  "ar": "الوصف",
-                  "en": "Description"
-                },
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "id": "quantity",
-                "labels": {
-                  "ar": "الكمية",
-                  "en": "Quantity"
-                },
-                "min": 0,
-                "precision": 3,
-                "required": true,
-                "type": "decimal"
-              }
-            ],
-            "id": "delivery_note_line",
-            "kind": "child",
-            "labels": {
-              "ar": "بند إذن التسليم",
-              "en": "Delivery line"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            }
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/delivery_note_line",
-        "reversible": true,
-        "seq": 43,
-        "sourceOps": [
-          "/entities/delivery_note_line"
-        ],
-        "subject": {
-          "id": "delivery_note_line",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "sales.price_list",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "item",
-                "labels": {
-                  "ar": "الصنف",
-                  "en": "Item"
-                },
-                "required": true,
-                "target": "item",
-                "type": "link"
-              },
-              {
-                "id": "rate",
-                "labels": {
-                  "ar": "السعر",
-                  "en": "Rate"
-                },
-                "min": 0,
-                "precision": 2,
-                "required": true,
-                "type": "money"
-              },
-              {
-                "default": 1,
-                "id": "min_quantity",
-                "labels": {
-                  "ar": "الحد الأدنى للكمية",
-                  "en": "Minimum quantity"
-                },
-                "min": 0,
-                "precision": 3,
-                "type": "decimal"
-              }
-            ],
-            "id": "price_list_item",
-            "kind": "child",
-            "labels": {
-              "ar": "بند قائمة الأسعار",
-              "en": "Price list item"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            }
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/price_list_item",
-        "reversible": true,
-        "seq": 44,
-        "sourceOps": [
-          "/entities/price_list_item"
-        ],
-        "subject": {
-          "id": "price_list_item",
+          "id": "payment",
           "kind": "entity",
           "parents": []
         }
@@ -2832,12 +3369,323 @@
         "phase": 4,
         "pointer": "/entities/price_list",
         "reversible": true,
-        "seq": 45,
+        "seq": 47,
         "sourceOps": [
           "/entities/price_list"
         ],
         "subject": {
           "id": "price_list",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "sales.price_list",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "item",
+                "labels": {
+                  "ar": "الصنف",
+                  "en": "Item"
+                },
+                "required": true,
+                "target": "item",
+                "type": "link"
+              },
+              {
+                "id": "rate",
+                "labels": {
+                  "ar": "السعر",
+                  "en": "Rate"
+                },
+                "min": 0,
+                "precision": 2,
+                "required": true,
+                "type": "money"
+              },
+              {
+                "default": 1,
+                "id": "min_quantity",
+                "labels": {
+                  "ar": "الحد الأدنى للكمية",
+                  "en": "Minimum quantity"
+                },
+                "min": 0,
+                "precision": 3,
+                "type": "decimal"
+              }
+            ],
+            "id": "price_list_item",
+            "kind": "child",
+            "labels": {
+              "ar": "بند قائمة الأسعار",
+              "en": "Price list item"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            }
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/price_list_item",
+        "reversible": true,
+        "seq": 48,
+        "sourceOps": [
+          "/entities/price_list_item"
+        ],
+        "subject": {
+          "id": "price_list_item",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "purchasing.purchase_invoice",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "supplier",
+                "labels": {
+                  "ar": "المورد",
+                  "en": "Supplier"
+                },
+                "required": true,
+                "target": "supplier",
+                "type": "link"
+              },
+              {
+                "id": "purchase_order",
+                "labels": {
+                  "ar": "أمر الشراء",
+                  "en": "Purchase order"
+                },
+                "target": "purchase_order",
+                "type": "link"
+              },
+              {
+                "id": "supplier_invoice_number",
+                "labels": {
+                  "ar": "رقم فاتورة المورد",
+                  "en": "Supplier invoice number"
+                },
+                "maxLength": 60,
+                "required": true,
+                "type": "string"
+              },
+              {
+                "id": "invoice_date",
+                "labels": {
+                  "ar": "تاريخ الفاتورة",
+                  "en": "Invoice date"
+                },
+                "required": true,
+                "type": "date"
+              },
+              {
+                "default": 30,
+                "id": "payment_terms_days",
+                "labels": {
+                  "ar": "مدة السداد بالأيام",
+                  "en": "Payment terms (days)"
+                },
+                "max": 180,
+                "min": 0,
+                "type": "integer"
+              },
+              {
+                "computed": {
+                  "function": "purchasing.invoice.due_date",
+                  "inputs": [
+                    "invoice_date",
+                    "payment_terms_days"
+                  ]
+                },
+                "id": "due_date",
+                "labels": {
+                  "ar": "تاريخ الاستحقاق",
+                  "en": "Due date"
+                },
+                "readOnly": true,
+                "type": "date"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "purchasing.invoice.subtotal",
+                  "inputs": [
+                    "discount_percent"
+                  ]
+                },
+                "id": "subtotal",
+                "labels": {
+                  "ar": "المجموع قبل الضريبة",
+                  "en": "Subtotal"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "purchasing.invoice.vat_amount",
+                  "inputs": [
+                    "subtotal"
+                  ]
+                },
+                "id": "vat_amount",
+                "labels": {
+                  "ar": "ضريبة القيمة المضافة",
+                  "en": "VAT"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "purchasing.invoice.total",
+                  "inputs": [
+                    "subtotal",
+                    "vat_amount"
+                  ]
+                },
+                "id": "total_amount",
+                "labels": {
+                  "ar": "الإجمالي",
+                  "en": "Total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "default": 0,
+                "id": "paid_amount",
+                "labels": {
+                  "ar": "المبلغ المسدد",
+                  "en": "Paid amount"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "purchasing.invoice.outstanding",
+                  "inputs": [
+                    "total_amount",
+                    "paid_amount"
+                  ]
+                },
+                "id": "outstanding_amount",
+                "labels": {
+                  "ar": "المبلغ المتبقي",
+                  "en": "Outstanding amount"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "id": "invoice_scan",
+                "labels": {
+                  "ar": "صورة الفاتورة",
+                  "en": "Invoice scan"
+                },
+                "type": "attachment"
+              },
+              {
+                "id": "notes",
+                "labels": {
+                  "ar": "ملاحظات",
+                  "en": "Notes"
+                },
+                "maxLength": 1000,
+                "type": "text"
+              }
+            ],
+            "id": "purchase_invoice",
+            "kind": "document",
+            "labels": {
+              "ar": "فاتورة مورد",
+              "en": "Supplier invoice"
+            },
+            "numbering": {
+              "padding": 5,
+              "prefix": "PINV-",
+              "resetPerFiscalYear": true
+            },
+            "pluralLabels": {
+              "ar": "فواتير الموردين",
+              "en": "Supplier invoices"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            },
+            "relations": [
+              {
+                "cardinality": "many",
+                "id": "lines",
+                "kind": "child_table",
+                "labels": {
+                  "ar": "البنود",
+                  "en": "Lines"
+                },
+                "onDelete": "cascade",
+                "required": true,
+                "target": "purchase_invoice_line"
+              }
+            ]
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/purchase_invoice",
+        "reversible": true,
+        "seq": 49,
+        "sourceOps": [
+          "/entities/purchase_invoice"
+        ],
+        "subject": {
+          "id": "purchase_invoice",
           "kind": "entity",
           "parents": []
         }
@@ -2944,12 +3792,202 @@
         "phase": 4,
         "pointer": "/entities/purchase_invoice_line",
         "reversible": true,
-        "seq": 46,
+        "seq": 50,
         "sourceOps": [
           "/entities/purchase_invoice_line"
         ],
         "subject": {
           "id": "purchase_invoice_line",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "purchasing.purchase_order",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "supplier",
+                "labels": {
+                  "ar": "المورد",
+                  "en": "Supplier"
+                },
+                "required": true,
+                "target": "supplier",
+                "type": "link"
+              },
+              {
+                "id": "order_date",
+                "labels": {
+                  "ar": "تاريخ الأمر",
+                  "en": "Order date"
+                },
+                "required": true,
+                "type": "date"
+              },
+              {
+                "id": "expected_date",
+                "labels": {
+                  "ar": "تاريخ الاستلام المتوقع",
+                  "en": "Expected receipt date"
+                },
+                "type": "date"
+              },
+              {
+                "id": "warehouse",
+                "labels": {
+                  "ar": "مستودع الاستلام",
+                  "en": "Receiving warehouse"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "مستودع الرياض",
+                      "en": "Riyadh warehouse"
+                    },
+                    "value": "wh_riyadh"
+                  },
+                  {
+                    "labels": {
+                      "ar": "مستودع جدة",
+                      "en": "Jeddah warehouse"
+                    },
+                    "value": "wh_jeddah"
+                  }
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "purchasing.order.subtotal",
+                  "inputs": [
+                    "discount_percent"
+                  ]
+                },
+                "id": "subtotal",
+                "labels": {
+                  "ar": "المجموع قبل الضريبة",
+                  "en": "Subtotal"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "purchasing.order.vat_amount",
+                  "inputs": [
+                    "subtotal"
+                  ]
+                },
+                "id": "vat_amount",
+                "labels": {
+                  "ar": "ضريبة القيمة المضافة",
+                  "en": "VAT"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "purchasing.order.total",
+                  "inputs": [
+                    "subtotal",
+                    "vat_amount"
+                  ]
+                },
+                "id": "total_amount",
+                "labels": {
+                  "ar": "الإجمالي",
+                  "en": "Total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "id": "notes",
+                "labels": {
+                  "ar": "ملاحظات",
+                  "en": "Notes"
+                },
+                "maxLength": 1000,
+                "type": "text"
+              }
+            ],
+            "id": "purchase_order",
+            "kind": "document",
+            "labels": {
+              "ar": "أمر شراء",
+              "en": "Purchase order"
+            },
+            "numbering": {
+              "padding": 5,
+              "prefix": "PO-",
+              "resetPerFiscalYear": true
+            },
+            "pluralLabels": {
+              "ar": "أوامر الشراء",
+              "en": "Purchase orders"
+            },
+            "provenance": {
+              "editedBy": "owner",
+              "humanEdited": true,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            },
+            "relations": [
+              {
+                "cardinality": "many",
+                "id": "lines",
+                "kind": "child_table",
+                "labels": {
+                  "ar": "البنود",
+                  "en": "Lines"
+                },
+                "onDelete": "cascade",
+                "required": true,
+                "target": "purchase_order_line"
+              }
+            ],
+            "workflow": "purchase_order_flow"
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/purchase_order",
+        "reversible": true,
+        "seq": 51,
+        "sourceOps": [
+          "/entities/purchase_order"
+        ],
+        "subject": {
+          "id": "purchase_order",
           "kind": "entity",
           "parents": []
         }
@@ -3056,12 +4094,151 @@
         "phase": 4,
         "pointer": "/entities/purchase_order_line",
         "reversible": true,
-        "seq": 47,
+        "seq": 52,
         "sourceOps": [
           "/entities/purchase_order_line"
         ],
         "subject": {
           "id": "purchase_order_line",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "purchasing.purchase_receipt",
+                "mode": "implements"
+              },
+              {
+                "component": "stock.ledger",
+                "mode": "extends"
+              }
+            ],
+            "fields": [
+              {
+                "id": "purchase_order",
+                "labels": {
+                  "ar": "أمر الشراء",
+                  "en": "Purchase order"
+                },
+                "required": true,
+                "target": "purchase_order",
+                "type": "link"
+              },
+              {
+                "id": "supplier",
+                "labels": {
+                  "ar": "المورد",
+                  "en": "Supplier"
+                },
+                "required": true,
+                "target": "supplier",
+                "type": "link"
+              },
+              {
+                "id": "receipt_date",
+                "labels": {
+                  "ar": "تاريخ الاستلام",
+                  "en": "Receipt date"
+                },
+                "required": true,
+                "type": "date"
+              },
+              {
+                "id": "warehouse",
+                "labels": {
+                  "ar": "المستودع",
+                  "en": "Warehouse"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "مستودع الرياض",
+                      "en": "Riyadh warehouse"
+                    },
+                    "value": "wh_riyadh"
+                  },
+                  {
+                    "labels": {
+                      "ar": "مستودع جدة",
+                      "en": "Jeddah warehouse"
+                    },
+                    "value": "wh_jeddah"
+                  }
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "id": "supplier_delivery_ref",
+                "labels": {
+                  "ar": "مرجع تسليم المورد",
+                  "en": "Supplier delivery reference"
+                },
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "id": "notes",
+                "labels": {
+                  "ar": "ملاحظات",
+                  "en": "Notes"
+                },
+                "maxLength": 1000,
+                "type": "text"
+              }
+            ],
+            "id": "purchase_receipt",
+            "kind": "document",
+            "labels": {
+              "ar": "إذن استلام",
+              "en": "Purchase receipt"
+            },
+            "numbering": {
+              "padding": 5,
+              "prefix": "GRN-",
+              "resetPerFiscalYear": true
+            },
+            "pluralLabels": {
+              "ar": "أذونات الاستلام",
+              "en": "Purchase receipts"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            },
+            "relations": [
+              {
+                "cardinality": "many",
+                "id": "lines",
+                "kind": "child_table",
+                "labels": {
+                  "ar": "البنود",
+                  "en": "Lines"
+                },
+                "onDelete": "cascade",
+                "required": true,
+                "target": "purchase_receipt_line"
+              }
+            ]
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/purchase_receipt",
+        "reversible": true,
+        "seq": 53,
+        "sourceOps": [
+          "/entities/purchase_receipt"
+        ],
+        "subject": {
+          "id": "purchase_receipt",
           "kind": "entity",
           "parents": []
         }
@@ -3137,926 +4314,12 @@
         "phase": 4,
         "pointer": "/entities/purchase_receipt_line",
         "reversible": true,
-        "seq": 48,
+        "seq": 54,
         "sourceOps": [
           "/entities/purchase_receipt_line"
         ],
         "subject": {
           "id": "purchase_receipt_line",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "core.sales_invoice",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "item",
-                "labels": {
-                  "ar": "الصنف",
-                  "en": "Item"
-                },
-                "required": true,
-                "target": "item",
-                "type": "link"
-              },
-              {
-                "id": "description",
-                "labels": {
-                  "ar": "الوصف",
-                  "en": "Description"
-                },
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "id": "quantity",
-                "labels": {
-                  "ar": "الكمية",
-                  "en": "Quantity"
-                },
-                "min": 0,
-                "precision": 3,
-                "required": true,
-                "type": "decimal"
-              },
-              {
-                "id": "unit_price",
-                "labels": {
-                  "ar": "سعر الوحدة",
-                  "en": "Unit price"
-                },
-                "min": 0,
-                "precision": 2,
-                "required": true,
-                "type": "money"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "sales.invoice.line_total",
-                  "inputs": [
-                    "quantity",
-                    "unit_price",
-                    "discount_percent"
-                  ]
-                },
-                "id": "line_total",
-                "labels": {
-                  "ar": "إجمالي البند",
-                  "en": "Line total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              }
-            ],
-            "id": "sales_invoice_line",
-            "kind": "child",
-            "labels": {
-              "ar": "بند الفاتورة",
-              "en": "Invoice line"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            }
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/sales_invoice_line",
-        "reversible": true,
-        "seq": 49,
-        "sourceOps": [
-          "/entities/sales_invoice_line"
-        ],
-        "subject": {
-          "id": "sales_invoice_line",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "core.sales_order",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "item",
-                "labels": {
-                  "ar": "الصنف",
-                  "en": "Item"
-                },
-                "required": true,
-                "target": "item",
-                "type": "link"
-              },
-              {
-                "id": "description",
-                "labels": {
-                  "ar": "الوصف",
-                  "en": "Description"
-                },
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "id": "quantity",
-                "labels": {
-                  "ar": "الكمية",
-                  "en": "Quantity"
-                },
-                "min": 0,
-                "precision": 3,
-                "required": true,
-                "type": "decimal"
-              },
-              {
-                "id": "unit_price",
-                "labels": {
-                  "ar": "سعر الوحدة",
-                  "en": "Unit price"
-                },
-                "min": 0,
-                "precision": 2,
-                "required": true,
-                "type": "money"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "sales.order.line_total",
-                  "inputs": [
-                    "quantity",
-                    "unit_price",
-                    "discount_percent"
-                  ]
-                },
-                "id": "line_total",
-                "labels": {
-                  "ar": "إجمالي البند",
-                  "en": "Line total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              }
-            ],
-            "id": "sales_order_line",
-            "kind": "child",
-            "labels": {
-              "ar": "بند أمر البيع",
-              "en": "Order line"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            }
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/sales_order_line",
-        "reversible": true,
-        "seq": 50,
-        "sourceOps": [
-          "/entities/sales_order_line"
-        ],
-        "subject": {
-          "id": "sales_order_line",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "sales.quote",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "item",
-                "labels": {
-                  "ar": "الصنف",
-                  "en": "Item"
-                },
-                "required": true,
-                "target": "item",
-                "type": "link"
-              },
-              {
-                "id": "description",
-                "labels": {
-                  "ar": "الوصف",
-                  "en": "Description"
-                },
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "id": "quantity",
-                "labels": {
-                  "ar": "الكمية",
-                  "en": "Quantity"
-                },
-                "min": 0,
-                "precision": 3,
-                "required": true,
-                "type": "decimal"
-              },
-              {
-                "id": "unit_price",
-                "labels": {
-                  "ar": "سعر الوحدة",
-                  "en": "Unit price"
-                },
-                "min": 0,
-                "precision": 2,
-                "required": true,
-                "type": "money"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "sales.quote.line_total",
-                  "inputs": [
-                    "quantity",
-                    "unit_price",
-                    "discount_percent"
-                  ]
-                },
-                "id": "line_total",
-                "labels": {
-                  "ar": "إجمالي البند",
-                  "en": "Line total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              }
-            ],
-            "id": "sales_quote_line",
-            "kind": "child",
-            "labels": {
-              "ar": "بند عرض السعر",
-              "en": "Quote line"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            }
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/sales_quote_line",
-        "reversible": true,
-        "seq": 51,
-        "sourceOps": [
-          "/entities/sales_quote_line"
-        ],
-        "subject": {
-          "id": "sales_quote_line",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "sales.quote",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "customer",
-                "labels": {
-                  "ar": "العميل",
-                  "en": "Customer"
-                },
-                "required": true,
-                "target": "customer",
-                "type": "link"
-              },
-              {
-                "id": "quote_date",
-                "labels": {
-                  "ar": "تاريخ العرض",
-                  "en": "Quote date"
-                },
-                "required": true,
-                "type": "date"
-              },
-              {
-                "id": "valid_until",
-                "labels": {
-                  "ar": "صالح حتى",
-                  "en": "Valid until"
-                },
-                "type": "date"
-              },
-              {
-                "id": "price_list",
-                "labels": {
-                  "ar": "قائمة الأسعار",
-                  "en": "Price list"
-                },
-                "target": "price_list",
-                "type": "link"
-              },
-              {
-                "id": "branch",
-                "labels": {
-                  "ar": "الفرع",
-                  "en": "Branch"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "المقر الرئيسي - الرياض",
-                      "en": "Head office - Riyadh"
-                    },
-                    "value": "hq_riyadh"
-                  },
-                  {
-                    "labels": {
-                      "ar": "فرع جدة",
-                      "en": "Jeddah branch"
-                    },
-                    "value": "branch_jeddah"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "sales.quote.subtotal",
-                  "inputs": [
-                    "discount_percent"
-                  ]
-                },
-                "id": "subtotal",
-                "labels": {
-                  "ar": "المجموع قبل الضريبة",
-                  "en": "Subtotal"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "sales.quote.vat_amount",
-                  "inputs": [
-                    "subtotal"
-                  ]
-                },
-                "id": "vat_amount",
-                "labels": {
-                  "ar": "ضريبة القيمة المضافة",
-                  "en": "VAT"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "sales.quote.total",
-                  "inputs": [
-                    "subtotal",
-                    "vat_amount"
-                  ]
-                },
-                "id": "total_amount",
-                "labels": {
-                  "ar": "الإجمالي",
-                  "en": "Total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "id": "notes",
-                "labels": {
-                  "ar": "ملاحظات",
-                  "en": "Notes"
-                },
-                "maxLength": 1000,
-                "type": "text"
-              }
-            ],
-            "id": "sales_quote",
-            "kind": "document",
-            "labels": {
-              "ar": "عرض سعر",
-              "en": "Sales quote"
-            },
-            "numbering": {
-              "padding": 5,
-              "prefix": "QT-",
-              "resetPerFiscalYear": true
-            },
-            "pluralLabels": {
-              "ar": "عروض الأسعار",
-              "en": "Sales quotes"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            },
-            "relations": [
-              {
-                "cardinality": "many",
-                "id": "lines",
-                "kind": "child_table",
-                "labels": {
-                  "ar": "البنود",
-                  "en": "Lines"
-                },
-                "onDelete": "cascade",
-                "required": true,
-                "target": "sales_quote_line"
-              }
-            ]
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/sales_quote",
-        "reversible": true,
-        "seq": 52,
-        "sourceOps": [
-          "/entities/sales_quote"
-        ],
-        "subject": {
-          "id": "sales_quote",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "core.sales_order",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "customer",
-                "labels": {
-                  "ar": "العميل",
-                  "en": "Customer"
-                },
-                "required": true,
-                "target": "customer",
-                "type": "link"
-              },
-              {
-                "id": "sales_quote",
-                "labels": {
-                  "ar": "عرض السعر",
-                  "en": "Sales quote"
-                },
-                "target": "sales_quote",
-                "type": "link"
-              },
-              {
-                "id": "order_date",
-                "labels": {
-                  "ar": "تاريخ الطلب",
-                  "en": "Order date"
-                },
-                "required": true,
-                "type": "date"
-              },
-              {
-                "id": "delivery_date",
-                "labels": {
-                  "ar": "تاريخ التسليم المطلوب",
-                  "en": "Requested delivery date"
-                },
-                "type": "date"
-              },
-              {
-                "id": "branch",
-                "labels": {
-                  "ar": "الفرع",
-                  "en": "Branch"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "المقر الرئيسي - الرياض",
-                      "en": "Head office - Riyadh"
-                    },
-                    "value": "hq_riyadh"
-                  },
-                  {
-                    "labels": {
-                      "ar": "فرع جدة",
-                      "en": "Jeddah branch"
-                    },
-                    "value": "branch_jeddah"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "id": "warehouse",
-                "labels": {
-                  "ar": "المستودع",
-                  "en": "Warehouse"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "مستودع الرياض",
-                      "en": "Riyadh warehouse"
-                    },
-                    "value": "wh_riyadh"
-                  },
-                  {
-                    "labels": {
-                      "ar": "مستودع جدة",
-                      "en": "Jeddah warehouse"
-                    },
-                    "value": "wh_jeddah"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "id": "price_list",
-                "labels": {
-                  "ar": "قائمة الأسعار",
-                  "en": "Price list"
-                },
-                "target": "price_list",
-                "type": "link"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "sales.order.subtotal",
-                  "inputs": [
-                    "discount_percent"
-                  ]
-                },
-                "id": "subtotal",
-                "labels": {
-                  "ar": "المجموع قبل الضريبة",
-                  "en": "Subtotal"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "sales.order.vat_amount",
-                  "inputs": [
-                    "subtotal"
-                  ]
-                },
-                "id": "vat_amount",
-                "labels": {
-                  "ar": "ضريبة القيمة المضافة",
-                  "en": "VAT"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "sales.order.total",
-                  "inputs": [
-                    "subtotal",
-                    "vat_amount"
-                  ]
-                },
-                "id": "total_amount",
-                "labels": {
-                  "ar": "الإجمالي",
-                  "en": "Total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "id": "notes",
-                "labels": {
-                  "ar": "ملاحظات",
-                  "en": "Notes"
-                },
-                "maxLength": 1000,
-                "type": "text"
-              }
-            ],
-            "id": "sales_order",
-            "kind": "document",
-            "labels": {
-              "ar": "أمر بيع",
-              "en": "Sales order"
-            },
-            "numbering": {
-              "padding": 5,
-              "prefix": "SO-",
-              "resetPerFiscalYear": true
-            },
-            "pluralLabels": {
-              "ar": "أوامر البيع",
-              "en": "Sales orders"
-            },
-            "provenance": {
-              "confidence": 0.88,
-              "humanEdited": false,
-              "ref": "turn-009",
-              "source": "interview"
-            },
-            "relations": [
-              {
-                "cardinality": "many",
-                "id": "lines",
-                "kind": "child_table",
-                "labels": {
-                  "ar": "البنود",
-                  "en": "Lines"
-                },
-                "onDelete": "cascade",
-                "required": true,
-                "target": "sales_order_line"
-              }
-            ],
-            "workflow": "sales_order_flow"
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/sales_order",
-        "reversible": true,
-        "seq": 53,
-        "sourceOps": [
-          "/entities/sales_order"
-        ],
-        "subject": {
-          "id": "sales_order",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "sales.delivery_note",
-                "mode": "implements"
-              },
-              {
-                "component": "stock.ledger",
-                "mode": "extends"
-              }
-            ],
-            "fields": [
-              {
-                "id": "sales_order",
-                "labels": {
-                  "ar": "أمر البيع",
-                  "en": "Sales order"
-                },
-                "required": true,
-                "target": "sales_order",
-                "type": "link"
-              },
-              {
-                "id": "customer",
-                "labels": {
-                  "ar": "العميل",
-                  "en": "Customer"
-                },
-                "required": true,
-                "target": "customer",
-                "type": "link"
-              },
-              {
-                "id": "delivery_date",
-                "labels": {
-                  "ar": "تاريخ التسليم",
-                  "en": "Delivery date"
-                },
-                "required": true,
-                "type": "date"
-              },
-              {
-                "id": "warehouse",
-                "labels": {
-                  "ar": "المستودع",
-                  "en": "Warehouse"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "مستودع الرياض",
-                      "en": "Riyadh warehouse"
-                    },
-                    "value": "wh_riyadh"
-                  },
-                  {
-                    "labels": {
-                      "ar": "مستودع جدة",
-                      "en": "Jeddah warehouse"
-                    },
-                    "value": "wh_jeddah"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "id": "driver_name",
-                "labels": {
-                  "ar": "اسم السائق",
-                  "en": "Driver name"
-                },
-                "maxLength": 100,
-                "type": "string"
-              },
-              {
-                "id": "vehicle_plate",
-                "labels": {
-                  "ar": "لوحة المركبة",
-                  "en": "Vehicle plate"
-                },
-                "maxLength": 20,
-                "type": "string"
-              },
-              {
-                "id": "notes",
-                "labels": {
-                  "ar": "ملاحظات",
-                  "en": "Notes"
-                },
-                "maxLength": 1000,
-                "type": "text"
-              }
-            ],
-            "id": "delivery_note",
-            "kind": "document",
-            "labels": {
-              "ar": "إذن تسليم",
-              "en": "Delivery note"
-            },
-            "numbering": {
-              "padding": 5,
-              "prefix": "DN-",
-              "resetPerFiscalYear": true
-            },
-            "pluralLabels": {
-              "ar": "أذونات التسليم",
-              "en": "Delivery notes"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            },
-            "relations": [
-              {
-                "cardinality": "many",
-                "id": "lines",
-                "kind": "child_table",
-                "labels": {
-                  "ar": "البنود",
-                  "en": "Lines"
-                },
-                "onDelete": "cascade",
-                "required": true,
-                "target": "delivery_note_line"
-              }
-            ]
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/delivery_note",
-        "reversible": true,
-        "seq": 54,
-        "sourceOps": [
-          "/entities/delivery_note"
-        ],
-        "subject": {
-          "id": "delivery_note",
           "kind": "entity",
           "parents": []
         }
@@ -4388,25 +4651,347 @@
           "definition": {
             "components": [
               {
-                "component": "sales.credit_note",
+                "component": "core.sales_invoice",
                 "mode": "implements"
-              },
-              {
-                "component": "compliance.zatca_sa",
-                "mode": "extends"
               }
             ],
             "fields": [
               {
-                "id": "sales_invoice",
+                "id": "item",
                 "labels": {
-                  "ar": "الفاتورة الأصلية",
-                  "en": "Original invoice"
+                  "ar": "الصنف",
+                  "en": "Item"
                 },
                 "required": true,
-                "target": "sales_invoice",
+                "target": "item",
                 "type": "link"
               },
+              {
+                "id": "description",
+                "labels": {
+                  "ar": "الوصف",
+                  "en": "Description"
+                },
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "id": "quantity",
+                "labels": {
+                  "ar": "الكمية",
+                  "en": "Quantity"
+                },
+                "min": 0,
+                "precision": 3,
+                "required": true,
+                "type": "decimal"
+              },
+              {
+                "id": "unit_price",
+                "labels": {
+                  "ar": "سعر الوحدة",
+                  "en": "Unit price"
+                },
+                "min": 0,
+                "precision": 2,
+                "required": true,
+                "type": "money"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "sales.invoice.line_total",
+                  "inputs": [
+                    "quantity",
+                    "unit_price",
+                    "discount_percent"
+                  ]
+                },
+                "id": "line_total",
+                "labels": {
+                  "ar": "إجمالي البند",
+                  "en": "Line total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              }
+            ],
+            "id": "sales_invoice_line",
+            "kind": "child",
+            "labels": {
+              "ar": "بند الفاتورة",
+              "en": "Invoice line"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            }
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/sales_invoice_line",
+        "reversible": true,
+        "seq": 56,
+        "sourceOps": [
+          "/entities/sales_invoice_line"
+        ],
+        "subject": {
+          "id": "sales_invoice_line",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "core.sales_order",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "item",
+                "labels": {
+                  "ar": "الصنف",
+                  "en": "Item"
+                },
+                "required": true,
+                "target": "item",
+                "type": "link"
+              },
+              {
+                "id": "description",
+                "labels": {
+                  "ar": "الوصف",
+                  "en": "Description"
+                },
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "id": "quantity",
+                "labels": {
+                  "ar": "الكمية",
+                  "en": "Quantity"
+                },
+                "min": 0,
+                "precision": 3,
+                "required": true,
+                "type": "decimal"
+              },
+              {
+                "id": "unit_price",
+                "labels": {
+                  "ar": "سعر الوحدة",
+                  "en": "Unit price"
+                },
+                "min": 0,
+                "precision": 2,
+                "required": true,
+                "type": "money"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "sales.order.line_total",
+                  "inputs": [
+                    "quantity",
+                    "unit_price",
+                    "discount_percent"
+                  ]
+                },
+                "id": "line_total",
+                "labels": {
+                  "ar": "إجمالي البند",
+                  "en": "Line total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              }
+            ],
+            "id": "sales_order_line",
+            "kind": "child",
+            "labels": {
+              "ar": "بند أمر البيع",
+              "en": "Order line"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            }
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/sales_order_line",
+        "reversible": true,
+        "seq": 57,
+        "sourceOps": [
+          "/entities/sales_order_line"
+        ],
+        "subject": {
+          "id": "sales_order_line",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "sales.quote",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "item",
+                "labels": {
+                  "ar": "الصنف",
+                  "en": "Item"
+                },
+                "required": true,
+                "target": "item",
+                "type": "link"
+              },
+              {
+                "id": "description",
+                "labels": {
+                  "ar": "الوصف",
+                  "en": "Description"
+                },
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "id": "quantity",
+                "labels": {
+                  "ar": "الكمية",
+                  "en": "Quantity"
+                },
+                "min": 0,
+                "precision": 3,
+                "required": true,
+                "type": "decimal"
+              },
+              {
+                "id": "unit_price",
+                "labels": {
+                  "ar": "سعر الوحدة",
+                  "en": "Unit price"
+                },
+                "min": 0,
+                "precision": 2,
+                "required": true,
+                "type": "money"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "sales.quote.line_total",
+                  "inputs": [
+                    "quantity",
+                    "unit_price",
+                    "discount_percent"
+                  ]
+                },
+                "id": "line_total",
+                "labels": {
+                  "ar": "إجمالي البند",
+                  "en": "Line total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              }
+            ],
+            "id": "sales_quote_line",
+            "kind": "child",
+            "labels": {
+              "ar": "بند عرض السعر",
+              "en": "Quote line"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            }
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/sales_quote_line",
+        "reversible": true,
+        "seq": 58,
+        "sourceOps": [
+          "/entities/sales_quote_line"
+        ],
+        "subject": {
+          "id": "sales_quote_line",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "sales.quote",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
               {
                 "id": "customer",
                 "labels": {
@@ -4418,52 +5003,30 @@
                 "type": "link"
               },
               {
-                "id": "credit_date",
+                "id": "quote_date",
                 "labels": {
-                  "ar": "تاريخ الإشعار",
-                  "en": "Credit date"
+                  "ar": "تاريخ العرض",
+                  "en": "Quote date"
                 },
                 "required": true,
                 "type": "date"
               },
               {
-                "id": "reason",
+                "id": "valid_until",
                 "labels": {
-                  "ar": "السبب",
-                  "en": "Reason"
+                  "ar": "صالح حتى",
+                  "en": "Valid until"
                 },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "مرتجعات",
-                      "en": "Returned goods"
-                    },
-                    "value": "returned_goods"
-                  },
-                  {
-                    "labels": {
-                      "ar": "تصحيح سعر",
-                      "en": "Price correction"
-                    },
-                    "value": "price_correction"
-                  },
-                  {
-                    "labels": {
-                      "ar": "بضاعة تالفة",
-                      "en": "Damaged goods"
-                    },
-                    "value": "damaged_goods"
-                  },
-                  {
-                    "labels": {
-                      "ar": "أخرى",
-                      "en": "Other"
-                    },
-                    "value": "other"
-                  }
-                ],
-                "required": true,
-                "type": "select"
+                "type": "date"
+              },
+              {
+                "id": "price_list",
+                "labels": {
+                  "ar": "قائمة الأسعار",
+                  "en": "Price list"
+                },
+                "target": "price_list",
+                "type": "link"
               },
               {
                 "id": "branch",
@@ -4504,7 +5067,7 @@
               },
               {
                 "computed": {
-                  "function": "sales.credit_note.subtotal",
+                  "function": "sales.quote.subtotal",
                   "inputs": [
                     "discount_percent"
                   ]
@@ -4521,7 +5084,7 @@
               },
               {
                 "computed": {
-                  "function": "sales.credit_note.vat_amount",
+                  "function": "sales.quote.vat_amount",
                   "inputs": [
                     "subtotal"
                   ]
@@ -4538,7 +5101,7 @@
               },
               {
                 "computed": {
-                  "function": "sales.credit_note.total",
+                  "function": "sales.quote.total",
                   "inputs": [
                     "subtotal",
                     "vat_amount"
@@ -4555,44 +5118,235 @@
                 "type": "money"
               },
               {
-                "default": "not_sent",
-                "id": "zatca_status",
+                "id": "notes",
                 "labels": {
-                  "ar": "حالة هيئة الزكاة",
-                  "en": "ZATCA status"
+                  "ar": "ملاحظات",
+                  "en": "Notes"
+                },
+                "maxLength": 1000,
+                "type": "text"
+              }
+            ],
+            "id": "sales_quote",
+            "kind": "document",
+            "labels": {
+              "ar": "عرض سعر",
+              "en": "Sales quote"
+            },
+            "numbering": {
+              "padding": 5,
+              "prefix": "QT-",
+              "resetPerFiscalYear": true
+            },
+            "pluralLabels": {
+              "ar": "عروض الأسعار",
+              "en": "Sales quotes"
+            },
+            "provenance": {
+              "humanEdited": false,
+              "ref": "trading_distribution@0.1.0",
+              "source": "template"
+            },
+            "relations": [
+              {
+                "cardinality": "many",
+                "id": "lines",
+                "kind": "child_table",
+                "labels": {
+                  "ar": "البنود",
+                  "en": "Lines"
+                },
+                "onDelete": "cascade",
+                "required": true,
+                "target": "sales_quote_line"
+              }
+            ]
+          }
+        },
+        "phase": 4,
+        "pointer": "/entities/sales_quote",
+        "reversible": true,
+        "seq": 59,
+        "sourceOps": [
+          "/entities/sales_quote"
+        ],
+        "subject": {
+          "id": "sales_quote",
+          "kind": "entity",
+          "parents": []
+        }
+      },
+      {
+        "ddlImpact": "additive",
+        "impact": "data_shape",
+        "kind": "entity.add",
+        "params": {
+          "definition": {
+            "components": [
+              {
+                "component": "core.sales_order",
+                "mode": "implements"
+              }
+            ],
+            "fields": [
+              {
+                "id": "customer",
+                "labels": {
+                  "ar": "العميل",
+                  "en": "Customer"
+                },
+                "required": true,
+                "target": "customer",
+                "type": "link"
+              },
+              {
+                "id": "sales_quote",
+                "labels": {
+                  "ar": "عرض السعر",
+                  "en": "Sales quote"
+                },
+                "target": "sales_quote",
+                "type": "link"
+              },
+              {
+                "id": "order_date",
+                "labels": {
+                  "ar": "تاريخ الطلب",
+                  "en": "Order date"
+                },
+                "required": true,
+                "type": "date"
+              },
+              {
+                "id": "delivery_date",
+                "labels": {
+                  "ar": "تاريخ التسليم المطلوب",
+                  "en": "Requested delivery date"
+                },
+                "type": "date"
+              },
+              {
+                "id": "branch",
+                "labels": {
+                  "ar": "الفرع",
+                  "en": "Branch"
                 },
                 "options": [
                   {
                     "labels": {
-                      "ar": "لم تُرسل",
-                      "en": "Not sent"
+                      "ar": "المقر الرئيسي - الرياض",
+                      "en": "Head office - Riyadh"
                     },
-                    "value": "not_sent"
+                    "value": "hq_riyadh"
                   },
                   {
                     "labels": {
-                      "ar": "تم الاعتماد",
-                      "en": "Cleared"
+                      "ar": "فرع جدة",
+                      "en": "Jeddah branch"
                     },
-                    "value": "cleared"
-                  },
-                  {
-                    "labels": {
-                      "ar": "تم الإبلاغ",
-                      "en": "Reported"
-                    },
-                    "value": "reported"
-                  },
-                  {
-                    "labels": {
-                      "ar": "مرفوضة",
-                      "en": "Rejected"
-                    },
-                    "value": "rejected"
+                    "value": "branch_jeddah"
                   }
                 ],
-                "readOnly": true,
+                "required": true,
                 "type": "select"
+              },
+              {
+                "id": "warehouse",
+                "labels": {
+                  "ar": "المستودع",
+                  "en": "Warehouse"
+                },
+                "options": [
+                  {
+                    "labels": {
+                      "ar": "مستودع الرياض",
+                      "en": "Riyadh warehouse"
+                    },
+                    "value": "wh_riyadh"
+                  },
+                  {
+                    "labels": {
+                      "ar": "مستودع جدة",
+                      "en": "Jeddah warehouse"
+                    },
+                    "value": "wh_jeddah"
+                  }
+                ],
+                "required": true,
+                "type": "select"
+              },
+              {
+                "id": "price_list",
+                "labels": {
+                  "ar": "قائمة الأسعار",
+                  "en": "Price list"
+                },
+                "target": "price_list",
+                "type": "link"
+              },
+              {
+                "default": 0,
+                "id": "discount_percent",
+                "labels": {
+                  "ar": "نسبة الخصم",
+                  "en": "Discount percent"
+                },
+                "max": 100,
+                "min": 0,
+                "precision": 2,
+                "type": "percent"
+              },
+              {
+                "computed": {
+                  "function": "sales.order.subtotal",
+                  "inputs": [
+                    "discount_percent"
+                  ]
+                },
+                "id": "subtotal",
+                "labels": {
+                  "ar": "المجموع قبل الضريبة",
+                  "en": "Subtotal"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "sales.order.vat_amount",
+                  "inputs": [
+                    "subtotal"
+                  ]
+                },
+                "id": "vat_amount",
+                "labels": {
+                  "ar": "ضريبة القيمة المضافة",
+                  "en": "VAT"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
+              },
+              {
+                "computed": {
+                  "function": "sales.order.total",
+                  "inputs": [
+                    "subtotal",
+                    "vat_amount"
+                  ]
+                },
+                "id": "total_amount",
+                "labels": {
+                  "ar": "الإجمالي",
+                  "en": "Total"
+                },
+                "min": 0,
+                "precision": 2,
+                "readOnly": true,
+                "type": "money"
               },
               {
                 "id": "notes",
@@ -4604,25 +5358,25 @@
                 "type": "text"
               }
             ],
-            "id": "credit_note",
+            "id": "sales_order",
             "kind": "document",
             "labels": {
-              "ar": "إشعار دائن",
-              "en": "Credit note"
+              "ar": "أمر بيع",
+              "en": "Sales order"
             },
             "numbering": {
               "padding": 5,
-              "prefix": "CN-",
+              "prefix": "SO-",
               "resetPerFiscalYear": true
             },
             "pluralLabels": {
-              "ar": "إشعارات الدائن",
-              "en": "Credit notes"
+              "ar": "أوامر البيع",
+              "en": "Sales orders"
             },
             "provenance": {
-              "confidence": 0.9,
+              "confidence": 0.88,
               "humanEdited": false,
-              "ref": "turn-013",
+              "ref": "turn-009",
               "source": "interview"
             },
             "relations": [
@@ -4636,20 +5390,21 @@
                 },
                 "onDelete": "cascade",
                 "required": true,
-                "target": "credit_note_line"
+                "target": "sales_order_line"
               }
-            ]
+            ],
+            "workflow": "sales_order_flow"
           }
         },
         "phase": 4,
-        "pointer": "/entities/credit_note",
+        "pointer": "/entities/sales_order",
         "reversible": true,
-        "seq": 56,
+        "seq": 60,
         "sourceOps": [
-          "/entities/credit_note"
+          "/entities/sales_order"
         ],
         "subject": {
-          "id": "credit_note",
+          "id": "sales_order",
           "kind": "entity",
           "parents": []
         }
@@ -4714,7 +5469,7 @@
         "phase": 4,
         "pointer": "/entities/stock_transfer_line",
         "reversible": true,
-        "seq": 57,
+        "seq": 61,
         "sourceOps": [
           "/entities/stock_transfer_line"
         ],
@@ -4877,7 +5632,7 @@
         "phase": 4,
         "pointer": "/entities/stock_transfer",
         "reversible": true,
-        "seq": 58,
+        "seq": 62,
         "sourceOps": [
           "/entities/stock_transfer"
         ],
@@ -5042,767 +5797,12 @@
         "phase": 4,
         "pointer": "/entities/supplier",
         "reversible": true,
-        "seq": 59,
+        "seq": 63,
         "sourceOps": [
           "/entities/supplier"
         ],
         "subject": {
           "id": "supplier",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "purchasing.purchase_order",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "supplier",
-                "labels": {
-                  "ar": "المورد",
-                  "en": "Supplier"
-                },
-                "required": true,
-                "target": "supplier",
-                "type": "link"
-              },
-              {
-                "id": "order_date",
-                "labels": {
-                  "ar": "تاريخ الأمر",
-                  "en": "Order date"
-                },
-                "required": true,
-                "type": "date"
-              },
-              {
-                "id": "expected_date",
-                "labels": {
-                  "ar": "تاريخ الاستلام المتوقع",
-                  "en": "Expected receipt date"
-                },
-                "type": "date"
-              },
-              {
-                "id": "warehouse",
-                "labels": {
-                  "ar": "مستودع الاستلام",
-                  "en": "Receiving warehouse"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "مستودع الرياض",
-                      "en": "Riyadh warehouse"
-                    },
-                    "value": "wh_riyadh"
-                  },
-                  {
-                    "labels": {
-                      "ar": "مستودع جدة",
-                      "en": "Jeddah warehouse"
-                    },
-                    "value": "wh_jeddah"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "purchasing.order.subtotal",
-                  "inputs": [
-                    "discount_percent"
-                  ]
-                },
-                "id": "subtotal",
-                "labels": {
-                  "ar": "المجموع قبل الضريبة",
-                  "en": "Subtotal"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "purchasing.order.vat_amount",
-                  "inputs": [
-                    "subtotal"
-                  ]
-                },
-                "id": "vat_amount",
-                "labels": {
-                  "ar": "ضريبة القيمة المضافة",
-                  "en": "VAT"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "purchasing.order.total",
-                  "inputs": [
-                    "subtotal",
-                    "vat_amount"
-                  ]
-                },
-                "id": "total_amount",
-                "labels": {
-                  "ar": "الإجمالي",
-                  "en": "Total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "id": "notes",
-                "labels": {
-                  "ar": "ملاحظات",
-                  "en": "Notes"
-                },
-                "maxLength": 1000,
-                "type": "text"
-              }
-            ],
-            "id": "purchase_order",
-            "kind": "document",
-            "labels": {
-              "ar": "أمر شراء",
-              "en": "Purchase order"
-            },
-            "numbering": {
-              "padding": 5,
-              "prefix": "PO-",
-              "resetPerFiscalYear": true
-            },
-            "pluralLabels": {
-              "ar": "أوامر الشراء",
-              "en": "Purchase orders"
-            },
-            "provenance": {
-              "editedBy": "owner",
-              "humanEdited": true,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            },
-            "relations": [
-              {
-                "cardinality": "many",
-                "id": "lines",
-                "kind": "child_table",
-                "labels": {
-                  "ar": "البنود",
-                  "en": "Lines"
-                },
-                "onDelete": "cascade",
-                "required": true,
-                "target": "purchase_order_line"
-              }
-            ],
-            "workflow": "purchase_order_flow"
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/purchase_order",
-        "reversible": true,
-        "seq": 60,
-        "sourceOps": [
-          "/entities/purchase_order"
-        ],
-        "subject": {
-          "id": "purchase_order",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "purchasing.purchase_invoice",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "supplier",
-                "labels": {
-                  "ar": "المورد",
-                  "en": "Supplier"
-                },
-                "required": true,
-                "target": "supplier",
-                "type": "link"
-              },
-              {
-                "id": "purchase_order",
-                "labels": {
-                  "ar": "أمر الشراء",
-                  "en": "Purchase order"
-                },
-                "target": "purchase_order",
-                "type": "link"
-              },
-              {
-                "id": "supplier_invoice_number",
-                "labels": {
-                  "ar": "رقم فاتورة المورد",
-                  "en": "Supplier invoice number"
-                },
-                "maxLength": 60,
-                "required": true,
-                "type": "string"
-              },
-              {
-                "id": "invoice_date",
-                "labels": {
-                  "ar": "تاريخ الفاتورة",
-                  "en": "Invoice date"
-                },
-                "required": true,
-                "type": "date"
-              },
-              {
-                "default": 30,
-                "id": "payment_terms_days",
-                "labels": {
-                  "ar": "مدة السداد بالأيام",
-                  "en": "Payment terms (days)"
-                },
-                "max": 180,
-                "min": 0,
-                "type": "integer"
-              },
-              {
-                "computed": {
-                  "function": "purchasing.invoice.due_date",
-                  "inputs": [
-                    "invoice_date",
-                    "payment_terms_days"
-                  ]
-                },
-                "id": "due_date",
-                "labels": {
-                  "ar": "تاريخ الاستحقاق",
-                  "en": "Due date"
-                },
-                "readOnly": true,
-                "type": "date"
-              },
-              {
-                "default": 0,
-                "id": "discount_percent",
-                "labels": {
-                  "ar": "نسبة الخصم",
-                  "en": "Discount percent"
-                },
-                "max": 100,
-                "min": 0,
-                "precision": 2,
-                "type": "percent"
-              },
-              {
-                "computed": {
-                  "function": "purchasing.invoice.subtotal",
-                  "inputs": [
-                    "discount_percent"
-                  ]
-                },
-                "id": "subtotal",
-                "labels": {
-                  "ar": "المجموع قبل الضريبة",
-                  "en": "Subtotal"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "purchasing.invoice.vat_amount",
-                  "inputs": [
-                    "subtotal"
-                  ]
-                },
-                "id": "vat_amount",
-                "labels": {
-                  "ar": "ضريبة القيمة المضافة",
-                  "en": "VAT"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "purchasing.invoice.total",
-                  "inputs": [
-                    "subtotal",
-                    "vat_amount"
-                  ]
-                },
-                "id": "total_amount",
-                "labels": {
-                  "ar": "الإجمالي",
-                  "en": "Total"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "default": 0,
-                "id": "paid_amount",
-                "labels": {
-                  "ar": "المبلغ المسدد",
-                  "en": "Paid amount"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "computed": {
-                  "function": "purchasing.invoice.outstanding",
-                  "inputs": [
-                    "total_amount",
-                    "paid_amount"
-                  ]
-                },
-                "id": "outstanding_amount",
-                "labels": {
-                  "ar": "المبلغ المتبقي",
-                  "en": "Outstanding amount"
-                },
-                "min": 0,
-                "precision": 2,
-                "readOnly": true,
-                "type": "money"
-              },
-              {
-                "id": "invoice_scan",
-                "labels": {
-                  "ar": "صورة الفاتورة",
-                  "en": "Invoice scan"
-                },
-                "type": "attachment"
-              },
-              {
-                "id": "notes",
-                "labels": {
-                  "ar": "ملاحظات",
-                  "en": "Notes"
-                },
-                "maxLength": 1000,
-                "type": "text"
-              }
-            ],
-            "id": "purchase_invoice",
-            "kind": "document",
-            "labels": {
-              "ar": "فاتورة مورد",
-              "en": "Supplier invoice"
-            },
-            "numbering": {
-              "padding": 5,
-              "prefix": "PINV-",
-              "resetPerFiscalYear": true
-            },
-            "pluralLabels": {
-              "ar": "فواتير الموردين",
-              "en": "Supplier invoices"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            },
-            "relations": [
-              {
-                "cardinality": "many",
-                "id": "lines",
-                "kind": "child_table",
-                "labels": {
-                  "ar": "البنود",
-                  "en": "Lines"
-                },
-                "onDelete": "cascade",
-                "required": true,
-                "target": "purchase_invoice_line"
-              }
-            ]
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/purchase_invoice",
-        "reversible": true,
-        "seq": 61,
-        "sourceOps": [
-          "/entities/purchase_invoice"
-        ],
-        "subject": {
-          "id": "purchase_invoice",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "finance.payment_entry",
-                "mode": "implements"
-              }
-            ],
-            "fields": [
-              {
-                "id": "payment_type",
-                "labels": {
-                  "ar": "نوع الدفعة",
-                  "en": "Payment type"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "قبض من عميل",
-                      "en": "Receive from customer"
-                    },
-                    "value": "receive"
-                  },
-                  {
-                    "labels": {
-                      "ar": "سداد لمورد",
-                      "en": "Pay supplier"
-                    },
-                    "value": "pay"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "id": "customer",
-                "labels": {
-                  "ar": "العميل",
-                  "en": "Customer"
-                },
-                "target": "customer",
-                "type": "link"
-              },
-              {
-                "id": "supplier",
-                "labels": {
-                  "ar": "المورد",
-                  "en": "Supplier"
-                },
-                "target": "supplier",
-                "type": "link"
-              },
-              {
-                "id": "sales_invoice",
-                "labels": {
-                  "ar": "الفاتورة الضريبية",
-                  "en": "Tax invoice"
-                },
-                "target": "sales_invoice",
-                "type": "link"
-              },
-              {
-                "id": "purchase_invoice",
-                "labels": {
-                  "ar": "فاتورة المورد",
-                  "en": "Supplier invoice"
-                },
-                "target": "purchase_invoice",
-                "type": "link"
-              },
-              {
-                "id": "posting_date",
-                "labels": {
-                  "ar": "تاريخ الدفعة",
-                  "en": "Payment date"
-                },
-                "required": true,
-                "type": "date"
-              },
-              {
-                "id": "amount",
-                "labels": {
-                  "ar": "المبلغ",
-                  "en": "Amount"
-                },
-                "min": 0,
-                "precision": 2,
-                "required": true,
-                "type": "money"
-              },
-              {
-                "id": "method",
-                "labels": {
-                  "ar": "طريقة الدفع",
-                  "en": "Payment method"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "حوالة بنكية",
-                      "en": "Bank transfer"
-                    },
-                    "value": "bank_transfer"
-                  },
-                  {
-                    "labels": {
-                      "ar": "نقداً",
-                      "en": "Cash"
-                    },
-                    "value": "cash"
-                  },
-                  {
-                    "labels": {
-                      "ar": "شيك",
-                      "en": "Cheque"
-                    },
-                    "value": "cheque"
-                  },
-                  {
-                    "labels": {
-                      "ar": "مدى",
-                      "en": "Mada card"
-                    },
-                    "value": "mada"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "id": "bank_reference",
-                "labels": {
-                  "ar": "مرجع العملية البنكية",
-                  "en": "Bank reference"
-                },
-                "maxLength": 60,
-                "type": "string"
-              },
-              {
-                "id": "notes",
-                "labels": {
-                  "ar": "ملاحظات",
-                  "en": "Notes"
-                },
-                "maxLength": 1000,
-                "type": "text"
-              }
-            ],
-            "id": "payment",
-            "kind": "document",
-            "labels": {
-              "ar": "دفعة",
-              "en": "Payment"
-            },
-            "numbering": {
-              "padding": 5,
-              "prefix": "PAY-",
-              "resetPerFiscalYear": true
-            },
-            "pluralLabels": {
-              "ar": "الدفعات",
-              "en": "Payments"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            }
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/payment",
-        "reversible": true,
-        "seq": 62,
-        "sourceOps": [
-          "/entities/payment"
-        ],
-        "subject": {
-          "id": "payment",
-          "kind": "entity",
-          "parents": []
-        }
-      },
-      {
-        "ddlImpact": "additive",
-        "impact": "data_shape",
-        "kind": "entity.add",
-        "params": {
-          "definition": {
-            "components": [
-              {
-                "component": "purchasing.purchase_receipt",
-                "mode": "implements"
-              },
-              {
-                "component": "stock.ledger",
-                "mode": "extends"
-              }
-            ],
-            "fields": [
-              {
-                "id": "purchase_order",
-                "labels": {
-                  "ar": "أمر الشراء",
-                  "en": "Purchase order"
-                },
-                "required": true,
-                "target": "purchase_order",
-                "type": "link"
-              },
-              {
-                "id": "supplier",
-                "labels": {
-                  "ar": "المورد",
-                  "en": "Supplier"
-                },
-                "required": true,
-                "target": "supplier",
-                "type": "link"
-              },
-              {
-                "id": "receipt_date",
-                "labels": {
-                  "ar": "تاريخ الاستلام",
-                  "en": "Receipt date"
-                },
-                "required": true,
-                "type": "date"
-              },
-              {
-                "id": "warehouse",
-                "labels": {
-                  "ar": "المستودع",
-                  "en": "Warehouse"
-                },
-                "options": [
-                  {
-                    "labels": {
-                      "ar": "مستودع الرياض",
-                      "en": "Riyadh warehouse"
-                    },
-                    "value": "wh_riyadh"
-                  },
-                  {
-                    "labels": {
-                      "ar": "مستودع جدة",
-                      "en": "Jeddah warehouse"
-                    },
-                    "value": "wh_jeddah"
-                  }
-                ],
-                "required": true,
-                "type": "select"
-              },
-              {
-                "id": "supplier_delivery_ref",
-                "labels": {
-                  "ar": "مرجع تسليم المورد",
-                  "en": "Supplier delivery reference"
-                },
-                "maxLength": 60,
-                "type": "string"
-              },
-              {
-                "id": "notes",
-                "labels": {
-                  "ar": "ملاحظات",
-                  "en": "Notes"
-                },
-                "maxLength": 1000,
-                "type": "text"
-              }
-            ],
-            "id": "purchase_receipt",
-            "kind": "document",
-            "labels": {
-              "ar": "إذن استلام",
-              "en": "Purchase receipt"
-            },
-            "numbering": {
-              "padding": 5,
-              "prefix": "GRN-",
-              "resetPerFiscalYear": true
-            },
-            "pluralLabels": {
-              "ar": "أذونات الاستلام",
-              "en": "Purchase receipts"
-            },
-            "provenance": {
-              "humanEdited": false,
-              "ref": "trading_distribution@0.1.0",
-              "source": "template"
-            },
-            "relations": [
-              {
-                "cardinality": "many",
-                "id": "lines",
-                "kind": "child_table",
-                "labels": {
-                  "ar": "البنود",
-                  "en": "Lines"
-                },
-                "onDelete": "cascade",
-                "required": true,
-                "target": "purchase_receipt_line"
-              }
-            ]
-          }
-        },
-        "phase": 4,
-        "pointer": "/entities/purchase_receipt",
-        "reversible": true,
-        "seq": 63,
-        "sourceOps": [
-          "/entities/purchase_receipt"
-        ],
-        "subject": {
-          "id": "purchase_receipt",
           "kind": "entity",
           "parents": []
         }
@@ -8683,6 +8683,39 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
+        29
+      ],
+      "forwardRefs": [
+        45
+      ],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/credit_note_line",
+      "reversible": true,
+      "seq": 40,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
+        19,
+        29,
+        40
+      ],
+      "forwardRefs": [
+        42,
+        55
+      ],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/credit_note",
+      "reversible": true,
+      "seq": 41,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
         20
       ],
       "forwardRefs": [],
@@ -8690,7 +8723,40 @@
       "phase": 4,
       "pointer": "/entities/customer",
       "reversible": true,
-      "seq": 40,
+      "seq": 42,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
+        30,
+        33,
+        42
+      ],
+      "forwardRefs": [
+        44,
+        60
+      ],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/delivery_note",
+      "reversible": true,
+      "seq": 43,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
+        30
+      ],
+      "forwardRefs": [
+        45
+      ],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/delivery_note_line",
+      "reversible": true,
+      "seq": 44,
       "unresolved": []
     },
     {
@@ -8704,75 +8770,23 @@
       "phase": 4,
       "pointer": "/entities/item",
       "reversible": true,
-      "seq": 41,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        29,
-        41
-      ],
-      "forwardRefs": [],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/credit_note_line",
-      "reversible": true,
-      "seq": 42,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        30,
-        41
-      ],
-      "forwardRefs": [],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/delivery_note_line",
-      "reversible": true,
-      "seq": 43,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        31,
-        41
-      ],
-      "forwardRefs": [],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/price_list_item",
-      "reversible": true,
-      "seq": 44,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        31,
-        44
-      ],
-      "forwardRefs": [],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/price_list",
-      "reversible": true,
       "seq": 45,
       "unresolved": []
     },
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        26,
-        41
+        25,
+        42
       ],
-      "forwardRefs": [],
+      "forwardRefs": [
+        49,
+        55,
+        63
+      ],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/purchase_invoice_line",
+      "pointer": "/entities/payment",
       "reversible": true,
       "seq": 46,
       "unresolved": []
@@ -8780,13 +8794,14 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        27,
-        41
+        31
       ],
-      "forwardRefs": [],
+      "forwardRefs": [
+        48
+      ],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/purchase_order_line",
+      "pointer": "/entities/price_list",
       "reversible": true,
       "seq": 47,
       "unresolved": []
@@ -8794,13 +8809,13 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        28,
-        41
+        31,
+        45
       ],
       "forwardRefs": [],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/purchase_receipt_line",
+      "pointer": "/entities/price_list_item",
       "reversible": true,
       "seq": 48,
       "unresolved": []
@@ -8808,13 +8823,16 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        22,
-        41
+        26
       ],
-      "forwardRefs": [],
+      "forwardRefs": [
+        50,
+        51,
+        63
+      ],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/sales_invoice_line",
+      "pointer": "/entities/purchase_invoice",
       "reversible": true,
       "seq": 49,
       "unresolved": []
@@ -8822,13 +8840,13 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        23,
-        41
+        26,
+        45
       ],
       "forwardRefs": [],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/sales_order_line",
+      "pointer": "/entities/purchase_invoice_line",
       "reversible": true,
       "seq": 50,
       "unresolved": []
@@ -8836,13 +8854,16 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        32,
-        41
+        27
       ],
-      "forwardRefs": [],
+      "forwardRefs": [
+        52,
+        63,
+        72
+      ],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/sales_quote_line",
+      "pointer": "/entities/purchase_order",
       "reversible": true,
       "seq": 51,
       "unresolved": []
@@ -8850,15 +8871,13 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        32,
-        40,
-        45,
-        51
+        27,
+        45
       ],
       "forwardRefs": [],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/sales_quote",
+      "pointer": "/entities/purchase_order_line",
       "reversible": true,
       "seq": 52,
       "unresolved": []
@@ -8866,18 +8885,17 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        23,
-        40,
-        45,
-        50,
-        52
+        28,
+        33,
+        51
       ],
       "forwardRefs": [
-        74
+        54,
+        63
       ],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/sales_order",
+      "pointer": "/entities/purchase_receipt",
       "reversible": true,
       "seq": 53,
       "unresolved": []
@@ -8885,16 +8903,13 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        30,
-        33,
-        40,
-        43,
-        53
+        28,
+        45
       ],
       "forwardRefs": [],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/delivery_note",
+      "pointer": "/entities/purchase_receipt_line",
       "reversible": true,
       "seq": 54,
       "unresolved": []
@@ -8904,11 +8919,11 @@
       "dependsOn": [
         19,
         22,
-        40,
-        49,
-        53
+        42
       ],
       "forwardRefs": [
+        56,
+        60,
         73
       ],
       "kind": "entity.add",
@@ -8921,16 +8936,13 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        19,
-        29,
-        40,
-        42,
-        55
+        22,
+        45
       ],
       "forwardRefs": [],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/credit_note",
+      "pointer": "/entities/sales_invoice_line",
       "reversible": true,
       "seq": 56,
       "unresolved": []
@@ -8938,13 +8950,13 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
-        34,
-        41
+        23,
+        45
       ],
       "forwardRefs": [],
       "kind": "entity.add",
       "phase": 4,
-      "pointer": "/entities/stock_transfer_line",
+      "pointer": "/entities/sales_order_line",
       "reversible": true,
       "seq": 57,
       "unresolved": []
@@ -8952,9 +8964,72 @@
     {
       "ddlImpact": "additive",
       "dependsOn": [
+        32,
+        45
+      ],
+      "forwardRefs": [],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/sales_quote_line",
+      "reversible": true,
+      "seq": 58,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
+        32,
+        42,
+        47,
+        58
+      ],
+      "forwardRefs": [],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/sales_quote",
+      "reversible": true,
+      "seq": 59,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
+        23,
+        42,
+        47,
+        57,
+        59
+      ],
+      "forwardRefs": [
+        74
+      ],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/sales_order",
+      "reversible": true,
+      "seq": 60,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
+        34,
+        45
+      ],
+      "forwardRefs": [],
+      "kind": "entity.add",
+      "phase": 4,
+      "pointer": "/entities/stock_transfer_line",
+      "reversible": true,
+      "seq": 61,
+      "unresolved": []
+    },
+    {
+      "ddlImpact": "additive",
+      "dependsOn": [
         33,
         34,
-        57
+        61
       ],
       "forwardRefs": [
         75
@@ -8963,7 +9038,7 @@
       "phase": 4,
       "pointer": "/entities/stock_transfer",
       "reversible": true,
-      "seq": 58,
+      "seq": 62,
       "unresolved": []
     },
     {
@@ -8976,91 +9051,24 @@
       "phase": 4,
       "pointer": "/entities/supplier",
       "reversible": true,
-      "seq": 59,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        27,
-        47,
-        59
-      ],
-      "forwardRefs": [
-        72
-      ],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/purchase_order",
-      "reversible": true,
-      "seq": 60,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        26,
-        46,
-        59,
-        60
-      ],
-      "forwardRefs": [],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/purchase_invoice",
-      "reversible": true,
-      "seq": 61,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        25,
-        40,
-        55,
-        59,
-        61
-      ],
-      "forwardRefs": [],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/payment",
-      "reversible": true,
-      "seq": 62,
-      "unresolved": []
-    },
-    {
-      "ddlImpact": "additive",
-      "dependsOn": [
-        28,
-        33,
-        48,
-        59,
-        60
-      ],
-      "forwardRefs": [],
-      "kind": "entity.add",
-      "phase": 4,
-      "pointer": "/entities/purchase_receipt",
-      "reversible": true,
       "seq": 63,
       "unresolved": []
     },
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
         41,
+        42,
+        43,
         45,
-        52,
+        46,
+        47,
+        49,
+        51,
         53,
-        54,
         55,
-        56,
-        58,
         59,
         60,
-        61,
         62,
         63
       ],
@@ -9075,18 +9083,18 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
         41,
+        42,
+        43,
         45,
-        52,
+        46,
+        47,
+        49,
+        51,
         53,
-        54,
         55,
-        56,
-        58,
         59,
         60,
-        61,
         62,
         63
       ],
@@ -9102,14 +9110,14 @@
       "ddlImpact": "none",
       "dependsOn": [
         35,
-        40,
         41,
+        42,
+        43,
         45,
-        52,
-        53,
-        54,
+        47,
         55,
-        56
+        59,
+        60
       ],
       "forwardRefs": [],
       "kind": "role.upsert",
@@ -9122,18 +9130,18 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
         41,
+        42,
+        43,
         45,
-        52,
+        46,
+        47,
+        49,
+        51,
         53,
-        54,
         55,
-        56,
-        58,
         59,
         60,
-        61,
         62,
         63
       ],
@@ -9148,18 +9156,18 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
         41,
+        42,
+        43,
         45,
-        52,
+        46,
+        47,
+        49,
+        51,
         53,
-        54,
         55,
-        56,
-        58,
         59,
         60,
-        61,
         62,
         63
       ],
@@ -9174,11 +9182,11 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        41,
-        58,
-        59,
-        60,
-        61,
+        45,
+        49,
+        51,
+        53,
+        62,
         63
       ],
       "forwardRefs": [],
@@ -9192,14 +9200,14 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        40,
         41,
+        42,
+        43,
         45,
-        52,
-        53,
-        54,
+        47,
         55,
-        56
+        59,
+        60
       ],
       "forwardRefs": [],
       "kind": "role.upsert",
@@ -9214,12 +9222,12 @@
       "dependsOn": [
         38,
         39,
-        41,
+        43,
+        45,
+        51,
         53,
-        54,
-        58,
         60,
-        63
+        62
       ],
       "forwardRefs": [],
       "kind": "role.upsert",
@@ -9232,7 +9240,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        60,
+        51,
         64,
         67,
         68,
@@ -9269,7 +9277,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        53,
+        60,
         64,
         66,
         67,
@@ -9291,7 +9299,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        58,
+        62,
         69,
         71
       ],
@@ -9306,7 +9314,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        56,
+        41,
         64,
         67
       ],
@@ -9321,7 +9329,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        53,
+        60,
         67,
         68
       ],
@@ -9336,7 +9344,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        53,
+        60,
         67,
         68
       ],
@@ -9351,7 +9359,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        60,
+        51,
         67,
         68
       ],
@@ -9366,7 +9374,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        53,
+        60,
         70
       ],
       "forwardRefs": [],
@@ -9380,7 +9388,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        61,
+        49,
         64,
         65,
         67,
@@ -9415,7 +9423,7 @@
     {
       "ddlImpact": "none",
       "dependsOn": [
-        53,
+        60,
         65,
         66,
         67,

@@ -1,0 +1,30 @@
+{
+  "version": "0.1.0",
+  "status": "draft",
+  "owner": "eldon (until the partner owns or replaces it, Q-722)",
+  "description": "Blueprint entity ids that map to a document type the engine ships with, so the type exists before any step runs. The compiler adds no Link-target order into these entities (engine-adapter.md 9.4, ADR-0075, BPL-051). Copied from the adapter's entity table (ENTITY_TO_DOCTYPE in apps/engine/change_engine/change_engine/adapter/mapping.py, main at 1f029d18); engine-side names are not listed here and stay UNVERIFIED until a bench run. Q-722 asks the partner to own this list or expose it in the engine-mapping contract.",
+  "entities": [
+    "audit_log",
+    "customer",
+    "delivery_note",
+    "delivery_note_line",
+    "general_ledger",
+    "item",
+    "price_list",
+    "price_list_item",
+    "purchase_invoice",
+    "purchase_invoice_line",
+    "purchase_order",
+    "purchase_order_line",
+    "purchase_receipt",
+    "purchase_receipt_line",
+    "sales_invoice",
+    "sales_invoice_line",
+    "sales_order",
+    "sales_order_line",
+    "session_token",
+    "supplier",
+    "tax_ledger",
+    "user_account"
+  ]
+}

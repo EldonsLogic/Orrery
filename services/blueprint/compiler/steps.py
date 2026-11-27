@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import copy
 import heapq
+import json
+from functools import lru_cache
 from typing import Any
 
+from ._deps import CONTRACTS
 from .components import touches_ledger_or_tax
 from .result import Issue
 
@@ -93,6 +96,14 @@ def steps_from_ops(ops: list[dict]) -> tuple[list[dict], list[dict], list[Issue]
     return steps, skipped, issues
 
 
+@lru_cache(maxsize=1)
+def builtin_entities() -> frozenset[str]:
+    """Entities that map to a document type the engine ships with (contracts/engine-builtin-entities.json, Q-722): the
+    type exists before any step, so a Link into one needs no order."""
+    doc = json.loads((CONTRACTS / "engine-builtin-entities.json").read_text(encoding="utf-8"))
+    return frozenset(doc["entities"])
+
+
 def link_targets(definition: Any) -> set[str]:
     """Entity ids an entity definition links to: every field of type `link` and every relation (reference, child table
     and many-to-many all point the engine at the target type). Other field types are excluded even if they carry a
@@ -104,24 +115,102 @@ def link_targets(definition: Any) -> set[str]:
     return {el["target"] for el in fields + relations if isinstance(el.get("target"), str)}
 
 
-def _topo(group: list[dict], dependants_first: bool) -> tuple[list[dict], list[str]]:
-    """Kahn's algorithm over the Links among `group`, ties by pointer. A self-link and a link to an entity outside the
-    group add no edge. On a cycle the smallest remaining pointer is taken next; returns (order, cycle member pointers)."""
+def _edges(by_id: dict) -> tuple[list[tuple], list[tuple]]:
+    """(hard, soft) edges among the entities of `by_id`, each (pointer, target, entity, element id): the target must
+    come before the entity. Hard: a field of type `link`, which the adapter creates with the entity. Soft: a relation, an
+    ordering preference only, because the adapter does not create inline relations on entity.add (#391 review). A
+    self-link, a link outside the group and a link into a built-in type add no edge."""
+    hard, soft = [], []
+    for e, s in by_id.items():
+        d = s["params"]["definition"]
+        if not isinstance(d, dict):
+            continue
+        into = set(by_id) - builtin_entities() - {e}
+        for coll, out in (("fields", hard), ("relations", soft)):
+            for el in d.get(coll) or []:
+                if isinstance(el, dict) and isinstance(el.get("target"), str) and el["target"] in into \
+                        and (coll == "relations" or el.get("type") == "link"):
+                    out.append((f"{s['pointer']}/{coll}/{_esc(el.get('id'))}", el["target"], e, el.get("id")))
+    return sorted(hard), sorted(soft)
+
+
+def _reaches(after: dict[str, set[str]], src: str, dst: str) -> bool:
+    seen, todo = set(), [src]
+    while todo:
+        e = todo.pop()
+        if e == dst:
+            return True
+        if e not in seen:
+            seen.add(e)
+            todo += after[e]
+    return False
+
+
+def _graph(by_id: dict, hard: list[tuple], soft: list[tuple]) -> dict[str, set[str]]:
+    """target -> entities that come after it: every hard edge, then each soft edge in pointer order unless it would
+    close a cycle (dropped)."""
+    after: dict[str, set[str]] = {e: set() for e in by_id}
+    for _, t, e, _ in hard:
+        after[t].add(e)
+    for _, t, e, _ in soft:
+        if not _reaches(after, e, t):
+            after[t].add(e)
+    return after
+
+
+def _closing_links(by_id: dict) -> list[tuple]:
+    """The hard edges to move out of their entity.add so no hard cycle remains: while one does, the edge on a cycle with
+    the smallest pointer (deterministic; one per cycle unless cycles share it)."""
+    hard, _ = _edges(by_id)
+    out = []
+    while True:
+        after = _graph(by_id, hard, [])
+        on_cycle = [edge for edge in hard if _reaches(after, edge[2], edge[1])]
+        if not on_cycle:
+            return out
+        out.append(on_cycle[0])
+        hard.remove(on_cycle[0])
+
+
+def _split(step: dict, links: list[tuple]) -> list[dict]:
+    """The entity.add without the closing Link fields, a phase 5 field.add per Link (pointer order) and, when appending
+    them leaves the fields out of Blueprint order, a phase 6 field.reorder. The new steps implement the same diff op,
+    so they repeat the entity.add's sourceOps (ADR-0075)."""
+    e, defn = step["subject"]["id"], copy.deepcopy(step["params"]["definition"])
+    moved = {fid for *_, fid in links}
+    order = [f.get("id") for f in defn["fields"]]
+    fields = {f.get("id"): f for f in defn["fields"]}
+    defn["fields"] = [f for f in defn["fields"] if f.get("id") not in moved]
+    head = {**step, "subject": copy.deepcopy(step["subject"]), "params": {"definition": defn},
+            "sourceOps": list(step["sourceOps"])}
+    out = [head]
+    for ptr, _, _, fid in sorted(links):
+        add = _step("field.add", {"kind": "field", "id": fid, "parents": [{"kind": "entity", "id": e}]}, ptr,
+                    step["impact"], {"definition": copy.deepcopy(fields[fid])}, "")
+        out.append({**add, "sourceOps": list(step["sourceOps"])})
+    previous = [f.get("id") for f in defn["fields"]] + [fid for *_, fid in sorted(links)]
+    if previous != order:
+        ro = _step("field.reorder", {"kind": "entity", "id": e, "parents": []}, step["pointer"] + "/fields",
+                   step["impact"], {"order": order, "previousOrder": previous}, "")
+        out.append({**ro, "sourceOps": list(step["sourceOps"])})
+    return out
+
+
+def _topo(group: list[dict], dependants_first: bool) -> list[dict]:
+    """Kahn's algorithm over the edges among `group` (_edges, _graph), ties by pointer. A hard cycle left here (a
+    quarantine, or a restore) is broken at the smallest remaining pointer."""
     by_id = {s["subject"]["id"]: s for s in group}
     if len(by_id) != len(group):  # a duplicate subject: leave the order alone, CMP-ART-006 refuses it
-        return group, []
-    after: dict[str, set[str]] = {e: set() for e in by_id}  # e -> entities that must come after e
-    for e, s in by_id.items():
-        for t in link_targets(s["params"]["definition"]) & set(by_id) - {e}:
-            after[e if dependants_first else t].add(t if dependants_first else e)
+        return group
+    before = _graph(by_id, *_edges(by_id))
+    after = before if not dependants_first else {e: {t for t in by_id if e in before[t]} for e in by_id}
     need = {e: sum(e in a for a in after.values()) for e in by_id}
     ptr = {e: by_id[e]["pointer"] for e in by_id}
     ready = [(ptr[e], e) for e in by_id if not need[e]]
     heapq.heapify(ready)
-    order, left, forced = [], set(by_id), False
+    order, left = [], set(by_id)
     while left:
         if not ready:
-            forced = True
             heapq.heappush(ready, min((ptr[e], e) for e in left))
         _, e = heapq.heappop(ready)
         if e not in left:
@@ -132,42 +221,33 @@ def _topo(group: list[dict], dependants_first: bool) -> tuple[list[dict], list[s
             need[d] -= 1
             if need[d] == 0 and d in left:
                 heapq.heappush(ready, (ptr[d], d))
-    return order, sorted(ptr[e] for e in _stuck(by_id, after)) if forced else []
-
-
-def _stuck(by_id: dict, after: dict) -> set[str]:
-    """Entities on a Link cycle: the members of every strongly connected component of size > 1 (self-links add no
-    edge), found as the entities reachable again from one of their own successors. An entity between two cycles is
-    not on one and is not named."""
-    def reach(start: set[str]) -> set[str]:
-        seen, todo = set(), list(start)
-        while todo:
-            e = todo.pop()
-            if e not in seen:
-                seen.add(e)
-                todo += after[e]
-        return seen
-    return {e for e in by_id if e in reach(after[e])}
+    return order
 
 
 def order_by_links(steps: list[dict], *, restores: bool = False) -> tuple[list[dict], list[Issue]]:
-    """BPL-051 (Q-691): reorder the entity.add steps (phase 4) so every Link target is created before the entities that
-    link to it, and the entity.quarantine steps (phase 16) so dependants go first. `steps` must already be in the
-    9.4 sort order; every other step keeps its place. A Link cycle among new entities refuses (CMP-ART-007). A
+    """BPL-051 (Q-691, ADR-0075): reorder the entity.add steps (phase 4) so every Link target is created before the
+    entities that link to it, and the entity.quarantine steps (phase 16) so dependants go first. `steps` must already
+    be in the 9.4 sort order; every other step keeps its place. A hard Link cycle among new entities is split: its
+    closing Link fields (_closing_links) move to a later field.add, so the compile never refuses for a cycle. A
     quarantine cycle is broken by pointer, as quarantine keeps the stored entity; so is an add cycle when `restores`
     (an inverse, whose entity.add steps only re-activate entities the forward quarantined: the stored types still
-    exist, so their Links resolve in any order)."""
-    out, issues = list(steps), []
+    exist, so their Links resolve in any order). Returns (steps, issues); no Link graph refuses, so issues is empty."""
+    out = list(steps)
+    adds = {s["subject"]["id"]: s for s in out if s["kind"] == "entity.add"}
+    links = _closing_links(adds) if not restores and len(adds) == sum(s["kind"] == "entity.add" for s in out) else []
+    if links:
+        by_entity: dict[str, list[tuple]] = {}
+        for link in links:
+            by_entity.setdefault(link[2], []).append(link)
+        split = {e: _split(adds[e], ls) for e, ls in by_entity.items()}
+        out = [x for s in out for x in (split[s["subject"]["id"]] if s["kind"] == "entity.add" and
+                                         s["subject"]["id"] in split else [s])]
+        out.sort(key=lambda s: (s["phase"], s["pointer"], s["kind"]))  # stable: settings.set keep their property order
     for kind, dependants_first in (("entity.add", False), ("entity.quarantine", True)):
         idx = [i for i, s in enumerate(out) if s["kind"] == kind]
-        order, cycle = _topo([out[i] for i in idx], dependants_first)
-        for i, s in zip(idx, order):
+        for i, s in zip(idx, _topo([out[i] for i in idx], dependants_first)):
             out[i] = s
-        if cycle and not dependants_first and not restores:
-            ids = ", ".join(p.rsplit("/", 1)[-1] for p in cycle)
-            issues += [Issue("CMP-ART-007", p, f"Link cycle among new entities ({ids}); add the closing Link as a "
-                             "field in a later revision") for p in cycle]
-    return out, issues
+    return out, []
 
 
 def post_conditions(steps: list[dict], target: dict) -> list[dict]:

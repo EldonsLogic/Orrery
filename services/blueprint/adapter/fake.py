@@ -19,7 +19,7 @@ from .contract import CONTRACTS, artifact_hashes, canon, response_validator, sch
 
 ADAPTER_ID = "frappe"  # internal id; the sample artifacts name it in engineTarget.adapter (contract open question 12)
 ADAPTER_VERSION = "0.1.0"
-CONTRACT_VERSIONS = ["0.1.3"]
+CONTRACT_VERSIONS = ["0.1.4"]  # 0.1.4: plan judges each step after the earlier ones (5.3, ADR-0075)
 ARTIFACT_SCHEMA_VERSIONS = ["0.1.0"]
 VERSION_SETS = ["set-example", "set-example-2"]
 PLAN_TOKEN_TTL = 900
@@ -529,8 +529,17 @@ class FakeAdapter:
 
     def _evaluate(self, site: _Site, artifact: dict) -> dict:
         steps, additive, semantic = [], 0, 0
+        # Contract 5.3 (0.1.4, ADR-0075): each step is judged against the site as the steps before it leave it, so a
+        # field.add on an entity this artifact adds (a split Link cycle) is not subject_missing.
+        proj = copy.copy(site)
+        proj.config, proj.retained = copy.deepcopy(site.config), copy.deepcopy(site.retained)
         for step in artifact["steps"]:
-            disp, reason, ddl = self._judge(site, step)
+            disp, reason, ddl = self._judge(proj, step)
+            if disp not in ("blocked", "unsupported"):
+                try:
+                    self._exec(proj, step)
+                except Exception:  # noqa: BLE001  apply reports this step's fault; the plan keeps judging the rest
+                    pass
             if ddl == "additive":
                 additive += 1
             elif ddl == "semantic":
